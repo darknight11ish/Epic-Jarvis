@@ -4,5 +4,5 @@
   "module": "jarvis_pictures",
   "install": "handler",
   "replaces_patch": "pictures.patch",
-  "stack_order": 139
+  "stack_order": 140
 }

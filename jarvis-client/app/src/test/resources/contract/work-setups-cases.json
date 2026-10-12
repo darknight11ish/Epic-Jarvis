@@ -1,0 +1,2316 @@
+{
+ "cases": {
+  "chosen_admin_already_running": {
+   "available": true,
+   "chosen": "admin",
+   "chosen_at": 1770000000,
+   "chosen_name": "Admin and paperwork",
+   "current_model": "qwen3.5:9b",
+   "found": "5 work setups for this PC's own cards: \"Everyday quick answers\", \"Building an Android app\", \"Admin and paperwork\", \"Long conversations and big documents\", \"Careful coding with a coding specialist\".",
+   "how_to": "Say what you are about to work on and Jarvis will offer the setup for it - or pick one here before you start. Choosing only remembers the choice; switching a model is its own card, as always.",
+   "known_models": [
+    "jarvis-primary:latest",
+    "ornith:9b",
+    "qwen3.5:0.8b",
+    "qwen3.5:2b",
+    "qwen3.5:4b",
+    "qwen3.5:9b",
+    "qwen3:0.6b",
+    "qwen3:8b"
+   ],
+   "not_a_catalogue": "These are combinations of models already on this PC. There is no list here of models that could be downloaded, and no search.",
+   "ollama_seen": true,
+   "recommended": "admin",
+   "setups": [
+    {
+     "both_cards": true,
+     "card_words": "Switch everyday chat to qwen3:8b, for \"Everyday quick answers\"?\n\nWhat this setup is for: short questions, writing, checking things, one-off tasks.\nWhere it goes: the RTX 2080 SUPER, holding 16,384 tokens of conversation (5.84 GB of the card's 8 GB, measured - nothing spills).\nBeside it: qwen3.5:9b on the RTX 2060, 196,608 tokens.\n\nWhat it costs: Both models sit loaded at once, one per card, and that measured only -1.9% off the main model's speed while the other card worked. The everyday model's own conversation is capped at about 15,600 tokens of real input - that is its ceiling, not a guess.\nWhat it is worse at: Chosen for speed, not for the best answer: on the quality questions asked today qwen3:8b gave the weakest explanation of the three, and it led with the outdated reason.\n\nNothing has changed yet. Approving this card switches one model; it does not download anything and it does not change any of Ollama's settings. The model you use now stays downloaded, so switching back is one more switch.",
+     "cost": "Both models sit loaded at once, one per card, and that measured only -1.9% off the main model's speed while the other card worked. The everyday model's own conversation is capped at about 15,600 tokens of real input - that is its ceiling, not a guess.",
+     "have": [
+      "qwen3:8b",
+      "qwen3.5:9b"
+     ],
+     "id": "everyday",
+     "main_model": "qwen3:8b",
+     "models": [
+      "qwen3:8b",
+      "qwen3.5:9b"
+     ],
+     "name": "Everyday quick answers",
+     "need": [],
+     "places": [
+      {
+       "card": "RTX 2080 SUPER",
+       "clean": true,
+       "context": 16384,
+       "context_words": "16K",
+       "disk_gb": 4.87,
+       "free_gib": 2.16,
+       "model": "qwen3:8b",
+       "role": "main",
+       "speed_tokens_per_s": 64.0,
+       "spill_gib": 0.0,
+       "vram_gib": 5.84,
+       "words": "The everyday model, on the faster card"
+      },
+      {
+       "card": "RTX 2060",
+       "clean": true,
+       "context": 196608,
+       "context_words": "192K",
+       "disk_gb": 6.1,
+       "free_gib": 2.83,
+       "model": "qwen3.5:9b",
+       "role": "beside",
+       "speed_tokens_per_s": 44.9,
+       "spill_gib": 0.0,
+       "vram_gib": 9.17,
+       "words": "A second, better model waiting with room for a very long chat"
+      }
+     ],
+     "ready": "ready",
+     "ready_words": "Both models are downloaded already.",
+     "step": {
+      "body": {
+       "ref": "qwen3:8b"
+      },
+      "detail": "Raises the usual model-switch card. The model you use now stays downloaded, so switching back is one more switch.",
+      "done": false,
+      "kind": "switch",
+      "route": "/api/models/switch",
+      "title": "Switch everyday chat to qwen3:8b",
+      "words": "Ready when you are: switching to qwen3:8b raises the usual approval card, and nothing changes until you approve it."
+     },
+     "summary": "qwen3:8b at 16,384 tokens on the RTX 2080 SUPER (64 tokens a second), with qwen3.5:9b (196,608 tokens) on the RTX 2060",
+     "thinking": "Neither model thinks before answering here, and qwen3.5:9b is set that way in Thinking levels - left on it answered nothing at all on all three test questions.",
+     "uses": "Yes - both cards work at once, one model each. Nothing is split across both cards: that measured 3x slower.",
+     "what": "For short questions, a bit of writing, checking things and one-off tasks - the ordinary use of Jarvis, where waiting is the annoying part.",
+     "why": "qwen3:8b on the 2080 SUPER is the fastest useful setup measured: 64.0 tokens a second against 49.3 for the same model on the 2060. It scored 10/10 on the coding test and found a planted fact at both the start and the end of a 13,780-token prompt. The other card is not wasted beside it - it holds qwen3.5:9b at its full 196,608 tokens, which is 12x the conversation the everyday setting holds today.",
+     "work": "short questions, writing, checking things, one-off tasks",
+     "worse": "Chosen for speed, not for the best answer: on the quality questions asked today qwen3:8b gave the weakest explanation of the three, and it led with the outdated reason."
+    },
+    {
+     "both_cards": true,
+     "card_words": "Switch everyday chat to qwen3.5:9b, for \"Building an Android app\"?\n\nWhat this setup is for: writing code, reading a file, fixing an error, multi-step coding work.\nWhere it goes: the RTX 2060, holding 196,608 tokens of conversation (9.17 GB of the card's 12 GB, measured - nothing spills).\nBeside it: qwen3.5:4b on the RTX 2080 SUPER, 65,536 tokens.\n\nWhat it costs: The card that writes the code is the slower one - 44.9 tokens a second against 64.0 on the other card - and qwen3.5:9b fills 9.17 of its 12 GB at this context, so the other card is the only place a second model can go. What the slow card buys is 196,608 tokens of project in view instead of 16,384, about twelve times as much. Both cards still work at once, for the same -1.9%.\nWhat it is worse at: The coding model writes more slowly than qwen3:8b would on the fast card, and the small model beside it is the one that got a trap question wrong when asked as an explanation - it is here for speed on short questions, not for careful reasoning.\n\nNothing has changed yet. Approving this card switches one model; it does not download anything and it does not change any of Ollama's settings. The model you use now stays downloaded, so switching back is one more switch.",
+     "cost": "The card that writes the code is the slower one - 44.9 tokens a second against 64.0 on the other card - and qwen3.5:9b fills 9.17 of its 12 GB at this context, so the other card is the only place a second model can go. What the slow card buys is 196,608 tokens of project in view instead of 16,384, about twelve times as much. Both cards still work at once, for the same -1.9%.",
+     "have": [
+      "qwen3.5:9b",
+      "qwen3.5:4b"
+     ],
+     "id": "coding",
+     "main_model": "qwen3.5:9b",
+     "models": [
+      "qwen3.5:9b",
+      "qwen3.5:4b"
+     ],
+     "name": "Building an Android app",
+     "need": [],
+     "places": [
+      {
+       "card": "RTX 2060",
+       "clean": true,
+       "context": 196608,
+       "context_words": "192K",
+       "disk_gb": 6.1,
+       "free_gib": 2.83,
+       "model": "qwen3.5:9b",
+       "role": "main",
+       "speed_tokens_per_s": 44.9,
+       "spill_gib": 0.0,
+       "vram_gib": 9.17,
+       "words": "Writes the code, with room for a whole project in view"
+      },
+      {
+       "card": "RTX 2080 SUPER",
+       "clean": true,
+       "context": 65536,
+       "context_words": "64K",
+       "disk_gb": 3.16,
+       "free_gib": 3.85,
+       "model": "qwen3.5:4b",
+       "role": "beside",
+       "speed_tokens_per_s": 77.1,
+       "spill_gib": 0.0,
+       "vram_gib": 4.15,
+       "words": "Answers quick questions about the code, fast"
+      }
+     ],
+     "ready": "ready",
+     "ready_words": "Both models are downloaded already.",
+     "step": {
+      "body": null,
+      "detail": "Nothing to change.",
+      "done": true,
+      "kind": "none",
+      "route": null,
+      "title": "qwen3.5:9b is already the everyday model",
+      "words": "qwen3.5:9b is already the model Jarvis uses, so this setup is ready - nothing needs changing."
+     },
+     "summary": "qwen3.5:9b at 196,608 tokens on the RTX 2060 (44.9 tokens a second), with qwen3.5:4b (65,536 tokens) on the RTX 2080 SUPER",
+     "thinking": "qwen3.5:9b has thinking ON by default, and with it on the answer came back EMPTY on all three measured questions. Thinking levels is what turns it off for ordinary turns; this setup assumes that setting and changes nothing itself.",
+     "uses": "Yes - both cards, one model each, run at once. Both fit entirely in video memory at these sizes: nothing spills and nothing is split.",
+     "what": "For building an Android app, or any other coding work: writing code, reading a file, fixing an error, or a long job where Jarvis has to keep a lot of the project in view at once.",
+     "why": "qwen3.5:9b scored 10/10 on the coding test and gave the best explanation answer measured, and it holds 196,608 tokens on the 12 GB card with nothing spilled. The 4B beside it also scored 10/10 and is the fastest model that still got the reasoning question right (77.1 tokens a second), so short questions do not pay the 9B's price.",
+     "work": "writing code, reading a file, fixing an error, multi-step coding work",
+     "worse": "The coding model writes more slowly than qwen3:8b would on the fast card, and the small model beside it is the one that got a trap question wrong when asked as an explanation - it is here for speed on short questions, not for careful reasoning."
+    },
+    {
+     "both_cards": true,
+     "card_words": "Switch everyday chat to qwen3.5:9b, for \"Admin and paperwork\"?\n\nWhat this setup is for: letters, statements, forms, policies and things to sort out.\nWhere it goes: the RTX 2060, holding 196,608 tokens of conversation (9.17 GB of the card's 12 GB, measured - nothing spills).\nBeside it: qwen3:8b on the RTX 2080 SUPER, 16,384 tokens.\n\nWhat it costs: The model that reads it all writes about 30% slower than qwen3:8b would on the fast card, and the fast card's conversation is only 16,384 tokens while it is the second model. The 12 GB card is fully committed, so nothing else fits on it.\nWhat it is worse at: The step from \"best explanation answer measured\" to \"best for paperwork\" is a reading, not a measurement: no summarise-a-whole-document test was run today. It rests on the explanation result and on the 196,608-token ceiling.\n\nNothing has changed yet. Approving this card switches one model; it does not download anything and it does not change any of Ollama's settings. The model you use now stays downloaded, so switching back is one more switch.",
+     "cost": "The model that reads it all writes about 30% slower than qwen3:8b would on the fast card, and the fast card's conversation is only 16,384 tokens while it is the second model. The 12 GB card is fully committed, so nothing else fits on it.",
+     "have": [
+      "qwen3.5:9b",
+      "qwen3:8b"
+     ],
+     "id": "admin",
+     "main_model": "qwen3.5:9b",
+     "models": [
+      "qwen3.5:9b",
+      "qwen3:8b"
+     ],
+     "name": "Admin and paperwork",
+     "need": [],
+     "places": [
+      {
+       "card": "RTX 2060",
+       "clean": true,
+       "context": 196608,
+       "context_words": "192K",
+       "disk_gb": 6.1,
+       "free_gib": 2.83,
+       "model": "qwen3.5:9b",
+       "role": "main",
+       "speed_tokens_per_s": 44.9,
+       "spill_gib": 0.0,
+       "vram_gib": 9.17,
+       "words": "Reads the whole letter or statement and answers about it"
+      },
+      {
+       "card": "RTX 2080 SUPER",
+       "clean": true,
+       "context": 16384,
+       "context_words": "16K",
+       "disk_gb": 4.87,
+       "free_gib": 2.16,
+       "model": "qwen3:8b",
+       "role": "beside",
+       "speed_tokens_per_s": 64.0,
+       "spill_gib": 0.0,
+       "vram_gib": 5.84,
+       "words": "Drafts and rewords quickly"
+      }
+     ],
+     "ready": "ready",
+     "ready_words": "Both models are downloaded already.",
+     "step": {
+      "body": null,
+      "detail": "Nothing to change.",
+      "done": true,
+      "kind": "none",
+      "route": null,
+      "title": "qwen3.5:9b is already the everyday model",
+      "words": "qwen3.5:9b is already the model Jarvis uses, so this setup is ready - nothing needs changing."
+     },
+     "summary": "qwen3.5:9b at 196,608 tokens on the RTX 2060 (44.9 tokens a second), with qwen3:8b (16,384 tokens) on the RTX 2080 SUPER",
+     "thinking": "qwen3.5:9b's thinking is off here (Thinking levels). With it on and an ordinary budget it answered nothing at all.",
+     "uses": "Yes - both cards, one model each, run at once, nothing spilled.",
+     "what": "For your own life admin: a long letter, a bank statement, a policy document, a form to fill in, or a pile of things to sort out and summarise - where being right matters more than being quick.",
+     "why": "qwen3.5:9b gave the best answer of the models asked the explanation question, and it is the one model that holds 196,608 tokens in video memory on this PC - which is what a letter, a statement or a policy document actually needs. qwen3:8b on the fast card keeps drafting quick.",
+     "work": "letters, statements, forms, policies and things to sort out",
+     "worse": "The step from \"best explanation answer measured\" to \"best for paperwork\" is a reading, not a measurement: no summarise-a-whole-document test was run today. It rests on the explanation result and on the 196,608-token ceiling."
+    },
+    {
+     "both_cards": true,
+     "card_words": "Switch everyday chat to qwen3.5:4b, for \"Long conversations and big documents\"?\n\nWhat this setup is for: one very long back-and-forth, or a document too big for anything else.\nWhere it goes: the RTX 2060, holding 262,144 tokens of conversation (8.27 GB of the card's 12 GB, measured - nothing spills).\nBeside it: qwen3:8b on the RTX 2080 SUPER, 16,384 tokens.\n\nWhat it costs: 262,144 tokens, which is a third more than the better model reaches and sixteen times the everyday setting. It is paid for in answer quality, not in speed: the small model writes at 63.1 tokens a second.\nWhat it is worse at: The model holding all that text got a trap question WRONG (\"all but 9 run away\" answered as 8, with a self-contradictory reason), and on the 12 GB card it produced a muddled explanation the same weights did not produce on the other card. Use it for size, not for care.\n\nNothing has changed yet. Approving this card switches one model; it does not download anything and it does not change any of Ollama's settings. The model you use now stays downloaded, so switching back is one more switch.",
+     "cost": "262,144 tokens, which is a third more than the better model reaches and sixteen times the everyday setting. It is paid for in answer quality, not in speed: the small model writes at 63.1 tokens a second.",
+     "have": [
+      "qwen3.5:4b",
+      "qwen3:8b"
+     ],
+     "id": "long",
+     "main_model": "qwen3.5:4b",
+     "models": [
+      "qwen3.5:4b",
+      "qwen3:8b"
+     ],
+     "name": "Long conversations and big documents",
+     "need": [],
+     "places": [
+      {
+       "card": "RTX 2060",
+       "clean": true,
+       "context": 262144,
+       "context_words": "256K",
+       "disk_gb": 3.16,
+       "free_gib": 3.73,
+       "model": "qwen3.5:4b",
+       "role": "main",
+       "speed_tokens_per_s": 63.1,
+       "spill_gib": 0.0,
+       "vram_gib": 8.27,
+       "words": "Holds the most text this PC can load at once"
+      },
+      {
+       "card": "RTX 2080 SUPER",
+       "clean": true,
+       "context": 16384,
+       "context_words": "16K",
+       "disk_gb": 4.87,
+       "free_gib": 2.16,
+       "model": "qwen3:8b",
+       "role": "beside",
+       "speed_tokens_per_s": 64.0,
+       "spill_gib": 0.0,
+       "vram_gib": 5.84,
+       "words": "Answers ordinary questions while the long one stays loaded"
+      }
+     ],
+     "ready": "ready",
+     "ready_words": "Both models are downloaded already.",
+     "step": {
+      "body": {
+       "ref": "qwen3.5:4b"
+      },
+      "detail": "Raises the usual model-switch card. The model you use now stays downloaded, so switching back is one more switch.",
+      "done": false,
+      "kind": "switch",
+      "route": "/api/models/switch",
+      "title": "Switch everyday chat to qwen3.5:4b",
+      "words": "Ready when you are: switching to qwen3.5:4b raises the usual approval card, and nothing changes until you approve it."
+     },
+     "summary": "qwen3.5:4b at 262,144 tokens on the RTX 2060 (63.1 tokens a second), with qwen3:8b (16,384 tokens) on the RTX 2080 SUPER",
+     "thinking": "",
+     "uses": "Yes - both cards, one model each, at once, nothing spilled.",
+     "what": "For one very long back-and-forth, or a document too big for any other setup - the most text this PC can genuinely hold at once.",
+     "why": "Measured: qwen3.5:4b is the only model that holds 262,144 tokens in video memory on the 2060 with zero spill, at 63.1 tokens a second - and 262,144 is the model's own limit, not the card's. qwen3.5:9b at that size spills 2.91 GB and falls to 21.9 tokens a second, and qwen3:8b stops at 40,960 because that is the model's own limit.",
+     "work": "one very long back-and-forth, or a document too big for anything else",
+     "worse": "The model holding all that text got a trap question WRONG (\"all but 9 run away\" answered as 8, with a self-contradictory reason), and on the 12 GB card it produced a muddled explanation the same weights did not produce on the other card. Use it for size, not for care."
+    },
+    {
+     "both_cards": true,
+     "card_words": "Switch everyday chat to ornith:9b, for \"Careful coding with a coding specialist\"?\n\nWhat this setup is for: multi-step coding work with tools, files and many steps.\nWhere it goes: the RTX 2060, holding 196,608 tokens of conversation (8.93 GB of the card's 12 GB, measured - nothing spills).\nBeside it: qwen3.5:9b on the RTX 2080 SUPER, 8,192 tokens.\n\nWhat it costs: On the one test both were given, the coding specialist scored WORSE: 8/10 against 10/10 for the general models. It is also slower than qwen3:8b on the same card (45.6 against 49.3 tokens a second). And the better general model beside it gets only 8,192 tokens, because the 8 GB card cannot hold more.\nWhat it is worse at: Everything in the line above: it scored 8/10 and lost the only measured coding comparison it was in, by ignoring the word \"DISTINCT\". One question with ten cases is not a verdict - but it is why this setup is not the default for coding.\n\nNothing has changed yet. Approving this card switches one model; it does not download anything and it does not change any of Ollama's settings. The model you use now stays downloaded, so switching back is one more switch.",
+     "cost": "On the one test both were given, the coding specialist scored WORSE: 8/10 against 10/10 for the general models. It is also slower than qwen3:8b on the same card (45.6 against 49.3 tokens a second). And the better general model beside it gets only 8,192 tokens, because the 8 GB card cannot hold more.",
+     "have": [
+      "ornith:9b",
+      "qwen3.5:9b"
+     ],
+     "id": "specialist",
+     "main_model": "ornith:9b",
+     "models": [
+      "ornith:9b",
+      "qwen3.5:9b"
+     ],
+     "name": "Careful coding with a coding specialist",
+     "need": [],
+     "places": [
+      {
+       "card": "RTX 2060",
+       "clean": true,
+       "context": 196608,
+       "context_words": "192K",
+       "disk_gb": 5.24,
+       "free_gib": 3.07,
+       "model": "ornith:9b",
+       "role": "main",
+       "speed_tokens_per_s": 49.1,
+       "spill_gib": 0.0,
+       "vram_gib": 8.93,
+       "words": "The model built for long, tool-driven coding jobs, MIT licensed"
+      },
+      {
+       "card": "RTX 2080 SUPER",
+       "clean": true,
+       "context": 8192,
+       "context_words": "8K",
+       "disk_gb": 6.1,
+       "free_gib": 2.78,
+       "model": "qwen3.5:9b",
+       "role": "beside",
+       "speed_tokens_per_s": 58.1,
+       "spill_gib": 0.0,
+       "vram_gib": 5.22,
+       "words": "The better general model, with a short conversation"
+      }
+     ],
+     "ready": "ready",
+     "ready_words": "Both models are downloaded already.",
+     "step": {
+      "body": {
+       "ref": "ornith:9b"
+      },
+      "detail": "Raises the usual model-switch card. The model you use now stays downloaded, so switching back is one more switch.",
+      "done": false,
+      "kind": "switch",
+      "route": "/api/models/switch",
+      "title": "Switch everyday chat to ornith:9b",
+      "words": "Ready when you are: switching to ornith:9b raises the usual approval card, and nothing changes until you approve it."
+     },
+     "summary": "ornith:9b at 196,608 tokens on the RTX 2060 (49.1 tokens a second), with qwen3.5:9b (8,192 tokens) on the RTX 2080 SUPER",
+     "thinking": "ornith:9b has thinking ON by default too, and the same trap applies: with thinking on and a normal budget it answered nothing. Thinking levels is what turns it off.",
+     "uses": "Yes - both cards, one model each, at once, nothing spilled.",
+     "what": "For long, multi-step coding work - many files, tools and steps - using the one model here that is purpose-built for it.",
+     "why": "ornith:9b is the only model installed that is built and benchmarked for multi-step agentic work (SWE-bench, Terminal-Bench), it carries the MIT licence and a 256K window, and it holds 196,608 tokens on the 12 GB card with nothing spilled. This setup exists so the choice can be settled on real work: the measured comparison today favours the general models (8/10 against 10/10), and the cheap way to settle it is to use both for a week.",
+     "work": "multi-step coding work with tools, files and many steps",
+     "worse": "Everything in the line above: it scored 8/10 and lost the only measured coding comparison it was in, by ignoring the word \"DISTINCT\". One question with ten cases is not a verdict - but it is why this setup is not the default for coding."
+    }
+   ],
+   "switch_path": "/api/models/switch"
+  },
+  "chosen_coding": {
+   "available": true,
+   "chosen": "coding",
+   "chosen_at": 1770000000,
+   "chosen_name": "Building an Android app",
+   "current_model": "jarvis-primary:latest",
+   "found": "5 work setups for this PC's own cards: \"Everyday quick answers\", \"Building an Android app\", \"Admin and paperwork\", \"Long conversations and big documents\", \"Careful coding with a coding specialist\".",
+   "how_to": "Say what you are about to work on and Jarvis will offer the setup for it - or pick one here before you start. Choosing only remembers the choice; switching a model is its own card, as always.",
+   "known_models": [
+    "jarvis-primary:latest",
+    "ornith:9b",
+    "qwen3.5:0.8b",
+    "qwen3.5:2b",
+    "qwen3.5:4b",
+    "qwen3.5:9b",
+    "qwen3:0.6b",
+    "qwen3:8b"
+   ],
+   "not_a_catalogue": "These are combinations of models already on this PC. There is no list here of models that could be downloaded, and no search.",
+   "ollama_seen": true,
+   "recommended": "coding",
+   "setups": [
+    {
+     "both_cards": true,
+     "card_words": "Switch everyday chat to qwen3:8b, for \"Everyday quick answers\"?\n\nWhat this setup is for: short questions, writing, checking things, one-off tasks.\nWhere it goes: the RTX 2080 SUPER, holding 16,384 tokens of conversation (5.84 GB of the card's 8 GB, measured - nothing spills).\nBeside it: qwen3.5:9b on the RTX 2060, 196,608 tokens.\n\nWhat it costs: Both models sit loaded at once, one per card, and that measured only -1.9% off the main model's speed while the other card worked. The everyday model's own conversation is capped at about 15,600 tokens of real input - that is its ceiling, not a guess.\nWhat it is worse at: Chosen for speed, not for the best answer: on the quality questions asked today qwen3:8b gave the weakest explanation of the three, and it led with the outdated reason.\n\nNothing has changed yet. Approving this card switches one model; it does not download anything and it does not change any of Ollama's settings. The model you use now stays downloaded, so switching back is one more switch.",
+     "cost": "Both models sit loaded at once, one per card, and that measured only -1.9% off the main model's speed while the other card worked. The everyday model's own conversation is capped at about 15,600 tokens of real input - that is its ceiling, not a guess.",
+     "have": [
+      "qwen3:8b",
+      "qwen3.5:9b"
+     ],
+     "id": "everyday",
+     "main_model": "qwen3:8b",
+     "models": [
+      "qwen3:8b",
+      "qwen3.5:9b"
+     ],
+     "name": "Everyday quick answers",
+     "need": [],
+     "places": [
+      {
+       "card": "RTX 2080 SUPER",
+       "clean": true,
+       "context": 16384,
+       "context_words": "16K",
+       "disk_gb": 4.87,
+       "free_gib": 2.16,
+       "model": "qwen3:8b",
+       "role": "main",
+       "speed_tokens_per_s": 64.0,
+       "spill_gib": 0.0,
+       "vram_gib": 5.84,
+       "words": "The everyday model, on the faster card"
+      },
+      {
+       "card": "RTX 2060",
+       "clean": true,
+       "context": 196608,
+       "context_words": "192K",
+       "disk_gb": 6.1,
+       "free_gib": 2.83,
+       "model": "qwen3.5:9b",
+       "role": "beside",
+       "speed_tokens_per_s": 44.9,
+       "spill_gib": 0.0,
+       "vram_gib": 9.17,
+       "words": "A second, better model waiting with room for a very long chat"
+      }
+     ],
+     "ready": "ready",
+     "ready_words": "Both models are downloaded already.",
+     "step": {
+      "body": {
+       "ref": "qwen3:8b"
+      },
+      "detail": "Raises the usual model-switch card. The model you use now stays downloaded, so switching back is one more switch.",
+      "done": false,
+      "kind": "switch",
+      "route": "/api/models/switch",
+      "title": "Switch everyday chat to qwen3:8b",
+      "words": "Ready when you are: switching to qwen3:8b raises the usual approval card, and nothing changes until you approve it."
+     },
+     "summary": "qwen3:8b at 16,384 tokens on the RTX 2080 SUPER (64 tokens a second), with qwen3.5:9b (196,608 tokens) on the RTX 2060",
+     "thinking": "Neither model thinks before answering here, and qwen3.5:9b is set that way in Thinking levels - left on it answered nothing at all on all three test questions.",
+     "uses": "Yes - both cards work at once, one model each. Nothing is split across both cards: that measured 3x slower.",
+     "what": "For short questions, a bit of writing, checking things and one-off tasks - the ordinary use of Jarvis, where waiting is the annoying part.",
+     "why": "qwen3:8b on the 2080 SUPER is the fastest useful setup measured: 64.0 tokens a second against 49.3 for the same model on the 2060. It scored 10/10 on the coding test and found a planted fact at both the start and the end of a 13,780-token prompt. The other card is not wasted beside it - it holds qwen3.5:9b at its full 196,608 tokens, which is 12x the conversation the everyday setting holds today.",
+     "work": "short questions, writing, checking things, one-off tasks",
+     "worse": "Chosen for speed, not for the best answer: on the quality questions asked today qwen3:8b gave the weakest explanation of the three, and it led with the outdated reason."
+    },
+    {
+     "both_cards": true,
+     "card_words": "Switch everyday chat to qwen3.5:9b, for \"Building an Android app\"?\n\nWhat this setup is for: writing code, reading a file, fixing an error, multi-step coding work.\nWhere it goes: the RTX 2060, holding 196,608 tokens of conversation (9.17 GB of the card's 12 GB, measured - nothing spills).\nBeside it: qwen3.5:4b on the RTX 2080 SUPER, 65,536 tokens.\n\nWhat it costs: The card that writes the code is the slower one - 44.9 tokens a second against 64.0 on the other card - and qwen3.5:9b fills 9.17 of its 12 GB at this context, so the other card is the only place a second model can go. What the slow card buys is 196,608 tokens of project in view instead of 16,384, about twelve times as much. Both cards still work at once, for the same -1.9%.\nWhat it is worse at: The coding model writes more slowly than qwen3:8b would on the fast card, and the small model beside it is the one that got a trap question wrong when asked as an explanation - it is here for speed on short questions, not for careful reasoning.\n\nNothing has changed yet. Approving this card switches one model; it does not download anything and it does not change any of Ollama's settings. The model you use now stays downloaded, so switching back is one more switch.",
+     "cost": "The card that writes the code is the slower one - 44.9 tokens a second against 64.0 on the other card - and qwen3.5:9b fills 9.17 of its 12 GB at this context, so the other card is the only place a second model can go. What the slow card buys is 196,608 tokens of project in view instead of 16,384, about twelve times as much. Both cards still work at once, for the same -1.9%.",
+     "have": [
+      "qwen3.5:9b",
+      "qwen3.5:4b"
+     ],
+     "id": "coding",
+     "main_model": "qwen3.5:9b",
+     "models": [
+      "qwen3.5:9b",
+      "qwen3.5:4b"
+     ],
+     "name": "Building an Android app",
+     "need": [],
+     "places": [
+      {
+       "card": "RTX 2060",
+       "clean": true,
+       "context": 196608,
+       "context_words": "192K",
+       "disk_gb": 6.1,
+       "free_gib": 2.83,
+       "model": "qwen3.5:9b",
+       "role": "main",
+       "speed_tokens_per_s": 44.9,
+       "spill_gib": 0.0,
+       "vram_gib": 9.17,
+       "words": "Writes the code, with room for a whole project in view"
+      },
+      {
+       "card": "RTX 2080 SUPER",
+       "clean": true,
+       "context": 65536,
+       "context_words": "64K",
+       "disk_gb": 3.16,
+       "free_gib": 3.85,
+       "model": "qwen3.5:4b",
+       "role": "beside",
+       "speed_tokens_per_s": 77.1,
+       "spill_gib": 0.0,
+       "vram_gib": 4.15,
+       "words": "Answers quick questions about the code, fast"
+      }
+     ],
+     "ready": "ready",
+     "ready_words": "Both models are downloaded already.",
+     "step": {
+      "body": {
+       "ref": "qwen3.5:9b"
+      },
+      "detail": "Raises the usual model-switch card. The model you use now stays downloaded, so switching back is one more switch.",
+      "done": false,
+      "kind": "switch",
+      "route": "/api/models/switch",
+      "title": "Switch everyday chat to qwen3.5:9b",
+      "words": "Ready when you are: switching to qwen3.5:9b raises the usual approval card, and nothing changes until you approve it."
+     },
+     "summary": "qwen3.5:9b at 196,608 tokens on the RTX 2060 (44.9 tokens a second), with qwen3.5:4b (65,536 tokens) on the RTX 2080 SUPER",
+     "thinking": "qwen3.5:9b has thinking ON by default, and with it on the answer came back EMPTY on all three measured questions. Thinking levels is what turns it off for ordinary turns; this setup assumes that setting and changes nothing itself.",
+     "uses": "Yes - both cards, one model each, run at once. Both fit entirely in video memory at these sizes: nothing spills and nothing is split.",
+     "what": "For building an Android app, or any other coding work: writing code, reading a file, fixing an error, or a long job where Jarvis has to keep a lot of the project in view at once.",
+     "why": "qwen3.5:9b scored 10/10 on the coding test and gave the best explanation answer measured, and it holds 196,608 tokens on the 12 GB card with nothing spilled. The 4B beside it also scored 10/10 and is the fastest model that still got the reasoning question right (77.1 tokens a second), so short questions do not pay the 9B's price.",
+     "work": "writing code, reading a file, fixing an error, multi-step coding work",
+     "worse": "The coding model writes more slowly than qwen3:8b would on the fast card, and the small model beside it is the one that got a trap question wrong when asked as an explanation - it is here for speed on short questions, not for careful reasoning."
+    },
+    {
+     "both_cards": true,
+     "card_words": "Switch everyday chat to qwen3.5:9b, for \"Admin and paperwork\"?\n\nWhat this setup is for: letters, statements, forms, policies and things to sort out.\nWhere it goes: the RTX 2060, holding 196,608 tokens of conversation (9.17 GB of the card's 12 GB, measured - nothing spills).\nBeside it: qwen3:8b on the RTX 2080 SUPER, 16,384 tokens.\n\nWhat it costs: The model that reads it all writes about 30% slower than qwen3:8b would on the fast card, and the fast card's conversation is only 16,384 tokens while it is the second model. The 12 GB card is fully committed, so nothing else fits on it.\nWhat it is worse at: The step from \"best explanation answer measured\" to \"best for paperwork\" is a reading, not a measurement: no summarise-a-whole-document test was run today. It rests on the explanation result and on the 196,608-token ceiling.\n\nNothing has changed yet. Approving this card switches one model; it does not download anything and it does not change any of Ollama's settings. The model you use now stays downloaded, so switching back is one more switch.",
+     "cost": "The model that reads it all writes about 30% slower than qwen3:8b would on the fast card, and the fast card's conversation is only 16,384 tokens while it is the second model. The 12 GB card is fully committed, so nothing else fits on it.",
+     "have": [
+      "qwen3.5:9b",
+      "qwen3:8b"
+     ],
+     "id": "admin",
+     "main_model": "qwen3.5:9b",
+     "models": [
+      "qwen3.5:9b",
+      "qwen3:8b"
+     ],
+     "name": "Admin and paperwork",
+     "need": [],
+     "places": [
+      {
+       "card": "RTX 2060",
+       "clean": true,
+       "context": 196608,
+       "context_words": "192K",
+       "disk_gb": 6.1,
+       "free_gib": 2.83,
+       "model": "qwen3.5:9b",
+       "role": "main",
+       "speed_tokens_per_s": 44.9,
+       "spill_gib": 0.0,
+       "vram_gib": 9.17,
+       "words": "Reads the whole letter or statement and answers about it"
+      },
+      {
+       "card": "RTX 2080 SUPER",
+       "clean": true,
+       "context": 16384,
+       "context_words": "16K",
+       "disk_gb": 4.87,
+       "free_gib": 2.16,
+       "model": "qwen3:8b",
+       "role": "beside",
+       "speed_tokens_per_s": 64.0,
+       "spill_gib": 0.0,
+       "vram_gib": 5.84,
+       "words": "Drafts and rewords quickly"
+      }
+     ],
+     "ready": "ready",
+     "ready_words": "Both models are downloaded already.",
+     "step": {
+      "body": {
+       "ref": "qwen3.5:9b"
+      },
+      "detail": "Raises the usual model-switch card. The model you use now stays downloaded, so switching back is one more switch.",
+      "done": false,
+      "kind": "switch",
+      "route": "/api/models/switch",
+      "title": "Switch everyday chat to qwen3.5:9b",
+      "words": "Ready when you are: switching to qwen3.5:9b raises the usual approval card, and nothing changes until you approve it."
+     },
+     "summary": "qwen3.5:9b at 196,608 tokens on the RTX 2060 (44.9 tokens a second), with qwen3:8b (16,384 tokens) on the RTX 2080 SUPER",
+     "thinking": "qwen3.5:9b's thinking is off here (Thinking levels). With it on and an ordinary budget it answered nothing at all.",
+     "uses": "Yes - both cards, one model each, run at once, nothing spilled.",
+     "what": "For your own life admin: a long letter, a bank statement, a policy document, a form to fill in, or a pile of things to sort out and summarise - where being right matters more than being quick.",
+     "why": "qwen3.5:9b gave the best answer of the models asked the explanation question, and it is the one model that holds 196,608 tokens in video memory on this PC - which is what a letter, a statement or a policy document actually needs. qwen3:8b on the fast card keeps drafting quick.",
+     "work": "letters, statements, forms, policies and things to sort out",
+     "worse": "The step from \"best explanation answer measured\" to \"best for paperwork\" is a reading, not a measurement: no summarise-a-whole-document test was run today. It rests on the explanation result and on the 196,608-token ceiling."
+    },
+    {
+     "both_cards": true,
+     "card_words": "Switch everyday chat to qwen3.5:4b, for \"Long conversations and big documents\"?\n\nWhat this setup is for: one very long back-and-forth, or a document too big for anything else.\nWhere it goes: the RTX 2060, holding 262,144 tokens of conversation (8.27 GB of the card's 12 GB, measured - nothing spills).\nBeside it: qwen3:8b on the RTX 2080 SUPER, 16,384 tokens.\n\nWhat it costs: 262,144 tokens, which is a third more than the better model reaches and sixteen times the everyday setting. It is paid for in answer quality, not in speed: the small model writes at 63.1 tokens a second.\nWhat it is worse at: The model holding all that text got a trap question WRONG (\"all but 9 run away\" answered as 8, with a self-contradictory reason), and on the 12 GB card it produced a muddled explanation the same weights did not produce on the other card. Use it for size, not for care.\n\nNothing has changed yet. Approving this card switches one model; it does not download anything and it does not change any of Ollama's settings. The model you use now stays downloaded, so switching back is one more switch.",
+     "cost": "262,144 tokens, which is a third more than the better model reaches and sixteen times the everyday setting. It is paid for in answer quality, not in speed: the small model writes at 63.1 tokens a second.",
+     "have": [
+      "qwen3.5:4b",
+      "qwen3:8b"
+     ],
+     "id": "long",
+     "main_model": "qwen3.5:4b",
+     "models": [
+      "qwen3.5:4b",
+      "qwen3:8b"
+     ],
+     "name": "Long conversations and big documents",
+     "need": [],
+     "places": [
+      {
+       "card": "RTX 2060",
+       "clean": true,
+       "context": 262144,
+       "context_words": "256K",
+       "disk_gb": 3.16,
+       "free_gib": 3.73,
+       "model": "qwen3.5:4b",
+       "role": "main",
+       "speed_tokens_per_s": 63.1,
+       "spill_gib": 0.0,
+       "vram_gib": 8.27,
+       "words": "Holds the most text this PC can load at once"
+      },
+      {
+       "card": "RTX 2080 SUPER",
+       "clean": true,
+       "context": 16384,
+       "context_words": "16K",
+       "disk_gb": 4.87,
+       "free_gib": 2.16,
+       "model": "qwen3:8b",
+       "role": "beside",
+       "speed_tokens_per_s": 64.0,
+       "spill_gib": 0.0,
+       "vram_gib": 5.84,
+       "words": "Answers ordinary questions while the long one stays loaded"
+      }
+     ],
+     "ready": "ready",
+     "ready_words": "Both models are downloaded already.",
+     "step": {
+      "body": {
+       "ref": "qwen3.5:4b"
+      },
+      "detail": "Raises the usual model-switch card. The model you use now stays downloaded, so switching back is one more switch.",
+      "done": false,
+      "kind": "switch",
+      "route": "/api/models/switch",
+      "title": "Switch everyday chat to qwen3.5:4b",
+      "words": "Ready when you are: switching to qwen3.5:4b raises the usual approval card, and nothing changes until you approve it."
+     },
+     "summary": "qwen3.5:4b at 262,144 tokens on the RTX 2060 (63.1 tokens a second), with qwen3:8b (16,384 tokens) on the RTX 2080 SUPER",
+     "thinking": "",
+     "uses": "Yes - both cards, one model each, at once, nothing spilled.",
+     "what": "For one very long back-and-forth, or a document too big for any other setup - the most text this PC can genuinely hold at once.",
+     "why": "Measured: qwen3.5:4b is the only model that holds 262,144 tokens in video memory on the 2060 with zero spill, at 63.1 tokens a second - and 262,144 is the model's own limit, not the card's. qwen3.5:9b at that size spills 2.91 GB and falls to 21.9 tokens a second, and qwen3:8b stops at 40,960 because that is the model's own limit.",
+     "work": "one very long back-and-forth, or a document too big for anything else",
+     "worse": "The model holding all that text got a trap question WRONG (\"all but 9 run away\" answered as 8, with a self-contradictory reason), and on the 12 GB card it produced a muddled explanation the same weights did not produce on the other card. Use it for size, not for care."
+    },
+    {
+     "both_cards": true,
+     "card_words": "Switch everyday chat to ornith:9b, for \"Careful coding with a coding specialist\"?\n\nWhat this setup is for: multi-step coding work with tools, files and many steps.\nWhere it goes: the RTX 2060, holding 196,608 tokens of conversation (8.93 GB of the card's 12 GB, measured - nothing spills).\nBeside it: qwen3.5:9b on the RTX 2080 SUPER, 8,192 tokens.\n\nWhat it costs: On the one test both were given, the coding specialist scored WORSE: 8/10 against 10/10 for the general models. It is also slower than qwen3:8b on the same card (45.6 against 49.3 tokens a second). And the better general model beside it gets only 8,192 tokens, because the 8 GB card cannot hold more.\nWhat it is worse at: Everything in the line above: it scored 8/10 and lost the only measured coding comparison it was in, by ignoring the word \"DISTINCT\". One question with ten cases is not a verdict - but it is why this setup is not the default for coding.\n\nNothing has changed yet. Approving this card switches one model; it does not download anything and it does not change any of Ollama's settings. The model you use now stays downloaded, so switching back is one more switch.",
+     "cost": "On the one test both were given, the coding specialist scored WORSE: 8/10 against 10/10 for the general models. It is also slower than qwen3:8b on the same card (45.6 against 49.3 tokens a second). And the better general model beside it gets only 8,192 tokens, because the 8 GB card cannot hold more.",
+     "have": [
+      "ornith:9b",
+      "qwen3.5:9b"
+     ],
+     "id": "specialist",
+     "main_model": "ornith:9b",
+     "models": [
+      "ornith:9b",
+      "qwen3.5:9b"
+     ],
+     "name": "Careful coding with a coding specialist",
+     "need": [],
+     "places": [
+      {
+       "card": "RTX 2060",
+       "clean": true,
+       "context": 196608,
+       "context_words": "192K",
+       "disk_gb": 5.24,
+       "free_gib": 3.07,
+       "model": "ornith:9b",
+       "role": "main",
+       "speed_tokens_per_s": 49.1,
+       "spill_gib": 0.0,
+       "vram_gib": 8.93,
+       "words": "The model built for long, tool-driven coding jobs, MIT licensed"
+      },
+      {
+       "card": "RTX 2080 SUPER",
+       "clean": true,
+       "context": 8192,
+       "context_words": "8K",
+       "disk_gb": 6.1,
+       "free_gib": 2.78,
+       "model": "qwen3.5:9b",
+       "role": "beside",
+       "speed_tokens_per_s": 58.1,
+       "spill_gib": 0.0,
+       "vram_gib": 5.22,
+       "words": "The better general model, with a short conversation"
+      }
+     ],
+     "ready": "ready",
+     "ready_words": "Both models are downloaded already.",
+     "step": {
+      "body": {
+       "ref": "ornith:9b"
+      },
+      "detail": "Raises the usual model-switch card. The model you use now stays downloaded, so switching back is one more switch.",
+      "done": false,
+      "kind": "switch",
+      "route": "/api/models/switch",
+      "title": "Switch everyday chat to ornith:9b",
+      "words": "Ready when you are: switching to ornith:9b raises the usual approval card, and nothing changes until you approve it."
+     },
+     "summary": "ornith:9b at 196,608 tokens on the RTX 2060 (49.1 tokens a second), with qwen3.5:9b (8,192 tokens) on the RTX 2080 SUPER",
+     "thinking": "ornith:9b has thinking ON by default too, and the same trap applies: with thinking on and a normal budget it answered nothing. Thinking levels is what turns it off.",
+     "uses": "Yes - both cards, one model each, at once, nothing spilled.",
+     "what": "For long, multi-step coding work - many files, tools and steps - using the one model here that is purpose-built for it.",
+     "why": "ornith:9b is the only model installed that is built and benchmarked for multi-step agentic work (SWE-bench, Terminal-Bench), it carries the MIT licence and a 256K window, and it holds 196,608 tokens on the 12 GB card with nothing spilled. This setup exists so the choice can be settled on real work: the measured comparison today favours the general models (8/10 against 10/10), and the cheap way to settle it is to use both for a week.",
+     "work": "multi-step coding work with tools, files and many steps",
+     "worse": "Everything in the line above: it scored 8/10 and lost the only measured coding comparison it was in, by ignoring the word \"DISTINCT\". One question with ten cases is not a verdict - but it is why this setup is not the default for coding."
+    }
+   ],
+   "switch_path": "/api/models/switch"
+  },
+  "fresh_pc": {
+   "available": true,
+   "chosen": null,
+   "chosen_at": null,
+   "chosen_name": null,
+   "current_model": "jarvis-primary:latest",
+   "found": "5 work setups for this PC's own cards: \"Everyday quick answers\", \"Building an Android app\", \"Admin and paperwork\", \"Long conversations and big documents\", \"Careful coding with a coding specialist\".",
+   "how_to": "Say what you are about to work on and Jarvis will offer the setup for it - or pick one here before you start. Choosing only remembers the choice; switching a model is its own card, as always.",
+   "known_models": [
+    "jarvis-primary:latest",
+    "qwen3:8b"
+   ],
+   "not_a_catalogue": "These are combinations of models already on this PC. There is no list here of models that could be downloaded, and no search.",
+   "ollama_seen": true,
+   "recommended": null,
+   "setups": [
+    {
+     "both_cards": true,
+     "card_words": "Switch everyday chat to qwen3:8b, for \"Everyday quick answers\"?\n\nWhat this setup is for: short questions, writing, checking things, one-off tasks.\nWhere it goes: the RTX 2080 SUPER, holding 16,384 tokens of conversation (5.84 GB of the card's 8 GB, measured - nothing spills).\nBeside it: qwen3.5:9b on the RTX 2060, 196,608 tokens.\n\nWhat it costs: Both models sit loaded at once, one per card, and that measured only -1.9% off the main model's speed while the other card worked. The everyday model's own conversation is capped at about 15,600 tokens of real input - that is its ceiling, not a guess.\nWhat it is worse at: Chosen for speed, not for the best answer: on the quality questions asked today qwen3:8b gave the weakest explanation of the three, and it led with the outdated reason.\n\nNothing has changed yet. Approving this card switches one model; it does not download anything and it does not change any of Ollama's settings. The model you use now stays downloaded, so switching back is one more switch.",
+     "cost": "Both models sit loaded at once, one per card, and that measured only -1.9% off the main model's speed while the other card worked. The everyday model's own conversation is capped at about 15,600 tokens of real input - that is its ceiling, not a guess.",
+     "have": [
+      "qwen3:8b"
+     ],
+     "id": "everyday",
+     "main_model": "qwen3:8b",
+     "models": [
+      "qwen3:8b",
+      "qwen3.5:9b"
+     ],
+     "name": "Everyday quick answers",
+     "need": [
+      "qwen3.5:9b"
+     ],
+     "places": [
+      {
+       "card": "RTX 2080 SUPER",
+       "clean": true,
+       "context": 16384,
+       "context_words": "16K",
+       "disk_gb": 4.87,
+       "free_gib": 2.16,
+       "model": "qwen3:8b",
+       "role": "main",
+       "speed_tokens_per_s": 64.0,
+       "spill_gib": 0.0,
+       "vram_gib": 5.84,
+       "words": "The everyday model, on the faster card"
+      },
+      {
+       "card": "RTX 2060",
+       "clean": true,
+       "context": 196608,
+       "context_words": "192K",
+       "disk_gb": 6.1,
+       "free_gib": 2.83,
+       "model": "qwen3.5:9b",
+       "role": "beside",
+       "speed_tokens_per_s": 44.9,
+       "spill_gib": 0.0,
+       "vram_gib": 9.17,
+       "words": "A second, better model waiting with room for a very long chat"
+      }
+     ],
+     "ready": "partial",
+     "ready_words": "Already here: qwen3:8b. Still to download: qwen3.5:9b - the usual download card, nothing until you approve it.",
+     "step": {
+      "body": {
+       "ref": "qwen3:8b"
+      },
+      "detail": "Raises the usual model-switch card. The model you use now stays downloaded, so switching back is one more switch.",
+      "done": false,
+      "kind": "switch",
+      "route": "/api/models/switch",
+      "title": "Switch everyday chat to qwen3:8b",
+      "words": "Ready when you are: switching to qwen3:8b raises the usual approval card, and nothing changes until you approve it."
+     },
+     "summary": "qwen3:8b at 16,384 tokens on the RTX 2080 SUPER (64 tokens a second), with qwen3.5:9b (196,608 tokens) on the RTX 2060",
+     "thinking": "Neither model thinks before answering here, and qwen3.5:9b is set that way in Thinking levels - left on it answered nothing at all on all three test questions.",
+     "uses": "Yes - both cards work at once, one model each. Nothing is split across both cards: that measured 3x slower.",
+     "what": "For short questions, a bit of writing, checking things and one-off tasks - the ordinary use of Jarvis, where waiting is the annoying part.",
+     "why": "qwen3:8b on the 2080 SUPER is the fastest useful setup measured: 64.0 tokens a second against 49.3 for the same model on the 2060. It scored 10/10 on the coding test and found a planted fact at both the start and the end of a 13,780-token prompt. The other card is not wasted beside it - it holds qwen3.5:9b at its full 196,608 tokens, which is 12x the conversation the everyday setting holds today.",
+     "work": "short questions, writing, checking things, one-off tasks",
+     "worse": "Chosen for speed, not for the best answer: on the quality questions asked today qwen3:8b gave the weakest explanation of the three, and it led with the outdated reason."
+    },
+    {
+     "both_cards": true,
+     "card_words": "Switch everyday chat to qwen3.5:9b, for \"Building an Android app\"?\n\nWhat this setup is for: writing code, reading a file, fixing an error, multi-step coding work.\nWhere it goes: the RTX 2060, holding 196,608 tokens of conversation (9.17 GB of the card's 12 GB, measured - nothing spills).\nBeside it: qwen3.5:4b on the RTX 2080 SUPER, 65,536 tokens.\n\nWhat it costs: The card that writes the code is the slower one - 44.9 tokens a second against 64.0 on the other card - and qwen3.5:9b fills 9.17 of its 12 GB at this context, so the other card is the only place a second model can go. What the slow card buys is 196,608 tokens of project in view instead of 16,384, about twelve times as much. Both cards still work at once, for the same -1.9%.\nWhat it is worse at: The coding model writes more slowly than qwen3:8b would on the fast card, and the small model beside it is the one that got a trap question wrong when asked as an explanation - it is here for speed on short questions, not for careful reasoning.\n\nNothing has changed yet. Approving this card switches one model; it does not download anything and it does not change any of Ollama's settings. The model you use now stays downloaded, so switching back is one more switch.",
+     "cost": "The card that writes the code is the slower one - 44.9 tokens a second against 64.0 on the other card - and qwen3.5:9b fills 9.17 of its 12 GB at this context, so the other card is the only place a second model can go. What the slow card buys is 196,608 tokens of project in view instead of 16,384, about twelve times as much. Both cards still work at once, for the same -1.9%.",
+     "have": [],
+     "id": "coding",
+     "main_model": "qwen3.5:9b",
+     "models": [
+      "qwen3.5:9b",
+      "qwen3.5:4b"
+     ],
+     "name": "Building an Android app",
+     "need": [
+      "qwen3.5:9b",
+      "qwen3.5:4b"
+     ],
+     "places": [
+      {
+       "card": "RTX 2060",
+       "clean": true,
+       "context": 196608,
+       "context_words": "192K",
+       "disk_gb": 6.1,
+       "free_gib": 2.83,
+       "model": "qwen3.5:9b",
+       "role": "main",
+       "speed_tokens_per_s": 44.9,
+       "spill_gib": 0.0,
+       "vram_gib": 9.17,
+       "words": "Writes the code, with room for a whole project in view"
+      },
+      {
+       "card": "RTX 2080 SUPER",
+       "clean": true,
+       "context": 65536,
+       "context_words": "64K",
+       "disk_gb": 3.16,
+       "free_gib": 3.85,
+       "model": "qwen3.5:4b",
+       "role": "beside",
+       "speed_tokens_per_s": 77.1,
+       "spill_gib": 0.0,
+       "vram_gib": 4.15,
+       "words": "Answers quick questions about the code, fast"
+      }
+     ],
+     "ready": "missing",
+     "ready_words": "Not downloaded yet: qwen3.5:9b, qwen3.5:4b. Choosing this setup would ask to download it, with the usual card - nothing downloads until you approve it.",
+     "step": {
+      "body": null,
+      "detail": "qwen3.5:9b is not downloaded on this PC. The download card is the usual one (Brain, Models) - Jarvis does not download a model from this screen.",
+      "done": false,
+      "kind": "missing",
+      "route": null,
+      "title": "Download qwen3.5:9b first",
+      "words": "qwen3.5:9b is not downloaded yet, so this setup cannot be used. Download it from Brain, Models - the usual card - and then choose this setup again."
+     },
+     "summary": "qwen3.5:9b at 196,608 tokens on the RTX 2060 (44.9 tokens a second), with qwen3.5:4b (65,536 tokens) on the RTX 2080 SUPER",
+     "thinking": "qwen3.5:9b has thinking ON by default, and with it on the answer came back EMPTY on all three measured questions. Thinking levels is what turns it off for ordinary turns; this setup assumes that setting and changes nothing itself.",
+     "uses": "Yes - both cards, one model each, run at once. Both fit entirely in video memory at these sizes: nothing spills and nothing is split.",
+     "what": "For building an Android app, or any other coding work: writing code, reading a file, fixing an error, or a long job where Jarvis has to keep a lot of the project in view at once.",
+     "why": "qwen3.5:9b scored 10/10 on the coding test and gave the best explanation answer measured, and it holds 196,608 tokens on the 12 GB card with nothing spilled. The 4B beside it also scored 10/10 and is the fastest model that still got the reasoning question right (77.1 tokens a second), so short questions do not pay the 9B's price.",
+     "work": "writing code, reading a file, fixing an error, multi-step coding work",
+     "worse": "The coding model writes more slowly than qwen3:8b would on the fast card, and the small model beside it is the one that got a trap question wrong when asked as an explanation - it is here for speed on short questions, not for careful reasoning."
+    },
+    {
+     "both_cards": true,
+     "card_words": "Switch everyday chat to qwen3.5:9b, for \"Admin and paperwork\"?\n\nWhat this setup is for: letters, statements, forms, policies and things to sort out.\nWhere it goes: the RTX 2060, holding 196,608 tokens of conversation (9.17 GB of the card's 12 GB, measured - nothing spills).\nBeside it: qwen3:8b on the RTX 2080 SUPER, 16,384 tokens.\n\nWhat it costs: The model that reads it all writes about 30% slower than qwen3:8b would on the fast card, and the fast card's conversation is only 16,384 tokens while it is the second model. The 12 GB card is fully committed, so nothing else fits on it.\nWhat it is worse at: The step from \"best explanation answer measured\" to \"best for paperwork\" is a reading, not a measurement: no summarise-a-whole-document test was run today. It rests on the explanation result and on the 196,608-token ceiling.\n\nNothing has changed yet. Approving this card switches one model; it does not download anything and it does not change any of Ollama's settings. The model you use now stays downloaded, so switching back is one more switch.",
+     "cost": "The model that reads it all writes about 30% slower than qwen3:8b would on the fast card, and the fast card's conversation is only 16,384 tokens while it is the second model. The 12 GB card is fully committed, so nothing else fits on it.",
+     "have": [
+      "qwen3:8b"
+     ],
+     "id": "admin",
+     "main_model": "qwen3.5:9b",
+     "models": [
+      "qwen3.5:9b",
+      "qwen3:8b"
+     ],
+     "name": "Admin and paperwork",
+     "need": [
+      "qwen3.5:9b"
+     ],
+     "places": [
+      {
+       "card": "RTX 2060",
+       "clean": true,
+       "context": 196608,
+       "context_words": "192K",
+       "disk_gb": 6.1,
+       "free_gib": 2.83,
+       "model": "qwen3.5:9b",
+       "role": "main",
+       "speed_tokens_per_s": 44.9,
+       "spill_gib": 0.0,
+       "vram_gib": 9.17,
+       "words": "Reads the whole letter or statement and answers about it"
+      },
+      {
+       "card": "RTX 2080 SUPER",
+       "clean": true,
+       "context": 16384,
+       "context_words": "16K",
+       "disk_gb": 4.87,
+       "free_gib": 2.16,
+       "model": "qwen3:8b",
+       "role": "beside",
+       "speed_tokens_per_s": 64.0,
+       "spill_gib": 0.0,
+       "vram_gib": 5.84,
+       "words": "Drafts and rewords quickly"
+      }
+     ],
+     "ready": "partial",
+     "ready_words": "Already here: qwen3:8b. Still to download: qwen3.5:9b - the usual download card, nothing until you approve it.",
+     "step": {
+      "body": null,
+      "detail": "qwen3.5:9b is not downloaded on this PC. The download card is the usual one (Brain, Models) - Jarvis does not download a model from this screen.",
+      "done": false,
+      "kind": "missing",
+      "route": null,
+      "title": "Download qwen3.5:9b first",
+      "words": "qwen3.5:9b is not downloaded yet, so this setup cannot be used. Download it from Brain, Models - the usual card - and then choose this setup again."
+     },
+     "summary": "qwen3.5:9b at 196,608 tokens on the RTX 2060 (44.9 tokens a second), with qwen3:8b (16,384 tokens) on the RTX 2080 SUPER",
+     "thinking": "qwen3.5:9b's thinking is off here (Thinking levels). With it on and an ordinary budget it answered nothing at all.",
+     "uses": "Yes - both cards, one model each, run at once, nothing spilled.",
+     "what": "For your own life admin: a long letter, a bank statement, a policy document, a form to fill in, or a pile of things to sort out and summarise - where being right matters more than being quick.",
+     "why": "qwen3.5:9b gave the best answer of the models asked the explanation question, and it is the one model that holds 196,608 tokens in video memory on this PC - which is what a letter, a statement or a policy document actually needs. qwen3:8b on the fast card keeps drafting quick.",
+     "work": "letters, statements, forms, policies and things to sort out",
+     "worse": "The step from \"best explanation answer measured\" to \"best for paperwork\" is a reading, not a measurement: no summarise-a-whole-document test was run today. It rests on the explanation result and on the 196,608-token ceiling."
+    },
+    {
+     "both_cards": true,
+     "card_words": "Switch everyday chat to qwen3.5:4b, for \"Long conversations and big documents\"?\n\nWhat this setup is for: one very long back-and-forth, or a document too big for anything else.\nWhere it goes: the RTX 2060, holding 262,144 tokens of conversation (8.27 GB of the card's 12 GB, measured - nothing spills).\nBeside it: qwen3:8b on the RTX 2080 SUPER, 16,384 tokens.\n\nWhat it costs: 262,144 tokens, which is a third more than the better model reaches and sixteen times the everyday setting. It is paid for in answer quality, not in speed: the small model writes at 63.1 tokens a second.\nWhat it is worse at: The model holding all that text got a trap question WRONG (\"all but 9 run away\" answered as 8, with a self-contradictory reason), and on the 12 GB card it produced a muddled explanation the same weights did not produce on the other card. Use it for size, not for care.\n\nNothing has changed yet. Approving this card switches one model; it does not download anything and it does not change any of Ollama's settings. The model you use now stays downloaded, so switching back is one more switch.",
+     "cost": "262,144 tokens, which is a third more than the better model reaches and sixteen times the everyday setting. It is paid for in answer quality, not in speed: the small model writes at 63.1 tokens a second.",
+     "have": [
+      "qwen3:8b"
+     ],
+     "id": "long",
+     "main_model": "qwen3.5:4b",
+     "models": [
+      "qwen3.5:4b",
+      "qwen3:8b"
+     ],
+     "name": "Long conversations and big documents",
+     "need": [
+      "qwen3.5:4b"
+     ],
+     "places": [
+      {
+       "card": "RTX 2060",
+       "clean": true,
+       "context": 262144,
+       "context_words": "256K",
+       "disk_gb": 3.16,
+       "free_gib": 3.73,
+       "model": "qwen3.5:4b",
+       "role": "main",
+       "speed_tokens_per_s": 63.1,
+       "spill_gib": 0.0,
+       "vram_gib": 8.27,
+       "words": "Holds the most text this PC can load at once"
+      },
+      {
+       "card": "RTX 2080 SUPER",
+       "clean": true,
+       "context": 16384,
+       "context_words": "16K",
+       "disk_gb": 4.87,
+       "free_gib": 2.16,
+       "model": "qwen3:8b",
+       "role": "beside",
+       "speed_tokens_per_s": 64.0,
+       "spill_gib": 0.0,
+       "vram_gib": 5.84,
+       "words": "Answers ordinary questions while the long one stays loaded"
+      }
+     ],
+     "ready": "partial",
+     "ready_words": "Already here: qwen3:8b. Still to download: qwen3.5:4b - the usual download card, nothing until you approve it.",
+     "step": {
+      "body": null,
+      "detail": "qwen3.5:4b is not downloaded on this PC. The download card is the usual one (Brain, Models) - Jarvis does not download a model from this screen.",
+      "done": false,
+      "kind": "missing",
+      "route": null,
+      "title": "Download qwen3.5:4b first",
+      "words": "qwen3.5:4b is not downloaded yet, so this setup cannot be used. Download it from Brain, Models - the usual card - and then choose this setup again."
+     },
+     "summary": "qwen3.5:4b at 262,144 tokens on the RTX 2060 (63.1 tokens a second), with qwen3:8b (16,384 tokens) on the RTX 2080 SUPER",
+     "thinking": "",
+     "uses": "Yes - both cards, one model each, at once, nothing spilled.",
+     "what": "For one very long back-and-forth, or a document too big for any other setup - the most text this PC can genuinely hold at once.",
+     "why": "Measured: qwen3.5:4b is the only model that holds 262,144 tokens in video memory on the 2060 with zero spill, at 63.1 tokens a second - and 262,144 is the model's own limit, not the card's. qwen3.5:9b at that size spills 2.91 GB and falls to 21.9 tokens a second, and qwen3:8b stops at 40,960 because that is the model's own limit.",
+     "work": "one very long back-and-forth, or a document too big for anything else",
+     "worse": "The model holding all that text got a trap question WRONG (\"all but 9 run away\" answered as 8, with a self-contradictory reason), and on the 12 GB card it produced a muddled explanation the same weights did not produce on the other card. Use it for size, not for care."
+    },
+    {
+     "both_cards": true,
+     "card_words": "Switch everyday chat to ornith:9b, for \"Careful coding with a coding specialist\"?\n\nWhat this setup is for: multi-step coding work with tools, files and many steps.\nWhere it goes: the RTX 2060, holding 196,608 tokens of conversation (8.93 GB of the card's 12 GB, measured - nothing spills).\nBeside it: qwen3.5:9b on the RTX 2080 SUPER, 8,192 tokens.\n\nWhat it costs: On the one test both were given, the coding specialist scored WORSE: 8/10 against 10/10 for the general models. It is also slower than qwen3:8b on the same card (45.6 against 49.3 tokens a second). And the better general model beside it gets only 8,192 tokens, because the 8 GB card cannot hold more.\nWhat it is worse at: Everything in the line above: it scored 8/10 and lost the only measured coding comparison it was in, by ignoring the word \"DISTINCT\". One question with ten cases is not a verdict - but it is why this setup is not the default for coding.\n\nNothing has changed yet. Approving this card switches one model; it does not download anything and it does not change any of Ollama's settings. The model you use now stays downloaded, so switching back is one more switch.",
+     "cost": "On the one test both were given, the coding specialist scored WORSE: 8/10 against 10/10 for the general models. It is also slower than qwen3:8b on the same card (45.6 against 49.3 tokens a second). And the better general model beside it gets only 8,192 tokens, because the 8 GB card cannot hold more.",
+     "have": [],
+     "id": "specialist",
+     "main_model": "ornith:9b",
+     "models": [
+      "ornith:9b",
+      "qwen3.5:9b"
+     ],
+     "name": "Careful coding with a coding specialist",
+     "need": [
+      "ornith:9b",
+      "qwen3.5:9b"
+     ],
+     "places": [
+      {
+       "card": "RTX 2060",
+       "clean": true,
+       "context": 196608,
+       "context_words": "192K",
+       "disk_gb": 5.24,
+       "free_gib": 3.07,
+       "model": "ornith:9b",
+       "role": "main",
+       "speed_tokens_per_s": 49.1,
+       "spill_gib": 0.0,
+       "vram_gib": 8.93,
+       "words": "The model built for long, tool-driven coding jobs, MIT licensed"
+      },
+      {
+       "card": "RTX 2080 SUPER",
+       "clean": true,
+       "context": 8192,
+       "context_words": "8K",
+       "disk_gb": 6.1,
+       "free_gib": 2.78,
+       "model": "qwen3.5:9b",
+       "role": "beside",
+       "speed_tokens_per_s": 58.1,
+       "spill_gib": 0.0,
+       "vram_gib": 5.22,
+       "words": "The better general model, with a short conversation"
+      }
+     ],
+     "ready": "missing",
+     "ready_words": "Not downloaded yet: ornith:9b, qwen3.5:9b. Choosing this setup would ask to download it, with the usual card - nothing downloads until you approve it.",
+     "step": {
+      "body": null,
+      "detail": "ornith:9b is not downloaded on this PC. The download card is the usual one (Brain, Models) - Jarvis does not download a model from this screen.",
+      "done": false,
+      "kind": "missing",
+      "route": null,
+      "title": "Download ornith:9b first",
+      "words": "ornith:9b is not downloaded yet, so this setup cannot be used. Download it from Brain, Models - the usual card - and then choose this setup again."
+     },
+     "summary": "ornith:9b at 196,608 tokens on the RTX 2060 (49.1 tokens a second), with qwen3.5:9b (8,192 tokens) on the RTX 2080 SUPER",
+     "thinking": "ornith:9b has thinking ON by default too, and the same trap applies: with thinking on and a normal budget it answered nothing. Thinking levels is what turns it off.",
+     "uses": "Yes - both cards, one model each, at once, nothing spilled.",
+     "what": "For long, multi-step coding work - many files, tools and steps - using the one model here that is purpose-built for it.",
+     "why": "ornith:9b is the only model installed that is built and benchmarked for multi-step agentic work (SWE-bench, Terminal-Bench), it carries the MIT licence and a 256K window, and it holds 196,608 tokens on the 12 GB card with nothing spilled. This setup exists so the choice can be settled on real work: the measured comparison today favours the general models (8/10 against 10/10), and the cheap way to settle it is to use both for a week.",
+     "work": "multi-step coding work with tools, files and many steps",
+     "worse": "Everything in the line above: it scored 8/10 and lost the only measured coding comparison it was in, by ignoring the word \"DISTINCT\". One question with ten cases is not a verdict - but it is why this setup is not the default for coding."
+    }
+   ],
+   "switch_path": "/api/models/switch"
+  },
+  "none_already_setups": {
+   "answer": {
+    "offered": false
+   },
+   "words": "which work setup should I use?"
+  },
+  "none_already_switching": {
+   "answer": {
+    "offered": false
+   },
+   "words": "I want to switch the model to qwen3.5:9b"
+  },
+  "none_crisis": {
+   "answer": {
+    "offered": false
+   },
+   "words": "I feel like I can't go on and want to die"
+  },
+  "none_empty": {
+   "answer": {
+    "offered": false
+   },
+   "words": "   "
+  },
+  "none_mention_only": {
+   "answer": {
+    "offered": false
+   },
+   "words": "I read a letter yesterday"
+  },
+  "none_smalltalk": {
+   "answer": {
+    "offered": false
+   },
+   "words": "how are you today?"
+  },
+  "ollama_unreachable": {
+   "available": true,
+   "chosen": null,
+   "chosen_at": null,
+   "chosen_name": null,
+   "current_model": null,
+   "found": "5 work setups for this PC's own cards: \"Everyday quick answers\", \"Building an Android app\", \"Admin and paperwork\", \"Long conversations and big documents\", \"Careful coding with a coding specialist\".",
+   "how_to": "Say what you are about to work on and Jarvis will offer the setup for it - or pick one here before you start. Choosing only remembers the choice; switching a model is its own card, as always.",
+   "known_models": null,
+   "not_a_catalogue": "These are combinations of models already on this PC. There is no list here of models that could be downloaded, and no search.",
+   "ollama_seen": false,
+   "recommended": null,
+   "setups": [
+    {
+     "both_cards": true,
+     "card_words": "Switch everyday chat to qwen3:8b, for \"Everyday quick answers\"?\n\nWhat this setup is for: short questions, writing, checking things, one-off tasks.\nWhere it goes: the RTX 2080 SUPER, holding 16,384 tokens of conversation (5.84 GB of the card's 8 GB, measured - nothing spills).\nBeside it: qwen3.5:9b on the RTX 2060, 196,608 tokens.\n\nWhat it costs: Both models sit loaded at once, one per card, and that measured only -1.9% off the main model's speed while the other card worked. The everyday model's own conversation is capped at about 15,600 tokens of real input - that is its ceiling, not a guess.\nWhat it is worse at: Chosen for speed, not for the best answer: on the quality questions asked today qwen3:8b gave the weakest explanation of the three, and it led with the outdated reason.\n\nNothing has changed yet. Approving this card switches one model; it does not download anything and it does not change any of Ollama's settings. The model you use now stays downloaded, so switching back is one more switch.",
+     "cost": "Both models sit loaded at once, one per card, and that measured only -1.9% off the main model's speed while the other card worked. The everyday model's own conversation is capped at about 15,600 tokens of real input - that is its ceiling, not a guess.",
+     "have": [],
+     "id": "everyday",
+     "main_model": "qwen3:8b",
+     "models": [
+      "qwen3:8b",
+      "qwen3.5:9b"
+     ],
+     "name": "Everyday quick answers",
+     "need": [
+      "qwen3:8b",
+      "qwen3.5:9b"
+     ],
+     "places": [
+      {
+       "card": "RTX 2080 SUPER",
+       "clean": true,
+       "context": 16384,
+       "context_words": "16K",
+       "disk_gb": 4.87,
+       "free_gib": 2.16,
+       "model": "qwen3:8b",
+       "role": "main",
+       "speed_tokens_per_s": 64.0,
+       "spill_gib": 0.0,
+       "vram_gib": 5.84,
+       "words": "The everyday model, on the faster card"
+      },
+      {
+       "card": "RTX 2060",
+       "clean": true,
+       "context": 196608,
+       "context_words": "192K",
+       "disk_gb": 6.1,
+       "free_gib": 2.83,
+       "model": "qwen3.5:9b",
+       "role": "beside",
+       "speed_tokens_per_s": 44.9,
+       "spill_gib": 0.0,
+       "vram_gib": 9.17,
+       "words": "A second, better model waiting with room for a very long chat"
+      }
+     ],
+     "ready": "unknown",
+     "ready_words": "Jarvis could not ask Ollama which models are downloaded, so it cannot tell whether this setup needs one. Check that Ollama is running, then open this again - nothing is downloaded and nothing is changed either way.",
+     "step": {
+      "body": null,
+      "detail": "Jarvis could not ask Ollama which model is running, so it cannot say whether anything needs to change.",
+      "done": null,
+      "kind": "unknown",
+      "route": null,
+      "title": "Which model is running could not be read",
+      "words": "Nothing to do yet: Jarvis could not reach Ollama. Check that Ollama is running, then open this again."
+     },
+     "summary": "qwen3:8b at 16,384 tokens on the RTX 2080 SUPER (64 tokens a second), with qwen3.5:9b (196,608 tokens) on the RTX 2060",
+     "thinking": "Neither model thinks before answering here, and qwen3.5:9b is set that way in Thinking levels - left on it answered nothing at all on all three test questions.",
+     "uses": "Yes - both cards work at once, one model each. Nothing is split across both cards: that measured 3x slower.",
+     "what": "For short questions, a bit of writing, checking things and one-off tasks - the ordinary use of Jarvis, where waiting is the annoying part.",
+     "why": "qwen3:8b on the 2080 SUPER is the fastest useful setup measured: 64.0 tokens a second against 49.3 for the same model on the 2060. It scored 10/10 on the coding test and found a planted fact at both the start and the end of a 13,780-token prompt. The other card is not wasted beside it - it holds qwen3.5:9b at its full 196,608 tokens, which is 12x the conversation the everyday setting holds today.",
+     "work": "short questions, writing, checking things, one-off tasks",
+     "worse": "Chosen for speed, not for the best answer: on the quality questions asked today qwen3:8b gave the weakest explanation of the three, and it led with the outdated reason."
+    },
+    {
+     "both_cards": true,
+     "card_words": "Switch everyday chat to qwen3.5:9b, for \"Building an Android app\"?\n\nWhat this setup is for: writing code, reading a file, fixing an error, multi-step coding work.\nWhere it goes: the RTX 2060, holding 196,608 tokens of conversation (9.17 GB of the card's 12 GB, measured - nothing spills).\nBeside it: qwen3.5:4b on the RTX 2080 SUPER, 65,536 tokens.\n\nWhat it costs: The card that writes the code is the slower one - 44.9 tokens a second against 64.0 on the other card - and qwen3.5:9b fills 9.17 of its 12 GB at this context, so the other card is the only place a second model can go. What the slow card buys is 196,608 tokens of project in view instead of 16,384, about twelve times as much. Both cards still work at once, for the same -1.9%.\nWhat it is worse at: The coding model writes more slowly than qwen3:8b would on the fast card, and the small model beside it is the one that got a trap question wrong when asked as an explanation - it is here for speed on short questions, not for careful reasoning.\n\nNothing has changed yet. Approving this card switches one model; it does not download anything and it does not change any of Ollama's settings. The model you use now stays downloaded, so switching back is one more switch.",
+     "cost": "The card that writes the code is the slower one - 44.9 tokens a second against 64.0 on the other card - and qwen3.5:9b fills 9.17 of its 12 GB at this context, so the other card is the only place a second model can go. What the slow card buys is 196,608 tokens of project in view instead of 16,384, about twelve times as much. Both cards still work at once, for the same -1.9%.",
+     "have": [],
+     "id": "coding",
+     "main_model": "qwen3.5:9b",
+     "models": [
+      "qwen3.5:9b",
+      "qwen3.5:4b"
+     ],
+     "name": "Building an Android app",
+     "need": [
+      "qwen3.5:9b",
+      "qwen3.5:4b"
+     ],
+     "places": [
+      {
+       "card": "RTX 2060",
+       "clean": true,
+       "context": 196608,
+       "context_words": "192K",
+       "disk_gb": 6.1,
+       "free_gib": 2.83,
+       "model": "qwen3.5:9b",
+       "role": "main",
+       "speed_tokens_per_s": 44.9,
+       "spill_gib": 0.0,
+       "vram_gib": 9.17,
+       "words": "Writes the code, with room for a whole project in view"
+      },
+      {
+       "card": "RTX 2080 SUPER",
+       "clean": true,
+       "context": 65536,
+       "context_words": "64K",
+       "disk_gb": 3.16,
+       "free_gib": 3.85,
+       "model": "qwen3.5:4b",
+       "role": "beside",
+       "speed_tokens_per_s": 77.1,
+       "spill_gib": 0.0,
+       "vram_gib": 4.15,
+       "words": "Answers quick questions about the code, fast"
+      }
+     ],
+     "ready": "unknown",
+     "ready_words": "Jarvis could not ask Ollama which models are downloaded, so it cannot tell whether this setup needs one. Check that Ollama is running, then open this again - nothing is downloaded and nothing is changed either way.",
+     "step": {
+      "body": null,
+      "detail": "Jarvis could not ask Ollama which model is running, so it cannot say whether anything needs to change.",
+      "done": null,
+      "kind": "unknown",
+      "route": null,
+      "title": "Which model is running could not be read",
+      "words": "Nothing to do yet: Jarvis could not reach Ollama. Check that Ollama is running, then open this again."
+     },
+     "summary": "qwen3.5:9b at 196,608 tokens on the RTX 2060 (44.9 tokens a second), with qwen3.5:4b (65,536 tokens) on the RTX 2080 SUPER",
+     "thinking": "qwen3.5:9b has thinking ON by default, and with it on the answer came back EMPTY on all three measured questions. Thinking levels is what turns it off for ordinary turns; this setup assumes that setting and changes nothing itself.",
+     "uses": "Yes - both cards, one model each, run at once. Both fit entirely in video memory at these sizes: nothing spills and nothing is split.",
+     "what": "For building an Android app, or any other coding work: writing code, reading a file, fixing an error, or a long job where Jarvis has to keep a lot of the project in view at once.",
+     "why": "qwen3.5:9b scored 10/10 on the coding test and gave the best explanation answer measured, and it holds 196,608 tokens on the 12 GB card with nothing spilled. The 4B beside it also scored 10/10 and is the fastest model that still got the reasoning question right (77.1 tokens a second), so short questions do not pay the 9B's price.",
+     "work": "writing code, reading a file, fixing an error, multi-step coding work",
+     "worse": "The coding model writes more slowly than qwen3:8b would on the fast card, and the small model beside it is the one that got a trap question wrong when asked as an explanation - it is here for speed on short questions, not for careful reasoning."
+    },
+    {
+     "both_cards": true,
+     "card_words": "Switch everyday chat to qwen3.5:9b, for \"Admin and paperwork\"?\n\nWhat this setup is for: letters, statements, forms, policies and things to sort out.\nWhere it goes: the RTX 2060, holding 196,608 tokens of conversation (9.17 GB of the card's 12 GB, measured - nothing spills).\nBeside it: qwen3:8b on the RTX 2080 SUPER, 16,384 tokens.\n\nWhat it costs: The model that reads it all writes about 30% slower than qwen3:8b would on the fast card, and the fast card's conversation is only 16,384 tokens while it is the second model. The 12 GB card is fully committed, so nothing else fits on it.\nWhat it is worse at: The step from \"best explanation answer measured\" to \"best for paperwork\" is a reading, not a measurement: no summarise-a-whole-document test was run today. It rests on the explanation result and on the 196,608-token ceiling.\n\nNothing has changed yet. Approving this card switches one model; it does not download anything and it does not change any of Ollama's settings. The model you use now stays downloaded, so switching back is one more switch.",
+     "cost": "The model that reads it all writes about 30% slower than qwen3:8b would on the fast card, and the fast card's conversation is only 16,384 tokens while it is the second model. The 12 GB card is fully committed, so nothing else fits on it.",
+     "have": [],
+     "id": "admin",
+     "main_model": "qwen3.5:9b",
+     "models": [
+      "qwen3.5:9b",
+      "qwen3:8b"
+     ],
+     "name": "Admin and paperwork",
+     "need": [
+      "qwen3.5:9b",
+      "qwen3:8b"
+     ],
+     "places": [
+      {
+       "card": "RTX 2060",
+       "clean": true,
+       "context": 196608,
+       "context_words": "192K",
+       "disk_gb": 6.1,
+       "free_gib": 2.83,
+       "model": "qwen3.5:9b",
+       "role": "main",
+       "speed_tokens_per_s": 44.9,
+       "spill_gib": 0.0,
+       "vram_gib": 9.17,
+       "words": "Reads the whole letter or statement and answers about it"
+      },
+      {
+       "card": "RTX 2080 SUPER",
+       "clean": true,
+       "context": 16384,
+       "context_words": "16K",
+       "disk_gb": 4.87,
+       "free_gib": 2.16,
+       "model": "qwen3:8b",
+       "role": "beside",
+       "speed_tokens_per_s": 64.0,
+       "spill_gib": 0.0,
+       "vram_gib": 5.84,
+       "words": "Drafts and rewords quickly"
+      }
+     ],
+     "ready": "unknown",
+     "ready_words": "Jarvis could not ask Ollama which models are downloaded, so it cannot tell whether this setup needs one. Check that Ollama is running, then open this again - nothing is downloaded and nothing is changed either way.",
+     "step": {
+      "body": null,
+      "detail": "Jarvis could not ask Ollama which model is running, so it cannot say whether anything needs to change.",
+      "done": null,
+      "kind": "unknown",
+      "route": null,
+      "title": "Which model is running could not be read",
+      "words": "Nothing to do yet: Jarvis could not reach Ollama. Check that Ollama is running, then open this again."
+     },
+     "summary": "qwen3.5:9b at 196,608 tokens on the RTX 2060 (44.9 tokens a second), with qwen3:8b (16,384 tokens) on the RTX 2080 SUPER",
+     "thinking": "qwen3.5:9b's thinking is off here (Thinking levels). With it on and an ordinary budget it answered nothing at all.",
+     "uses": "Yes - both cards, one model each, run at once, nothing spilled.",
+     "what": "For your own life admin: a long letter, a bank statement, a policy document, a form to fill in, or a pile of things to sort out and summarise - where being right matters more than being quick.",
+     "why": "qwen3.5:9b gave the best answer of the models asked the explanation question, and it is the one model that holds 196,608 tokens in video memory on this PC - which is what a letter, a statement or a policy document actually needs. qwen3:8b on the fast card keeps drafting quick.",
+     "work": "letters, statements, forms, policies and things to sort out",
+     "worse": "The step from \"best explanation answer measured\" to \"best for paperwork\" is a reading, not a measurement: no summarise-a-whole-document test was run today. It rests on the explanation result and on the 196,608-token ceiling."
+    },
+    {
+     "both_cards": true,
+     "card_words": "Switch everyday chat to qwen3.5:4b, for \"Long conversations and big documents\"?\n\nWhat this setup is for: one very long back-and-forth, or a document too big for anything else.\nWhere it goes: the RTX 2060, holding 262,144 tokens of conversation (8.27 GB of the card's 12 GB, measured - nothing spills).\nBeside it: qwen3:8b on the RTX 2080 SUPER, 16,384 tokens.\n\nWhat it costs: 262,144 tokens, which is a third more than the better model reaches and sixteen times the everyday setting. It is paid for in answer quality, not in speed: the small model writes at 63.1 tokens a second.\nWhat it is worse at: The model holding all that text got a trap question WRONG (\"all but 9 run away\" answered as 8, with a self-contradictory reason), and on the 12 GB card it produced a muddled explanation the same weights did not produce on the other card. Use it for size, not for care.\n\nNothing has changed yet. Approving this card switches one model; it does not download anything and it does not change any of Ollama's settings. The model you use now stays downloaded, so switching back is one more switch.",
+     "cost": "262,144 tokens, which is a third more than the better model reaches and sixteen times the everyday setting. It is paid for in answer quality, not in speed: the small model writes at 63.1 tokens a second.",
+     "have": [],
+     "id": "long",
+     "main_model": "qwen3.5:4b",
+     "models": [
+      "qwen3.5:4b",
+      "qwen3:8b"
+     ],
+     "name": "Long conversations and big documents",
+     "need": [
+      "qwen3.5:4b",
+      "qwen3:8b"
+     ],
+     "places": [
+      {
+       "card": "RTX 2060",
+       "clean": true,
+       "context": 262144,
+       "context_words": "256K",
+       "disk_gb": 3.16,
+       "free_gib": 3.73,
+       "model": "qwen3.5:4b",
+       "role": "main",
+       "speed_tokens_per_s": 63.1,
+       "spill_gib": 0.0,
+       "vram_gib": 8.27,
+       "words": "Holds the most text this PC can load at once"
+      },
+      {
+       "card": "RTX 2080 SUPER",
+       "clean": true,
+       "context": 16384,
+       "context_words": "16K",
+       "disk_gb": 4.87,
+       "free_gib": 2.16,
+       "model": "qwen3:8b",
+       "role": "beside",
+       "speed_tokens_per_s": 64.0,
+       "spill_gib": 0.0,
+       "vram_gib": 5.84,
+       "words": "Answers ordinary questions while the long one stays loaded"
+      }
+     ],
+     "ready": "unknown",
+     "ready_words": "Jarvis could not ask Ollama which models are downloaded, so it cannot tell whether this setup needs one. Check that Ollama is running, then open this again - nothing is downloaded and nothing is changed either way.",
+     "step": {
+      "body": null,
+      "detail": "Jarvis could not ask Ollama which model is running, so it cannot say whether anything needs to change.",
+      "done": null,
+      "kind": "unknown",
+      "route": null,
+      "title": "Which model is running could not be read",
+      "words": "Nothing to do yet: Jarvis could not reach Ollama. Check that Ollama is running, then open this again."
+     },
+     "summary": "qwen3.5:4b at 262,144 tokens on the RTX 2060 (63.1 tokens a second), with qwen3:8b (16,384 tokens) on the RTX 2080 SUPER",
+     "thinking": "",
+     "uses": "Yes - both cards, one model each, at once, nothing spilled.",
+     "what": "For one very long back-and-forth, or a document too big for any other setup - the most text this PC can genuinely hold at once.",
+     "why": "Measured: qwen3.5:4b is the only model that holds 262,144 tokens in video memory on the 2060 with zero spill, at 63.1 tokens a second - and 262,144 is the model's own limit, not the card's. qwen3.5:9b at that size spills 2.91 GB and falls to 21.9 tokens a second, and qwen3:8b stops at 40,960 because that is the model's own limit.",
+     "work": "one very long back-and-forth, or a document too big for anything else",
+     "worse": "The model holding all that text got a trap question WRONG (\"all but 9 run away\" answered as 8, with a self-contradictory reason), and on the 12 GB card it produced a muddled explanation the same weights did not produce on the other card. Use it for size, not for care."
+    },
+    {
+     "both_cards": true,
+     "card_words": "Switch everyday chat to ornith:9b, for \"Careful coding with a coding specialist\"?\n\nWhat this setup is for: multi-step coding work with tools, files and many steps.\nWhere it goes: the RTX 2060, holding 196,608 tokens of conversation (8.93 GB of the card's 12 GB, measured - nothing spills).\nBeside it: qwen3.5:9b on the RTX 2080 SUPER, 8,192 tokens.\n\nWhat it costs: On the one test both were given, the coding specialist scored WORSE: 8/10 against 10/10 for the general models. It is also slower than qwen3:8b on the same card (45.6 against 49.3 tokens a second). And the better general model beside it gets only 8,192 tokens, because the 8 GB card cannot hold more.\nWhat it is worse at: Everything in the line above: it scored 8/10 and lost the only measured coding comparison it was in, by ignoring the word \"DISTINCT\". One question with ten cases is not a verdict - but it is why this setup is not the default for coding.\n\nNothing has changed yet. Approving this card switches one model; it does not download anything and it does not change any of Ollama's settings. The model you use now stays downloaded, so switching back is one more switch.",
+     "cost": "On the one test both were given, the coding specialist scored WORSE: 8/10 against 10/10 for the general models. It is also slower than qwen3:8b on the same card (45.6 against 49.3 tokens a second). And the better general model beside it gets only 8,192 tokens, because the 8 GB card cannot hold more.",
+     "have": [],
+     "id": "specialist",
+     "main_model": "ornith:9b",
+     "models": [
+      "ornith:9b",
+      "qwen3.5:9b"
+     ],
+     "name": "Careful coding with a coding specialist",
+     "need": [
+      "ornith:9b",
+      "qwen3.5:9b"
+     ],
+     "places": [
+      {
+       "card": "RTX 2060",
+       "clean": true,
+       "context": 196608,
+       "context_words": "192K",
+       "disk_gb": 5.24,
+       "free_gib": 3.07,
+       "model": "ornith:9b",
+       "role": "main",
+       "speed_tokens_per_s": 49.1,
+       "spill_gib": 0.0,
+       "vram_gib": 8.93,
+       "words": "The model built for long, tool-driven coding jobs, MIT licensed"
+      },
+      {
+       "card": "RTX 2080 SUPER",
+       "clean": true,
+       "context": 8192,
+       "context_words": "8K",
+       "disk_gb": 6.1,
+       "free_gib": 2.78,
+       "model": "qwen3.5:9b",
+       "role": "beside",
+       "speed_tokens_per_s": 58.1,
+       "spill_gib": 0.0,
+       "vram_gib": 5.22,
+       "words": "The better general model, with a short conversation"
+      }
+     ],
+     "ready": "unknown",
+     "ready_words": "Jarvis could not ask Ollama which models are downloaded, so it cannot tell whether this setup needs one. Check that Ollama is running, then open this again - nothing is downloaded and nothing is changed either way.",
+     "step": {
+      "body": null,
+      "detail": "Jarvis could not ask Ollama which model is running, so it cannot say whether anything needs to change.",
+      "done": null,
+      "kind": "unknown",
+      "route": null,
+      "title": "Which model is running could not be read",
+      "words": "Nothing to do yet: Jarvis could not reach Ollama. Check that Ollama is running, then open this again."
+     },
+     "summary": "ornith:9b at 196,608 tokens on the RTX 2060 (49.1 tokens a second), with qwen3.5:9b (8,192 tokens) on the RTX 2080 SUPER",
+     "thinking": "ornith:9b has thinking ON by default too, and the same trap applies: with thinking on and a normal budget it answered nothing. Thinking levels is what turns it off.",
+     "uses": "Yes - both cards, one model each, at once, nothing spilled.",
+     "what": "For long, multi-step coding work - many files, tools and steps - using the one model here that is purpose-built for it.",
+     "why": "ornith:9b is the only model installed that is built and benchmarked for multi-step agentic work (SWE-bench, Terminal-Bench), it carries the MIT licence and a 256K window, and it holds 196,608 tokens on the 12 GB card with nothing spilled. This setup exists so the choice can be settled on real work: the measured comparison today favours the general models (8/10 against 10/10), and the cheap way to settle it is to use both for a week.",
+     "work": "multi-step coding work with tools, files and many steps",
+     "worse": "Everything in the line above: it scored 8/10 and lost the only measured coding comparison it was in, by ignoring the word \"DISTINCT\". One question with ten cases is not a verdict - but it is why this setup is not the default for coding."
+    }
+   ],
+   "switch_path": "/api/models/switch"
+  },
+  "post_choose_coding": {
+   "body": {
+    "chosen": "coding",
+    "message": "\"Building an Android app\" chosen. Nothing has changed: the models are the ones already loaded. The step below switches one model, and it raises its own card.",
+    "ok": true,
+    "setup": {
+     "both_cards": true,
+     "card_words": "Switch everyday chat to qwen3.5:9b, for \"Building an Android app\"?\n\nWhat this setup is for: writing code, reading a file, fixing an error, multi-step coding work.\nWhere it goes: the RTX 2060, holding 196,608 tokens of conversation (9.17 GB of the card's 12 GB, measured - nothing spills).\nBeside it: qwen3.5:4b on the RTX 2080 SUPER, 65,536 tokens.\n\nWhat it costs: The card that writes the code is the slower one - 44.9 tokens a second against 64.0 on the other card - and qwen3.5:9b fills 9.17 of its 12 GB at this context, so the other card is the only place a second model can go. What the slow card buys is 196,608 tokens of project in view instead of 16,384, about twelve times as much. Both cards still work at once, for the same -1.9%.\nWhat it is worse at: The coding model writes more slowly than qwen3:8b would on the fast card, and the small model beside it is the one that got a trap question wrong when asked as an explanation - it is here for speed on short questions, not for careful reasoning.\n\nNothing has changed yet. Approving this card switches one model; it does not download anything and it does not change any of Ollama's settings. The model you use now stays downloaded, so switching back is one more switch.",
+     "cost": "The card that writes the code is the slower one - 44.9 tokens a second against 64.0 on the other card - and qwen3.5:9b fills 9.17 of its 12 GB at this context, so the other card is the only place a second model can go. What the slow card buys is 196,608 tokens of project in view instead of 16,384, about twelve times as much. Both cards still work at once, for the same -1.9%.",
+     "have": [
+      "qwen3.5:9b",
+      "qwen3.5:4b"
+     ],
+     "id": "coding",
+     "main_model": "qwen3.5:9b",
+     "models": [
+      "qwen3.5:9b",
+      "qwen3.5:4b"
+     ],
+     "name": "Building an Android app",
+     "need": [],
+     "places": [
+      {
+       "card": "RTX 2060",
+       "clean": true,
+       "context": 196608,
+       "context_words": "192K",
+       "disk_gb": 6.1,
+       "free_gib": 2.83,
+       "model": "qwen3.5:9b",
+       "role": "main",
+       "speed_tokens_per_s": 44.9,
+       "spill_gib": 0.0,
+       "vram_gib": 9.17,
+       "words": "Writes the code, with room for a whole project in view"
+      },
+      {
+       "card": "RTX 2080 SUPER",
+       "clean": true,
+       "context": 65536,
+       "context_words": "64K",
+       "disk_gb": 3.16,
+       "free_gib": 3.85,
+       "model": "qwen3.5:4b",
+       "role": "beside",
+       "speed_tokens_per_s": 77.1,
+       "spill_gib": 0.0,
+       "vram_gib": 4.15,
+       "words": "Answers quick questions about the code, fast"
+      }
+     ],
+     "ready": "ready",
+     "ready_words": "Both models are downloaded already.",
+     "step": {
+      "body": {
+       "ref": "qwen3.5:9b"
+      },
+      "detail": "Raises the usual model-switch card. The model you use now stays downloaded, so switching back is one more switch.",
+      "done": false,
+      "kind": "switch",
+      "route": "/api/models/switch",
+      "title": "Switch everyday chat to qwen3.5:9b",
+      "words": "Ready when you are: switching to qwen3.5:9b raises the usual approval card, and nothing changes until you approve it."
+     },
+     "summary": "qwen3.5:9b at 196,608 tokens on the RTX 2060 (44.9 tokens a second), with qwen3.5:4b (65,536 tokens) on the RTX 2080 SUPER",
+     "thinking": "qwen3.5:9b has thinking ON by default, and with it on the answer came back EMPTY on all three measured questions. Thinking levels is what turns it off for ordinary turns; this setup assumes that setting and changes nothing itself.",
+     "uses": "Yes - both cards, one model each, run at once. Both fit entirely in video memory at these sizes: nothing spills and nothing is split.",
+     "what": "For building an Android app, or any other coding work: writing code, reading a file, fixing an error, or a long job where Jarvis has to keep a lot of the project in view at once.",
+     "why": "qwen3.5:9b scored 10/10 on the coding test and gave the best explanation answer measured, and it holds 196,608 tokens on the 12 GB card with nothing spilled. The 4B beside it also scored 10/10 and is the fastest model that still got the reasoning question right (77.1 tokens a second), so short questions do not pay the 9B's price.",
+     "work": "writing code, reading a file, fixing an error, multi-step coding work",
+     "worse": "The coding model writes more slowly than qwen3:8b would on the fast card, and the small model beside it is the one that got a trap question wrong when asked as an explanation - it is here for speed on short questions, not for careful reasoning."
+    }
+   },
+   "status": 200
+  },
+  "post_choose_none": {
+   "body": {
+    "chosen": null,
+    "message": "No work setup is chosen. Your models are exactly as they are; nothing was changed.",
+    "ok": true,
+    "setup": null
+   },
+   "status": 200
+  },
+  "post_choose_specialist_fresh_pc": {
+   "body": {
+    "chosen": "specialist",
+    "message": "\"Careful coding with a coding specialist\" chosen. Nothing has changed: the models are the ones already loaded. The step below switches one model, and it raises its own card.",
+    "ok": true,
+    "setup": {
+     "both_cards": true,
+     "card_words": "Switch everyday chat to ornith:9b, for \"Careful coding with a coding specialist\"?\n\nWhat this setup is for: multi-step coding work with tools, files and many steps.\nWhere it goes: the RTX 2060, holding 196,608 tokens of conversation (8.93 GB of the card's 12 GB, measured - nothing spills).\nBeside it: qwen3.5:9b on the RTX 2080 SUPER, 8,192 tokens.\n\nWhat it costs: On the one test both were given, the coding specialist scored WORSE: 8/10 against 10/10 for the general models. It is also slower than qwen3:8b on the same card (45.6 against 49.3 tokens a second). And the better general model beside it gets only 8,192 tokens, because the 8 GB card cannot hold more.\nWhat it is worse at: Everything in the line above: it scored 8/10 and lost the only measured coding comparison it was in, by ignoring the word \"DISTINCT\". One question with ten cases is not a verdict - but it is why this setup is not the default for coding.\n\nNothing has changed yet. Approving this card switches one model; it does not download anything and it does not change any of Ollama's settings. The model you use now stays downloaded, so switching back is one more switch.",
+     "cost": "On the one test both were given, the coding specialist scored WORSE: 8/10 against 10/10 for the general models. It is also slower than qwen3:8b on the same card (45.6 against 49.3 tokens a second). And the better general model beside it gets only 8,192 tokens, because the 8 GB card cannot hold more.",
+     "have": [],
+     "id": "specialist",
+     "main_model": "ornith:9b",
+     "models": [
+      "ornith:9b",
+      "qwen3.5:9b"
+     ],
+     "name": "Careful coding with a coding specialist",
+     "need": [
+      "ornith:9b",
+      "qwen3.5:9b"
+     ],
+     "places": [
+      {
+       "card": "RTX 2060",
+       "clean": true,
+       "context": 196608,
+       "context_words": "192K",
+       "disk_gb": 5.24,
+       "free_gib": 3.07,
+       "model": "ornith:9b",
+       "role": "main",
+       "speed_tokens_per_s": 49.1,
+       "spill_gib": 0.0,
+       "vram_gib": 8.93,
+       "words": "The model built for long, tool-driven coding jobs, MIT licensed"
+      },
+      {
+       "card": "RTX 2080 SUPER",
+       "clean": true,
+       "context": 8192,
+       "context_words": "8K",
+       "disk_gb": 6.1,
+       "free_gib": 2.78,
+       "model": "qwen3.5:9b",
+       "role": "beside",
+       "speed_tokens_per_s": 58.1,
+       "spill_gib": 0.0,
+       "vram_gib": 5.22,
+       "words": "The better general model, with a short conversation"
+      }
+     ],
+     "ready": "missing",
+     "ready_words": "Not downloaded yet: ornith:9b, qwen3.5:9b. Choosing this setup would ask to download it, with the usual card - nothing downloads until you approve it.",
+     "step": {
+      "body": null,
+      "detail": "ornith:9b is not downloaded on this PC. The download card is the usual one (Brain, Models) - Jarvis does not download a model from this screen.",
+      "done": false,
+      "kind": "missing",
+      "route": null,
+      "title": "Download ornith:9b first",
+      "words": "ornith:9b is not downloaded yet, so this setup cannot be used. Download it from Brain, Models - the usual card - and then choose this setup again."
+     },
+     "summary": "ornith:9b at 196,608 tokens on the RTX 2060 (49.1 tokens a second), with qwen3.5:9b (8,192 tokens) on the RTX 2080 SUPER",
+     "thinking": "ornith:9b has thinking ON by default too, and the same trap applies: with thinking on and a normal budget it answered nothing. Thinking levels is what turns it off.",
+     "uses": "Yes - both cards, one model each, at once, nothing spilled.",
+     "what": "For long, multi-step coding work - many files, tools and steps - using the one model here that is purpose-built for it.",
+     "why": "ornith:9b is the only model installed that is built and benchmarked for multi-step agentic work (SWE-bench, Terminal-Bench), it carries the MIT licence and a 256K window, and it holds 196,608 tokens on the 12 GB card with nothing spilled. This setup exists so the choice can be settled on real work: the measured comparison today favours the general models (8/10 against 10/10), and the cheap way to settle it is to use both for a week.",
+     "work": "multi-step coding work with tools, files and many steps",
+     "worse": "Everything in the line above: it scored 8/10 and lost the only measured coding comparison it was in, by ignoring the word \"DISTINCT\". One question with ten cases is not a verdict - but it is why this setup is not the default for coding."
+    }
+   },
+   "status": 200
+  },
+  "post_choose_unknown": {
+   "body": {
+    "error": "there is no work setup called 'nonsense'; the setups are everyday, coding, admin, long, specialist"
+   },
+   "status": 400
+  },
+  "post_handle_choose_long": {
+   "body": {
+    "chosen": "long",
+    "message": "\"Long conversations and big documents\" chosen. Nothing has changed: the models are the ones already loaded. The step below switches one model, and it raises its own card.",
+    "ok": true,
+    "setup": {
+     "both_cards": true,
+     "card_words": "Switch everyday chat to qwen3.5:4b, for \"Long conversations and big documents\"?\n\nWhat this setup is for: one very long back-and-forth, or a document too big for anything else.\nWhere it goes: the RTX 2060, holding 262,144 tokens of conversation (8.27 GB of the card's 12 GB, measured - nothing spills).\nBeside it: qwen3:8b on the RTX 2080 SUPER, 16,384 tokens.\n\nWhat it costs: 262,144 tokens, which is a third more than the better model reaches and sixteen times the everyday setting. It is paid for in answer quality, not in speed: the small model writes at 63.1 tokens a second.\nWhat it is worse at: The model holding all that text got a trap question WRONG (\"all but 9 run away\" answered as 8, with a self-contradictory reason), and on the 12 GB card it produced a muddled explanation the same weights did not produce on the other card. Use it for size, not for care.\n\nNothing has changed yet. Approving this card switches one model; it does not download anything and it does not change any of Ollama's settings. The model you use now stays downloaded, so switching back is one more switch.",
+     "cost": "262,144 tokens, which is a third more than the better model reaches and sixteen times the everyday setting. It is paid for in answer quality, not in speed: the small model writes at 63.1 tokens a second.",
+     "have": [
+      "qwen3.5:4b",
+      "qwen3:8b"
+     ],
+     "id": "long",
+     "main_model": "qwen3.5:4b",
+     "models": [
+      "qwen3.5:4b",
+      "qwen3:8b"
+     ],
+     "name": "Long conversations and big documents",
+     "need": [],
+     "places": [
+      {
+       "card": "RTX 2060",
+       "clean": true,
+       "context": 262144,
+       "context_words": "256K",
+       "disk_gb": 3.16,
+       "free_gib": 3.73,
+       "model": "qwen3.5:4b",
+       "role": "main",
+       "speed_tokens_per_s": 63.1,
+       "spill_gib": 0.0,
+       "vram_gib": 8.27,
+       "words": "Holds the most text this PC can load at once"
+      },
+      {
+       "card": "RTX 2080 SUPER",
+       "clean": true,
+       "context": 16384,
+       "context_words": "16K",
+       "disk_gb": 4.87,
+       "free_gib": 2.16,
+       "model": "qwen3:8b",
+       "role": "beside",
+       "speed_tokens_per_s": 64.0,
+       "spill_gib": 0.0,
+       "vram_gib": 5.84,
+       "words": "Answers ordinary questions while the long one stays loaded"
+      }
+     ],
+     "ready": "ready",
+     "ready_words": "Both models are downloaded already.",
+     "step": {
+      "body": {
+       "ref": "qwen3.5:4b"
+      },
+      "detail": "Raises the usual model-switch card. The model you use now stays downloaded, so switching back is one more switch.",
+      "done": false,
+      "kind": "switch",
+      "route": "/api/models/switch",
+      "title": "Switch everyday chat to qwen3.5:4b",
+      "words": "Ready when you are: switching to qwen3.5:4b raises the usual approval card, and nothing changes until you approve it."
+     },
+     "summary": "qwen3.5:4b at 262,144 tokens on the RTX 2060 (63.1 tokens a second), with qwen3:8b (16,384 tokens) on the RTX 2080 SUPER",
+     "thinking": "",
+     "uses": "Yes - both cards, one model each, at once, nothing spilled.",
+     "what": "For one very long back-and-forth, or a document too big for any other setup - the most text this PC can genuinely hold at once.",
+     "why": "Measured: qwen3.5:4b is the only model that holds 262,144 tokens in video memory on the 2060 with zero spill, at 63.1 tokens a second - and 262,144 is the model's own limit, not the card's. qwen3.5:9b at that size spills 2.91 GB and falls to 21.9 tokens a second, and qwen3:8b stops at 40,960 because that is the model's own limit.",
+     "work": "one very long back-and-forth, or a document too big for anything else",
+     "worse": "The model holding all that text got a trap question WRONG (\"all but 9 run away\" answered as 8, with a self-contradictory reason), and on the 12 GB card it produced a muddled explanation the same weights did not produce on the other card. Use it for size, not for care."
+    }
+   },
+   "status": 200
+  },
+  "post_handle_choose_no_setup": {
+   "body": {
+    "error": "send {\"setup\": \"everyday\" | \"coding\" | \"admin\" | \"long\" | \"specialist\" | null}"
+   },
+   "status": 400
+  },
+  "post_recommend": {
+   "body": {
+    "id": "coding",
+    "name": "Building an Android app",
+    "offered": true,
+    "step": {
+     "body": {
+      "ref": "qwen3.5:9b"
+     },
+     "detail": "Raises the usual model-switch card. The model you use now stays downloaded, so switching back is one more switch.",
+     "done": false,
+     "kind": "switch",
+     "route": "/api/models/switch",
+     "title": "Switch everyday chat to qwen3.5:9b",
+     "words": "Ready when you are: switching to qwen3.5:9b raises the usual approval card, and nothing changes until you approve it."
+    },
+    "switched": false,
+    "why": "Your words mention writing code, reading a file, fixing an error, multi-step coding work.",
+    "words": "That sounds like writing code, reading a file, fixing an error, multi-step coding work. The \"Building an Android app\" setup puts qwen3.5:9b on the RTX 2060 for it, with qwen3.5:4b on the RTX 2080 SUPER beside it. Nothing has changed - the setup screen explains it before anything moves, and switching is yours to approve.",
+    "work": "writing code, reading a file, fixing an error, multi-step coding work"
+   },
+   "status": 200
+  },
+  "post_recommend_no_words": {
+   "body": {
+    "error": "send {\"words\": \"what you are about to work on\"}"
+   },
+   "status": 400
+  },
+  "today": {
+   "available": true,
+   "chosen": null,
+   "chosen_at": null,
+   "chosen_name": null,
+   "current_model": "qwen3:8b",
+   "found": "5 work setups for this PC's own cards: \"Everyday quick answers\", \"Building an Android app\", \"Admin and paperwork\", \"Long conversations and big documents\", \"Careful coding with a coding specialist\".",
+   "how_to": "Say what you are about to work on and Jarvis will offer the setup for it - or pick one here before you start. Choosing only remembers the choice; switching a model is its own card, as always.",
+   "known_models": [
+    "jarvis-primary:latest",
+    "ornith:9b",
+    "qwen3.5:0.8b",
+    "qwen3.5:2b",
+    "qwen3.5:4b",
+    "qwen3.5:9b",
+    "qwen3:0.6b",
+    "qwen3:8b"
+   ],
+   "not_a_catalogue": "These are combinations of models already on this PC. There is no list here of models that could be downloaded, and no search.",
+   "ollama_seen": true,
+   "recommended": null,
+   "setups": [
+    {
+     "both_cards": true,
+     "card_words": "Switch everyday chat to qwen3:8b, for \"Everyday quick answers\"?\n\nWhat this setup is for: short questions, writing, checking things, one-off tasks.\nWhere it goes: the RTX 2080 SUPER, holding 16,384 tokens of conversation (5.84 GB of the card's 8 GB, measured - nothing spills).\nBeside it: qwen3.5:9b on the RTX 2060, 196,608 tokens.\n\nWhat it costs: Both models sit loaded at once, one per card, and that measured only -1.9% off the main model's speed while the other card worked. The everyday model's own conversation is capped at about 15,600 tokens of real input - that is its ceiling, not a guess.\nWhat it is worse at: Chosen for speed, not for the best answer: on the quality questions asked today qwen3:8b gave the weakest explanation of the three, and it led with the outdated reason.\n\nNothing has changed yet. Approving this card switches one model; it does not download anything and it does not change any of Ollama's settings. The model you use now stays downloaded, so switching back is one more switch.",
+     "cost": "Both models sit loaded at once, one per card, and that measured only -1.9% off the main model's speed while the other card worked. The everyday model's own conversation is capped at about 15,600 tokens of real input - that is its ceiling, not a guess.",
+     "have": [
+      "qwen3:8b",
+      "qwen3.5:9b"
+     ],
+     "id": "everyday",
+     "main_model": "qwen3:8b",
+     "models": [
+      "qwen3:8b",
+      "qwen3.5:9b"
+     ],
+     "name": "Everyday quick answers",
+     "need": [],
+     "places": [
+      {
+       "card": "RTX 2080 SUPER",
+       "clean": true,
+       "context": 16384,
+       "context_words": "16K",
+       "disk_gb": 4.87,
+       "free_gib": 2.16,
+       "model": "qwen3:8b",
+       "role": "main",
+       "speed_tokens_per_s": 64.0,
+       "spill_gib": 0.0,
+       "vram_gib": 5.84,
+       "words": "The everyday model, on the faster card"
+      },
+      {
+       "card": "RTX 2060",
+       "clean": true,
+       "context": 196608,
+       "context_words": "192K",
+       "disk_gb": 6.1,
+       "free_gib": 2.83,
+       "model": "qwen3.5:9b",
+       "role": "beside",
+       "speed_tokens_per_s": 44.9,
+       "spill_gib": 0.0,
+       "vram_gib": 9.17,
+       "words": "A second, better model waiting with room for a very long chat"
+      }
+     ],
+     "ready": "ready",
+     "ready_words": "Both models are downloaded already.",
+     "step": {
+      "body": null,
+      "detail": "Nothing to change.",
+      "done": true,
+      "kind": "none",
+      "route": null,
+      "title": "qwen3:8b is already the everyday model",
+      "words": "qwen3:8b is already the model Jarvis uses, so this setup is ready - nothing needs changing."
+     },
+     "summary": "qwen3:8b at 16,384 tokens on the RTX 2080 SUPER (64 tokens a second), with qwen3.5:9b (196,608 tokens) on the RTX 2060",
+     "thinking": "Neither model thinks before answering here, and qwen3.5:9b is set that way in Thinking levels - left on it answered nothing at all on all three test questions.",
+     "uses": "Yes - both cards work at once, one model each. Nothing is split across both cards: that measured 3x slower.",
+     "what": "For short questions, a bit of writing, checking things and one-off tasks - the ordinary use of Jarvis, where waiting is the annoying part.",
+     "why": "qwen3:8b on the 2080 SUPER is the fastest useful setup measured: 64.0 tokens a second against 49.3 for the same model on the 2060. It scored 10/10 on the coding test and found a planted fact at both the start and the end of a 13,780-token prompt. The other card is not wasted beside it - it holds qwen3.5:9b at its full 196,608 tokens, which is 12x the conversation the everyday setting holds today.",
+     "work": "short questions, writing, checking things, one-off tasks",
+     "worse": "Chosen for speed, not for the best answer: on the quality questions asked today qwen3:8b gave the weakest explanation of the three, and it led with the outdated reason."
+    },
+    {
+     "both_cards": true,
+     "card_words": "Switch everyday chat to qwen3.5:9b, for \"Building an Android app\"?\n\nWhat this setup is for: writing code, reading a file, fixing an error, multi-step coding work.\nWhere it goes: the RTX 2060, holding 196,608 tokens of conversation (9.17 GB of the card's 12 GB, measured - nothing spills).\nBeside it: qwen3.5:4b on the RTX 2080 SUPER, 65,536 tokens.\n\nWhat it costs: The card that writes the code is the slower one - 44.9 tokens a second against 64.0 on the other card - and qwen3.5:9b fills 9.17 of its 12 GB at this context, so the other card is the only place a second model can go. What the slow card buys is 196,608 tokens of project in view instead of 16,384, about twelve times as much. Both cards still work at once, for the same -1.9%.\nWhat it is worse at: The coding model writes more slowly than qwen3:8b would on the fast card, and the small model beside it is the one that got a trap question wrong when asked as an explanation - it is here for speed on short questions, not for careful reasoning.\n\nNothing has changed yet. Approving this card switches one model; it does not download anything and it does not change any of Ollama's settings. The model you use now stays downloaded, so switching back is one more switch.",
+     "cost": "The card that writes the code is the slower one - 44.9 tokens a second against 64.0 on the other card - and qwen3.5:9b fills 9.17 of its 12 GB at this context, so the other card is the only place a second model can go. What the slow card buys is 196,608 tokens of project in view instead of 16,384, about twelve times as much. Both cards still work at once, for the same -1.9%.",
+     "have": [
+      "qwen3.5:9b",
+      "qwen3.5:4b"
+     ],
+     "id": "coding",
+     "main_model": "qwen3.5:9b",
+     "models": [
+      "qwen3.5:9b",
+      "qwen3.5:4b"
+     ],
+     "name": "Building an Android app",
+     "need": [],
+     "places": [
+      {
+       "card": "RTX 2060",
+       "clean": true,
+       "context": 196608,
+       "context_words": "192K",
+       "disk_gb": 6.1,
+       "free_gib": 2.83,
+       "model": "qwen3.5:9b",
+       "role": "main",
+       "speed_tokens_per_s": 44.9,
+       "spill_gib": 0.0,
+       "vram_gib": 9.17,
+       "words": "Writes the code, with room for a whole project in view"
+      },
+      {
+       "card": "RTX 2080 SUPER",
+       "clean": true,
+       "context": 65536,
+       "context_words": "64K",
+       "disk_gb": 3.16,
+       "free_gib": 3.85,
+       "model": "qwen3.5:4b",
+       "role": "beside",
+       "speed_tokens_per_s": 77.1,
+       "spill_gib": 0.0,
+       "vram_gib": 4.15,
+       "words": "Answers quick questions about the code, fast"
+      }
+     ],
+     "ready": "ready",
+     "ready_words": "Both models are downloaded already.",
+     "step": {
+      "body": {
+       "ref": "qwen3.5:9b"
+      },
+      "detail": "Raises the usual model-switch card. The model you use now stays downloaded, so switching back is one more switch.",
+      "done": false,
+      "kind": "switch",
+      "route": "/api/models/switch",
+      "title": "Switch everyday chat to qwen3.5:9b",
+      "words": "Ready when you are: switching to qwen3.5:9b raises the usual approval card, and nothing changes until you approve it."
+     },
+     "summary": "qwen3.5:9b at 196,608 tokens on the RTX 2060 (44.9 tokens a second), with qwen3.5:4b (65,536 tokens) on the RTX 2080 SUPER",
+     "thinking": "qwen3.5:9b has thinking ON by default, and with it on the answer came back EMPTY on all three measured questions. Thinking levels is what turns it off for ordinary turns; this setup assumes that setting and changes nothing itself.",
+     "uses": "Yes - both cards, one model each, run at once. Both fit entirely in video memory at these sizes: nothing spills and nothing is split.",
+     "what": "For building an Android app, or any other coding work: writing code, reading a file, fixing an error, or a long job where Jarvis has to keep a lot of the project in view at once.",
+     "why": "qwen3.5:9b scored 10/10 on the coding test and gave the best explanation answer measured, and it holds 196,608 tokens on the 12 GB card with nothing spilled. The 4B beside it also scored 10/10 and is the fastest model that still got the reasoning question right (77.1 tokens a second), so short questions do not pay the 9B's price.",
+     "work": "writing code, reading a file, fixing an error, multi-step coding work",
+     "worse": "The coding model writes more slowly than qwen3:8b would on the fast card, and the small model beside it is the one that got a trap question wrong when asked as an explanation - it is here for speed on short questions, not for careful reasoning."
+    },
+    {
+     "both_cards": true,
+     "card_words": "Switch everyday chat to qwen3.5:9b, for \"Admin and paperwork\"?\n\nWhat this setup is for: letters, statements, forms, policies and things to sort out.\nWhere it goes: the RTX 2060, holding 196,608 tokens of conversation (9.17 GB of the card's 12 GB, measured - nothing spills).\nBeside it: qwen3:8b on the RTX 2080 SUPER, 16,384 tokens.\n\nWhat it costs: The model that reads it all writes about 30% slower than qwen3:8b would on the fast card, and the fast card's conversation is only 16,384 tokens while it is the second model. The 12 GB card is fully committed, so nothing else fits on it.\nWhat it is worse at: The step from \"best explanation answer measured\" to \"best for paperwork\" is a reading, not a measurement: no summarise-a-whole-document test was run today. It rests on the explanation result and on the 196,608-token ceiling.\n\nNothing has changed yet. Approving this card switches one model; it does not download anything and it does not change any of Ollama's settings. The model you use now stays downloaded, so switching back is one more switch.",
+     "cost": "The model that reads it all writes about 30% slower than qwen3:8b would on the fast card, and the fast card's conversation is only 16,384 tokens while it is the second model. The 12 GB card is fully committed, so nothing else fits on it.",
+     "have": [
+      "qwen3.5:9b",
+      "qwen3:8b"
+     ],
+     "id": "admin",
+     "main_model": "qwen3.5:9b",
+     "models": [
+      "qwen3.5:9b",
+      "qwen3:8b"
+     ],
+     "name": "Admin and paperwork",
+     "need": [],
+     "places": [
+      {
+       "card": "RTX 2060",
+       "clean": true,
+       "context": 196608,
+       "context_words": "192K",
+       "disk_gb": 6.1,
+       "free_gib": 2.83,
+       "model": "qwen3.5:9b",
+       "role": "main",
+       "speed_tokens_per_s": 44.9,
+       "spill_gib": 0.0,
+       "vram_gib": 9.17,
+       "words": "Reads the whole letter or statement and answers about it"
+      },
+      {
+       "card": "RTX 2080 SUPER",
+       "clean": true,
+       "context": 16384,
+       "context_words": "16K",
+       "disk_gb": 4.87,
+       "free_gib": 2.16,
+       "model": "qwen3:8b",
+       "role": "beside",
+       "speed_tokens_per_s": 64.0,
+       "spill_gib": 0.0,
+       "vram_gib": 5.84,
+       "words": "Drafts and rewords quickly"
+      }
+     ],
+     "ready": "ready",
+     "ready_words": "Both models are downloaded already.",
+     "step": {
+      "body": {
+       "ref": "qwen3.5:9b"
+      },
+      "detail": "Raises the usual model-switch card. The model you use now stays downloaded, so switching back is one more switch.",
+      "done": false,
+      "kind": "switch",
+      "route": "/api/models/switch",
+      "title": "Switch everyday chat to qwen3.5:9b",
+      "words": "Ready when you are: switching to qwen3.5:9b raises the usual approval card, and nothing changes until you approve it."
+     },
+     "summary": "qwen3.5:9b at 196,608 tokens on the RTX 2060 (44.9 tokens a second), with qwen3:8b (16,384 tokens) on the RTX 2080 SUPER",
+     "thinking": "qwen3.5:9b's thinking is off here (Thinking levels). With it on and an ordinary budget it answered nothing at all.",
+     "uses": "Yes - both cards, one model each, run at once, nothing spilled.",
+     "what": "For your own life admin: a long letter, a bank statement, a policy document, a form to fill in, or a pile of things to sort out and summarise - where being right matters more than being quick.",
+     "why": "qwen3.5:9b gave the best answer of the models asked the explanation question, and it is the one model that holds 196,608 tokens in video memory on this PC - which is what a letter, a statement or a policy document actually needs. qwen3:8b on the fast card keeps drafting quick.",
+     "work": "letters, statements, forms, policies and things to sort out",
+     "worse": "The step from \"best explanation answer measured\" to \"best for paperwork\" is a reading, not a measurement: no summarise-a-whole-document test was run today. It rests on the explanation result and on the 196,608-token ceiling."
+    },
+    {
+     "both_cards": true,
+     "card_words": "Switch everyday chat to qwen3.5:4b, for \"Long conversations and big documents\"?\n\nWhat this setup is for: one very long back-and-forth, or a document too big for anything else.\nWhere it goes: the RTX 2060, holding 262,144 tokens of conversation (8.27 GB of the card's 12 GB, measured - nothing spills).\nBeside it: qwen3:8b on the RTX 2080 SUPER, 16,384 tokens.\n\nWhat it costs: 262,144 tokens, which is a third more than the better model reaches and sixteen times the everyday setting. It is paid for in answer quality, not in speed: the small model writes at 63.1 tokens a second.\nWhat it is worse at: The model holding all that text got a trap question WRONG (\"all but 9 run away\" answered as 8, with a self-contradictory reason), and on the 12 GB card it produced a muddled explanation the same weights did not produce on the other card. Use it for size, not for care.\n\nNothing has changed yet. Approving this card switches one model; it does not download anything and it does not change any of Ollama's settings. The model you use now stays downloaded, so switching back is one more switch.",
+     "cost": "262,144 tokens, which is a third more than the better model reaches and sixteen times the everyday setting. It is paid for in answer quality, not in speed: the small model writes at 63.1 tokens a second.",
+     "have": [
+      "qwen3.5:4b",
+      "qwen3:8b"
+     ],
+     "id": "long",
+     "main_model": "qwen3.5:4b",
+     "models": [
+      "qwen3.5:4b",
+      "qwen3:8b"
+     ],
+     "name": "Long conversations and big documents",
+     "need": [],
+     "places": [
+      {
+       "card": "RTX 2060",
+       "clean": true,
+       "context": 262144,
+       "context_words": "256K",
+       "disk_gb": 3.16,
+       "free_gib": 3.73,
+       "model": "qwen3.5:4b",
+       "role": "main",
+       "speed_tokens_per_s": 63.1,
+       "spill_gib": 0.0,
+       "vram_gib": 8.27,
+       "words": "Holds the most text this PC can load at once"
+      },
+      {
+       "card": "RTX 2080 SUPER",
+       "clean": true,
+       "context": 16384,
+       "context_words": "16K",
+       "disk_gb": 4.87,
+       "free_gib": 2.16,
+       "model": "qwen3:8b",
+       "role": "beside",
+       "speed_tokens_per_s": 64.0,
+       "spill_gib": 0.0,
+       "vram_gib": 5.84,
+       "words": "Answers ordinary questions while the long one stays loaded"
+      }
+     ],
+     "ready": "ready",
+     "ready_words": "Both models are downloaded already.",
+     "step": {
+      "body": {
+       "ref": "qwen3.5:4b"
+      },
+      "detail": "Raises the usual model-switch card. The model you use now stays downloaded, so switching back is one more switch.",
+      "done": false,
+      "kind": "switch",
+      "route": "/api/models/switch",
+      "title": "Switch everyday chat to qwen3.5:4b",
+      "words": "Ready when you are: switching to qwen3.5:4b raises the usual approval card, and nothing changes until you approve it."
+     },
+     "summary": "qwen3.5:4b at 262,144 tokens on the RTX 2060 (63.1 tokens a second), with qwen3:8b (16,384 tokens) on the RTX 2080 SUPER",
+     "thinking": "",
+     "uses": "Yes - both cards, one model each, at once, nothing spilled.",
+     "what": "For one very long back-and-forth, or a document too big for any other setup - the most text this PC can genuinely hold at once.",
+     "why": "Measured: qwen3.5:4b is the only model that holds 262,144 tokens in video memory on the 2060 with zero spill, at 63.1 tokens a second - and 262,144 is the model's own limit, not the card's. qwen3.5:9b at that size spills 2.91 GB and falls to 21.9 tokens a second, and qwen3:8b stops at 40,960 because that is the model's own limit.",
+     "work": "one very long back-and-forth, or a document too big for anything else",
+     "worse": "The model holding all that text got a trap question WRONG (\"all but 9 run away\" answered as 8, with a self-contradictory reason), and on the 12 GB card it produced a muddled explanation the same weights did not produce on the other card. Use it for size, not for care."
+    },
+    {
+     "both_cards": true,
+     "card_words": "Switch everyday chat to ornith:9b, for \"Careful coding with a coding specialist\"?\n\nWhat this setup is for: multi-step coding work with tools, files and many steps.\nWhere it goes: the RTX 2060, holding 196,608 tokens of conversation (8.93 GB of the card's 12 GB, measured - nothing spills).\nBeside it: qwen3.5:9b on the RTX 2080 SUPER, 8,192 tokens.\n\nWhat it costs: On the one test both were given, the coding specialist scored WORSE: 8/10 against 10/10 for the general models. It is also slower than qwen3:8b on the same card (45.6 against 49.3 tokens a second). And the better general model beside it gets only 8,192 tokens, because the 8 GB card cannot hold more.\nWhat it is worse at: Everything in the line above: it scored 8/10 and lost the only measured coding comparison it was in, by ignoring the word \"DISTINCT\". One question with ten cases is not a verdict - but it is why this setup is not the default for coding.\n\nNothing has changed yet. Approving this card switches one model; it does not download anything and it does not change any of Ollama's settings. The model you use now stays downloaded, so switching back is one more switch.",
+     "cost": "On the one test both were given, the coding specialist scored WORSE: 8/10 against 10/10 for the general models. It is also slower than qwen3:8b on the same card (45.6 against 49.3 tokens a second). And the better general model beside it gets only 8,192 tokens, because the 8 GB card cannot hold more.",
+     "have": [
+      "ornith:9b",
+      "qwen3.5:9b"
+     ],
+     "id": "specialist",
+     "main_model": "ornith:9b",
+     "models": [
+      "ornith:9b",
+      "qwen3.5:9b"
+     ],
+     "name": "Careful coding with a coding specialist",
+     "need": [],
+     "places": [
+      {
+       "card": "RTX 2060",
+       "clean": true,
+       "context": 196608,
+       "context_words": "192K",
+       "disk_gb": 5.24,
+       "free_gib": 3.07,
+       "model": "ornith:9b",
+       "role": "main",
+       "speed_tokens_per_s": 49.1,
+       "spill_gib": 0.0,
+       "vram_gib": 8.93,
+       "words": "The model built for long, tool-driven coding jobs, MIT licensed"
+      },
+      {
+       "card": "RTX 2080 SUPER",
+       "clean": true,
+       "context": 8192,
+       "context_words": "8K",
+       "disk_gb": 6.1,
+       "free_gib": 2.78,
+       "model": "qwen3.5:9b",
+       "role": "beside",
+       "speed_tokens_per_s": 58.1,
+       "spill_gib": 0.0,
+       "vram_gib": 5.22,
+       "words": "The better general model, with a short conversation"
+      }
+     ],
+     "ready": "ready",
+     "ready_words": "Both models are downloaded already.",
+     "step": {
+      "body": {
+       "ref": "ornith:9b"
+      },
+      "detail": "Raises the usual model-switch card. The model you use now stays downloaded, so switching back is one more switch.",
+      "done": false,
+      "kind": "switch",
+      "route": "/api/models/switch",
+      "title": "Switch everyday chat to ornith:9b",
+      "words": "Ready when you are: switching to ornith:9b raises the usual approval card, and nothing changes until you approve it."
+     },
+     "summary": "ornith:9b at 196,608 tokens on the RTX 2060 (49.1 tokens a second), with qwen3.5:9b (8,192 tokens) on the RTX 2080 SUPER",
+     "thinking": "ornith:9b has thinking ON by default too, and the same trap applies: with thinking on and a normal budget it answered nothing. Thinking levels is what turns it off.",
+     "uses": "Yes - both cards, one model each, at once, nothing spilled.",
+     "what": "For long, multi-step coding work - many files, tools and steps - using the one model here that is purpose-built for it.",
+     "why": "ornith:9b is the only model installed that is built and benchmarked for multi-step agentic work (SWE-bench, Terminal-Bench), it carries the MIT licence and a 256K window, and it holds 196,608 tokens on the 12 GB card with nothing spilled. This setup exists so the choice can be settled on real work: the measured comparison today favours the general models (8/10 against 10/10), and the cheap way to settle it is to use both for a week.",
+     "work": "multi-step coding work with tools, files and many steps",
+     "worse": "Everything in the line above: it scored 8/10 and lost the only measured coding comparison it was in, by ignoring the word \"DISTINCT\". One question with ten cases is not a verdict - but it is why this setup is not the default for coding."
+    }
+   ],
+   "switch_path": "/api/models/switch"
+  },
+  "words_admin_inbox": {
+   "answer": {
+    "id": "admin",
+    "name": "Admin and paperwork",
+    "offered": true,
+    "step": {
+     "body": {
+      "ref": "qwen3.5:9b"
+     },
+     "detail": "Raises the usual model-switch card. The model you use now stays downloaded, so switching back is one more switch.",
+     "done": false,
+     "kind": "switch",
+     "route": "/api/models/switch",
+     "title": "Switch everyday chat to qwen3.5:9b",
+     "words": "Ready when you are: switching to qwen3.5:9b raises the usual approval card, and nothing changes until you approve it."
+    },
+    "switched": false,
+    "why": "Your words mention letters, statements, forms, policies and things to sort out.",
+    "words": "That sounds like letters, statements, forms, policies and things to sort out. The \"Admin and paperwork\" setup puts qwen3.5:9b on the RTX 2060 for it, with qwen3:8b on the RTX 2080 SUPER beside it. Nothing has changed - the setup screen explains it before anything moves, and switching is yours to approve.",
+    "work": "letters, statements, forms, policies and things to sort out"
+   },
+   "words": "I'm going to work on my inbox, it's a mess"
+  },
+  "words_admin_letter": {
+   "answer": {
+    "id": "admin",
+    "name": "Admin and paperwork",
+    "offered": true,
+    "step": {
+     "body": {
+      "ref": "qwen3.5:9b"
+     },
+     "detail": "Raises the usual model-switch card. The model you use now stays downloaded, so switching back is one more switch.",
+     "done": false,
+     "kind": "switch",
+     "route": "/api/models/switch",
+     "title": "Switch everyday chat to qwen3.5:9b",
+     "words": "Ready when you are: switching to qwen3.5:9b raises the usual approval card, and nothing changes until you approve it."
+    },
+    "switched": false,
+    "why": "Your words mention letters, statements, forms, policies and things to sort out.",
+    "words": "That sounds like letters, statements, forms, policies and things to sort out. The \"Admin and paperwork\" setup puts qwen3.5:9b on the RTX 2060 for it, with qwen3:8b on the RTX 2080 SUPER beside it. Nothing has changed - the setup screen explains it before anything moves, and switching is yours to approve.",
+    "work": "letters, statements, forms, policies and things to sort out"
+   },
+   "words": "I need to fill in a form for the council"
+  },
+  "words_admin_taxes": {
+   "answer": {
+    "id": "admin",
+    "name": "Admin and paperwork",
+    "offered": true,
+    "step": {
+     "body": {
+      "ref": "qwen3.5:9b"
+     },
+     "detail": "Raises the usual model-switch card. The model you use now stays downloaded, so switching back is one more switch.",
+     "done": false,
+     "kind": "switch",
+     "route": "/api/models/switch",
+     "title": "Switch everyday chat to qwen3.5:9b",
+     "words": "Ready when you are: switching to qwen3.5:9b raises the usual approval card, and nothing changes until you approve it."
+    },
+    "switched": false,
+    "why": "Your words mention letters, statements, forms, policies and things to sort out.",
+    "words": "That sounds like letters, statements, forms, policies and things to sort out. The \"Admin and paperwork\" setup puts qwen3.5:9b on the RTX 2060 for it, with qwen3:8b on the RTX 2080 SUPER beside it. Nothing has changed - the setup screen explains it before anything moves, and switching is yours to approve.",
+    "work": "letters, statements, forms, policies and things to sort out"
+   },
+   "words": "I have to sort out my taxes and some paperwork"
+  },
+  "words_android_app": {
+   "answer": {
+    "id": "coding",
+    "name": "Building an Android app",
+    "offered": true,
+    "step": {
+     "body": {
+      "ref": "qwen3.5:9b"
+     },
+     "detail": "Raises the usual model-switch card. The model you use now stays downloaded, so switching back is one more switch.",
+     "done": false,
+     "kind": "switch",
+     "route": "/api/models/switch",
+     "title": "Switch everyday chat to qwen3.5:9b",
+     "words": "Ready when you are: switching to qwen3.5:9b raises the usual approval card, and nothing changes until you approve it."
+    },
+    "switched": false,
+    "why": "Your words mention writing code, reading a file, fixing an error, multi-step coding work.",
+    "words": "That sounds like writing code, reading a file, fixing an error, multi-step coding work. The \"Building an Android app\" setup puts qwen3.5:9b on the RTX 2060 for it, with qwen3.5:4b on the RTX 2080 SUPER beside it. Nothing has changed - the setup screen explains it before anything moves, and switching is yours to approve.",
+    "work": "writing code, reading a file, fixing an error, multi-step coding work"
+   },
+   "words": "I'm going to build an Android app this weekend"
+  },
+  "words_coding_bug": {
+   "answer": {
+    "id": "coding",
+    "name": "Building an Android app",
+    "offered": true,
+    "step": {
+     "body": {
+      "ref": "qwen3.5:9b"
+     },
+     "detail": "Raises the usual model-switch card. The model you use now stays downloaded, so switching back is one more switch.",
+     "done": false,
+     "kind": "switch",
+     "route": "/api/models/switch",
+     "title": "Switch everyday chat to qwen3.5:9b",
+     "words": "Ready when you are: switching to qwen3.5:9b raises the usual approval card, and nothing changes until you approve it."
+    },
+    "switched": false,
+    "why": "Your words mention writing code, reading a file, fixing an error, multi-step coding work.",
+    "words": "That sounds like writing code, reading a file, fixing an error, multi-step coding work. The \"Building an Android app\" setup puts qwen3.5:9b on the RTX 2060 for it, with qwen3.5:4b on the RTX 2080 SUPER beside it. Nothing has changed - the setup screen explains it before anything moves, and switching is yours to approve.",
+    "work": "writing code, reading a file, fixing an error, multi-step coding work"
+   },
+   "words": "I need to fix a bug in the code for my app"
+  },
+  "words_coding_gradle": {
+   "answer": {
+    "id": "coding",
+    "name": "Building an Android app",
+    "offered": true,
+    "step": {
+     "body": {
+      "ref": "qwen3.5:9b"
+     },
+     "detail": "Raises the usual model-switch card. The model you use now stays downloaded, so switching back is one more switch.",
+     "done": false,
+     "kind": "switch",
+     "route": "/api/models/switch",
+     "title": "Switch everyday chat to qwen3.5:9b",
+     "words": "Ready when you are: switching to qwen3.5:9b raises the usual approval card, and nothing changes until you approve it."
+    },
+    "switched": false,
+    "why": "Your words mention writing code, reading a file, fixing an error, multi-step coding work.",
+    "words": "That sounds like writing code, reading a file, fixing an error, multi-step coding work. The \"Building an Android app\" setup puts qwen3.5:9b on the RTX 2060 for it, with qwen3.5:4b on the RTX 2080 SUPER beside it. Nothing has changed - the setup screen explains it before anything moves, and switching is yours to approve.",
+    "work": "writing code, reading a file, fixing an error, multi-step coding work"
+   },
+   "words": "help me with my gradle build, it keeps failing"
+  },
+  "words_everyday": {
+   "answer": {
+    "id": "everyday",
+    "name": "Everyday quick answers",
+    "offered": true,
+    "step": {
+     "body": null,
+     "detail": "Nothing to change.",
+     "done": true,
+     "kind": "none",
+     "route": null,
+     "title": "qwen3:8b is already the everyday model",
+     "words": "qwen3:8b is already the model Jarvis uses, so this setup is ready - nothing needs changing."
+    },
+    "switched": false,
+    "why": "Your words mention short questions, writing, checking things, one-off tasks.",
+    "words": "That sounds like short questions, writing, checking things, one-off tasks. The \"Everyday quick answers\" setup puts qwen3:8b on the RTX 2080 SUPER for it, with qwen3.5:9b on the RTX 2060 beside it. Nothing has changed - the setup screen explains it before anything moves, and switching is yours to approve.",
+    "work": "short questions, writing, checking things, one-off tasks"
+   },
+   "words": "I just want to ask you a few quick questions"
+  },
+  "words_long_book": {
+   "answer": {
+    "id": "long",
+    "name": "Long conversations and big documents",
+    "offered": true,
+    "step": {
+     "body": {
+      "ref": "qwen3.5:4b"
+     },
+     "detail": "Raises the usual model-switch card. The model you use now stays downloaded, so switching back is one more switch.",
+     "done": false,
+     "kind": "switch",
+     "route": "/api/models/switch",
+     "title": "Switch everyday chat to qwen3.5:4b",
+     "words": "Ready when you are: switching to qwen3.5:4b raises the usual approval card, and nothing changes until you approve it."
+    },
+    "switched": false,
+    "why": "Your words mention one very long back-and-forth, or a document too big for anything else.",
+    "words": "That sounds like one very long back-and-forth, or a document too big for anything else. The \"Long conversations and big documents\" setup puts qwen3.5:4b on the RTX 2060 for it, with qwen3:8b on the RTX 2080 SUPER beside it. Nothing has changed - the setup screen explains it before anything moves, and switching is yours to approve.",
+    "work": "one very long back-and-forth, or a document too big for anything else"
+   },
+   "words": "I'm going to work on the whole book tonight"
+  },
+  "words_long_document": {
+   "answer": {
+    "id": "long",
+    "name": "Long conversations and big documents",
+    "offered": true,
+    "step": {
+     "body": {
+      "ref": "qwen3.5:4b"
+     },
+     "detail": "Raises the usual model-switch card. The model you use now stays downloaded, so switching back is one more switch.",
+     "done": false,
+     "kind": "switch",
+     "route": "/api/models/switch",
+     "title": "Switch everyday chat to qwen3.5:4b",
+     "words": "Ready when you are: switching to qwen3.5:4b raises the usual approval card, and nothing changes until you approve it."
+    },
+    "switched": false,
+    "why": "Your words mention one very long back-and-forth, or a document too big for anything else.",
+    "words": "That sounds like one very long back-and-forth, or a document too big for anything else. The \"Long conversations and big documents\" setup puts qwen3.5:4b on the RTX 2060 for it, with qwen3:8b on the RTX 2080 SUPER beside it. Nothing has changed - the setup screen explains it before anything moves, and switching is yours to approve.",
+    "work": "one very long back-and-forth, or a document too big for anything else"
+   },
+   "words": "I need to read a long document and summarise it"
+  },
+  "words_specialist": {
+   "answer": {
+    "id": "specialist",
+    "name": "Careful coding with a coding specialist",
+    "offered": true,
+    "step": {
+     "body": {
+      "ref": "ornith:9b"
+     },
+     "detail": "Raises the usual model-switch card. The model you use now stays downloaded, so switching back is one more switch.",
+     "done": false,
+     "kind": "switch",
+     "route": "/api/models/switch",
+     "title": "Switch everyday chat to ornith:9b",
+     "words": "Ready when you are: switching to ornith:9b raises the usual approval card, and nothing changes until you approve it."
+    },
+    "switched": false,
+    "why": "Your words mention multi-step coding work with tools, files and many steps.",
+    "words": "That sounds like multi-step coding work with tools, files and many steps. The \"Careful coding with a coding specialist\" setup puts ornith:9b on the RTX 2060 for it, with qwen3.5:9b on the RTX 2080 SUPER beside it. Nothing has changed - the setup screen explains it before anything moves, and switching is yours to approve.",
+    "work": "multi-step coding work with tools, files and many steps"
+   },
+   "words": "help me with multi-step coding, many files at once"
+  }
+ },
+ "measured_on": "2026-10-10, the owner's PC",
+ "not_a_catalogue": "Five combinations of models already on this PC. Nothing here is a list of what could be downloaded.",
+ "setup_ids": [
+  "everyday",
+  "coding",
+  "admin",
+  "long",
+  "specialist"
+ ],
+ "switch_path": "/api/models/switch",
+ "what": "The real answers of GET /api/work and its POSTs (backend/jarvis_work.py). Written by tools/gen_work_cases.py."
+}

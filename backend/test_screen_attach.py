@@ -516,6 +516,12 @@ def t_hygiene():
              # adds no _TOOL_ACTIONS line and does not touch register_approval_key, so
              # it cannot rewrite a line this patch wrote.
              "uncensored-optins.patch",
+             # work.patch (2026-10-10) comes after it as well: exactly TWO hunks,
+             # both in jarvis_hud.py - a GET route in the read-only set and a POST
+             # block, each anchored on a route that predates it, nowhere near the
+             # POST /api/screen wrapper this patch installs. It removes no line and
+             # touches jarvis_gate.py not at all, so it cannot rewrite that wrapper.
+             "work.patch",
              "picture-card.patch",
              # pictures.patch (2026-10-11): ONE install block at the end of
              # jarvis_hud.py's chain - nowhere near the POST /api/screen route this

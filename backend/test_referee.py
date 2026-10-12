@@ -28,12 +28,14 @@ folder), a hand-moved clock, a stand-in gate and a stand-in for the numbers:
 """
 from __future__ import annotations
 
+import itertools
 import json
 import os
 import re
 import sys
 import tempfile
 import traceback
+import types
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -51,6 +53,47 @@ import jarvis_backoff as BO  # noqa: E402
 import jarvis_goals as G  # noqa: E402
 import jarvis_referee as R  # noqa: E402
 import jarvis_schedule as S  # noqa: E402
+
+
+#: The hex characters a pinned goal id is spelled with. Only a-f, on purpose: see
+#: the note at _ID_N.
+_HEX_LETTERS = "abcdef"
+
+
+def _pinned_hex(n):
+    """Ten hex characters that spell `n` in base 6, using only the letters a-f.
+
+    So two goals never share an id (the store's UNIQUE constraint), and no id can
+    ever carry a decimal digit - which is what makes it a safe fixture.
+    """
+    out = ""
+    while True:
+        n, r = divmod(n, 6)
+        out = _HEX_LETTERS[r] + out
+        if not n:
+            return out.rjust(10, "a")
+
+
+class _FixedGoalId:
+    """A stand-in for uuid.uuid4(): the one part Goals.create uses is `.hex`."""
+
+    def __init__(self, n):
+        self.hex = _pinned_hex(n) + "a" * 22      # 32 characters, like uuid4().hex
+
+
+#  `jarvis_goals.Goals.create` mints every goal id as "g" + uuid.uuid4().hex[:10].
+#  A RANDOM id makes t_a_private_number_stays_on_the_screen fail on a coin toss:
+#  that check reads every non-text field of the card's detail for the weight's own
+#  digits ("150"), ids included. Measured 2026-10-11: 6 failures in 2000 runs of
+#  that check, with the card exactly right and the goal id "ga150ce0378" - the id
+#  happened to carry them; three hex characters come up "150" about once in 600
+#  draws. That was never a fact about the referee, only about its fixture.
+#  Pinning it changes no assertion: the check still scans the WHOLE detail, ids
+#  and all. The ids are spelled with a-f only, so an id can never be mistaken for
+#  the number, and they still differ per goal, so the store's UNIQUE id constraint
+#  holds and a failure can be repeated.
+_ID_N = itertools.count(1)
+G.uuid = types.SimpleNamespace(uuid4=lambda: _FixedGoalId(next(_ID_N)))
 
 PASSED, FAILED = [], []
 SKIPPED = []
@@ -717,6 +760,13 @@ def t_the_patch_and_the_lists():
              # adds no _TOOL_ACTIONS line and does not touch register_approval_key, so
              # it cannot rewrite a line this patch wrote.
              "uncensored-optins.patch",
+             # work.patch (2026-10-10) comes after it too: exactly TWO hunks, both
+             # in jarvis_hud.py - one GET route in the read-only set and one POST
+             # block, each anchored on a route that predates it - and neither is in
+             # the install chain referee.patch's own block belongs to. It removes no
+             # line and touches jarvis_gate.py not at all, so it rewrites nothing
+             # referee.patch's hunks anchor on.
+             "work.patch",
              "picture-card.patch",
              # pictures.patch (2026-10-11) is appended last and has exactly ONE
              # hunk, in jarvis_hud.py: an install block at the end of the install

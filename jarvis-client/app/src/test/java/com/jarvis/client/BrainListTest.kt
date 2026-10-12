@@ -406,8 +406,14 @@ class BrainListTest {
             for (plate in section.plateKeys) {
                 // A pair is written as one plate that names both halves, so the
                 // half that is not named first may not appear as `plate("...")`.
-                val at = listOf("plate(\"$plate\")", "plateDrawn(\"$plate\")", "\"$plate\"")
-                    .map { screen.indexOf(it) }.firstOrNull { it > 0 } ?: -1
+                // A lone plate may also be written with its own `drawn = ...`
+                // argument, which is why the bare name is accepted too (the
+                // second name of a pair is written bare inside the call).
+                val at = listOf(
+                    Regex("""\bplate\(\s*"${Regex.escape(plate)}"\s*[,)]""").find(screen)?.range?.first,
+                    screen.indexOf("plateDrawn(\"$plate\")").takeIf { it > 0 },
+                    screen.indexOf("\"$plate\"").takeIf { it > 0 },
+                ).filterNotNull().minOrNull() ?: -1
                 assertTrue("$plate is not drawn", at > 0)
                 assertTrue(
                     "$plate is drawn outside every heading's call",
@@ -446,8 +452,11 @@ class BrainListTest {
         while (i < lines.size) {
             // A lone plate is `plate("name")`; the three PAIRS are one plate that
             // names both halves, `plate(if (plateDrawn("wiki")) "wiki" else
-            // "wiki-hidden")`, so both spellings start a plate.
-            val direct = Regex("\\bplate\\(\"([\\w-]+)\"\\)").find(lines[i])
+            // "wiki-hidden")`, so both spellings start a plate. A lone plate may
+            // also carry its own `drawn = ...` (2026-10-11: `people-and-things`
+            // draws its own hidden prompt instead of vanishing), which is what
+            // the `[^)]*` admits.
+            val direct = Regex("\\bplate\\(\"([\\w-]+)\"[^)]*\\)").find(lines[i])
             val paired = Regex("\\bplate\\(if \\(plateDrawn\\(\"([\\w-]+)\"\\)\\) \"([\\w-]+)\" else \"([\\w-]+)\"\\)")
                 .find(lines[i])
             if (direct == null && paired == null) {

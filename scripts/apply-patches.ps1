@@ -1305,6 +1305,23 @@ $PATCHES = @(
     # own picture and input routes are untouched, and the desktop still names
     # none of them (tests/handoff.mjs and tests/handoff-front.mjs).
     'handoff-front.patch'
+    # The work setups (the owner asked, 2026-10-10): five combinations of
+    # local models, each chosen for a kind of work - building an Android app,
+    # admin and paperwork, long conversations and big documents, quick
+    # everyday use, and a coding specialist - each explaining in plain words
+    # what it is for, what it costs and what it is honestly worse at, before
+    # the owner starts. Jarvis offers the matching one when the owner talks
+    # about work they want to do. Needs jarvis_work.py copied in; without it
+    # the two routes answer 503 in plain words and nothing else changes.
+    #
+    # It OFFERS and it REMEMBERS, and that is all: choosing a setup changes no
+    # model and no setting, and every switch or download is still the existing
+    # /api/models/switch and /api/models/install card, tier "ask". No new gate
+    # action, no new tier, and no route of its own that could start a model.
+    # It sits after hardware.patch because it adds its routes beside that
+    # patch's, and after second-card-suggest.patch because the POST block it
+    # appends to is the one that patch last rewrote.
+    'work.patch'
     # --- the owner's uncensored opt-ins, BOTH halves -------------------------
     # jarvis_optin_models.py, the owner's OWN decision of 2026-10-10 (Decision
     # 5): (a) one clearly-labelled opt-in for fiction and role-play, never the
@@ -1525,6 +1542,7 @@ $SHIPPED = @(
     'jarvis_entities.py'         # the entity layer's optional local-model pass (off by default); jarvis_auto_learn.py calls it
     'jarvis_profiles.py'         # hardware.patch: the three setups' arithmetic, words and one-line command (no I/O)
     'jarvis_hardware.py'         # hardware.patch: finding the cards, the steps, making a tuned model, measuring
+    'jarvis_work.py'             # work.patch: the five work setups, their plain words, and which one to offer (no I/O of its own)
     'jarvis_scrub.py'            # log-scrub.patch: passwords, keys and the token kept out of backend.log
     'jarvis_sqlite.py'           # the one connection class that CLOSES when its `with` block ends, shared by
                                  # jarvis_schedule.py, jarvis_goals.py and jarvis_projects.py (2026-10-08; the
