@@ -174,3 +174,5 @@ fixed by this method, and this record does not claim it.
 - **No number is quoted from a checkout other than the source named beside it**: the list numbers come from
   `git show origin/main:<path>`, the phone lines from the phone's own dumps, the Settings lines from the
   live window.
+
+**See also, added 2026-10-12:** `docs/FIELD-TEST-2026-10-12-TOPUP-2.md` - the second half, in which seven of the eleven rows section 6 left UNTESTED were driven and given a verdict (one PASS, six PARTIAL), and the four that need the owner are named. The eleven rows above are left exactly as this pass wrote them.
