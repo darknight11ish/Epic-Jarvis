@@ -1108,6 +1108,42 @@ into both apps too).
    backend folder).
 4. Connect.
 
+#### On GrapheneOS, two extra taps first
+
+GrapheneOS is a more locked-down Android built by a different team from
+Google's. The app is built for exactly that — it needs none of Google's
+services — so the steps above do not change. But two of them behave
+differently, and both are easy to misread as "the app is broken".
+
+1. **Unlock the phone before you plug in the USB cable.** GrapheneOS's USB-C
+   port defaults to *charging only while the phone is locked*, so on a locked
+   phone the `adb install` line above does nothing at all and can look like it
+   has hung. Unlock first, then plug in and run it. It can also drop out again
+   if the screen locks mid-install.
+
+2. **"Allow restricted settings" — needed only for reading phone
+   notifications.** Since Android 13, an app that was **not** installed from
+   the Play Store (so: every `adb install`) cannot be given **Notification
+   access** until the owner allows it by hand. The reading-notifications
+   feature is off by default and will not switch on until this is done:
+   - Settings → Apps → **Jarvis** → the **three-dot menu** (top right) →
+     **Allow restricted settings**;
+   - then Settings → Apps → Special app access → **Notification access** →
+     enable **Jarvis**;
+   - then turn the feature on inside Jarvis's own settings.
+
+   Nothing else in the app needs this step.
+
+**One more thing worth knowing before you chase a phantom fault:** GrapheneOS
+adds its own per-app **Network** on/off toggle. If that is ever switched off,
+the app does not see a permission error — it sees *"the network is down"* and
+reports **"Your PC isn't answering."** Check that toggle before suspecting the
+PC or the mesh.
+
+The full evaluation, and what is expected but not yet proven on a real
+GrapheneOS phone, is in
+[`GRAPHENEOS-PIXEL9-EVAL-2026-10-12.md`](GRAPHENEOS-PIXEL9-EVAL-2026-10-12.md).
+
 ### 3.4 When it fails
 
 The phone says one of these (the desktop app uses the same words):
