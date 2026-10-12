@@ -22,6 +22,30 @@ have reported the rule as unasserted.
 
 ---
 
+## Settlement, re-measured at `9c91e1fb` (the same evening's docs review)
+
+**The audit above is kept as written; this is how much of it still holds.** Two counts moved, and one
+"red today" row turned out to depend on what the checker was pointed at:
+
+* **§1's headline still holds**: **7** checkers are named by no workflow. Its denominator moved:
+  `tools/check_*.py` is **22** on main now, not 24, and the same seven files are the unnamed ones
+  (`check_feature_list.py`, `check_lanes.py`, `check_obscura.py`, `check_registry_phone.py`,
+  `check_screen_safety.py`, `check_stale_twins.py`, `check_work_claims.py`).
+* **§4's first row is environmental, not main's.** `tools/check_claims.py` **exits 0** in a plain
+  checkout; its red was the owner's *installed* backend being compared (`jarvis_quick.py in
+  C:\Users\pcadm...`), which is the drift `AUDIT-2026-10-11-MACHINE-VS-REPO.md` measures rather than a
+  fault in main. The other three rows are unchanged the same evening: `check_apk_16kb.py` (`exit=1`,
+  no APK), `check_obscura.py` (`exit=1`, Obscura not installed), `check_work_claims.py` (`exit=2`,
+  evidence untracked).
+* **§3's scan counts** (328 merges, 89 flagged lines) are a snapshot of a seven-day window that has
+  since grown; the two findings it drew attention to are unchanged, and the scan is not re-run here.
+
+Everything else this page found coherent - the twins, patch order and encoding, generated files
+against their sources - was re-checked by the docs review's run of the `audit` job's checkers and
+still passes.
+
+---
+
 ## Findings, in order of consequence
 
 ### 1. Seven checkers exist that no workflow runs - and the twins checker is one of them

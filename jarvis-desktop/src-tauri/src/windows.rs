@@ -1413,6 +1413,27 @@ pub fn show_floating(app: &AppHandle) -> Result<(), String> {
     .minimizable(false)
     .decorations(false)
     .transparent(true)
+    // A TRANSPARENT WINDOW MUST SAY SO IN ITS BACKGROUND, OR THE PLATFORM SAYS
+    // IT IN GREY (2026-10-11).
+    //
+    // The owner reported two flat grey boxes that vanish when Jarvis exits and
+    // return when it starts. `rgb(84,84,84)` appears NOWHERE in this repository
+    // - the only hit is the comment in `tools/find-flat-regions.ps1` about this
+    // very defect - so it is a platform/WebView2 default, not a colour anybody
+    // chose. This window is `transparent(true)` and, until now, set no
+    // background at all, so a frame that had not painted showed that default.
+    //
+    // `Color(0,0,0,0)` is the only value that keeps this window's own promise:
+    // the desktop shows THROUGH it. An opaque value - the theme colour
+    // included - would trade a grey rectangle for a solid one, which is worse
+    // than the bug.
+    //
+    // This is also the surface `WindowFromPoint` cannot see: the click-through
+    // loop below calls `set_ignore_cursor_events(true)` whenever the pointer is
+    // away, which puts `WS_EX_TRANSPARENT` on it, and that API skips such
+    // windows by design. That is why the colour tool named whatever was
+    // underneath it.
+    .background_color(tauri::window::Color(0, 0, 0, 0))
     .always_on_top(true)
     .skip_taskbar(true)
     .shadow(false)

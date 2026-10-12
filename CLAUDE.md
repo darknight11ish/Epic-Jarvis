@@ -2114,6 +2114,23 @@ draft and mistaking it for the source file.
 - Quote the evidence. Let the side that owns the code do the diagnosing.
 - "I checked X and it says Y" beats "Y". "I have not checked" beats a guess
   delivered confidently.
+- **Say which tree you asked.** This repository is worked in parallel `git
+  worktree` checkouts - **a worktree is a second copy of the code, on another
+  branch** - so a plain search answers "what does MY checkout say" while reading
+  exactly like a claim about `main`:
+
+  ```powershell
+  git grep -n 'X' -- path                        # what THIS checkout says (a branch, often)
+  git show origin/main:path | Select-String 'X'  # what main says
+  ```
+
+  This cost two rounds on 2026-10-11: a false finding about a privacy-sensitive
+  plate, and then a second reader "independently confirmed" it - with the same
+  command, in the same feature branch, and neither of them asked what it searched.
+  **Two confirmations of the same wrong thing, because the instrument was the
+  same.** When the claim is about `main`, read `origin/main`; when it is about the
+  file in front of you, say so. (Written up as one of the dead ends in
+  `docs/FIELD-TEST-HOW-TO-READ-THE-APPS.md`.)
 
 ## How the Android apps get built
 
@@ -2256,3 +2273,32 @@ the next version, and every version goes on GitHub.
 
 The Python backend lives on the owner's machine, not in this repo. `backend/`
 holds patches against it plus tests that prove the patches work.
+
+Decided 2026-10-11, written down here on 2026-10-12 by the docs review, because
+these are rules the project now runs on and a reader should not have to infer them
+from a commit message:
+
+- **BLOCKED and NOT-TESTABLE are never counted as passes.** A field-test row that
+  could not be reached is written as BLOCKED, PARTIAL or NOT-TESTABLE and reads as
+  such; only a feature driven on real hardware is a PASS. The rule and the rows it
+  applies to are in `docs/FIELD-TEST-MATRIX-2026-10-11.md`.
+- **Editing any file under `backend/` is a two-file change.** `backend/<file>` and
+  `jarvis-backend/<file>` are kept equal - the second is the published base an
+  installer starts from - so a change to one must be carried to the other, and
+  `backend/test_base_matches_repo.py` is run before pushing. `tools/check_stale_twins.py`
+  is the same comparison as a tool. **Neither is run by a workflow** (see
+  `docs/AUDIT-2026-10-11-IS-MAIN-COHERENT.md` section 1), so this one is on the
+  person pushing, not on CI.
+- The same day's owner decision - **the phone may raise a spending limit with its
+  own fingerprint** - is recorded above under "Amended by the owner on 2026-10-11"
+  and is deliberately not repeated here.
+
+**`audit` and `python-advisories` are informational. Six required checks are what
+gate a merge** - `rust`, `frontend`, `backend`, `backend-windows`,
+`credential-manager` and `powershell-5` - and the ruleset says so itself: a direct
+push to `main` was refused with ***"6 of 6 required status checks are expected."***
+The owner's evidence for the other half is five merged PRs (#312, #314, #315, #317,
+#318) that each had those six green **while `audit` was red**. So **a red `audit` is
+a signal to fix `main`'s own state - never a reason to hold a PR.** The cost of not
+knowing this was hours of holding mergeable work, which is why it is written here
+rather than left to be inferred.
