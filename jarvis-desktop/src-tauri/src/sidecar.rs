@@ -255,6 +255,22 @@ fn read_backend(app: &AppHandle) -> BackendConfig {
         .unwrap_or_default()
 }
 
+/// The folder the configured backend runs in - the very answer `start()` uses.
+///
+/// This is why "Check my setup" needs NO new setting for the backend folder:
+/// the app has known that path since supervision was built, and a second source
+/// of truth would be a second thing to get wrong. `working_dir()` already
+/// falls back to the folder holding the script it was told to run.
+pub fn backend_dir(app: &AppHandle) -> Option<std::path::PathBuf> {
+    read_backend(app).working_dir()
+}
+
+/// The program the owner configured: `python.exe`, or a frozen backend.
+pub fn backend_program(app: &AppHandle) -> Option<String> {
+    let program = read_backend(app).program.trim().to_string();
+    (!program.is_empty()).then_some(program)
+}
+
 /// Current state of supervision.
 #[tauri::command]
 pub fn supervisor_status(app: AppHandle) -> SupervisorStatus {

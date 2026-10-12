@@ -32,6 +32,10 @@ pub mod browser_engine;
 pub mod chatbot_money;
 pub mod clipboard_privacy;
 pub mod commands;
+// "Check my setup": the read-only live preflight, run from this repository
+// against the running Jarvis. See its own module note for why the repository's
+// copy and not one shipped into the backend folder.
+pub mod preflight;
 pub mod crash_notes;
 pub mod devices;
 pub mod email_sending;
@@ -1052,6 +1056,11 @@ pub fn run() {
             sidecar::set_supervision,
             sidecar::start_backend,
             sidecar::stop_backend,
+            // "Check my setup" (2026-10-11, the owner's first priority): runs
+            // the repository's read-only live preflight against the running
+            // Jarvis and hands the window its words. Read-only, and no token
+            // ever passes through it - see preflight.rs's own note.
+            preflight::check_my_setup,
             crash_notes::crash_notes,
             pyfind::find_python,
             commands::get_theme,
