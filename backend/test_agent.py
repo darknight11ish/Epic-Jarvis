@@ -771,7 +771,21 @@ def t_empty_enabled_tools_offers_nothing():
 
 
 def t_max_rounds_stops_an_infinite_tool_loop():
+    # The fake model asks for ANOTHER tool call on every request, so only
+    # `max_rounds` can make this turn end. If that limit stopped working the
+    # loop would call this function forever and the suite would HANG: the check
+    # below would never run, and neither would any check after it. So the fake
+    # model hangs up on its own - past a generous bound it raises, turning an
+    # unbounded loop into a failure that names the bound.
+    LIMIT = 12
+    calls = []
+
     def always_wants_a_tool(url, payload):
+        calls.append(payload)
+        if len(calls) > LIMIT:
+            raise AssertionError(
+                "run_local_turn is still asking the model for tools after "
+                f"{LIMIT} calls with max_rounds=3 - it is looping")
         return {"choices": [{"message": {"role": "assistant", "tool_calls": [
             {"id": "1", "function": {"name": "calculator",
              "arguments": json.dumps({"expression": "1"})}}]}}]}
@@ -785,6 +799,15 @@ def t_max_rounds_stops_an_infinite_tool_loop():
                 post=always_wants_a_tool, gate_check=allow, max_rounds=3,
                 open_stream=lambda url, payload: FakeStream([b'{"done":true}\n']))
         check("run_local_turn returns rather than looping forever", True)
+        # `max_rounds=3` is FOUR calls by design, not three: the loop is
+        # `for _round in range(max_rounds + 1)` (jarvis_agent.py:7430), with the
+        # last pass reserved for the model's final answer rather than another
+        # tool call. So the bound is max_rounds + 1 - and a loop that ignored the
+        # limit would run past LIMIT above and raise, failing this check.
+        check("it stops at max_rounds instead of asking the model again",
+              len(calls) <= 3 + 1,
+              f"the model was asked {len(calls)} time(s) with max_rounds=3 "
+              f"(3 tool rounds + the final answer attempt expected)")
     finally:
         AG.TOOLS["calculator"].execute = real
 
