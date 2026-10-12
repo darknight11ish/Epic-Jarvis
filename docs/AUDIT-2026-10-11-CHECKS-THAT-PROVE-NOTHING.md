@@ -234,7 +234,7 @@ to be able to check the bed before trusting anything it says.
 **A mutation pass needs ONE tree where the suite can run AND the file may be
 edited.** Playwright is installed in exactly one worktree (`.dsh-scratch/wt-suites`,
 section 1) and that worktree is shared - so the only bed that may be mutated is
-the one bed that must not be. **That is why this section is one row and not ten,
+the one bed that must not be. **That is why this section is four rows and not ten,
 and it is a structural limit rather than neglect.**
 
 Mutating in one worktree while running the suite in another tests the *unmutated*
@@ -254,12 +254,37 @@ phone's, word for word`); restored; green again.
 | # | suite | what was mutated | result | the assertion that caught it |
 |---|---|---|---|---|
 | 1 | `chatbot-api-keys.mjs` | `src/chatbot-api-keys.js:30` - renamed the first entry of the exported `SERVICES` list, `"openai"` -> `"openai-typo"` | **RED** | `readChatbotApiKeys always returns the six, in order, even from an odd answer` **and** `CONTROL: the six services are the generated fixture's, in its order` |
-| 2-10 | the rest of the safety-critical ten | **not mutated** | - | next session; the bed is built and its red demonstrated |
+| 2 | `heavy-approve.mjs` | `src/heavy-approve.js` - the weight test stops recognising `"heavy"` (`=== "heavy"` -> `=== "heavyy"`) | **RED** | `isHeavy: true only for notice.weight === "heavy"` **and** `CONTROL: a labelled heavy card is still heavy, and a labelled normal local card is not` |
+| 3 | `approval-target.mjs` | `src/approval-target.js` - `GONE_LINE`'s words gain `" (changed)"` | **RED** | `the refusal is one plain sentence, and says where the card went` |
+| 4 | `account-secrets.mjs` | `src/account-secrets.js` - one account-secret identifier renamed, `"home_token"` -> `"home_token_renamed"` | **RED** | `readAccountSecrets always returns the four, in order, even from an odd answer` **and** `Settings: all four secrets show, in order, each with its own help` **and** `Settings: a secret already set as an environment variable disables its box` |
+| 5-10 | `approvals-contract.mjs`, `blockers.mjs`, `screen-work.mjs`, `lock-capture.mjs`, `chatbot-money.mjs`, `limits.mjs` | **not mutated** | - | next session; the bed is ready, and two of them need a different shape (below) |
 
 **Restored after each mutation and proved green again: mutation 1 left the bed
 with 0 modified files and `chatbot-api-keys.mjs` passing (exit 0).**
 
-**One suite of the ten, done properly, rather than ten claimed.** The method is
+**Two things this pass found that are findings, not repairs.** First, **a shared
+module means the catch belongs to the FILE, not the suite**: `chatbot-money.mjs`
+and `chatbot-api-keys.mjs` both import `src/chatbot-api-keys.js`, so a red in
+either can come from code the other one names. Second, **`account-secrets.mjs`
+carries a self-referential assertion** - `assert.deepEqual(rows.map((r) => r.name),
+[...SECRETS])` compares the module's output against **its own exported list**, so
+on its own it cannot catch an edit to that list; what caught the rename were the
+three assertions that **name** the secrets. Reported, not repaired: a vacuous
+assertion and its repair are two changes.
+
+**And two suites resisted for a reason worth recording rather than a verdict.**
+`chatbot-money.mjs` and `limits.mjs` were **green**, but the mutations first
+chosen **did not apply** (0 matches in the module each import resolves to), so
+they get **no row**: reporting "stayed green" from a pattern that never landed
+would have invented a vacuous suite out of a bad pattern. `lock-capture.mjs`
+imports no `src/*.js` module at all - it reads files as text through `read(p)` -
+so its mutation is a text change in another file rather than a constant.
+
+**Every mutation above was restored, and the bed was left with 0 modified files
+and the junction intact after each one.**
+
+
+**Four suites of the ten, done properly, rather than ten claimed.** The method is
 proved end to end - find a constant the suite asserts, change it, watch the suite
 go red, restore, watch it go green - and the bed is ready for the remaining nine
 with no setup.
