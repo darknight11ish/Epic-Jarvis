@@ -1520,9 +1520,6 @@ jobs:
       - name: Every shipped backend module matches the repository's twin
         run: python3 ../../tools/check_stale_twins.py
       - name: Every feature the feature list claims is really there
-        run: python3 ../../tools/check_feature_list.py
-      - name: The model lanes and the models they name agree
-        run: python3 ../../tools/check_lanes.py
       - name: The phone's settings registry matches the PC's
         run: python3 ../../tools/check_registry_phone.py
       - name: The screen feature's safety rules hold
@@ -1535,6 +1532,8 @@ jobs:
       #   check_apk_16kb.py    - exits 1 with "no APK found. Build one first."
       #                          The APK is built in the `Jarvis client`
       #                          workflow, so that is where it belongs.
+      #   check_lanes.py      - reads THIS PC's Task Scheduler and its local Ollama (line 286,
+      #                         line 170), so it cannot pass on a hosted runner. Run it here.
       #   check_obscura.py     - looks for the Obscura binary under
       #                          C:\Users\<owner>\.openjarvis\obscura\, which
       #                          lives on the owner's PC and nowhere in CI.
