@@ -2154,6 +2154,29 @@ class JarvisApi(
         )
 
     /**
+     * `GET /api/chatbot/money` - every API service's monthly money limit, what
+     * is spent, what is left, and its model's price with where that number came
+     * from and when it was set, in the PC's own words
+     * (`backend/jarvis_chatbot_limits.py`'s `view()`, JARVIS-API section 122;
+     * [Money] reads the answer). A read: never held on a stale link, and
+     * nothing on this route changes a limit - the phone sends no body here.
+     *
+     * Through [probeKeeping503], because this route's 503 is a refusal with its
+     * own words, not "that subsystem is off":
+     *
+     * ```
+     * 503  {"ok": false, "available": false, "error": "money_unreadable",
+     *       "message": <the PC's own words>}
+     * ```
+     *
+     * The PC's money file is there but unreadable, so it refuses rather than
+     * reading as "nothing spent" ([AutoLearn.pcError]'s reasoning, a different
+     * body field: this one carries `message`). [Money.readFailure] turns it into
+     * the sentence the plate draws, so a blank never stands in for a refusal.
+     */
+    suspend fun chatbotMoney(): ApiResult<JsonObject> = probeKeeping503(Money.PATH)
+
+    /**
      * `POST /api/chatbot/start`, `/stop`, `/limits`, `/compare/start` or
      * `/compare/stop`, with a body made by [Chatbot.startBody],
      * [Chatbot.stopBody], [Chatbot.limitsBody], [Chatbot.compareBody] or

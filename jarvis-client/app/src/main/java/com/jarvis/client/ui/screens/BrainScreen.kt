@@ -1097,6 +1097,25 @@ fun BrainScreen(
                     }
                 }
 
+                // "Chatbot money limits" (docs/JARVIS-API.md section 122;
+                // docs/ACCOUNT-KEYS-DESIGN.md decisions 1 and 3): the READ half
+                // only - every API service's monthly limit, what is spent and
+                // what is left, and its model's price with where that number
+                // came from, in the PC's own words (MoneyPlate.kt). No Raise
+                // control, no price box and no `WRITE_PATHS` entry here: the
+                // write half is a separate piece of work that ships with its own
+                // caller. `drawn = { true }` with no `menus.shows` guard, like
+                // `watch`: the phone has no menu id for this page (the desktop's
+                // "Chatbot API keys" id is PC-only here), and the plate draws the
+                // PC's own sentence itself when the route is not on the PC.
+                plate("chatbot-money", drawn = { true }) {
+                    ChatbotMoneySection(
+                        privateHidden = privateHidden,
+                        showPrivateBusy = showPrivateBusy,
+                        onShowPrivate = onShowPrivate,
+                    )
+                }
+
                 // "Retirement what-if" (the owner's decision of 2026-09-30,
                 // docs/JARVIS-API.md section 103; menu id brain.retirement, group
                 // finance): a form and an answer drawn from the PC, the typed

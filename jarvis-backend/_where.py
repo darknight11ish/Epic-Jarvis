@@ -569,8 +569,11 @@ SHIPPED = (
     "jarvis_chatbot_api.py",
     # The monthly money limits and the price list, set from the PC's own app
     # (chatbot-limits.patch; docs/ACCOUNT-KEYS-DESIGN.md decisions 1 and 3):
-    # GET/POST /api/chatbot/money, PC only. A raise is ONE card plus Windows
-    # Hello; a lowering, a removal and a price correction are not.
+    # GET /api/chatbot/money, on both apps since 2026-10-12 (the phone reads
+    # it in Brain -> Money and time; the WRITE half is still the PC's).
+    # A raise is ONE card, answered with Windows Hello on the PC or with the
+    # asking phone's own fingerprint or PIN; a lowering, a removal and a price
+    # correction are not.
     "jarvis_chatbot_limits.py",
     "jarvis_chatbot_local.py",
     # "Look at this" and "Watch with me": the session rules, pause rules,
