@@ -4,7 +4,9 @@
  *
  * Seven Rust commands (src-tauri/src/devices.rs), Settings only:
  *  - pair_phone_address: the name to put in the QR code - remembered, else
- *    this PC's Tailscale name, else typed once here.
+ *    this PC's Tailscale name, else the name this PC's own mesh address
+ *    proves by a local lookup (which is how a PC on NordVPN Meshnet fills it
+ *    in by itself), else typed once here.
  *  - pair_start({address}): the QR code as a PICTURE (drawn in Rust - this
  *    page never holds the text inside it), the typed backup code, the
  *    countdown. Rust hides this window from screen capture before it

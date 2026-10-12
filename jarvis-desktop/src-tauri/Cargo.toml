@@ -120,6 +120,13 @@ windows-sys = { version = "0.59", features = [
   # Windows lock screen in front? Jarvis Live ends when it is, and pauses
   # when it cannot tell (live.rs).
   "Win32_System_StationsAndDesktops",
+  # getnameinfo / WSAStartup (ws2_32): the reverse lookup that turns this PC's
+  # own mesh address into the name the phone reaches it at (devices.rs,
+  # pair_phone_address), which is what lets a PC on NordVPN Meshnet fill the
+  # QR code in by itself. A feature of a crate already here, not a new
+  # dependency, and it is the OS's own resolver - nothing is sent anywhere but
+  # the DNS this machine already uses.
+  "Win32_Networking_WinSock",
 ] }
 # The higher-level `windows` crate, not another windows-sys binding - not a
 # new dependency either: Tauri's own graph already resolves 0.61.3 for other
