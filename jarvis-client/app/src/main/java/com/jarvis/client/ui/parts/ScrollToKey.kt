@@ -150,17 +150,27 @@ fun ScrollToKeyOnce(
      * is on screen".
      */
     onVisited: (String) -> Unit = {},
+    /**
+     * One line per step of the walk, for the caller to log. Optional and off by
+     * default; it exists so a missed jump on a real device can be read back
+     * instead of reasoned about (2026-10-11, the fourth variant of this family).
+     */
+    trace: (String) -> Unit = {},
     onDone: () -> Unit,
 ) {
     val done by rememberUpdatedState(onDone)
     val opened by rememberUpdatedState(onOpen)
     val visited by rememberUpdatedState(onVisited)
+    val traced by rememberUpdatedState(trace)
     LaunchedEffect(key, tick) {
         val target = key ?: return@LaunchedEffect
         val report: () -> Unit = {
             runCatching { visited(target) }
             done()
         }
+        // One line per step, prefixed with the key so a log with two jumps in it
+        // stays readable.
+        val trace: (String) -> Unit = { line -> runCatching { traced("$target $line") } }
         // The heading that holds the item, when the screen knows of one - the
         // one item a jump can still land on when the item itself is not drawn
         // (a menu the owner has hidden, a plate drawn only in the other of a
@@ -200,7 +210,7 @@ fun ScrollToKeyOnce(
                 tries++
                 withFrameNanos { }
             }
-            if (!scrollToKey(state, a, fromTop = true)) return false
+            if (!scrollToKey(state, a, fromTop = true, trace = trace)) return false
             // One frame for the plates that were not composed above it yet.
             withFrameNanos { }
             return true
@@ -226,6 +236,14 @@ fun ScrollToKeyOnce(
         var anchored = false
         if (anchor != null) {
             anchored = anchorNow()
+            // The anchor's OWN result. Without this the previous device run could
+            // only be read as "the list moved", not "the heading was reached at
+            // index N" - and the difference between those two is the whole
+            // question when the walk that follows still misses.
+            trace("anchor=$anchor reached=$anchored " +
+                "hint=${state.layoutInfo.visibleItemsInfo.firstOrNull { it.key == anchor }?.index} " +
+                "viewport=[${state.layoutInfo.visibleItemsInfo.firstOrNull()?.key}" +
+                "..${state.layoutInfo.visibleItemsInfo.lastOrNull()?.key}]")
         }
         var waited = 0
         if (!anchored) {
@@ -267,7 +285,7 @@ fun ScrollToKeyOnce(
                 withFrameNanos { }
                 continue
             }
-            if (scrollToKey(state, target, fromTop = false)) {
+            if (scrollToKey(state, target, fromTop = false, trace = trace)) {
                 val hit = onScreen()
                 if (hit != null) state.animateScrollToItem(hit)
                 if (onScreen() == null && hit != null) to(hit)
@@ -320,7 +338,23 @@ fun ScrollToKeyOnce(
  *
  * @return whether the key was found.
  */
-suspend fun scrollToKey(state: LazyListState, key: String, fromTop: Boolean = false): Boolean {
+suspend fun scrollToKey(
+    state: LazyListState,
+    key: String,
+    fromTop: Boolean = false,
+    /**
+     * One line per attempt, for a caller that has to know WHY a walk missed.
+     *
+     * Added 2026-10-11 after a device run where the anchor moved the list
+     * correctly and the walk still reported `found=false` with a list short
+     * enough to enumerate: the walk's start and end were logged, and nothing
+     * between them, so the one question left - did it MOVE, and where did it
+     * look each time - had no answer in the output. `step` is the count so far,
+     * `first`/`last` the viewport's own ends, `total` the list's row count, and
+     * `walk` what the walk decided this frame.
+     */
+    trace: (String) -> Unit = {},
+): Boolean {
     if (fromTop) state.scrollToItem(0)
     var steps = 0
     var waited = 0
@@ -333,6 +367,11 @@ suspend fun scrollToKey(state: LazyListState, key: String, fromTop: Boolean = fa
             visibleKeys = info.visibleItemsInfo.map { it.key },
             visibleIndexes = info.visibleItemsInfo.map { it.index },
             waited = waited,
+        )
+        trace(
+            "step=$steps first=${info.visibleItemsInfo.firstOrNull()?.index} " +
+                "last=${info.visibleItemsInfo.lastOrNull()?.index} total=${info.totalItemsCount} " +
+                "waited=$waited walk=${decision::class.simpleName}",
         )
         when (decision) {
             Walk.Found -> return true
@@ -350,5 +389,6 @@ suspend fun scrollToKey(state: LazyListState, key: String, fromTop: Boolean = fa
     }
     return false
 }
+
 
 

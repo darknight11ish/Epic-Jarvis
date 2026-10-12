@@ -488,6 +488,12 @@ fun BrainScreen(
                         "count=${seen.size}",
                 )
             },
+            // Every step of both walks - the anchor's and the item's - plus the
+            // anchor's own result. The device run of 2026-10-11 proved the anchor
+            // MOVED the list and the item was still missed, and left the one
+            // question the start and end lines cannot answer: did the item's walk
+            // move at all, and where did it look each frame?
+            trace = { line -> android.util.Log.i("JarvisBrain", "jump-step $line") },
             onDone = onSectionConsumed,
         )
         // A jump inside Brain: the "facts kept, hidden" link under Saved
