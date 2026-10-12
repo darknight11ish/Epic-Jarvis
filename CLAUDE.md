@@ -663,6 +663,23 @@ testers, scouts and integration scouts; `.claude/agents/`):
   that service when it is reached, and the approval card shows how much is
   left. Prices change, so the amount is an estimate from a price list the
   owner can see and correct, and the card says "about".
+  **Amended by the owner on 2026-10-11: the phone may raise the limit too,
+  with its own fingerprint.** His words: "Let the phone raise it too, with its
+  own fingerprint" - a change to his own rule above, made after he asked to
+  change the amount "in the settings of jarvis on both the desktop and phone
+  app". Asked directly, once the limit was open, he chose the same for a
+  PRICE: the phone may correct one too. What that means, in plain words:
+  raising a limit is still ONE approval card - Windows Hello on the PC, or the
+  asking phone's own fingerprint or PIN (signed approvals, a fresh signature
+  for every raise) - while lowering a limit, removing one and correcting a
+  price change at once, from either app, with no card at all. A price needs no
+  fingerprint because it is only an estimate of what a service costs:
+  correcting it spends nothing, raises no cap and takes nothing back. **What
+  changed is WHERE a raise may be confirmed, never whether a person confirms
+  it**: the raise is still a risky approval on its own, so the PC's own path
+  still asks Windows Hello, and a phone with no approval key is still refused
+  until it turns signed approvals on. The API key itself is still typed on the
+  PC (docs/ACCOUNT-KEYS-DESIGN.md).
   **Built 2026-09-28; the owner then chose to make it a hard stop too:**
   Jarvis also asks each service to cap how long an answer can be, so one
   long answer cannot carry a month past the limit. Each service names that
