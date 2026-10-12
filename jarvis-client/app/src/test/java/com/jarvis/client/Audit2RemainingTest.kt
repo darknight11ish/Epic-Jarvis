@@ -47,9 +47,14 @@ class Audit2RemainingTest {
         val helper = repoFile(SCROLL).readText()
         assertTrue(
             "scrollToKey is not the shared, callable form",
-            helper.contains(
-                "suspend fun scrollToKey(state: LazyListState, key: String, fromTop: Boolean = false): Boolean",
-            ),
+            // `trace` joined it on 2026-10-11 without changing what the walk
+            // does: the device's fourth variant of this family could only be
+            // understood from a step-by-step log, so the walk can now narrate
+            // itself to a caller that needs to read it back. The default is `{}`,
+            // so no caller has to pass it and it stays one shared walk.
+            helper.contains("suspend fun scrollToKey(") &&
+                helper.contains("fromTop: Boolean = false,") &&
+                helper.contains("trace: (String) -> Unit = {},"),
         )
         assertTrue(
             "fromTop must really go to the first item before walking down",
