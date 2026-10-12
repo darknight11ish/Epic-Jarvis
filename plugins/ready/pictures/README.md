@@ -8,7 +8,7 @@ this folder into the backend's `jarvis_plugins\` folder (or run
 
 - Module the loader calls: `jarvis_pictures.install()` (takes the core's Handler)
 - The patch this replaces: `backend/pictures.patch`
-- Position in the old patch stack: 139 of 141
+- Position in the old patch stack: 140 of 142
 
 The module itself is one of the ones this repository already ships
 (`backend/jarvis_pictures.py`), copied into the backend by

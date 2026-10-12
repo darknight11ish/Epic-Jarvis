@@ -56,8 +56,13 @@ class Audit2RemainingTest {
             helper.contains("if (fromTop) state.scrollToItem(0)"),
         )
         // Settings' jump list and "open a place" open a screen at the top and
-        // have no opinion about starting there.
-        assertTrue("ScrollToKeyOnce no longer uses the shared walk", helper.contains("scrollToKey(state, target)"))
+        // have no opinion about starting there. The walk's own call carries the
+        // explicit `fromTop = false` since 2026-10-11, when ScrollToKeyOnce
+        // stopped trusting a single attempt (ScrollToKeyTest holds that rule).
+        assertTrue(
+            "ScrollToKeyOnce no longer uses the shared walk",
+            helper.contains("scrollToKey(state, target"),
+        )
     }
 
     @Test

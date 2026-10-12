@@ -59,6 +59,20 @@ every route answers ONE PLAIN SENTENCE saying so and naming both programs -
 never a crash, never a silent nothing. That is the same promise the Progress
 pictures and the second-card features make.
 
+THE GRAPH COMFYUI IS ASKED FOR (added 2026-10-11, fixing a real defect)
+
+The first version posted one graph whose only loader was
+``CheckpointLoaderSimple``, the loader for a FUSED checkpoint. No picture model
+on this PC is fused - Chroma1-HD is a diffusion model with a separate T5-XXL
+encoder and a separate FLUX VAE, and the Qwen one is an sd.cpp GGUF - so that
+graph could not have drawn a picture here whatever the switch said. Which
+loaders and companions to use now comes from the machine's OWN record
+(``jarvis_picture_card.IMAGE_MODELS``), and the two graphs are the recipes
+``scripts/measure-image-options.ps1`` drew real pictures with, node for node:
+the Chroma1-HD publisher's own, and Comfy-Org's Qwen-Image 2.1 one. Neither is
+invented here, and a model this PC has no record of is refused in plain words
+rather than guessed at.
+
 WHERE PICTURES ARE KEPT (this survives a restart, by design)
 
   * The FOLDER: ``folder`` in the settings file, defaulting to
@@ -198,6 +212,8 @@ WORDS = {
     "no_folder": "That folder is not there any more. Choose another folder in Settings, under Pictures.",
     "too_long": "That is a very long request for a picture. Keep it under {max} characters.",
     "no_words": "Say what the picture should show, and Jarvis will draw it.",
+    "unknown_model": ("That is not one of the picture models on this PC, so "
+                      "Jarvis will not guess at a graph that cannot load it."),
     "folder_size": "{count} pictures, {size} on disk, in {folder}.",
 }
 
@@ -358,12 +374,209 @@ class LocalRuntime:
         raise NotImplementedError
 
 
+# --------------------------------------------------------------------------
+#   Which graph this PC's picture models need
+# --------------------------------------------------------------------------
+#
+# WHY THIS EXISTS (2026-10-11, the defect this file shipped with). The first
+# version of this module posted ONE graph, whose only loader was
+# `CheckpointLoaderSimple` - the loader for a FUSED checkpoint, which hands out
+# a model, a CLIP and a VAE from one file. No picture model on this PC is
+# fused: Chroma1-HD is a diffusion model with a separate T5-XXL text encoder
+# and a separate FLUX VAE, and the Qwen one is an sd.cpp GGUF. So the route
+# could not draw a picture here at all - the graph failed at its first node,
+# whatever the switch said. The loaders and companions now come from the
+# machine's OWN record (`jarvis_picture_card.IMAGE_MODELS`, checked against the
+# real files byte for byte by `test_picture_card.py`), and the two graphs are
+# the recipes `scripts/measure-image-options.ps1:487-528` drew real pictures
+# with - the Chroma1-HD publisher's own, and Comfy-Org's Qwen-Image 2.1 one.
+
+#: The size, steps and guidance each proven graph used, when the caller names
+#: none. Not invented here: these are the numbers in the measurement script.
+GRAPH_DEFAULTS = {
+    "chroma": {"width": 1152, "height": 1152, "steps": 26, "guidance": 3.8},
+    "qwen_image": {"width": 1024, "height": 1024, "steps": 25, "guidance": 1.0},
+}
+
+
+def _cards():
+    """`jarvis_picture_card`, or None when this backend does not carry it.
+
+    Guarded, and imported late: a backend without that module answers with one
+    plain sentence instead of an ImportError on a pictures route.
+    """
+    try:
+        import jarvis_picture_card as cards
+        return cards
+    except Exception:
+        return None
+
+
+def placement_for(model) -> Optional[dict]:
+    """The loaders one picture model needs, from the machine's own record.
+
+    Matched on the FILE NAME, so a caller may pass either the bare name ComfyUI
+    shows or the full path. ``None`` means "this PC has no record of that
+    file", and the route says so in plain words rather than posting a graph
+    that cannot load it.
+    """
+    name = Path(str(model or "")).name.lower()
+    if not name:
+        return None
+    cards = _cards()
+    if cards is None:
+        return None
+    for entry in getattr(cards, "IMAGE_MODELS", ()) or ():
+        if Path(str(entry.get("file", ""))).name.lower() != name:
+            continue
+        kinds = {kind: str(f) for f, kind, _size in entry.get("companions", ())}
+        return {
+            "model": Path(str(entry.get("file", ""))).name,
+            "loader": str(entry.get("loader") or ""),
+            "clip": kinds.get("text_encoders", ""),
+            "vae": kinds.get("vae", ""),
+            "clip_type": str(entry.get("clip_type") or ""),
+            "graph": str(entry.get("graph") or ""),
+        }
+    return None
+
+
+def default_model() -> str:
+    """The file name to draw with when the caller names none.
+
+    The apps send only a prompt, so something has to choose; it is the model of
+    the way `jarvis_picture_card.OPTIONS` marks recommended, and the sidecar
+    records which one drew. Empty when this backend has no such record - the
+    adapter then answers plainly instead of guessing.
+    """
+    cards = _cards()
+    if cards is None:
+        return ""
+    wanted = None
+    for option in getattr(cards, "OPTIONS", ()) or ():
+        if option.get("recommended"):
+            wanted = option.get("model")
+    for entry in getattr(cards, "IMAGE_MODELS", ()) or ():
+        if wanted is None or entry.get("id") == wanted:
+            return Path(str(entry.get("file", ""))).name
+    return ""
+
+
+def graph_knobs(settings: dict, place: dict) -> dict:
+    """The size, steps and guidance a graph will really use.
+
+    The caller's own numbers win; the per-graph defaults above fill the rest.
+    The values returned here are the ones written into the sidecar, so the
+    record and the graph can never disagree.
+    """
+    settings = dict(settings or {})
+    defaults = GRAPH_DEFAULTS.get(place.get("graph"), GRAPH_DEFAULTS["chroma"])
+
+    def _int(key, fallback):
+        try:
+            return int(settings[key])
+        except (KeyError, TypeError, ValueError):
+            return int(fallback)
+
+    width = max(MIN_SIDE, min(MAX_SIDE, _int("width", defaults["width"])))
+    height = max(MIN_SIDE, min(MAX_SIDE, _int("height", defaults["height"])))
+    steps = max(1, min(150, _int("steps", defaults["steps"])))
+    try:
+        guidance = round(float(settings["guidance"]), 3)
+    except (KeyError, TypeError, ValueError):
+        guidance = float(defaults["guidance"])
+    return {"width": width, "height": height, "steps": steps,
+            "guidance": guidance}
+
+
+def _chroma_graph(prompt, negative, seed, knobs, place) -> dict:
+    """The Chroma1-HD publisher's own graph, node for node.
+
+    Copied from `scripts/measure-image-options.ps1:510-527`, which drew real
+    pictures on this PC. `T5TokenizerOptions` and `ModelSamplingAuraFlow` are
+    the publisher's requirements, not decoration: without the shift this model
+    samples wrongly.
+    """
+    return {
+        "1": {"class_type": place["loader"] or "UNETLoader",
+              "inputs": {"unet_name": place["model"], "weight_dtype": "default"}},
+        "2": {"class_type": "CLIPLoader",
+              "inputs": {"clip_name": place["clip"], "type": place["clip_type"],
+                         "device": "default"}},
+        "3": {"class_type": "VAELoader",
+              "inputs": {"vae_name": place["vae"]}},
+        "4": {"class_type": "T5TokenizerOptions",
+              "inputs": {"clip": ["2", 0], "min_padding": 1, "min_length": 0}},
+        "5": {"class_type": "CLIPTextEncode",
+              "inputs": {"text": prompt, "clip": ["4", 0]}},
+        "6": {"class_type": "CLIPTextEncode",
+              "inputs": {"text": negative, "clip": ["4", 0]}},
+        "7": {"class_type": "ModelSamplingAuraFlow",
+              "inputs": {"model": ["1", 0], "shift": 1.0}},
+        "8": {"class_type": "EmptySD3LatentImage",
+              "inputs": {"width": knobs["width"], "height": knobs["height"],
+                         "batch_size": 1}},
+        "9": {"class_type": "RandomNoise", "inputs": {"noise_seed": seed}},
+        "10": {"class_type": "CFGGuider",
+               "inputs": {"model": ["7", 0], "positive": ["5", 0],
+                          "negative": ["6", 0], "cfg": knobs["guidance"]}},
+        "11": {"class_type": "KSamplerSelect",
+               "inputs": {"sampler_name": "euler"}},
+        "12": {"class_type": "BetaSamplingScheduler",
+               "inputs": {"model": ["7", 0], "steps": knobs["steps"],
+                          "alpha": 0.45, "beta": 0.45}},
+        "13": {"class_type": "SamplerCustomAdvanced",
+               "inputs": {"noise": ["9", 0], "guider": ["10", 0],
+                          "sampler": ["11", 0], "sigmas": ["12", 0],
+                          "latent_image": ["8", 0]}},
+        "14": {"class_type": "VAEDecode",
+               "inputs": {"samples": ["13", 0], "vae": ["3", 0]}},
+        "15": {"class_type": "SaveImage",
+               "inputs": {"images": ["14", 0], "filename_prefix": "jarvis"}},
+    }
+
+
+def _qwen_image_graph(prompt, negative, seed, knobs, place) -> dict:
+    """Comfy-Org's Qwen-Image 2.1 graph, node for node.
+
+    Copied from `scripts/measure-image-options.ps1:493-504`. `TextEncodeQwenImage21`
+    hands out its OWN 64-channel latent (positive, negative and latent on the
+    same node), so `EmptyLatentImage` would be the wrong shape; and this model
+    is guidance-distilled, so its cfg stays 1.0 whatever a caller asks for.
+    """
+    return {
+        "1": {"class_type": place["loader"] or "UnetLoaderGGUF",
+              "inputs": {"unet_name": place["model"]}},
+        "2": {"class_type": "CLIPLoader",
+              "inputs": {"clip_name": place["clip"], "type": place["clip_type"],
+                         "device": "default"}},
+        "3": {"class_type": "VAELoader",
+              "inputs": {"vae_name": place["vae"]}},
+        "4": {"class_type": "TextEncodeQwenImage21",
+              "inputs": {"clip": ["2", 0], "prompt": prompt,
+                         "negative_prompt": negative,
+                         "resolution": knobs["width"]}},
+        "5": {"class_type": "KSampler",
+              "inputs": {"model": ["1", 0], "positive": ["4", 0],
+                         "negative": ["4", 1], "latent_image": ["4", 2],
+                         "seed": seed, "steps": knobs["steps"], "cfg": 1.0,
+                         "sampler_name": "euler", "scheduler": "simple",
+                         "denoise": 1.0}},
+        "6": {"class_type": "VAEDecode",
+              "inputs": {"samples": ["5", 0], "vae": ["3", 0]}},
+        "7": {"class_type": "SaveImage",
+              "inputs": {"images": ["6", 0], "filename_prefix": "jarvis"}},
+    }
+
+
 class ComfyUI(LocalRuntime):
     """ComfyUI, over its own HTTP API (``/prompt``, ``/history``, ``/view``).
 
-    The workflow is built here rather than loaded from a file: a file the
-    owner might not have would be a second thing to install, and this is the
-    smallest graph that draws one picture from one prompt.
+    The graph is built here rather than loaded from a file: a file the owner
+    might not have would be a second thing to install. There are TWO, and which
+    one runs is decided by the MODEL FILE, from the machine's own record - never
+    guessed, and never a fused `CheckpointLoaderSimple`, because no picture
+    model on this PC is a fused checkpoint (see the note above).
     """
 
     name = "comfyui"
@@ -379,41 +592,24 @@ class ComfyUI(LocalRuntime):
 
     def _workflow(self, prompt, settings):
         settings = dict(settings or {})
-        width = int(settings.get("width") or 512)
-        height = int(settings.get("height") or 512)
-        steps = int(settings.get("steps") or 20)
-        ckpt = str(settings.get("model") or "")
-        nodes = {
-            "1": {"class_type": "CheckpointLoaderSimple",
-                  "inputs": {"ckpt_name": ckpt}},
-            "2": {"class_type": "CLIPTextEncode",
-                  "inputs": {"text": prompt, "clip": ["1", 1]}},
-            "3": {"class_type": "CLIPTextEncode",
-                  "inputs": {"text": str(settings.get("negative") or ""),
-                             "clip": ["1", 1]}},
-            "4": {"class_type": "EmptyLatentImage",
-                  "inputs": {"width": width, "height": height, "batch_size": 1}},
-            "5": {"class_type": "KSampler",
-                  "inputs": {"seed": int(settings.get("seed") or 0), "steps": steps,
-                             "cfg": float(settings.get("guidance") or 7.0),
-                             "sampler_name": "euler", "scheduler": "normal",
-                             "denoise": 1.0, "model": ["1", 0],
-                             "positive": ["2", 0], "negative": ["3", 0],
-                             "latent_image": ["4", 0]}},
-            "6": {"class_type": "VAEDecode",
-                  "inputs": {"samples": ["5", 0], "vae": ["1", 2]}},
-            "7": {"class_type": "SaveImage",
-                  "inputs": {"filename_prefix": "jarvis", "images": ["6", 0]}},
-        }
-        return nodes
+        place = placement_for(settings.get("model"))
+        if place is None:
+            raise DrawingFailed(WORDS["unknown_model"])
+        negative = str(settings.get("negative") or "")
+        seed = int(settings.get("seed") or 0)
+        knobs = graph_knobs(settings, place)
+        if place["graph"] == "qwen_image":
+            return _qwen_image_graph(prompt, negative, seed, knobs, place), knobs
+        return _chroma_graph(prompt, negative, seed, knobs, place), knobs
 
     def draw(self, prompt, *, seed=None, settings=None) -> Piece:
         started = time.time()
         settings = dict(settings or {})
         if seed is not None:
             settings["seed"] = int(seed)
+        graph, knobs = self._workflow(prompt, settings)
         client_id = "jarvis-pictures"
-        posted = self._json("/prompt", {"prompt": self._workflow(prompt, settings),
+        posted = self._json("/prompt", {"prompt": graph,
                                         "client_id": client_id})
         pid = posted.get("prompt_id")
         if not pid:
@@ -451,13 +647,12 @@ class ComfyUI(LocalRuntime):
             raise DrawingFailed(type(exc).__name__)
         if not png:
             raise DrawingFailed("The drawing program sent an empty picture.")
-        used = dict(settings)
-        used.setdefault("model", "")
-        return Piece(png, seed=settings.get("seed"), model=str(used.get("model") or ""),
-                     settings={"steps": used.get("steps"),
-                               "width": used.get("width"),
-                               "height": used.get("height"),
-                               "guidance": used.get("guidance")},
+        named = str(settings.get("model") or "")
+        return Piece(png, seed=settings.get("seed"), model=named,
+                     settings={"steps": knobs["steps"],
+                               "width": knobs["width"],
+                               "height": knobs["height"],
+                               "guidance": knobs["guidance"]},
                      seconds=time.time() - started)
 
 
@@ -814,6 +1009,17 @@ def make_answer(body, settings: dict, *, runtime=None, now=None) -> tuple:
             draw["seed"] = int(body["seed"])
         except (TypeError, ValueError):
             pass
+    # WHICH MODEL, AND WHY IT HAS TO BE ONE OF THIS PC'S OWN (2026-10-11).
+    # The apps send only a prompt, so when no model is named the recommended
+    # way's own model is used and the sidecar records it. A name this PC has no
+    # record of is refused HERE, in plain words - the alternative is posting a
+    # graph whose loader cannot open the file, which fails deeper down with a
+    # message the owner cannot act on.
+    if not draw.get("model"):
+        draw["model"] = default_model()
+    if draw.get("model") and placement_for(draw["model"]) is None:
+        return 503, {"ok": False, "available": False,
+                     "error": WORDS["unknown_model"]}
 
     adapter = runtime if runtime is not None else runtime_for(settings)
     if adapter is None:
