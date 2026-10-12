@@ -31,6 +31,11 @@ about not being quiet:
      exits 0. So a lane at the wrong context is also non-zero, and also gets
      its own command.
 
+SKIPPED OFF THE OWNER'S PC. A bare run needs this machine's Task Scheduler and its
+lanes on 127.0.0.1, so on any other host (a CI runner included) it prints the
+reason and exits 0 rather than reporting NOT HEALTHY - see THE HOST GUARD in
+main(). `--tasks-file` supplies the task list yourself and is never skipped.
+
 READ-ONLY. It opens a socket to 127.0.0.1 and prints. It starts nothing, stops
 nothing, loads no model and writes no file. It never reads or prints the pairing
 token.
@@ -274,6 +279,23 @@ def main(argv=None) -> int:
               + ", ".join(lane.key for lane in bad_lane))
         return 3
 
+    # THE HOST GUARD. This checker's whole job is to look at the owner's own PC:
+    # the Task Scheduler (`scheduled_tasks()`, via `schtasks`) and the lanes
+    # listening on 127.0.0.1. Neither can be the owner's on a CI runner, so a bare
+    # run there is SKIPPED with the reason printed, not reported NOT HEALTHY - a
+    # red that means "wrong machine" makes every pull request red and teaches
+    # nobody anything. Passing --tasks-file is the caller supplying the machine's
+    # own answer, so that path is never skipped.
+    if not args.tasks_file and sys.platform != "win32":
+        print("SKIP: this checker reads the owner's PC, and this is not it")
+        print(f"  host: sys.platform == {sys.platform!r}, and it needs 'win32' - only")
+        print("  there can `schtasks` list the tasks named 'Jarvis Ollama...' and")
+        print("  only there do the lanes answer on http://127.0.0.1:<port>/api/ps.")
+        print("  NOTHING WAS CHECKED, and that is not the same as healthy: run this")
+        print("  on the owner's PC for a real answer, or pass --tasks-file to supply")
+        print("  the task list yourself.")
+        print("exit code: 0 (skipped - the reason is above)")
+        return 0
     if args.tasks_file:
         try:
             tasks = tasks_from_file(args.tasks_file)
