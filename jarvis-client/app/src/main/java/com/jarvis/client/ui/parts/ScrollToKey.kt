@@ -11,6 +11,20 @@ import androidx.compose.runtime.withFrameNanos
 private const val MAX_STEPS = 60
 
 /**
+ * How many times in a row the walk pushes the window to the end of the composed
+ * rows before believing the list really ends there. Each push asks the
+ * `LazyList` to compose more; one that has not grown after this many asks has
+ * nothing more to give.
+ */
+private const val END_OF_LIST_TRIES = 3
+
+/**
+ * The list size when the caller does not know it, which is every real caller: a
+ * `LazyListState` reports only what it has composed.
+ */
+internal const val UNKNOWN = -1
+
+/**
  * How many frames the walk waits, in a row, for a list that has not laid the
  * item out yet. Two real cases need the wait (both found on 2026-10-11):
  *
@@ -50,6 +64,16 @@ internal sealed interface Walk {
     /** Nothing to do this frame; look again next frame. Kept for [waited] frames. */
     data object Wait : Walk
 
+    /**
+     * Push the window past the last COMPOSED row and look again, without
+     * counting it as patience running out.
+     *
+     * A `LazyList` only composes more when it is scrolled, so a walk that waits
+     * at the end of what is composed waits for ever. **A list that has not been
+     * asked to show more has not said it has no more** (2026-10-11).
+     */
+    data object Advance : Walk
+
     /** Not in this list (or not reachable by walking down): stop. */
     data object GiveUp : Walk
 }
@@ -62,13 +86,38 @@ internal fun walkStep(
     visibleKeys: List<Any?>,
     visibleIndexes: List<Int>,
     waited: Int,
+    /** Consecutive pushes at the end of the composed rows that changed nothing. */
+    advances: Int = 0,
+    /**
+     * How many rows the WHOLE list has, when the caller knows it - or [UNKNOWN].
+     *
+     * A `LazyListState` never knows this, so production leaves it [UNKNOWN] and
+     * the walk treats the end of the composed rows as a boundary it must push
+     * past. A test knows its own list, and passing it is what lets a test say
+     * "this list can no longer grow, so the item really is absent" - the
+     * distinction the whole defect turns on.
+     */
+    listSize: Int = UNKNOWN,
 ): Walk {
     if (visibleKeys.any { it == key }) return Walk.Found
     val last = visibleIndexes.lastOrNull() ?: return if (waited >= WAIT_FRAMES) Walk.GiveUp else Walk.Wait
     if (last >= totalItemsCount - 1) {
-        // At the bottom already. The item may be one composition away, so wait
-        // a little rather than declaring it missing on the first frame.
-        return if (waited >= WAIT_FRAMES) Walk.GiveUp else Walk.Wait
+        // The end of what the list has COMPOSED - which is not the end of the
+        // list, and that is the defect of 2026-10-11 in one line: reading it as
+        // "the item is not here" made the walk wait thirty frames on a list that
+        // was never going to change by itself, because nothing had asked it to
+        // compose the rows past that point.
+        //
+        // Whether more EXISTS to compose is the whole question, and only the
+        // caller can answer it: every row is composed once the composed count has
+        // reached the list's own size.
+        val allComposed = listSize != UNKNOWN && totalItemsCount >= listSize
+        return when {
+            allComposed -> if (waited >= WAIT_FRAMES) Walk.GiveUp else Walk.Wait
+            advances >= END_OF_LIST_TRIES -> Walk.GiveUp
+            waited >= WAIT_FRAMES -> Walk.Advance
+            else -> Walk.Wait
+        }
     }
     // The last item on screen goes to the top. One taller than the screen would
     // never move that way, so step past it instead.
@@ -372,8 +421,15 @@ suspend fun scrollToKey(
     if (fromTop) state.scrollToItem(0)
     var steps = 0
     var waited = 0
+    // Consecutive pushes at the end of the composed rows that changed nothing.
+    var advances = 0
+    var lastTotal = -1
     while (steps < MAX_STEPS) {
         val info = state.layoutInfo
+        if (info.totalItemsCount != lastTotal) {
+            lastTotal = info.totalItemsCount
+            advances = 0
+        }
         val decision = walkStep(
             key = key,
             firstVisibleIndex = state.firstVisibleItemIndex,
@@ -381,6 +437,7 @@ suspend fun scrollToKey(
             visibleKeys = info.visibleItemsInfo.map { it.key },
             visibleIndexes = info.visibleItemsInfo.map { it.index },
             waited = waited,
+            advances = advances,
         )
         trace(
             "step=$steps first=${info.visibleItemsInfo.firstOrNull()?.index} " +
@@ -399,11 +456,25 @@ suspend fun scrollToKey(
                 waited++
                 withFrameNanos { }
             }
+            Walk.Advance -> {
+                // Ask the list for more rows. The end of what is composed is
+                // not the end of the list, and only scrolling makes it compose.
+                advances++
+                waited = 0
+                val last = info.visibleItemsInfo.lastOrNull()?.index
+                if (last != null) state.scrollToItem(last + 1)
+                withFrameNanos { }
+            }
             Walk.GiveUp -> return false
         }
     }
     return false
 }
+
+
+
+
+
 
 
 
