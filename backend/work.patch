@@ -1,0 +1,86 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1909,8 +1909,29 @@
+             except Exception as exc:
+                 # The exception's NAME only, as for /api/schedule.
+                 return self._send(503, {"available": False, "error": type(exc).__name__})
+ 
++        if path == "/api/work":
++            # work.patch - the work setups: five combinations of local models,
++            # each for a kind of work, each explained in plain words before the
++            # owner starts (jarvis_work.py, and its design note
++            # .dsh-scratch/android-verify/WORK-SETUPS-DESIGN-2026-10-10.md).
++            # Reads only: which setups exist for this PC's own cards, which of
++            # their models are downloaded, which one is running now, and which
++            # one the owner chose. It starts nothing, loads nothing, downloads
++            # nothing and changes no model. Model names and measured numbers;
++            # never a token.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                import jarvis_work
++                return self._send(200, jarvis_work.status())
++            except Exception as exc:
++                return self._send(503, {"available": False,
++                                        "error": f"{type(exc).__name__}: {exc}"})
++
+         if path in ("/api/wiki", "/api/wiki/ingest"):
+             # wiki.patch - the wiki builder (jarvis_wiki.py). GET /api/wiki:
+             # whether it can run (it needs the second card's "wiki" lane),
+             # the documents in <vault>/Jarvis Wiki/Sources and their state,
+@@ -2803,13 +2824,53 @@
+             except Exception as exc:
+                 return self._send(503, {"available": False, "error": type(exc).__name__})
+             code, out = jarvis_briefing.handle_senders(body)
+             return self._send(code, out)
+ 
++        if route in ("/api/work/recommend", "/api/work/choose"):
++            # work.patch - the two writes of the work setups (jarvis_work.py).
++            #
++            #   recommend {"words": "<what the owner said>"}: which setup to
++            #     OFFER for those words, and the sentence to say. It is offered
++            #     and nothing else: this call switches no model, loads none and
++            #     writes nothing at all. The answer carries `switched: false`
++            #     and, when the model is already downloaded, the ONE step that
++            #     would switch it - the existing /api/models/switch card, which
++            #     the app raises and the owner decides.
++            #
++            #   choose {"setup": "everyday" | "coding" | "admin" | "long" |
++            #     "specialist" | null}: remembers the owner's choice and
++            #     returns the setup with its step. It changes NO model and no
++            #     setting; the switch is its own card, as always (CLAUDE.md:
++            #     switching a model raises an approval card like any other
++            #     change - so this route raises none and does none).
++            #
++            # 200 {"ok": true, ...}; 400 {"error": "<a plain sentence>"}.
++            # No new gate action, no new tier, no download route: every model
++            # change still goes through the card the owner already knows.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                body = json.loads(_read_body(self) or b"{}")
++            except (ValueError, json.JSONDecodeError) as exc:
++                return self._send(400, {"error": str(exc)})
++            try:
++                import jarvis_work
++            except Exception as exc:
++                return self._send(503, {"available": False,
++                                        "error": f"{type(exc).__name__}: {exc}"})
++            if route == "/api/work/recommend":
++                code, out = jarvis_work.handle_recommend(body)
++            else:
++                code, out = jarvis_work.handle_choose(body)
++            return self._send(code, out)
++
+         if route == "/api/wiki/ingest":
+             # wiki.patch - "Add to wiki" for one document in Sources. The
+             # second card's model reads it and proposes pages, then ONE
+             # approval card is raised (wiki_update, tier "ask" as shipped);
+             # nothing is written before it is answered. 202 {"id", "pending":
+             # true} while that runs; 400/409/503 {"error": "<a sentence>"}.
+             if not _origin_ok(self):
+                 return self._send(403, {"error": "cross-origin request refused"})
