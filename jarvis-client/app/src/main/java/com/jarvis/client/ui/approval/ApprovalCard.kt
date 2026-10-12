@@ -72,6 +72,14 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
+ * What an expired card says, in ONE place: the line that explains why nothing
+ * can be decided, and (since DEF-010, 2026-10-11) also what is drawn where the
+ * buttons used to be. Two copies of this sentence would let the explanation and
+ * the dead control drift apart, which is the defect itself.
+ */
+private const val EXPIRED_WHY = "Timed out — ask the desktop to raise this again."
+
+/**
  * Feasibility I110, "Slower Approve on risky cards": how long a heavy card's
  * Approve stays disabled at minimum, matching the desktop's own
  * `heavy-approve.js` `MIN_DELAY_MS`.
@@ -360,7 +368,7 @@ fun ApprovalCard(
     // the red line near the buttons (as before) and whether the deadline
     // readout is shown in its place.
     val why = when {
-        expired -> "Timed out — ask the desktop to raise this again."
+        expired -> EXPIRED_WHY
         blocker != null -> blocker
         // Used to say "choose one on the desktop" - wrong, per
         // docs/JARVIS-API.md §8: the desktop's own option buttons send
@@ -689,14 +697,36 @@ fun ApprovalCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Refuse(CardWords.BUTTONS[0], enabled = canDecide && !decided, onClick = deny)
-            Affirm(CardWords.BUTTONS[1], enabled = canApprove && !decided, onClick = approve)
-            if (SecurityRules.riskyByToday(item)) {
+            // AN EXPIRED CARD SHOWS NO BUTTONS (DEF-010, 2026-10-11).
+            //
+            // Measured on the owner's phone: he tapped Approve several times on
+            // an expired card, nothing happened, and nothing acknowledged the
+            // tap - because `canDecide` is false once the deadline passes, so
+            // both buttons were correctly disabled and correctly inert. The
+            // gate was right and the reason was already on screen (`why`, drawn
+            // above), and he still tapped: a faded control captioned by a line
+            // he had not connected to it does not read as "you cannot act".
+            //
+            // So the dead state is not expressed by dimming the pair. The
+            // reason takes their place, and there is nothing left to tap. The
+            // wording is the card's own, unchanged.
+            if (expired) {
                 Text(
-                    text = "Fingerprint follows",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = chrome.textMid,
+                    EXPIRED_WHY,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = chrome.badInk,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                 )
+            } else {
+                Refuse(CardWords.BUTTONS[0], enabled = canDecide && !decided, onClick = deny)
+                Affirm(CardWords.BUTTONS[1], enabled = canApprove && !decided, onClick = approve)
+                if (SecurityRules.riskyByToday(item)) {
+                    Text(
+                        text = "Fingerprint follows",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textMid,
+                    )
+                }
             }
         }
         if (showFooter) {
