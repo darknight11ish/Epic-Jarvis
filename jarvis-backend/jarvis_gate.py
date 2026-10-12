@@ -942,9 +942,9 @@ _JSON_OBJECT_RE = re.compile(r"\{.*\}", re.S)
 #: of a plan. Matching END TO END is what keeps this safe: a card's own text
 #: is a paragraph, never one of these lines, so no wording of a card can reach
 #: the rule (the failure _PROSE_KEYS' note records). The closing brace is NOT
-#: required, because jarvis_agent._gate_prompt cuts the arguments at 1500
-#: characters for its audit-log line; that is the whole point of the pattern,
-#: and the cut is read at the end of _target_blobs below.
+#: required, because a caller can still cut the arguments short: jarvis_mcp's
+#: `call` slices at 1500 and gate_tool below does too; that is the whole point
+#: of the pattern, and the cut is read at the end of _target_blobs below.
 _TOOL_CALL_PROMPTS = (
     re.compile(r"\s*tool\s+[A-Za-z0-9_\-\.]+\s+(?P<args>\{.*)\s*\Z", re.S),
     re.compile(r"\s*plan\s+step\s+[A-Za-z0-9_\-\.]+\s+(?P<args>\{.*)\s*\Z", re.S),
@@ -992,8 +992,8 @@ def _target_blobs(action: str, detail: Any, prompt: str) -> tuple:
 
       `prompt`  EITHER a tool call - OpenJarvis's confirm callback, whose
                 prompt is `Allow execution of tool '<name>' with args {json}?`,
-                and jarvis_agent's own `tool <name> {json}`, cut at 1500
-                characters for its audit-log line - OR the card's own text.
+                and jarvis_agent's own `tool <name> {json}` (whole since
+                DEF-003; jarvis_mcp's `call` still cuts) - OR the card's text.
                 The route callers (jarvis_backup, jarvis_asks_first,
                 jarvis_mcp, jarvis_task_control and the rest) hand the gate the
                 card text as the prompt, because that is what a person reads.
@@ -1030,20 +1030,20 @@ def _target_blobs(action: str, detail: Any, prompt: str) -> tuple:
         except Exception:
             continue                      # braces in prose, not arguments
         blobs.append(m)
-    # A CUT TOOL CALL STILL CARRIES ITS ARGUMENTS. jarvis_agent._gate_prompt
-    # writes `tool <name> {json.dumps(args)[:1500]}` - the audit-log line has a
-    # 1500-character budget - and its plan-step and web-search calls slice the
-    # same way. A JSON object cut in half does not parse, so the loop just
-    # above dropped exactly the arguments this rule exists to read: measured
-    # 2026-10-11, arguments 3453 characters long with a write to the gate's own
-    # file at character 62 left `['{}', 'run_shell_on_host']`, and the action
-    # was offered as an ordinary card a person could approve. What the action
-    # would TOUCH does not change because the line recording it is too short to
-    # hold it, so the raw argument text of a prompt that IS a tool-call line,
-    # end to end, is read as it stands. This can only ever ADD text to the
-    # search - nothing that was refused before can become allowed - and the
-    # match is anchored at both ends, so a card's own words still cannot reach
-    # this rule at all.
+    # A CUT TOOL CALL STILL CARRIES ITS ARGUMENTS. A caller can still hand the
+    # gate a line cut at 1500 characters - jarvis_mcp's `call` slices
+    # `plan.args_json` and gate_tool below slices the same way - and a JSON
+    # object cut in half does not parse, so the loop just above dropped exactly
+    # the arguments this rule exists to read: measured 2026-10-11, arguments
+    # 3453 characters long with a write to the gate's own file at character 62
+    # left `['{}', 'run_shell_on_host']`, and the action was offered as an
+    # ordinary card a person could approve. (jarvis_agent's lines cut the same
+    # way until DEF-003.) What the action would TOUCH does not change because
+    # the line recording it is too short to hold it, so the raw argument text
+    # of a prompt that IS a tool-call line, end to end, is read as it stands.
+    # This can only ever ADD text to the search - nothing that was refused
+    # before can become allowed - and the match is anchored at both ends, so a
+    # card's own words still cannot reach this rule at all.
     for pat in _TOOL_CALL_PROMPTS:
         m = pat.match(prompt or "")
         if m:
