@@ -1045,6 +1045,13 @@ def _match(text, now: float) -> Optional[Intent]:
     if _OPEN_CHAT.fullmatch(s):
         return Intent("open_chat")
 
+    # --- a typed decision word ("approve", 2026-10-11) ----------------------
+    # "approve", "deny", "yes", "no" as the WHOLE message. He typed one, and
+    # the app answered him as ordinary chat - which reads as a broken app
+    # rather than a deliberate rule. This says where the control is instead.
+    if _TYPED_DECISION.fullmatch(s):
+        return Intent("approval_where")
+
     # --- "open <a settings section>", and "turn on/off <a setting>" ------------
     # (jarvis_settings_registry.py, 2026-09-27) - see that module's own header.
     # Checked AFTER the older, more specific fast paths just above (bug audit
@@ -3172,6 +3179,26 @@ _OPEN_CHAT = re.compile(
     r"|show\s+(?:me\s+)?(?:the\s+)?jarvis\s+bar"
     r"|bring\s+up\s+(?:the\s+)?jarvis\s+bar")
 
+#: A whole message that is a DECISION word and nothing else - the owner
+#: typed "approve" into the bar on 2026-10-11 and the app answered him with
+#: silence. Whole sentences only, like every phrase here, and `.fullmatch`
+#: is what guarantees it: "I approved the plans yesterday" is ordinary chat
+#: and must stay that way.
+#:
+#: THIS NEVER APPROVES ANYTHING. Rule 4: cards are decided by tapping the
+#: card's own button, and a risky one adds Windows Hello on this PC. The
+#: `approval_where` reply below only says WHERE the control is, and carries
+#: no id, no "approved", nothing a client could action.
+_TYPED_DECISION = re.compile(
+    r"approve(?:\s+it)?"
+    r"|approve\s+it\s+please"
+    r"|deny(?:\s+it)?"
+    r"|reject(?:\s+it)?"
+    r"|decline(?:\s+it)?"
+    r"|yes"
+    r"|no"
+    r"|yes,?\s+please")
+
 
 def _open(s: str) -> Optional[Intent]:
     """"open Notion", "open settings", "open Jarvis settings" (jarvis_open.py,
@@ -4067,6 +4094,26 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         # (commands.rs, stream_chat, for its floating face); this file does
         # not know or care which app asked.
         return Result("Here you go.", n)
+    if n == "approval_where":
+        # A typed (or spoken) word cannot approve anything - rule 4 - so this
+        # answers the question the owner is really asking: where IS the
+        # control. Deliberately NO field here but this intent's own name:
+        # nothing a client could read as a decision, and no button in the
+        # sentence. A chat reply that could action a card would be worse than
+        # the silence it replaces.
+        #
+        # The intent's own name travels in X-Jarvis-Route's `quick`
+        # field, exactly as `open_chat`'s does, and that is all a client
+        # needs: the desktop adds the second half - WHICH card is waiting,
+        # or that none is - from the state it already holds.
+        # WHICH card is waiting (its own approval window knows), or that none
+        # is. That is why this half needs nothing from the live backend's
+        # gate, which this repository does not carry.
+        return Result(
+            "Approvals are decided on the card itself - the Jarvis approval "
+            "window on this PC, with your fingerprint for a risky one. "
+            "Typing or saying a decision here cannot approve anything, and "
+            "that is on purpose.", n)
     if n == "open_app":
         # "open Notion", "open settings", "open Jarvis settings"
         # (jarvis_open.py, 2026-10-10). Nothing is opened from here: the app
