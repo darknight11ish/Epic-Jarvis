@@ -2097,6 +2097,23 @@ draft and mistaking it for the source file.
 - Quote the evidence. Let the side that owns the code do the diagnosing.
 - "I checked X and it says Y" beats "Y". "I have not checked" beats a guess
   delivered confidently.
+- **Say which tree you asked.** This repository is worked in parallel `git
+  worktree` checkouts - **a worktree is a second copy of the code, on another
+  branch** - so a plain search answers "what does MY checkout say" while reading
+  exactly like a claim about `main`:
+
+  ```powershell
+  git grep -n 'X' -- path                        # what THIS checkout says (a branch, often)
+  git show origin/main:path | Select-String 'X'  # what main says
+  ```
+
+  This cost two rounds on 2026-10-11: a false finding about a privacy-sensitive
+  plate, and then a second reader "independently confirmed" it - with the same
+  command, in the same feature branch, and neither of them asked what it searched.
+  **Two confirmations of the same wrong thing, because the instrument was the
+  same.** When the claim is about `main`, read `origin/main`; when it is about the
+  file in front of you, say so. (Written up as one of the dead ends in
+  `docs/FIELD-TEST-HOW-TO-READ-THE-APPS.md`.)
 
 ## How the Android apps get built
 

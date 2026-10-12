@@ -144,3 +144,29 @@ readers went there and not into `tools/` (that folder holds the Python checkers 
 4. If a control ignores `Invoke`, try method 5 - and still confirm the effect with method 3 or 4.
 5. Write down what could **not** be reached and why. "Drawn, not text" and "no readable menu" are
    findings; "assumed working" is not.
+
+## The dead ends, so nobody spends another round on them
+
+Three things in this pass looked like they were working and were not. The first two are above; the
+third cost two rounds on the day and is worth its own line here, because it looked like *verification*:
+
+1. **The face picker is drawn, not text** - `uiautomator` sees no labels for it, and there is no vision
+   provider here (method 1).
+2. **The desktop Brain cannot be opened from a harness** - the tray icon is inside the "Show Hidden
+   Icons" overflow and produces no readable menu, which is why `work-tab` is reachable by a person in
+   two clicks and BLOCKED for a harness (method 2).
+3. **A search is not a claim about `main`.** This repository is worked in parallel `git worktree`
+   checkouts - **a worktree is a second copy of the code, on another branch** - so a plain search
+   answers "what does my checkout say" while reading exactly like a claim about main:
+
+   ```powershell
+   git grep -n 'X' -- path                        # what THIS checkout says (a branch, often)
+   git show origin/main:path | Select-String 'X'  # what main says
+   ```
+
+   It produced a false finding about a privacy-sensitive plate, and then a second reader "independently
+   confirmed" it - with the same command, in the same feature branch, and neither asked what it
+   searched. **Two confirmations of the same wrong thing, because the instrument was the same.** The
+   rule lives in `CLAUDE.md` under "Do not claim more than the evidence supports", next to the other
+   time this bit: a bug invented by grepping a draft and mistaking it for the source file.
+
