@@ -100,6 +100,13 @@ async function bar(extra = {}) {
  * 2026-10-08; it passed locally on a fast machine and failed on a loaded
  * runner).
  *
+ * It happened AGAIN on 2026-10-11 (#308, CI run 38206724001): with a
+ * one-second budget the loop ran out while the page was still busy, and the
+ * settle wait after it threw that same wrong sentence. That is why the loop
+ * below now polls the SAME observable - K.turnsSent, the thing that tells
+ * "not sent yet" from "never will be" - for about five seconds instead of
+ * one, and why the fixed 250 ms sleep further down is gone.
+ *
  * So it waits for what is actually observable: the turn count rising (proof
  * the question went) and, when the scenario says what the answer should say,
  * that text on screen (proof the turn finished - which is also what makes the
@@ -110,7 +117,9 @@ async function bar(extra = {}) {
  */
 async function ask(page, text, expected) {
   const before = await K.turnsSent(page);
-  for (let tries = 0; tries < 40; tries++) {
+  // 200 tries x 25 ms: the observable is polled, never assumed, and the
+  // budget has to outlast a loaded runner's busy window (see the docstring).
+  for (let tries = 0; tries < 200; tries++) {
     await page.fill("#prompt", text);
     await page.keyboard.press("Enter");
     if ((await K.turnsSent(page)) > before) break;
@@ -134,7 +143,8 @@ await check("the bar: the question is shown above its answer, and the thread ope
   const you = await page.locator("#you-line").innerText();
   const summary = await page.locator("#previous-answer-summary").innerText();
   await page.locator("#previous-answer-summary").click();
-  await page.waitForTimeout(250);
+  // Wait on the element the assertions below actually read, not on a clock.
+  await page.locator(".thread-reads-from").first().waitFor();
   const line = await page.locator(".thread-reads-from").allInnerTexts();
   const above = await page.locator(".thread-reads-from").evaluate(
     (n) => [...n.parentElement.children].slice(0, [...n.parentElement.children].indexOf(n))

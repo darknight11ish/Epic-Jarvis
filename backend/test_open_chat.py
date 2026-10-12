@@ -177,10 +177,127 @@ def t_the_phones_own_list_is_current():
           have == doc)
 
 
+# --- a typed decision word ("approve", 2026-10-11) ---------------------------
+#
+# The owner typed "approve" into the Jarvis bar and the app answered him with
+# silence. The half that is right: a typed word can never approve anything
+# (rule 4 - cards are decided by tapping the card's own button, and a risky one
+# adds Windows Hello on this PC). The half that was wrong: the silence. A person
+# who types "approve" is saying they cannot find the control, so the answer says
+# WHERE it is.
+#
+# These travel the same path as "open a chat" above: jarvis_quick.py's own
+# grammar, no model, the intent's name in X-Jarvis-Route's "quick" field.
+
+#: Whole messages that are a decision and nothing else.
+DECISIONS = (
+    "approve",
+    "Approve.",
+    "approve it",
+    "approve it please",
+    "deny",
+    "deny it",
+    "reject",
+    "reject it",
+    "decline",
+    "yes",
+    "no",
+    "yes please",
+    # "no thanks" is here, not among the near misses: normalise() strips a
+    # polite tail, so the grammar is handed exactly "no" - which IS the whole
+    # message. Measured 2026-10-11 (the first version of this test guessed the
+    # opposite and the app was right).
+    "no thanks",
+)
+
+#: Sentences that merely CONTAIN such a word, which must stay ordinary chat.
+DECISION_NEAR_MISSES = (
+    "I approved the plans yesterday",
+    "approve the invoice tomorrow",
+    "yes but later",
+    "reject the draft and rewrite it",
+    "not yet",
+)
+
+
+def t_a_typed_decision_answers_where_the_card_is():
+    now = time.time()
+    sched = _Sched()
+    try:
+        for text in DECISIONS:
+            intent = Q.match(text, now=now)
+            check(f"a typed decision is answered without the model: {text!r}",
+                  intent is not None and intent.name == "approval_where", intent)
+            if intent is None or intent.name != "approval_where":
+                continue
+            result = Q.run(intent, sched, now)
+            check(f"and really answers, no model: {text!r}",
+                  result is not None and isinstance(result.reply, str)
+                  and bool(result.reply.strip()), result)
+            if result is None:
+                continue
+            reply = result.reply.lower()
+            check(f"the answer names the card: {text!r}", "card" in reply, result.reply)
+            check(f"and says where it is: {text!r}",
+                  "approval window" in reply and "on this pc" in reply, result.reply)
+            check(f"and says typing here cannot do it: {text!r}",
+                  "cannot approve" in reply, result.reply)
+            fields = Q.route_fields(result)
+            check(f"the route carries the intent, unchanged: {text!r}",
+                  fields.get("quick") == "approval_where", fields)
+            check(f"and raises no gate: {text!r}", "gate" not in fields, fields)
+        for text in DECISION_NEAR_MISSES:
+            intent = Q.match(text, now=now)
+            check(f"a sentence that merely contains one goes to the model: {text!r}",
+                  intent is None or intent.name != "approval_where", intent)
+    finally:
+        sched.close()
+
+
+def t_a_typed_decision_can_never_approve():
+    """The reply offers no control, and no code path here can decide a card.
+
+    Rule 4's whole point is that a typed word is not a decision, so the answer
+    must carry nothing a client could action: no approve/deny field, no id, and
+    no call into the gate from the intent's own branch.
+    """
+    sched = _Sched()
+    try:
+        intent = Q.match("approve")
+        result = Q.run(intent, sched, time.time())
+        fields = Q.route_fields(result)
+        for forbidden in ("approved", "approve", "deny", "denied", "decision",
+                          "option_id", "always"):
+            check(f"the route carries no {forbidden!r} field",
+                  forbidden not in fields, sorted(fields))
+        # No interactive control in the words themselves.
+        check("the answer offers no button or link",
+              "[" not in result.reply and "http" not in result.reply, result.reply)
+        # The intent's branch calls nothing that could decide anything.
+        src = (Path(__file__).resolve().parent / "jarvis_quick.py").read_text(encoding="utf-8")
+        start = src.index('if n == "approval_where":')
+        branch = src[start:src.index('if n == "open_app":', start)]
+        for call in ("gate(", "check(", "decide(", "approve(", "deny(", "_run_gate"):
+            check(f"the approval_where branch never calls {call}", call not in branch)
+        # And nothing else in the backend answers this intent.
+        others = []
+        for path in sorted((Path(__file__).resolve().parent).glob("*.py")):
+            if path.name in ("jarvis_quick.py", "test_open_chat.py"):
+                continue
+            if "approval_where" in path.read_text(encoding="utf-8", errors="replace"):
+                others.append(path.name)
+        check("no other backend module knows this intent", not others, others)
+    finally:
+        sched.close()
+
+
+
 if __name__ == "__main__":
     for fn in (t_every_phrasing_is_answered_with_no_model, t_answer_turn_end_to_end,
                t_route_carries_the_intent_name, t_fixed_line_style,
-               t_the_phones_own_list_is_current):
+               t_the_phones_own_list_is_current,
+               t_a_typed_decision_answers_where_the_card_is,
+               t_a_typed_decision_can_never_approve):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

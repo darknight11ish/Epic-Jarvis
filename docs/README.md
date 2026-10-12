@@ -1,20 +1,20 @@
 # The documents, and which ones are current
 
-There are **353 markdown documents** here, adding up to about **8.33 MB**. Neither
+There are **358 markdown documents** here, adding up to about **8.46 MB**. Neither
 number is a guess, and neither is asked to stay still: the documents are written
 to all day, so the count and the size both move. Both were measured on 2026-10-11
 with the two lines below, run from the top of the repository - so run them again
 whenever you want today's numbers rather than this page's:
 
 ```powershell
-(Get-ChildItem docs -Recurse -Filter *.md).Count                        # 353 documents
+(Get-ChildItem docs -Recurse -Filter *.md).Count                        # 358 documents
 "{0:N0}" -f (Get-ChildItem docs -Recurse -Filter *.md |
-  Measure-Object -Property Length -Sum).Sum                             # about 8,417,863 bytes
+  Measure-Object -Property Length -Sum).Sum                             # about 8,500,688 bytes
 ```
 
 Both lines count the documents in the subfolders too, not only the ones sitting
 directly in `docs/`. The count is the honest measure of how much is here; treat
-the size as "around 8.33 MB" and re-measure it rather than trusting the digits
+the size as "around 8.46 MB" and re-measure it rather than trusting the digits
 above. **Five of the documents are the ones to read**; the rest are the history of
 how Jarvis got here: audits, research, and notes that one working session left for
 another. One generated file, the source bundle, is **really gone** now: the removal
@@ -141,8 +141,8 @@ them; the current documents above replace them.
 
 | Document | Why it is stale |
 |---|---|
-| ~~SOURCE-BUNDLE.md~~ | **Removed 2026-10-05, and this time the removal was really run**: `git ls-files docs/SOURCE-BUNDLE.md` lists nothing, and `.gitignore` now carries the path so a regenerated copy cannot come back tracked. It was 8,417,863 bytes of generated output - 13.5 MB of the 19 MB `docs/` was this one file - a copy of the phone app's source at an old commit on a deleted branch, made for an outside audit. The real source is in `jarvis-client/`, and the bundle is regenerated from the tree in one line whenever a reviewer wants it: `py -3 tools/gen_source_bundle.py`, which is still tracked. Git history still has the file (`git show <older-commit>:docs/SOURCE-BUNDLE.md`), so nothing is lost. |
-| `tel/`, `evidence-dev-telemetry-2.1.3.tgz` | **Removed 2026-10-06.** These were both the same third-party npm package, `@evidence-dev/telemetry` 2.1.3: `tel/package/` was its unpacked contents (5 files, 8,417,863 bytes) and the tarball was the download it came out of (8,417,863 bytes). Its own `index.cjs` opens a `@segment/analytics-node` connection and reports the operating system, Node version, architecture and hashed home directory, so it is a phone-home sitting in a project whose first rule is that nothing leaves the PC. Nothing in Jarvis, the desktop app, the phone app or any workflow imported it - the two words `tel/package` appear in no tracked file. `git show <older-commit>:tel/package/index.cjs` still returns it, so nothing is lost. `.gitignore` already covers `*.tgz` (added 2026-10-05); no new rule is needed for `tel/`, which a `npm install` would recreate anyway. |
+| ~~SOURCE-BUNDLE.md~~ | **Removed 2026-10-05, and this time the removal was really run**: `git ls-files docs/SOURCE-BUNDLE.md` lists nothing, and `.gitignore` now carries the path so a regenerated copy cannot come back tracked. It was 8,500,688 bytes of generated output - 13.5 MB of the 19 MB `docs/` was this one file - a copy of the phone app's source at an old commit on a deleted branch, made for an outside audit. The real source is in `jarvis-client/`, and the bundle is regenerated from the tree in one line whenever a reviewer wants it: `py -3 tools/gen_source_bundle.py`, which is still tracked. Git history still has the file (`git show <older-commit>:docs/SOURCE-BUNDLE.md`), so nothing is lost. |
+| `tel/`, `evidence-dev-telemetry-2.1.3.tgz` | **Removed 2026-10-06.** These were both the same third-party npm package, `@evidence-dev/telemetry` 2.1.3: `tel/package/` was its unpacked contents (5 files, 8,500,688 bytes) and the tarball was the download it came out of (8,500,688 bytes). Its own `index.cjs` opens a `@segment/analytics-node` connection and reports the operating system, Node version, architecture and hashed home directory, so it is a phone-home sitting in a project whose first rule is that nothing leaves the PC. Nothing in Jarvis, the desktop app, the phone app or any workflow imported it - the two words `tel/package` appear in no tracked file. `git show <older-commit>:tel/package/index.cjs` still returns it, so nothing is lost. `.gitignore` already covers `*.tgz` (added 2026-10-05); no new rule is needed for `tel/`, which a `npm install` would recreate anyway. |
 | ~~docs/critters/eyelids-preview/~~ | **Removed 2026-10-06.** Four files, 2.83 MB: two "before and after" pictures and the generator that drew them. Its own `README.md:3-4` says it is "a PREVIEW, not part of the app yet" and that "the main branch does not have it" - it did - and `README.md:14-16` says it was "not wired to the animals' poses" and that no golden file changed. The feature was built afterwards and is kept properly in [CRITTERS.md](CRITTERS.md), with its pictures in `docs/critters/eyelids/` (6.77 MB, still here). Its generator imported from `.claude/worktrees/agent-abd7d5ab573657428/`, a worktree that no longer exists, so those pictures could not be drawn again anyway. Nothing pointed at it - no test, no workflow, no document, not the CHANGELOG, which names `docs/critters/eyelids/`. Git history still has it (`git show <older-commit>:docs/critters/eyelids-preview/README.md`), so nothing is lost. |
 | [GEMINI-AUDIT-PROMPT.md](GEMINI-AUDIT-PROMPT.md), [GEMINI-AUDIT.md](GEMINI-AUDIT.md), [ASK-GEMINI.md](ASK-GEMINI.md) | Instructions for past outside audits. |
 | [HANDOFF.md](HANDOFF.md) | A handover note for the phone app, 15 September. |

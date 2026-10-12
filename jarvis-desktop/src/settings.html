@@ -2762,6 +2762,43 @@
     </main>
 
     <script src="sky.js"></script>
+    <!-- One tab per service for the two cards that hold a key apiece: Chatbot
+         API keys (settings-tabs.js) and the web-search keys. A plain script,
+         not a module, so it is on the page before the module scripts below run
+         (modules are deferred; this is not) - the cards call it through
+         `window.JarvisSettingsTabs`, and every one of them still works without
+         it, in a column, exactly as before. The owner asked for this on
+         2026-10-11: "a tab for chatgpt, a tab for deepseek, etc". -->
+    <style>
+      .tabstrip {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 4px 0 12px;
+        border-bottom: 1px solid var(--line, #3a3f4b);
+        padding-bottom: 6px;
+      }
+      .tabstrip .tab {
+        font: inherit;
+        color: inherit;
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        padding: 6px 12px;
+        cursor: pointer;
+      }
+      .tabstrip .tab:hover { border-color: var(--line, #3a3f4b); }
+      /* The open tab is a real state, not a colour alone: the border and the
+         underline both move, so it survives a colour-blind theme. */
+      .tabstrip .tab[aria-selected="true"] {
+        border-color: var(--accent, #6aa9ff);
+        border-bottom-color: var(--accent, #6aa9ff);
+        box-shadow: inset 0 -2px 0 0 var(--accent, #6aa9ff);
+      }
+      .tabstrip .tab:focus-visible { outline: 2px solid var(--accent, #6aa9ff); outline-offset: 2px; }
+      .tabpanel[hidden] { display: none; }
+    </style>
+    <script src="settings-tabs.js"></script>
     <script type="module" src="first-run-settings.js"></script>
     <script type="module" src="settings-search.js"></script>
     <script type="module" src="settings.js"></script>

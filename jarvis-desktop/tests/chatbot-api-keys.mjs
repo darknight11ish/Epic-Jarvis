@@ -272,19 +272,28 @@ if (K) {
 
   await check("Settings: all six services show, in order, each with its key page", async () => {
     const page = await settings(allNone());
-    const text = await page.locator("#chatbot-api-keys").innerText();
+    // The six services are one TAB each now (owner, 2026-10-11), so "show"
+    // means six tabs named with the app's own words, and opening each one shows
+    // that service's own page. `innerText` skips a hidden panel, which is why
+    // this opens the tab before reading - and why it used to fail on DeepSeek.
+    const tabs = await page
+      .locator("#cak-body [role=tab]")
+      .evaluateAll((els) => els.map((e) => e.textContent.trim()));
     const boxes = await page
       .locator("#cak-body [data-service]")
       .evaluateAll((els) => els.map((e) => e.dataset.service));
     const errors = page.__errors;
-    await page.close();
+    assert.deepEqual(tabs, SERVICES.map((s) => LABEL[s]));
     assert.deepEqual(boxes, [...SERVICES]);
-    const lower = text.toLowerCase();
     for (const service of SERVICES) {
-      assert.ok(lower.includes(LABEL[service].toLowerCase()), `missing the ${service} label`);
-      assert.ok(text.includes(KEY_WHERE[service]), `missing ${service}'s key page`);
+      await page.locator(`#tab-cak-${service}`).click();
+      const open = await page.locator("#chatbot-api-keys").innerText();
+      assert.ok(open.toLowerCase().includes(LABEL[service].toLowerCase()),
+        `missing the ${service} label`);
+      assert.ok(open.includes(KEY_WHERE[service]), `missing ${service}'s key page`);
+      assert.match(open, /Not set\./);
     }
-    assert.match(text, /Not set\./);
+    await page.close();
     assert.deepEqual(errors, []);
   });
 
@@ -319,6 +328,9 @@ if (K) {
     const view = allNone();
     view.services.find((x) => x.service === "openrouter").saved = true;
     const page = await settings(view);
+    // One tab per service now: open OpenRouter's own tab, so "Remove is shown
+    // for the service that has a key" is tested with that service on screen.
+    await page.locator("#tab-cak-openrouter").click();
     const types = await page
       .locator("#cak-body input")
       .evaluateAll((els) => els.map((e) => e.type));
