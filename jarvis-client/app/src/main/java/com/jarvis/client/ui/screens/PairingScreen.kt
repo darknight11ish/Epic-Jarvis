@@ -1,5 +1,7 @@
 package com.jarvis.client.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -37,6 +39,8 @@ import com.jarvis.client.ui.theme.LocalAccent
 import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.ui.parts.Primary
 import com.jarvis.client.ui.parts.Quiet
+import androidx.compose.ui.platform.LocalContext
+import com.jarvis.client.platform.LocalNetworkPermission
 import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.parts.TextInput
 
@@ -154,6 +158,57 @@ fun PairingScreen(
     // whatever address is typed. That is what the field's own "leave this
     // blank to keep it" already promises, so it needs no extra wording.
     var handedOver by remember { mutableStateOf(false) }
+
+    /** The context the permission check needs; never saved, and nothing secret. */
+    val context = LocalContext.current
+
+    /**
+     * Set only when the owner actively refused local network access while
+     * connecting on a phone that gates it. Draws the plain sentence and a
+     * "Try again" beside the Connect button.
+     */
+    var localNetworkRefused by remember { mutableStateOf(false) }
+
+    /**
+     * Hands the typed address and token over, and forgets the token from the
+     * field. Pulled out of the button so that the local-network permission
+     * prompt can run FIRST and the same work then happens on the retry - rather
+     * than the pairing call being duplicated between the two paths, which is
+     * how one of them quietly stops matching the other.
+     */
+    fun pairNow() {
+        onPair(host, token)
+        // Cleared the moment it is handed over. On success this screen leaves
+        // composition anyway; on failure the secret is already in the Keystore
+        // and does not need to sit in a text field on an unlocked phone waiting
+        // for a retry.
+        handedOver = handedOver || token.isNotBlank()
+        token = ""
+        keyShown = false
+    }
+
+    /**
+     * Asked for from this screen, at the moment the address is typed, rather
+     * than at app start - a permission dialog before the app has shown what it
+     * is for is the one people refuse, and the refusal is sticky. See
+     * [LocalNetworkPermission] for why this is Android 17+ only and why asking
+     * on an older phone would be wrong.
+     */
+    val localNetworkPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { allowed ->
+        // A yes carries straight on with the same tap. A no does NOT fire a
+        // pairing call that is already known to fail: on Android 17 the socket
+        // is blocked, so the attempt would come back as "Your PC isn't
+        // answering" - the exact misleading message this feature exists to stop.
+        // Instead the owner gets one plain sentence and a Try again beside the
+        // button they just pressed.
+        if (allowed || !LocalNetworkPermission.blocked(context)) {
+            pairNow()
+        } else {
+            localNetworkRefused = true
+        }
+    }
 
     Column(
         modifier
@@ -277,6 +332,30 @@ fun PairingScreen(
             }
         }
 
+        if (localNetworkRefused) {
+            Spacer(Modifier.height(14.dp))
+            Text(
+                // Plain words, and it names the exact symptom the owner would
+                // otherwise meet with nothing to go on: on Android 17 the
+                // app's own connection error says "Your PC isn't answering",
+                // which reads as a backend fault rather than a permission.
+                "Jarvis is not allowed on your local network, so it cannot " +
+                    "reach your PC - that is what Android is blocking, not your " +
+                    "desktop. Allow it and try again, or connect from the PC " +
+                    "instead.",
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.badInk,
+                modifier = Modifier
+                    .background(chrome.badInk.copy(alpha = 0.10f), RoundedCornerShape(10.dp))
+                    .padding(12.dp),
+            )
+            Spacer(Modifier.height(10.dp))
+            Secondary(
+                text = "Try again",
+                onClick = { localNetworkPermission.launch(LocalNetworkPermission.PERMISSION) },
+            )
+        }
+
         if (notice != null) {
             Spacer(Modifier.height(14.dp))
             Text(
@@ -300,14 +379,17 @@ fun PairingScreen(
                     (hasToken || handedOver || token.isNotBlank()),
                 modifier = Modifier.weight(1f),
                 onClick = {
-                    onPair(host, token)
-                    // Cleared the moment it is handed over. On success this
-                    // screen leaves composition anyway; on failure the secret
-                    // is already in the Keystore and does not need to sit in a
-                    // text field on an unlocked phone waiting for a retry.
-                    handedOver = handedOver || token.isNotBlank()
-                    token = ""
-                    keyShown = false
+                    // Local network access, asked for HERE and not at app start,
+                    // because this is the moment the owner types the desktop's
+                    // address - so the prompt has the context that makes it
+                    // answerable. Android 17+ only; on every phone this app has
+                    // run on so far it is already allowed, so `pairNow` runs on
+                    // the first tap and nothing changes.
+                    if (LocalNetworkPermission.blocked(context)) {
+                        localNetworkPermission.launch(LocalNetworkPermission.PERMISSION)
+                    } else {
+                        pairNow()
+                    }
                 },
             )
 

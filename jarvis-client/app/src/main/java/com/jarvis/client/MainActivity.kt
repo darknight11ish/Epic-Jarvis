@@ -72,6 +72,7 @@ import android.security.keystore.KeyPermanentlyInvalidatedException
 import com.jarvis.client.platform.ApprovalKey
 import com.jarvis.client.platform.CrashLog
 import com.jarvis.client.platform.DisplayRate
+import com.jarvis.client.platform.LocalNetworkPermission
 import com.jarvis.client.platform.PictureEncoder
 import com.jarvis.client.platform.PlatformReadiness
 import com.jarvis.client.platform.PowerWatch
@@ -264,6 +265,24 @@ class MainActivity : FragmentActivity() {
     private val securityNotice = mutableStateOf<String?>(null)
 
     private val notificationPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { permissionTick.intValue += 1 }
+
+    /**
+     * Local network access, which only Android 17+ gates.
+     *
+     * The tick re-reads [PlatformReadiness.report], so both this screen and the
+     * local-network row reflect what the platform now ACTUALLY reports rather
+     * than what this callback assumed a dialog dismissal meant - the same
+     * reasoning the battery and notification permissions already use.
+     *
+     * Asking on a phone that does not gate it would be a request for a
+     * permission the platform has never heard of, which resolves as a denial
+     * and would leave an unfixable warning on the Checks screen. It is only
+     * ever launched behind [LocalNetworkPermission.required], and the row
+     * itself draws no button otherwise.
+     */
+    private val localNetworkPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { permissionTick.intValue += 1 }
 
@@ -2181,6 +2200,14 @@ class MainActivity : FragmentActivity() {
                                 }
                             },
                             onRequestBatteryExemption = ::requestBatteryExemption,
+                            // Only ever offered in the WARN state, which the row
+                            // itself reaches only when the platform gates local
+                            // network access at all (LocalNetworkPermission).
+                            onRequestLocalNetwork = if (LocalNetworkPermission.required()) {
+                                { localNetworkPermission.launch(LocalNetworkPermission.PERMISSION) }
+                            } else {
+                                null
+                            },
                             // The card used to read exactly the same before and
                             // after this tap, so an owner who tapped twice could
                             // not tell the first tap worked (device tour,

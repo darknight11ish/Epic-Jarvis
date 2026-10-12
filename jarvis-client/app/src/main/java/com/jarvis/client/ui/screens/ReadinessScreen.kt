@@ -102,6 +102,14 @@ fun ReadinessScreen(
      *  request at all, or Jarvis already holds it. */
     onRequestAssistantRole: (() -> Unit)? = null,
     /**
+     * Asks Android for local network access. Only ever offered when the
+     * platform actually gates it - on Android 16 and 17 the row reads "nothing
+     * to do" and no button is drawn, because the permission does not exist
+     * there and a permanent unfixable warning is worse than none. Null hides
+     * the button.
+     */
+    onRequestLocalNetwork: (() -> Unit)? = null,
+    /**
      * Opens Android's own screen for choosing the assistant app. Offered
      * beside the role request because the request is not always answerable:
      * the owner's phone reports the role as available, then its own permission
@@ -225,6 +233,12 @@ fun ReadinessScreen(
                     },
                     note = assistantRoleNote,
                 )
+            }
+        ReadinessItem.Fix.LOCAL_NETWORK ->
+            // Only ever reached in the WARN state: the row itself passes no fix
+            // at all when local network access is not gated or already allowed.
+            onRequestLocalNetwork?.let {
+                CardFix("Allow local network", warn = true, onClick = it)
             }
         null -> null
     }
