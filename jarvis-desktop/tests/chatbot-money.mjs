@@ -21,8 +21,10 @@
  *   cannot carry a path or a query into the route, and forwards only known
  *   keys - a key can never travel through this route;
  * - CONTROL: the PC's own `pc_only` refusal is passed on as the PC wrote it;
- * - CONTROL: /api/chatbot/money is classified in tools/check_parity.py as
- *   desktop-only, with the reason.
+ * - CONTROL: the phone may READ /api/chatbot/money and is given no way to
+ *   WRITE it - the route is `ported` (a status check_parity.py enforces), the
+ *   phone's own fingerprint is what a phone raise would cost, and no money
+ *   path is in the phone's Chatbot.WRITE_PATHS.
  *
  * The browser-free half runs anywhere, including CI, which has no Playwright.
  */
@@ -240,14 +242,52 @@ await check("CONTROL: the PC's own pc_only words are passed on, not replaced", (
   assert.match(js, /problemWords\(error\)/, "a refusal is not shown as the PC's words");
 });
 
-await check("CONTROL: /api/chatbot/money is classified desktop-only, with its reason", () => {
+await check("CONTROL: the phone may READ /api/chatbot/money and must not be given a way to write it", () => {
+  // This controlled a `deliberate` classification while the route was
+  // desktop-only. 2026-10-12 the phone got the READ half, so the route moved
+  // to `ported` - and `ported` is the status check_parity.py ENFORCES ("a
+  // route classified `ported` is not called by the phone" is a failure), so
+  // the classification is not a claim the phone can quietly stop honouring.
+  //
+  // THE GUARD THAT MATTERS, and the reason this is not merely a flipped word:
+  // the danger was never that the phone could SEE the limits - it is that the
+  // phone could RAISE one, a loosening that costs an approval card. So the
+  // absence of a money WRITE on the phone is asserted directly, and the card
+  // words belonging to the phone are asserted too (CLAUD.md: an API key is
+  // "answered with Windows Hello on the PC or with the asking phone's own
+  // fingerprint or PIN" - a phone-style card that said "Windows Hello" would
+  // be telling the owner to do something their phone cannot do).
   const parity = readRepo("tools/check_parity.py");
-  const m = /"\/api\/chatbot\/money": \("([a-z-]+)", "([^"]{80,})"\)/.exec(parity);
-  assert.ok(m, "check_parity.py does not classify /api/chatbot/money");
-  assert.equal(m[1], "deliberate", "the phone would raise a money limit");
-  assert.match(m[2], /Windows Hello/);
-  assert.match(m[2], /pc_only/);
-  assert.match(m[2], /raise_api_limit/);
+  // The entry, sliced from its own key to the NEXT key, so a reason containing
+  // escaped quotes (this one does) cannot truncate it. The old single-line
+  // regex could not read this entry at all once it grew a second sentence.
+  const KEY = '"/api/chatbot/money": (';
+  const at = parity.indexOf(KEY);
+  assert.ok(at >= 0, "check_parity.py does not classify /api/chatbot/money");
+  const rest = parity.slice(at + KEY.length);
+  const end = rest.search(/\n\s*"\/api\//);
+  const entry = end >= 0 ? rest.slice(0, end) : rest;
+  const st = /^"([a-z-]+)"/.exec(entry);
+  assert.ok(st, "the money entry has no status");
+  assert.equal(st[1], "ported", "the phone reads this route; `deliberate` would be a lie");
+  const reason = /^"[a-z-]+",\s*"([\s\S]*)"\s*\)\s*,?\s*$/.exec(entry);
+  assert.ok(reason, "the money entry has no reason string");
+  // The guard, and the one that is NOT a flipped word: the danger was never
+  // that the phone could SEE the limits, it is that the phone could RAISE one.
+  const r = reason[1];
+  assert.match(r, /raise_api_limit/, "the reason no longer names the raise gate action");
+  assert.match(r, /phone's own fingerprint|\bPIN\b/,
+    "the reason does not say a phone raise uses the phone's own fingerprint or PIN");
+  assert.match(r, /WRITE_PATHS/, "the reason does not record the phone's missing write half");
+
+  // THE READ HALF IS ALL THE PHONE HAS. `chatbotWrite` refuses any path that is
+  // not in Chatbot.WRITE_PATHS, so "no money path in that constant" is exactly
+  // "the phone cannot call the money route with a body".
+  const chatbot = readRepo("jarvis-client/app/src/main/java/com/jarvis/client/net/Chatbot.kt");
+  const wm = /WRITE_PATHS\s*=\s*setOf\(([^)]*)\)/.exec(chatbot);
+  assert.ok(wm, "the phone's Chatbot.WRITE_PATHS is gone, so this control checks nothing");
+  assert.doesNotMatch(wm[1], /MONEY|money/,
+    "a money path is in the phone's write allow-list - the write half shipped without its guard");
 });
 
 await check("CONTROL: the page never writes innerHTML, and never shows a key", () => {
