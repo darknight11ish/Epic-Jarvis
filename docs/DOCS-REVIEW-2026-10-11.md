@@ -102,10 +102,12 @@ These hold, and something checks them:
   *"6 of 6 required status checks are expected"*, and five PRs (#312, #314, #315, #317, #318) merged with
   those six green **while `audit` was red**. A red `audit` is therefore a signal to fix main's own state,
   never a reason to hold a PR.
-* **The three dead ids in the field-test record** - `crash-notes`, `first-run` and `notifications` are
-  named by its rows and are not on the current feature list. **Reconciliation is another agent's work,
-  so this page only notes it** rather than duplicating it; until then the record's row list should not be
-  read as exactly matching `features/features.json`.
+* **A correction to this review's own first draft: the three "dead" ids are alive.** I wrote that
+  `crash-notes`, `first-run` and `notifications` were named by the field-test record's rows and were
+  absent from the current feature list. **They are on main** - `features/features.json` lines **1119,
+  1156 and 1250**, checked with `git show origin/main:features/features.json` - and in the matrix too.
+  **There is no drift to reconcile**, which is a better result than the one expected, and the way the
+  false one appeared is worth keeping: a search of one document was read as a fact about two.
 
 ## 5. What I could not run or verify
 
