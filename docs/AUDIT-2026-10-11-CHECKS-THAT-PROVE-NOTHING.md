@@ -112,17 +112,34 @@ it is a one-file change.
      `rows` -> `composed` incident lives (`hud.mjs:309`, asserted `:367-373`);
    - `node tests/progress.mjs` - **passed** ("the progress pictures hold"; its
      own `composed` ramp is built and asserted at `:400-425`).
-   **A pass is not the finding, and this is the honest limit: I ran them, I did
-   not mutate them.** The audit's test is *"does the check still pass when its
-   subject is broken"*, and for these two suites that mutation has **not** been
-   done - so they are **run, not cleared**. What to mutate, named exactly, for
-   whoever has the budget: in `hud.mjs`, break the HUD title's value so
-   `composed.title` no longer equals `composed.button` and confirm `:373` goes
-   red (it should - `:372` pins `composed.button` to the literal); in
-   `progress.mjs`, corrupt one level of the ramp at `:400-406` and confirm
-   `:425`'s fixture comparison goes red. **Two of 182 is not the desktop side**:
-   the rest of the glob is un-run *and* un-mutated, so nothing here should be
-   read as clearing it.
+   **A pass is not the finding - and one of the two has now been MUTATED.** The
+   `hud.mjs` suite's own subject was broken and the suite **went RED**, which is
+   the other half of this audit:
+
+   - **Mutation RUN, and it caught it.** `jarvis-desktop/src-tauri/src/hud_bootstrap.js`
+     builds the HUD's button; its label and its tooltip are **two separate
+     assignments** to the same function - `open.textContent = barLabel(barOnScreen)`
+     and, ten lines later, `open.title = barLabel(barOnScreen)`. **Only the
+     tooltip assignment was changed**, to a fixed string, leaving the label
+     untouched. `node tests/hud.mjs` then reported:
+     `FAIL with the shell, the HUD's own chat box is usable, and the button opens
+     and hides the bar` / `the tooltip and the label disagree` - **1 failed**,
+     exactly the assertion at `tests/hud.mjs:373`. The file was restored from git
+     and the suite passes again.
+   - **The trap in this mutation, written down because it wastes a run:** changing
+     the shared constant `OPEN_BAR` (`hud_bootstrap.js:1168`) changes **both** the
+     label and the tooltip, so `assert.equal(composed.title, composed.button)`
+     would still pass and prove **nothing**. **Break one assignment, never the
+     constant they both read.**
+   - **Still to mutate, named exactly:** `progress.mjs` was **not** mutated. Its
+     `composed` ramp is built at `tests/progress.mjs:400-407` and compared to its
+     fixture at `:424-425`; the plan is to corrupt **one level's fill** and record
+     **which** assertion fires first - `:404` (alpha), `:429` (hue), or `:425`
+     (the fixture ratios) - because *which check catches it* is part of the
+     finding.
+   - **Sizing the remaining gap honestly: two of 182 suites have been run and one
+     of those two has been mutated.** The rest of the glob is un-run *and*
+     un-mutated, so nothing here should be read as clearing the desktop side.
 2. **`cargo test` was not run** (it OOMs here, per the brief), so the Rust-side
    assertions are not covered either.
 3. **The mutations I would run next, in order, with budget:** (a) make
@@ -190,8 +207,9 @@ whose condition is the literal `True` while its only real evidence is "the call
 did not crash", at `backend/test_agent.py:786` - and it is worth fixing because
 its failure mode is a **hang**, which CI reports as a timeout rather than as
 that check failing. **One checker gap** follows from it: the tool built to catch
-this class does not look at it. **The largest remaining gap is in my evidence,
-not in the repository:** the desktop `.mjs` suites CAN now be run - Playwright is
-installed in the test bed - and **two of 182 were run and passed**, but **none
-was mutated**, so they are *run, not cleared*, and the other 180 are neither.
-Section 3.1 names the exact mutations to run next.
+this class does not look at it. **One mutation has now been run and the check
+caught it:** breaking the HUD button's tooltip - one assignment, not the shared
+constant - made `tests/hud.mjs` go **red** with `the tooltip and the label
+disagree`, then the file was restored. **Two of 182 desktop suites have been
+run; one has been mutated.** `progress.mjs`'s mutation is named in section 3.1
+and not yet run.
