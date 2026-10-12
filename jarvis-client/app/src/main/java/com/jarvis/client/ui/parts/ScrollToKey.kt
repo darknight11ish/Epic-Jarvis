@@ -76,6 +76,24 @@ internal fun walkStep(
 }
 
 /**
+ * What a jump lands on, in the order it travels: the HOLDER of the item first
+ * whenever the screen knows of one, then the item itself. No holder, just the
+ * item.
+ *
+ * Pure and separate from [ScrollToKeyOnce] so the rule can be driven by a JVM
+ * test - the rule the device found missing on 2026-10-11 (build 0.2.1232, the
+ * fourth variant of this family): a jump treated "the item's heading is open"
+ * as the whole job, so an already-open heading meant the item inside it was
+ * never reached, and the screen stayed on whatever was at the end of the list.
+ *
+ * Landing on the holder first is also what makes the walk that follows safe:
+ * the rows above the item stop being added, so the walk runs against a list
+ * that no longer moves under it.
+ */
+internal fun landingOrder(target: String, holder: String?): List<String> =
+    if (holder == null || holder == target) listOf(target) else listOf(holder, target)
+
+/**
  * Brings the item whose `item(key = ...)` is [key] into view, once per new
  * [key], then calls [onDone] - whether or not it was found. Null does nothing.
  *
@@ -123,21 +141,93 @@ fun ScrollToKeyOnce(
      */
     holderKey: (String) -> String? = { null },
     onOpen: (String) -> Unit = {},
+    /**
+     * Called with the key the walk was looking for, at the moment it finishes -
+     * whatever it found. Null-safe reporting, and it exists because the defect
+     * of 2026-10-11 was a walk that reported success while the item was never
+     * on screen: the caller logs what really happened instead of what was
+     * intended, and "the heading was open" stops being mistaken for "the item
+     * is on screen".
+     */
+    onVisited: (String) -> Unit = {},
     onDone: () -> Unit,
 ) {
     val done by rememberUpdatedState(onDone)
     val opened by rememberUpdatedState(onOpen)
+    val visited by rememberUpdatedState(onVisited)
     LaunchedEffect(key, tick) {
         val target = key ?: return@LaunchedEffect
+        val report: () -> Unit = {
+            runCatching { visited(target) }
+            done()
+        }
         // The heading that holds the item, when the screen knows of one - the
         // one item a jump can still land on when the item itself is not drawn
         // (a menu the owner has hidden, a plate drawn only in the other of a
         // pair). The screen passes it in; see [ScrollToKeyOnce]'s note.
         val holder = holderKey(target)
-        var openAsked = false
-        var attemptedHold = false
-        var retried = false
+        // The rule itself lives in [landingOrder], so a JVM test holds it. This
+        // reads it rather than restating it.
+        val stops = landingOrder(target, holder)
+        val anchor = stops.firstOrNull()?.takeIf { it != target }
+
+        suspend fun to(index: Int) {
+            runCatching { state.scrollToItem(index) }
+        }
+
+        suspend fun onScreen(): Int? =
+            state.layoutInfo.visibleItemsInfo.firstOrNull { it.key == target }?.index
+
+        // ANCHOR FIRST, when the jump knows what holds the item (2026-10-11).
+        //
+        // A jump used to rely on the finished state of the list: it looked at
+        // the rows laid out on the frame it first ran, and if the item was not
+        // among them it walked down a screenful at a time. That is safe only
+        // while the list is FINISHED. It is not: a section that was already
+        // open when the owner arrived has its plates composed as the walk runs,
+        // and every row composed ABOVE the item moves it further down - so the
+        // index the walk aimed at was the one from BEFORE those rows existed.
+        // The device showed exactly that (`Coming up` by Find, 2026-10-11: the
+        // log said `initiallyOpen=money-time`, and the screen stayed on the
+        // attention card at the end of the list).
+        //
+        // Bringing the HOLDER to the top first removes the whole class: the
+        // list above the item stops growing, so the walk that follows runs
+        // against a list that no longer moves under it. It is also the honest
+        // place to land when the item turns out not to be drawn at all.
+        var anchored = false
+        if (anchor != null) {
+            var tries = 0
+            while (tries < WAIT_FRAMES && state.layoutInfo.visibleItemsInfo.isEmpty()) {
+                tries++
+                withFrameNanos { }
+            }
+            val at = state.layoutInfo.visibleItemsInfo.firstOrNull { it.key == anchor }?.index
+            if (at != null) {
+                to(at)
+                anchored = true
+                // One frame for the plates that were not composed above it yet.
+                withFrameNanos { }
+            }
+        }
         var waited = 0
+        if (!anchored) {
+            // Nothing to anchor to, or its heading is not in the list: wait for
+            // a real row, then open whatever holds the item.
+            while (waited < WAIT_FRAMES && state.layoutInfo.visibleItemsInfo.isEmpty()) {
+                waited++
+                withFrameNanos { }
+            }
+            opened(target)
+            withFrameNanos { }
+        }
+
+        // The item itself: on screen, or a screenful at a time; then opened
+        // again and walked once more, because opening is a state write whose
+        // rows land on the NEXT composition.
+        var openAsked = anchored
+        var retried = false
+        waited = 0
         while (waited < WAIT_FRAMES) {
             val info = state.layoutInfo
             if (info.visibleItemsInfo.isEmpty()) {
@@ -147,54 +237,46 @@ fun ScrollToKeyOnce(
             }
             if (info.visibleItemsInfo.any { it.key == target }) {
                 state.animateScrollToItem(info.visibleItemsInfo.first { it.key == target }.index)
-                done()
+                // AND THEN MEAN IT: the walk above can be right about the index
+                // and still have the list move before the scroll is felt. If the
+                // animation did not put the item on screen, go there directly.
+                if (onScreen() == null) to(info.visibleItemsInfo.first { it.key == target }.index)
+                report()
                 return@LaunchedEffect
             }
             if (!openAsked) {
-                // The holder is shut, so the item is not in the list at all.
-                // Open it, and give the composition a frame to lay its plates
-                // out before walking.
                 openAsked = true
                 opened(target)
                 withFrameNanos { }
                 continue
             }
-            if (!attemptedHold) {
-                // Walk down a screenful at a time for the item itself.
-                attemptedHold = true
-                if (scrollToKey(state, target, fromTop = false)) {
-                    val hit = state.layoutInfo.visibleItemsInfo.firstOrNull { it.key == target }
-                    if (hit != null) state.animateScrollToItem(hit.index)
-                    done()
-                    return@LaunchedEffect
-                }
-                if (holder != null && !retried) {
-                    // It was not in the list while that walk ran. Opening the
-                    // holder is a STATE WRITE and its items are added by the
-                    // composition AFTER it, so ask once more and walk the list
-                    // that has them - from the top, because the failed walk ran
-                    // to the bottom and a walk only ever moves down.
-                    retried = true
-                    attemptedHold = false
-                    opened(target)
-                    state.scrollToItem(0)
-                    withFrameNanos { }
-                    continue
-                }
-                if (holder == null) break
-                // Second miss WITH a holder known: the screen is really not
-                // drawing the item, so land on the heading that holds it rather
-                // than on the bottom of a failed search.
-                if (scrollToKey(state, holder, fromTop = true)) {
-                    val hit = state.layoutInfo.visibleItemsInfo.firstOrNull { it.key == holder }
-                    if (hit != null) state.animateScrollToItem(hit.index)
-                }
-                done()
+            if (scrollToKey(state, target, fromTop = false)) {
+                val hit = onScreen()
+                if (hit != null) state.animateScrollToItem(hit)
+                if (onScreen() == null && hit != null) to(hit)
+                report()
                 return@LaunchedEffect
+            }
+            if (anchor != null && !retried) {
+                retried = true
+                openAsked = false
+                opened(target)
+                if (!anchored) {
+                    val a = state.layoutInfo.visibleItemsInfo.firstOrNull { it.key == anchor }?.index
+                    if (a != null) to(a)
+                }
+                withFrameNanos { }
+                continue
             }
             break
         }
-        done()
+        // The item is not drawn at all, and the holder is known: end on the
+        // holder rather than on the bottom of a failed search.
+        if (anchor != null) {
+            val at = state.layoutInfo.visibleItemsInfo.firstOrNull { it.key == anchor }?.index
+            if (at != null) to(at)
+        }
+        report()
     }
 }
 
@@ -251,3 +333,4 @@ suspend fun scrollToKey(state: LazyListState, key: String, fromTop: Boolean = fa
     }
     return false
 }
+

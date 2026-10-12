@@ -444,6 +444,12 @@ fun BrainScreen(
                 )
             }
         }
+        // The walk's OWN report, at the moment it finishes - not a guess from
+        // watching the list from another effect, which is the mistake that hid
+        // this defect. "The heading was open" and "the item was on screen" are
+        // different facts (Coming up by Find, 2026-10-11). `rows` is how many
+        // items the list had when the walk was done, `onScreen` the keys it
+        // could really see, and `found` whether the item was among them.
         ScrollToKeyOnce(
             listState,
             initialSection?.let { plateKeyAt(it) },
@@ -454,6 +460,17 @@ fun BrainScreen(
             // is what the owner saw on 2026-10-11.
             holderKey = { key -> BrainSections.sectionOf(key)?.let { BrainSections.headingKey(it) } },
             onOpen = ::openFor,
+            onVisited = { key ->
+                val info = listState.layoutInfo
+                val seen = info.visibleItemsInfo
+                android.util.Log.i(
+                    "JarvisBrain",
+                    "walk key=$key rows=${info.totalItemsCount} " +
+                        "found=${seen.any { it.key == key }} " +
+                        "onScreen=[${seen.firstOrNull()?.key}..${seen.lastOrNull()?.key}] " +
+                        "count=${seen.size}",
+                )
+            },
             onDone = onSectionConsumed,
         )
         // A jump inside Brain: the "facts kept, hidden" link under Saved

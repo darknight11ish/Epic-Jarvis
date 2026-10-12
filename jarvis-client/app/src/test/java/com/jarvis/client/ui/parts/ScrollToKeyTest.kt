@@ -208,6 +208,43 @@ class ScrollToKeyTest {
         assertEquals("brain-heading:knows", list.keys[found!!])
     }
 
+    @Test
+    fun `a jump that knows what holds its item asks to land on the holder first`() {
+        // THE DEVICE'S FOURTH VARIANT (2026-10-11, found by the lead on build
+        // 0.2.1232). The log said `initiallyOpen=money-time openKey=money-time`:
+        // the holder was ALREADY OPEN, so opening it did nothing, and the item
+        // inside it was never reached. The walk that followed looked at the rows
+        // composed when it ran - and the section's plates were still being
+        // composed, so every row added ABOVE the item moved it further down and
+        // the index aimed at was the one from before those rows existed.
+        //
+        // The rule that removes the whole class is a PURE one, so it is tested
+        // here rather than described: a jump that knows of a holder lands on the
+        // holder FIRST, whatever state the list is in. Anchoring stops the rows
+        // above the item from growing, so the walk that follows runs against a
+        // list that no longer moves under it.
+        //
+        // This is the assertion whose absence let the defect through: the tests
+        // before it proved a SHUT holder is opened, and nothing proved anything
+        // about an OPEN one.
+        assertEquals(
+            "a jump with a holder must land on the holder first, open or shut",
+            "brain-heading:money-time",
+            landingOrder(target = "brain-plate:coming-up", holder = "brain-heading:money-time").first(),
+        )
+        assertEquals(
+            "the item itself is still what the jump is for",
+            "brain-plate:coming-up",
+            landingOrder(target = "brain-plate:coming-up", holder = "brain-heading:money-time").last(),
+        )
+        // With no holder known, the item is the only stop - the shape every
+        // screen without headings uses.
+        assertEquals(
+            listOf("brain-plate:coming-up"),
+            landingOrder(target = "brain-plate:coming-up", holder = null),
+        )
+    }
+
     // ------------------- the jump really names the plate ----------------
     // The assertion whose absence let the device defect through: the tests
     // before this one proved the BUTTON existed and that the Brain draws the
