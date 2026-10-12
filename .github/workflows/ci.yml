@@ -1559,3 +1559,69 @@ jobs:
           python-version: "3.12"
       - name: Python packages are hash-locked and have no known advisory
         run: python tools/check_python_advisories.py
+
+  # The phone's unit tests, on EVERY pull request.
+  #
+  # WHY (2026-10-11). A Kotlin change could merge with its tests never run. The
+  # unit tests live in jarvis-client.yml's `build` job, which is PATH-FILTERED
+  # and is not one of the six required checks - so a pull request that touches
+  # none of its paths never runs them at all.
+  #
+  # A required check that can be ABSENT is worse than no check: a `build` job was
+  # briefly required here and permanently blocked seven pull requests that could
+  # never report it, because that job is in the same filtered file. This job
+  # therefore has NO path filter and reports a conclusion on every request.
+  #
+  # The field-test audit ended up here from the other side: two of its five
+  # incidents are phone tests, and the plate-placement incident happened in
+  # ScrollToKeyTest - in the tests whose invocation was optional.
+  phone-unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: jarvis-client
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5.0.0
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      # `packages: platform-tools`, NOT the action's default `tools
+      # platform-tools`: Google removed the obsolete `tools` package, so the
+      # default makes the action run `sdkmanager tools`, get "Failed to find
+      # package 'tools'", and fail before a line of Kotlin is compiled. The
+      # phone's own workflow pins it for this reason; copied from there rather
+      # than rewritten.
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          packages: platform-tools
+      - name: The phone's unit tests pass (a Kotlin change cannot merge without them)
+        run: |
+          set -uo pipefail
+          chmod +x ./gradlew
+          if ! ./gradlew testDebugUnitTest --stacktrace 2>&1 | tee test.log; then
+            echo "::group::Compiler errors, if any"
+            grep -E "^e: |Unresolved reference|Argument type mismatch|None of the following candidates|Compilation error" test.log | head -80 \
+              || echo "(none - so this is a TEST failure, not a compile failure)"
+            echo "::endgroup::"
+            echo "::group::Failing tests"
+            grep -E "FAILED$|^[A-Za-z].*> .* FAILED" test.log | head -40 || true
+            echo "::endgroup::"
+            exit 1
+          fi
+          # A test task that matches no sources exits 0 and reports nothing -
+          # a green that measures nothing. Refuse it, so this job cannot pass
+          # by finding no tests to run.
+          results=app/build/test-results/testDebugUnitTest
+          if ! ls "$results"/TEST-*.xml >/dev/null 2>&1; then
+            echo "::error::No test results in $results - the test task matched no sources."
+            exit 1
+          fi
+          total=$(grep -ho 'tests="[0-9]*"' "$results"/TEST-*.xml | grep -o '[0-9]*' | paste -sd+ - | bc)
+          echo "Total tests: ${total:-0}"
+          if [ "${total:-0}" -lt 1 ]; then
+            echo "::error::Test results contain zero tests."
+            exit 1
+          fi
