@@ -295,8 +295,10 @@ def view(*, here: bool = False, device: str | None = None) -> tuple:
 
     `device` is who the request's own key said it was (a paired phone), or
     None. A phone may change LIMITS from here - it raises one with its own
-    fingerprint, and lowers one instantly - but never a price, so
-    `can_change_prices` stays the PC's alone."""
+    fingerprint, and lowers one instantly - and it may correct a PRICE too,
+    which spends nothing and changes no cap, so it needs no card. The owner
+    decided both on 2026-10-11, and `view()` below sets `can_change` and
+    `can_change_prices` from exactly that."""
     api = _api()
     try:
         data = api._load()

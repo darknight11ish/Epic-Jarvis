@@ -24,10 +24,16 @@
  * An API service (a chatbot reached with a key) carries this month's money
  * limit from the PC (`money` on the chatbot: "$4.02" and so on, written by
  * the PC), shown with WORDS.money_left; a conversation's `usage.cost` is the
- * PC's estimate. Limits and prices are set on the PC only (its command
- * line, like keys) - this app only shows them.
+ * PC's estimate. A limit is raised by the fingerprint or PIN of the device that
+ * asks for it, and lowered, removed or a price corrected at once, with no card.
  *
- * The phone says the same words (net/Chatbot.kt); tests/chatbot.mjs and the
+ * These words live in THREE places, and all three must say the same thing:
+ * `backend/jarvis_chatbot_routes.py` (the PC's own map), `net/Chatbot.kt` (the
+ * phone), and HERE. All three are compared against
+ * `tests/fixtures/chatbot-cases.json` by `tests/chatbot.mjs`, which is the
+ * suite that catches a mirror left behind. Changing the sentence on the PC alone
+ * and forgetting one of these is what that suite exists to fail on.
+ * tests/chatbot.mjs and the
  * phone's ChatbotTest check them against tools/gen_chatbot_cases.py's file,
  * which takes them from the PC's own jarvis_chatbot_routes.WORDS.
  *
@@ -120,7 +126,7 @@ export const WORDS = {
   money_left:
     "About {left} of {limit} left this month for {company} (prices are estimates you can correct on the PC).",
   money_pc_only:
-    "Each service with a key needs a monthly money limit before Jarvis uses it. Limits and prices are set on the PC only, like keys; the amounts are estimates.",
+    "Each service with a key needs a monthly money limit before Jarvis uses it. You can raise one here with your fingerprint or PIN; lowering one, removing one and correcting a price change at once, with no card. The amounts are estimates.",
   // Under an answer the money limit's answer-length cap cut short (the
   // PC's `cut_off: true` on that transcript entry).
   cut_off: "Jarvis asked for a short answer so it stays within your limit; the rest was cut off.",
