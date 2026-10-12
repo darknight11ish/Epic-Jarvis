@@ -1190,13 +1190,34 @@ class Tool:
             "parameters": self.parameters}}
 
 
-def _gate_prompt(name: str, args: dict) -> str:
-    """The line the gate keeps beside a decision (its audit log): the tool and
-    its arguments. Not for the retirement what-if, whose arguments are the
-    owner's own money figures - nothing of them is written down."""
+def _gate_prompt(name: str, args: dict, *, plan_step: bool = False) -> str:
+    """The tool-call line the gate READS, and keeps beside its decision.
+
+    THE ARGUMENTS GO OVER WHOLE (DEF-003, 2026-10-12). This line used to end in
+    `json.dumps(args, ensure_ascii=False)[:1500]`, cut for the audit record's
+    1500-character budget - and cut BEFORE the gate ever saw it. The gate's one
+    rule above the tier table (nothing may edit the policy or the gate itself)
+    reads the model's own arguments out of this line, so a protected name past
+    character 1500 was never scanned and an action that would rewrite
+    jarvis_gate.py came back as an ordinary card a person could approve. PR
+    #260 closed the half where the cut JSON did not parse; this is the half
+    that survived it. What an action would TOUCH does not change because the
+    recording budget is too short to hold it, so the cut is gone from all three
+    call sites (this one, the plan step, the web search) rather than moved
+    further out - a longer cut is the same hole later. What is WRITTEN DOWN
+    stays bounded anyway: `jarvis_gate.check()` stores at most 2000 characters
+    of this line on the approvals row, so the record grew by at most 500
+    characters, never without limit.
+
+    `plan_step` writes the `plan step <tool> {json}` shape for one step of a
+    plan; the gate reads both shapes from their first character to their last.
+
+    Not for the retirement what-if, whose arguments are the owner's own money
+    figures - nothing of them is written down."""
     if name == RETIREMENT_TOOL:
         return f"tool {name}"
-    return f"tool {name} {json.dumps(args, ensure_ascii=False)[:1500]}"
+    line = json.dumps(args, ensure_ascii=False)
+    return f"{'plan step' if plan_step else 'tool'} {name} {line}"
 
 
 def _plain_prepare(label: str) -> Callable[[dict], tuple]:
@@ -1380,8 +1401,7 @@ def _plan_step_dispatch(tools: dict, names: list, checker, watch: "_TurnWatch",
             return refuse(CARD_LIMIT_ERROR.format(n=CARDS_PER_TURN))
         out.set_status("approval")
         verdict = checker(action_name, {"text": shaped},
-                          f"plan step {step.tool} "
-                          f"{json.dumps(checked_args, ensure_ascii=False)[:1500]}")
+                          _gate_prompt(step.tool, checked_args, plan_step=True))
         out.card_answered(verdict)
         out.set_status("thinking")
         if _a_card_was_shown(verdict):
@@ -8240,7 +8260,7 @@ def _web_search_call(args: dict, call: dict, convo: list, steps: list, checker,
                 "was asked and nothing was sent. Search with fewer words.")})
         out.set_status("approval")
         verdict = checker(WS.ACTION_SEARCH, {"text": plan_text},
-                          f"tool {name} {json.dumps(args, ensure_ascii=False)[:1500]}")
+                          _gate_prompt(name, args))
         out.card_answered(verdict)
         out.set_status("thinking")
         if _a_card_was_shown(verdict):
