@@ -779,14 +779,28 @@ jobs:
             'test_wiki.py',
             'test_youtube.py'
           )
+          # Each suite's output also goes to its own file, so a failure can name
+          # its own assertion in the annotation rather than only the file name.
+          # WHY: on 2026-10-12 one suite failed here and it took three people and
+          # a re-run to learn WHICH assertion - `--log-failed` collapses the
+          # `::group::` blocks and shows one line, the run kept no artifacts, and
+          # the only Windows machine that can reproduce it is the owner's.
+          # The failing assertion is the cheapest thing to put where people look.
+          $logdir = Join-Path $state 'suite-logs'
+          New-Item -ItemType Directory -Force -Path $logdir | Out-Null
           $failed = @()
           foreach ($suite in $suites) {
             Write-Output "::group::$suite"
-            python $suite
+            $out = Join-Path $logdir (($suite -replace '\.py$', '') + '.log')
+            python $suite 2>&1 | Tee-Object -FilePath $out
             $code = $LASTEXITCODE
             if ($code -ne 0) {
               $failed += $suite
-              Write-Output "::error::$suite exited $code"
+              # The last few non-empty lines are where pytest puts its summary,
+              # and `%0A` is how an annotation carries a newline.
+              $tail = (Get-Content -LiteralPath $out -Tail 15 |
+                       Where-Object { $_.Trim() }) -join '%0A'
+              Write-Output "::error title=$suite exited $code::$tail"
             }
             Write-Output "::endgroup::"
           }
