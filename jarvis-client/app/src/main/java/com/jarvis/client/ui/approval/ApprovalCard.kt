@@ -72,6 +72,14 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
+ * What an expired card says, in ONE place: the line that explains why nothing
+ * can be decided, and (since DEF-010, 2026-10-11) also what is drawn where the
+ * buttons used to be. Two copies of this sentence would let the explanation and
+ * the dead control drift apart, which is the defect itself.
+ */
+private const val EXPIRED_WHY = "Timed out — ask the desktop to raise this again."
+
+/**
  * Feasibility I110, "Slower Approve on risky cards": how long a heavy card's
  * Approve stays disabled at minimum, matching the desktop's own
  * `heavy-approve.js` `MIN_DELAY_MS`.
@@ -360,7 +368,7 @@ fun ApprovalCard(
     // the red line near the buttons (as before) and whether the deadline
     // readout is shown in its place.
     val why = when {
-        expired -> "Timed out — ask the desktop to raise this again."
+        expired -> EXPIRED_WHY
         blocker != null -> blocker
         // Used to say "choose one on the desktop" - wrong, per
         // docs/JARVIS-API.md §8: the desktop's own option buttons send
@@ -689,14 +697,43 @@ fun ApprovalCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Refuse(CardWords.BUTTONS[0], enabled = canDecide && !decided, onClick = deny)
-            Affirm(CardWords.BUTTONS[1], enabled = canApprove && !decided, onClick = approve)
-            if (SecurityRules.riskyByToday(item)) {
-                Text(
-                    text = "Fingerprint follows",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = chrome.textMid,
-                )
+            // AN EXPIRED CARD SHOWS NO BUTTONS (DEF-010, 2026-10-11).
+            //
+            // Measured on the owner's phone: he tapped Approve several times on
+            // an expired card, nothing happened, and nothing acknowledged the
+            // tap - because `canDecide` is false once the deadline passes, so
+            // both buttons were correctly disabled and correctly inert. The
+            // gate was right and the reason was already on screen (`why`, drawn
+            // above), and he still tapped: a faded control captioned by a line
+            // he had not connected to it does not read as "you cannot act".
+            //
+            // So the dead state is no longer expressed by dimming the pair: while
+            // expired this row draws NOTHING AT ALL. Nothing to tap, and the
+            // reason is said ONCE, above, where the decision would have been -
+            // not twice on one small card (the lead's ruling, 2026-10-11).
+            // AND A PC-ONLY CARD LOSES ITS APPROVE, KEEPING ITS DENY.
+            //
+            // Same measurement, the other branch: a LIVE card the phone may not
+            // approve (`raise_api_limit`) drew a dimmed **Approve** that could
+            // never work. The gate knew (`canApprove`'s `!item.pcOnly`, and
+            // `decide()`'s own refusal); only the drawing disagreed with it.
+            //
+            // **Deny stays**, because it does still work here and
+            // `AsksFirst.APPROVE_ON_PC` says so in as many words - "Deny still
+            // works here." Emptying this whole row for a pcOnly card would make
+            // the phone's own sentence a lie.
+            if (!expired) {
+                Refuse(CardWords.BUTTONS[0], enabled = canDecide && !decided, onClick = deny)
+                if (!item.pcOnly) {
+                    Affirm(CardWords.BUTTONS[1], enabled = canApprove && !decided, onClick = approve)
+                }
+                if (SecurityRules.riskyByToday(item)) {
+                    Text(
+                        text = "Fingerprint follows",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textMid,
+                    )
+                }
             }
         }
         if (showFooter) {
