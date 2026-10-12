@@ -30,6 +30,20 @@ import org.junit.Test
  * the device - an expired card must show the sentence and no buttons - and the
  * honest place to pin that is a Compose UI test, which this project does not
  * have. Said here so the next reader knows exactly how far this goes.
+ *
+ * THE MUTATION ON THE RECORD, because a test that has never failed has not been
+ * tested either. `if (expired) { ...buttons... }` - buttons drawn only while
+ * expired, this defect with the branches swapped - **fails the first case**, as
+ * it must.
+ *
+ * AND A WEAK MUTATION THAT PASSES IS THE SAME FALSE GREEN AS AN UNMUTATED FILE.
+ * The first mutation tried here was `if (expired || !expired)`, which is
+ * always true and draws the buttons in **both** states - and it **passed**,
+ * because it still contains the literal `!expired` the check was looking for.
+ * A guard that obviously wrong sailed through a check that only looked for the
+ * word. That is why the assertion is on the SENSE of the guard now, and why
+ * this note is here: **checking that a token is present is not checking what
+ * the code does.**
  */
 class ExpiredCardShowsNoButtonsTest {
 
