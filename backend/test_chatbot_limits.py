@@ -20,8 +20,14 @@ WHAT THIS PROVES - the one rule that matters most first
     "ask" and the lowering "auto". A `raise_limit` that names an amount at or
     below the current one is sent down the tightening path, so a lowering can
     never be dressed up as a raise to get a card.
-  * PC ONLY: a request that is not from this PC is refused 403 `pc_only` and
-    changes nothing. The route is a WRITE route, so the phone never gets one.
+  * FROM THE PHONE (the owner, 2026-10-11: "Let the phone raise it too, with
+    its own fingerprint", changing his own 2026-09-28 "set on the PC"): a RAISE
+    from a paired device raises the same card, and that card is answered with
+    the phone's own signed approval (its fingerprint or PIN, through
+    `jarvis_devices.check_signed_approval`) - which is why
+    `jarvis_owner_check.PC_ONLY_ACTIONS` no longer holds `raise_api_limit`. A
+    LOWERING or a REMOVAL from the phone applies at once, with no card. A PRICE
+    from the phone is still refused 403 `pc_only` and changes nothing.
   * Every read and every write goes through `jarvis_chatbot_api`'s own
     functions, and the real, unmodified module stores it: the test runs against
     jarvis_chatbot_api.py itself with its money file pointed at a temporary
@@ -55,7 +61,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 sys.path.insert(0, str(HERE))
-from _where import require_shipped  # noqa: E402
+from _where import BACKEND, require_shipped  # noqa: E402
 
 require_shipped("jarvis_chatbot_limits.py", "jarvis_chatbot_api.py", "jarvis_chatbot.py",
                 "jarvis_token_store.py", "jarvis_local_http.py", "jarvis_task_control.py",
@@ -181,13 +187,17 @@ def read_view(service=None):
     return next(r for r in body["services"] if r["service"] == service)
 
 
-def post(body, here=True):
-    """A request as the PC (or as another device), through change()."""
+def post(body, here=True, device=None):
+    """A request as the PC (or as a paired device), through change().
+
+    `device` is what the server's own token check put on the handler
+    (`_jarvis_device`): the id of the phone whose key made the request, or None
+    when nothing identified it."""
     peer = "127.0.0.1" if here else "100.100.5.9"
     saved = L._from_this_pc
     L._from_this_pc = lambda *_a, **_k: here
     try:
-        return L.change(body, peer=peer, local="127.0.0.1")
+        return L.change(body, peer=peer, local="127.0.0.1", device=device)
     finally:
         L._from_this_pc = saved
 
@@ -226,14 +236,30 @@ def t_the_view_names_every_service_and_says_where_each_price_came_from():
           body["raise_action"] == "raise_api_limit" and body["lower_action"] == "lower_api_limit")
 
 
-def t_a_view_from_another_device_is_offered_but_cannot_change_anything():
+def t_a_view_from_the_phone_offers_both_a_limit_and_a_price_change():
+    """WAS `..._is_offered_but_cannot_change_anything`, when every change was
+    the PC's alone. The owner changed that for LIMITS on 2026-10-11 - a phone
+    raises one with its own fingerprint - and prices are the half that stayed,
+    which is why the view now answers both questions separately instead of one
+    `can_change`."""
     wipe()
     arm()
-    code, body = L.handle_get(L.PATH, {}, "100.100.5.9", "100.64.0.1")
-    check("a read from the phone still answers", code == 200 and body["can_change"] is False)
-    check("and it names the PC's own rule", body["pc_only"] == L.PC_ONLY)
-    check("every row says it cannot be changed here",
-          all(r["can_change"] is False for r in body["services"]))
+    code, body = L.handle_get(L.PATH, {}, "100.100.5.9", "100.64.0.1", device="d3f9a1c2e")
+    check("a read from the phone still answers", code == 200)
+    check("a phone whose own key made the request may change a limit here",
+          body["can_change"] is True)
+    check("and a price may be corrected here too - the owner opened both on 2026-10-11",
+          body["can_change_prices"] is True)
+    check("the sentence by that name now names the one thing that did not move: the key",
+          body["pc_only"] == L.PC_ONLY and "key" in L.PC_ONLY.lower(), L.PC_ONLY)
+    check("every row says a limit can be changed from here",
+          all(r["can_change"] is True for r in body["services"]))
+    check("the raise words name the phone's own fingerprint",
+          "fingerprint" in body["raise_words"], body["raise_words"])
+    code2, body2 = L.handle_get(L.PATH, {}, "100.100.5.9", "100.64.0.1")
+    check("with nothing identifying the caller it may change nothing",
+          code2 == 200 and body2["can_change"] is False
+          and body2["can_change_prices"] is False)
 
 
 # ======================================================= 2. the one rule
@@ -372,21 +398,72 @@ def t_removing_a_limit_that_is_not_there_says_so():
 # ======================================================= 3. PC only
 
 
-def t_a_request_from_another_device_is_refused_and_changes_nothing():
+def t_a_raise_from_the_phone_raises_the_card_and_applies_when_it_is_confirmed():
+    """WAS part of `t_a_request_from_another_device_is_refused_and_changes_nothing`,
+    which held the 2026-09-28 rule "a monthly amount per service, set on the PC".
+    The owner lifted it for this one direction on 2026-10-11. The card is the
+    SAME card the PC raises - what changed is where it may be answered, with the
+    phone's own signed approval instead of Windows Hello."""
     wipe()
     API.set_limit("openai_api", 3.0)
     arm(YES)
-    for body in ({"action": "raise_limit", "service": "openai", "dollars": 10},
-                 {"action": "lower_limit", "service": "openai", "dollars": 1},
-                 {"action": "remove_limit", "service": "openai"},
-                 {"action": "set_price", "service": "openai", "in": 1, "out": 2},
-                 {"action": "reset_price", "service": "openai"}):
-        code, out = post(body, here=False)
-        check(f"a {body['action']} from the phone is refused 403 pc_only",
-              code == 403 and out.get("pc_only") is True, out)
-        check(f"its words are the module's own ({body['action']})", out.get("message") == L.PC_ONLY)
-    check("nothing moved", API.limit_of("openai_api") == 3.0)
-    check("and no card was raised from another device", GATE_CALLS == [], GATE_CALLS)
+    code, out = post({"action": "raise_limit", "service": "openai", "dollars": 10},
+                     here=False, device="d3f9a1c2e")
+    check("a raise from the phone is accepted", code == 200, out)
+    check("the limit really moved", API.limit_of("openai_api") == 10.0)
+    check("it raised the RAISE action's card, once",
+          [c["action"] for c in GATE_CALLS] == [L.RAISE_ACTION], GATE_CALLS)
+    check("and the card names the phone's own request, not the PC's",
+          "raise the monthly money limit" in GATE_CALLS[0]["detail"]["what"], GATE_CALLS)
+
+
+def t_a_denied_card_on_the_phone_leaves_the_limit_exactly_where_it_was():
+    wipe()
+    API.set_limit("openai_api", 3.0)
+    arm(NO)
+    code, out = post({"action": "raise_limit", "service": "openai", "dollars": 10},
+                     here=False, device="d3f9a1c2e")
+    check("a no on the phone is not an approval",
+          code == 409 and out.get("error") == "not_approved", out)
+    check("and nothing moved", API.limit_of("openai_api") == 3.0)
+
+
+def t_a_lowering_or_a_removal_from_the_phone_needs_no_card_at_all():
+    """The other half of the owner's change, and the one that makes the phone
+    useful: stopping spending must never need a fingerprint."""
+    wipe()
+    API.set_limit("openai_api", 3.0)
+    arm()
+    code, out = post({"action": "lower_limit", "service": "openai", "dollars": 1},
+                     here=False, device="d3f9a1c2e")
+    check("a lowering from the phone applies", code == 200, out)
+    check("the limit is the lower one", API.limit_of("openai_api") == 1.0)
+    code, out = post({"action": "remove_limit", "service": "openai"},
+                     here=False, device="d3f9a1c2e")
+    check("a removal from the phone applies", code == 200, out)
+    check("and the limit is gone", API.limit_of("openai_api") is None)
+    check("with no card at all", GATE_CALLS == [], GATE_CALLS)
+
+
+def t_a_price_correction_from_the_phone_applies_at_once_with_no_card():
+    """WAS `t_a_price_from_the_phone_is_still_refused_and_changes_nothing`, when
+    prices were the PC's. The owner opened them on 2026-10-11, asked directly
+    after the limit: a price is an ESTIMATE of what a service costs, so
+    correcting one spends nothing, raises no cap and takes nothing back - the
+    same shape as a lowering, and card-free for the same reason. It is not
+    tier "ask" and there is no gate action for it, so nothing to confirm."""
+    wipe()
+    API.set_limit("openai_api", 3.0)
+    arm()
+    code, out = post({"action": "set_price", "service": "openai", "in": 1, "out": 2},
+                     here=False, device="d3f9a1c2e")
+    check("a price correction from the phone is accepted", code == 200, out)
+    check("and it is not a card", out.get("ok") is True, out)
+    code, out = post({"action": "reset_price", "service": "openai"},
+                     here=False, device="d3f9a1c2e")
+    check("resetting it from the phone is accepted too", code == 200, out)
+    check("no card was raised from the phone for either",
+          GATE_CALLS == [], GATE_CALLS)
 
 
 # ======================================================= 4. the price list
@@ -528,21 +605,50 @@ def t_the_module_is_shipped_on_both_sides_and_the_tiers_are_in_the_shipped_file(
           re.search(r'^lower_api_limit\s*=\s*"auto"', toml, re.M) is not None)
 
 
-def t_the_raise_is_the_pc_only_action_and_the_lowering_is_not():
-    """The whole reason for two names. jarvis_owner_check attaches Windows
-    Hello to the ACTION, so the raise must be in PC_ONLY_ACTIONS and the
-    lowering must not be - and the API module must never send both through one
-    name."""
+def t_the_raise_left_the_pc_only_set_and_is_still_risky_on_the_pc():
+    """WAS `t_the_raise_is_the_pc_only_action_and_the_lowering_is_not`, which
+    held the 2026-09-28 rule: `jarvis_owner_check` attaches Windows Hello to the
+    ACTION NAME, so `raise_api_limit` had to be in `PC_ONLY_ACTIONS` and a
+    lowering must not be. The owner took the raise OUT of that set on
+    2026-10-11 so a phone can confirm it with its own fingerprint. This test now
+    pins the two things that keep that safe rather than the old membership:
+
+      * the action is out of the set, and the lowering still is not in it; and
+      * the raise is still RISKY on its own merits, so the PC's own approval
+        still asks Windows Hello through `is_risky` and not through this set.
+        That is the whole safety argument: where a raise may be confirmed
+        changed, whether a person confirms it did not."""
     oc = (REPO / "backend" / "jarvis_owner_check.py").read_text(encoding="utf-8")
     # The frozenset's own text, however it is wrapped across lines.
     start = oc.index("PC_ONLY_ACTIONS = frozenset(")
     block = oc[start:oc.index("})", start) + 2]
-    check("raise_api_limit is in PC_ONLY_ACTIONS, so it always asks Windows Hello",
-          "raise_api_limit" in block, block)
-    check("lower_api_limit is NOT, so a lowering never does",
+    check("raise_api_limit is OUT of PC_ONLY_ACTIONS, so a phone may confirm this card",
+          "raise_api_limit" not in block, block)
+    check("lower_api_limit is not in it either, so a lowering never asks anything",
           "lower_api_limit" not in block, block)
     check("and PC_ONLY_ACTIONS is still a frozenset, not a list",
           "frozenset({" in block, block)
+    check("the PC still asks Windows Hello for a risky card it did not get from the PC",
+          "is_risky(row)" in oc and "action in PC_ONLY_ACTIONS" in oc)
+    check("and a risky card from another device still needs that device's signature",
+          "_signed_check(body, row, device)" in oc)
+    # THE SAFETY ARGUMENT, in the one place it can be checked: the risk row.
+    # `jarvis_gate.py` is the owner's own module - patched, never shipped from
+    # this repository - so it is read from BACKEND, not from REPO.
+    gate = (BACKEND / "jarvis_gate.py").read_text(encoding="utf-8")
+    check("the raise's risk row is still not reversible, so is_risky() is True "
+          "for it and the PC's own approval still asks Windows Hello",
+          '"raise_api_limit": ("no"' in gate
+          or "'raise_api_limit': ('no'" in gate,
+          [ln.strip()[:90] for ln in gate.splitlines() if "raise_api_limit" in ln][:3])
+    check("and the raise is still in the gate's own no-standing-rule set, untouched "
+          "by this change",
+          gate.count('"raise_api_limit"') >= 2, gate.count('"raise_api_limit"'))
+    src = (REPO / "backend" / "jarvis_chatbot_limits.py").read_text(encoding="utf-8")
+    check("the module has one name per direction and no third one",
+          src.count('_ACTION = "') == 2, src.count('_ACTION = "'))
+    check("lowering and removing share the tightening name",
+          src.count("LOWER_ACTION") >= 1 and "remove_limit" in src)
     src = (REPO / "backend" / "jarvis_chatbot_limits.py").read_text(encoding="utf-8")
     check("the module has one name per direction and no third one",
           src.count('_ACTION = "') == 2, src.count('_ACTION = "'))
@@ -633,7 +739,7 @@ def t_no_other_module_raises_a_chatbot_money_card():
 
 if __name__ == "__main__":
     for fn in (t_the_view_names_every_service_and_says_where_each_price_came_from,
-               t_a_view_from_another_device_is_offered_but_cannot_change_anything,
+               t_a_view_from_the_phone_offers_both_a_limit_and_a_price_change,
                t_lowering_only_a_limit_needs_no_card_at_all,
                t_removing_a_limit_needs_no_card_either,
                t_raising_a_limit_raises_one_card_and_moves_on_a_yes,
@@ -643,7 +749,10 @@ if __name__ == "__main__":
                t_a_raise_that_names_no_more_than_now_is_a_tightening_not_a_card,
                t_the_first_limit_on_a_service_is_a_raise_and_gets_a_card,
                t_removing_a_limit_that_is_not_there_says_so,
-               t_a_request_from_another_device_is_refused_and_changes_nothing,
+               t_a_raise_from_the_phone_raises_the_card_and_applies_when_it_is_confirmed,
+               t_a_denied_card_on_the_phone_leaves_the_limit_exactly_where_it_was,
+               t_a_lowering_or_a_removal_from_the_phone_needs_no_card_at_all,
+               t_a_price_correction_from_the_phone_applies_at_once_with_no_card,
                t_a_corrected_price_is_kept_and_says_it_is_yours,
                t_resetting_a_price_goes_back_to_the_unverified_default,
                t_a_price_that_is_not_a_number_is_refused,
@@ -651,7 +760,7 @@ if __name__ == "__main__":
                t_an_unreadable_money_file_refuses_rather_than_reading_as_zero,
                t_the_patch_is_in_the_stack_and_carries_both_gate_names,
                t_the_module_is_shipped_on_both_sides_and_the_tiers_are_in_the_shipped_file,
-               t_the_raise_is_the_pc_only_action_and_the_lowering_is_not,
+               t_the_raise_left_the_pc_only_set_and_is_still_risky_on_the_pc,
                t_every_read_and_write_goes_through_the_api_module,
                t_audit_carries_actions_and_amounts_only,
                t_the_route_is_only_this_one_path_and_only_these_two_methods,
