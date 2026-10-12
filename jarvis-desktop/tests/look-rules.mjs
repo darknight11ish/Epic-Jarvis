@@ -327,5 +327,33 @@ await check("picture mode is wired: the command, its permission, and only Settin
   assert.ok(html.includes('id="sp-switch"') && html.includes('id="sp-line-text"'), "settings.html markup");
 });
 
+await check("the badge cannot outlive a session that ended on the PC", async () => {
+  const js = read("src/watch-badge.js");
+  // The PC can end a session without THIS app asking, and the screen-status
+  // event only arrives when this app made the call - so a sign that only
+  // listened said "Jarvis is watching" for ever after it stopped (2026-10-11).
+  assert.match(js, /setTimeout\(tick, POLL_MS\)/, "the tick re-reads the session");
+  assert.match(js, /function tick\(\)[\s\S]{0,400}invoke\("screen_status"\)/);
+  const poll = Number((js.match(/const POLL_MS = (\d+)/) || [])[1]);
+  assert.ok(Number.isFinite(poll) && poll > 0, "the tick is a number");
+  // One tick plus the ended display is the longest a badge may outlive a
+  // session that ended on the PC: 10 s + 15 s = 25 s.
+  assert.ok(poll / 1000 + R.ENDED_SHOW_S <= 25, `one tick plus the ended display (${poll / 1000} + ${R.ENDED_SHOW_S} s)`);
+  // A stale payload must FREEZE rather than keep counting: a countdown still
+  // running is what made the sign look alive while saying something untrue.
+  assert.match(js, /Math\.min\(age, TRUST_MS\)/, "the minutes freeze on stale news");
+  const t = js.match(/const TRUST_MS = POLL_MS \* (\d+) \+ (\d+);/);
+  assert.ok(t, "TRUST_MS is defined from the tick");
+  assert.ok(poll * Number(t[1]) + Number(t[2]) > poll, "one missed tick is still counted");
+  // The PC hides the window when IT saw the session end; when the end came
+  // from anywhere else nothing told it to - so the badge closes itself.
+  assert.match(js, /function closeBadge\(\)[\s\S]{0,400}getCurrentWindow\(\)\.hide\(\)/);
+  const cap = JSON.parse(read("src-tauri/capabilities/watch-badge.json"));
+  assert.ok(cap.permissions.includes("core:window:allow-hide"), "hiding itself needs allow-hide on this window");
+  assert.ok(!cap.permissions.includes("core:window:allow-show"), "and never show: the PC opens it");
+  assert.ok(!cap.permissions.includes("core:event:allow-emit"), "no window emits events");
+  assert.ok(!cap.permissions.includes("screen-picture"), "and the badge still holds no picture switch");
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
