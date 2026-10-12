@@ -81,6 +81,28 @@ this file; and the phone is driven by one process at a time.
 | 110 | About Jarvis (`about`) | both | **PASS** | Help → scrolled to the About card: `Version 0.2.1227`, `Made by darknight11ish`, `MIT, with third-party parts under their own licences`, the source link, the notices link. Real version, not the local build's `0.2.0` |
 | 125 | A warning when text tried to rush you (`rush-latch`) | phone | PARTIAL | **no Find row at all** — Find → `rush` says `Nothing matches that.` It is a **behaviour** (a warning shown when text tries to rush you), so testing it needs a turn with rushing text |
 
+**Row 89 (`crash-notes`), corrected by measurement on 2026-10-12 - and the row above is left exactly as
+the pass wrote it.** The row is defined by the app's own source as a row **inside the desktop's `More
+options` fold**: `backend/jarvis_settings_registry.py:289-293` says so in as many words - *"\"Hang and
+crash notes\": inside \"More options\" on the desktop (its own `<section id="crash-notes">`). The phone has
+no such list"* - and `jarvis_menus.py:370-374` carries `_m("settings.crash-notes", "Hang and crash
+notes", ...)` with *"A row inside the desktop's own More options fold; the phone keeps its own crash
+notes."* **The live, installed backend carries both entries at the same lines** (its own copies, modified
+2026-10-11 20:38), so the PC does send the row.
+
+**And the count could never have decided it.** Re-measured on the running app: with the page as the pass
+saw it, **`crash` appears 0 times in 1,999 strings** - the artefact reproduced. Then the fold's own
+control was invoked (**`clicked 'More options': invoked`**) and the page scrolled to its end: **`crash` 0
+times and `Hang` 0 times in 2,073 strings.** The fold's contents never entered the accessibility tree,
+opened or not. So **row 89's FAIL cannot rest on the string count**: the count is a fact about the
+enumeration, not about the row. What remains unverified by this method is whether the row *renders* -
+there is no vision provider here - and this note does not claim it does; it claims the absence of the
+word proved nothing.
+
+**The method sentence, because it generalises:** *a collapsed fold is invisible to a string enumeration,
+so "the words are absent from N strings" is a claim about the enumeration until the fold has been
+opened* - and here, opening it changed nothing either, which is exactly why the count was never evidence.
+
 ## 3. Test-verified only — suites pass, never driven (13)
 
 | # | feature | surface | verdict | evidence |
