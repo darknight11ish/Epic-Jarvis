@@ -274,8 +274,9 @@ WORDS = {
     "money_left": ("About {left} of {limit} left this month for {company} (prices are "
                    "estimates you can correct on the PC)."),
     "money_pc_only": ("Each service with a key needs a monthly money limit before Jarvis uses "
-                      "it. Limits and prices are set on the PC only, like keys; the amounts "
-                      "are estimates."),
+                      "it. You can raise one here with your fingerprint or PIN; lowering one, "
+                      "removing one and correcting a price change at once, with no card. The "
+                      "amounts are estimates."),
     # Under a chatbot's answer that the money limit's answer-length cap cut
     # short (`cut_off: true` on that transcript entry;
     # jarvis_chatbot_api.CUT_OFF, word for word).
