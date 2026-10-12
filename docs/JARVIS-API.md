@@ -18687,7 +18687,11 @@ a direction, so one action covering both directions would ask Hello for a loweri
 too. Two names keeps Hello on the loosening only, and this module is the single place
 that decides which name a request gets:
 
-    raise_limit   -> action `raise_api_limit`, in PC_ONLY_ACTIONS, tier ask
+    raise_limit   -> action `raise_api_limit`, tier ask: ONE card, answered
+                     with Windows Hello on the PC or with the asking
+                     phone's own fingerprint (signed approvals; the owner's
+                     change of 2026-10-11 to his 2026-09-28 "set on the
+                     PC" - it is no longer in PC_ONLY_ACTIONS)
     lower_limit   -> action `lower_api_limit`, tier auto, no card
     remove_limit  -> action `lower_api_limit` (it only ever spends less)
     set_price     -> no gate action at all; a correction is not a loosening

@@ -197,6 +197,15 @@ cost of two names, two tests and a rule that has to be kept in step.
 
 This is decision 3 below.
 
+Amended 2026-10-11 (owner): the phone may raise a limit too, with its
+own fingerprint, so `raise_api_limit` left `PC_ONLY_ACTIONS` and this route
+no longer refuses another device. The rule the two names exist for is
+unchanged: the PC's own path still asks Windows Hello, because the raise is
+a RISKY card on its own merits (`reversible` is `no`), and a phone's path
+needs that phone's signed approval - a fresh fingerprint or PIN per raise.
+Lowering a limit, removing one and correcting a price need no card from
+either app.
+
 ---
 
 ## 5. The cloud escalation lane, and `cloud-keys.env`
