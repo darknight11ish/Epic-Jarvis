@@ -653,7 +653,14 @@ fun BrainScreen(
             log = { section, open, written, emitted ->
                 android.util.Log.i(
                     "JarvisBrain",
-                    "section=$section open=$open written=$written emitted=$emitted",
+                    "section=$section open=$open written=$written emitted=$emitted " +
+                        "privateHidden=$privateHidden " +
+                        // The deciding bit: with "Hide memory lists" on, this rule
+                        // drops every plate whose name does not end -hidden, BEFORE
+                        // the list ever sees it. Non-empty here means the section
+                        // asked for rows and the rule refused them.
+                        "writesNow=${plateDrawn(WANTED_JUMP_PLATE)} " +
+                        "writesBriefing=${plateDrawn(JUMP_LOG_PLATE_A)}",
                 )
             },
         )
@@ -835,7 +842,14 @@ fun BrainScreen(
             log = { section, open, written, emitted ->
                 android.util.Log.i(
                     "JarvisBrain",
-                    "section=$section open=$open written=$written emitted=$emitted",
+                    "section=$section open=$open written=$written emitted=$emitted " +
+                        "privateHidden=$privateHidden " +
+                        // The deciding bit: with "Hide memory lists" on, this rule
+                        // drops every plate whose name does not end -hidden, BEFORE
+                        // the list ever sees it. Non-empty here means the section
+                        // asked for rows and the rule refused them.
+                        "writesNow=${plateDrawn(WANTED_JUMP_PLATE)} " +
+                        "writesBriefing=${plateDrawn(JUMP_LOG_PLATE_A)}",
                 )
             },
         )
@@ -992,7 +1006,14 @@ fun BrainScreen(
             log = { section, open, written, emitted ->
                 android.util.Log.i(
                     "JarvisBrain",
-                    "section=$section open=$open written=$written emitted=$emitted",
+                    "section=$section open=$open written=$written emitted=$emitted " +
+                        "privateHidden=$privateHidden " +
+                        // The deciding bit: with "Hide memory lists" on, this rule
+                        // drops every plate whose name does not end -hidden, BEFORE
+                        // the list ever sees it. Non-empty here means the section
+                        // asked for rows and the rule refused them.
+                        "writesNow=${plateDrawn(WANTED_JUMP_PLATE)} " +
+                        "writesBriefing=${plateDrawn(JUMP_LOG_PLATE_A)}",
                 )
             },
         )
@@ -1094,7 +1115,14 @@ fun BrainScreen(
             log = { section, open, written, emitted ->
                 android.util.Log.i(
                     "JarvisBrain",
-                    "section=$section open=$open written=$written emitted=$emitted",
+                    "section=$section open=$open written=$written emitted=$emitted " +
+                        "privateHidden=$privateHidden " +
+                        // The deciding bit: with "Hide memory lists" on, this rule
+                        // drops every plate whose name does not end -hidden, BEFORE
+                        // the list ever sees it. Non-empty here means the section
+                        // asked for rows and the rule refused them.
+                        "writesNow=${plateDrawn(WANTED_JUMP_PLATE)} " +
+                        "writesBriefing=${plateDrawn(JUMP_LOG_PLATE_A)}",
                 )
             },
         )
@@ -1171,7 +1199,14 @@ fun BrainScreen(
             log = { section, open, written, emitted ->
                 android.util.Log.i(
                     "JarvisBrain",
-                    "section=$section open=$open written=$written emitted=$emitted",
+                    "section=$section open=$open written=$written emitted=$emitted " +
+                        "privateHidden=$privateHidden " +
+                        // The deciding bit: with "Hide memory lists" on, this rule
+                        // drops every plate whose name does not end -hidden, BEFORE
+                        // the list ever sees it. Non-empty here means the section
+                        // asked for rows and the rule refused them.
+                        "writesNow=${plateDrawn(WANTED_JUMP_PLATE)} " +
+                        "writesBriefing=${plateDrawn(JUMP_LOG_PLATE_A)}",
                 )
             },
         )
@@ -1216,7 +1251,14 @@ fun BrainScreen(
             log = { section, open, written, emitted ->
                 android.util.Log.i(
                     "JarvisBrain",
-                    "section=$section open=$open written=$written emitted=$emitted",
+                    "section=$section open=$open written=$written emitted=$emitted " +
+                        "privateHidden=$privateHidden " +
+                        // The deciding bit: with "Hide memory lists" on, this rule
+                        // drops every plate whose name does not end -hidden, BEFORE
+                        // the list ever sees it. Non-empty here means the section
+                        // asked for rows and the rule refused them.
+                        "writesNow=${plateDrawn(WANTED_JUMP_PLATE)} " +
+                        "writesBriefing=${plateDrawn(JUMP_LOG_PLATE_A)}",
                 )
             },
         )
@@ -1437,7 +1479,14 @@ fun BrainScreen(
             log = { section, open, written, emitted ->
                 android.util.Log.i(
                     "JarvisBrain",
-                    "section=$section open=$open written=$written emitted=$emitted",
+                    "section=$section open=$open written=$written emitted=$emitted " +
+                        "privateHidden=$privateHidden " +
+                        // The deciding bit: with "Hide memory lists" on, this rule
+                        // drops every plate whose name does not end -hidden, BEFORE
+                        // the list ever sees it. Non-empty here means the section
+                        // asked for rows and the rule refused them.
+                        "writesNow=${plateDrawn(WANTED_JUMP_PLATE)} " +
+                        "writesBriefing=${plateDrawn(JUMP_LOG_PLATE_A)}",
                 )
             },
         )
@@ -2906,6 +2955,9 @@ private fun String.looksMachine(): Boolean =
  * nothing, so no key's absence is a mistake.
  */
 private val WANTED_JUMP_PLATE: String = listOf("coming", "up").joinToString("-")
+
+/** A second plate name, built, so the log can compare two without spelling either. */
+private val JUMP_LOG_PLATE_A: String = "briefing"
 
 private val MENU_FOR_JUMP_LOG: Map<String, String> = run {
     val ns = com.jarvis.client.ui.screens.PlateList.PLATE_PREFIX
