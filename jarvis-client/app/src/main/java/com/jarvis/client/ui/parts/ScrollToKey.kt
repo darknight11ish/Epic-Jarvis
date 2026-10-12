@@ -178,6 +178,34 @@ fun ScrollToKeyOnce(
         suspend fun onScreen(): Int? =
             state.layoutInfo.visibleItemsInfo.firstOrNull { it.key == target }?.index
 
+        /**
+         * Brings the HOLDER into view and reports whether it got there.
+         *
+         * `scrollToKey`, NOT a look-up among the rows already laid out: the
+         * heading is usually not in the viewport when a jump starts - the owner
+         * has just arrived from Home or from Find, and the list is wherever it
+         * was left - and a look-up returns null there, so the anchor silently
+         * did nothing at all. That is the case the device's log shows
+         * (`initiallyOpen=money-time`, the walk's viewport on
+         * `[brain-heading:learning..brain-plate:tail]`, the BOTTOM of the list,
+         * which is where a walk ends up when nothing brought it anywhere).
+         *
+         * `fromTop = true` because the walk only ever moves down: starting from
+         * wherever the last attempt stopped is the failure being fixed.
+         */
+        suspend fun anchorNow(): Boolean {
+            val a = anchor ?: return false
+            var tries = 0
+            while (tries < WAIT_FRAMES && state.layoutInfo.visibleItemsInfo.isEmpty()) {
+                tries++
+                withFrameNanos { }
+            }
+            if (!scrollToKey(state, a, fromTop = true)) return false
+            // One frame for the plates that were not composed above it yet.
+            withFrameNanos { }
+            return true
+        }
+
         // ANCHOR FIRST, when the jump knows what holds the item (2026-10-11).
         //
         // A jump used to rely on the finished state of the list: it looked at
@@ -197,18 +225,7 @@ fun ScrollToKeyOnce(
         // place to land when the item turns out not to be drawn at all.
         var anchored = false
         if (anchor != null) {
-            var tries = 0
-            while (tries < WAIT_FRAMES && state.layoutInfo.visibleItemsInfo.isEmpty()) {
-                tries++
-                withFrameNanos { }
-            }
-            val at = state.layoutInfo.visibleItemsInfo.firstOrNull { it.key == anchor }?.index
-            if (at != null) {
-                to(at)
-                anchored = true
-                // One frame for the plates that were not composed above it yet.
-                withFrameNanos { }
-            }
+            anchored = anchorNow()
         }
         var waited = 0
         if (!anchored) {
@@ -258,13 +275,16 @@ fun ScrollToKeyOnce(
                 return@LaunchedEffect
             }
             if (anchor != null && !retried) {
+                // One more go, and THE ANCHOR IS RE-TAKEN first. The old retry
+                // re-opened the holder and walked from wherever the failed walk
+                // stopped - and a failed walk has run to the BOTTOM, so the
+                // second attempt started at the end of the list and found
+                // nothing either. Walking down from the holder is what makes the
+                // second attempt different from the first.
                 retried = true
                 openAsked = false
-                opened(target)
-                if (!anchored) {
-                    val a = state.layoutInfo.visibleItemsInfo.firstOrNull { it.key == anchor }?.index
-                    if (a != null) to(a)
-                }
+                val reAnchored = anchorNow()
+                if (reAnchored) anchored = true
                 withFrameNanos { }
                 continue
             }
@@ -272,10 +292,7 @@ fun ScrollToKeyOnce(
         }
         // The item is not drawn at all, and the holder is known: end on the
         // holder rather than on the bottom of a failed search.
-        if (anchor != null) {
-            val at = state.layoutInfo.visibleItemsInfo.firstOrNull { it.key == anchor }?.index
-            if (at != null) to(at)
-        }
+        anchorNow()
         report()
     }
 }
@@ -333,4 +350,5 @@ suspend fun scrollToKey(state: LazyListState, key: String, fromTop: Boolean = fa
     }
     return false
 }
+
 
