@@ -61,6 +61,34 @@ this file; and the phone is driven by one process at a time.
 | 121 | Hand a captcha to your phone (`captcha-handoff`) | both | **PASS** | Find → `captcha` → the phone drew `WHEN A CAPTCHA STOPS JARVIS`, in full: *"When Jarvis is stuck on a captcha or a sign-in page, it can leave that browser window exactly where it is - or bring it to the front so you can type into it."*, with both choices and what each does — `Leave it where it is (in use)` (the window is not touched) and `Bring it to the front` (raises it, *"takes your screen and your keyboard away… so turning this on asks for your approval"*). Marked in use |
 | 126 | Jarvis marks what it read from outside (`outside-text`) | both | PARTIAL | **no Find row** — Find → `outside` says `Nothing matches that.` It is a **marking behaviour** on answers that used outside text, so testing it needs a turn that reads an email, file or page |
 
+**Row 44 (`watch-with-me`), re-driven on 2026-10-12 under a fresh authorisation from the owner - and the
+row above is left exactly as the pass wrote it.** The recorded failure was *"the SIGN does not clear, not
+the Stop"*: the badge listened for a `screen-status` event that only fires when *that app* makes the call,
+so an ending that did not come through the app's own command left the sign up **for ever**. #302 addressed
+precisely that, so the walk was run against the case the row names - **an ending that does not come
+through the app's own command**:
+
+* **Before:** `GET /api/screen` answered `{"state":"off","on":false,...}`, and there was no badge window
+  among the app's windows.
+* **A two-minute session was started through the route** - `POST /api/screen {"do":"start","minutes":2}`
+  answered `state:"watching", on:true, left_s:120, built:true`. The badge appeared as its own window,
+  **`Jarvis is watching`** (23 elements), and its own words were **`Jarvis is watching`**, **`Stop
+  watching`**, `20 more minutes` and **`Ending soon - 2 min left`**.
+* **Ended by the API, never by the app's own command:** `POST /api/screen {"do":"stop"}` answered
+  `{"state":"ended","on":false,"ended":"owner","ended_words":"you stopped it","stopped":true}`, and
+  `GET /api/screen` agreed.
+* **The badge cleared.** It was still in the window list on the first check a few seconds after the stop,
+  and **gone by the next read - roughly ten seconds after the stop**. So **the sign no longer stays up for
+  ever when the ending does not come through the app's own command: #302's fix is confirmed on the running
+  app, for the exact case this row recorded.** The one thing worth keeping: it clears **in a few seconds,
+  not instantly**.
+* **The session was left OFF, verifiably** - the final read is the one quoted above, and the app's window
+  list now holds only the HUD.
+* **Only the badge's own words are written down here; nothing the screen showed is.** The badge window is
+  the subject and its text is quoted; what was on the owner's screen is not in this file.
+* **This authorisation covered one pass, and it is not standing permission.** The session is the owner's to
+  start in future; the next pass must ask again.
+
 ## 2. Not found — no evidence either way (15)
 
 | # | feature | surface | verdict | evidence |
