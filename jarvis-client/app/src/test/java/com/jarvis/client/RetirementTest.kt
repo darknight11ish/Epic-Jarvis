@@ -555,7 +555,13 @@ class RetirementTest {
         // through `plate("...")`, and the item's key is `brain-plate:` + that
         // name - one recorder writes it, so the name is still the literal thing
         // to look for, and BrainListTest holds the two halves together.
-        assertTrue(src.contains("plate(\"retirement\")"))
+        // 2026-10-11: the call may carry the private-lists override -
+        // `plate("retirement", drawn = { true })` - because the heading's own rule
+        // drops every plate that is not memory while "Hide memory lists and chat
+        // history" is on. The search therefore tolerates an argument after the
+        // name, the same shape `MenuVisibilityTest` uses
+        // (`plate\(\s*"key"\s*[,)]`). The plate is still drawn by its literal name.
+        assertTrue(Regex("""plate\(\s*"retirement"\s*[,)]""").containsMatchIn(src))
         assertTrue(src.contains("RetirementSection("))
     }
 
