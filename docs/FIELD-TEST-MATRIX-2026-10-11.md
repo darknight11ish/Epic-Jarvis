@@ -16,6 +16,8 @@ The owner asked: *"are there any features that haven't been field tested on the 
 | NOT FOUND | **15** |
 | **total** | **127** |
 
+> **Overtaken 2026-10-11, later the same day.** The counts below are what this document measured that night; the **second pass** (section after "Build freshness") drove **43 of these 45** on real hardware and **could not drive 2** - the phone on **real CI builds and locally-built branches of #294**, the desktop on **0.2.140** - and its verdicts stand beside these. The rows below are left exactly as they were measured, and the marker here is the document's own convention for being overtaken.
+
 ## What each verdict means here, exactly
 
 - **FIELD-TESTED** - a *pass record* names it: one of the two artifacts that recorded the app RUNNING and a result per thing.
@@ -38,7 +40,113 @@ Measured, not assumed: `git rev-list --count 6947f458..main` = 37 and `git rev-l
 
 **So: nothing merged in the last 37 commits has ever run on the phone, and nothing in the last 43 has run on the desktop.** Every phone verdict below is against a build 37 commits old; every desktop verdict is older still. The phone's own install time (`lastUpdateTime`) and `firstInstallTime` (`2026-10-09 22:14:29`) were read from the device itself.
 
+> **Since this was measured:** the second pass below ran the phone's **real CI builds and locally-built branches of #294** and the desktop at **0.2.140**, so the "37 commits behind" and "43 commits behind" columns describe the first pass's builds, not those. A verdict without its build is not evidence.
+
+## Second pass - 2026-10-11, later the same day: the verdicts, and the two defects that matter
+
+**Read this before the body below.** The body is left exactly as it was measured that night, with a short marker wherever it now misleads a reader; this section is the second pass, which re-ran the never-tested set on real builds. The source record is `.dsh-scratch/fieldtest-2026-10-11/RESULTS.md`, and every line of evidence below is taken from it rather than paraphrased.
+
+**The builds.** The phone half ran on **real CI builds** and on **locally-built branches of #294** - the batch that pinned the `coming-up` count printed that screen's own key list on **`edf85d2f`**. The desktop half ran on **0.2.140**. Evidence came from the phone's own accessibility dump (`uiautomator`), the desktop's own **UI Automation** tree, and the backend's own answers: no screenshots and no vision.
+
+**A feature that could not be reached is never a pass**, so PARTIAL and BLOCKED read as such below.
+
+### The two defects this pass found - they matter more than the counts
+
+1. **The "Jarvis is watching" badge does not clear after the session ends.** The session stops; **the sign does not.** Symptom: the backend's own state says `state:"ended"` while the badge is still on screen with a **decreasing countdown**. Read after stopping: `GET /api/screen` answered **HTTP 200** with **`{"state":"ended","on":false,"paused":null,"left_s":null,"ended":"owner","ended_words":"you stopped it", …}`** - and `ended:"owner"` is the string the backend's `ENGINE.stop()` writes, so **the stop worked**. The badge stayed up for **another ten minutes** all the same, reading `Jarvis is watching - paused` / `Paused: one of Jarvis's own windows · 8 min left`, its countdown falling because the badge **decrements `left_s` locally and never re-reads**: `watch-badge.js:156` listens for a `screen-status` event the desktop emits only when **that app** makes the call, and `:161` fetches the status **once at startup**. So **any ending that does not come through the app's own command leaves the sign up for ever** - a permanent false privacy alarm. What does work: the pause rule fires on Jarvis's own windows (the session sat paused because a Jarvis window was in front). **FAIL** - and the reproduction is two lines: **start a watch, stop it, then compare `GET /api/screen` against the badge window.**
+
+   **Correction, kept visible - this row has now been corrected twice.** An earlier desktop-quickbar line in the record called it a **PASS** ("the control toggled and reported `Off`"); the direct test then wrote it up as **"cannot be stopped"**, which the backend's own state above **disproved** - it was ended by the owner's own click (`ended:"owner"`), and the broken thing is the badge. Claim, measurement and verdict are all three here on purpose: that is what this document is for.
+2. **The Brain declares 19 rows and the list registers 11.** On `edf85d2f`, the screen's own key list and the list's count were printed side by side: **`screen declared=19 … hasWanted=true`**, **`composed=11`**, **`found=false`**, and `head` shows **`brain-plate:coming-up` is the eighth entry of the declared list**. The plate is declared and `shown=true`, so this is neither the walk nor the screen's keys: **the content lambda is not registering eight declared rows**, and **the Brain is drawing a third less than it declares**. That is why `coming-up` has been unreachable through six builds, and it is bigger than this one feature.
+
+### One setting, not six bugs - the single most useful sentence in this pass
+
+`pinned-facts`, `memory-as-of`, `between-us`, `memory-known`, `memory-tab` and `sensitive-facts` are all **BLOCKED by the same thing: "Hide memory lists and chat history"**. Every one of those menus is real - four of them are named with their own line (`MenuCatalog.kt:100`, `:101`, `:104`, `:107`, `brain.memory.*`) and the other two are the same group - and Find only offers a row whose menu is **shown**; the phone says so in its own words: **`Hidden. Tap Show and confirm it is you.`** That confirmation is the owner's fingerprint. **Turning that one setting off unblocks six features - they are not six defects.** `chat-tags` is blocked the same way (**"part of the same hidden memory group"**), and `between-us` in particular is **not a defect**, although it was filed as one once and corrected.
+
+### FAIL (2)
+
+| # | feature | build | evidence |
+|---|---|---|---|
+| 44 | Watch with me (`watch-with-me`) | desktop 0.2.140 | **the "Jarvis is watching" badge does not clear after the session ends**: the backend says `GET /api/screen` → `"state":"ended"`, `"ended":"owner"` (`ended_words":"you stopped it"`) while the badge stays on screen with a **decreasing countdown** for ~10 more minutes (`watch-badge.js:156`/`:161`). The session itself **was** stopped, by the owner's own click - an earlier write-up called it unstoppable and the backend's state corrected that |
+| 89 | Hang and crash notes (`crash-notes`) | desktop 0.2.140 | the row is **not on his Settings page at all**: the word `crash` appears **zero times** in all **2,067** strings the Settings window exposes, though the row is supposed to be there (`jarvis_settings_registry.py:289-292`, `DESKTOP`-gated) |
+
+### BLOCKED (10)
+
+| # | feature | build | the blocker, in the record's own words |
+|---|---|---|---|
+| 19 | Timers, alarms, reminders and lists (`coming-up`) | phone `edf85d2f` | **`screen declared=19 … composed=11`**, `found=false` - the plate is declared, the list registers eleven of nineteen |
+| 31 | Always keep in mind (`pinned-facts`) | phone CI build | the menu exists (`MenuCatalog.kt:100`) but Find → `keep in mind` offers **no such row**; `brain.memory.*` hidden by "Hide memory lists and chat history" |
+| 37 | What did I believe on this date? (`memory-as-of`) | phone CI build | Find → `believe` says **`Nothing matches that.`** - same hidden-memory cause |
+| 66 | Health and money facts wait for your yes (`sensitive-facts`) | phone CI build | Find → `sensitive` says **`Nothing matches that.`** - same cause |
+| 26 | The Memory tab (`memory-tab`) | desktop 0.2.140 | same hidden-memory cause on the phone; the desktop Brain was not opened (the tray icon is not exposed to UI Automation by name) |
+| 29 | What Jarvis knows about you (`memory-known`) | phone CI build | the phone **did draw the row**, with its own hidden state under it: **`Hidden. Tap Show and confirm it is you.`** |
+| 32 | Between us (`between-us`) | phone CI build | **not a defect - a privacy setting**: Find → `between` says **`Nothing matches that.`** |
+| 40 | Chat tags (`chat-tags`) | phone CI build | Find → `tags` says **`Nothing matches that.`** - part of the same hidden group |
+| 105 | The big model (slow) (`big-model`) | desktop 0.2.140 | the row exists (`Big model (slow)`); turning it on needs the owner's click through Windows Hello |
+| 101 | The Work tab (`work-tab`) | desktop 0.2.140 | it lives in the **desktop Brain window**, which could not be opened from here: **three routes tried and all failed** - the tray icon is inside the "Show Hidden Icons" overflow and a right-click produced **no readable menu**, no in-app control opens the Brain (the Settings page says *"open it from the tray icon, 'Open the Brain'"*), and the HUD's **GALAXY tab is a different view**. **A person at the machine with a mouse reaches it in two clicks; this harness cannot** |
+
+### PARTIAL (19)
+
+| # | feature | build | exactly which part was driven, and why the rest was not |
+|---|---|---|---|
+| 8 | How strict the voice check is (`voice-check`) | phone CI build | Find → `strict` gives **one match, and it is the `Voice` section** - the setting exists, but not under a "How strict" row of its own |
+| 11 | Interrupt Jarvis while it talks (`interrupt`) | phone CI build | Find → `interrupt` gives **one match: `Attention budget`** - no screen of its own; it is a behaviour needing a live spoken answer to cut into |
+| 47 | Show Jarvis the camera in Live (`live-camera`) | phone CI build | **no row of its own** - Find → `camera` offers one match, `Settings / Look at this and Watch with me`; it also needs the 12 GB card per the design |
+| 90 | Choose Jarvis's face (`faces`) | phone CI build | the Appearance page opens and reads correctly (THEME, HOME, face sizes, tabs row), but the FACE section is **drawn, not text** - `uiautomator` sees no labels - and there is no vision provider here |
+| 126 | Jarvis marks what it read from outside (`outside-text`) | phone CI build | **no Find row** - Find → `outside` says `Nothing matches that.`; it is a marking behaviour needing a turn that reads an email, file or page |
+| 14 | Talk-to-type (`talk-to-type`) | desktop 0.2.140 | the row is real and reports its own live state: **`Nothing listens for the talk-to-type key.`** Turning it on needs an approval card plus Windows Hello (the owner) |
+| 17 | Search what was said (`history-search`) | phone CI build | **no Find row** - Find → `history` says `Nothing matches that.`; it lives in History, which was not opened in this batch |
+| 50 | Write a note for you (`notes-write`) | phone CI build | **no row of its own** - Find → `note` offers two unrelated matches; it is an action, so asking is the honest test |
+| 57 | What's new on GitHub (`github-watchlist`) | phone CI build | **no row of its own** - Find → `github` landed in the Brain; it is an action/plate |
+| 81 | Smartwatch notifications (`phone-watch`) | phone CI build | the row is **real and readable** (`Show notifications on a compatible watch`) but **no paired watch**, so the behaviour cannot be tested here |
+| 85 | Also on my phone (`also-on-phone`) | phone CI build | **no Find row** - Find → `also on my phone` says `Nothing matches that.`; it hands an alarm to the phone's own apps by a tap, so it needs a share sheet |
+| 92 | Set up Jarvis (`first-run`) | desktop 0.2.140 | the entry exists (`Set up Jarvis`) and clicking it **invoked**, but **neither window's text changed afterwards** |
+| 98 | Memory on the Model page (`model-memory`) | desktop 0.2.140 | the row exists; its own words are in the page (`The memory summary on the Model page.`) - not driven |
+| 125 | A warning when text tried to rush you (`rush-latch`) | phone CI build | **no Find row at all** - Find → `rush` says `Nothing matches that.`; it is a behaviour needing a turn with rushing text |
+| 4 | Say "Hey Jarvis" (`wake-word`) | phone CI build | **no row** - Find → `hey jarvis` offers one unrelated match (`Screens / Jarvis Live`); it is a behaviour needing a voice |
+| 54 | PC help (`pc-help`) | phone CI build | **no screen of its own** - Find → `PC help` landed in the Brain; like `find-phone` it is an action |
+| 99 | Notifications (`notifications`) | desktop 0.2.140 | the desktop Settings section is real (`Start reading notifications from apps you choose on your phone - Asks you first, every time`) - not driven |
+| 13 | The extras around Live (`live-extras`) | phone CI build | **no row of its own** - Find → `live extras` offers two matches (`Screens / Jarvis Live` and `Settings / Voice`). The extras are **behaviours and OS surfaces** (a Quick Settings tile, a headset button, a 10-minute "Live ended - Resume" notification, a PC hotkey, preferring a Bluetooth headset mic, and "Talk about this in Live" from Share), so testing them needs a Live session and, for some, hardware |
+| 12 | Jarvis Live (`live`) | phone CI build | **the screen is real and reachable**: Find → `jarvis live` drew `Jarvis Live` with a **`Start Jarvis Live`** control. **The session itself was not started, deliberately** - a Live session opens the phone's microphone and there is nobody here to talk to it, so starting one would have tested the microphone rather than the feature |
+
+### PASS (12)
+
+| # | feature | build | the evidence, in the record's own words |
+|---|---|---|---|
+| 82 | Floating Jarvis (`phone-floating`) | phone CI build | Find → `floating` → the phone drew `FLOATING JARVIS` with `Off / Bubble / Overlay` and the live line `Off. Nothing floats over other apps.` |
+| 83 | Quick Settings tiles (`phone-tiles`) | phone CI build | `QUICK SETTINGS TILES`, with `Tile 1 - 10-min timer`, `Tile 2 - Open briefing` and the whole choice list |
+| 119 | What asks first (`what-asks-first`) | phone CI build | `WHAT ASKS FIRST`, `Lockdown is off: everything asks first as your settings say.`, `Turn on Lockdown`, each action with its `Ask me first` control |
+| 121 | Hand a captcha to your phone (`captcha-handoff`) | phone CI build | `WHEN A CAPTCHA STOPS JARVIS` read in full, with both choices (`Leave it where it is (in use)` / `Bring it to the front`) and what each does |
+| 110 | About Jarvis (`about`) | desktop 0.2.140 | Help → the About card: `Version 0.2.1227`, `Made by darknight11ish`, `MIT, with third-party parts under their own licences` |
+| 16 | Temporary chat (`temporary-chat`) | desktop 0.2.140 | clicked in the Jarvis bar: `toggled to Off` (it was On) - and **put back**, re-read as `toggled to On` |
+| 23 | What Jarvis is doing right now (`now`) | phone CI build | Find → `doing` → landed in the Brain with the `What Jarvis is doing` plate drawn and unfolded |
+| 24 | How much Jarvis may interrupt you (`attention-budget`) | phone CI build | `ATTENTION BUDGET`, `of 3 spoken interruptions left today`, `Speak up`, and the count's own explanation |
+| 80 | Let Jarvis read phone notifications (`phone-notifications`) | phone CI build | `PHONE NOTIFICATIONS` with its live state: `Notification access: not granted yet.`, `Turn on Notification access`, `Apps Jarvis may read` |
+| 86 | Ring my phone (`find-phone`) | phone CI build | **driven by asking** (`ring my phone`), and the phone's own notification confirms it really rang: `title = "Jarvis is ringing this phone"`, `SCHEDULE_KIND = ring_phone`, `channel = jarvis_alarm` |
+| 93 | Show or hide menus (`menu-visibility`) | phone CI build | `SHOW OR HIDE MENUS`, `This hides menus on this device only.`, `Nothing is hidden.`, `Show everything`, and per-menu rows naming what each hides |
+| 43 | Look at this (`look-at-this`) | desktop 0.2.140 | **driven with its own key** - the Settings page names it (`Look at this: Alt + Shift + S`), and sending it opened **`Jarvis and your screen`** showing **`Looked at: DeepSeek Harness window - words only`** (the window that was in front), a **`Forget this look`** control, and `Secrets in pictures you attach are covered with black boxes before Jarvis looks.` One press, one read, and the words-only mode reported honestly |
+
+### All 45, and where each verdict came from
+
+**PASS 12, FAIL 2, PARTIAL 19, BLOCKED 10, NOT-TESTABLE 2 = 45.** Every count above is derived from
+the record's own table (`.dsh-scratch/fieldtest-2026-10-11/RESULTS.md`), not adjusted here: the rows
+are the record's rows.
+
+### NOT-TESTABLE (2), and the three that were driven only in part
+
+| # | feature | why it could not be driven |
+|---|---|---|
+| 67 | Crisis help (`crisis-help`) | **deliberately not provoked** ("must not be provoked casually") - the one feature this pass refused to drive |
+| 68 | Ask how the house is (`home-status`) | needs **Home Assistant**, which this machine does not have |
+
+Three more could only be driven in part, and their reasons are in their own rows above:
+`phone-watch` (81, PARTIAL - the row is real and readable, but there is **no paired watch**),
+`big-model` (105, BLOCKED - the row exists; turning it on needs the owner's click through Windows Hello),
+and `faces` (90, PARTIAL - the picker is **drawn, not text**, and there is **no vision provider here**).
+
+The pass's own summary of the pattern, kept because it is what the counts do not show: across four batches, **the features that drew a screen when asked passed almost every time, and the ones that failed were almost all features with no screen of their own** (actions and behaviours) **or features whose menu the owner's privacy setting hides**. **Twenty-nine of the 45 now read PARTIAL or BLOCKED** (19 PARTIAL + 10 BLOCKED), and most of those are "there is nothing to point at", not "it is broken". (The record's batch note said twenty of the 45 at the time it was written; the last four were driven after it, so this line carries today's number.)
+
 ## The headline: features that have NEVER run on a real device
+
+> **Overtaken 2026-10-11, later the same day:** the second pass above drove **43 of the 45** in this queue on real hardware and could not drive 2 (crisis-help and home-status) - the phone on real CI builds and locally-built branches of #294, the desktop on 0.2.140. The list below is left as it was written that night; read the **Second pass** verdicts above for what each one did when it was driven.
 
 The whole NEVER TESTED and NOT FOUND set - this is the testing queue from the device side:
 
