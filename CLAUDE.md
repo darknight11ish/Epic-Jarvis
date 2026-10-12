@@ -166,6 +166,11 @@ The split was made on 2026-10-12 because this file had grown past the 64 KB
 instruction budget and was being silently truncated - so the newest rules, at the
 bottom, were the ones most at risk of never being read.
 
+**Earlier decisions still bind.** Before building or changing anything, search
+`docs/DECISIONS.md` for it: the reasoning lives there, and some of it is a promise to
+someone outside this project - the sea otter's voice is not a matter of taste, and the
+record says why. **Not finding a rule here does not mean there is no decision.**
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added
