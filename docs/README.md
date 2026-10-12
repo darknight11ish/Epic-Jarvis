@@ -1,20 +1,20 @@
 # The documents, and which ones are current
 
-There are **358 markdown documents** here, adding up to about **8.5 MB**. Neither
+There are **359 markdown documents** here, adding up to about **8.6 MB**. Neither
 number is a guess, and neither is asked to stay still: the documents are written
 to all day, so the count and the size both move. Both were measured on 2026-10-11
 with the two lines below, run from the top of the repository - so run them again
 whenever you want today's numbers rather than this page's:
 
 ```powershell
-(Get-ChildItem docs -Recurse -Filter *.md).Count                        # 358 documents
+(Get-ChildItem docs -Recurse -Filter *.md).Count                        # 359 documents
 "{0:N0}" -f (Get-ChildItem docs -Recurse -Filter *.md |
-  Measure-Object -Property Length -Sum).Sum                             # about 8,502,866 bytes
+  Measure-Object -Property Length -Sum).Sum                             # about 8,635,280 bytes
 ```
 
 Both lines count the documents in the subfolders too, not only the ones sitting
 directly in `docs/`. The count is the honest measure of how much is here; treat
-the size as "around 8.5 MB" and re-measure it rather than trusting the digits
+the size as "around 8.6 MB" and re-measure it rather than trusting the digits
 above. **Five of the documents are the ones to read**; the rest are the history of
 how Jarvis got here: audits, research, and notes that one working session left for
 another. One generated file, the source bundle, is **really gone** now: the removal

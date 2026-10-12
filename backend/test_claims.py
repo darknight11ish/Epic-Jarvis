@@ -303,10 +303,15 @@ def t_the_five_kinds_all_answer_on_a_real_row():
                      encoding="utf-8")
     rows = {
         "file": "file:backend/jarvis_tidy.py",
-        "grep": "grep:CLAUDE.md:Owner decisions recorded",
+        # The live rows point at the file that really holds the text: the owner's
+        # dated decisions moved out of CLAUDE.md into docs/DECISIONS.md on
+        # 2026-10-12 ("Owner decisions recorded" and the 60,000 shader budget are
+        # both in the record now), so a probe left on CLAUDE.md would fail for a
+        # reason that has nothing to do with the checker.
+        "grep": "grep:docs/DECISIONS.md:Owner decisions recorded",
         "absent": "absent:CLAUDE.md:a sentence that was never written",
         "test": f"test:{suite}",
-        "number": "number:CLAUDE.md:tools/shader_size.py:60,000",
+        "number": "number:docs/DECISIONS.md:tools/shader_size.py:60,000",
     }
     for name, expr in rows.items():
         path = register_with(f"K-{name}\ta live {name} check\t{expr}\tbuilt\tCLAUDE.md:1\n")
