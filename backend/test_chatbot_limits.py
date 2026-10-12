@@ -632,18 +632,31 @@ def t_the_raise_left_the_pc_only_set_and_is_still_risky_on_the_pc():
           "is_risky(row)" in oc and "action in PC_ONLY_ACTIONS" in oc)
     check("and a risky card from another device still needs that device's signature",
           "_signed_check(body, row, device)" in oc)
-    # THE SAFETY ARGUMENT, in the one place it can be checked: the risk row.
-    # `jarvis_gate.py` is the owner's own module - patched, never shipped from
-    # this repository - so it is read from BACKEND, not from REPO.
-    gate = (BACKEND / "jarvis_gate.py").read_text(encoding="utf-8")
-    check("the raise's risk row is still not reversible, so is_risky() is True "
-          "for it and the PC's own approval still asks Windows Hello",
-          '"raise_api_limit": ("no"' in gate
-          or "'raise_api_limit': ('no'" in gate,
-          [ln.strip()[:90] for ln in gate.splitlines() if "raise_api_limit" in ln][:3])
-    check("and the raise is still in the gate's own no-standing-rule set, untouched "
-          "by this change",
-          gate.count('"raise_api_limit"') >= 2, gate.count('"raise_api_limit"'))
+    # THE SAFETY ARGUMENT, where it can be read. `jarvis_gate.py` is the
+    # owner's own module: it is patched by the stack and is NOT in this
+    # repository, so a staged copy (CI's own `backend/run_suites.py` stage) does
+    # not have it. When it is here - on the owner's PC - the two checks below
+    # read it; when it is not, they SKIP BY NAME rather than raising
+    # FileNotFoundError, which is what the first version of this test did on
+    # 2026-10-11 and what turned CI red for a file that was never going to be
+    # there. The tier line and the risk row are the two halves of the same
+    # fact, and the tier half is checked from this repository's own
+    # `rebuilt/jarvis-framework.toml` above, so nothing here is unproven.
+    gate_path = BACKEND / "jarvis_gate.py"
+    if not gate_path.exists():
+        skip("jarvis_gate.py is not in this backend copy (it is the owner's own "
+             "module, patched rather than shipped here), so the raise's risk row and "
+             "its no-standing-rule entry are checked only where that file is")
+    else:
+        gate = gate_path.read_text(encoding="utf-8")
+        check("the raise's risk row is still not reversible, so is_risky() is True "
+              "for it and the PC's own approval still asks Windows Hello",
+              '"raise_api_limit": ("no"' in gate
+              or "'raise_api_limit': ('no'" in gate,
+              [ln.strip()[:90] for ln in gate.splitlines() if "raise_api_limit" in ln][:3])
+        check("and the raise is still in the gate's own no-standing-rule set, untouched "
+              "by this change",
+              gate.count('"raise_api_limit"') >= 2, gate.count('"raise_api_limit"'))
     src = (REPO / "backend" / "jarvis_chatbot_limits.py").read_text(encoding="utf-8")
     check("the module has one name per direction and no third one",
           src.count('_ACTION = "') == 2, src.count('_ACTION = "'))
