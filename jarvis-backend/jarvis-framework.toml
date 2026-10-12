@@ -79,6 +79,10 @@ unknown_action_tier = "ask"
 approval_timeout_seconds = 180
 
 [autonomy.tiers]
+# Docker (jarvis_docker.py): starting a service gives Jarvis more, so it asks;
+# stopping one gives it less, so it is instant. Both go through the gate either way.
+docker_service_start = "ask"
+docker_service_stop = "auto"
 web_research              = "auto"
 read_calendar             = "auto"
 # The five tools of backend/README.md "What each one needs in jarvis_gate.py

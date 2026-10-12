@@ -941,6 +941,18 @@ def voices_cases():
 
 
 def render() -> str:
+    # ONE RENDER MUST NOT INHERIT THE LAST ONE (DEF-009, 2026-10-11). The flow
+    # numbers in the fixture come from jarvis_voice_flow's module-level row list
+    # (timings()/summary()), and the cases this function runs APPEND to it as
+    # they go - deliberately, because the fixture records what the flow reports
+    # for a session. What was wrong is that nothing cleared it FIRST: a second
+    # render in the same interpreter started with the first one's rows, so the
+    # same tree produced 1,054,760 bytes and then 1,218,390, and `--check`
+    # answered 0 and then 1. `jarvis_speech._flow` is the guarded way to reach
+    # that module (it answers None when the file is missing), and in a FRESH
+    # interpreter the list is empty already - so the committed fixture cannot
+    # change, and test_voice_contract.py now checks this property.
+    S._flow("_reset_for_tests")
     s_status, s_answers = strict_cases()
     v_status, v_answers = voices_cases()
     body = {

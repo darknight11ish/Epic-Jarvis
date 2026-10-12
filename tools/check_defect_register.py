@@ -170,16 +170,10 @@ def md_open_ids(path, problems):
 def check_open_rows_do_not_name_a_fix(tsv, rows, problems):
     """An OPEN row whose own evidence says it is fixed contradicts itself.
 
-    This is the one stale-row shape a script CAN see: the evidence reads
-    "fixed by #255" while `status` still says `open`. It is exactly how
-    DEF-004 and DEF-005 sat stale - each row's own evidence named the fix and
-    the row stayed open - and this rule would have caught them the day they
-    went stale.
-
-    NOT checked here, and not to be faked: whether an open row's DESCRIPTION
-    still matches the code. That needs a reader putting prose beside source,
-    not a pattern; a checker that pretended to do it would be the vacuous
-    check this suite exists to prevent.
+    The one stale-row shape a script CAN see: the evidence reads "fixed by
+    #255" while `status` still says `open` - exactly how DEF-004 and DEF-005
+    sat stale. NOT checked, and not to be faked: whether an open row's
+    DESCRIPTION still matches the code. That needs a reader, not a pattern.
     """
     names_a_fix = re.compile(r"\bfixed\s+(?:by|in)\s+(?:PR\s*)?#\d+", re.I)
     for row in rows:
