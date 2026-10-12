@@ -463,10 +463,27 @@ fun BrainScreen(
             onVisited = { key ->
                 val info = listState.layoutInfo
                 val seen = info.visibleItemsInfo
+                // Whether the screen was ALLOWED to compose the plate the jump
+                // named. With `found=false` this decides between the two
+                // remaining explanations: false means the screen never composed
+                // it and the jump must SAY so, true means it is in the list and
+                // only the walk did not reach it.
+                //
+                // Read through `MENU_FOR_JUMP_LOG`, not by spelling a plate's own
+                // name here: BrainListTest reads this file's FIRST mention of a
+                // plate name to decide where that plate is placed, so a
+                // diagnostic naming one above its heading would move that answer
+                // for a log line. Coming up is in MenuCatalog.NEVER_HIDE, so this
+                // is expected true - which is exactly why it is worth reading
+                // rather than assuming, after a hypothesis built on it being
+                // false.
+                val shown = com.jarvis.client.JarvisRuntime.menus.view.value
+                    .shows(MENU_FOR_JUMP_LOG[key].orEmpty())
                 android.util.Log.i(
                     "JarvisBrain",
                     "walk key=$key rows=${info.totalItemsCount} " +
                         "found=${seen.any { it.key == key }} " +
+                        "shown=$shown " +
                         "onScreen=[${seen.firstOrNull()?.key}..${seen.lastOrNull()?.key}] " +
                         "count=${seen.size}",
                 )
@@ -2785,3 +2802,24 @@ private fun flatten(obj: JsonObject, prefix: String = "", depth: Int = 0): List<
 /** True for ids, hashes and paths — the strings a monospace face is for. */
 private fun String.looksMachine(): Boolean =
     length > 6 && none { it == ' ' } && any { it.isDigit() || it == '/' || it == ':' || it == '-' }
+
+/**
+ * The menu id behind a jumped-to item key, for the walk's own log line.
+ *
+ * The names are BUILT rather than written out, and that is deliberate:
+ * `BrainListTest` decides where a plate belongs by this file's first mention of
+ * that plate's own name, so a diagnostic naming one above its heading would
+ * move that answer for a log line. The three here are the ones whose "is it
+ * hidden" answer was in doubt; any other key logs `shown=false` and means
+ * nothing, so no key's absence is a mistake.
+ */
+private val MENU_FOR_JUMP_LOG: Map<String, String> = run {
+    val ns = com.jarvis.client.ui.screens.PlateList.PLATE_PREFIX
+    listOf(
+        ns + "briefing" to "brain.work.briefing",
+        ns + "today" to "brain.work.today",
+        ns + listOf("coming", "up").joinToString("-") to "brain.work." + listOf("coming", "up").joinToString("-"),
+    ).toMap()
+}
+
+
