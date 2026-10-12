@@ -19,8 +19,14 @@ private const val MAX_STEPS = 60
 private const val END_OF_LIST_TRIES = 3
 
 /**
- * The list size when the caller does not know it, which is every real caller: a
- * `LazyListState` reports only what it has composed.
+ * The list size when the caller does not know it - and **every real caller does
+ * not**, because a `LazyListState` reports only what it has composed.
+ *
+ * This is a VALUE WITH A MEANING, not a placeholder and not a missing value:
+ * "I cannot know how long this list is, so I must push past what I have rather
+ * than conclude the item is absent." A test that knows its own list passes the
+ * real size instead, which is the only way to say "this list cannot grow, so the
+ * item really is not there".
  */
 internal const val UNKNOWN = -1
 
@@ -91,11 +97,12 @@ internal fun walkStep(
     /**
      * How many rows the WHOLE list has, when the caller knows it - or [UNKNOWN].
      *
-     * A `LazyListState` never knows this, so production leaves it [UNKNOWN] and
-     * the walk treats the end of the composed rows as a boundary it must push
-     * past. A test knows its own list, and passing it is what lets a test say
-     * "this list can no longer grow, so the item really is absent" - the
-     * distinction the whole defect turns on.
+     * [UNKNOWN] is what PRODUCTION passes, and it is a real answer rather than a
+     * placeholder: a `LazyListState` cannot know the list's length, so the walk
+     * must push past the end of the composed rows instead of concluding the item
+     * is absent. A test knows its own list and passes the real size, which is
+     * what lets it say "this list cannot grow, so the item really is not there" -
+     * the distinction the whole defect turns on.
      */
     listSize: Int = UNKNOWN,
 ): Walk {
@@ -470,6 +477,7 @@ suspend fun scrollToKey(
     }
     return false
 }
+
 
 
 
