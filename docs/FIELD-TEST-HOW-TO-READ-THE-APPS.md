@@ -169,4 +169,15 @@ third cost two rounds on the day and is worth its own line here, because it look
    searched. **Two confirmations of the same wrong thing, because the instrument was the same.** The
    rule lives in `CLAUDE.md` under "Do not claim more than the evidence supports", next to the other
    time this bit: a bug invented by grepping a draft and mistaking it for the source file.
+4. **A collapsed fold is invisible to a string enumeration** *(added 2026-10-12; the list's fourth, after
+   this document was written)*. `crash-notes` was recorded **FAIL** because the word `crash` appeared
+   **zero times** in the 2,067 strings the Settings window exposed - and the row is defined by the app's
+   own source as a row **inside the desktop's `More options` fold**
+   (`jarvis_settings_registry.py:289-293`, `jarvis_menus.py:370-374`). Re-measured: **0 `crash` in 1,999
+   strings** with the fold closed, and **0 `crash`, 0 `Hang` in 2,073** after invoking the fold's own
+   control and scrolling the page to its end - the fold's contents never entered the tree, opened or not.
+   **"The words are absent from N strings" is a claim about the enumeration until the fold has been
+   opened** - and here opening it changed nothing either, which is exactly why the count was never
+   evidence. Same shape as the census traps: counting what you can see and concluding about what you
+   cannot.
 

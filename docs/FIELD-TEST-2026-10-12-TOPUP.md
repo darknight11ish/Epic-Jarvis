@@ -131,6 +131,14 @@ strings the window exposed so a reader can re-check it.
 
 **The one cause worth naming twice:** the `brain.memory.*` menus are hidden on this phone by **"Hide memory lists and chat history"**, which only the owner's fingerprint can change, so Find does not offer them (the cause the record pinned for five features).
 
+**Corrected 2026-10-12, by measurement - and this line is left as written above.** The switch itself sits
+behind the phone's fingerprint, so these rows are blocked by a **biometric gate, and only the owner can
+lift it**: tapping `Hide memory lists and chat history` drew **`Loosen security` / `Confirm it is you.` /
+`Touch the fingerprint sensor`**, and the Brain's own `Show` control drew **`Show memory lists` /
+`Confirm it is you.`** The prompt was cancelled both times and the switch was re-read still ON. See
+`docs/FIELD-TEST-2026-10-12-TOPUP-3.md` - a future pass should read these rows as the owner's to unlock,
+not as a harness task.
+
 ## 6. Not driven in this pass, and no reason invented (11)
 
 These are named plainly as **UNTESTED**. The instruments above were available; this pass was bounded, and

@@ -61,6 +61,34 @@ this file; and the phone is driven by one process at a time.
 | 121 | Hand a captcha to your phone (`captcha-handoff`) | both | **PASS** | Find → `captcha` → the phone drew `WHEN A CAPTCHA STOPS JARVIS`, in full: *"When Jarvis is stuck on a captcha or a sign-in page, it can leave that browser window exactly where it is - or bring it to the front so you can type into it."*, with both choices and what each does — `Leave it where it is (in use)` (the window is not touched) and `Bring it to the front` (raises it, *"takes your screen and your keyboard away… so turning this on asks for your approval"*). Marked in use |
 | 126 | Jarvis marks what it read from outside (`outside-text`) | both | PARTIAL | **no Find row** — Find → `outside` says `Nothing matches that.` It is a **marking behaviour** on answers that used outside text, so testing it needs a turn that reads an email, file or page |
 
+**Row 44 (`watch-with-me`), re-driven on 2026-10-12 under a fresh authorisation from the owner - and the
+row above is left exactly as the pass wrote it.** The recorded failure was *"the SIGN does not clear, not
+the Stop"*: the badge listened for a `screen-status` event that only fires when *that app* makes the call,
+so an ending that did not come through the app's own command left the sign up **for ever**. #302 addressed
+precisely that, so the walk was run against the case the row names - **an ending that does not come
+through the app's own command**:
+
+* **Before:** `GET /api/screen` answered `{"state":"off","on":false,...}`, and there was no badge window
+  among the app's windows.
+* **A two-minute session was started through the route** - `POST /api/screen {"do":"start","minutes":2}`
+  answered `state:"watching", on:true, left_s:120, built:true`. The badge appeared as its own window,
+  **`Jarvis is watching`** (23 elements), and its own words were **`Jarvis is watching`**, **`Stop
+  watching`**, `20 more minutes` and **`Ending soon - 2 min left`**.
+* **Ended by the API, never by the app's own command:** `POST /api/screen {"do":"stop"}` answered
+  `{"state":"ended","on":false,"ended":"owner","ended_words":"you stopped it","stopped":true}`, and
+  `GET /api/screen` agreed.
+* **The badge cleared.** It was still in the window list on the first check a few seconds after the stop,
+  and **gone by the next read - roughly ten seconds after the stop**. So **the sign no longer stays up for
+  ever when the ending does not come through the app's own command: #302's fix is confirmed on the running
+  app, for the exact case this row recorded.** The one thing worth keeping: it clears **in a few seconds,
+  not instantly**.
+* **The session was left OFF, verifiably** - the final read is the one quoted above, and the app's window
+  list now holds only the HUD.
+* **Only the badge's own words are written down here; nothing the screen showed is.** The badge window is
+  the subject and its text is quoted; what was on the owner's screen is not in this file.
+* **This authorisation covered one pass, and it is not standing permission.** The session is the owner's to
+  start in future; the next pass must ask again.
+
 ## 2. Not found — no evidence either way (15)
 
 | # | feature | surface | verdict | evidence |
@@ -80,6 +108,28 @@ this file; and the phone is driven by one process at a time.
 | 98 | Memory on the Model page (`model-memory`) | desktop | PARTIAL | the row exists; its own words are in the page: `The memory summary on the Model page.` Not driven |
 | 110 | About Jarvis (`about`) | both | **PASS** | Help → scrolled to the About card: `Version 0.2.1227`, `Made by darknight11ish`, `MIT, with third-party parts under their own licences`, the source link, the notices link. Real version, not the local build's `0.2.0` |
 | 125 | A warning when text tried to rush you (`rush-latch`) | phone | PARTIAL | **no Find row at all** — Find → `rush` says `Nothing matches that.` It is a **behaviour** (a warning shown when text tries to rush you), so testing it needs a turn with rushing text |
+
+**Row 89 (`crash-notes`), corrected by measurement on 2026-10-12 - and the row above is left exactly as
+the pass wrote it.** The row is defined by the app's own source as a row **inside the desktop's `More
+options` fold**: `backend/jarvis_settings_registry.py:289-293` says so in as many words - *"\"Hang and
+crash notes\": inside \"More options\" on the desktop (its own `<section id="crash-notes">`). The phone has
+no such list"* - and `jarvis_menus.py:370-374` carries `_m("settings.crash-notes", "Hang and crash
+notes", ...)` with *"A row inside the desktop's own More options fold; the phone keeps its own crash
+notes."* **The live, installed backend carries both entries at the same lines** (its own copies, modified
+2026-10-11 20:38), so the PC does send the row.
+
+**And the count could never have decided it.** Re-measured on the running app: with the page as the pass
+saw it, **`crash` appears 0 times in 1,999 strings** - the artefact reproduced. Then the fold's own
+control was invoked (**`clicked 'More options': invoked`**) and the page scrolled to its end: **`crash` 0
+times and `Hang` 0 times in 2,073 strings.** The fold's contents never entered the accessibility tree,
+opened or not. So **row 89's FAIL cannot rest on the string count**: the count is a fact about the
+enumeration, not about the row. What remains unverified by this method is whether the row *renders* -
+there is no vision provider here - and this note does not claim it does; it claims the absence of the
+word proved nothing.
+
+**The method sentence, because it generalises:** *a collapsed fold is invisible to a string enumeration,
+so "the words are absent from N strings" is a claim about the enumeration until the fold has been
+opened* - and here, opening it changed nothing either, which is exactly why the count was never evidence.
 
 ## 3. Test-verified only — suites pass, never driven (13)
 
@@ -156,6 +206,15 @@ this file; and the phone is driven by one process at a time.
   confirm it is you.`** So **five of the 45 — `pinned-facts`, `memory-as-of`, `between-us`,
   `memory-known`, `memory-tab` — are BLOCKED by one setting, not by five bugs.** That is the
   field test doing its job: "cannot be reached" and "is broken" are different answers.
+
+  **Note added 2026-10-12, with the owner's authority to change it - and measured, not assumed:** that
+  fingerprint is the whole answer, and the switch will not move for a harness at all. Tapping
+  `Hide memory lists and chat history` drew **`Loosen security` / `Confirm it is you.` / `Touch the
+  fingerprint sensor`**; the prompt was cancelled and the switch was re-read still ON. The Brain's own
+  `Show` control drew the same gate (**`Show memory lists` / `Confirm it is you.`**). So these rows are
+  BLOCKED by a **biometric gate, and only the owner can lift them** - not by a preference a pass could
+  flip. See `docs/FIELD-TEST-2026-10-12-TOPUP-3.md` (PR #340). **The bullet above stays exactly as the
+  pass wrote it.**
 - **2026-10-11, desktop quickbar, two more driven** — `watch-with-me` (**PASS**: the control
   toggled and reported `Off`, meaning a session was live and the click ended it; left **off**
   deliberately, since starting it again would begin screen watching) and `temporary-chat`
