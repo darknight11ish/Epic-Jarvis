@@ -1897,6 +1897,57 @@ $script:State    = @{
     Proven           = $false   # the test suites ran, none failed, none skipped
     StartLine        = $null
 }
+# --- what this run left out, and why ------------------------------------------
+#
+# Written into the record the run already keeps (`leftOut`, `notInstalled`,
+# `summary`) AND said on the screen when the run ends. Until 2026-10-11 a run
+# that left patches out recorded one word - `run: partial` - and the owner had no
+# way to find out WHAT was missing or WHY: the five patches his own record was
+# missing were only found by comparing the manifest against the patch list by
+# hand. A record that says "partial" and nothing else reads like a finished
+# install, which is the false green this project hunts.
+$script:LeftOut = New-Object System.Collections.Generic.List[object]
+
+function Add-LeftOut {
+    param([string] $Patch, [string] $Why)
+    if (-not $Patch) { return }
+    foreach ($e in $script:LeftOut) { if ($e.patch -eq $Patch) { return } }
+    [void]$script:LeftOut.Add([ordered]@{ patch = [string]$Patch; why = [string]$Why })
+}
+
+# The owner-facing words for one patch. `backend\README.md` is where this script
+# already sends the owner ("backend/README.md says what each one was for", in the
+# PARTIAL note below), so the record quotes that rather than inventing a second
+# description to drift from it. A patch the README does not name is reported by
+# its own file name - it is never dropped out of the sentence.
+function Get-PatchWords {
+    param([string] $Patch)
+    $leaf = ($Patch -replace '\.patch$', '')
+    $leaf = Split-Path -Leaf $leaf
+    $readme = ''
+    if ($PatchDir) { $readme = Join-Path $PatchDir 'README.md' }
+    if ($readme -and (Test-Path -LiteralPath $readme)) {
+        foreach ($line in @(Get-Content -LiteralPath $readme -ErrorAction SilentlyContinue)) {
+            if ($line -match [regex]::Escape($leaf)) {
+                $t = ($line -replace '^\s*[-*#]+\s*', '').Trim()
+                if ($t.Length -gt 0) { return $t }
+            }
+        }
+    }
+    return $Patch
+}
+
+# The sentence a person reads. One per run, naming every feature that is not
+# there, so "run: partial" cannot be the whole story.
+function Get-LeftOutSummary {
+    param($LeftOut)
+    $recs = @([object[]] $LeftOut)
+    if ($recs.Count -eq 0) { return '' }
+    $words = @()
+    foreach ($e in $recs) { $words += (Get-PatchWords ([string]$e.patch)) }
+    return "NOT FULLY INSTALLED: $($recs.Count) patch(es) were left out, so these are NOT " +
+           "there: " + ($words -join '; ') + "."
+}
 function Add-Problem($msg, [switch] $Damaged) {
     [void]$script:Problems.Add([string]$msg)
     if ($Damaged) { $script:State.Damaged = $true }
@@ -1986,7 +2037,17 @@ function Finish-Run {
     }
     Write-Host "Nothing deletes old backups for you. After a good run you can delete the old" -ForegroundColor Gray
     Write-Host "_jarvis-backup-* folders inside the backend folder; keep the newest one for now." -ForegroundColor Gray
-    if ($script:RunLog) { Write-Host "Log: $($script:RunLog)" -ForegroundColor Gray }
+    # Say what was left out, in the same words the record now carries, whenever
+    # the run ends and something was (2026-10-11). This is the screen the owner
+    # actually reads at the end of an install.
+    if ($script:LeftOut -and $script:LeftOut.Count -gt 0) {
+        Write-Host ""
+        Write-Host "  NOT FULLY INSTALLED - these were left out of this run:" -ForegroundColor Yellow
+        foreach ($e in $script:LeftOut) {
+            Write-Host "    $($e.patch) - $($e.why)" -ForegroundColor Yellow
+        }
+        Write-Host "    $((Get-LeftOutSummary -LeftOut ([object[]] $script:LeftOut)))" -ForegroundColor Yellow
+    }    if ($script:RunLog) { Write-Host "Log: $($script:RunLog)" -ForegroundColor Gray }
     exit 0
 }
 
@@ -2203,6 +2264,7 @@ if ($UsingRebuilt) {
             # backend/test_shipped_modules.py, which turns a patch that starts
             # touching a live file into a failure instead of a silence.
             Warn "$name - left out whole: the rebuilt modules already carry it ($($REBUILT_SUPERSEDES[$name]))"
+                Add-LeftOut $name "the rebuilt modules already carry it ($($REBUILT_SUPERSEDES[$name]))"
         }
     }
     $PATCHES = $swapped
@@ -2715,6 +2777,18 @@ if ($absent.Count -gt 0) {
     $blocked = @{}
     foreach ($a in $absent) { foreach ($n in $wanted[$a]) { $blocked[$n] = $true } }
     $clear = @($PATCHES | Where-Object { -not $blocked.ContainsKey($_) })
+    # Which file each left-out patch was stopped by (2026-10-11): the record has
+    # to name the file, not only say that something was missing.
+    $blockedWhy = @{}
+    foreach ($a in $absent) {
+        foreach ($n in $wanted[$a]) {
+            if (-not $blockedWhy.ContainsKey($n)) { $blockedWhy[$n] = New-Object System.Collections.Generic.List[string] }
+            if (-not $blockedWhy[$n].Contains($a)) { [void]$blockedWhy[$n].Add($a) }
+        }
+    }
+    foreach ($n in @($blockedWhy.Keys | Sort-Object)) {
+        Add-LeftOut $n ("a file it needs is not in your backend folder: " + (($blockedWhy[$n] | Sort-Object -Unique) -join ', '))
+    }
 
     Say ""
     Bad "$($absent.Count) file(s) the patches expect are not in your backend folder:"
@@ -3016,7 +3090,7 @@ try {
         # speak for this run, so the baseline the owner's own files were first
         # recorded with is never quietly replaced.
         function Write-Manifest {
-            param($Doc, [array] $Entries, [string] $State, [string[]] $NameList, [hashtable] $Verified, $Owners)
+            param($Doc, [array] $Entries, [string] $State, [string[]] $NameList, [hashtable] $Verified, $Owners, [array] $LeftOut = @())
             # `$patchRecs`, never `$patches`: PowerShell compares variable names
             # case-insensitively, so a local `$patches` inside a function that
             # also reads the run's `$PATCHES` is the SAME variable (measured
@@ -3091,6 +3165,15 @@ try {
             $out['patches']   = @($patchRecs)
             $out['patchList'] = [string[]]$NameList
             $out['unmatched'] = @($unmatched)
+            # What was left out, and why (2026-10-11). `summary` is the sentence
+            # for a person - a beginner should not have to read `run: partial` and
+            # guess - and `leftOut` is the same thing a program can read: one
+            # entry per patch, with the reason it was left out and, where the run
+            # knew it, the file that stopped it.
+            $leftOutRecs = @([object[]] $LeftOut)
+            $out['leftOut']      = $leftOutRecs
+            $out['notInstalled'] = @($leftOutRecs | ForEach-Object { Get-PatchWords ([string]$_.patch) })
+            $out['summary']      = [string](Get-LeftOutSummary -LeftOut @($leftOutRecs))
             $out['files']     = $files
             $why = ''
             $wrote = $false
@@ -4785,7 +4868,7 @@ if ($ManifestPath) {
     $runState = 'baseline'
     if ($script:ManifestCurrent) { $runState = 'checked' }
     elseif ($script:ManifestExisting) { $runState = 'partial' }
-    [void](Write-Manifest -Doc $mfDoc -Entries $mfEntries -State $runState -NameList $mfNames.ToArray() -Verified $mfDocVerified -Owners $script:ManifestOwner)
+    [void](Write-Manifest -Doc $mfDoc -Entries $mfEntries -State $runState -NameList $mfNames.ToArray() -Verified $mfDocVerified -Owners $script:ManifestOwner -LeftOut $script:LeftOut)
     }
 }
 
