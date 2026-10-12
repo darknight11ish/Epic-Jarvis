@@ -2321,6 +2321,44 @@
         </div>
       </section>
 
+      <!-- ── Check my setup ────────────────────────────────────────────────
+           The owner's first priority (2026-10-11): the live preflight - the
+           same end-to-end check as `selftest.py --preflight`, "the Jarvis that
+           is RUNNING now", read-only, ending "N pass, N fail, N warn". It ran
+           only for someone with the repository checked out, and this is where he
+           presses it instead. It runs THIS repository's copy: the check that
+           names his six missing patches needs the repository's 144 patch files,
+           and shipping them into his backend folder would be a duplicate patch
+           tree that could compare against the WRONG patches and say everything
+           was fine. preflight.rs does the running; this card shows its words and
+           BOTH folders, because "is it even looking at my Jarvis?" is the first
+           question the answer raises. The checker reads the pairing token
+           itself: nothing in the app touches one. -->
+      <section class="card" id="preflight">
+        <h2>Check my setup</h2>
+        <p class="note">Runs one end-to-end check on the Jarvis that is running
+          now - is it up, does the model answer, is every patch really applied -
+          and ends with "N pass, N fail, N warn". A failure says what to do.</p>
+        <button class="btn" id="pf-run" type="button">Check my setup</button>
+        <p class="state" id="pf-state" role="status">Ready when you are.</p>
+        <div id="pf-body">
+          <p class="note"><strong>Read-only.</strong> It approves nothing, sends
+            nothing, unloads no model and changes no setting.</p>
+          <div class="row">
+            <span class="label">Ran from</span>
+            <span class="sc-line" id="pf-ran-from"></span>
+          </div>
+          <div class="row">
+            <span class="label">Checked</span>
+            <span class="sc-line" id="pf-checked"></span>
+          </div>
+          <p class="note" id="pf-summary"></p>
+          <pre class="note" id="pf-lines" style="white-space: pre-wrap"></pre>
+          <button class="btn small" id="pf-copy" type="button">Copy</button>
+        </div>
+      </section>
+      <script src="preflight-settings.js"></script>
+
       <!-- ── Backups ────────────────────────────────────────────────────────
            The owner's decision of 2026-09-27: "one locked backup file into
            a folder the owner picks ... locked with a recovery code only
