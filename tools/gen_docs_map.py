@@ -29,6 +29,13 @@ It also reports any place still stating the OLD number that the checker does not
 read - a spot this generator cannot write because nothing defines it - because a
 page half-updated is worse than one left alone.
 
+THE FIXED-POINT LOOP IS EXERCISED BY A TEST, because nothing else checks it:
+tools/check_docs_map.py allows a tenth on the size, so a marginally wrong MB
+figure passes it silently. backend/test_docs_map_generator.py builds a synthetic
+page whose size sits on a rounding boundary and proves that a SINGLE pass is not
+the fixed point - the one-pass page fails this tool's own --check - while the
+real docs/README.md is left byte-identical.
+
 Run:  py -3 tools/gen_docs_map.py            # write the measured numbers
       py -3 tools/gen_docs_map.py --check    # write nothing; fail if it would
 Exit: 0 when the page states the measured numbers (and the checker agrees),
@@ -57,15 +64,45 @@ def _checker():
 
 
 def mb(byte_count: int, module) -> str:
-    """The page writes MB to one decimal (8.3), which is inside the checker's
-    tenth: 0.05 MB of rounding on millions of bytes."""
-    return f"{byte_count / module.BYTES_PER_MB:.1f}"
+    """The page's MB figure, with the fewest decimals the checker's tenth allows.
+
+    One decimal ("8.3") is what this repository's page uses and is well inside
+    the slack on megabytes. It is NOT enough on a small tree: 50,005 bytes is
+    0.050005 MB, which one decimal writes as "0.1" - a hundred per cent out, and
+    the checker rejects it. The test found that, so the rule is a number the
+    checker accepts rather than a fixed width.
+    """
+    for places in (1, 2, 3, 4):
+        text = f"{byte_count / module.BYTES_PER_MB:.{places}f}"
+        if abs(int(float(text) * module.BYTES_PER_MB) - byte_count) <= byte_count * module.SIZE_SLACK:
+            return text
+    return f"{byte_count / module.BYTES_PER_MB:.4f}"
 
 
 def _swap(pattern: re.Pattern, new: str):
     def replace(m):
         return m.group(0).replace(m.group(1), new)
     return replace
+
+
+def render_page(page: str, real_count: int, others: int, module) -> str:
+    """`page` with every spot set to the measured values, ONE pass.
+
+    `others` is the size of everything under `docs/` EXCEPT this page; the page's
+    own length is added here, per candidate, because the page is inside the tree
+    it measures (DEF-011). One pass is not enough on its own - see `main`: the
+    digits' length changes the page's length, which changes the figure - so this
+    is exposed for the test that proves a single pass FAILS.
+    """
+    measured = others + len(page.encode("utf-8"))
+    out = page
+    for spot in module.COUNT_SPOTS:
+        out = spot[1].sub(_swap(spot[1], module.thousands(real_count)), out)
+    for spot in module.SIZE_SPOTS:
+        unit = spot[2] if len(spot) > 2 else "bytes"
+        value = mb(measured, module) if unit == "mb" else module.thousands(measured)
+        out = spot[1].sub(_swap(spot[1], value), out)
+    return out
 
 
 def main(argv=None) -> int:
@@ -96,24 +133,11 @@ def main(argv=None) -> int:
     others = sum(p.stat().st_size for p in files if p.resolve() != readme.resolve())
     original = readme.read_text(encoding="utf-8")
 
-    def render(page: str) -> str:
-        """`page` with every spot set to the measured values, the page's own
-        bytes counted in, so the figure and the file it lives in agree."""
-        measured = others + len(page.encode("utf-8"))
-        out = page
-        for spot in module.COUNT_SPOTS:
-            out = spot[1].sub(_swap(spot[1], module.thousands(real_count)), out)
-        for spot in module.SIZE_SPOTS:
-            unit = spot[2] if len(spot) > 2 else "bytes"
-            value = mb(measured, module) if unit == "mb" else module.thousands(measured)
-            out = spot[1].sub(_swap(spot[1], value), out)
-        return out
-
     # Iterate to the fixed point: writing the figure changes the figure, and one
     # pass is not enough when the digits' own length changes.
     text = original
     for _ in range(10):
-        nxt = render(text)
+        nxt = render_page(text, real_count, others, module)
         if nxt == text:
             break
         text = nxt
