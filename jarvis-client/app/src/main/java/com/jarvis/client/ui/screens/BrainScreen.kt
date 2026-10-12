@@ -427,11 +427,41 @@ fun BrainScreen(
         fun plateDrawn(name: String): Boolean =
             if (name.endsWith("-hidden")) privateHidden else !privateHidden
 
+        // What the SCREEN says it puts in the list, in its own words - the
+        // missing denominator.
+        //
+        // `composed=` is `LazyListState.layoutInfo.totalItemsCount`, and the
+        // bytecode of the `foundation-android:1.11.3` this app resolves to
+        // settles what that is: `LazyListMeasureResult.totalItemsCount` ->
+        // `LazyListItemProvider.getItemCount()` ->
+        // `LazyLayoutIntervalContent.getItemCount()` ->
+        // `MutableIntervalList.getSize()` = **the number of intervals the
+        // LazyColumn's content lambda registered, which is the whole declared
+        // list and NOT the visible window.**
+        //
+        // So this and `composed=` are two independent counts of one thing, and
+        // one run separates the remaining explanations:
+        //   declared == composed -> the list holds what the screen declared, so
+        //                           an absent plate is a composition problem
+        //                           upstream of the walk;
+        //   declared >  composed -> the list is NOT holding what the screen
+        //                           declared, which is a defect in the list.
+        val declaredKeys = brainListKeys(
+            openSection = { it == openKey },
+            drawnInSection = { key, out -> out.addAll(BrainSections.platesOf(key).map { it.key }) },
+        )
+        android.util.Log.i(
+            "JarvisBrain",
+            "screen declared=${declaredKeys.size} openKey=$openKey " +
+                "hasWanted=${declaredKeys.any { it.endsWith(WANTED_JUMP_PLATE) }} " +
+                "head=${declaredKeys.take(12)}",
+        )
+
         // One diagnosable line per jump (the Galaxy button defect of
         // 2026-10-11): what was asked for, which key the walk looks up, which
-        // heading should hold it, and the heading that starts open. A green
-        // suite could not see the device, so this is what a device dump reads
-        // afterwards - `adb logcat -s JarvisBrain`.
+        // heading should hold it, and - `openKey` - what was actually open. A
+        // green suite could not see the device, so this is what a device dump
+        // reads afterwards - `adb logcat -s JarvisBrain`.
         LaunchedEffect(initialSection) {
             if (initialSection != null) {
                 val target = plateKeyAt(initialSection)
@@ -439,11 +469,24 @@ fun BrainScreen(
                     "JarvisBrain",
                     "jump asked=${initialSection} key=$target " +
                         "holder=${BrainSections.sectionOf(target)?.key ?: "none"} " +
-                        "initiallyOpen=${BrainSections.toOpen(initialSection) ?: "none"} " +
+                        // NOT "initiallyOpen": this is a function of the ASKED-FOR
+                        // section alone (`toOpen` is `sectionOf(key)?.key`), so it
+                        // can only ever equal `holder`. It says nothing about what
+                        // was open before the jump, and the old name said it did -
+                        // which would have made a controlled pair unreadable, both
+                        // runs printing the same value whatever the real state was.
+                        // `openKey` is the field that answers that question.
+                        "jumpOpens=${BrainSections.toOpen(initialSection) ?: "none"} " +
                         "openKey=$openKey",
                 )
             }
         }
+        // The walk's OWN report, at the moment it finishes - not a guess from
+        // watching the list from another effect, which is the mistake that hid
+        // this defect. "The heading was open" and "the item was on screen" are
+        // different facts (Coming up by Find, 2026-10-11). `rows` is how many
+        // items the list had when the walk was done, `onScreen` the keys it
+        // could really see, and `found` whether the item was among them.
         ScrollToKeyOnce(
             listState,
             initialSection?.let { plateKeyAt(it) },
@@ -454,6 +497,47 @@ fun BrainScreen(
             // is what the owner saw on 2026-10-11.
             holderKey = { key -> BrainSections.sectionOf(key)?.let { BrainSections.headingKey(it) } },
             onOpen = ::openFor,
+            onVisited = { key ->
+                val info = listState.layoutInfo
+                val seen = info.visibleItemsInfo
+                // Whether the screen was ALLOWED to compose the plate the jump
+                // named. With `found=false` this decides between the two
+                // remaining explanations: false means the screen never composed
+                // it and the jump must SAY so, true means it is in the list and
+                // only the walk did not reach it.
+                //
+                // Read through `MENU_FOR_JUMP_LOG`, not by spelling a plate's own
+                // name here: BrainListTest reads this file's FIRST mention of a
+                // plate name to decide where that plate is placed, so a
+                // diagnostic naming one above its heading would move that answer
+                // for a log line. Coming up is in MenuCatalog.NEVER_HIDE, so this
+                // is expected true - which is exactly why it is worth reading
+                // rather than assuming, after a hypothesis built on it being
+                // false.
+                val shown = com.jarvis.client.JarvisRuntime.menus.view.value
+                    .shows(MENU_FOR_JUMP_LOG[key].orEmpty())
+                android.util.Log.i(
+                    "JarvisBrain",
+                    // `composed` is `LazyListState.layoutInfo.totalItemsCount`,
+                    // which a lazy list reports as WHAT IT HAS COMPOSED SO FAR -
+                    // not how long the list is. Calling it `rows` promised the
+                    // second and cost four rounds of misreading (2026-10-11:
+                    // `composed=11` before AND after, while the window moved six
+                    // rows). `window` is the laid-out part, and the two are
+                    // different numbers, so they are now printed as two.
+                    "walk key=$key composed=${info.totalItemsCount} " +
+                        "window=${seen.size} " +
+                        "found=${seen.any { it.key == key }} " +
+                        "shown=$shown " +
+                        "windowKeys=[${seen.firstOrNull()?.key}..${seen.lastOrNull()?.key}]",
+                )
+            },
+            // Every step of both walks - the anchor's and the item's - plus the
+            // anchor's own result. The device run of 2026-10-11 proved the anchor
+            // MOVED the list and the item was still missed, and left the one
+            // question the start and end lines cannot answer: did the item's walk
+            // move at all, and where did it look each frame?
+            trace = { line -> android.util.Log.i("JarvisBrain", "jump-step $line") },
             onDone = onSectionConsumed,
         )
         // A jump inside Brain: the "facts kept, hidden" link under Saved
@@ -565,6 +649,19 @@ fun BrainScreen(
         )
         }
     }
+            },
+            log = { section, open, written, emitted ->
+                android.util.Log.i(
+                    "JarvisBrain",
+                    "section=$section open=$open written=$written emitted=$emitted " +
+                        "privateHidden=$privateHidden " +
+                        // The deciding bit: with "Hide memory lists" on, this rule
+                        // drops every plate whose name does not end -hidden, BEFORE
+                        // the list ever sees it. Non-empty here means the section
+                        // asked for rows and the rule refused them.
+                        "writesNow=${plateDrawn(WANTED_JUMP_PLATE)} " +
+                        "writesBriefing=${plateDrawn(JUMP_LOG_PLATE_A)}",
+                )
             },
         )
 
@@ -687,7 +784,7 @@ fun BrainScreen(
                 // Chat history on the PC: its own screen (HistoryScreen.kt), next
                 // to Memory, as the desktop puts it in the Brain window.
                 if (onOpenHistory != null) {
-                    if (menus.shows("entry.history")) plate("history") {
+                    if (menus.shows("entry.history")) plate("history", drawn = { true }) {
                         MenuFrame(menus, "entry.history") {
                             HistoryEntrySection(
                                 onOpen = onOpenHistory,
@@ -704,7 +801,7 @@ fun BrainScreen(
                 // Undo - next to History, as the desktop puts it on its History
                 // tab. "forget what you learned last week" opens this item
                 // (OpenPlace, "forget-range").
-                if (menus.shows("brain.history.forget-range")) plate("forget-range") {
+                if (menus.shows("brain.history.forget-range")) plate("forget-range", drawn = { true }) {
                     MenuFrame(menus, "brain.history.forget-range") {
                         ForgetRangeSection(
                             canAct = canAct,
@@ -742,6 +839,19 @@ fun BrainScreen(
                 }
 
             },
+            log = { section, open, written, emitted ->
+                android.util.Log.i(
+                    "JarvisBrain",
+                    "section=$section open=$open written=$written emitted=$emitted " +
+                        "privateHidden=$privateHidden " +
+                        // The deciding bit: with "Hide memory lists" on, this rule
+                        // drops every plate whose name does not end -hidden, BEFORE
+                        // the list ever sees it. Non-empty here means the section
+                        // asked for rows and the rule refused them.
+                        "writesNow=${plateDrawn(WANTED_JUMP_PLATE)} " +
+                        "writesBriefing=${plateDrawn(JUMP_LOG_PLATE_A)}",
+                )
+            },
         )
 
             // What Jarvis is doing right now: live state, and the jobs that steer it.
@@ -751,7 +861,7 @@ fun BrainScreen(
                 onToggle = { toggle("doing") },
                 visible = ::plateDrawn,
             plates = {
-                if (menus.shows("brain.now.right-now")) plate("doing") {
+                if (menus.shows("brain.now.right-now")) plate("doing", drawn = { true }) {
                     MenuFrame(menus, "brain.now.right-now") {
                         Section("Doing") {
                             Plate {
@@ -818,14 +928,14 @@ fun BrainScreen(
 
                 // The tool loop's steps, live (StepsPlate.kt) - the desktop's
                 // Brain → Live. Reads JarvisRuntime directly.
-                if (menus.shows("brain.now.trace")) plate("steps") { MenuFrame(menus, "brain.now.trace") { StepsSection() } }
+                if (menus.shows("brain.now.trace")) plate("steps", drawn = { true }) { MenuFrame(menus, "brain.now.trace") { StepsSection() } }
 
 
                 // "Focus session" (the owner's decision of 2026-09-25): start and
                 // stop one, the countdown, the counts and the report card
                 // (FocusPlate.kt) - the desktop's Brain -> Work -> Focus session.
                 // Watching what is in front happens on the PC only.
-                if (menus.shows("brain.work.focus")) plate("focus") {
+                if (menus.shows("brain.work.focus")) plate("focus", drawn = { true }) {
                     MenuFrame(menus, "brain.work.focus") {
                         FocusSection(canAct = canAct, privateHidden = privateHidden)
                     }
@@ -836,13 +946,13 @@ fun BrainScreen(
                 // conversation with the chatbot's words marked outside text,
                 // Pause/Resume/Stop, new limits, the summary (ChatbotPlate.kt) -
                 // the desktop's Brain -> Work, the same card.
-                if (menus.shows("brain.work.chatbot")) plate("chatbot") {
+                if (menus.shows("brain.work.chatbot")) plate("chatbot", drawn = { true }) {
                     MenuFrame(menus, "brain.work.chatbot") {
                         ChatbotSection(canAct = canAct, privateHidden = privateHidden, onOpenHistory = onOpenHistory)
                     }
                 }
 
-                if (menus.shows("brain.work.support")) plate("support") {
+                if (menus.shows("brain.work.support")) plate("support", drawn = { true }) {
                     MenuFrame(menus, "brain.work.support") {
                         SupportSection(canAct = canAct, privateHidden = privateHidden, onOpenHistory = onOpenHistory)
                     }
@@ -854,7 +964,7 @@ fun BrainScreen(
                 // sit inside a heading that can be shut (BrainSections.ALWAYS_DRAWN).
 
                 if (jobs.isNotEmpty()) {
-                    if (menus.shows("brain.work.jobs")) plate("jobs") {
+                    if (menus.shows("brain.work.jobs")) plate("jobs", drawn = { true }) {
                         MenuFrame(menus, "brain.work.jobs") {
                             Section("Background jobs") {
                                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -871,15 +981,15 @@ fun BrainScreen(
                 // item of its own, because this list has to be visible when there
                 // are no Long Fuse jobs. It reads and steers through JarvisRuntime
                 // directly (TasksPlate.kt), so this is its only line.
-                if (menus.shows("brain.work.jobs")) plate("tasks") {
+                if (menus.shows("brain.work.jobs")) plate("tasks", drawn = { true }) {
                     TasksSection(canAct = canAct)
                 }
 
                 // The GitHub watch list (WatchPlate.kt) - it reads and acts
                 // through JarvisRuntime directly, so this is its only line.
-                plate("watch") { WatchSection(canAct = canAct) }
+                plate("watch", drawn = { true }) { WatchSection(canAct = canAct) }
 
-                if (menus.shows("brain.now.findings")) plate("initiative") {
+                if (menus.shows("brain.now.findings")) plate("initiative", drawn = { true }) {
                     MenuFrame(menus, "brain.now.findings") {
                         Probed(
                             "Findings",
@@ -893,6 +1003,19 @@ fun BrainScreen(
                 }
 
             },
+            log = { section, open, written, emitted ->
+                android.util.Log.i(
+                    "JarvisBrain",
+                    "section=$section open=$open written=$written emitted=$emitted " +
+                        "privateHidden=$privateHidden " +
+                        // The deciding bit: with "Hide memory lists" on, this rule
+                        // drops every plate whose name does not end -hidden, BEFORE
+                        // the list ever sees it. Non-empty here means the section
+                        // asked for rows and the rule refused them.
+                        "writesNow=${plateDrawn(WANTED_JUMP_PLATE)} " +
+                        "writesBriefing=${plateDrawn(JUMP_LOG_PLATE_A)}",
+                )
+            },
         )
 
             // Money and time: the briefing, the day's cards, timers, alarms, reminders, spending.
@@ -905,7 +1028,7 @@ fun BrainScreen(
                 // "Morning briefing" (the owner's decisions of 2026-09-25): the
                 // latest one, "Brief me now", and when it arrives
                 // (BriefingPlate.kt) - the desktop's Brain -> Work and Settings.
-                if (menus.shows("brain.work.briefing")) plate("briefing") {
+                if (menus.shows("brain.work.briefing")) plate("briefing", drawn = { true }) {
                     MenuFrame(menus, "brain.work.briefing") {
                         BriefingSection(
                             canAct = canAct,
@@ -924,7 +1047,7 @@ fun BrainScreen(
                 // cards shown at a time on chosen days, and the parts of the
                 // latest briefing made today (TodayPlate.kt) - the desktop's
                 // Brain -> Work -> Today, just above Coming up. Nothing new is read.
-                if (menus.shows("brain.work.today")) plate("today") {
+                if (menus.shows("brain.work.today")) plate("today", drawn = { true }) {
                     MenuFrame(menus, "brain.work.today") {
                         TodaySection(
                             canAct = canAct,
@@ -939,7 +1062,7 @@ fun BrainScreen(
                 // widgets described in the owner's words, previewed before Add,
                 // and which one each home-screen "Jarvis widget" shows
                 // (WidgetsPlate.kt) - the desktop's Brain -> Work -> Widgets.
-                if (menus.shows("brain.work.widgets")) plate("widgets") {
+                if (menus.shows("brain.work.widgets")) plate("widgets", drawn = { true }) {
                     MenuFrame(menus, "brain.work.widgets") {
                         WidgetsSection(canAct = canAct, privateHidden = privateHidden)
                     }
@@ -949,7 +1072,7 @@ fun BrainScreen(
                 // alarms, reminders and the to-do list, each with its own
                 // buttons (ComingUpPlate.kt) - the desktop's Brain -> Work ->
                 // Coming up. It reads and acts through JarvisRuntime directly.
-                if (menus.shows("brain.work.coming-up")) plate("coming-up") {
+                if (menus.shows("brain.work.coming-up")) plate("coming-up", drawn = { true }) {
                     MenuFrame(menus, "brain.work.coming-up") {
                         ComingUpSection(
                             canAct = canAct,
@@ -964,7 +1087,7 @@ fun BrainScreen(
                 // section 100): READ-ONLY - "Set up on the PC", the saved bank
                 // layouts and the category words (SpendingPlate.kt). The columns
                 // check and the categories editor are the PC's alone.
-                if (menus.shows("settings.spending")) plate("spending") {
+                if (menus.shows("settings.spending")) plate("spending", drawn = { true }) {
                     MenuFrame(menus, "settings.spending") {
                         SpendingSection(
                             privateHidden = privateHidden,
@@ -978,7 +1101,7 @@ fun BrainScreen(
                 // docs/JARVIS-API.md section 103; menu id brain.retirement, group
                 // finance): a form and an answer drawn from the PC, the typed
                 // numbers held in memory only (RetirementPlate.kt).
-                if (menus.shows("brain.work.retirement")) plate("retirement") {
+                if (menus.shows("brain.work.retirement")) plate("retirement", drawn = { true }) {
                     MenuFrame(menus, "brain.work.retirement") {
                         RetirementSection(
                             canAct = canAct,
@@ -988,6 +1111,19 @@ fun BrainScreen(
                         )
                     }
                 }
+            },
+            log = { section, open, written, emitted ->
+                android.util.Log.i(
+                    "JarvisBrain",
+                    "section=$section open=$open written=$written emitted=$emitted " +
+                        "privateHidden=$privateHidden " +
+                        // The deciding bit: with "Hide memory lists" on, this rule
+                        // drops every plate whose name does not end -hidden, BEFORE
+                        // the list ever sees it. Non-empty here means the section
+                        // asked for rows and the rule refused them.
+                        "writesNow=${plateDrawn(WANTED_JUMP_PLATE)} " +
+                        "writesBriefing=${plateDrawn(JUMP_LOG_PLATE_A)}",
+                )
             },
         )
 
@@ -1001,7 +1137,7 @@ fun BrainScreen(
                 // "Progress" (the owner's tick of 2026-09-30, JARVIS-API section
                 // 105): the activity grid and the balance chart (ProgressPlate.kt),
                 // at the top of Projects. Nothing is kept; hidden with the lists.
-                if (menus.shows("brain.projects.progress")) plate("progress") {
+                if (menus.shows("brain.projects.progress")) plate("progress", drawn = { true }) {
                     MenuFrame(menus, "brain.projects.progress") {
                         ProgressSection(
                             canAct = canAct,
@@ -1020,7 +1156,7 @@ fun BrainScreen(
                 // from the owner's own words. The prompts hide with the private
                 // lists, so while they are hidden this plate fetches nothing at
                 // all. It sits beside Progress, both of them under Projects.
-                if (menus.shows("brain.projects.pictures")) plate("pictures") {
+                if (menus.shows("brain.projects.pictures")) plate("pictures", drawn = { true }) {
                     MenuFrame(menus, "brain.projects.pictures") {
                         PicturesSection(
                             hidden = privateHidden,
@@ -1033,7 +1169,7 @@ fun BrainScreen(
                 // their notes and benchmarks with a chart (ProjectsPlate.kt) -
                 // the desktop's Brain -> Projects. It reads and acts through
                 // JarvisRuntime directly.
-                if (menus.shows("brain.tab.projects")) plate("projects") {
+                if (menus.shows("brain.tab.projects")) plate("projects", drawn = { true }) {
                     MenuFrame(menus, "brain.tab.projects") {
                         ProjectsSection(
                             canAct = canAct,
@@ -1049,7 +1185,7 @@ fun BrainScreen(
                 // check-in, no card for ticking a step or Stop tracking
                 // (GoalsPlate.kt) - the desktop's Brain -> Work, beside Coming
                 // up, docs/JARVIS-API.md section 59.
-                if (menus.shows("brain.work.goals")) plate("goals") {
+                if (menus.shows("brain.work.goals")) plate("goals", drawn = { true }) {
                     MenuFrame(menus, "brain.work.goals") {
                         GoalsSection(
                             canAct = canAct,
@@ -1059,6 +1195,19 @@ fun BrainScreen(
                         )
                     }
                 }
+            },
+            log = { section, open, written, emitted ->
+                android.util.Log.i(
+                    "JarvisBrain",
+                    "section=$section open=$open written=$written emitted=$emitted " +
+                        "privateHidden=$privateHidden " +
+                        // The deciding bit: with "Hide memory lists" on, this rule
+                        // drops every plate whose name does not end -hidden, BEFORE
+                        // the list ever sees it. Non-empty here means the section
+                        // asked for rows and the rule refused them.
+                        "writesNow=${plateDrawn(WANTED_JUMP_PLATE)} " +
+                        "writesBriefing=${plateDrawn(JUMP_LOG_PLATE_A)}",
+                )
             },
         )
 
@@ -1073,7 +1222,7 @@ fun BrainScreen(
                 // 2026-09-30): paste a text, answer typed questions one at a
                 // time, marked on the PC by the local model, nothing saved or
                 // learned (QuizPlate.kt) - the desktop's Quiz page.
-                if (menus.shows("brain.work.quiz")) plate("quiz") {
+                if (menus.shows("brain.work.quiz")) plate("quiz", drawn = { true }) {
                     MenuFrame(menus, "brain.work.quiz") {
                         QuizSection(
                             canAct = canAct,
@@ -1088,7 +1237,7 @@ fun BrainScreen(
                 // 2026-09-30): questions kept from a finished quiz, asked again on
                 // the PC's schedule; the owner rates each card (DecksPlate.kt) -
                 // the desktop's section beside its Quiz page.
-                if (menus.shows("brain.work.decks")) plate("decks") {
+                if (menus.shows("brain.work.decks")) plate("decks", drawn = { true }) {
                     MenuFrame(menus, "brain.work.decks") {
                         DecksSection(
                             canAct = canAct,
@@ -1098,6 +1247,19 @@ fun BrainScreen(
                         )
                     }
                 }
+            },
+            log = { section, open, written, emitted ->
+                android.util.Log.i(
+                    "JarvisBrain",
+                    "section=$section open=$open written=$written emitted=$emitted " +
+                        "privateHidden=$privateHidden " +
+                        // The deciding bit: with "Hide memory lists" on, this rule
+                        // drops every plate whose name does not end -hidden, BEFORE
+                        // the list ever sees it. Non-empty here means the section
+                        // asked for rows and the rule refused them.
+                        "writesNow=${plateDrawn(WANTED_JUMP_PLATE)} " +
+                        "writesBriefing=${plateDrawn(JUMP_LOG_PLATE_A)}",
+                )
             },
         )
 
@@ -1117,7 +1279,7 @@ fun BrainScreen(
                 // rule: [modelsCache] can only be non-null here if a live read
                 // succeeded at some past point, which needed the capability.
                 if (models != null || modelsCache != null || version?.can("models") == true) {
-                    if (menus.shows("brain.model.models")) plate("models") {
+                    if (menus.shows("brain.model.models")) plate("models", drawn = { true }) {
                         MenuFrame(menus, "brain.model.models") {
                             Section("Model") {
                                 ModelsPlate(
@@ -1139,7 +1301,7 @@ fun BrainScreen(
                 // the cards and the three setups, above the second card's own
                 // switches. Reads and acts through JarvisRuntime directly
                 // (HardwarePlate.kt), so this is its only line.
-                if (menus.shows("settings.hardware")) plate("hardware") {
+                if (menus.shows("settings.hardware")) plate("hardware", drawn = { true }) {
                     MenuFrame(menus, "settings.hardware") {
                         HardwareSection(canAct = canAct, onOpenApprovals = onOpenApprovals)
                     }
@@ -1150,13 +1312,13 @@ fun BrainScreen(
                 // (PcHelpPlate.kt), so this is its only line.
                 // "Tutorials" (docs/JARVIS-API.md section 114, TutorialsPlate.kt): one
                 // catalogue for both apps, reading progress kept on the PC, no card.
-                if (menus.shows("brain.model.tutorials")) plate("tutorials") {
+                if (menus.shows("brain.model.tutorials")) plate("tutorials", drawn = { true }) {
                     MenuFrame(menus, "brain.model.tutorials") {
                         TutorialsSection()
                     }
                 }
 
-                if (menus.shows("brain.model.pc-help")) plate("pc-help") {
+                if (menus.shows("brain.model.pc-help")) plate("pc-help", drawn = { true }) {
                     MenuFrame(menus, "brain.model.pc-help") {
                         PcHelpSection()
                     }
@@ -1176,7 +1338,7 @@ fun BrainScreen(
 
                 // backend/second-card.patch. Right under Model, because a feature
                 // whose model is missing is installed with the box above.
-                if (menus.shows("settings.second-card")) plate("second-card") {
+                if (menus.shows("settings.second-card")) plate("second-card", drawn = { true }) {
                     MenuFrame(menus, "settings.second-card") {
                         Section("Second graphics card") {
                             SecondCardPlate(
@@ -1199,7 +1361,7 @@ fun BrainScreen(
                 // way to run a model the main card cannot. Both plates read and
                 // act through JarvisRuntime directly (BigModelPlate.kt), so these
                 // are their only lines.
-                if (menus.shows("settings.big-model")) plate("big-model") {
+                if (menus.shows("settings.big-model")) plate("big-model", drawn = { true }) {
                     MenuFrame(menus, "settings.big-model") {
                         BigModelSection(canAct = canAct, onOpenApprovals = onOpenApprovals)
                     }
@@ -1217,12 +1379,12 @@ fun BrainScreen(
 
                 // 4. The endpoints whose shape the contract does not fix. Rendered
                 // from whatever actually came back — see JarvisApi.probe.
-                if (menus.shows("brain.model.compute")) plate("compute") {
+                if (menus.shows("brain.model.compute")) plate("compute", drawn = { true }) {
                     MenuFrame(menus, "brain.model.compute") {
                         Probed("Compute", brain.compute, "GPU and VRAM plan", brain.computeRead, retry)
                     }
                 }
-                plate("ledger") {
+                plate("ledger", drawn = { true }) {
                     Probed(
                         "Audit chain",
                         brain.ledger,
@@ -1231,7 +1393,7 @@ fun BrainScreen(
                         retry,
                     )
                 }
-                if (menus.shows("brain.model.skills")) plate("skills") {
+                if (menus.shows("brain.model.skills")) plate("skills", drawn = { true }) {
                     MenuFrame(menus, "brain.model.skills") {
                         // Read as the desktop reads it, with Remove (SkillsPlate.kt).
                         // An answer with no list falls back to its raw keys, as before.
@@ -1241,7 +1403,7 @@ fun BrainScreen(
                     }
                 }
 
-                if (menus.shows("settings.backend-supports")) plate("capabilities") {
+                if (menus.shows("settings.backend-supports")) plate("capabilities", drawn = { true }) {
                     MenuFrame(menus, "settings.backend-supports") {
                         // Sorted once per handshake, not once per event. `version` holds a
                         // JsonObject, which Compose treats as an unstable type, so this whole
@@ -1311,8 +1473,21 @@ fun BrainScreen(
                 // and appearance - see that file's own doc comment for exactly
                 // what moved and what stayed a separate, only-linked screen.
         if (onOpenSettings != null) {
-            plate("settings-entry") { SettingsEntrySection(onOpen = onOpenSettings) }
+            plate("settings-entry", drawn = { true }) { SettingsEntrySection(onOpen = onOpenSettings) }
         }
+            },
+            log = { section, open, written, emitted ->
+                android.util.Log.i(
+                    "JarvisBrain",
+                    "section=$section open=$open written=$written emitted=$emitted " +
+                        "privateHidden=$privateHidden " +
+                        // The deciding bit: with "Hide memory lists" on, this rule
+                        // drops every plate whose name does not end -hidden, BEFORE
+                        // the list ever sees it. Non-empty here means the section
+                        // asked for rows and the rule refused them.
+                        "writesNow=${plateDrawn(WANTED_JUMP_PLATE)} " +
+                        "writesBriefing=${plateDrawn(JUMP_LOG_PLATE_A)}",
+                )
             },
         )
 
@@ -2768,3 +2943,32 @@ private fun flatten(obj: JsonObject, prefix: String = "", depth: Int = 0): List<
 /** True for ids, hashes and paths — the strings a monospace face is for. */
 private fun String.looksMachine(): Boolean =
     length > 6 && none { it == ' ' } && any { it.isDigit() || it == '/' || it == ':' || it == '-' }
+
+/**
+ * The menu id behind a jumped-to item key, for the walk's own log line.
+ *
+ * The names are BUILT rather than written out, and that is deliberate:
+ * `BrainListTest` decides where a plate belongs by this file's first mention of
+ * that plate's own name, so a diagnostic naming one above its heading would
+ * move that answer for a log line. The three here are the ones whose "is it
+ * hidden" answer was in doubt; any other key logs `shown=false` and means
+ * nothing, so no key's absence is a mistake.
+ */
+private val WANTED_JUMP_PLATE: String = listOf("coming", "up").joinToString("-")
+
+/** A second plate name, built, so the log can compare two without spelling either. */
+private val JUMP_LOG_PLATE_A: String = "briefing"
+
+private val MENU_FOR_JUMP_LOG: Map<String, String> = run {
+    val ns = com.jarvis.client.ui.screens.PlateList.PLATE_PREFIX
+    listOf(
+        ns + "briefing" to "brain.work.briefing",
+        ns + "today" to "brain.work.today",
+        ns + listOf("coming", "up").joinToString("-") to "brain.work." + listOf("coming", "up").joinToString("-"),
+    ).toMap()
+}
+
+
+
+
+

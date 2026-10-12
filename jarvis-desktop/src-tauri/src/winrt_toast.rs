@@ -193,14 +193,37 @@ pub fn notify_approval(app: &AppHandle, title: &str, body: &str, id: &str, silen
     }
 }
 
+/// The line every approval toast carries under the card's own words: where
+/// the other half of the decision is, and why it cannot be here.
+///
+/// The owner reported this as a missing button (2026-10-11): a toast with
+/// only Deny offered half a decision and never said where the other half
+/// was. Approve cannot go on a notification at all - it is answered by
+/// Windows Hello over the window that asked (docs/ARCHITECTURE.md §3, rule
+/// 2) - so the toast has to say so instead of looking broken.
+///
+/// This is the toast's own short sentence. `jarvis-link.js`'s
+/// [`APPROVE_WHERE`] names the surfaces the card waits on ("in the Jarvis
+/// bar, on the widget, or on your phone's Home screen"); a toast has no room
+/// for that list, and both say the same thing about the bar, which is where
+/// this app's own "Not denied" sentence already points the owner.
+const APPROVE_WHERE_TOAST: &str =
+    "Deny here, or open Jarvis to approve - approving needs your Windows Hello.";
+
 /// The toast's XML. Deny is the ONLY action, whatever the arguments: Approve
 /// never goes on a notification (docs/ARCHITECTURE.md §3, rule 2). An empty
-/// body (App lock: the title only) leaves out its line.
+/// body (App lock: the title only) leaves out its line - and the
+/// where-to-approve line with it, because that case says nothing else.
 fn approval_toast_xml(title: &str, body: &str, id: &str, silent: bool) -> String {
     let body_line = if body.trim().is_empty() {
         String::new()
     } else {
         format!("\n      <text>{}</text>", escape_xml(body))
+    };
+    let where_line = if body.trim().is_empty() {
+        String::new()
+    } else {
+        format!("\n      <text>{APPROVE_WHERE_TOAST}</text>")
     };
     let audio = if silent {
         "\n  <audio silent=\"true\"/>"
@@ -211,7 +234,7 @@ fn approval_toast_xml(title: &str, body: &str, id: &str, silent: bool) -> String
         r#"<toast activationType="foreground" launch="jarvis-open">
   <visual>
     <binding template="ToastGeneric">
-      <text>{title}</text>{body_line}
+      <text>{title}</text>{body_line}{where_line}
     </binding>
   </visual>{audio}
   <actions>
@@ -957,17 +980,59 @@ mod tests {
         for silent in [false, true] {
             let xml = approval_toast_xml("Jarvis wants to search the web", "Why.", "a1", silent);
             assert!(xml.contains(r#"<action content="Deny""#));
-            assert!(!xml.to_lowercase().contains("approve"));
             assert_eq!(xml.matches("<action ").count(), 1);
             assert_eq!(xml.contains(r#"<audio silent="true"/>"#), silent);
         }
     }
 
     #[test]
+    fn every_approval_toast_says_where_to_approve_and_never_offers_it() {
+        // BOTH HALVES, and the second is the one that matters most.
+        //
+        // The first is the owner's report of 2026-10-11: a toast with only
+        // Deny looked like a missing button, because nothing on it said where
+        // the other half of the decision was.
+        //
+        // The second is the rule the fix has to leave standing: a notification
+        // never approves anything (docs/ARCHITECTURE.md §3, rule 2).
+        // Approving is answered by Windows Hello over the window that asked,
+        // and a toast cannot ask for it. A later reader who sees "there is no
+        // Approve button" as a bug and reaches for one has to get past this
+        // test, so it says why they must not.
+        for silent in [false, true] {
+            let xml = approval_toast_xml(
+                "Jarvis wants to raise a chatbot's monthly spending limit",
+                "Why.",
+                "a1",
+                silent,
+            );
+            assert!(
+                xml.contains(APPROVE_WHERE_TOAST),
+                "the toast must say where the card can be approved:\n{xml}"
+            );
+            assert_eq!(
+                xml.matches("<action ").count(),
+                1,
+                "a notification carries exactly one action:\n{xml}"
+            );
+            let actions = xml.split("<actions>").nth(1).unwrap_or_default();
+            assert!(
+                !actions.to_lowercase().contains("approve"),
+                "a notification must never carry an approving action - Windows \
+                 Hello cannot be asked for from a toast:\n{xml}"
+            );
+        }
+    }
+
+    #[test]
     fn app_lock_s_title_only_toast_has_one_line() {
+        // App lock's toast is the title only: no card words, and no
+        // where-to-approve line either, because that case deliberately says
+        // nothing else.
         let xml = approval_toast_xml("Jarvis wants to send an email", "", "a1", false);
         assert_eq!(xml.matches("<text>").count(), 1);
         assert!(xml.contains("<text>Jarvis wants to send an email</text>"));
+        assert!(!xml.contains(APPROVE_WHERE_TOAST));
     }
 
     #[test]

@@ -140,9 +140,20 @@ QUEUE_UNREADABLE = ("The approval queue could not be read, so Jarvis cannot tell
 #: that stays on this PC and always asks Windows Hello. Going back to "Stop
 #: early" is the other direction and needs neither: it applies at once, from
 #: either app (the OFF path in jarvis_handoff_mode.request never reaches here).
+#: `raise_api_limit` USED to be in this set, and the owner took it out on
+#: 2026-10-11: "Let the phone raise it too, with its own fingerprint." A raise
+#: is still a RISKY card (`jarvis_asks_first`: tier ask, "lets Jarvis spend more
+#: of your money"), so the two halves of the rule both stay:
+#:   * on the PC it still asks Windows Hello - `is_risky` sends it there, which
+#:     is why removing it from this set does not weaken the desktop's own path;
+#:   * on the phone it needs that phone's signed approval, a fresh fingerprint
+#:     or PIN over a one-use challenge, and a phone with no approval key is
+#:     refused with "no_approval_key" so it can offer to turn signing on.
+#: What the owner changed is only WHERE the raise may be confirmed, never
+#: whether a person has to confirm it.
 PC_ONLY_ACTIONS = frozenset({"loosen_what_asks_first", "enable_reading_tool", "restore_backup",
                              "pair_device", "unretire_shared_key", "register_approval_key",
-                             "raise_api_limit", "handoff_keep_offering",
+                             "handoff_keep_offering",
                              "handoff_bring_to_front"})
 PC_ONLY = ("This card can only be approved on the PC, with Windows Hello, so nothing was "
            "approved")

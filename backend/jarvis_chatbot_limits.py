@@ -47,10 +47,24 @@ request gets:
     reset_price  -> no gate action at all
 
 A request that names no `action` is refused. A request from the phone (or from
-anything that is not this PC) is refused with 403 `pc_only`, before anything is
-read or written - the owner's own decision, "a monthly amount per service, set
-on the PC", and the same shape jarvis_spending.py uses for its own PC-only
-routes.
+anything that is not this PC) is no longer refused outright:
+
+  * a RAISE raises the same card a raise from the PC raises, and that card is
+    answered with the asking phone's own fingerprint or PIN (the signed
+    approval `jarvis_owner_check` routes to
+    `jarvis_devices.check_signed_approval`). A phone with no approval key yet is
+    refused there in its own plain words, with the "Turn on signed approvals"
+    control - nothing is raised. This is the owner's change of 2026-10-11 to his
+    own rule of 2026-09-28 ("a monthly amount per service, set on the PC"):
+    "Let the phone raise it too, with its own fingerprint."
+  * a LOWERING or a REMOVAL applies at once, with no card, from either app -
+    stopping spending must never need a fingerprint.
+  * a PRICE is corrected from either app too, with no card and no signature
+    (the owner, 2026-10-11, asked directly after opening the limit): a price is
+    an estimate of what a service costs, so correcting one spends nothing,
+    raises no cap and takes nothing back. Nothing on this route is 403
+    `pc_only` any more; the sentence by that name now says what IS still the
+    PC's own - the API key itself.
 
 FAILING CLOSED. `jarvis_chatbot_api` raises `MoneyFileError` when its money file
 is there but unreadable, and that must never read as "nothing spent" - every
@@ -83,9 +97,14 @@ TITLE = "Raise a chatbot's monthly money limit?"
 ABOUT = ("How much Jarvis may spend on this service's account in one calendar month. "
          "Raising it lets Jarvis spend more of your money than it could before.")
 
-PC_ONLY = ("This is set on the PC only, so nothing was changed. A monthly money limit is "
-           "what keeps a chatbot service from spending past what you agreed to, and the "
-           "card that raises one is answered on the PC with Windows Hello.")
+#: What is STILL the PC's alone on this page. It used to be the limits AND the
+#: prices; the owner opened both to the phone on 2026-10-11 - "Let the phone
+#: raise it too, with its own fingerprint", and then, asked directly about
+#: prices, "correct them too" - so this sentence now names the one thing that
+#: did not move, rather than losing a clause.
+PC_ONLY = ("The API key itself is still typed on the PC. A limit and a price can be changed from "
+           "either app: raising a limit asks you on a card, and lowering one, removing one or "
+           "correcting a price changes at once, with no card.")
 
 _STATE = {"gate": None, "tier_of": None, "spawn": None, "api": None, "audit": None,
           "now": time.time}
@@ -271,25 +290,33 @@ def _service_row(api, pid: str, data: dict, *, here: bool) -> dict:
     return out
 
 
-def view(*, here: bool = False) -> tuple:
-    """GET /api/chatbot/money. (status, body)."""
+def view(*, here: bool = False, device: str | None = None) -> tuple:
+    """GET /api/chatbot/money. (status, body).
+
+    `device` is who the request's own key said it was (a paired phone), or
+    None. A phone may change LIMITS from here - it raises one with its own
+    fingerprint, and lowers one instantly - but never a price, so
+    `can_change_prices` stays the PC's alone."""
     api = _api()
     try:
         data = api._load()
     except api.MoneyFileError as exc:
         return 503, {"ok": False, "available": False, "error": "money_unreadable",
                      "message": _file_words(str(exc))}
-    rows = [_service_row(api, pid, data, here=here) for pid in api.PRESETS]
+    may_change = bool(here or device)
+    rows = [_service_row(api, pid, data, here=may_change) for pid in api.PRESETS]
     return 200, {
         "ok": True,
         "available": True,
         "title": "Chatbot money limits",
         "about": ABOUT,
-        "can_change": bool(here),
+        "can_change": may_change,
+        "can_change_prices": may_change,
         "pc_only": PC_ONLY,
-        "raise_words": ("Raising a limit asks you on an approval card, and Windows Hello on "
-                        "this PC confirms it is you. Lowering one, removing one and "
-                        "correcting a price change at once, with no card."),
+        "raise_words": ("Raising a limit asks you on an approval card: Windows Hello on this "
+                        "PC, or the fingerprint or PIN of the phone that asked. Lowering one, "
+                        "removing one and correcting a price change at once, with no card - a "
+                        "price is an estimate, so correcting it spends nothing."),
         "raise_action": RAISE_ACTION,
         "lower_action": LOWER_ACTION,
         "estimates": ("Every price here is used to ESTIMATE what an answer cost. The default "
@@ -344,7 +371,7 @@ def _raise_card(api, pid: str, old, amount: float):
     return None, f"The limit for {p.company} is now {_dollars(amount)} a month."
 
 
-def _apply(api, body: dict, *, here: bool) -> tuple:
+def _apply(api, body: dict, *, here: bool, device: str | None = None) -> tuple:
     """One change. (status, body)."""
     action = str(body.get("action") or "").strip().lower()
     pid = api.BY_SHORT.get(str(body.get("service") or "").strip().lower())
@@ -359,6 +386,14 @@ def _apply(api, body: dict, *, here: bool) -> tuple:
     p = api.PRESETS[pid]
 
     if action in ("set_price", "reset_price"):
+        # A price correction is card-free from EITHER app, and the owner said
+        # so directly on 2026-10-11 (asked whether the phone may correct a
+        # price, having already opened the limit: "allow"). It needs no card
+        # and no fingerprint because there is nothing to confirm: a price is
+        # an estimate of what a service costs, it spends nothing, raises no cap
+        # and takes nothing back. That is the same shape as a lowering, and it
+        # is why there is no gate action for it at all - so nothing here asks
+        # `tier_of` for one.
         model, problem = api.model_for(pid)
         if problem or not model:
             return _refuse("no_model", 400, f"{p.name} has no usable model: {problem}.")
@@ -385,7 +420,7 @@ def _apply(api, body: dict, *, here: bool) -> tuple:
             return _refuse("price_not_set", 400, str(got.get("error") or ""))
         _audit("chatbot_money.price", {"action": action, "service": p.short, "model": model})
         return 200, {"ok": True, "changed": True, "said": got.get("said", ""),
-                     **(view(here=here)[1])}
+                     **(view(here=here, device=device)[1])}
 
     # ---- a limit ----------------------------------------------------------
     try:
@@ -451,18 +486,20 @@ def _apply(api, body: dict, *, here: bool) -> tuple:
     return 200, {"ok": True, "changed": True, "raised": action == "raise_limit",
                  "approved": action == "raise_limit",
                  "said": said or str(got.get("said") or ""),
-                 **(view(here=here)[1])}
+                 **(view(here=here, device=device)[1])}
 
 
-def change(body, *, peer=None, local=None) -> tuple:
-    """POST /api/chatbot/money. (status, body). PC only."""
+def change(body, *, peer=None, local=None, device=None) -> tuple:
+    """POST /api/chatbot/money. (status, body).
+
+    Either app may change anything here: a raise raises the card (answered with
+    Windows Hello on the PC or with that phone's own fingerprint or PIN), and a
+    lowering, a removal and a price correction apply at once, with no card."""
     here = _from_this_pc(peer, local)
-    if not here:
-        return 403, {"ok": False, "error": "pc_only", "pc_only": True, "message": PC_ONLY}
     if not isinstance(body, dict):
         return _refuse("bad_request", 400)
     api = _api()
-    return _apply(api, body, here=True)
+    return _apply(api, body, here=here, device=device)
 
 
 # ---------------------------------------------------------------------------
@@ -473,16 +510,16 @@ def owns(method: str, route: str) -> bool:
     return route == PATH and method in ("GET", "POST")
 
 
-def handle_get(route: str, query: dict, peer=None, local=None) -> tuple:
+def handle_get(route: str, query: dict, peer=None, local=None, device=None) -> tuple:
     if route != PATH:
         return 404, {"ok": False, "error": "not_found"}
-    return view(here=_from_this_pc(peer, local))
+    return view(here=_from_this_pc(peer, local), device=device)
 
 
-def handle_post(route: str, body, peer=None, local=None) -> tuple:
+def handle_post(route: str, body, peer=None, local=None, device=None) -> tuple:
     if route != PATH:
         return 404, {"ok": False, "error": "not_found"}
-    return change(body, peer=peer, local=local)
+    return change(body, peer=peer, local=local, device=device)
 
 
 def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
@@ -520,7 +557,8 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
         if not _allowed(self):
             return None
         try:
-            code, out = handle_get(route, _query(self), *_peer_local(self))
+            code, out = handle_get(route, _query(self), *_peer_local(self),
+                                    device=getattr(self, "_jarvis_device", None))
         except Exception as exc:
             code, out = 503, {"ok": False, "error": type(exc).__name__}
         return self._send(code, out)
@@ -536,7 +574,8 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
         except Exception as exc:
             return self._send(400, {"error": type(exc).__name__})
         try:
-            code, out = handle_post(route, body, *_peer_local(self))
+            code, out = handle_post(route, body, *_peer_local(self),
+                                    device=getattr(self, "_jarvis_device", None))
         except Exception as exc:
             code, out = 503, {"ok": False, "error": type(exc).__name__}
         return self._send(code, out)
@@ -545,8 +584,9 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
     do_POST._jarvis_chatbot_limits = True
     handler_cls.do_GET = do_GET
     handler_cls.do_POST = do_POST
-    return ("  chatbot money limits (a raise needs a card and Windows Hello; a lowering does "
-            "not; prices are editable and always say where the number came from)")
+    return ("  chatbot money limits (a raise needs a card - Windows Hello on this PC or "
+            "the asking phone's own fingerprint; a lowering does not; prices are the "
+            "PC's own and always say where the number came from)")
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,9 @@
 package com.jarvis.client.platform
 
+import android.app.ActivityManager
+import android.app.ApplicationExitInfo
 import android.content.Context
+import android.os.Build
 import android.util.Log
 import com.jarvis.client.BuildConfig
 import java.io.File
@@ -26,6 +29,66 @@ import java.util.Locale
 object CrashLog {
 
     private const val FILE = "last-crash.txt"
+
+    /** SharedPreferences holding the hang already shown, so it shows once. */
+    private const val PREFS = "jarvis-crash-log"
+    private const val LAST_HANG = "last_hang_shown"
+
+    /** The first line of a hang note - [MainActivity] titles the screen from it. */
+    const val HANG_PREFIX = "Jarvis was not responding (the phone froze) at "
+
+    /**
+     * A HANG LEAVES NO EXCEPTION. The handler below never runs, so nothing is
+     * written and the screen stays silent - "it froze mid-sentence" was the one
+     * failure this app could not report at all. Android's own exit history does
+     * know, and this reads it. On this phone only; nothing leaves the device.
+     *
+     * Called once, from Application.onCreate. Below Android 11 the history API
+     * does not exist, so this is a no-op there.
+     */
+    fun recordHangIfAny(context: Context) {
+        val app = context.applicationContext
+        runCatching {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+            val manager = app.getSystemService(ActivityManager::class.java) ?: return
+            val newest = manager.getHistoricalProcessExitReasons(app.packageName, 0, 8)
+                .firstOrNull { it.reason == ApplicationExitInfo.REASON_ANR } ?: return
+            val marks = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            if (newest.timestamp <= marks.getLong(LAST_HANG, 0L)) return
+            marks.edit().putLong(LAST_HANG, newest.timestamp).apply()
+            // A crash file is the richer record (time, version, thread, trace)
+            // and is already waiting to be read: never overwrite it.
+            if (read(app) != null) return
+            val when_ = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+                .format(Date(newest.timestamp))
+            File(app.filesDir, FILE).writeText(
+                scrub(
+                    buildString {
+                        appendLine("$HANG_PREFIX$when_")
+                        appendLine("version: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+                        appendLine()
+                        append("The phone stopped answering while Jarvis was running, so Android ")
+                        append("closed it. This is the phone's own record of that, kept on the ")
+                        append("phone. Nothing was sent anywhere.")
+                    },
+                    redact = null,
+                ),
+            )
+        }.onFailure { Log.e(TAG, "could not record the hang", it) }
+    }
+
+    /**
+     * The token scrub, in one place: the secret itself when we can read it,
+     * then the header shape, then a per-device key's shape. The crash path has
+     * always done all three; a hang note goes through the SAME door, so it
+     * cannot become a second, weaker way onto the same screen.
+     */
+    private fun scrub(body: String, redact: (() -> String?)?): String {
+        val secret = runCatching { redact?.invoke() }.getOrNull()
+        var safe = if (!secret.isNullOrBlank()) body.replace(secret, "«token»") else body
+        safe = TOKEN_HEADER.replace(safe, "$1«token»")
+        return com.jarvis.client.net.DeviceKey.scrub(safe, "«token»")
+    }
 
     /** `X-Jarvis-Token: ...` however it appears in a trace or an OkHttp message. */
     private val TOKEN_HEADER =
@@ -69,14 +132,7 @@ object CrashLog {
         // was most likely to need redacting was the moment the substitution
         // silently did nothing and the trace was written anyway. This file is
         // meant to be read aloud and pasted into a chat.
-        val secret = runCatching { redact() }.getOrNull()
-        var safe = if (!secret.isNullOrBlank()) body.replace(secret, "«token»") else body
-        // And a belt: anything shaped like the header goes, whatever the
-        // token store had to say about itself.
-        safe = TOKEN_HEADER.replace(safe, "$1«token»")
-        // A key made for this device (docs/PAIRING-DESIGN.md §5.1, §8.6) is
-        // recognisable by its shape even with no header name beside it.
-        safe = com.jarvis.client.net.DeviceKey.scrub(safe, "«token»")
+        val safe = scrub(body, redact)
         File(context.filesDir, FILE).writeText(safe)
     }
 
