@@ -393,7 +393,8 @@ class MenuVisibilityTest {
             assertTrue(
                 "BrainScreen has no plate(\"$key\"), no plateDrawn(\"$key\"), no " +
                     "item(key = plateKeyAt(\"$key\")) and no item(key = \"$key\")",
-                brain.contains("plate(\"$key\")") || brain.contains("item(key = \"$key\")") ||
+                Regex("""plate\(\s*"${Regex.escape(key)}"\s*[,)]""").containsMatchIn(brain) ||
+                    brain.contains("item(key = \"$key\")") ||
                     brain.contains("plateDrawn(\"$key\")") ||
                     brain.contains("item(key = plateKeyAt(\"$key\"))"),
             )

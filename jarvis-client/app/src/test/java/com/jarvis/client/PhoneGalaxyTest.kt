@@ -80,9 +80,20 @@ class PhoneGalaxyTest {
      * these is a plate nothing can reach, which is what the caller is asking.
      */
     private fun String.draws(name: String): Boolean =
-        contains("plate(\"$name\")") ||
+        plateDrawnUnder(name) ||
             contains("item(key = \"$name\")") ||
             contains("item(key = \"${PlateList.PLATE_PREFIX}$name\")")
+
+    /**
+     * Whether some `plate("...")` call here names [name] - with or without the
+     * `drawn = ...` argument a plate that guards ITSELF passes. The Galaxy is
+     * one of those since 2026-10-11: with "Hide memory lists and chat history"
+     * on, the heading's own rule dropped it, so the prompt it draws instead of
+     * its list was never composed and Home's button landed at the bottom of
+     * Brain's list.
+     */
+    private fun String.plateDrawnUnder(name: String): Boolean =
+        Regex("""plate\(\s*"${Regex.escape(name)}"\s*[,)]""").containsMatchIn(this)
 
     // ------------------------------------------------------- reachable ---
 
@@ -102,6 +113,20 @@ class PhoneGalaxyTest {
         assertTrue(
             "the Galaxy plate is not drawn on Brain",
             screen.draws("people-and-things"),
+        )
+
+        // And drawn WHATEVER the private-lists rule says, because it guards
+        // itself rather than vanishing (2026-10-11). The heading hands every
+        // plate `visible = ::plateDrawn`, and `plateDrawn("people-and-things")`
+        // is `!privateHidden` - false with the lists hidden - so without the
+        // `drawn = { true }` below, that heading DROPS the plate: the
+        // `HiddenSection` prompt inside it is never composed, and Home's Galaxy
+        // button lands on the last item of Brain's list instead of the thing it
+        // named. `EntitiesPlate`'s own guard is asserted by EntitiesTest.
+        val call = screen.substringAfter("""plate("people-and-things"""")
+        assertTrue(
+            "the Galaxy plate is dropped by the private-lists rule, so its own hidden prompt never draws",
+            call.substringBefore(") {").contains("drawn = { true }"),
         )
 
         // Under a heading - and the heading that fits. "What Jarvis knows about

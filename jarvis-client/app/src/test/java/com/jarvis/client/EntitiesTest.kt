@@ -185,8 +185,23 @@ class EntitiesTest {
         val brain = repoFile("$main/ui/screens/BrainScreen.kt").readText()
         // Drawn through `plate("...")` since 2026-10-10 (BrainSections.kt): the
         // plate's own name, with the item's key carrying the plates' namespace.
-        assertTrue(brain.contains("plate(\"people-and-things\")"))
-        assertTrue(brain.indexOf("plate(\"topics\")") < brain.indexOf("plate(\"people-and-things\")"))
+        // It carries `drawn = { true }` since 2026-10-11, because it guards
+        // itself instead of vanishing under "Hide memory lists and chat
+        // history" - the heading's own rule would otherwise drop it, prompt and
+        // all (asserted just below, together with the guard it relies on).
+        assertTrue(
+            "the Galaxy plate is not drawn through plate(\"...\")",
+            Regex("""plate\(\s*"people-and-things"\s*[,)]""").containsMatchIn(brain),
+        )
+        assertTrue(
+            "the Galaxy plate no longer asks to be drawn despite the private-lists rule, " +
+                "so the heading drops it and its \"${Entities.TITLE}\" prompt never draws",
+            brain.substringAfter("""plate("people-and-things"""").substringBefore(") {").contains("drawn = { true }"),
+        )
+        assertTrue(
+            "topics is no longer drawn before the Galaxy plate",
+            brain.indexOf("""plate("topics"""") < brain.indexOf("""plate("people-and-things""""),
+        )
     }
 
     private fun repoFile(rel: String): File {
