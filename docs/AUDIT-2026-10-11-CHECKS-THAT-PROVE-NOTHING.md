@@ -282,3 +282,64 @@ suites have been run, and both of those two have been mutated** (`hud.mjs` red a
 the two remaining incidents are not desktop suites. **Nothing here clears the
 desktop side**, and the Kotlin suites are now named with the workflow that runs
 them so the next person does not have to search for them again.
+
+---
+
+## 7. The phone's suites: they RUN here, and `initiallyOpen` is already fixed
+
+Second glob. The phone's Kotlin tests are a **second set of suites**, and unlike the
+desktop ones they need Gradle. **They build and run on this machine** - Android SDK
+present (`ANDROID_HOME` set), JDK 17, `gradlew` present:
+
+    cd jarvis-client
+    ./gradlew :app:testDebugUnitTest --tests "com.jarvis.client.ui.parts.ScrollToKeyTest"
+    -> BUILD SUCCESSFUL in 1m 51s   (ScrollToKeyTest green)
+
+**So the hole is not that these tests cannot run. They run. The hole is that
+`ci.yml` never invokes them for a given pull request** - they are run only by
+`.github/workflows/jarvis-client.yml`, which is not one of the six required checks.
+A phone change can therefore merge with its tests skipped, and the tests exist and
+pass when someone chooses to run them.
+
+### 7.1 `initiallyOpen` - the identity comparison - is ALREADY FIXED on main
+
+This was the strongest claim in the audit, so it was checked first, and the answer
+is in the source rather than in a test. `initiallyOpen` is **not an identifier and
+not an assertion**: it was a **log field name**, and the string appears on main only
+in comments. The code that used it now carries this note
+(`jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/BrainScreen.kt`,
+the `jumpOpens=` log line):
+
+> NOT "initiallyOpen": this is a function of the ASKED-FOR section alone (`toOpen`
+> is `sectionOf(key)?.key`), so it can only ever equal `holder`. It says nothing
+> about what was open before the jump, and the old name said it did - which would
+> have made a controlled pair unreadable, both runs printing the same value
+> whatever the real state was. `openKey` is the field that answers that question.
+
+**So the incident is real, already known, and already fixed** - the field was
+renamed to `jumpOpens`, and the source says in its own words that the old name
+"could only ever equal" the holder. It is reported here as **already fixed**, not as
+a new finding (the same category as DEF-009).
+
+**Why no mutation was run for it:** a comparison of one expression with itself
+cannot be made to fail by changing anything else - that impossibility *is* the
+finding, and the fix has already removed it. There is nothing left to mutate.
+
+### 7.2 `GoalsTest` / `RetirementTest` - the plate-placement incident - NOT mutated
+
+`jarvis-client/app/src/test/java/com/jarvis/client/GoalsTest.kt` and
+`RetirementTest.kt` exist on main and the Gradle build above compiles them (both
+appear in the build's own output). **They were not run or mutated in this slice:**
+a full Gradle cycle is ~2 minutes per run, and a run-mutate-restore cycle did not
+fit. The instrument is proven to work here, so the next person starts from a
+green baseline rather than from "can this even build".
+
+### 7.3 Sizing, both globs, exact
+
+- **Desktop: two of 182 suites have been run, and both of those two have been
+  mutated** (`hud.mjs` red at `:373`, `progress.mjs` red at `:425`).
+- **Phone: one suite (`ScrollToKeyTest`) has been run and is green; no phone suite
+  has been mutated.** The phone's glob has not been counted here, so no fraction is
+  claimed for it.
+
+**Nothing in this document clears either glob.**
