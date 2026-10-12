@@ -24,19 +24,107 @@ fun gitSha(): String {
 }
 
 /**
- * Android's version number for this build: CI's run number for this
- * workflow, which only goes up, or 1 for a build made anywhere else.
+ * What every versionCode this app builds starts from: one billion.
  *
- * It used to be pinned at 1, so ANY build installed over any other and kept
- * the app's data - including an older one, or a debuggable one (security
- * audit L3). Android refuses to install a lower number over a higher one
- * (`adb install -r` says INSTALL_FAILED_VERSION_DOWNGRADE), so with the run
- * number an older build can no longer replace a newer one. A re-run of the
- * same workflow run keeps its number, which Android accepts as equal.
+ * THE COLLISION THIS EXISTS FOR. `versionCode` used to BE CI's run number.
+ * The owner's phone (CPH2419, over adb) held `com.jarvis.client`
+ * versionCode=10009 / versionName=0.2.10009, while the published
+ * `client-latest` APK (`jarvis-client-8518e53.apk`) was versionCode=1299 /
+ * versionName=0.2.1299. A workflow run number climbs by one per run, so every
+ * release CI could produce for years was BELOW what the phone already had:
+ * `adb install -r` answers INSTALL_FAILED_VERSION_DOWNGRADE, and the only way
+ * past it is an uninstall - which wipes the app's data and with it the
+ * pairing token, the exact outcome the release comments below say must not
+ * happen.
+ *
+ * 10009 did not come from this workflow. `.github/workflows/jarvis-client.yml`
+ * has been present since it was first added and its run number has never been
+ * reset in this repository's history (`git log --diff-filter=AD` over that
+ * path shows one add and no rename or delete) - so a counter that reached
+ * 10009 came from a build made OUTSIDE GitHub Actions with GITHUB_RUN_NUMBER
+ * set in its environment. `docs/AUDIT-2026-10-11-MACHINE-VS-REPO.md` section 3
+ * reached the same reading from the phone alone: "0.2.10008 is a local build
+ * counter, not a main commit".
+ *
+ * THE SCHEME. versionCode = this base + the CI run number, and a build made
+ * anywhere else gets the base itself. So:
+ *
+ *   * every CI release is above 1,000,000,000, which clears the 10009 the
+ *     phone held by about 999,990,000 - and a locally built APK can never
+ *     overtake it again, because a local build is the base and a CI build is
+ *     the base PLUS at least 1;
+ *   * the run number still only goes up, so an older build still cannot
+ *     replace a newer one (security audit L3). Before this, a versionCode was
+ *     pinned at 1 and ANY build replaced any other, a debuggable one
+ *     included;
+ *   * a re-run of the same workflow run keeps GITHUB_RUN_NUMBER, and so keeps
+ *     its versionCode - which Android accepts as equal;
+ *   * the base is a constant, so moving it is a deliberate edit, and the
+ *     VERSION file (0.2.<run> as the versionName) is untouched.
+ *
+ * WHY ONE BILLION. It is about 100,000x the 10009 that caused this, so no
+ * counter from an earlier build system can reach it; and with the run number
+ * capped by VERSION_CODE_MAX_RUN the highest number this can produce is
+ * 2,000,000,000 - inside Android's 2,100,000,000 ceiling with 100,000,000 to
+ * spare.
  */
-fun buildVersionCode(): Int =
-    providers.environmentVariable("GITHUB_RUN_NUMBER").orNull?.trim()
-        ?.toIntOrNull()?.takeIf { it in 1..2_100_000_000 } ?: 1
+val VERSION_CODE_BASE = 1_000_000_000
+
+/**
+ * The largest CI run number [buildVersionCode] will add to
+ * [VERSION_CODE_BASE]. One billion, which puts the highest reachable
+ * versionCode at 2,000,000,000 - under Android's 2,100,000,000 ceiling.
+ *
+ * A run number outside 1..this is refused rather than folded back to the
+ * base, because a silent fallback would hand a CI build a LOWER number than
+ * the build before it: the downgrade this whole scheme exists to prevent.
+ */
+val VERSION_CODE_MAX_RUN = 1_000_000_000
+
+/**
+ * GitHub Actions' run number for this build, or null for a build made
+ * anywhere else.
+ *
+ * BOTH variables are required, not GITHUB_RUN_NUMBER on its own.
+ * GITHUB_RUN_NUMBER is an ordinary environment variable that any build can
+ * carry - the 10009 described above is what a build carrying one outside
+ * GitHub Actions produced - while GITHUB_ACTIONS is set by GitHub's runner
+ * and by nothing in this project. Gating on it keeps the release lane for
+ * real CI runs, so a build made on someone's PC can never land inside it and
+ * overtake a published release.
+ *
+ * Taken through `providers`, so the configuration cache (gradle.properties)
+ * knows what this build's number depends on.
+ */
+fun ciRunNumber(): Int? {
+    val actions = providers.environmentVariable("GITHUB_ACTIONS").orNull?.trim()
+    if (actions == null || !actions.equals("true", ignoreCase = true)) return null
+    val raw = providers.environmentVariable("GITHUB_RUN_NUMBER").orNull?.trim()
+    val run = raw?.toIntOrNull()
+    if (run == null || run !in 1..VERSION_CODE_MAX_RUN) {
+        throw GradleException(
+            "GITHUB_RUN_NUMBER is '$raw', which is not a run number between 1 and " +
+                "$VERSION_CODE_MAX_RUN, and GITHUB_ACTIONS is set - so this is a CI " +
+                "build. Stopping on purpose instead of falling back to a lower number: " +
+                "Android would then refuse to install this APK over the copy already on " +
+                "the phone (INSTALL_FAILED_VERSION_DOWNGRADE), and the only way past that " +
+                "is an uninstall that wipes the pairing token.",
+        )
+    }
+    return run
+}
+
+/**
+ * Android's version number for this build: [VERSION_CODE_BASE] plus CI's run
+ * number, or [VERSION_CODE_BASE] alone for a build made anywhere else.
+ *
+ * The full reasoning, and the collision that produced it, is on
+ * [VERSION_CODE_BASE] above. In one line: the number only ever goes up (an
+ * older build cannot replace a newer one), it starts a billion above anything
+ * built outside CI (so a release can always install over one), and the same
+ * CI run always produces the same number (so a re-run is accepted as equal).
+ */
+fun buildVersionCode(): Int = VERSION_CODE_BASE + (ciRunNumber() ?: 0)
 
 /**
  * The version people see (Android's app info, and About in the app): the one
@@ -46,6 +134,12 @@ fun buildVersionCode(): Int =
  * desktop installer's version (desktop-release.yml). So a CI build reads
  * "0.2.57", and a build made anywhere else reads what VERSION says. Through
  * `providers`, so the configuration cache knows it depends on the file.
+ *
+ * The run number comes from [ciRunNumber], so it means the same thing here as
+ * it does one function up: a build made outside GitHub Actions reads plain
+ * VERSION even if GITHUB_RUN_NUMBER happens to be set in its environment -
+ * which is what this comment has always said, and until 2026-10-12 was not
+ * true (the phone carried 0.2.10009 from exactly such a build).
  */
 fun buildVersionName(): String {
     val base = providers.fileContents(layout.projectDirectory.file("../../VERSION"))
@@ -55,8 +149,7 @@ fun buildVersionName(): String {
         throw GradleException(
             "VERSION at the top of the repository must be major.minor.patch, not '$base'")
     }
-    val run = providers.environmentVariable("GITHUB_RUN_NUMBER").orNull?.trim()
-        ?.toIntOrNull()?.takeIf { it in 1..2_100_000_000 }
+    val run = ciRunNumber()
     return if (run != null) "${parts[0]}.${parts[1]}.$run" else base
 }
 

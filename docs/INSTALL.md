@@ -1089,6 +1089,18 @@ into both apps too).
    If it says `INSTALL_FAILED_UPDATE_INCOMPATIBLE`, the copy already on the
    phone was signed with the old key; [`keystore/README.md`](../keystore/README.md)
    has the three steps (uninstall once, install, pair again).
+
+   If it says `INSTALL_FAILED_VERSION_DOWNGRADE`, the APK you are installing
+   is numbered *lower* than the copy already on the phone - an older release
+   file, or a build made on a PC. Install the newest
+   `jarvis-client-<commit>.apk` from
+   [`client-latest`](https://github.com/darknight11ish/Epic-Jarvis/releases/tag/client-latest)
+   instead. Since 2026-10-12 a published release is numbered above anything
+   built anywhere else on purpose (`VERSION_CODE_BASE` in
+   `jarvis-client/app/build.gradle.kts`, and why it exists), so this message
+   means the file is old, not that the release is broken. **Do not uninstall
+   to get past it**: that is the message's whole cost - an uninstall wipes
+   the app's data and the pairing token with it.
 3. Open it → Pairing → host `yourpc.tailnet.ts.net:4719` (Tailscale) or
    `yourpc.nord:4719` (Meshnet, e.g. `my-pc.nord:4719`), then the
    token: on the PC, the desktop app's **Settings → Connection → Show the
