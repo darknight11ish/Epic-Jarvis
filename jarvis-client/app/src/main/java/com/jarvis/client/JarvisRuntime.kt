@@ -4795,6 +4795,35 @@ object JarvisRuntime {
             _notice.value = it
             return null
         }
+        // A PC-ONLY CARD ANSWERS BEFORE THE SIGNATURE IS EVEN ASKED FOR.
+        //
+        // Measured on the owner's CPH2419 on 2026-10-11: he tapped Approve on the
+        // live $15 DeepSeek money-limit card - `raise_api_limit`, in the
+        // backend's own `PC_ONLY_ACTIONS` - and the phone offered him "Turn on
+        // signed approvals". Turning it on CANNOT help: `decide()` refuses a
+        // pcOnly card at :4003 whatever the signature, and `ApprovalCard`'s
+        // `canApprove` carries the same `!item.pcOnly`. So he would switch it
+        // on, tap again, and it would still refuse - which is exactly what he
+        // reported, twice, as "it is still not working".
+        //
+        // `AsksFirst.APPROVE_ON_PC` is the sentence for this, it already
+        // existed, and it already carries the useful half - "Deny still works
+        // here." It was simply never reached: this function asked the PC for a
+        // nonce first, and the PC answered `no_approval_key`, so the check in
+        // `decide()` that would have said the right thing never ran.
+        //
+        // After `decisionBlocker`, deliberately: an EXPIRED pcOnly card must
+        // still say it expired (DEF-010), because that is the obstacle in front
+        // of him. The order is: what blocks every decision, then what blocks
+        // this one, then the signature.
+        //
+        // AND THIS DOES NOT LOOSEN THE GATE. A pcOnly card stays unapprovable
+        // from this phone - that is the rule, and `decide()` still refuses it.
+        // Only the reason he is given changes.
+        if (item.pcOnly) {
+            _notice.value = com.jarvis.client.net.AsksFirst.APPROVE_ON_PC
+            return null
+        }
         val post = api.approvalPost(SignedApproval.CHALLENGE_PATH, SignedApproval.challengeBody(item.id))
         if (post !is ApiResult.Ok) {
             _notice.value = describe((post as ApiResult.Failed).error)
