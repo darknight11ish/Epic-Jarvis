@@ -1,0 +1,1932 @@
+# Decisions, dated: the owner's decisions from 2026-09-24 to 2026-10-11
+
+**This is the record, not the rulebook.** Every block below was moved here **verbatim**
+from `CLAUDE.md` on 2026-10-12, because that file had grown to about 150 KB and the
+harness loads only the first 64 KB of it - silently. The rules themselves stayed in
+`CLAUDE.md`; the dated reasoning behind them lives here.
+
+Nothing in this file was reworded while moving. The blocks are in their original order.
+Read `CLAUDE.md` to know a rule; read this to know **when** it was decided, what the
+owner's own words were, and what it replaced.
+
+Also decided 2026-09-24: an answer that uses a sensitive saved fact is
+**kept on screen, not read aloud**, by default - even under "Read aloud"
+for answers that use memories. A voice setting lets the owner allow it;
+turning that on raises an approval card like the other voice settings.
+
+Also decided 2026-09-24, after the safety research
+(`docs/RESEARCH-2026-09-24.md`):
+- **Note-writing waits for a yes after outside text.** In a turn where Jarvis
+  has read an email, web page, file or other tool output (or the
+  conversation is tainted, or the message was pasted or shared), writing to
+  Obsidian, Logseq or Joplin raises an approval card. Other turns save notes
+  straight away, as before.
+- **Passwords, PINs, account numbers and ID numbers always wait for the
+  owner's yes**, even with "Also remember sensitive topics automatically"
+  on. That setting covers health, money and the other sensitive topics only.
+- **"Erase the words" joins Forget.** Forget still hides a fact and keeps its
+  history. A second action, "Erase the words", wipes the fact's text for
+  good (and its search entry); only the dates stay, so the history shows
+  that something was erased. It asks "are you sure?" first, like Forget.
+- **Hands-free voice is as trusted as the talk button by default, with a
+  setting to make it stricter** (owner, 2026-09-24). A voice setting
+  "Hands-free ("Hey Jarvis")" offers: "Same as the talk button" (default)
+  and "Only trust the talk button" - under the stricter choice, a turn
+  started by "Hey Jarvis" cannot save facts without a card, and its memory,
+  sensitive or private answers stay on screen. Choosing the stricter option
+  is immediate; going back raises an approval card, like the other voice
+  settings. The voice check's wording says plainly that it cannot tell a
+  recording or a copy from the real voice.
+- **Spoken questions get spoken-style answers, and speech starts at the
+  first comma.** A voice turn tells the model its answer will be spoken
+  (short first sentence, 1-3 sentences unless asked for more, no lists or
+  markdown); typed turns are unchanged. Both apps start speaking at the
+  first comma of an answer once the phrase is long enough.
+- **Phone pairing by QR code, with a short typed code as the backup**,
+  confirmed by an approval card on the PC before any key is handed over.
+  Built together with per-device keys (task "more devices"), since both
+  change how a device gets its key.
+
+Decided 2026-09-25, after the competitiveness audit
+(`docs/RESEARCH-2026-09-24.md` and the audit reports):
+- **Timers, reminders and one shared scheduler come first** in the queue.
+  The any-GPU presets, Docker, model advice and mouse control wait. Build
+  ONE scheduler (the initiative engine and digest) and reuse it for
+  briefings, sleep mode and the overnight tidy - not one per feature.
+- **A plain timer or a one-time reminder needs no approval card; anything
+  that repeats ("every weekday at 7") asks once with a card**, and that
+  card lists the next run times. Simple commands like timers are answered
+  without the AI model, so they keep working when the model is slow,
+  unloaded or asleep.
+- On the desktop, while App lock is on, the approval widget shows only a
+  short title and its Approve opens the locked app; the HUD is locked too.
+  On the phone, screenshots are blocked while App lock or "Hide memory lists
+  and chat history" is on.
+- **Plain `http://` (unscrambled) to Home Assistant or the calendar is
+  allowed only inside the owner's own networks:** this PC, the home network
+  (private addresses such as 192.168.x.x and 10.x.x.x, and `.local` names),
+  Tailscale and NordVPN Meshnet (both encrypt the traffic themselves). It is
+  refused to anything on the open internet.
+- **The "I heard you" sound gets a switch in both apps, off by default**,
+  next to the "One moment" switch (the owner changed on to off, 2026-09-25).
+- **The standby schedule wakes Jarvis only if the schedule put it on
+  standby.** Standby switched on by hand stays on at the end of the hours.
+- **The morning briefing shows new emails' count AND senders by default**,
+  with a setting in both apps to show the count only.
+- **Web search with a choice of five providers, SearXNG the default,** in
+  this order: SearXNG (self-hosted, in Docker, on this PC only), DuckDuckGo
+  (the `ddgs` library, DuckDuckGo backend only), Exa and Tavily (free keys,
+  no payment card), and Brave (a key and a payment card that is charged past
+  the $5 monthly credit - the owner removed it, then asked for it back the
+  same day, 2026-09-25; its line says plainly that it can cost money). Keys
+  follow rule 3. Each has a short "why use this one" line in both apps, and
+  Jarvis can explain the choice. Left out, and the list says why: Whoogle
+  (it stopped returning results in 2025). No silent fallback: if the chosen
+  provider is down, Jarvis says so and offers to switch.
+- **When a search asks first:** by default only when private things could
+  slip in - a card showing the exact search words if the conversation has
+  read email, files, notes or saved memories; no card for a search that
+  comes straight from the owner's question. A setting makes it ask every
+  time.
+- **Jarvis may read Google Calendar through its private link** ("Secret
+  address in iCal format"): read-only, set on the PC only, and the link
+  kept as safely as a password (never logged, shown or sent anywhere but
+  Google).
+
+Decided 2026-09-25, after the audit against Meta's Muse
+(`docs/COMPETITORS-MUSE-2026-09-25.md`):
+- **Jarvis may SEND email, one approval card per email**, the card showing
+  the exact recipients, subject and full text; never an "always allow", and
+  the card says plainly when the conversation has read outside text. Sending
+  is a new named way out of the PC (ARCHITECTURE section 4), like the others.
+- **Close the approval gap later:** today the Windows fingerprint/PIN check
+  for risky approvals lives in the desktop app, so a program already on the
+  PC could approve by calling the backend directly with the pairing token.
+  The owner chose to have the backend itself require that check for risky
+  approvals - a later piece of work; until then it is written down as a
+  known limit (ARCHITECTURE section 3).
+- **Build step 1 of the approval-gap design now** (`docs/APPROVAL-GAP-DESIGN.md`,
+  owner 2026-09-25): the PC's backend itself asks Windows Hello before
+  accepting a risky approval that comes from the PC, stamps each real
+  approval so an "approved" written straight into the database does not
+  count, and the desktop stops asking separately so the owner is asked once.
+  It narrows the gap; a program written specifically to attack Jarvis can
+  still get around it, and the docs say so. The phone half (a Keystore key
+  that needs a fresh fingerprint per risky approval) comes with "more
+  devices".
+- **No lock, no risky approval:** on a PC without Windows Hello set up, or a
+  phone without a screen lock, a risky approval is refused until one is set
+  up, with a plain message saying how (owner, 2026-09-25).
+
+Decided 2026-09-25, after the creativity audit
+(`docs/CREATIVITY-AUDIT-2026-09-25.md`):
+- **Web search asks first only when the search words would repeat a saved
+  fact, or a sensitive fact was used** - no longer whenever any memory
+  (a pinned fact, a recalled one) was part of the question. After outside
+  text, and with "Ask before every web search" on, it still asks as before.
+- **One smart-home card may cover several named devices**, every one listed
+  in full on the card (e.g. "turn off the kitchen, hall and bedroom
+  lights"). Locks, alarms, doors and covers always get a card of their own.
+  It is one decision about a fully listed set - never a standing permission.
+- **Jarvis's manner: warm and brief by default, with a "Plain" option** in
+  both apps' settings (plain, businesslike answers). Manner never changes
+  what Jarvis does, asks or remembers - only how it phrases things.
+
+Decided 2026-09-25, after reviewing the "Build Your Own Jarvis" prompt pack
+and video (owner chose: build four ideas now):
+- **A live preflight check** on the PC: every real chain tested end to end,
+  "N pass, N fail, N warn", one new check per real incident.
+- **A "stop everything" hotkey** on the desktop that halts any action Jarvis
+  is taking on the screen at once.
+- **Urgent alerts without phone calls:** "tell me when ..." (a named sender's
+  email, a device change) set up with one card; a match only notifies -
+  urgent ones as a phone notification that keeps ringing until seen. No
+  telephony service: a call would send private text to an outside voice
+  company (rule 1).
+- **Focus sessions**, off unless started: a timer plus Quiet; Jarvis watches
+  which app/site is in front ON THE PC ONLY, names the distraction out loud
+  ("Instagram can wait") but never stores what it saw (only counts), waits
+  until the owner settles before locking on, and ends with a report card.
+  Snooze, "I'm doing research", pause and stop by voice. Nothing leaves the PC.
+
+Decided 2026-09-26, after checking a Gemini audit finding:
+- **The apps accept a server address on the owner's own networks only:**
+  this PC, the home network (private addresses and `.local` names),
+  Tailscale and NordVPN Meshnet. Anything on the open internet - including
+  a public tunnel such as ngrok or Cloudflare - is refused with a plain
+  message saying why, so the pairing key never travels through one.
+  While a refused address is saved, the desktop does nothing over the
+  network - no chat, no reads - until an allowed address is entered; it
+  does not quietly fall back to this PC (owner, 2026-09-26).
+
+Decided 2026-09-26, after the approvals audit
+(`docs/APPROVALS-AUDIT-2026-09-26.md`) - small, low-risk things stop asking:
+- **Plain repeating reminders, alarms and the standby schedule need no
+  card.** Only the owner's own words can set one, and deleting is instant.
+  The morning briefing and "tell me when" keep their one card (they read
+  email or the calendar). This replaces "anything that repeats asks once"
+  for those three kinds.
+- **Lights, plugs and fans: a setting, off by default,** lets Jarvis switch
+  devices the owner names without a card. Turning it on raises a card;
+  turning it off is immediate. Never after outside text in the turn. Locks,
+  doors, alarms and covers always keep a card of their own.
+- **Everyday facts about people the owner mentions save automatically**
+  ("my sister likes jazz"). Their health, money, address and contact
+  details, and passwords/PINs/account/ID numbers, still wait for a yes.
+- **A "What asks first" page in both apps** lists every action and whether
+  it asks, in plain words, with "make stricter" switches. On the PC only,
+  the owner may also loosen a short safe list (note writes, the wiki,
+  reading their own calendar, email, notes and home status) - one card plus
+  Windows Hello per change. Nothing outside that list can be loosened from
+  an app.
+
+Decided 2026-09-26, after the professionalism audit
+(`docs/PROFESSIONALISM-AUDIT-2026-09-26.md`):
+- **The maker's name is the owner's GitHub name, "darknight11ish"** - as
+  publisher, copyright holder and in the licence - not "Jarvis Labs" (a real
+  company uses that name).
+- **Bring GitHub's `main` up to date with one pull request, once the bug
+  audit's fixes have landed.** The owner presses Merge on GitHub.
+
+Decided 2026-09-26, after the bug audit (`docs/BUG-AUDIT-2026-09-26-*.md`):
+- **App lock covers task notes too**, like approval notes: with App lock on,
+  adding a note to a running task needs the app unlocked first.
+- **A late alarm rings only if it is at most 10 minutes late.** If the phone
+  (or the PC app) hears about an alarm or reminder later than that - it was
+  out of reach, or restarted - it shows a silent notification saying when
+  it was missed, instead of ringing as if it were happening now.
+
+Decided 2026-09-26, after the memory research
+(`docs/MEMORY-RESEARCH-2026-09-26.md`):
+- **Build memory ideas 1-4 first, each measured by the memory self-test:**
+  a re-ranker over the top ~20 facts, a bigger self-test, "said again"
+  counts, and real "true from" dates (older news never replaces newer).
+  **Then the overnight tidy** - cards only, never changing memory by itself.
+- **Searching the owner's own past chat words waits** until 1-4 are built
+  and measured; it changes a written rule (ARCHITECTURE section 5).
+
+Decided 2026-09-26, after the approvals build:
+- **The screen is called "Brain" in both apps** (the phone's "Mind" is
+  renamed to match the PC).
+- **Everyday facts about people are treated as normal everywhere**, not
+  only when saving: they may be read aloud and do not make a web search ask
+  first. Their health, money, address, contact details, debts and secrets
+  stay sensitive everywhere.
+
+Decided 2026-09-26, after the cutting-edge research
+(`docs/CUTTING-EDGE-2026-09-26-*.md`) - build all four groups, after the
+current fix pass, and keep researching:
+- **Quick wins:** briefing weather from the owner's own Home Assistant;
+  "Also on my phone" (hand an alarm or event to the phone's own apps by the
+  owner's tap); reading the text in a screenshot on the PC (marked as
+  outside text).
+- **Smarter tools:** a short tool list with more on request, "ask, don't
+  guess" and multi-step tool tests, then the MCP bridge (local servers only,
+  read-only first, a card to start each server, every call through the
+  gate).
+- **Voice upgrades:** a newer "Hey Jarvis" detector and a fast voice-copying
+  voice, each measured before it replaces anything.
+- **Documents & email:** asking about PDFs and Word files, instant "tell me
+  when" for email, saving drafts to the owner's Drafts folder.
+Also fixed without asking: a model that cannot use tools gets a true error
+message, and `OLLAMA_NO_CLOUD=1` as a second lock behind rule 1.
+
+Decided 2026-09-26: **reading phone notifications is added as an option**
+(queued after the four cutting-edge groups and the security audit). The
+safe version only: off by default, turning it on raises an approval card,
+turning it off is immediate; only apps the owner chooses (never banking);
+one-time codes hidden before anything reaches the model; treated as
+outside text - never makes Jarvis act and is never saved as a fact; shown
+or summarised only when the owner asks; nothing leaves the owner's own
+devices. Never text messages (SMS), and Jarvis never replies or sends.
+
+Decided 2026-09-26, when the owner asked for memory and learning to be
+"really refined":
+- **Memory and learning run now, alongside the four groups** - not after
+  them. Every memory or learning change must beat the memory self-test
+  (`backend/eval_memory.py`) and the learner test (`backend/eval_learner.py`)
+  before it is kept; a change that makes a number worse is not kept.
+  Numbers from the real model come from the owner's PC (one PowerShell
+  line), and are written on a memory scoreboard page after each change.
+  A dedicated memory review team follows ideas 1-4.
+- **"Bring in my Notion export"** joins the Documents & email group: the
+  export (Markdown pages and CSV tables) goes into a folder Jarvis searches,
+  then the owner can ask about it or have it tidied. Imported notes are
+  outside text: they are never learned as facts, and every note Jarvis
+  writes back after reading them asks first, as for any note.
+
+Decided 2026-09-27, the owner's answers to `docs/OWNER-QUESTIONS-2026-09-27.md`
+(after the feasibility, UI, memory and ease-of-use audits):
+- **Email drafts: a card every time**, showing the full draft, before any
+  text goes to the owner's Drafts folder.
+- **Plug-in programs (MCP): programs on this PC only** (the owner had no
+  preference; the built, stricter version stays). A card when a plug-in is
+  added and again when its program or version changes; each start is logged.
+- **Backups: one locked backup file into a folder the owner picks, a
+  NordLocker (or other cloud-synced) folder included.** Locked with a
+  recovery code only the owner has (shown once); Jarvis keeps only the last
+  few. This bends rule 1 for that one locked file only; the app must say
+  plainly that a lost code means a useless backup and that erased facts stay
+  in older backups until they age out.
+- **The feasibility audit's 31 small items are queued after the four groups.**
+- **Build the UI audit's "do first" list.** The HUD window uses the app's
+  theme colours; the widget's Approve button matches the Jarvis bar's; the
+  phone keeps its own font everywhere.
+- **Memory:** "Erase the words" also offers "Also delete the chat it came
+  from"; the re-ranker may also drop weak facts, but only if the PC's
+  self-test shows it helps.
+- **Web search ships switched on** (with the existing asks-first rules).
+- **A read-only list of past approvals** (title, Approved / Denied / Timed
+  out, when, which device) - after reading the owner's `jarvis_gate.py`.
+- **Reading tools (calendar, email, notes, home status) can be switched on
+  from the PC app**, each with a card plus Windows Hello; other tools stay in
+  the settings file.
+- **A search box in History for the owner's own old chats is allowed now**
+  (shown on screen only; nothing saved, nothing handed to the AI).
+- **Crisis help line: United States - 988 (Suicide & Crisis Lifeline) and
+  911.** Crisis messages are never learned from and never counted.
+- **The plan card is allowed later**, only after the multi-step safety tests
+  pass; risky steps still get their own card.
+- **"From now on, ..." style requests apply at once, with Undo, no card.**
+- ~~Phone: allow home-network addresses~~ - **replaced 2026-09-28** (see
+  the studio review block below): the phone stays on Tailscale/Meshnet.
+- **Focus report card: drop the streak line.**
+- **12 GB card:** longer conversations with picture understanding first, and
+  making pictures too (swapped in when asked, since both cannot sit on the
+  card at once) - decided in detail after the card is measured.
+- **Music/video control on the PC: no card**, only from the owner's own words.
+- **Smartwatch: every notification stays on the phone by default**, with a
+  setting to let them all show on a compatible watch (turning it on raises a
+  card, turning it off is instant).
+- **News headlines and "tell me when this page changes": yes, the safe
+  version** - one card per address the owner adds, read-only, never follows
+  links elsewhere, never acts on what it reads, outside text; queued with
+  the small items.
+- **Games and role-play run in a temporary chat automatically.**
+- **Inside jokes: yes**, a "between us" list in Brain with Forget, from the
+  owner's own words only.
+- **Humour: a switch in "How Jarvis talks", off to start**; never on cards,
+  errors or serious topics.
+
+Decided 2026-09-27, the owner's answers to the cross-cutting/backend audits'
+own "owner's call" findings:
+- **A crisis turn is excluded from the "suggest the bigger model" counters
+  too** - the same "never counted" rule already covers memory and learning;
+  it now covers this in-memory signal as well.
+- **The phone and desktop "open a chat" phrase lists are unified** into one
+  shared source both sides check, so the two can no longer quietly drift
+  apart (`net/OpenChatPhrase.kt` and `jarvis_quick.py`'s `_OPEN_CHAT` used
+  to be two separately-maintained lists).
+- **"Floating Jarvis"'s Bubble mode gets the Android conversation shortcut
+  it needs** - without one, Android 11+ silently never shows it as a
+  bubble at all, even with the setting on. **Not the whole fix**, an Opus
+  5.5 re-check found (2026-09-27): Android's own conversation requirement
+  also needs `NotificationCompat.MessagingStyle`, which this notification
+  still does not use - so a bubble may still not appear until that second,
+  larger piece (a real redesign of what the notification looks like, on or
+  off Bubble mode) is also done. Try it on a real phone before trusting it.
+- **App lock matches on both apps for the floating face/avatar**: neither
+  is hidden or blanked while locked - matching the desktop's original
+  behaviour, which already showed link, approval and error state while
+  locked. The phone's avatar used to go neutral instead; it now shows the
+  same connectivity/listening state regardless of App lock, same as the
+  desktop always did.
+
+Opus 5.5 re-check, 2026-09-27, of the fixes above and the CI-failure fixes
+alongside them - six small, real findings, all fixed except two written down
+here rather than patched blind:
+- Fixed: the Settings hotkey row for a key Jarvis itself blanked (a default
+  clash, not another program) said "in use by another app" - the exact wrong
+  blame finding #7 already fixed in the startup toast, missed on this row.
+- Fixed: a toggle in "Your second graphics card" whose re-read failed left
+  its one-shot focus-restore marker set, so a later, unrelated successful
+  repaint could yank keyboard focus back to that switch from wherever the
+  owner had moved on to.
+- Fixed: the correction-phrase check's anchor (finding #9's fix, above)
+  only spared a leading "no," - "Jarvis, that's wrong", "nope, that's
+  wrong", "hmm, that's not right" and "actually it's wrong" had quietly
+  stopped counting as corrections. Widened; the doctor/landlord false
+  positives finding #9 was written for stay fixed.
+- Fixed: the Bubble-mode shortcut push discarded a real success/failure
+  answer behind a hardcoded `true` - an earlier note here that the call
+  "returns Unit" was wrong.
+- Fixed: the phone/desktop "open a chat" phrase-list test (above) only ever
+  checked the fixture against the app, never the app against the fixture -
+  a phrase added straight to the phone's list, in neither direction, would
+  have passed silently.
+- **Written down, not fixed:** marking a crisis answer "wrong" (the thumbs-
+  down button) still counts toward "suggest the bigger model" - the crisis
+  exclusion above only covers the live phrase-based signal and the
+  struggle count. Fixing it needs the turn's crisis flag and its id joined
+  across two separate patches (`chat-stream.patch`, which has the flag, and
+  `second-card-suggest.patch`, which has the id) - mechanical, but not done
+  without the owner's go-ahead given how carefully this project already
+  treats crisis handling. **Go-ahead given 2026-09-28: queued as milestone 8**
+  (`docs/AUDIT-2026-09-28-REPO-REFS.md`).
+- **Fixed 2026-09-28 (the owner said fix it; commit 248227a2):** marking a
+  crisis answer "wrong" (the thumbs-down button) used to count toward
+  "suggest the bigger model" - the crisis exclusion above only covered the
+  live phrase-based signal and the struggle count. Now the chat route hands
+  a crisis turn's id to `jarvis_agent.note_crisis_turn` when it makes the
+  id (`second-card-suggest.patch`, on `wellbeing.patch`'s flag and again on
+  `run_local_turn`'s own check), and `note_correction` does not count a
+  mark on that id. `test_wellbeing.py` runs the join end to end.
+- The crisis thumbs-down gap written down above is closed by the fix
+  recorded just above (2026-09-28, `jarvis_agent.note_crisis_turn`); the owner's
+  go-ahead of 2026-09-29 confirmed that fix, and nothing else about crisis
+  handling changed.
+
+Decided 2026-09-27, the owner's answers after the studio review (play
+testers, scouts and integration scouts; `.claude/agents/`):
+- **Talk-to-type on the PC: one approval card to switch it on**, then no
+  card each time. Hold a key, speak, and Jarvis types what was said into the
+  program in front - speech-to-text on the PC only, as always. Switching it
+  off is immediate. Not on the phone (a client must not do speech-to-text).
+  Built on GitHub's `main` (JARVIS-API §72), merged into the research branch
+  2026-09-28; while Jarvis Live is on, talk-to-type waits, like the talk
+  button.
+- **Answers that used web search, weather or home status are read aloud**
+  when read-aloud would otherwise apply. Answers that used email, calendar,
+  notes, documents, memory, or any tool not on that short list stay on
+  screen, and every earlier rule (sensitive facts, the stricter hands-free
+  choice) still comes first. This replaces "any tool keeps the answer on
+  screen".
+- **Jarvis may hold a conversation with an AI chatbot (such as ChatGPT or
+  Gemini) for the owner**, asking it things and following up on its answers
+  **on its own, within limits the owner sets**. This loosens rule 4 and the
+  "ask each time" cloud rule (ARCHITECTURE §11) for this feature only. How
+  the limits work, and whether it uses the chatbot's official API or its
+  website, is being designed and comes back to the owner before anything is
+  built (`docs/CHATBOT-DRIVER-DESIGN.md`). It may need both graphics cards.
+  Rule 1 is unchanged: nothing private (email, files, credentials, memory)
+  goes into those chats.
+  Owner's answers, 2026-09-28: **Gemini first, through its website
+  (gemini.google.com)**, ~~driven openly - at human pace, in a visible
+  browser window, with nothing that hides it from or dodges Google's bot
+  detection, and no captcha-solving. The owner chose this knowing Google's
+  terms forbid automated access and that the account could be closed. A
+  request to add "tactics that help avoid bans" was declined: getting round
+  a site's bot protection is not something this project builds.~~
+  **Reversed 2026-09-29 (owner): "driven openly" and the refusal of
+  "tactics that help avoid bans" are gone** - see "Stealth on for
+  everything" below. What stays: Jarvis never solves a captcha (it hands it
+  to the owner), and the owner chose this knowing Google's terms forbid
+  automated access and that the account could be closed.
+  **A spare Google account used only by Jarvis**, not the owner's main
+  one (owner, 2026-09-28): a ban cannot touch the owner's Gmail, and the
+  owner's email and Gemini's memory of them stay out of these chats.
+- **Inbox tidy by voice: yes** (owner, 2026-09-28) - archive, star, mark
+  read, or move to Trash. One approval card lists every email it will
+  touch, approved on screen (never by voice), then Undo. "Delete" only ever
+  moves to Trash. The card says when the choice came from reading email
+  (outside text). A new named way out of the PC (ARCHITECTURE §4) and its
+  own gate action, like sending email. Built (JARVIS-API §95; merged in PR #30, 2026-09-29). Tried against a stand-in mail server, never a real mailbox.
+- **The phone connects through Tailscale or NordVPN Meshnet only** (owner,
+  2026-09-28), replacing "Phone: allow home-network addresses" of
+  2026-09-27. Allowing a home address would mean the PC also answering on
+  home Wi-Fi, where the pairing key travels unscrambled; the mesh networks
+  work at home too and scramble it.
+- **A "listening" sound after a bare "Hey Jarvis"** (owner, 2026-09-28):
+  only as part of the existing "I heard you" switch, which stays off by
+  default.
+- **Animal faces offer their own voice once** (owner, 2026-09-28): the
+  first time the owner picks an animal face, one line asks "The panda has
+  its own voice. Use it?" (Use it / Keep my voice), remembered per face. A
+  face never changes the voice by itself. **Confirmed 2026-09-28 over the
+  mascot branch's "Voice follows the face" switch, which was built on by
+  default:** that switch stays, but starts off, and the one-time question
+  turns it on. **The sea otter must not use Kokoro's "Sky" voice** (its name
+  matches the voice OpenAI withdrew in 2024 over a likeness complaint);
+  give it another Kokoro voice with the same playful pitch. Animal voices are Kokoro voices,
+  blends and pitch from Jarvis's own sources only - never a real person's
+  voice - and must pass the "not the owner's voice" check.
+- **Upgrade the voice pack to Kokoro v1.0** (owner, 2026-09-28): the best
+  rated voices, real British pronunciation, and a "Hear it" sample button
+  for every voice in both apps. The saved choice moves from a number to the
+  voice's name, and the owner's current choice carries over. A 350 MB
+  download on the PC, checksum-pinned. Built (JARVIS-API §94; merged in PR #30, 2026-09-29). Nobody has listened to a v1.0 voice yet - the "Hear it" buttons are how to try them.
+- **A "sneaky instruction" (prompt-injection) detector: test two, keep the
+  winner** (owner, 2026-09-28) - Meta's Prompt Guard 2 (Llama 4 Community
+  Licence: credit "Built with Llama", licence file, the owner downloads it
+  after accepting Meta's terms) and an Apache-licensed one (Horizon Labs
+  guard-small). Both run on Jarvis's own attack tests on the owner's PC;
+  whichever wins is kept, and it only ever adds a warning - it never removes
+  or replaces an approval card.
+- **A thumbs-down on a crisis answer stops counting toward "suggest the
+  bigger model"** (owner, 2026-09-28) - closes the gap written down in the
+  Opus 5.5 re-check above. Done (commit 248227a2).
+- **Build the chatbot driver first** (owner, 2026-09-28), ahead of easier
+  setup, voice upgrades and the other new abilities. It is **versatile**:
+  one driver with a separate "adapter" per chatbot website, Gemini first,
+  others added one at a time (each new chatbot is a new named way out of
+  the PC and gets the owner's OK first, since each company's terms differ).
+  **Two versions by hardware:** with both graphics cards, the full version
+  (long, flexible sessions, the driver model on the 12 GB card); with one
+  card, a limited version (shorter sessions, sharing the main card, waiting
+  while the owner chats). The two-card version is switched on only once
+  the second card is installed and measured.
+- **Phone: tap to talk, stopping at a pause** (owner, 2026-09-28), instead
+  of only hold-to-talk. The phone detects the pause (Smart Turn); the words
+  are still worked out on the PC after the voice check. A Stop button and a
+  time limit stay.
+- **Projects, like Claude's Projects and more** (owner, 2026-09-28): a
+  project has a name, its own instructions, files and chats, its goals
+  (built on the Goals feature, `jarvis_goals.py` on the continuation
+  branch - not a second goals system), benchmarks to measure progress, and
+  the work being built. **Both kinds**: coding projects (benchmarks are
+  tests, speed and scores) and life projects (benchmarks are numbers the
+  owner tracks). **Jarvis does real work**: it writes files and runs code
+  and benchmarks on the PC, and **every change asks first with a card**,
+  like everything else. Designed in `docs/PROJECTS-DESIGN.md` before
+  anything is built; queued after the chatbot driver unless the owner says
+  otherwise.
+  Owner's answers to the design's questions (2026-09-28):
+  **a "Shareable" switch per project, off by default** - when on, a short
+  piece of the project's files may go to a web search or the chatbot
+  driver, shown word for word on its card first; never health or money
+  numbers, and never memory, email or credentials. This bends rule 1 for
+  that shown piece only, the way the locked backup bends it for one file.
+  **Build order inside Projects:** projects, goals, benchmarks, charts and
+  running tests first; Jarvis writing code comes once the 12 GB card is
+  installed and measured.
+  **A private mark Jarvis added by itself to a benchmark** (a tracked
+  number, e.g. "5k time" mistaken for money) **can be removed by the owner,
+  with a card first** (owner, 2026-09-28), because afterwards those numbers
+  may be read aloud. A mark the owner added comes off with no card, as
+  built.
+- **Swiping on approval cards is a setting that can be turned off**
+  (owner, 2026-09-28): "Swipe to approve or deny" on the phone's Security
+  screen, on by default. Off, every card is decided with its buttons only.
+  Turning it off is instant; turning it back on asks for the fingerprint or
+  PIN, like every other loosening there. The desktop has no swipe.
+- **The chatbot driver becomes versatile** (owner, 2026-09-28): (1) **an
+  API adapter** - one adapter speaking the common OpenAI-style API, so a key
+  reaches ChatGPT, DeepSeek, Mistral, Grok, OpenRouter and similar (keys
+  under rule 3; each host a named way out); (2) **more websites, in a
+  visible window like Gemini** (~~driven openly~~ - reversed 2026-09-29, see
+  "Stealth on for everything"), each with its own spare account - **ChatGPT, Claude,
+  Microsoft Copilot, Perplexity, and other commonly used chatbot websites**;
+  (3) **a second AI on the owner's own PC** (another local model, best on
+  the 12 GB card; nothing leaves the PC); and (4) **compare**: ask several
+  AIs the same question, one card listing every AI it will ask, one summary
+  of agreements, disagreements and sources.
+  **The chatbots the studio picked are confirmed** (owner, 2026-09-28,
+  after the feature audit noted they had gone in without a per-company OK):
+  DeepSeek, Grok, Le Chat and Meta AI websites and the Groq API stay, next
+  to the ChatGPT, Claude, Copilot and Perplexity the owner named. Any
+  further chatbot still gets the owner's OK first.
+  **A money limit comes before API chatbots are used for real** (owner,
+  2026-09-28): a monthly amount per service, set on the PC; Jarvis stops
+  that service when it is reached, and the approval card shows how much is
+  left. Prices change, so the amount is an estimate from a price list the
+  owner can see and correct, and the card says "about".
+  **Amended by the owner on 2026-10-11: the phone may raise the limit too,
+  with its own fingerprint.** His words: "Let the phone raise it too, with its
+  own fingerprint" - a change to his own rule above, made after he asked to
+  change the amount "in the settings of jarvis on both the desktop and phone
+  app". Asked directly, once the limit was open, he chose the same for a
+  PRICE: the phone may correct one too. What that means, in plain words:
+  raising a limit is still ONE approval card - Windows Hello on the PC, or the
+  asking phone's own fingerprint or PIN (signed approvals, a fresh signature
+  for every raise) - while lowering a limit, removing one and correcting a
+  price change at once, from either app, with no card at all. A price needs no
+  fingerprint because it is only an estimate of what a service costs:
+  correcting it spends nothing, raises no cap and takes nothing back. **What
+  changed is WHERE a raise may be confirmed, never whether a person confirms
+  it**: the raise is still a risky approval on its own, so the PC's own path
+  still asks Windows Hello, and a phone with no approval key is still refused
+  until it turns signed approvals on. The API key itself is still typed on the
+  PC (docs/ACCOUNT-KEYS-DESIGN.md).
+  **Built 2026-09-28; the owner then chose to make it a hard stop too:**
+  Jarvis also asks each service to cap how long an answer can be, so one
+  long answer cannot carry a month past the limit. Each service names that
+  setting differently, so each one's own documentation is checked before
+  it is used. Built 2026-09-28 (field names confirmed from each company's
+  own code on GitHub, their documentation sites being blocked); **the owner
+  chose (2026-09-28): DeepSeek, whose field could not be confirmed, stays
+  usable with the estimate check only, and OpenAI keeps gpt-5-mini** even
+  though its hidden thinking can shorten answers near the limit.
+  **Compare, as built, is confirmed** (owner, 2026-09-28): up to 3 chatbots
+  per comparison on one graphics card and 4 on two, asked one after
+  another; a chatbot that shows a captcha or sign-in page is left out and
+  the others carry on (the summary says who and why), rather than pausing
+  the whole comparison.
+- **Customer-support chats** (Groupon's and similar, owner 2026-09-28) are a
+  separate mode of the driver, because the other side is a company acting
+  on the owner's real account, often a real person: **one card before each
+  support chat lists exactly which personal details Jarvis may give** (order
+  number, email and so on - never passwords or payment card numbers);
+  **every offer (refund, cancellation, change) gets its own card**, and
+  nothing is accepted until the owner approves it. ~~Jarvis says at the
+  start that it is an AI assistant~~ - **changed 2026-09-28 (owner): no
+  opening disclosure line; Jarvis writes in the owner's name**, like any
+  message an assistant drafts for someone. **If the agent asks directly
+  whether they are talking to a bot, Jarvis never claims to be human: it
+  pauses and hands that question to the owner**, who answers in the window. Designed in `docs/CHATBOT-DRIVER-DESIGN.md` before it is built.
+  Owner's answers to the design (2026-09-28): **Jarvis sends the messages
+  itself**, at human speed (~~and never hiding from the site's bot
+  detection~~ - reversed 2026-09-29, see "Stealth on for everything"),
+  and **each card names that
+  company's terms risk** before the owner approves (the real account could
+  be closed); **identity checks** (last digits of a card, security
+  questions, codes) **are always handed to the owner** in the window, never
+  answered by Jarvis.
+- **A captcha can be handed to the owner's phone** (owner, 2026-09-28):
+  when a chatbot or support site shows a captcha or sign-in page, the phone
+  gets an alert, and offers **"Solve it here"** - a live picture of that one
+  browser window only, sent PC to phone over Tailscale/Meshnet, never
+  saved, and the owner's taps and typing passed to that window only while
+  Jarvis is paused there. Solving it on the PC still works. Jarvis itself
+  never solves a captcha. The app says plainly that some captchas may
+  reject taps passed on this way. Queued after customer-support chats.
+- **The build queue, set by the owner (2026-09-28)**, in this order:
+  1. customer-support chats; 2. the captcha hand-off to the phone;
+  3. **one pull request to `main`** with everything so far (the owner
+  merges); 4. the voice upgrade (Kokoro v1.0, "Hear it" samples);
+  5. finishing the screen feature ("Look at this" and "Watch with me"
+  working on the PC and phone) - **built (PR #34, 2026-09-29)**, with the
+  limits in `docs/ARCHITECTURE.md` section 8; 6. inbox tidy by voice, **Undo for 10
+  minutes**; 7. talk-to-type on the PC, **held Right Ctrl** by default
+  (changeable in Settings); 8. QR pairing with per-device keys; 9. the
+  sneaky-instruction detector test.
+  **Corrected 2026-10-08, after a feature review measured it:** talk-to-type
+  ships on **Alt+Shift+T**, not Right Ctrl, and `docs/JARVIS-API.md` section 72
+  says the same. A bare Ctrl key cannot be a global hotkey in this build - the
+  hotkey library wants a real key plus a modifier, and the parser refuses an
+  accelerator with no modifier at all - so "held Right Ctrl" was never
+  buildable as written. The owner chose on 2026-10-08 to keep Alt+Shift+T and
+  have this note corrected, rather than add low-level keyboard-hook code for
+  one key. It stays rebindable in Settings.
+  **Jarvis Live extras, all yes:** a phone Quick Settings tile (start/end);
+  a headset button (press = stop talking, long press = mic off, never
+  approves); a 10-minute "Live ended - Resume" notification; a PC hotkey to
+  start/end Live, off until the owner picks one (Alt+Shift+L suggested);
+  preferring a Bluetooth headset microphone in Live; "Talk about this in
+  Live" from the phone's Share (the shared item is outside text). **The
+  phone gets the same "End Live when" setting as the PC** (default strict;
+  the looser choice asks for the fingerprint or PIN). These extras are
+  built alongside the queue where they fit, the phone ones with item 2.
+  **History marks Live sessions** (owner, 2026-09-28): each Live session
+  is already its own chat (words and times kept, encrypted; never the
+  audio, pictures or side remarks); History shows it with a "Live" label
+  and its length ("Live · 12 min · 28 Sep, 14:05") in both apps, and can
+  be filtered to Live sessions only. Built with item 2.
+- **Chats, after the chat audit** (owner, 2026-09-28;
+  `docs/studio-2026-09-28/chat-audit-*.md`): **"Continue this chat"** from
+  History in both apps (reuses the conversation, its "read outside text"
+  mark carried over), an **"Earlier chats"** link on the phone's Home and in
+  the Jarvis bar, and **the whole current conversation as a scrollable
+  thread**, not just the last answer. **Chats with other AIs and comparisons
+  are kept in History**, encrypted, marked as outside text, never learned
+  from, never read aloud. **A new conversation starts after 30 quiet
+  minutes** (the old one stays in History, and Continue brings it back).
+  **Crisis chats are kept but titled "A difficult moment"**, never with the
+  owner's words. **Support chats: export stays** (the owner's own record -
+  a named exception to "no plain-text path", saying plainly the file is not
+  encrypted), and **auto-delete and "Forget a time frame" ask before
+  removing a support chat**. **The desktop HUD's own chat box opens the
+  Jarvis bar instead**, so the PC has one chat box. History rows carry a
+  kind (chat, Live, support, chatbot, comparison).
+- **Jarvis may look at the owner's screen, on the PC and the phone**
+  (owner, 2026-09-28), two ways: **"Look at this"** - one look when the
+  owner asks (a key on the PC; the assistant gesture on the phone), nothing
+  saved; and **"Watch with me"** - a live session the owner starts and
+  stops, with a visible "Jarvis is watching" sign the whole time, pausing
+  on password fields and on apps the owner excludes (banking), nothing
+  saved. What Jarvis sees is outside text. Screen images stay on the owner's
+  own devices (the phone sends them only to the PC, over Tailscale/Meshnet).
+  Full picture understanding needs the 12 GB card; with one card, Jarvis
+  reads the screen's text only (**changed 2026-09-29: "picture mode", a slow
+  picture reader on the processor, is built and off by default - see the
+  2026-09-29 screen block near the end of this file**). **Not** always-on watching with a history
+  (Recall-style) - the owner declined it. Designed in
+  `docs/SCREEN-DESIGN.md` before it is built.
+  Owner's answers to the design (2026-09-28): **the question and Jarvis's
+  answer about the screen are kept in chat history like any chat** (the
+  picture and the screen's words never are); **screen answers are read
+  aloud** unless a sensitive fact was used or the strict hands-free setting
+  says otherwise - a named exception to "a reading tool keeps the answer on
+  screen".
+  **Under "Only trust the talk button", screen answers stay on screen**
+  (owner, 2026-09-28): a turn started by "Hey Jarvis" gets a written answer
+  about the screen only. **A voice setting lets the owner allow reading them
+  aloud** even then; like the other voice settings, turning it on raises an
+  approval card and turning it off is immediate.
+- **"Jarvis Live": design voice and camera together now** (owner,
+  2026-09-28), like Gemini Live: a back-and-forth voice conversation the
+  owner starts and stops, with no wake word between turns and interrupting
+  at any time, plus showing Jarvis the phone's camera. The voice check still
+  runs on every clip, cards are still decided by tapping (never by voice),
+  and everything stays on the owner's own devices. Not full-duplex (that
+  skips the voice check), so a turn takes about 2-4 seconds (estimated; corrected by the design). The camera
+  understands pictures only with the 12 GB card (Qwen 3.5 9B or Qwen3-VL
+  8B, unmeasured); with one card there is no camera (see the owner's answers below). The camera part stays
+  off until the card is in and a photo test passes. Designed in
+  `docs/LIVE-DESIGN.md` and brought back to the owner before anything is
+  built.
+  Owner's answers to the design (2026-09-28): **under "Only trust the talk
+  button", a Live session is trusted like the talk button by default**
+  (the owner pressed Start), **with a voice setting to give Live the extra
+  "Hey Jarvis" caution instead**; choosing the extra caution is immediate,
+  going back raises an approval card, like the other voice settings.
+  **Answers about what the camera sees are read aloud, like screen
+  answers**, unless a sensitive fact was used or the strict setting says
+  otherwise. **The camera stays off until the 12 GB card is in and passes
+  the photo test** - no words-only camera on one card.
+  After the rules check (owner, 2026-09-28): **a Live session started by
+  voice ("Hey Jarvis, let's talk") is trusted the same as one started with
+  the button** by default, and **the Live voice setting can change it** -
+  its choices are full trust (default), "only when started with the
+  button", and the "Hey Jarvis" caution for all of Live; a stricter choice
+  is immediate, a looser one raises an approval card. **Live pauses itself
+  during a phone or video call** and picks up afterwards (whether Windows
+  and Android can always tell a call is happening is to be checked; where
+  they cannot, the app says so and the Mute button covers it).
+  After the voice play-test (owner, 2026-09-28): **Live keeps the 2-second
+  voice check** - no "Balanced" option for Live; tap buttons cover quick
+  answers. **Side remarks to someone else are ignored**: when a Live clip is
+  clearly not meant for Jarvis, Jarvis stays silent and nothing from it is
+  learned.
+  After the build (owner, 2026-09-28): **with App lock on, the PC ends Live
+  when App lock would ask again** (1 minute after the owner last touched a
+  Jarvis window, talking does not count) by default, **with a setting to
+  end it only when Windows itself locks**; the looser choice raises an
+  approval card, the stricter one is immediate. **The desktop Brain's
+  existing "Live" tab is renamed "Now"** (and, after the review track,
+  2026-09-28: **after a crisis turn, Live quietly gets more time and skips
+  the "minutes left" warning**; **the two interrupt settings become one** -
+  interrupt by voice, by tap only, or not at all - for Live and normal use
+  alike; **side remarks are not kept in chat history at all**) so it is
+  not confused with
+  Jarvis Live.
+- **After the second chat audit** (owner, 2026-09-28;
+  `docs/studio-2026-09-28/chat-audit2-*.md`): **the PC re-registers a
+  continued chat's own typed and spoken messages from its encrypted record**,
+  so facts learned after "Continue this chat" or a restart save on their own
+  again instead of waiting as cards for about 10 questions. This loosens the
+  "only messages seen arriving live count" rule for the owner's own typed or
+  spoken words in a chat the PC already holds - never for shared, pasted,
+  chatbot, support or outside text, and the outside-text mark still decides.
+  **The scrollable thread hides under "Hide memory lists and chat history"**
+  on both apps, like the "Used" list. Not yet decided by the owner, built
+  the careful way meanwhile: the delete dialogs say facts stay and backups
+  keep copies; the thread shows a "Jarvis reads from here" line; a chat that
+  spills over the days in "Forget a time frame" starts unticked; the bigger
+  re-send caps for two cards wait until the second card is measured.
+  **The owner then answered the two open items (2026-09-29):** **a crisis
+  question and its answer do not stay in the scrollable thread** (the help
+  answer shows once; the chat is still kept in History as "A difficult
+  moment"); and **two short warnings are built**: "Continue this chat" says
+  when chat history is off that new messages will not be kept, and the
+  phone's Live screen says when Temporary is on that the session will not be
+  kept.
+- **"Forget a time frame"** (owner, 2026-09-28): the owner may ask, by
+  voice or typing, to forget what Jarvis learned or said in a time frame
+  ("forget what you learned last week", "delete my chats from 1 to 15
+  September"). Nothing is removed at once: both apps show the exact facts
+  and chats from that time, each ticked, the owner can untick any, and ONE
+  approval card listing every item is decided by tapping only - never by
+  voice. Approved, the facts are **forgotten (retired, as Forget does) and
+  the chats deleted, with 10 minutes to Undo**; erasing a fact's words for
+  good stays the separate per-fact "Erase the words". This is the one
+  exception to "irreversible bulk actions stay off the API" (JARVIS-API
+  §18), made safe by the list, the card and the Undo window.
+  Built 2026-09-28 (JARVIS-API §64); **the owner kept its card a risky
+  approval** (Windows Hello on the PC, the screen lock on the phone),
+  because after the 10 minutes the chats are gone for good; Undo stays one
+  tap.
+- **Jarvis is built for one or two graphics cards.** Research and new
+  features say which they need; a feature may need two if a one-card PC
+  still works without it. Studio agents read `.claude/agents/JARVIS-TODAY.md`
+  first so they do not re-research what Jarvis already has.
+
+Decided 2026-09-27, when the owner asked for a 3D animal face (with
+Gemini's notes as input, not instructions):
+- **All three animals - red panda, pygmy owl, sea otter - panda first.**
+  The owner then said go for the owl and the otter the same day, and all
+  three are built. Each is a face like the others (picked in the Faces
+  window / Appearance), drawn from shared shader parts plus its own, one
+  source for both apps (`docs/CRITTERS.md`), not a downloaded 3D model.
+
+Decided 2026-09-28, the owner's answers after the animal-face audits:
+- **Mouths follow Jarvis's real voice**, timed by Kokoro's own phoneme
+  durations when the PC is set up for it (`jarvis_mouth.py --prepare`), else
+  analysed from the sound (`docs/LIPSYNC.md`). No sound, no mouth movement.
+- **Body movement: natural and calm, never busy or sporadic** - small,
+  slow, eased motion; rare idle events; asleep is still. Reuse proven open
+  motion logic (MIT: Spring-It-On, TalkingHead) rather than invent it.
+- **Serious moments are calm and plain:** no wave while asking for an
+  approval (an attentive look instead), a still, concerned look at an error,
+  and for a crisis-help answer a neutral pose and Jarvis's plain voice (not
+  the animal voice).
+- **Not connected = asleep with a hollow ring**, on every face surface of
+  both apps, matching the tray icon; never an approval pose while acting is
+  blocked. The screen reader says "Jarvis isn't connected".
+- **Asleep shows rising Zs** above each animal whenever Jarvis is on standby,
+  whether the standby schedule or the owner put it there - never while
+  merely not connected (that is the hollow ring alone). Drawn over the face,
+  not inside the shader, in both apps.
+- **A "Still" option for the animals** in both apps' face settings, off by
+  default: the animal sits calmly and only breathes - no looking around,
+  no gestures or idle events.
+- **Wake-up and falling-asleep animations** for every animal: short (about
+  2-3 s), calm, no yawn (the mouth moves only with Jarvis's voice); eyes
+  only when waking into an approval, under Still, calm motion or a crisis.
+- **A fourth animal: a cartoon monkey** (from the owner's picture), in the
+  same style as the others and with every improvement they have. It hangs
+  from a vine by one arm and swings gently; it sits on the vine to sleep,
+  tail curled round it. **The banana is its orb**: it glows in the state
+  colour, as the others' orbs do. A male voice, a touch energetic. It is
+  a little more lively than the other three - still smooth and never
+  sporadic. Its resting motion targets about 1.5x the panda's.
+- **Sharp animals on capable hardware:** when Jarvis detects a capable
+  graphics chip and the owner has chosen quality over battery saving,
+  every animal draws at full resolution (no soft or jagged edges).
+- **The otter gets more detail:** visible fur texture, and small gentle
+  waves on the water around it.
+- **Sun and moon behind the animals, optional (off by default):** the real
+  sun and moon for the date and time - sunrise and sunset, the moon's
+  phase (full, waxing, waning) and its rising and setting - worked out on
+  the owner's own devices from a town the owner types once on the PC (the
+  phone gets it from the PC). Nothing goes online for it.
+- **Weather in the animals' scene, optional (off by default):** rain, snow
+  or wind. Two sources to choose from in settings: the owner's own Home
+  Assistant (stays on the home network), or Open-Meteo online (free, no
+  key; it receives the rough location, so turning it on raises an
+  approval card, like any new way out of the PC; turning it off is
+  immediate).
+- **Every animal option lives in one place in both apps' settings** (Still,
+  sun and moon, weather and its source, resolution, frame rate, and every
+  new one), and **Jarvis can change any of them when asked** ("turn weather
+  off", "make the animal sharper"). Asking Jarvis follows the same rules as
+  the switch: cosmetic options change at once; anything that opens a way
+  out of the PC (online weather) still raises its approval card.
+  **Look-and-behaviour options are shared between the PC and the phone**
+  (one request changes both); sharpness and frame rate stay per device.
+- **A picked frame rate rounds UP** when the screen cannot match it exactly
+  (120 on a 165 Hz screen draws 165) - never slower than the pick.
+- **New animal behaviours, all four chosen** (after the ideas research,
+  `scratchpad` report "animal-ideas"): listening nods in the owner's pauses
+  and gestures landing on Jarvis's sentence ends; a focus buddy (works
+  quietly beside the owner in a focus session, a stretch at the end; never
+  sees the screen, never scolds) and small acknowledgements (a nod when a
+  fact is saved - not while App lock or "Hide memory lists" is on - and a
+  glow when a long answer is ready); petting (stroke it and it leans in;
+  a long press on the phone that does not open Brain); seasonal touches
+  from the date (off by default). Each is an option in the one animal
+  options place and changeable by asking Jarvis. Still and serious moments
+  switch every one off; calm makes them smaller. Never: humming, yawning,
+  mood-guessing, reacting to email or screen content, guilt or streaks,
+  roaming the screen, anything cute during an approval or error.
+- **A fifth face: a cute robot**, fully based on the owner's picture (round
+  white body, a big glowing blue visor with arc eyes, teal ear fins and a
+  teal chest patch), in the same soft 3D style. **Expressive eyes and no
+  mouth; no orb** - the eyes carry the state colour and the expression, the
+  ear fins and arms show the state, and while Jarvis speaks the eyes pulse
+  with the real voice instead of a mouth. Now and then at rest it **zips
+  around inside its own space** and settles back (never across the screen;
+  not under Still, calm motion or a serious moment). An energetic but not
+  annoying voice by default. It gets everything the animals have (sleep and
+  wake, Zs, Still, sky, options, quality). No wave at an approval.
+- **Two cute idle moments per face, alternating**, for all five: after the
+  face has been resting a while, now and then one plays, then it settles
+  back. Calm, never during an approval or error, off under Still and in
+  serious moments, with a switch in the animal options.
+- **Goodbye and hello when switching faces**, both apps: the leaving
+  animal or robot plays a short goodbye (about a second - a little wave or
+  bow, then out of view), then the incoming one a short hello (pops in, a
+  small bounce, a look at the owner). A non-animal face just fades on its
+  side. Under Still, calm motion or a serious moment it is a quick gentle
+  crossfade.
+- **Variety, never over the top:** every face gets several variants of each
+  kind of move (listening, thinking, talking gestures, resting moments,
+  the reaction as an approval or an error arrives), picked so the same one
+  never plays twice running - all within the existing comfort limits
+  (small, slow, eased, never busy). Still, calm and serious quieten them
+  as before; approval and error stay attentive and still.
+
+Decided 2026-09-29, the owner's answers on the small animal leftovers:
+- **Tighter drawing boundaries for the five faces**, for about 20-30% less
+  graphics work, provided nothing is cut off: every pose is compared
+  pixel for pixel with the old drawing before it is kept.
+- **A 60-frame cap while the AI model shares the graphics card waits for a
+  measurement from the owner's PC** (a one-line PowerShell check of the
+  graphics card while Jarvis talks, with and without a face showing). No cap
+  is built until those numbers are in.
+- **The owl's beak opens wider on quiet-to-normal speech**; loud words stay
+  about where they were, and it must stay cute, never a wide gape.
+- **A thumbs-down on a crisis-help answer is no longer counted** toward
+  "suggest the bigger model" - the owner's go-ahead for that one gap in the
+  2026-09-27 "written down, not fixed" note. Nothing else about crisis
+  handling changes; no crisis content is stored, counted or logged.
+
+Decided 2026-09-29, after the skeptical review of all five faces (the
+owner kept the ray-marched drawing; the review found expression, motion and
+one state bug to fix, not a new approach):
+- **An error gets a still mark on every face:** a thin ring with a gap at
+  the bottom, drawn by the apps over the face, never moving. It must not be
+  mistaken for the waiting-on-you clock or the not-connected ring.
+- **Fewer small idle moves when Jarvis is not being used:** breathing and
+  looking around stay; the small happenings (a tail flick, an ear turn, a
+  stretch) drop to about a quarter unless the owner has talked to Jarvis
+  lately or their pointer is on the face.
+- **A focus session no longer shows a sleeping animal:** the focus buddy
+  shows, not standby (a manual Quiet stays asleep).
+
+Decided 2026-09-29, after seeing the eyelid preview:
+- **The animals get painted eyelids** (red panda, pygmy owl, sea otter,
+  monkey): a lid of the surrounding fur over the top of each eye, so an
+  error looks worried (a sloped lid), waiting on you attentive (a level lid)
+  and dozing sleepy (a heavy lid). It is painted in the surface shading, not
+  in the shape, so it costs a little per pixel and nothing per march step;
+  each animal gets one new pose value on both apps. The robot has no
+  eyelids (its eyes carry the state). The lids obey the same rules as every
+  other look: nothing cute or new at an approval or error beyond the plain
+  worried or attentive lid, calm and Still quieten them, and the phone's
+  60,000 shader budget still holds.
+
+Decided 2026-09-28, after checking two Gemini reviews of the outside
+projects Jarvis names (`docs/AUDIT-2026-09-28-REPO-REFS.md` - read it
+before acting on any outside review; its disproven findings stay closed):
+- **Three separate milestones are queued, none started**, in this order:
+  (1) Silero speech detection in the apps for "stopped talking" and
+  interruptions (wake-up stays with the wake-word model); (2) Prompt Guard 2
+  as a warning only, after the owner gets Meta's access and it is measured;
+  (3) "quiz me on my notes" with FSRS, deferred until a note-review screen
+  is designed. Details and limits are in that audit, section 6.
+  Added the same day, as milestones 4-7: (4) a one-line lesson from each
+  "wrong" mark, offered on a card and saved only on the owner's yes; (5)
+  multi-hop memory, kept only if the memory self-tests improve; (6) a skill
+  that fails twice in a row stops being offered and asks "keep or turn
+  off?"; (7) record how much of each prompt Ollama reuses from its cache.
+- **Milestones 8-11, the same day:** (8) close the crisis "wrong" gap (the 2026-09-27 re-check above) -
+  the owner's go-ahead is given; (9) a "match my speaking pace" setting, off
+  to start, both apps; (10) microWakeWord joins the wake-word trial; (11)
+  offline developer docs. Details in the audit, section 6.
+- **Milestone 12, the same day:** "said again" counts become a small
+  tie-breaker in recall - never hiding or fading a fact - kept only if the
+  memory self-tests improve.
+- **Milestones 13-14, the same day:** LoCoMo's multi-hop questions join the
+  memory self-test (before milestone 5), and PrefEval's questions test "From
+  now on..." preferences. Test data only (CC BY-NC 4.0), never shipped,
+  credited when added.
+- **Built the same day:** milestones 7 (the prompt-cache share, shown in
+  Brain -> Model in both apps), 12 (the tie-breaker, OFF until the PC's
+  numbers improve) and 13 (`eval_memory.py --locomo`). On LoCoMo, words only,
+  the entity layer made every number worse - not looked into yet
+  (`docs/MEMORY-SCOREBOARD.md`).
+- **Copying the owner's own voice stays refused** (`jarvis_voices.py`): a
+  Jarvis speaking in the owner's voice could pass its own voice check.
+
+Decided 2026-09-28, after the app-builder suggestions
+(`docs/APP-BUILDER-DESIGN.md` has the plan):
+- **Jarvis may build apps and write code for the owner** - web apps (React +
+  Vite, Android through Capacitor) and native Android apps (Kotlin).
+- **Local model first; a cloud model only when Jarvis is stuck.** After a
+  set number of failed tries on one step, Jarvis may OFFER cloud help on a
+  card listing the exact files and error text that would leave the PC. This
+  bends rule 1 for app project files only, one card per offer - never email,
+  notes, memory, chat history, settings, `.env` files, signing keys or
+  anything that looks like a secret. A project can be marked "never cloud".
+- **Every merge into an app and every command (npm, Gradle) asks with a
+  card**; a git worktree keeps changes apart but is not a sandbox for
+  running programs.
+- Offline developer docs (Dash/Zeal docsets): queued as milestone 11 (below).
+- **aider is trialled as the coding engine**, locked down: only inside a
+  task's copy, no shell commands, no "yes to everything", no analytics, no
+  cloud model. Kept only if it beats Jarvis's own file blocks (design doc,
+  milestone D2). No second agent framework: one permission model, one
+  scheduler.
+
+Built 2026-09-27, the owner's "yes, build it now" - the router's cloud-offer
+gate (`jarvis_router.choose()`'s `owner_said_yes`, live since 2026-09-24) had
+no way for either app to actually say yes:
+
+- **"Try the cloud model", one tap, one question, never a standing choice.**
+  An answer whose route says `gate: "offer"` (a cloud lane that could answer
+  this, named but not used) now shows that button beside "Not now" in both
+  apps' chat screens, in the same fixed wording word for word
+  (`jarvis-desktop/src/index.html`/`main.js`, the phone's
+  `net/CloudOffer.kt`/`HomeScreen.kt`). Pressing it resends the exact same
+  question with `cloud_yes: true` (`backend/cloud-say-yes.patch`,
+  `docs/JARVIS-API.md` §18.1) - nothing else from the conversation goes with
+  it, and every gate that would have refused escalation outright (private,
+  tainted, a picture, no lane, no budget) already ran on this question's own
+  merits before the offer was ever made. "Not now" just dismisses it.
+- **Left off the desktop's separate widget on purpose**, not by oversight:
+  `widget.html`/`widget.js` never render a chat answer's own text or route
+  at all today, so there is nothing on that screen for an offer to attach
+  to (`docs/ARCHITECTURE.md` §8, "One-sided on purpose").
+- Verified: `backend/test_cloud_say_yes.py` (new), the phone's
+  `net/CloudOfferTest.kt` (new), the desktop's `tests/cloud-offer.mjs` (new)
+  - and, since the router call site had never been touched by any patch
+  before, the backend patch was written and checked against the owner's own
+  real `jarvis_hud.py` lines rather than guessed, per "Do not claim more
+  than the evidence supports" above.
+- **Antigravity / Google-account cloud access** (the same request that
+  prompted this): researched, not built - the owner chose "not sure yet,
+  research it properly first" for its role (a second cloud lane beside
+  this one, or a replacement for API-key cloud access). Still an open
+  decision for the owner, not a "later" already committed to.
+
+Built 2026-09-27, the owner's "build it now" after the Jarvis evaluation
+(`docs/JARVIS-EVALUATION-2026-09-27.md`) surfaced it as the biggest real gap
+against Meta's Muse still on the table - **Goals: a plan the owner edits,
+one card per acting step** (`docs/creativity-2026-09-25/future.md` idea 3;
+the feasibility audit's I63/I64; `docs/JARVIS-API.md` §59).
+
+- The owner says "insulate the garage before winter", writes or asks
+  Jarvis (in ordinary chat) to suggest a short plan, edits and accepts it.
+  Accepting sets up a weekly, model-free check-in - the same ONE
+  `schedule_repeat` card a repeating reminder already raises, approving
+  nothing that acts. Ticking a step off, and Stop tracking, need no card
+  and are immediate, like a to-do item. Every acting step (search
+  installers, draft an email) is asked for in ordinary chat and goes
+  through the exact same per-action card chat already uses - Goals adds no
+  new way to act, ever.
+- **This is NOT "the plan card"** (feasibility I61, gated behind the
+  multi-step safety tests that have not run yet) - a mix-up this session's
+  own evaluation made once before catching it. The plan card batches
+  several safe steps under one yes; Goals never batches anything, so it
+  never touched that gate and was not waiting on it. `jarvis_goals.py`'s
+  own docstring exists partly so this does not get confused a third time.
+- Deliberately calls no model itself: the real way this backend reaches a
+  local model is inside `jarvis_hud.py`, which is not in this repository,
+  and guessing at that integration rather than verifying it would be
+  exactly what "do not claim more than the evidence supports" (above)
+  warns against. Drafting a plan happens in ordinary chat instead, already
+  built and already safe.
+- **Where the weekly check-in shows**: the backend registers it
+  `owner_listed=True`, its own default, so it already appears on Coming
+  up like any other repeating job (a reminder, the morning briefing).
+  Neither app's Goals section carves out a private channel for it - each
+  reads that SAME list for the check-in's live state (waiting for the
+  card, paused, its next-run note), rather than inventing a second source
+  of truth for one job; Coming up itself offers it no Pause/Delete
+  (`Schedule.actionsOf` on the phone), since only Stop tracking, on the
+  goal, can take the check-in down cleanly. Consistent with how the
+  briefing's and the standby schedule's own jobs already work.
+- **All three surfaces are built**: backend (`backend/jarvis_goals.py`,
+  `goals.patch`, `test_goals.py`, 57 checks), the phone
+  (`net/Goals.kt`, `ui/screens/GoalsPlate.kt`, Brain -> Goals), and the
+  desktop (`jarvis-desktop/src/goals.js`, `brain.js`,
+  `src-tauri/src/brain/goals.rs`, Brain -> Work -> Goals) - each beside its
+  own app's "Coming up". `tools/check_parity.py` is clean.
+
+Built 2026-09-28, the owner's own words: "add the ability for jarvis to
+request a multi-step process that it does on its own, and it sends me a
+detailed approval card that I only give to approve once. Really refine
+this" - **"one card, several steps", the plan card itself** (feasibility
+I61; `docs/JARVIS-API.md` §60), the mechanism the Goals entry above was
+careful to say it was NOT. Asked plainly first whether building this now
+conflicted with the owner's own 2026-09-27 decision to gate it behind the
+multi-step safety tests - it does not conflict, since those tests have not
+run, so **built fully, switched off**, the owner's own recommended choice:
+
+- `backend/jarvis_plan.py` (whole module) + `plan-gate.patch` (two
+  append-only hunks against `jarvis_gate.py`, both verified with
+  `_stack.py` against real, already-covered context - this call site,
+  unlike `cloud-say-yes.patch`'s, had prior patches touching it, so no
+  hand-verification against the owner's real file was needed this time).
+  `test_plan.py`, 72 checks. Stricter than `jarvis_ui_control.py`'s own
+  "one card, several steps": a risky or result-filled step always asks
+  again on its own separate card, mid-run, even inside an already-approved
+  plan - only the safe steps run on the strength of the one card that
+  started things. Refuses outright on outside text.
+- `jarvis_plan.enabled()` is the safety gate itself, measured not
+  promised: it reads `tools/tool_eval/tool_eval_results.json` and says yes
+  only once a real run, for the real model, clears two bars (90% on the
+  multi-step suite, zero carried planted instructions on the injection
+  suite) - the same "measured before switched on" rule the memory
+  re-ranker already follows. No file yet, so nothing is unlocked yet.
+- **Not yet wired as a model-callable tool** in `jarvis_agent.py`'s
+  `TOOLS` table - found and confirmed the exact three pieces that need it
+  (a `Tool` entry, an outright-refusal check reusing `_TurnWatch.tainted`
+  at the real, verified call site, and a `run_step` dispatcher reusing
+  `Tool.prepare`/`.execute`'s own documented contract), and left the actual
+  wiring for a following pass rather than rush it into the one file this
+  project is most careful about - the feature is switched off regardless,
+  so nothing is lost by finishing it correctly next instead of quickly now.
+- No UI in either app yet - once wired in as a tool, its card needs no new
+  shape, only the ordinary approval flow both apps already have.
+
+Built 2026-09-28, after `docs/GPU-SUPPORT-RESEARCH-2026-09-27.md` (the
+owner asked for a third NVIDIA graphics card, end to end) - **the data-model
+reshape only (that research's own recommendation #1), not the third card's
+own feature.** What the research found: `jarvis_second_card.py`'s detection
+already picked exactly one "second" card out of however many capable extra
+cards were actually plugged in, and threw the rest away with "capable, but
+the [other] card has more memory" - a real third card sat right there,
+detected, and was silently discarded. Building a third card's own lane
+(which of the five features runs on it, its own approval card, a UI row in
+both apps - none of which exist today) in the SAME pass as reshaping how
+cards are detected risked exactly what this module's own tests exist to
+catch: a change to the shape `jarvis_agent.choose_lane()` trusts to route
+the model's own tool calls, made and checked in one large, hard-to-verify
+step. So this pass built the safety-critical half alone, fully tested, and
+stopped there on purpose - the conservative choice the research itself
+recommended (its "L, do the S-sized reshape first" advice).
+
+- **What changed:** `jarvis_second_card.detect()` now keeps every capable
+  non-primary card internally, not just the biggest, as `det["_lanes"]`
+  (best memory first - "second" is unchanged, it is still `_lanes[0]`), and
+  a new function, `extra_lanes(det)`, turns every card beyond that into
+  `det["second"]`'s own plain-dict shape - so a third capable card is now
+  visible to Python code as data, not only as a "why" sentence. Both are
+  internal (never returned by `status()`, never in the `GET
+  /api/second-card` JSON) - **on a PC with any number of cards, the route,
+  both apps and every existing test behave exactly as they did before this
+  change.** `test_second_card.py` gained tests for 0/1/2/3-card detection
+  (including a genuinely incapable third card, correctly excluded and
+  explained) and proves the 2-card case's public output is untouched.
+- **What is deliberately NOT built:** a third card cannot run anything yet.
+  There is no third lane process, no approval action for "which feature
+  goes on which card" (docs/GPU-SUPPORT-RESEARCH-2026-09-27.md §1.3 is
+  explicit this must be a real, named choice - never a "biggest card wins"
+  default, the same "no approve-all" rule every switch here already
+  follows), and no UI in either app (each renders exactly one "second card"
+  row today). None of `_wanted`, `_reconcile`, `lane_for`, `_LANE` or
+  `describe_on` (the approval card's own words) were touched - so nothing
+  about how the model's tool calls get routed could have moved. "Combined"
+  (one bigger model split across cards) stays two-card-only, for the same
+  reason its own real speed is still unmeasured on two cards: the second
+  card is not installed yet, so adding a third untested unknown on top of a
+  first untested one is not a decision to make silently.
+  `jarvis_hardware.py`'s preset system also stays two-slot, unchanged -
+  presets were designed and tested for exactly one extra lane card.
+- **This is a known, written-down gap, not an oversight:** a real "build
+  the third card's own lane, its approval card and both apps' UI" pass is
+  still queued, on top of the shape this one now provides. Until then, a
+  third capable NVIDIA card in the PC is detected and correctly explained
+  ("capable, but the [other] card has more memory") but does nothing.
+
+Built 2026-09-28, closing the queued gap the entry right above this one
+left on purpose - **a third graphics card can now actually be used.** A
+quick reminder of the two things in a graphics card that matter here:
+memory (how much a model can fit) and compute capability (how new its
+design is - old cards cannot use the compact conversation format Jarvis
+needs). A third card that has enough of both can now be given one of the
+five second-card features (Longer conversations, Pictures, Learning in the
+background, Browser control, Wiki builder), running there at the same time
+as the second card's own feature - never instead of it, and never chosen
+by Jarvis on its own.
+
+- **Never a default, always a named choice** - the one rule
+  `docs/GPU-SUPPORT-RESEARCH-2026-09-27.md` §1.3 was most insistent about.
+  A capable third card sitting in the PC does nothing on its own, exactly
+  like the second card did nothing until the owner turned a switch on.
+  Moving a switch there raises its own approval card
+  (`second_card_third_assign`, tier "ask"), naming the exact card, its
+  model and how much memory it uses - never reusing `second_card_enable`'s
+  own card, because that one never says WHICH card, and this decision is
+  entirely about that. Moving a switch back to "Not used" is immediate,
+  like turning any switch off.
+- **Built in both apps**: Settings → "Second graphics card" (desktop) and
+  Brain (phone) each show a new "Third graphics card" section, the exact
+  same visual and wording pattern the five switches and "One bigger model
+  on both cards" already use - a list of the switches that are currently
+  on, pick one to move it there. `tools/check_parity.py` is clean; no new
+  route was needed (`POST /api/second-card` already carried the shape,
+  now with `{"feature": "third", "assign": "<switch>" | null}` alongside
+  its existing bodies).
+- **How it runs, underneath:** a third, separate copy of Ollama
+  (`_THIRD_LANE` in `jarvis_second_card.py`), its own port and its own log
+  file, because - unlike "One bigger model on both cards", which never
+  runs at the same time as a feature switch - the third card's copy runs
+  AT THE SAME TIME as the second card's own copy, one feature on each.
+  Considered, and decided against on purpose: turning the two existing
+  lane-process singletons (`_LANE`, `_COMBINED_LANE`) into a more general
+  "however many lanes exist" structure, the more obviously "correct" shape
+  for a future fourth card. Chosen instead: a third, plainly-named
+  singleton, matching the existing two - explained in
+  `jarvis_second_card.py`'s own module docstring, because touching the
+  two existing, already-carefully-tested lane singletons in the same pass
+  that adds a third was judged the riskier move for a module this
+  safety-critical (it decides which physical card the model's own tool
+  calls run on), with no real fourth card on the horizon to justify it yet.
+  If a fourth card ever becomes a real prospect, that is the moment for
+  the more general shape - informed by how the third one's own design
+  actually held up, not guessed now.
+- **"One bigger model on both cards" stays two-card-only**, on purpose,
+  for the same reason the entry above already gives: real speed splitting
+  one model across even two cards is still unmeasured, since the second
+  card is not installed. A third untested unknown on top of a first is not
+  a decision to make silently, so that switch still only ever reads the
+  everyday and second cards - a third capable card is automatically left
+  out of it, without any code change.
+- **Verified**: `backend/test_second_card.py` (new tests: a capable third
+  card doing nothing until named; the approval flow's assign/unassign/
+  pending/denied/withdrawn/refused paths; the second and third lanes
+  running independently, on different ports, at the same time),
+  `backend/test_phone_second_card_contract.py`, `backend/test_hardware.py`,
+  `backend/test_asks_first.py`, `backend/test_card_words.py`,
+  `backend/test_gate_denial_rule.py`, `backend/test_wiki.py` (a knock-on
+  patch-context shift), `backend/test_patch_history.py` (after running
+  `tools/build_patch_history.py`, which every patch edit needs) - all
+  passing. The desktop's Rust (`cargo fmt`/`check`/`clippy` against the
+  Windows target, per this file's own "Checking the Rust" section) is
+  clean; `cargo test` itself still needs a Windows host, so the new Rust
+  unit tests are written and known to compile, not run here.
+  `jarvis-desktop/tests/second-card.mjs` gained real checks for the new
+  section, but this container cannot download the Chromium build
+  Playwright needs (blocked by network policy) - they are unexecuted, and
+  need a run on a machine that can reach it before they are trusted.
+  The phone's Kotlin (`net/SecondCard.kt`, `ui/screens/SecondCardPlate.kt`,
+  `JarvisRuntime.kt`, `net/JarvisApi.kt`, `MainActivity.kt`,
+  `SecondCardContractTest.kt`) is read carefully by eye, following this
+  file's own "How the Android apps get built" section (no local Android
+  build here); it is confirmed only once CI compiles it.
+
+Built 2026-09-28, the owner's "view the models... without having Jarvis up
+and running" request - **Brain → Model remembers its last list on both
+apps** (`docs/OFFLINE-MODELS-DESIGN-2026-09-27.md`), a client-side cache
+only, no new backend route:
+
+- Each app keeps its own last successful `GET /api/models` read on disk -
+  the desktop in `localStorage` (`models-cache.js`), the phone in
+  `ModelsCacheStore` (`net/ModelsCache.kt`) - holding only what is honestly
+  still true once written: the installed list, each model's size and
+  family, and the last-known current/previous model. `speed` and `offload`
+  are stripped before the write, never merely hidden after, since those are
+  facts about what Ollama is doing right now, not about a file on disk.
+- When a live read then fails outright, Brain → Model shows that cache
+  instead of going blank, with a plain, clearly-labelled banner naming the
+  real time it is from and hiding the live-only lines (the model-in-use
+  highlight, on/off-card note, recent-speed lines) rather than showing them
+  stale. A backend that explicitly has no models module is shown as that
+  fact, never as the cache. A device that has never once read successfully,
+  with nothing cached either, says plainly there is nothing to show yet.
+  Use/Install/Roll back stay visible but dimmed by the same live-link
+  greying both apps already had (rule 4) - no new visual state invented.
+- **This is not a model catalogue**, on either app: it only ever replays
+  what that same device already showed live at some point, never anything
+  fetched specially for the offline case, and never anything the phone
+  could browse (the standing "no model catalogue on the phone" rule).
+- Built as two worktree agents that, like the Goals feature before them,
+  each turned out to have branched from `origin/main` rather than this
+  branch - caught and reconciled by hand rather than trusting a plain
+  `git merge` (which would have pulled in unrelated main-only history).
+  Verified: the desktop's `tests/models-cache.mjs` (new) plus the existing
+  `.mjs` suite for files it touched; the phone's `ModelsCacheTest.kt`
+  (new) - Kotlin compilation itself is unverified here (no local Android
+  build; the "How the Android apps get built" section above), so it is
+  confirmed only once CI runs. `tools/check_parity.py`: no undecided drift
+  (no route changed either way).
+
+Built 2026-09-28, the following pass the 2026-09-28 plan-card entry above
+itself asked for: **the plan card is now wired into `jarvis_agent.py`'s
+`TOOLS` table**, as `propose_plan` - the three pieces that entry found and
+confirmed but deliberately left for next, now actually built. **The
+feature is still switched off for everyone, exactly as before**: nothing
+about wiring it in unlocks it - `jarvis_plan.enabled()` still has to read a
+real, run, passing `tools/tool_eval/tool_eval_results.json` before
+`propose_plan` does anything at all, and no such file ships in this
+repository or on the owner's PC yet.
+
+- `propose_plan` is one tool (not two): its `gate_lookup_name` resolves to
+  the gate action `run_plan` (tier `ask`), the same way `control_computer`'s
+  model-facing name already differs from its own gate key. Before
+  `Tool.prepare()` - `jarvis_plan.propose()` - ever runs, `_one_call`
+  refuses outright, at the same point `send_email`/`draft_email` already
+  do: first `jarvis_plan.enabled()`, then the same four signals
+  `note_needs_a_person()` already treats as "not really the owner's own
+  words right now" (read something this turn, the conversation is
+  tainted, the newest message was not typed or said, the app added its
+  own context), folded into the one `tainted` flag `propose()` itself
+  checks.
+- **The real find of this pass**: `jarvis_plan.run()` only asks its given
+  `gate_check` for a step the MODEL itself flagged `risky` or gave a
+  `from_step` - a step it did not flag goes straight to `run_step`, with
+  no separate gate_check call at all. Trusting that self-report alone
+  would have let a step the model happened to call "safe" run an
+  "ask"-tier tool with nobody really asked. So the wiring's own dispatcher
+  (`_plan_step_dispatch`) does the REAL per-tool gate check - the same
+  `check_call()`, `Tool.prepare()`, `jarvis_gate.action_for_tool()` lookup
+  and `checker()` call a direct model call to that tool already goes
+  through - inside BOTH `gate_check` and `run_step`, cached by the step's
+  own identity so the two never ask twice for the same step. A step naming
+  a tool whose real configured tier needs a person, even when the model
+  called it not risky, is refused rather than let through - proven by its
+  own test, not merely reasoned about.
+- send_email, draft_email, the schedule tools (their own `Tool.execute` is
+  a dummy - `_schedule_call` is the real path, not the `Tool` contract at
+  all) and `propose_plan` itself cannot be named by a step: each has its
+  own bespoke, turn-shaped pre-gate check this dispatcher does not
+  reproduce, or would let a plan nest inside itself. A step naming one is
+  refused with a plain reason.
+- **Deliberately NOT registered with Pause/Resume** (`_TASK_MODULES`):
+  that mechanism's generic Resume path calls `module.run(plan,
+  approved=True, announce=..., checkpoint=...)`, with no way to supply the
+  `run_step`/`gate_check` `jarvis_plan.run()` requires - and
+  `jarvis_plan.py`'s own condition 4 ("the plan grants nothing for later")
+  already requires no automatic resume regardless, so nothing is lost.
+  "Stop everything" still reaches a running plan through the plain
+  `watch.stopped()` check every tool already has.
+- `propose_plan` joins `NEEDS_A_PERSON` (the belt the other three
+  multi-step tools already wear: an `auto`/`notify` tier is never good
+  enough for it, whatever a config file says) and the `control` tool
+  group for the short tool list - not a new group of its own, since a new
+  group's name costs `more_tools`' own description tokens on every turn,
+  already near its budget, while a group's *members* cost nothing there.
+- Two tool descriptions had to be trimmed to fit `test_tool_text.py`'s
+  per-tool token budget (300) once `propose_plan`'s own schema was added,
+  and `jarvis_reach.py`'s `TOOL_NAMES` (the "What asks first" page) gained
+  a plain-English row for it - the same audit that follows every feature
+  here, run this time as it was being built rather than only after.
+- Verified: `backend/test_agent_plan_wiring.py` (new, 49 checks) - the
+  tool is invisible/refused while `enabled()` says no, and refused before
+  `propose()` runs on each of the four taint signals separately; a safe
+  step runs with no card of its own; a risky step, and separately a
+  `from_step` one, always get their own card, asked exactly once; a step
+  the model did NOT flag risky but whose real tier needs a person is
+  refused anyway (the gap above, proven, not assumed); a denial anywhere
+  stops the whole run, including a later step that was itself safe; each
+  excluded tool is refused before it ever reaches its own gate; running a
+  step for a real tool goes through that tool's own real `prepare()`.
+  `backend/test_plan.py` (72 checks, unchanged - `jarvis_plan.py` itself
+  was not touched) and the existing `test_agent.py`, `test_tool_text.py`,
+  `test_short_tool_list.py` and `test_reach.py` suites all still pass;
+  `tools/gen_reach_cases.py` was re-run for the new row (a small, additive
+  fixture diff in both apps).
+- **Not yet built either**: a UI in either app - unchanged from the
+  2026-09-28 entry above; once the safety test clears the bar, the card
+  needs no new shape, only the ordinary approval flow both apps have.
+
+Built 2026-09-28, the owner's decision of 2026-09-26 above ("reading phone
+notifications is added as an option") - **the actual build of that
+decision**, phone-only end to end, its one PC-decided switch copied
+straight from `jarvis_watch_notify.py`'s already-approved shape
+(`docs/JARVIS-API.md` §61):
+
+- **Backend**: `backend/jarvis_phone_notifications.py` (shipped whole) +
+  `phone-notifications.patch` (one line into `jarvis_gate.py`'s
+  "acts only on tier ask" set, one `_RISK` entry) - off by default, ON is
+  one approval card (`phone_notifications_read`), OFF is instant. Never
+  sees a notification's own text: it is a plain on/off switch, nothing
+  more. Given the usual second door too (`jarvis_settings_registry.py`:
+  "open/turn on phone notifications" by voice or chat, calling the exact
+  same function). `backend/test_phone_notifications.py`, 70 checks - the
+  same shape `test_watch_notify.py` already proves.
+- **Phone**: `service/PhoneNotificationListenerService.kt` (the real
+  `NotificationListenerService`, bound only by the system), gated by the
+  PC's switch, the per-app allow list and, defensively, an SMS check a
+  second time; `data/NotificationRedactor.kt` (the one-time-code
+  heuristic, applied before anything is stored); `data/
+  NotificationAllowList.kt` + `.../NotificationAllowListStore.kt` (empty
+  by default; a package the OS itself reports as the default SMS handler,
+  `Telephony.Sms.getDefaultSmsPackage` (see the CI fix below - not
+  `RoleManager.ROLE_SMS` as first built), is refused outright, and so is
+  one whose Play Store category or package name looks like a bank,
+  brokerage or payment app); `data/CapturedNotifications.kt` (a capped,
+  per-device store, never
+  synced). `PhoneNotificationsPlate.kt` (Settings → Phone notifications:
+  the switch, Android's "Notification access" explained before it is
+  opened, and the allow list). Reading one into a chat reuses the Share
+  sheet's own "shared text" chip - no new backend plumbing, and the
+  existing outside-text rule marks it on its own.
+- **Two judgment calls worth a second look, made rather than deferred:**
+  - **Banking apps are blocked outright**, not just discouraged in words
+    - the task allowed either. Two real signals existed (the app's own
+    declared Play Store category, and a curated name-substring list), so
+    blocking was the more responsible choice; the card and the allow-list
+    screen both say plainly that this is a heuristic, not a guarantee, for
+    a bank neither signal catches.
+  - **The redaction heuristic deliberately over-redacts.** It catches a
+    plain 4-8 digit run near an English trigger word, the common "NNN NNN"
+    grouping, and a bare digit-only notification with no trigger word at
+    all - and it will occasionally blank a year or a reference number by
+    mistake. It does NOT catch a non-digit code, a trigger word in another
+    language, or a bare digit run with no trigger word buried in a longer
+    sentence - written down in the class's own doc and in `docs/
+    JARVIS-API.md` §61.4, not discovered later.
+- Verified: `backend/test_phone_notifications.py` (70/70),
+  `test_asks_first.py` (174/174), `test_card_words.py` (98/98),
+  `test_gate_risk_words.py` (15/15) - all re-run after this feature's own
+  entries were added to their tables; `tools/gen_asks_first_cases.py` and
+  `tools/gen_card_words_cases.py` re-run so both apps' fixtures match.
+  `tools/check_parity.py`: clean, the new route classified `phone-only`
+  beside the smartwatch one. **Kotlin is unverified here** (no local
+  Android build; "How the Android apps get built" above) - every new file
+  was read back by eye instead, and the redaction/allow-list logic was
+  additionally checked by hand-simulating the regex in Python first, since
+  neither can be compiled in this container.
+
+Fixed 2026-09-28, from the first real CI round on the phone changes above
+(GitHub Actions is the only Kotlin compiler this container has - "How the
+Android apps get built" above) - two real, unverified-until-now bugs, both
+caught by the compiler itself, neither by a review:
+
+- **A missing import broke `onOk` everywhere in `JarvisRuntime.kt`.**
+  Merging the offline-models phone half (`Brain -> Model remembers its
+  last list...`, above) removed the one call site that removal alone made
+  look unused, and dropped `import com.jarvis.client.net.onOk` along with
+  it - but `onOk` (an extension function on `ApiResult<T>`, `net
+  /JarvisApi.kt`) was still used at several OTHER, unrelated call sites
+  (`refreshStatus`, `refreshAttention`, the jobs read in `refreshAll`),
+  none of which the merge touched or re-scanned for. Every one of those
+  had been silently broken since that merge - re-added the import; nothing
+  else needed to change.
+- **`RoleManager.getRoleHolders(ROLE_SMS)`, the SMS-exclusion check built
+  above, does not exist in the public SDK stub Gradle compiles against**
+  (`RoleManager.isRoleAvailable` and `.isRoleHeld` do; this one specific
+  method does not - confirmed by the compiler, not guessed). Replaced with
+  `Telephony.Sms.getDefaultSmsPackage`, the long-standing public API for
+  exactly this question, plus the `<queries>` element it needs for Android
+  11+ package visibility (`AndroidManifest.xml`). No change to what the
+  feature actually blocks or how strictly - same signal, same static
+  fallback list, same "checked twice" design; only the OS call underneath
+  changed.
+- Both fixes verified by reading the actual compile error text (not by
+  reasoning about what "should" work) and cross-checked against public
+  documentation before writing the replacement, per "Do not claim more
+  than the evidence supports" above. Every existing test still passes;
+  none tested the broken code paths directly (the pure `onOk`-adjacent
+  logic wasn't unit-tested at that granularity, and the SMS check's
+  Android-backed half was already documented as untestable without a
+  device) - written down here so that gap is visible, not papered over by
+  "tests passed."
+
+Decided 2026-09-28, the owner's answers after the post-change audits
+(`docs/AUDIT-2026-09-28-AFTER-CHANGES.md`; all merged in PR #23):
+- **The memory entity layer: test the fix.** Build the "skip very common
+  names" fix switched off; the owner runs the memory self-test on the PC
+  and whichever setting scores best is kept.
+- **Next work: fix the audits' open problems** - the seven smaller
+  findings (Lockdown gaps, health words in the private-topic check, "call
+  my mum's phone", talk-to-type vs Live on the microphone, Live warming the
+  wrong model, the plan card's gaps while it stays off, the hard face
+  picker, the widget's App lock line) plus the one-time "Use it / Keep my
+  voice" question - in one checked pull request, before bringing in the
+  other sessions' newer work.
+- **Phone builds publish from `main` only**, not from the old branch.
+- **Under App lock, the widgets' buttons open the locked app first, in
+  both apps** (the desktop widget's Focus/timer/music tiles and the phone's
+  home-screen widget buttons); they do not act on their own. The owner was
+  first told, wrongly, that the desktop widget already did this - only its
+  approval button did.
+- **A goal's weekly check-in needs no card**, like plain repeating
+  reminders: it only reminds and never acts.
+- ~~QR-code pairing keeps waiting~~ - **changed the same day (owner):
+  build QR-code pairing now**, together with per-device keys ("more
+  devices"), as the 2026-09-24 decision already said: a QR code with a short
+  typed code as the backup, an approval card on the PC before any key is
+  handed over, a key per device listed in both apps with its own Remove.
+  Designed first in `docs/PAIRING-DESIGN.md`, checked against the real code,
+  then built.
+- **Each animal keeps its own answer to "Use its own voice?"** (owner, the
+  same day, after the feature audit found one "Use it" turned every animal's
+  voice on): an animal speaks in its own voice only when "Voice follows the
+  face" is on AND the owner said "Use it" for that animal; every animal asks
+  once, even after another said yes; until answered it keeps the normal
+  voice. The switch stays the master (off = no animal voice).
+- **The app builder's projects join Projects**: an app is a coding project
+  whose tests are its benchmarks - one list, not two.
+- **An animal's answer can be changed later** (owner, 2026-09-28, after PR
+  #25 merged): in the voice settings of both apps, an animal answered "Keep
+  my voice" gets a button "Use its own voice", and one answered "Use it"
+  gets "Keep my voice". No card (the switch it can turn on has none); held
+  on a stale link. The backend route already took a new answer.
+- **The update guide is kept true after each merge** (owner, 2026-09-28): it
+  said QR pairing was "for later" after it was built; it now says what is on
+  `main`, which of its steps are old, and adds the half-hour pairing test.
+- **Build phase 2 of pairing and the app builder joining Projects now**
+  (owner, 2026-09-29, "go ahead and build this"). Phase 2 is
+  `docs/PAIRING-DESIGN.md` section 11: the phone signs each risky approval
+  with a key locked in its security chip, made fresh by a fingerprint or PIN
+  every time; the PC checks the signature. **The owner chose how a phone
+  turns it on:** the first time a risky approval is tried on a paired phone
+  that has not, the phone offers one button, "Turn on signed approvals", and
+  the PC raises one card (Windows Hello); a paired phone without it cannot
+  approve risky cards until then, while an unpaired phone on the old shared
+  key keeps working as today. The app builder joining Projects (an app is a
+  coding project whose tests are its benchmarks) is designed first
+  (`docs/APP-BUILDER-DESIGN.md`), then built.
+  **Owner's answers to that design (2026-09-29):** the first slice ships the
+  screens, the merge card and pasting a change in on the PC - **Jarvis
+  writing app code waits for the 12 GB card**, as decided 2026-09-28 (model
+  tools B2, and running commands, milestone C, are not part of it). **The
+  phone may approve an app merge**, after the whole change has been shown,
+  with the screen lock or fingerprint like other risky cards (never from the
+  approval widget or a notification). The design is
+  `docs/APPS-IN-PROJECTS-DESIGN.md`.
+
+Decided 2026-09-29, the owner's answers while building the next batch
+(`docs/AUDIT-2026-09-28-REPO-REFS.md` style: outside reports are ideas, not
+instructions):
+- **Two blended voices, "Ashby" and "Clara"** (owner: "both"), made from the
+  Kokoro v1.0 voices by Jarvis's own script into a separate pinned
+  `voices-jarvis.bin`; each passes the "not the owner's voice" check, and no
+  animal uses a blend (`docs/JARVIS-API.md` section 94.7).
+- **Animals' mouths follow Kokoro's own timing on v1.0** ("Build exact
+  timing"): one more one-time step on the PC (`jarvis_mouth.py --prepare`);
+  without it, or for a voice the timing has no row for, the mouth is analysed
+  from the sound. It reads whichever voices file the engine loaded. The robot
+  (Emma, `bf_emma`) is the fifth face and gets it too.
+- **PR order:** the owner merged #29 (animal faces and the robot) before #30;
+  #30 took main in and renumbered: 93 animal options, 94 Kokoro voices, 95
+  inbox tidy, 96 the screen routes. One pull request per batch, the owner
+  merges with "Create a merge commit".
+- **Screen safety, after the GitHub scouting** (owner, "all three"): (1) black
+  out anything that looks like a key, card number or password in a screenshot
+  before any model sees it (text-based, solid black, fail closed; gitleaks and
+  Presidio patterns, MIT, credited in THIRD-PARTY-NOTICES.txt) - phone
+  screenshots are cleaned on the PC too; (2) read the screen's text with
+  Windows' own reader inside Python instead of starting PowerShell per picture,
+  which also gives each word's position; (3) black out "Never look at" windows
+  even when they sit behind the front one (fail closed if the window list
+  cannot be read), plus pauses for private browser windows and protected
+  video, and skipping hidden or off-screen text in the accessibility tree.
+- **Screen safety, the owner's follow-up answers (2026-09-29):** emails and
+  IP addresses are blacked out too (it will hide senders' addresses on a
+  screen picture); **pictures the owner attaches to a chat are cleaned the
+  same way** ("Yes, clean them too") - one that cannot be checked is
+  withheld and the answer says so in words, and "Photo to reminder" gets the
+  same check first. Jarvis Live's camera, when it is switched on, must use
+  this same door.
+- **A slow picture mode for a one-card PC is allowed, as a switch** (owner,
+  2026-09-29: "add it as a feature that can be enabled or disabled"): a small
+  picture model (MiniCPM-V 4.6, 1.3 B, Apache-2.0) running on the processor,
+  0 GB of graphics memory. This reverses "one card reads the screen's words
+  only". Built the careful way: **off by default, turning it on raises an
+  approval card (a new download), turning it off is immediate**; the model
+  comes from a checksum-pinned line the owner pastes, never fetched by the
+  backend; speed is measured on the owner's PC before anything says "works".
+  Everything the model sees is outside text, and secrets are blacked out first.
+  Camera/Live pictures still wait for the 12 GB card.
+- **Screen safety, built 2026-09-29** (branch `feat-screen-safety`; JARVIS-API
+  §62.13): anything that looks like a key, token, password or card number is
+  hidden (`[hidden]`, and solid black in a picture) before a look's words or a
+  picture are used - the PC's screen and the phone's screen text and
+  screenshot alike (`jarvis_secrets.py`, `jarvis_secret_rules.py`,
+  `jarvis_picture.py`; `jarvis_screen.clean_picture` is the one door; fail
+  closed). The text reader runs inside Jarvis through six pywinrt packages,
+  with each word's position, PowerShell kept as the fallback. The PC's picture
+  is taken with every "Never look at" window painted black (not only the front
+  one), private browser windows and Jarvis's own windows too; a private browser
+  window in front is a new pause; ten streaming sites joined the built-in list;
+  the accessibility-text walk skips off-screen controls and has a quarter-second
+  budget. **Said plainly:** a password behind a show-password eye has no shape a
+  pattern can see. Emails and IP addresses are hidden too (a list in
+  `jarvis_secrets.PII_KINDS`). Nothing ran on Windows yet: the owner's check is
+  `tools\check_screen_safety.py`.
+
+Decided 2026-09-29, the owner REVERSED the 2026-09-28 "driven openly" rule
+(asked several times, after being told the ban risk each time; "get rid of
+the rule blocking it"):
+- **Stealth on for everything (owner, 2026-09-29): the ban risk was
+  explained and accepted; Obscura (Apache-2.0) is integrated as a headless
+  engine with `--stealth` always on; the visible Playwright browser stays the
+  default wherever the owner may have to take over (captcha, sign-in) and for
+  the chatbot driver; Jarvis writes no fingerprint-spoofing of its own for
+  the visible browser (it is a real browser); no proxy service; no captcha
+  solving.**
+- **What this replaces:** "driven openly - at human pace, in a visible
+  browser window, with nothing that hides it from or dodges Google's bot
+  detection" and the declined request for "tactics that help avoid bans"
+  (2026-09-28, struck through above), and the support chats' "never hiding
+  from the site's bot detection". The backend's approval-card notes (both
+  apps just show them) no longer promise "never hides that it is a program" or "never changes
+  how the browser looks" - a card note that said so would now be untrue.
+- **What does NOT change:** Jarvis itself never solves a captcha - it hands
+  it to the owner (the PC window, or "Solve it here" on the phone); no proxy
+  or residential-proxy service; nothing private (email, files, credentials,
+  memory) goes into a web chat or page (rule 1); every card and approval
+  rule; identity checks in support chats are handed to the owner; and **if
+  the other side asks directly whether it is talking to a bot, Jarvis never
+  claims to be human** - it pauses and hands the question to the owner.
+- **The ban risk is real and accepted:** an account on Gemini, ChatGPT and
+  the others could be blocked or closed, and each card still names the
+  company's terms risk. A spare account used only by Jarvis stays as
+  **advice** (a ban then cannot touch the owner's own account), not a rule.
+- The typing pause in the chatbot driver (a fixed few milliseconds a
+  character, and a pause between messages) stays: it is there so a site is
+  not flooded, and nothing in the owner's decision asked to change it.
+- **Tests:** the checks that used to fail on any "stealth" or user-agent
+  word now say what is still true - no proxy code, no captcha-solving code,
+  no spoofing code of Jarvis's own in the visible browser's files
+  (`backend/test_chatbot_gemini.py`, `test_chatbot_sites.py`,
+  `test_support_widget.py`, `test_handoff.py`). The engine that carries the
+  stealth lives in its own files (`backend/jarvis_browser_engine*.py`), not
+  in the chatbot driver's.
+
+Decided 2026-09-30, after checking an outside list of learning repos
+(`docs/STUDY-FROM-TEXT-DESIGN.md`): the owner said **any rule can change if
+the change is worth it**, and chose:
+- **A quiz on text the owner pastes or opens**, marked by the local model,
+  in a temporary chat, first.
+- **Reading a YouTube video's captions is allowed, one card per link**
+  (caption text only). This reverses the 2026-09-26 "left out" decision; the
+  owner accepts that it breaks YouTube's terms and may be blocked.
+- **Grading is local first, cloud on request:** a card lists exactly what goes,
+  bending rule 1 for that one quiz. Nothing is built yet.
+
+Also decided 2026-09-30: **study features that need the second graphics card
+are built switched off until the card is installed and measured** - a "Study
+helper" switch (quiz writing and marking on the second card, possibly with the
+bigger local model) and, later, multilingual speech-to-text for spoken
+practice. Video/audio download from YouTube stays refused; a second card does
+not change that (`docs/STUDY-FROM-TEXT-DESIGN.md` section 9).
+
+Decided 2026-09-30: **chat tags** (`docs/CHAT-TAGS-DESIGN.md`) - History gets
+collapsible coloured sections for tagged chats (a starter set the owner can
+rename and add to; one tag per chat), and the owner can ask Jarvis to label the
+current chat (applies at once, no card) or an older one (Jarvis shows matches and
+the owner taps the chat; it never guesses). **No automatic tagging**, and no
+tree index or clustering of past chats (ChatIndex, BERTopic and the others were
+checked and turned down).
+
+Decided 2026-09-30, the owner ticked every item in `docs/BUILD-QUEUE-2026-09-30.md`
+and said any rule can be changed if worth it: **spending summaries from bank
+CSV/Excel files** (bank connections such as Plaid stay refused; numbers by code,
+screen only), **review decks with py-fsrs and typed Spanish practice** as quiz
+modes, **goal step locks, a forecast range and step completion dates**, a
+**retirement what-if calculator** ("not financial advice"), **overnight suggested
+tags on cards only** (off by default; this reverses the earlier "no automatic
+tagging" answer to "no tagging without a tap"), an **activity heatmap and
+owner-defined balance chart** (no streaks, no wilting), a **Galaxy facts panel**
+and a manual **"new section here"** marker. Also decided: the tldraw canvas,
+React Flow, Datasette, Evidence, BERTopic and the other chat-clustering repos
+stay refused; the Galaxy is not swapped for a library.
+
+Standing instruction, 2026-09-30: **never open a pull request into `main` (or any
+branch) unless the owner asks for one.** (The owner then asked for exactly one, at the end of
+the 2026-09-30 batch, to be merged once its checks pass: see docs/BUILD-QUEUE-2026-09-30.md,
+"Final sequence".) Work is committed and pushed to the
+session's own branch only. This overrides the earlier plans in this file to open
+"one pull request" per batch: those wait until the owner says so.
+
+Decided 2026-09-30, the owner's answers on filling in forms and booking
+appointments (`docs/FORM-REVIEW-DESIGN.md`; Gemini's browser-use, LaVague,
+OmniParser, UI-TARS, Midscene, Stagehand, Agent-S and steel-browser suggestions
+were checked and none is added - `jarvis_browser_control.py` already does the
+job, one permission model, named elements only):
+- **Fill a form, show me, then a separate Submit card.** Jarvis fills the
+  fields, stops before the one click marked `final`, shows the owner **a
+  picture of the filled form exactly as the page shows it** (nothing blacked
+  out - the owner must read their own name, phone and email to check them),
+  and raises a **second card just for the Submit click**
+  (`browser_form_submit`, tier ask, risky). The picture goes only to the
+  owner's own PC and phone: kept in memory only, never on disk, never to any
+  model, never in a log, event, notification or widget. This is the one screen
+  picture shown without `jarvis_screen.clean_picture`, because it never
+  reaches a model. Visible browser only; the headless one has no pixels, so
+  its Submit card is text only and says so.
+- **The picture is also hidden under App lock AND under "Hide memory lists and
+  chat history"**, on both apps (owner, 2026-09-30); a plain line says why.
+- **Built before the second card is installed** (owner: "build it now"); the
+  form driver itself still needs the 2060 and its "Browser control" switch.
+  **No pull request to `main` until the owner asks.** Built 2026-09-30
+  (JARVIS-API §98, `backend/jarvis_form_review.py`, `form-review.patch`); not
+  tried against a real browser or the owner's real gate.
+- **The form page Jarvis opened itself does not count as "outside text" for
+  the Submit click** (owner, 2026-09-30, "ignore the form page itself"). Email,
+  files, notes, web searches, memories and **a different website read earlier
+  in the same turn** still refuse it, as does a model that is not on this PC.
+  Known limit, said plainly: an earlier TURN of the same conversation that
+  used any tool still taints the conversation, so a form must be opened and
+  filled in one turn (the normal flow).
+- **A form of several pages** (owner, 2026-09-30): one `browser_control` call
+  per page, all in one turn; **up to 8 cards in a turn (instead of 5) while ONE
+  website's form is being filled** and nothing else has asked - a card for any
+  other tool or a second website puts it back to 5 (a loosening of the
+  2026-09-25 limit, for the form only, confirmed by the owner); and **the
+  Submit card lists every page's typed words** (JARVIS-API §98.1b), the
+  picture staying the last page.
+- **Pillow is a named requirement** (owner, 2026-09-30) so a very tall form
+  still gets a picture; it was already in `requirements.lock`.
+- **Model advice stays as it is** (owner, 2026-09-30, "improve what exists"):
+  Jarvis already offers the bigger model when it struggles or is corrected
+  twice; better signals are added to that, only after the 2060 is measured. No
+  llm-checker, llmfit, hf-mem, RouteLLM or UncommonRoute; never a second
+  router, and no "delete models" action without its own card.
+- **A numbered-boxes screen-parsing fallback** (the OmniParser idea) is only
+  a possible later spec, for pages the accessibility tree cannot read; it
+  waits for the 12 GB card, a measurement of how often reading a page fails,
+  and the owner's decision on mouse control.
+
+Decided and built 2026-09-30, the owner's answers after the multi-GPU, settings,
+notification, card, quick-access and coverage audits (one pull request):
+- **Extra graphics cards of 8 GB now work** (floor 7,680 MiB reported, was 10
+  GB). An 8 GB second or third card runs Learning, the Wiki builder and (no
+  monitor on it) Pictures - work moved OFF the main card - but not "Longer
+  conversations" or "Browser control", because an 8 GB card holds no more than
+  the main card's 16,384 tokens. 10-12 GB behaviour is unchanged; 16 and 24 GB
+  cards get the same qwen3:8b at 32K plan (the 14B would fit but stays off until
+  it passes the tool tests). **All sizes are calculated, not measured; no extra
+  card is installed.** The third card's approval is now tied to the card's id: a
+  different card in that slot, or an old file with no id, counts as unassigned
+  and asks again. Known, not fixed: the second card's master switch is not tied
+  to a card id.
+- **"Look at this" and "Watch with me" use the Pictures graphics-card lane first**
+  when Pictures is on and its lane runs; the slow processor picture mode is the
+  fallback. Picture mode's own switch still decides whether a picture is read at
+  all (owner may revisit). The picture is still cleaned first.
+- **Settings fixes:** the email switch wrote a name the tool list ignored
+  (`email_read` vs `email_check`) - fixed for all four reading switches. **Web
+  search has an on/off switch in both apps** (off instant; back on is one card,
+  `web_search_enable`, via `web-search-switch.patch`, which goes AFTER
+  `form-review.patch` because both anchor on the gate's last lines). Phone
+  voice switches moved to Settings > Voice; Settings has a jump list; greyed
+  panels say why.
+- **Screen safety:** the secret scan is capped at 25,000 characters and 6 s and
+  fails closed; more patterns (`DB_PASSWORD=`, Bearer, US SSN, code-before-label,
+  `Passwort:`); a Watch started from the desktop ends after 45 s without a
+  heartbeat; a look racing Stop is discarded; an unreadable program name is
+  painted black; phone Watch ends after 10 s of a lost link and says it cannot
+  see password boxes.
+- **Phone hardening:** Live and the handoff screen start only from Jarvis's own
+  tiles and notifications (an app-private secret); the approval widget and the
+  Mute tile obey App lock; stream start is single-file; every notification id
+  is in one place; three unlabeled switches and checkboxes are readable by
+  TalkBack.
+- **Desktop hardening:** App lock reads each field on its own so one bad value
+  cannot switch it off; `backend.log` is capped at 4 MB while running; approval
+  toasts are withdrawn when the card is decided anywhere; failure toasts use
+  plain words and obey App lock; the focus ring is a solid outline with a High
+  Contrast fallback. `'unsafe-inline'` stays in the CSP (12 inline scripts) and
+  a test pins the count.
+- **Backups:** retention never deletes the file just written and ranks by real
+  file time; a restore is all-or-nothing with rollback; the restore card says it
+  replaces the memory and chat files; `POST /api/backup/delete-older` (one card)
+  is built on the backend - **the apps' "Delete older backups now" button after
+  an Erase is queued** (owner, 2026-09-30).
+- **Time:** the PC sends `age_s` for a fired job; "12 at night" is midnight and a
+  bare 12 is said back; timers survive a clock set back; DST "last week" and a
+  leap-day range no longer crash.
+- **Update script:** `-FixLineEndings` rehearses on a converted copy and converts
+  the real files only afterwards; the end is a green, yellow or red summary with
+  an exit code; a half-patched backend gets a one-line restore; a running Jarvis
+  stops the run (`-Force` overrides). Not run on real PowerShell 5.1.
+- **Owner decisions recorded, not yet built (queue, in this order). A 2026-10-05
+  pass marked every item that is now built; the marks are the record, so read
+  them before trusting any line below.** (1) a notification settings screen in
+  both apps (per kind: on/off, style, Test button, quiet hours that never
+  silence urgent alerts or approvals) - **the desktop screen is built 2026-09-30**
+  (`settings.html` "Notifications", `notifications.rs`); **the phone's own screen
+  is still open**; urgent alerts break through Do Not Disturb / Focus Assist
+  where the system allows, with a note - **built 2026-09-30** (`winrt_toast.rs`'s
+  `scenario="alarm"`) - and a late urgent alert follows the silent "Missed" rule
+  - **built** on the PC (`brain/schedule.rs`) and on the phone
+  (`JarvisRuntime.kt`); reminders and briefings get their own phone channel -
+  **built** (`strings.xml`'s `channel_schedule_desc`); (2) tap-to-talk on the
+  phone - **built 2026-10-01** (`eabca34d`): a tap starts the clip, a second
+  tap or the Smart Turn pause sends it, and hold-to-talk still works; (3)
+  quick access: "current task with Stop" and "approvals waiting" as widget
+  sources, "graphics memory per card" and "tokens per second" as fixed widget
+  sources (marked not measured), edit a saved
+  widget, per-widget transparency, accent, high contrast and a live preview
+  (**the preview is built 2026-09-30**, `widget-board.js`), and "Pin to home
+  screen" for any Brain section or chat; (4) card experience: after any approve
+  one line says which Undo exists - **built 2026-09-30 in both apps** (`main.js`'s
+  `desktopUndoNotice`, `JarvisRuntime.kt`'s `undoNoticeFor`); past approvals show
+  one non-sensitive summary line - **built 2026-09-26** (`9d1dddab`); setup cards
+  in plain words; pinned Approve/Deny on long phone cards; a quiet reminder when a
+  routine card has under 60 s left; (5) a suggestion line in Brain > Model for a
+  16-32 GB first card ("your card can hold the 14B at 32K") - **built 2026-09-30**
+  (`brain.js`), and a 16 GB or larger first card counts as capable for Pictures,
+  Wiki and Browser without a preset (each still off until approved) - **built
+  2026-09-30** (`jarvis_second_card.py`); (6) per-model thinking levels - Off,
+  Quick, Deep or Auto, set separately for the everyday model and each lane's
+  model, only levels the model supports, default Off, voice answers stay fast, no
+  card to change - **built 2026-10-01** (Section 5.5, `jarvis_thinking.py`);
+  (7) multi-model work: failover to the main card when a lane fails, a checker
+  (bigger model reviews tool plans and code only) and local compare (**local
+  compare built**, `jarvis_chatbot_compare.py`), each off by default and measured
+  first, plus a per-lane measured log; (8) test hardening (a per-patch "reads
+  original text" ratchet, skips no longer count as passes - **the skip half is
+  built**, `run_suites.py`); (9) "Restore to before" for an app merge (with the
+  app builder, after the 12 GB card); (10) a stale-area check after every big
+  merge.
+- **Rejected this session (ideas only):** Xinference, LocalAI, GPUStack, Triton,
+  a llama-server supervisor, screenpipe (stays rejected), Outlines, STORM, MCP
+  filesystem/git servers, Zebar, yasb, tauri-plugin-decorum, json-to-compose
+  and a free-form widget renderer, and Skill-Anything / QuizScribe / deepeval for
+  learning. The owner asked not to work on educational features for now (a
+  note-quiz feature stays queued behind everything else).
+- **The Undo shelf, Activity list and 10-minute Undo windows are separate today**;
+  the Activity list keeps only the title, decision, time and device.
+
+Decided 2026-10-06: **"Let Jarvis Desktop start and stop Jarvis" is deliberately
+instant - no approval card.** The owner considered giving the switch a card and
+chose to leave it as it is, and this entry is the record that the choice was
+deliberate rather than an oversight:
+- **It can only run one program he typed in himself.** The desktop starts
+  exactly the **Program** and **Arguments** saved in that same Settings box
+  and nothing else (`jarvis-desktop/src-tauri/src/sidecar.rs`:
+  `Command::new(config.program.trim())` then `command.args(&config.args)`,
+  with the whole `BackendConfig` written by the owner's own Save). There is
+  no way to make it run a program he did not name.
+- **It takes no power over his data.** Starting or stopping the backend does
+  not read, move, send or delete a file, and nothing leaves the PC.
+- **It opens no way out of the PC.** It is not a new named way out
+  (`docs/ARCHITECTURE.md` section 4) and it reaches nothing on the network.
+- So the card an approval would raise would ask him to confirm the exact
+  thing he just typed and pressed Save on. Switching it **off** is instant,
+  like every other narrowing change in this project; switching it **on** is
+  the only direction that changes anything, and it still needs his own Save.
+- The switch is **off by default** (`read_supervise`, ".unwrap_or(false)",
+  "§5, and the reason is a person's terminal"): a Jarvis he started himself
+  in PowerShell is never adopted and never stopped.
+- The desktop build brief's own section 5 (`DESKTOP-BUILD.md`, "Supervising
+  the backend - and the orphan problem") is why it is built carefully rather
+  than not at all: ask `POST /api/shutdown` first, kill the process tree (not
+  the process) only if that does not go, attach to a backend already
+  listening instead of spawning a second one, and keep it a setting, default
+  off.
+
+Decided 2026-10-08, after the owner asked for a prompt-writing helper and
+offered four open-source projects to build it from: **the Prompt Coach comes
+first, and none of the four is used.** `backend/jarvis_prompt_coach.py` reads
+ONE prompt the owner is about to send, and the last few turns (the owner's
+answer), and returns a short critique with a rewritten version. It runs on the
+model already on the PC and **adds no dependency at all** - because
+`promptimal` requires an OpenAI API key and has no local-model support (Ollama
+is item 1 of its own roadmap), so using it would have sent the owner's own typed
+words to OpenAI, which is rule 1. `textgrad` is a pre-alpha research framework,
+`prompt-optimizer` is AGPL-3.0 rather than the MIT claimed, and `promptfoo` is
+a fine Node CLI for a different job (regression-testing Jarvis's own system
+prompts offline, noted for later). The full comparison is
+`docs/PROMPT-COACH-DESIGN.md`.
+
+- **A button, not an interceptor.** The owner was offered a mode that checks
+  every message and chose the button, with the switch as the master switch: off
+  means no button and nothing read. An 8B model is a mediocre prompt critic, so
+  it must not be in the path of every message, and a critique is a full model
+  call.
+- **Turning it on raises no card, and neither does turning it off.** Written
+  down as a decision so nobody "fixes" it later: the coach reads words the chat
+  is about to send to the same model on the same PC anyway, takes no action, and
+  opens no way out of the PC. The reasoning is in the setter's docstring.
+- **The score is never a gate.** A 1 out of 10 is still sendable, "this is
+  clear, send it" is a correct answer, and the module's own prompt says that
+  inventing a complaint is a failure.
+- **It never sends anything by itself and never changes the owner's words.**
+  Both apps offer Send mine and Send the suggestion, and nothing leaves without
+  one of those presses.
+- **It never leaves the PC and keeps nothing.** The address is checked with
+  `jarvis_auto_learn.check_local_model()` before the request is built, and no
+  prompt, critique or score is written to history, memory or a log.
+- **Unmeasured, and said so.** Nobody has run it against a real model, so the
+  quality of its advice and how long it takes are both unknown; the app's own
+  line under the switch says the advice is sometimes wrong.
+- **One thing found on the way, for later:** neither app renders its settings
+  from `jarvis_settings_registry.py` - every switch is hand-written in three
+  places (the backend's words, a desktop copy, a phone copy) and nothing tests
+  that the copies agree. The repo's cure for that exists and is used elsewhere
+  (`gen_menu_cases.py` generates both apps' menu catalogues from one source,
+  with a `--check` in CI). The owner chose to build the Coach the house way and
+  queue "one source for the settings screens" as its own task rather than
+  block the feature on it.
+
+Decided 2026-10-08, after the comparison against CopilotKit's OpenMuse
+(`docs/COMPETITORS-OPENMUSE-2026-10-08.md`): **the job list comes first, and a
+turn hands work to it.** Work that outlives one chat turn is built
+(`backend/jarvis_tasks.py`, `tasks.patch`, JARVIS-API section 118): a job is a
+named list of steps, one step runs per tick, each step still raises its own
+approval card, and the list remembers where it got to through a restart. A
+chat turn delegates to a job with `jarvis_tasks.from_plan` after the plan card
+is approved, and the gate is reached only through `gate_ask`, so nothing
+bypasses it. Five protections came with it: a lease so a crashed job is picked
+up again and never run twice at once, a checkpoint after every step,
+`outcome_unknown` for a send interrupted by a restart (never `failed`, which
+invites a retry), an idempotency key so the same request makes one action, and
+a card whose decision must carry the hash of the words that were shown. Both
+apps show the list on Brain -> Work. Nothing new leaves the PC.
+- **The comparison also produced a correction, and the correction is the point.**
+  The report first listed OpenMuse's IP-pinned egress check as a gap to copy;
+  `backend/jarvis_local_http.py` had already done it since the 2026-09-27
+  security audit, and checks every resolved answer rather than the first. That
+  was the third time this project has "gone looking for" something it already
+  had (`docs/PEERS.md` recorded the first two). The two real things it did
+  earn were closed the same day: the ranges that are never a destination, and
+  NAT64, where `127.0.0.1` is spelled `64:ff9b::7f00:1`.
+
+Decided 2026-10-10, the owner's two answers after the integration evaluation
+(`docs/INTEGRATION-EVAL-2026-10-10.md`, PR #207, which read eight outside
+projects and found one idea worth taking): **the floating face passes clicks
+through to whatever is behind it, as a setting that is off by default** -
+every click goes to the window underneath except on the animal itself, so the
+face stops getting in the way over a full-screen app while the animal can
+still be dragged (and stroked, wherever stroking reaches it). It is one
+cosmetic switch in the desktop's Appearance card, under "Floating face",
+declared in the one settings table like every other row; it applies at once
+and asks for no approval card, because it changes only how Jarvis's own face
+is shown. The hit test is measured off the face's own drawn picture rather
+than guessed from the shader's camera (every one of the five faces reaches
+the edge of its square in some pose, so no circle round the middle would do),
+and every doubt - no measurement yet, a pointer that cannot be read - leaves
+the animal clickable. **And the faces stay as they are: no Live2D and no VRM
+importer** - Open-LLM-VTuber and amica both draw Jarvis a different way
+entirely, which would *replace* the ray-marched shader faces the desktop and
+the phone share (`docs/CRITTERS.md`) rather than extend them, and buy a
+second renderer, a second face picker and an SDK licence for it. The one idea
+worth borrowing was borrowed as an idea: no code, no dependency, no licence
+exposure.
+
+Decided 2026-10-10: **the desktop intro still appears once by itself, and the
+owner can replay it on demand** - the walkthrough is no longer a one-shot. The
+owner asked directly whether it was "interactive (and skippable) and redoable
+if accidentally skipped": the first two were true and the third was not.
+`jarvis-desktop/src/onboarding.html` is five plain screens with Back/Next and
+Escape to leave, and `commands.rs`'s versioned marker carries the rule "shown
+once, never again" - `lib.rs` opened the window only while the marker was
+missing, and no command and no control anywhere could open it again, so one
+accidental Escape and it was gone for good.
+
+What changed, in the owner's terms: one button, **"Show the intro again"**, in
+Settings' "Set up Jarvis" card (`settings.html`'s `#first-run`), beside that
+card's own "Set up again" and OUTSIDE its checklist rows - those rows fold away
+once set-up is done, which is exactly the state the owner is in when he wants
+the intro back. It calls one new command, `replay_onboarding`, which reuses
+`windows::show_onboarding` (the same fixed-size, non-resizable window, same
+label, same narrow capability) and **reads and writes no marker at all**.
+
+What deliberately did NOT change: when the intro appears by itself. `lib.rs`
+still opens it unprompted only while `commands::onboarding_seen` is false, and
+`finish_onboarding` is still the only writer of the versioned marker. Clearing
+the marker from the replay path would have made the intro open by itself on the
+next start, which is not what was asked for. This is replay on demand, never
+"show it every launch" - and it is not the first-run checklist
+(`src/first-run-settings.js`, the owner's option 8A of 2026-10-06), which
+gathers settings and is a different thing.
+
+The new command's whole ACL path, because a command missing any one piece
+silently does nothing: `build.rs`, `lib.rs`'s `generate_handler!`,
+`permissions/autogenerated/replay_onboarding.toml`, `surfaces.toml`'s new
+`onboarding-replay` set, and `capabilities/settings.json` - and that set is NOT
+given to the walkthrough's own window, which keeps `onboarding-surface` (mark
+seen, close) and nothing more. The button is not a settings TOGGLE row, so
+`backend/jarvis_settings_registry.py` (PR #163) is untouched and no generated
+catalogue needed regenerating. The stale "shown once, never again" comments in
+`commands.rs`, `windows.rs` and `onboarding.html` said otherwise and were
+corrected with it.
+Decided 2026-10-10, after a Reject click was found shipping a rule in the
+owner's name: **a Reject click may be written down, but only as Jarvis's
+guess, marked as a guess.** The owner's words: a rejection may become *"a
+suggestion, marked as a guess"*, which he **Keeps or Discards** - never
+something Jarvis puts in his mouth. What was happening before: when the owner
+pressed Reject, `jarvis_gate.py` built the sentence *"Remember this: I do not
+want Jarvis to `<action>` without asking me first. I just said no when it
+asked."* and handed it to the learner as if it were the owner's own turn. It
+was not. A Reject click carries none of his words - the HUD's Reject sends only
+`{id, by}`, and the gate NULLs the card's own `prompt` and `detail` when it is
+decided - so the sentence was Jarvis's invention, and "I just said no when it
+asked" invented a reason for a click that carries none. Facts here are learned
+from the owner's own words only (2026-09-24), so **that unlabelled behaviour is
+fixed**: the proposal now says in its own words that it is Jarvis's guess, that
+it is not a record of the owner's words, and that no reason was given nor made
+up to fill the gap - and it names the action, so the guess is worth reading.
+The same marking reaches the review card itself (`guessed`, plus the words in
+the reason line both apps already show), so it is visible where the owner
+actually decides, not only inside the backend. **Everything good about the old
+behaviour is kept, and must stay kept:** a timeout still proposes nothing ("the
+absence of an answer"), it still only ever *proposes* through
+`jarvis_extract.propose()` - the one review queue, never a second door into
+memory - the one-card list (`_NO_RULE_FROM_DENIAL`) still excludes a denial
+that answers a single card, and a failed proposal still never turns a completed
+denial into an error. Keeping the guess is what makes it apply: nothing is
+applied until the owner says so. Written down as entry **003** of
+`docs/RULE-FLEXIBILITY.md`, with the relaxation's own line on the "What asks
+first" page (`fixed:playbook_rejection`, "Writes a guessed rule for you to Keep
+or Discard").
+
