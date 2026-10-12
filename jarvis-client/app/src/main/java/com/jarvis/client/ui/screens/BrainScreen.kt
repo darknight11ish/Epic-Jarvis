@@ -427,6 +427,36 @@ fun BrainScreen(
         fun plateDrawn(name: String): Boolean =
             if (name.endsWith("-hidden")) privateHidden else !privateHidden
 
+        // What the SCREEN says it puts in the list, in its own words - the
+        // missing denominator.
+        //
+        // `composed=` is `LazyListState.layoutInfo.totalItemsCount`, and the
+        // bytecode of the `foundation-android:1.11.3` this app resolves to
+        // settles what that is: `LazyListMeasureResult.totalItemsCount` ->
+        // `LazyListItemProvider.getItemCount()` ->
+        // `LazyLayoutIntervalContent.getItemCount()` ->
+        // `MutableIntervalList.getSize()` = **the number of intervals the
+        // LazyColumn's content lambda registered, which is the whole declared
+        // list and NOT the visible window.**
+        //
+        // So this and `composed=` are two independent counts of one thing, and
+        // one run separates the remaining explanations:
+        //   declared == composed -> the list holds what the screen declared, so
+        //                           an absent plate is a composition problem
+        //                           upstream of the walk;
+        //   declared >  composed -> the list is NOT holding what the screen
+        //                           declared, which is a defect in the list.
+        val declaredKeys = brainListKeys(
+            openSection = { it == openKey },
+            drawnInSection = { key, out -> out.addAll(BrainSections.platesOf(key).map { it.key }) },
+        )
+        android.util.Log.i(
+            "JarvisBrain",
+            "screen declared=${declaredKeys.size} openKey=$openKey " +
+                "hasWanted=${declaredKeys.any { it.endsWith(WANTED_JUMP_PLATE) }} " +
+                "head=${declaredKeys.take(12)}",
+        )
+
         // One diagnosable line per jump (the Galaxy button defect of
         // 2026-10-11): what was asked for, which key the walk looks up, which
         // heading should hold it, and - `openKey` - what was actually open. A
@@ -2833,6 +2863,8 @@ private fun String.looksMachine(): Boolean =
  * hidden" answer was in doubt; any other key logs `shown=false` and means
  * nothing, so no key's absence is a mistake.
  */
+private val WANTED_JUMP_PLATE: String = listOf("coming", "up").joinToString("-")
+
 private val MENU_FOR_JUMP_LOG: Map<String, String> = run {
     val ns = com.jarvis.client.ui.screens.PlateList.PLATE_PREFIX
     listOf(
@@ -2841,5 +2873,8 @@ private val MENU_FOR_JUMP_LOG: Map<String, String> = run {
         ns + listOf("coming", "up").joinToString("-") to "brain.work." + listOf("coming", "up").joinToString("-"),
     ).toMap()
 }
+
+
+
 
 
