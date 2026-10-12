@@ -17,7 +17,9 @@
  * - the pairing panel: the QR picture exactly as Rust drew it, the typed
  *   code, the countdown, the PC's own sentence for each state, the four
  *   words as given; the code leaves the page when the session ends;
- *   Cancel; the address remembered or found;
+ *   Cancel; the address remembered or found - including a name proved on
+ *   this PC's own mesh address, which is how a PC on NordVPN Meshnet fills
+ *   it in without the owner typing;
  * - rule 4: Pair a phone and Bring it back wait for a live link; Remove,
  *   Retire and naming a device only take access away (or change nothing at
  *   all) and never wait;
@@ -515,6 +517,27 @@ await check("a burnt code: the PC's sentence, and where the wrong tries came fro
   assert.equal(said, "Three wrong tries - this code no longer works. Start again.");
   assert.match(from, /100\.88\.1\.2/);
   assert.equal(code, "");
+});
+
+await check("a name proved on this PC's own mesh address is offered, not asked for", async () => {
+  // The owner's own PC: NordVPN Meshnet, Tailscale logged out. Rust proves
+  // the name by this PC's own address (a reverse lookup, checked forwards
+  // again - devices.rs) and answers with its own source. The page must treat
+  // it exactly like the Tailscale name: shown, still editable, and the name
+  // it sends is the one that was proved.
+  const page = await open({ devices: {
+    list: list(), address: { address: "marioirelan11-alps.nord", source: "mesh" }, start: START,
+  } });
+  await page.waitForTimeout(400);
+  const prefilled = await page.locator("#dv-address").inputValue();
+  const asked = await page.locator("#dv-pair-status").innerText();
+  await page.locator("#dv-pair").click();
+  await page.waitForTimeout(300);
+  const sent = await calls(page, "pair_start");
+  await page.close();
+  assert.equal(prefilled, "marioirelan11-alps.nord", "the proved mesh name is offered");
+  assert.equal(asked, "", "nothing is asked for when a name was proved");
+  assert.deepEqual(sent, [{ address: "marioirelan11-alps.nord" }]);
 });
 
 await check("Cancel ends it on the PC and takes the code away", async () => {
