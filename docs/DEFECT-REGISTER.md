@@ -56,6 +56,37 @@ An example row (every gap between two words below is one TAB):
 DEF-003	some-agent	2026-10-11	open	tools/example.py	tools/example.py:41 returns before the check; test_example.py fails	x/some-branch @ 1a2b3c4
 ```
 
+## Before reporting a NEGATIVE result, check the instrument
+
+**A "nothing found" is the shape that most looks like a clean run, so it needs
+the most proof. Before a negative result is reported, ask whether the step that
+was supposed to happen actually happened.** The practical form of that rule:
+**make the check say what it did, not only what it found.**
+
+Three examples from 2026-10-11, all on real work, none of them hypothetical:
+
+- **The plate.** `BrainScreen`'s source said a plate was drawn; the runtime
+  dropped it from the list. Every check that read the source was green while the
+  thing being checked for was never on screen. *A claim in the source is not
+  evidence the thing is drawn.*
+- **The zero-line probe.** `adb logcat -d -s JarvisRuntime:I` returned **0 lines
+  in total** - not "no reconcile line". It read like "nothing wrong". *A probe
+  that returns nothing is not evidence of absence; it is not evidence at all
+  until the probe is shown to work.*
+- **The reading that was nearly sent.** An armed watcher **did** catch the
+  orphan condition at 16:05, then failed to find a Coming up row, fell back to
+  tapping the Brain tab, and printed **"STILL POSTED"** - an instrument failure
+  wearing a result's clothes. What stopped it being reported was one diagnostic
+  line above the verdict: *"no Coming up row found"*. *A negative verdict is
+  worth nothing if the step it depended on did not run.*
+
+All three were caught by a line that **contradicted the verdict** rather than by
+the verdict itself, which is why the check has to narrate its own steps. **The
+paired rule for positive results:** a test that passes because it is looking at
+nowhere or nothing proves nothing either - run the allowed case first and watch
+it FIND what the forbidden case must not contain
+(`docs/PIP-DESIGN.md` section 7.1 is that rule written out for one feature).
+
 ## Why this exists (history, not an open defect)
 
 On the night of 2026-10-11 the same real bug was repaired several times over,
@@ -77,4 +108,3 @@ exists: one line in one file, before the work starts.
 | DEF-004 | unclaimed | 2026-10-11 | open | `scripts/move-models-to-d.ps1` | section 8h called `Start-ScheduledTask` on `Jarvis Ollama - Everyday model` / `... Coding model` - names that do not exist (the real ones end ` (RTX 2060)` / ` (RTX 2080 Super)`) - with `-ErrorAction SilentlyContinue`, then exited 0. Both tasks show `LastTaskResult 0xC000013A` and the lanes stayed down for an hour. Fixed by PR #255 | wt-lanes-2026-10-11 @ bda48094 |
 | DEF-002 | desktop feature-test agent | 2026-10-11 | open | `jarvis-desktop/src-tauri/src/windows.rs`; `jarvis-backend/jarvis_hud.py` | the Settings gear's path (`main.js:5233` -> `plain_errors.rs:312` -> `windows.rs:516`) builds the window on the command thread, and `/api/status` (`jarvis_hud.py:3181`) makes 3-4 live upstream probes while `/api/pending` (`jarvis_hud.py:3160`) is a DB read: measured 4598 ms against 9 ms at app 0.2.129 | wt-reg-2026-10-11 @ f8e96ab4 |
 | DEF-005 | fix-265 | 2026-10-11 | open | `backend/test_power_switch.py` | `backend-windows` on PR #265 (job 114438288189) printed `FAIL  waking from standby loads the chat model at once` and then `KeyError: 'warm_up'` in `t_waking_loads_the_chat_model_again` (59 passed, 1 skipped, 2 failed). `set_mode` joins its work thread for `wait_s` only (1.5 s) and then answers 202 "Waiting for your approval", a body with no `warm_up` in it, so an in-place warm-up slower than 1.5 s is read as if it were the answer. Reproduced exactly on `.dsh-scratch/docs-drift`: fails at 2.0 s of warm-up, passes at 1.2 s - the boundary **is** the 1.5 s join. `main` carries the same racy test, so merging `main` alone does not fix it. Fixed by #265 (`45e35ec9`): the test passes `wait_s=30` and asserts `code == 200` | `.dsh-scratch/docs-drift @ 45e35ec9` |
-| DEF-006 | frontend-triage | 2026-10-11 | open | `jarvis-client/app/src/main/java/com/jarvis/client/service/ScheduleNotifier.kt`; `jarvis-client/app/src/main/java/com/jarvis/client/net/Schedule.kt`; `jarvis-client/app/src/main/java/com/jarvis/client/JarvisRuntime.kt` | a job **DELETED on the PC** while its "went off" notification is still posted leaves the notification up for ever: nothing cancels it, because the PC's `changed` event is the only cancellation this app has and a job that no longer exists sends none. Measured on the owner's CPH2419 (`adb f0a5b32b`) on 2026-10-11 - `POST /api/schedule/act {id,do:delete}` for `s7623a9a982` and `sf50b6d4930` both answered `{ok:false,reason:no_such_job}`, `GET /api/schedule` showed `jobs:[se80955f188]` and `went_off:[]`, and both tags were still posted (`tag=s7623a9a982 channel=jarvis_alarm flags=ONGOING_EVENT\|INSISTENT\|AUTO_CANCEL\|LOCAL_ONLY category=alarm actions=2` and `tag=sf50b6d4930 channel=jarvis_schedule actions=1`) - so the alarm kept ringing with no event left to cancel it. Fixed on `fix/phone-timer-offers-stop`: a schedule notification whose job is in none of `GET /api/schedule`'s `jobs`/`todo`/`went_off` is taken away, and only after a read that SUCCEEDED | `fix/phone-timer-offers-stop @ 719963ae` |
