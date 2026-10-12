@@ -476,12 +476,15 @@ def t_an_older_jarvis_voice_still_works():
 #: Renders all three producers ONCE each in a fresh interpreter whose temporary
 #: root is the one it is given, and prints {name: [bytes, sha256]}.
 #:
-#: WHY A FRESH PROCESS, and not module.render() here: the phone producer is not
-#: repeatable inside one interpreter (measured 2026-10-11 - rendering it twice
-#: with the SAME root gave 1,054,760 B and then 1,218,390 B, the second run
-#: filling in `median_ms` that the first left null), so a second render in this
-#: process proves nothing about the file. "A fresh run of the producer" is what
-#: the fixtures are compared against, so that is what this runs.
+#: WHY A FRESH PROCESS: `tempfile.tempdir` has to be set before the producer
+#: imports the backend modules that read it, and "a fresh run of the producer"
+#: is what the fixtures are compared against, so that is what this runs.
+#:
+#: (Until 2026-10-11 there was a second reason, now fixed - see DEF-009: the
+#: phone producer was not repeatable inside one interpreter, rendering twice
+#: with the SAME root as 1,054,760 B and then 1,218,390 B. Its own
+#: t_the_desktop_fixture_is_fresh now checks that property directly, and the
+#: producer clears jarvis_voice_flow's rows at the top of render().)
 _TEMP_PROPERTY_SCRIPT = (
     "import hashlib, importlib.util, json, sys, tempfile\n"
     "from pathlib import Path\n"
@@ -590,6 +593,18 @@ def t_the_desktop_fixture_is_fresh():
     import gen_phone_voice_cases as P
     check("phone-voice-cases.json equals a fresh run of the producer",
           P.main(["--check"]) == 0, "run python3 tools/gen_phone_voice_cases.py")
+    # THE PREMISE THE CHECK ABOVE STANDS ON, and the one a fresh run cannot see
+    # (DEF-009, 2026-10-11). This producer's flow numbers come from
+    # jarvis_voice_flow's module-level row list, which its own cases fill in as
+    # they run - so without the clear at the top of render(), ONE interpreter
+    # produces two different files from one tree (1,054,760 B then 1,218,390 B,
+    # and `--check` answering 0 and then 1), and a green above means only that
+    # nothing earlier in THIS process had measured a turn. Both renders are in
+    # this process on purpose; a fresh one would pass either way.
+    first, second = P.render(), P.render()
+    check("the phone producer gives the same bytes twice in one interpreter",
+          first == second,
+          f"{len(first.encode())} bytes then {len(second.encode())} bytes")
 
     # THE PREMISE THE THREE CHECKS ABOVE STAND ON, named after them: each file
     # is what a FRESH RUN produces on a SHORT temporary root AND on a LONG one,
