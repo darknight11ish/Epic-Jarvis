@@ -127,6 +127,15 @@ def _no_net():
 #: ("search_the_web"), which `web-search.patch` gives words in `_RISK`; it never
 #: goes through `action_for_tool`, so the table is the wrong place to look for
 #: it. `test_agent.py` skips the same one for the same reason.
+#: The names a suite FABRICATES, with the reason. These are not actions and are not
+#: meant to resolve: `something_nobody_classified` is put to the gate to show that an
+#: action nobody classified falls to "ask" (`test_gate_touches.py:482-484`, which
+#: asserts the tier comes back "unknown"). Exempting the NAME keeps the rule it proves
+#: - an unclassified action asks - exactly as it is.
+FABRICATED_BY_A_SUITE = {
+    "something_nobody_classified": "invented by test_gate_touches.py to prove an "
+                                   "unclassified action falls to ask",
+}
 NOT_VIA_THE_TABLE = {
     "web_search": "put to the gate under jarvis_search.ACTION_SEARCH (search_the_web), "
                   "never through action_for_tool - see jarvis_agent._web_search_call",
@@ -488,11 +497,28 @@ def t_every_action_a_suite_names_has_a_live_tier_line():
     # one of those. What this check fails on is a name NOTHING in the live gate
     # has any more: the suite would be asserting an action the running Jarvis
     # can no longer produce.
+    def _resolves_as_a_tool(n):
+        """Whether the gate resolves this name through `_TOOL_ACTIONS`.
+
+        `_TOOL_ACTIONS` maps TOOL lookup names to gate actions (`jarvis_gate.py:740`),
+        and `_gate_member_actions` reads its VALUES - so a suite that names the TOOL
+        rather than the action (`calculator`, `test_gate_touches.py:515`) was reported
+        as unresolvable while the gate has always resolved it, exactly as production
+        does. Asking the gate is the point: this is the call
+        `t_every_tool_resolves_to_a_real_action` already makes.
+        """
+        try:
+            action, _known = gate.action_for_tool(n, {})
+        except Exception:
+            return False
+        return action != UNCLASSIFIED
     known_to_the_gate = set(_gate_member_actions(gate))
     missing = {n: w for n, w in real.items()
                if n not in tiers and n not in gate._VALID_TIERS
                and n not in known_to_the_gate
-               and n not in (UNCLASSIFIED, "unclassified_action")}
+               and n not in FABRICATED_BY_A_SUITE
+               and n not in (UNCLASSIFIED, "unclassified_action")
+               and not _resolves_as_a_tool(n)}
     check("every action a suite names is one the live gate can still resolve a "
           "tier for (a toml line, a tier literal, or a name in the gate's own "
           "tables)",
