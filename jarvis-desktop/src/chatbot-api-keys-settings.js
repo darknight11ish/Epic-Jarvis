@@ -272,7 +272,21 @@ function row(entry) {
 
 function paint(entries) {
   if (!as.body) return;
-  as.body.replaceChildren(...entries.map(row));
+  // One tab per service, the service's own name as the tab's words (the owner,
+  // 2026-10-11: "a tab for chatgpt, a tab for deepseek, etc ... opening the
+  // tabs gives their specific menu"). The rows are untouched - `row(entry)` is
+  // the same row it always was, now inside its own service's panel.
+  const tabs = window.JarvisSettingsTabs && window.JarvisSettingsTabs.build({
+    mount: as.body,
+    items: entries,
+    idOf: (entry) => `cak-${entry.service}`,
+    labelOf: (entry) => LABEL[entry.service],
+    panelOf: (entry) => [row(entry)],
+    label: "Chatbot API keys",
+  });
+  // If the helper is not on the page, the card is exactly what it was: six rows
+  // in a column. A missing tab strip must never cost the owner a setting.
+  if (!tabs) as.body.replaceChildren(...entries.map(row));
 }
 
 function paintWords() {

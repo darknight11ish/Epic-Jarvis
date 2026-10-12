@@ -153,8 +153,13 @@ function paintProviders() {
 }
 
 function paintKeys() {
-  ws.keys.replaceChildren();
-  for (const p of view.providers.filter((x) => KEYED.includes(x.id))) {
+  // The three services that take a key (Exa, Tavily, Brave) become one tab
+  // each, the service's own name as the tab's words - the same shape as the
+  // Chatbot API keys card, and the owner's request of 2026-10-11. Everything
+  // else on this card (which search to use, asking first, the SearXNG address)
+  // is unchanged and stays outside the strip.
+  const keyed = view.providers.filter((x) => KEYED.includes(x.id));
+  const boxes = keyed.map((p) => {
     const box = node("div", "sc-switch");
     box.dataset.key = p.id;
     const label = node("label", "label", `${p.label} key`);
@@ -180,8 +185,18 @@ function paintKeys() {
     box.append(label, row);
     box.append(node("p", "sc-line", keyLine(p)));
     box.append(node("p", "note", `Get one at ${p.keyWhere}.`));
-    ws.keys.append(box);
-  }
+    return box;
+  });
+  const tabs = window.JarvisSettingsTabs && window.JarvisSettingsTabs.build({
+    mount: ws.keys,
+    items: keyed,
+    idOf: (p) => `ws-key-${p.id}`,
+    labelOf: (p) => p.label,
+    panelOf: (p) => [boxes[keyed.indexOf(p)]],
+    label: "Web search keys",
+  });
+  // No helper on the page: the same keys, one after another, exactly as before.
+  if (!tabs) ws.keys.replaceChildren(...boxes);
 }
 
 function paint() {
