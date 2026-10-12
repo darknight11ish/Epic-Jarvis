@@ -131,13 +131,25 @@ it is a one-file change.
      label and the tooltip, so `assert.equal(composed.title, composed.button)`
      would still pass and prove **nothing**. **Break one assignment, never the
      constant they both read.**
-   - **Still to mutate, named exactly:** `progress.mjs` was **not** mutated. Its
-     `composed` ramp is built at `tests/progress.mjs:400-407` and compared to its
-     fixture at `:424-425` (`jarvis-desktop/tests/fixtures/progress-cases.json`);
-     the plan is to corrupt **one fixture ratio** and record **which** assertion
-     fires first - `:404` (alpha), `:429` (hue), or `:425` (the fixture ratios) -
-     because *which check catches it* is part of the finding. **Two attempts were
-     made and both were refused by the rule below**, so nothing was mutated.
+   - **Mutation RUN on the third attempt, and the check caught it - and it names
+     WHICH assertion.** The fixture's first ratio
+     (`jarvis-desktop/tests/fixtures/progress-cases.json`, the `over_surface`
+     array that `tests/progress.mjs:424-425` compares against the live ramp) was
+     changed `3.06` -> `3.11`. `node tests/progress.mjs` then reported
+     **`1 failed: level 0 is an outline only; levels 1 to 4 are the accent at the
+     contract's alphas, and distinguishable in every theme`**, with the failing
+     message **`deep-space: the fixture's ratios`** - that is **`:425`**, the
+     fixture-ratio comparison, and **not** `:404` (alpha) or `:429` (hue). So the
+     red is attributable to the assertion being tested, which was the point of
+     naming all three in advance. Restored from git; `git diff` on the fixture is
+     empty and the suite is green again.
+   - **The first two attempts were refused by the rule below, and the refusal was
+     correct**: the first because **two** files matched its search (the test *and*
+     its fixture) rather than guessing, the second because its pattern expected
+     JavaScript while the file is JSON - `"over_surface": [`, a **quoted key**.
+     **In both refused cases the suite run printed green, on an unmutated tree: I
+     had two greens from a mutation that never landed, which say nothing.** A green
+     from an unmutated tree is not evidence; it is the absence of an experiment.
    - **THE RULE THIS AUDIT LEARNED ABOUT ITS OWN INSTRUMENT, and it belongs in the
      findings, not in a footnote: a mutation must ASSERT THAT IT ACTUALLY CHANGED
      SOMETHING before its run is trusted.** The first attempt at the `hud.mjs`
@@ -145,17 +157,14 @@ it is a one-file change.
      was never touched, and `node tests/hud.mjs` printed `all passed` on an
      **unmutated** file. That is **a false green manufactured by the mutation tool
      itself** - this audit's disease turned on this audit - and it was caught only
-     because the patch script asserted the occurrence count it was replacing. The
-     same rule then caught both `progress.mjs` attempts: the first refused because
-     **two** files matched its search (the test *and* its fixture) rather than
-     guessing between them, and the second refused because its pattern did not
-     match the fixture's JSON (`"over_surface": [` - a quoted key). **In both
-     refused cases the suite run printed green, on an unmutated tree.** A green
-     from a mutation that did not land says nothing at all, and anyone building
-     this instrument should make it refuse loudly, exactly as these did.
-   - **Sizing the remaining gap honestly: two of 182 suites have been run and one
-     of those two has been mutated.** The rest of the glob is un-run *and*
-     un-mutated, so nothing here should be read as clearing the desktop side.
+     because the patch script asserted the occurrence count it was replacing.
+     Every later attempt asserted the edit and **re-read the file from disk** to
+     prove the change had landed before any run was believed. Anyone building this
+     instrument should make it refuse loudly, exactly as these did.
+   - **Sizing the remaining gap honestly: two of 182 desktop suites have been run,
+     and both of those two have been mutated** - `hud.mjs` red at `:373`,
+     `progress.mjs` red at `:425`. The rest of the glob is un-run *and* un-mutated,
+     so nothing here should be read as clearing the desktop side.
 2. **`cargo test` was not run** (it OOMs here, per the brief), so the Rust-side
    assertions are not covered either.
 3. **The mutations I would run next, in order, with budget:** (a) make
