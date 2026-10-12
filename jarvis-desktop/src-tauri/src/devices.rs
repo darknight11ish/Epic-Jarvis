@@ -9,7 +9,10 @@
 //! * [`pair_phone_address`] - the name the phone reaches this PC at, for the
 //!   QR code: the one the owner typed last time, else this PC's Tailscale
 //!   name from `tailscale status --json` (a local, read-only command with a
-//!   2-second limit; nothing is sent anywhere), else nothing - typed once.
+//!   2-second limit; nothing is sent anywhere), else the name this PC's own
+//!   mesh address proves by a local reverse lookup checked forwards again
+//!   (which is what covers NordVPN Meshnet, whose Windows app has no command
+//!   to ask), else nothing - typed once.
 //! * [`pair_start`] - `POST /api/pair/start {"address", "port"?}` (PC only).
 //!   The answer's `qr` text is turned into a picture HERE, with the
 //!   `qrcodegen` crate, and thrown away: the page gets the SVG, the typed
@@ -41,6 +44,7 @@
 //! [`crate::commands::jarvis_headers`], never logged. The QR text and the
 //! typed code are never logged either: no `println!` below prints an answer.
 
+use std::net::{IpAddr, Ipv4Addr, ToSocketAddrs};
 use std::time::Duration;
 
 use tauri::{AppHandle, Manager};
@@ -107,6 +111,11 @@ const READ_TIMEOUT: Duration = Duration::from_secs(15);
 /// `tailscale status` normally answers in well under a second (design 8.1:
 /// "if the Tailscale command answers within 2 s").
 const TAILSCALE_LIMIT: Duration = Duration::from_secs(2);
+/// The whole "this PC's own mesh name" probe (below): the owner's own PC
+/// answers in well under a second (measured 2026-10-11), and a resolver that
+/// never answers must not hold the pairing panel open - it gives up and the
+/// owner is asked, exactly as before.
+const MESH_LIMIT: Duration = Duration::from_secs(3);
 
 /// The session states in which a code or the four words are on screen, so
 /// the window stays hidden from screen capture (design 3).
@@ -389,6 +398,179 @@ fn run_briefly(mut command: std::process::Command, limit: Duration) -> Option<St
     status
         .success()
         .then(|| String::from_utf8_lossy(&out).into_owned())
+}
+
+// ---------------------------------------------------------------------------
+// This PC's own mesh name (the owner's request, 2026-10-11)
+// ---------------------------------------------------------------------------
+//
+// `tailscale status --json` is one mesh's own answer. The other mesh this
+// project supports, NordVPN Meshnet, has no command to ask on Windows: it
+// ships no CLI, its local service answers no HTTP, and nothing on disk names
+// the device (all three measured on the owner's own PC, 2026-10-11). So a PC
+// on Meshnet, logged out of Tailscale, asked the owner to type its name by
+// hand - and the name is not derivable either: the computer is called
+// MARIOSBEASTDESK, and `mariosbeastdesk.nord` does not resolve at all.
+//
+// What that machine CAN prove, measured the same day:
+//
+//   * NordLynx carries 100.75.21.228/10, and Tailscale and NordVPN Meshnet
+//     both hand out addresses from 100.64.0.0/10;
+//   * the local resolver answers the reverse lookup for that address -
+//     `100.75.21.228` -> `marioirelan11-alps.nord` - and the forward lookup
+//     gives that same address back.
+//
+// So a name is used only when it is proved BOTH ways: an address this PC
+// really holds resolves to the name, and the name resolves back to that same
+// address. Nothing is guessed from the computer's name and nothing is
+// invented - when nothing proves, the owner is asked exactly as before,
+// because a wrong name in a QR code would be worse than a typed one.
+
+/// `100.64.0.0/10`, the range Tailscale and NordVPN Meshnet both use for the
+/// addresses they hand a device.
+fn is_mesh_address(address: Ipv4Addr) -> bool {
+    (u32::from(address) & 0xffc0_0000) == 0x6440_0000
+}
+
+/// The name this PC's own mesh address proves, or `None`.
+///
+/// `reverse` turns one of this PC's own addresses into the name the local
+/// resolver gives it; `forward` resolves a name back. A name is returned only
+/// when it is one the phone may reach ([`phone_host_ok`]) AND `forward` really
+/// gives this PC's own address back - so a resolver answering with somebody
+/// else's name, or a name pointing somewhere else, is refused and the owner
+/// is asked.
+pub(crate) fn mesh_name_from(
+    addresses: &[Ipv4Addr],
+    reverse: &dyn Fn(Ipv4Addr) -> Option<String>,
+    forward: &dyn Fn(&str) -> Vec<IpAddr>,
+) -> Option<String> {
+    for address in addresses {
+        let Some(name) = reverse(*address) else {
+            continue;
+        };
+        let name = name.trim().trim_end_matches('.').to_lowercase();
+        if !phone_host_ok(&name) {
+            continue;
+        }
+        if forward(&name).contains(&IpAddr::V4(*address)) {
+            return Some(name);
+        }
+    }
+    None
+}
+
+/// Runs `probe` on its own thread and gives up after `limit`, the way
+/// [`run_briefly`] gives up on the Tailscale command: a resolver that never
+/// answers must not hold the pairing panel open. The thread is left to finish
+/// on its own; its answer is dropped.
+fn within<T: Send + 'static>(
+    limit: Duration,
+    probe: impl FnOnce() -> T + Send + 'static,
+) -> Option<T> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(probe());
+    });
+    rx.recv_timeout(limit).ok()
+}
+
+/// The addresses on this PC a mesh name could name: the one the owner chose
+/// for the phone to reach (`bind_address`, when it is an address at all) and
+/// every 100.64.0.0/10 address on an interface - which is all a fresh install
+/// has, before the owner has chosen anything.
+fn own_mesh_addresses(app: &AppHandle) -> Vec<Ipv4Addr> {
+    let mut found: Vec<Ipv4Addr> = Vec::new();
+    let keep = |address: Ipv4Addr, found: &mut Vec<Ipv4Addr>| {
+        if !address.is_unspecified() && !address.is_loopback() && !found.contains(&address) {
+            found.push(address);
+        }
+    };
+    if let Some(bind) = crate::commands::supervised_bind_address(app) {
+        if let Ok(address) = bind.trim().parse::<Ipv4Addr>() {
+            keep(address, &mut found);
+        }
+    }
+    let networks = sysinfo::Networks::new_with_refreshed_list();
+    for data in networks.list().values() {
+        for network in data.ip_networks() {
+            if let IpAddr::V4(address) = network.addr {
+                if is_mesh_address(address) {
+                    keep(address, &mut found);
+                }
+            }
+        }
+    }
+    found
+}
+
+/// The name `address` resolves back to, by the OS's own reverse lookup -
+/// `None` when there is no answer (`NI_NAMEREQD`, so a missing PTR is never
+/// read as a name).
+#[cfg(windows)]
+fn reverse_name(address: Ipv4Addr) -> Option<String> {
+    use std::ffi::CStr;
+    use windows_sys::Win32::Networking::WinSock::{
+        getnameinfo, WSAStartup, AF_INET, NI_NAMEREQD, SOCKADDR, SOCKADDR_IN, WSADATA,
+    };
+
+    // ws2_32 has to be started before any of its calls; once per process is
+    // enough, and std's own networking starts it too - this is the one path
+    // that reaches the socket library first.
+    static STARTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    let started = *STARTED.get_or_init(|| {
+        let mut data = std::mem::MaybeUninit::<WSADATA>::uninit();
+        // SAFETY: `data` is a writable WSADATA that lives for the call.
+        unsafe { WSAStartup(0x0202, data.as_mut_ptr()) == 0 }
+    });
+    if !started {
+        return None;
+    }
+
+    let mut sin: SOCKADDR_IN = unsafe { std::mem::zeroed() };
+    sin.sin_family = AF_INET;
+    // The bytes in memory have to be the address's own octets, which is what
+    // a SOCKADDR_IN carries - hence native-endian bytes, not a host integer.
+    sin.sin_addr.S_un.S_addr = u32::from_ne_bytes(address.octets());
+    let mut buffer = [0u8; 256];
+    // SAFETY: `sin` is a filled SOCKADDR_IN and `buffer` is ours; the two
+    // service pointers are null, which getnameinfo documents as "no service
+    // wanted".
+    let answer = unsafe {
+        getnameinfo(
+            &sin as *const SOCKADDR_IN as *const SOCKADDR,
+            std::mem::size_of::<SOCKADDR_IN>() as i32,
+            buffer.as_mut_ptr(),
+            buffer.len() as u32,
+            std::ptr::null_mut(),
+            0,
+            NI_NAMEREQD as i32,
+        )
+    };
+    if answer != 0 {
+        return None;
+    }
+    // SAFETY: getnameinfo wrote a NUL-terminated name into `buffer`.
+    unsafe { CStr::from_ptr(buffer.as_ptr() as *const std::os::raw::c_char) }
+        .to_str()
+        .ok()
+        .map(str::to_string)
+}
+
+/// Only the owner's own PC has the mesh clients this project supports
+/// (ARCHITECTURE section 8), so anywhere else there is nothing to ask: the
+/// owner types the name once, exactly as before.
+#[cfg(not(windows))]
+fn reverse_name(_address: Ipv4Addr) -> Option<String> {
+    None
+}
+
+/// Every address `name` resolves to, through the same resolver as above.
+fn forward_addresses(name: &str) -> Vec<IpAddr> {
+    (name, 0u16)
+        .to_socket_addrs()
+        .map(|it| it.map(|socket| socket.ip()).collect())
+        .unwrap_or_default()
 }
 
 fn remembered_address(app: &AppHandle) -> Option<String> {
@@ -693,7 +875,8 @@ async fn post_raw(
 }
 
 /// The name to put in the QR code: `{"address", "source"}`, source
-/// `"remembered"`, `"tailscale"` or `null` (nothing found - typed once).
+/// `"remembered"`, `"tailscale"`, `"mesh"` or `null` (nothing found - typed
+/// once).
 #[tauri::command]
 pub async fn pair_phone_address(app: AppHandle) -> serde_json::Value {
     if let Some(address) = remembered_address(&app) {
@@ -703,8 +886,29 @@ pub async fn pair_phone_address(app: AppHandle) -> serde_json::Value {
         .await
         .ok()
         .flatten();
-    match found {
-        Some(name) => serde_json::json!({ "address": name, "source": "tailscale" }),
+    if let Some(name) = found {
+        return serde_json::json!({ "address": name, "source": "tailscale" });
+    }
+    // No Tailscale command answered, so ask this PC's own resolver instead -
+    // which also covers NordVPN Meshnet, whose Windows app has no command to
+    // ask. A name is used only when one of this PC's own addresses proves it
+    // both ways; otherwise the answer stays exactly what it was (ask).
+    let probing = app.clone();
+    let mesh = tauri::async_runtime::spawn_blocking(move || {
+        within(MESH_LIMIT, move || {
+            mesh_name_from(
+                &own_mesh_addresses(&probing),
+                &reverse_name,
+                &forward_addresses,
+            )
+        })
+        .flatten()
+    })
+    .await
+    .ok()
+    .flatten();
+    match mesh {
+        Some(name) => serde_json::json!({ "address": name, "source": "mesh" }),
         None => serde_json::json!({ "address": null, "source": null }),
     }
 }
@@ -1048,6 +1252,100 @@ mod tests {
         );
         assert_eq!(tailscale_name(r#"{"BackendState":"Stopped"}"#), None);
         assert_eq!(tailscale_name("not json"), None);
+    }
+
+    #[test]
+    fn a_mesh_name_is_used_only_when_this_pc_proves_it_both_ways() {
+        // The owner's own PC, 2026-10-11: NordLynx holds 100.75.21.228 and the
+        // local resolver answers `marioirelan11-alps.nord` for it, forwards
+        // and backwards. That name is what a QR code on that PC carries now,
+        // with no typing.
+        let address = Ipv4Addr::new(100, 75, 21, 228);
+        let real_reverse =
+            |ip: Ipv4Addr| (ip == address).then(|| "MarioIrelan11-Alps.NORD.".to_string());
+        let real_forward = |name: &str| {
+            if name == "marioirelan11-alps.nord" {
+                vec![IpAddr::V4(address)]
+            } else {
+                Vec::new()
+            }
+        };
+        assert_eq!(
+            mesh_name_from(&[address], &real_reverse, &real_forward).as_deref(),
+            Some("marioirelan11-alps.nord"),
+        );
+
+        // A resolver that names this address, but whose name does NOT resolve
+        // back to it, is not proof: somebody else's name (or a stale record)
+        // must never reach a QR code. This is "garbage Jarvis cannot verify".
+        let elsewhere = |_: &str| vec![IpAddr::V4(Ipv4Addr::new(203, 0, 113, 7))];
+        assert_eq!(mesh_name_from(&[address], &real_reverse, &elsewhere), None);
+        let nothing_at_all = |_: &str| Vec::new();
+        assert_eq!(
+            mesh_name_from(&[address], &real_reverse, &nothing_at_all),
+            None
+        );
+
+        // No reverse answer at all (no PTR): asked, exactly as before.
+        let no_reverse = |_: Ipv4Addr| None;
+        assert_eq!(mesh_name_from(&[address], &no_reverse, &real_forward), None);
+
+        // A name the phone may not reach is refused however well it resolves:
+        // the phone's own host rule is the last word (design 8.4).
+        let not_our_kind = |_: Ipv4Addr| Some("jarvis-pc.example.com".to_string());
+        let hits_our_address = |_: &str| vec![IpAddr::V4(address)];
+        assert_eq!(
+            mesh_name_from(&[address], &not_our_kind, &hits_our_address),
+            None
+        );
+
+        // Nothing on this PC to prove: no interface, no bind address.
+        assert_eq!(mesh_name_from(&[], &real_reverse, &real_forward), None);
+    }
+
+    #[test]
+    fn only_the_two_meshes_address_ranges_are_probed() {
+        // 100.64.0.0/10 is what Tailscale AND NordVPN Meshnet hand a device.
+        for inside in ["100.64.0.0", "100.75.21.228", "100.127.255.255"] {
+            assert!(
+                is_mesh_address(inside.parse().unwrap()),
+                "{inside} is a mesh address"
+            );
+        }
+        // Everything else is not: the home network, a link-local address, and
+        // the two addresses just outside the range - probing those would ask
+        // the resolver about names that can never be the phone's way in.
+        for outside in [
+            "100.63.255.255",
+            "100.128.0.0",
+            "192.168.0.191",
+            "169.254.83.107",
+            "10.0.0.5",
+            "0.0.0.0",
+            "127.0.0.1",
+        ] {
+            assert!(
+                !is_mesh_address(outside.parse().unwrap()),
+                "{outside} is not a mesh address"
+            );
+        }
+    }
+
+    #[test]
+    fn a_probe_that_never_answers_gives_up() {
+        // The pairing panel must not wait on a resolver: the probe is given a
+        // limit, and a slow one simply proves nothing (the owner is asked).
+        assert_eq!(
+            within(Duration::from_millis(20), || {
+                std::thread::sleep(Duration::from_millis(300));
+                "too late"
+            }),
+            None
+        );
+        assert_eq!(
+            within(Duration::from_secs(2), || "in time"),
+            Some("in time")
+        );
     }
 
     #[test]
