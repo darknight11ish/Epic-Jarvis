@@ -27,7 +27,13 @@
  * PC's estimate. A limit is raised by the fingerprint or PIN of the device that
  * asks for it, and lowered, removed or a price corrected at once, with no card.
  *
- * The phone says the same words (net/Chatbot.kt); tests/chatbot.mjs and the
+ * These words live in THREE places, and all three must say the same thing:
+ * `backend/jarvis_chatbot_routes.py` (the PC's own map), `net/Chatbot.kt` (the
+ * phone), and HERE. All three are compared against
+ * `tests/fixtures/chatbot-cases.json` by `tests/chatbot.mjs`, which is the
+ * suite that catches a mirror left behind. Changing the sentence on the PC alone
+ * and forgetting one of these is what that suite exists to fail on.
+ * tests/chatbot.mjs and the
  * phone's ChatbotTest check them against tools/gen_chatbot_cases.py's file,
  * which takes them from the PC's own jarvis_chatbot_routes.WORDS.
  *
