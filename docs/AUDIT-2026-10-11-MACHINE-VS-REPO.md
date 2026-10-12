@@ -18,6 +18,40 @@ finish a patch run **partially** and report success.
 
 ---
 
+## Settlement, re-measured later the same evening at `9c91e1fb`
+
+**The page above is kept as it was measured; this is what it says now.** He ran the patcher again at
+**21:01**, and most of the backend gap on this page closed. Re-measured with the same commands, the
+same rule and the same read-only discipline:
+
+| what this page says above | what it says now |
+|---|---|
+| his record: `run: partial`, **139** of 144 patches, 208 files, written **11:48:25** | `run: partial`, **142** of 144, 211 files, written **21:01:51** |
+| **five** patches not applied | **two**: `embedding-guard.patch`, `event-allowlist.patch` |
+| **three features absent** (`jarvis_work.py`, `jarvis_card_summary.py`, `jarvis_pictures.py`) | **all three present** - his `jarvis_hud.py` is now 370,234 bytes and carries cards-read-short's and pictures' install blocks |
+| preflight rule: **182 identical, 3 missing, 5 different** - eight FAILs | **190 identical, 0 missing, 0 different** - **no module FAIL remains** |
+| desktop: latest **0.2.142** (`d98a5b2`, 22:52) | latest **0.2.145** (`5891a87`, 2026-10-12 05:44) - his 0.2.140 is now **five** builds behind |
+| **45** commits have touched `jarvis-client/` since `04af95c3` | **62** |
+
+**Two corrections this page needs, both found by re-measuring:**
+
+1. **The test for Work setups was wrong.** Section 1 says his hud has no
+   `jarvis_work.install(Handler`. `work.patch` **does not add a startup call at all** - it wires
+   `jarvis_work` as route handlers (`jarvis_work.status()`, `handle_recommend`, `handle_choose`),
+   which his hud now has at lines 2914-2926 and 4137-4173. The absence of an install call was never
+   evidence about that feature; the same is true of `big_coder` and `power_switch`, which are wired
+   the same way.
+2. **The two patches still missing from his record have no observable effect.** They touch
+   `jarvis_memory.py` and `jarvis_events.py`, and **both files are byte-identical to main's** (the
+   `0 different` above). So nothing they change is missing; what remains is only that his record says
+   `partial` and, as section 3 says, **does not record which patches it left out or why**.
+
+**The gap that did not close is the one sections 2 and 3 describe**, and it did not close because it
+needs an *install*, not a patch run: the desktop is five published builds behind, and the phone is 62
+commits behind. Nothing on the machine can tell him either - that part of the page is unchanged.
+
+---
+
 ## 1. The backend on his PC
 
 ### What he is actually running
