@@ -536,6 +536,81 @@ def _ollama_base() -> str:
     return "http://127.0.0.1:11434"
 
 
+def _lane_bases() -> list:
+    """The loopback bases the BACKEND's own lanes use, read from the backend's
+    own lane table - never a port this checker made up.
+
+    WHY THIS EXISTS (measured on the owner's PC, 2026-10-11). The checker asked
+    the default 127.0.0.1:11434, which held NO models at all, while his running
+    lanes were 11435 (qwen3:8b) and 11436 (qwen3.5:9b, 9.8 GB in VRAM, context
+    196,608). It therefore reported his configured model as "not downloaded" and
+    "did not answer a one-word question" while Jarvis was answering on that exact
+    model in 2.3 seconds. The defect was never "11434 is the wrong number": it
+    was **asking a port nobody had told it about**. So the ports come from the
+    same table the backend itself loads its lanes from."""
+    out = []
+    try:
+        sys.path.insert(0, str(BACKEND))
+    except Exception:
+        return out
+    # jarvis_second_card has owned the lane ports since long before this
+    # checker: the default second-card lane, the third lane, and the main port.
+    # Read from it first, so the fix works on a deployment that predates the
+    # newest modules - which is exactly the deployment that needed it.
+    try:
+        import jarvis_second_card as SC
+        for name in ("DEFAULT_PORT", "DEFAULT_THIRD_PORT", "MAIN_OLLAMA_PORT"):
+            try:
+                port = int(getattr(SC, name, 0) or 0)
+            except (TypeError, ValueError):
+                continue
+            if port:
+                out.append(f"http://127.0.0.1:{port}")
+    except Exception:
+        pass
+    try:
+        import jarvis_big_coder as BC
+    except Exception:
+        return out
+    for lane in getattr(BC, "LANES", ()) or ():
+        port = lane.get("port") if isinstance(lane, dict) else getattr(lane, "port", None)
+        try:
+            port = int(port)
+        except (TypeError, ValueError):
+            continue
+        if port:
+            out.append(f"http://127.0.0.1:{port}")
+    return out
+
+
+def _ollama_base_with(model: str, *, fetch=None) -> str:
+    """Where `model` ACTUALLY is: the configured base when it holds the model,
+    else the lane that holds it, else the configured base unchanged.
+
+    The last line is the safety property, not a leftover: this may move the base
+    ONLY to a port that really carries the configured model. A port that answers
+    without the model is not a better guess than the one we started from, so a
+    model that is on none of them is still reported as missing - which is what
+    keeps this fix from turning a real FAIL into a false PASS."""
+    candidates = [_ollama_base()] + _lane_bases()
+    seen = set()
+    fetch = fetch or _get_json
+    for base in candidates:
+        base = (base or "").rstrip("/")
+        if not base or base in seen:
+            continue
+        seen.add(base)
+        try:
+            doc = fetch(f"{base}/api/tags")
+        except Exception:
+            continue
+        names = {str(m.get("name") or "") for m in (doc.get("models") or [])
+                 if isinstance(m, dict)}
+        if model and model in names:
+            return base
+    return _ollama_base()
+
+
 def _is_loopback(url: str) -> bool:
     import ipaddress
     import urllib.parse
@@ -1093,7 +1168,10 @@ def pf_model(live: Live) -> list:
         if isinstance(m, str) and m.strip() and m.strip().lower() not in ("none", "offline"):
             model = m.strip()
     model = model or _configured_model()
-    base = (live.ollama_base or _ollama_base()).rstrip("/")
+    # NOT the bare default: the model may be on one of the backend's own lanes.
+    # See _ollama_base_with - asking 11434 while Jarvis answers on 11436 is the
+    # false "not downloaded" this now avoids.
+    base = (live.ollama_base or _ollama_base_with(model, fetch=live.ollama)).rstrip("/")
     rows = [r if len(r) == 3 else (r[0], r[1], "")
             for r in doctor(fetch=live.ollama, base=base, model=model, env=live.env)]
     if not model or not _is_loopback(base):

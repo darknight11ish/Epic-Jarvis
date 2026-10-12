@@ -159,6 +159,11 @@ CONFIG_NAME = "jarvis-framework.toml"
 #      suite-state folder), which is why the lock, and not the pid, is what
 #      answers "is the owner still alive".
 SWEEP_PREFIX = "jarvis-sweep-"
+#: A DIRECT run's root - `python backend/<suite>.py` with no runner - claimed by
+#: `_where._stage_a_direct_run()` with the same marker and lock as a sweep, so
+#: one mechanism covers both and a killed direct run is reapable by the reaper
+#: below. It is one folder per direct process instead of one per suite.
+DIRECT_PREFIX = "jarvis-direct-"
 STAGE_PREFIX = "jarvis-staged-backend-"
 BACKEND_NAME = "backend"
 STATE_NAME = "state"

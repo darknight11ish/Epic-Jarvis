@@ -80,6 +80,31 @@ FIXED_TIME = 1790000000.0
 FIXED_EXPIRES_IN = 170
 HOME_WORDS = "~/.openjarvis"
 
+#: The stand-in folder every "these files are not on this PC yet" case points at,
+#: instead of a folder under this run's temporary directory - and its LENGTH is
+#: fixed, and the same on Windows and on the runner.
+#:
+#: WHY: the backend CLIPS these sentences to a character budget (here,
+#: jarvis_wakeword's "the wake-word model files are not on disk yet (looked in
+#: ...)" through jarvis_voice_enroll.py's [:140]/[:160]) and only THEN does this
+#: tool's scrub() rewrite the folder to `~/.openjarvis`. A cut that has already
+#: happened cannot be undone by redacting afterwards, so the folder's length
+#: decided where the cut fell: `looked in ~/.openjarvis/voice-mode` on one
+#: machine, the whole sentence on another. Measured 2026-10-11: 736 passed, 2
+#: failed in backend/test_voice_contract.py here (this branch's direct-run
+#: staging root adds ~20 characters to %TEMP%), 737/1 on CI, and a
+#: 150-character %TEMP% moved the file again.
+#:
+#: NOTHING MAY WRITE HERE: jarvis_wakeword.model_dir() is only ever READ (the
+#: files' absence is the answer). The "models installed" case below really does
+#: create its files, so IT keeps this run's own temporary folder.
+MISSING_MODELS_ROOT = "C:/jv"
+
+
+def missing_models(*parts: str):
+    """A fixed, non-existent model folder: see MISSING_MODELS_ROOT."""
+    return Path(MISSING_MODELS_ROOT).joinpath(*parts)
+
 
 def tone_wav(freq: float, seconds: float = 1.5, rate: int = 16000) -> bytes:
     """One sine tone as a WAV - a "voice" the basic check can learn."""
@@ -156,9 +181,14 @@ class World:
         self.dir = d
         self.profile = d / "voice" / "owner.json"
         self.profile.parent.mkdir(parents=True)
-        wake_dir = d / "voice-models" / "wakeword"
+        # The "models installed" case really creates these files, so it keeps
+        # this run's own temporary folder; the "missing" case - the one whose
+        # SENTENCE carries the folder - points at the fixed stand-in. See
+        # MISSING_MODELS_ROOT.
+        wake_dir = ((d / "voice-models" / "wakeword") if self.models
+                    else missing_models("voice-models", "wakeword"))
         turn_file = d / "voice-models" / "turn" / T.MODEL_FILE
-        speaker_dir = d / "voice-models" / "speaker"
+        speaker_dir = missing_models("voice-models", "speaker")
         self.patches = [
             mock.patch.object(S, "_config_dir", return_value=d),
             mock.patch.object(V, "PROFILE_PATH", self.profile),
@@ -271,7 +301,8 @@ def config_folders(world: World) -> list:
     this run's temporary one, and the real one - which backend/run_suites.py
     points somewhere temporary too (OPENJARVIS_CONFIG_DIR). Longest first,
     so a folder inside another is replaced whole."""
-    found = {str(world.dir), str(Path.home() / ".openjarvis")}
+    found = {str(world.dir), str(Path.home() / ".openjarvis"),
+             str(Path(MISSING_MODELS_ROOT))}
     for key in ("OPENJARVIS_CONFIG_DIR", "JARVIS_CONFIG_DIR"):
         if os.environ.get(key):
             found.add(os.environ[key])

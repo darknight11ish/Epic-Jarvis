@@ -847,7 +847,14 @@ class MainActivity : FragmentActivity() {
         }
         lastCrash.value?.let { trace ->
             CrashScreen(
-                title = "Jarvis stopped unexpectedly",
+                // A hang and a crash mean different things - "it froze
+                // mid-sentence" against "it closed" - and both arrive through
+                // this one note, so its first line picks the title.
+                title = if (trace.startsWith(CrashLog.HANG_PREFIX)) {
+                    "Jarvis stopped responding"
+                } else {
+                    "Jarvis stopped unexpectedly"
+                },
                 detail = trace,
                 onDismiss = {
                     CrashLog.clear(this@MainActivity)

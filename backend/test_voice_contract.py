@@ -20,10 +20,14 @@ No network, no microphone: clips are synthesised, and the one enrolled
 voice uses the spectral fallback into a temp folder.
 """
 import array
+import hashlib
 import io
 import json
 import math
+import os
 import re
+import shutil
+import subprocess
 import sys
 import tempfile
 import traceback
@@ -469,6 +473,80 @@ def t_an_older_jarvis_voice_still_works():
     check("hear() works with a verify() that has no sample_rate", ok, f"{heard}")
 
 
+#: Renders all three producers ONCE each in a fresh interpreter whose temporary
+#: root is the one it is given, and prints {name: [bytes, sha256]}.
+#:
+#: WHY A FRESH PROCESS, and not module.render() here: the phone producer is not
+#: repeatable inside one interpreter (measured 2026-10-11 - rendering it twice
+#: with the SAME root gave 1,054,760 B and then 1,218,390 B, the second run
+#: filling in `median_ms` that the first left null), so a second render in this
+#: process proves nothing about the file. "A fresh run of the producer" is what
+#: the fixtures are compared against, so that is what this runs.
+_TEMP_PROPERTY_SCRIPT = (
+    "import hashlib, importlib.util, json, sys, tempfile\n"
+    "from pathlib import Path\n"
+    "tempfile.tempdir = sys.argv[1]\n"
+    "repo = Path(sys.argv[2])\n"
+    "out = {}\n"
+    "for name in ('gen_voice_training_cases', 'gen_voice_status_cases',\n"
+    "             'gen_phone_voice_cases'):\n"
+    "    spec = importlib.util.spec_from_file_location(\n"
+    "        name, repo / 'tools' / (name + '.py'))\n"
+    "    mod = importlib.util.module_from_spec(spec)\n"
+    "    spec.loader.exec_module(mod)\n"
+    "    text = mod.render().encode('utf-8')\n"
+    "    out[name] = [len(text), hashlib.sha256(text).hexdigest()]\n"
+    "print(json.dumps(out))\n"
+)
+
+
+def _fresh_runs_at(root: Path) -> dict:
+    """{producer: [bytes, sha256]} from one fresh interpreter under `root`.
+
+    JARVIS_NO_DIRECT_STAGE is set so this branch's own direct-run staging (which
+    moves TMPDIR into a staged root) leaves the root THIS check chose alone; the
+    redirect is the branch's fix for the %TEMP% leak and is not what is under
+    test here."""
+    env = dict(os.environ, JARVIS_NO_DIRECT_STAGE="1")
+    proc = subprocess.run([sys.executable, "-c", _TEMP_PROPERTY_SCRIPT,
+                           str(root), str(REPO)],
+                          capture_output=True, text=True, env=env, cwd=str(HERE))
+    if proc.returncode != 0:
+        return {"error": (proc.stderr or proc.stdout or "")[-500:]}
+    try:
+        return json.loads(proc.stdout)
+    except ValueError:
+        return {"error": (proc.stdout or "")[-500:]}
+
+
+def _the_fixture_survives_a_short_and_a_long_temp(fixture: Path, name: str,
+                                                  short_runs: dict, long_runs: dict) -> None:
+    """The property CI really compares, asserted on the FIXTURE's own bytes: a
+    fresh run must produce the committed file on a SHORT temporary root AND on a
+    LONG one, not only on the machine that generated it.
+
+    WHY THIS IS ITS OWN CHECK. The backend CLIPS its sentences to a character
+    budget (jarvis_voice_enroll.py's [:140]/[:160]/[:200], jarvis_voice_flow.py's
+    fallback[:300]) and the producers' scrub() rewrites the folder to
+    `~/.openjarvis` AFTERWARDS - so a folder under %TEMP% decided where the cut
+    fell, and the same file was right here and wrong on a machine whose path was
+    longer. Measured 2026-10-11 on the branch that found it: this suite 736
+    passed, 2 failed in that checkout and 737/1 on CI, with the path's LENGTH the
+    only difference. Moving the folder OUT of the clipped string (the fixed
+    MISSING_MODELS_ROOT in each producer) is the fix; this check is what keeps it
+    fixed, and it fails on this machine, before CI sees it.
+    """
+    raw = fixture.read_bytes() if fixture.is_file() else b""
+    want = [len(raw), hashlib.sha256(raw).hexdigest()]
+    got_short, got_long = short_runs.get(name), long_runs.get(name)
+    check(f"{name}: a fresh run is the same on a SHORT and a LONG %TEMP%",
+          got_short == want and got_long == want,
+          f"fixture {want[0]} B {want[1][:12]}; short root {got_short}; "
+          f"long root {got_long}"
+          + (f"; the run's own answer: {short_runs['error']}" if "error" in short_runs else "")
+          + (f"; the run's own answer: {long_runs['error']}" if "error" in long_runs else ""))
+
+
 def t_the_desktop_fixture_is_fresh():
     """jarvis-desktop/tests/fixtures/voice-status-cases.json is what the
     desktop's Settings -> Voice is tested against (tests/voice-settings.mjs,
@@ -512,6 +590,27 @@ def t_the_desktop_fixture_is_fresh():
     import gen_phone_voice_cases as P
     check("phone-voice-cases.json equals a fresh run of the producer",
           P.main(["--check"]) == 0, "run python3 tools/gen_phone_voice_cases.py")
+
+    # THE PREMISE THE THREE CHECKS ABOVE STAND ON, named after them: each file
+    # is what a FRESH RUN produces on a SHORT temporary root AND on a LONG one,
+    # not only on this PC's. Without this the three comparisons above are "the
+    # same machine twice" - which is how a fixture that only matched its own
+    # %TEMP% length reached CI. Two fresh interpreters, one per root; see the
+    # helper for why they must be fresh processes.
+    short_root = Path(tempfile.gettempdir())
+    long_root = short_root / ("l" * 120)
+    long_root.mkdir(parents=True, exist_ok=True)
+    try:
+        short_runs = _fresh_runs_at(short_root)
+        long_runs = _fresh_runs_at(long_root)
+    finally:
+        shutil.rmtree(long_root, ignore_errors=True)
+    _the_fixture_survives_a_short_and_a_long_temp(
+        G.FIXTURE, "gen_voice_status_cases", short_runs, long_runs)
+    _the_fixture_survives_a_short_and_a_long_temp(
+        T.FIXTURE, "gen_voice_training_cases", short_runs, long_runs)
+    _the_fixture_survives_a_short_and_a_long_temp(
+        P.FIXTURE, "gen_phone_voice_cases", short_runs, long_runs)
 
 
 if __name__ == "__main__":

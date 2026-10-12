@@ -81,6 +81,30 @@ FIXED_EXPIRES_IN = 170
 FIXED_TOOK = 0.5
 HOME_WORDS = "~/.openjarvis"
 
+#: The stand-in folder every "these files are not on this PC yet" case points at,
+#: instead of a folder under this run's temporary directory - and its LENGTH is
+#: fixed, and the same on Windows and on the runner.
+#:
+#: WHY: the backend CLIPS these sentences to a character budget (jarvis_voice_
+#: enroll.py's [:140]/[:160]/[:200] family) and only THEN does this tool's
+#: scrub() rewrite the folder to `~/.openjarvis`. A cut that has already
+#: happened cannot be undone by redacting afterwards, so the folder's length
+#: decided where the cut fell, and the same fixture stopped matching a fresh run
+#: on a machine whose %TEMP% was longer. Measured 2026-10-11 on the branch that
+#: found it: 736 passed, 2 failed in backend/test_voice_contract.py with its
+#: own direct-run staging root in play, 737/1 on CI, and a 150-character %TEMP%
+#: moved the files again.
+#:
+#: NOTHING MAY WRITE HERE: jarvis_wakeword.model_dir() and jarvis_voice's
+#: speaker-model paths are only ever READ (their files' absence is the answer);
+#: the cases that stand a model IN do it with a stand-in class, not a file.
+MISSING_MODELS_ROOT = "C:/jv"
+
+
+def missing_models(*parts: str):
+    """A fixed, non-existent model folder: see MISSING_MODELS_ROOT."""
+    return Path(MISSING_MODELS_ROOT).joinpath(*parts)
+
 #: The two models whose bars were measured (jarvis_voice.MODEL_BARS).
 SMALL_NAME = "sherpa-onnx:357a834f702b"
 STRONG_NAME = "sherpa-onnx:d51abcf31717"
@@ -193,11 +217,12 @@ class World:
         profile.parent.mkdir(parents=True)
         self.small = Speaker(SMALL_NAME)
         self.strong = Speaker(STRONG_NAME) if self.models == "both" else None
-        speaker_dir = d / "voice-models" / "speaker"
+        speaker_dir = missing_models("voice-models", "speaker")
         ps = [
             mock.patch.object(S, "_config_dir", return_value=d),
             mock.patch.object(V, "PROFILE_PATH", profile),
-            mock.patch.object(W, "model_dir", return_value=d / "voice-models" / "wakeword"),
+            mock.patch.object(W, "model_dir",
+                              return_value=missing_models("voice-models", "wakeword")),
             mock.patch.object(T, "model_path", return_value=d / "voice-models" / "turn" / T.MODEL_FILE),
             # WHERE THE SPEAKER MODELS ARE, pinned like every other folder
             # here: jarvis_voice.status() reports the stronger models from
@@ -205,8 +230,14 @@ class World:
             # whether to warm anything from them. Left to the machine, the
             # fixture's "installed": false and "warm": "waiting" became this
             # PC's answers instead (measured 2026-10-10).
-            mock.patch.object(V, "speaker_model_path", lambda: speaker_dir / "model.onnx"),
-            mock.patch.object(V, "strong_model_path", lambda: speaker_dir / "strong.onnx"),
+            #
+            # The FIXED stand-in, not this run's temporary folder: the
+            # "not installed (looked for ...)" sentence carries the path and is
+            # clipped before scrub() can rewrite it. See MISSING_MODELS_ROOT.
+            mock.patch.object(V, "speaker_model_path",
+                              lambda: speaker_dir / "model.onnx"),
+            mock.patch.object(V, "strong_model_path",
+                              lambda: speaker_dir / "strong.onnx"),
             mock.patch.object(E, "_audit", lambda *a: None),
             mock.patch.object(E, "_timeout", lambda: 180.0),
             mock.patch.object(VS, "_config_dir", lambda: d),
@@ -321,7 +352,8 @@ def scrub(value, world):
         named = False
         # This run's temporary folder, and the real config folder - which
         # backend/run_suites.py points somewhere temporary too.
-        folders = {str(world.dir), str(Path.home() / ".openjarvis")}
+        folders = {str(world.dir), str(Path.home() / ".openjarvis"),
+                   str(Path(MISSING_MODELS_ROOT))}
         for key in ("OPENJARVIS_CONFIG_DIR", "JARVIS_CONFIG_DIR"):
             if os.environ.get(key):
                 folders.add(os.environ[key])

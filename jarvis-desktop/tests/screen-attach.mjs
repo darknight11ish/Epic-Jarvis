@@ -193,8 +193,38 @@ await check("the picture is that ONE question's: it is gone from the box once th
   assert.equal(after.thumb, null, "the thumbnail still holds the picture");
   // The next, unrelated question must not carry it again.
   await emit(page, "screen-status", { status: STATUS, stale: false });
+  // WAIT FOR THE APP TO BE ABLE TO TAKE ANOTHER QUESTION FIRST (2026-10-11).
+  //
+  // `send()` refuses a question while the previous answer is still streaming,
+  // and DROPS it - main.js:3522, `if (state.abort || state.inFlight) return;` -
+  // with no queue, no error and no retry. That guard is deliberate, and its own
+  // comment (main.js:3513-3521) records the bug it fixed: two channels writing
+  // one buffer, with `state.abort` pointing only at the newer, so Stop could
+  // never reach the older. The APP is right.
+  //
+  // This test was wrong. The wait just above ("the picture to leave the box")
+  // becomes true when the FIRST question is ACCEPTED, not when the app can take
+  // another, so the press below landed inside a window the app defines as busy
+  // and was discarded. The mock's one-delta reply normally finishes before
+  // Playwright's fill+press round-trip, which is why it passed locally; on a
+  // loaded CI runner it did not, and the wait at the end then timed out - for a
+  // question that had never been sent.
+  //
+  // A LONGER `until` TIMEOUT WOULD NOT FIX IT: the press was discarded, so no
+  // amount of waiting makes the second `stream_chat` appear. Instead: wait for
+  // the first answer to land, then keep asking until the app has TAKEN the
+  // question (the box is cleared on accept, main.js:1982). The final wait is
+  // left EXACTLY as it was, because that is the condition that must fail if the
+  // second question never reaches the wire.
+  await until(page, "the first answer to land", () =>
+    document.getElementById("answer").textContent.includes("It is flat."));
   await page.fill("#prompt", "where is the kettle?");
-  await page.press("#prompt", "Enter");
+  for (let tries = 0; tries < 40; tries += 1) {
+    await page.press("#prompt", "Enter");
+    if ((await page.inputValue("#prompt")).trim() === "") break;
+    // A backoff between presses, never the condition the test stands on.
+    await page.waitForTimeout(50);
+  }
   await until(page, "the second question to be sent", () =>
     (window.__calls || []).filter((c) => c[0] === "stream_chat").length > 1);
   const sent = (await chats(page))[1];

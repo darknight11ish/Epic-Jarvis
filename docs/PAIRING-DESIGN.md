@@ -1078,3 +1078,90 @@ once per phone.
   button, "Turn on signed approvals" (recommended)
 - **Turn it on as part of pairing**, so the pairing card also covers it
   (one card fewer, but that card then means two things)
+
+## 16. A second PC can join: design only, no code yet (2026-10-11)
+
+The owner asked about "potentially another PC". This section says what is true
+today, what a second desktop app would need, and what it would lose. Written
+**before** any code on purpose: the answer changes what the desktop app *is*,
+so it is the owner's decision, not a repair.
+
+### 16.1 What is true today
+
+Pairing is phone-shaped. The PC draws a QR (`GET /api/pair/session`), **the
+phone's camera reads it**, the phone proves the code (`/api/pair/claim`) and
+the PC approves a `pair_device` card with Windows Hello. A desktop app is not
+in that flow at all: it **supervises this PC's own backend** ("Let Jarvis
+Desktop start and stop Jarvis"), and its address field *publishes* this PC
+rather than naming a remote one - `jarvis-desktop/src/first-run-settings.js:359`,
+"This PC's address on Tailscale or NordVPN Meshnet", saving `bindAddress` only
+(`set_api_settings { base: null, token: null, bindAddress: address }` at :394).
+`base` and `token` exist in that command; they are what the desktop uses for
+its own local connection.
+
+### 16.2 The `this_pc` refusal, read rather than assumed
+
+The sentence quoted to me is real, and it is about **where the request came
+from, not what kind of app made it**:
+
+```
+backend/jarvis_devices.py:190
+    "this_pc": "Pairing is for another device - this PC already has its own key.",
+```
+
+It is chosen by origin. `mesh_peer()` (`backend/jarvis_devices.py:836-842`)
+returns `"this_pc"` when `from_this_pc(peer, local, own)` is true, `"mesh"`
+when the peer is inside the Tailscale or NordVPN Meshnet ranges, and `"no"`
+otherwise; `_mesh_refusal()` (:1600-1602) answers with
+`PHONE_WORDS["this_pc" if where == "this_pc" else "not_mesh"]`. And
+`from_this_pc()` (:824-825) is *"jarvis_owner_check.from_this_pc - the one
+rule. Without that module: loopback, the connection's own address, or
+anything unplaceable"*. The comment above the words says it outright:
+`"this_pc" (the phone is never the PC)` (:179).
+
+**So a second PC on the same mesh is not refused by this rule.** It arrives as
+a `mesh` peer, exactly as a phone does, and would hit `not_mesh` only if it
+were not on the mesh at all. **The phase is possible** - what is missing is the
+two things below, not a locked door.
+
+### 16.3 What a second desktop app would need
+
+1. **A camera-free way to claim the code.** The typed short code already
+   exists as the QR backup (§8.5), so a desktop can type it. Nothing new is
+   invented here.
+2. **A client mode.** The desktop would be *connected to another PC's Jarvis*
+   while not supervising that backend: `base` set to the other PC's mesh
+   address, and a key of its own in place of the shared token.
+3. **Its own device key**, the shape a phone gets (§5.1, §5.2) - and with it,
+   revocation (§5.4) cuts the second PC off exactly as it cuts off a phone.
+
+### 16.4 What a client-mode desktop loses, in plain words
+
+- **It is no longer the supervisor.** Start/stop Jarvis, the log folder, the
+  restart watchdog and the **hang and crash notes** all describe *this* PC's
+  processes (`docs/ARCHITECTURE.md:2163`); pointed at another PC's Jarvis they
+  describe nothing on this machine. Two windows with one name, unless the
+  window says which PC it is talking to.
+- **The other PC's Windows Hello is not reachable from here.** A risky card is
+  the *other* PC's card; this PC's fingerprint cannot decide it, and vice
+  versa. A second PC is a device, not a second owner.
+- **One backend, two brains.** `base` points one way at a time. A desktop
+  cannot supervise its own Jarvis *and* be a client of another's in one window;
+  that is a choice the owner makes, not a toggle left on.
+
+### 16.5 What is sufficient, and what is not
+
+Per-device key + revocation **is** enough for a second PC *once it holds its
+own key* - the shared key stays a bootstrap ("THE OLD SHARED KEY IS A
+BOOTSTRAP, NOT A FALLBACK", :41-63) and is never the second PC's identity. It
+is **not** enough today, because the desktop has no client mode and nowhere to
+type the code; those two are the phase.
+
+### 16.6 The question for the owner
+
+**Does the desktop app ever act as a client of another PC's Jarvis, or is it
+always the machine that owns the backend?** If "always the owner", this section
+closes as "not built, deliberately". If "yes, a second PC", the phase is:
+client mode + typed code + its own device key, with the three losses in §16.4
+said in the window itself.
+
