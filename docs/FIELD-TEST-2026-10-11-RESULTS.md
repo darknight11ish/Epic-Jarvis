@@ -103,6 +103,18 @@ this file; and the phone is driven by one process at a time.
 
 ## Progress log
 
+- **2026-10-12, the second pass — the top-up is `FIELD-TEST-2026-10-12-TOPUP.md`.** The record covered 45
+  of the feature list; that file reconciles it against the list and reads the rest. **Three things it
+  corrects about the brief it was given**, each with its evidence: the list is **128 entries in 9
+  groups** (122 is the *route-and-menu* count in `tools/check_feature_list.py`'s second clause, whose
+  denominator is 139, not the entry count); the three ids reported as removed - `crash-notes`,
+  `first-run`, `notifications` - **all still exist** (`features/features.json:1119/1156/1250`, and matrix
+  lines 69/99/101); and the record's id pattern, read as its rows are really written, yields **45 rows /
+  45 ids with 12 PASS - 2 FAIL - 19 PARTIAL - 10 BLOCKED - 2 NOT-TESTABLE**, its own audit line exactly.
+  **The validated gap is 83 of 128.** The second pass adds **20 rows driven on the phone**, **34** the
+  live desktop Settings window really carries (PARTIAL - the row is real, the behaviour was not driven),
+  and **18 BLOCKED or NOT-TESTABLE with the app's or the source's own reason**; **11 are left UNTESTED
+  and named as such rather than given an invented obstacle.**
 - **2026-10-11, the fix that follows the pass — and the most important finding it produced.** With
   `coming-up` pinned to "the open section writes zero rows", the fix was specified as **draw the
   plates that have no `-hidden` twin**. Before the diff existed, the reviewer checked the five
