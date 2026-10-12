@@ -488,11 +488,18 @@ fun BrainScreen(
                     .shows(MENU_FOR_JUMP_LOG[key].orEmpty())
                 android.util.Log.i(
                     "JarvisBrain",
-                    "walk key=$key rows=${info.totalItemsCount} " +
+                    // `composed` is `LazyListState.layoutInfo.totalItemsCount`,
+                    // which a lazy list reports as WHAT IT HAS COMPOSED SO FAR -
+                    // not how long the list is. Calling it `rows` promised the
+                    // second and cost four rounds of misreading (2026-10-11:
+                    // `composed=11` before AND after, while the window moved six
+                    // rows). `window` is the laid-out part, and the two are
+                    // different numbers, so they are now printed as two.
+                    "walk key=$key composed=${info.totalItemsCount} " +
+                        "window=${seen.size} " +
                         "found=${seen.any { it.key == key }} " +
                         "shown=$shown " +
-                        "onScreen=[${seen.firstOrNull()?.key}..${seen.lastOrNull()?.key}] " +
-                        "count=${seen.size}",
+                        "windowKeys=[${seen.firstOrNull()?.key}..${seen.lastOrNull()?.key}]",
                 )
             },
             // Every step of both walks - the anchor's and the item's - plus the

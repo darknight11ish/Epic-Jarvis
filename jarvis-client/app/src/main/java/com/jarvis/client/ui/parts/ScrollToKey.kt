@@ -171,6 +171,11 @@ fun ScrollToKeyOnce(
         // One line per step, prefixed with the key so a log with two jumps in it
         // stays readable.
         val trace: (String) -> Unit = { line -> runCatching { traced("$target $line") } }
+        // Every line says WHICH walk it belongs to: a jump runs two of them, and
+        // a log that does not say which forces the reader to infer it (the lead
+        // had to, 2026-10-11).
+        val traceItem: (String) -> Unit = { line -> trace("walk=item $line") }
+        val traceAnchor: (String) -> Unit = { line -> trace("walk=anchor $line") }
         // The heading that holds the item, when the screen knows of one - the
         // one item a jump can still land on when the item itself is not drawn
         // (a menu the owner has hidden, a plate drawn only in the other of a
@@ -210,7 +215,7 @@ fun ScrollToKeyOnce(
                 tries++
                 withFrameNanos { }
             }
-            if (!scrollToKey(state, a, fromTop = true, trace = trace)) return false
+            if (!scrollToKey(state, a, fromTop = true, trace = traceAnchor)) return false
             // One frame for the plates that were not composed above it yet.
             withFrameNanos { }
             return true
@@ -238,7 +243,7 @@ fun ScrollToKeyOnce(
         // and the viewport. This is the baseline a controlled pair needs - with
         // it, "the anchor moved the list" is a measurement rather than an
         // inference from two runs on different builds.
-        trace("before rows=${state.layoutInfo.totalItemsCount} " +
+        trace("before composed=${state.layoutInfo.totalItemsCount} " +
             "viewport=[${state.layoutInfo.visibleItemsInfo.firstOrNull()?.key}" +
             "..${state.layoutInfo.visibleItemsInfo.lastOrNull()?.key}] " +
             "first=${state.layoutInfo.visibleItemsInfo.firstOrNull()?.index} " +
@@ -294,7 +299,7 @@ fun ScrollToKeyOnce(
                 withFrameNanos { }
                 continue
             }
-            if (scrollToKey(state, target, fromTop = false, trace = trace)) {
+            if (scrollToKey(state, target, fromTop = false, trace = traceItem)) {
                 val hit = onScreen()
                 if (hit != null) state.animateScrollToItem(hit)
                 if (onScreen() == null && hit != null) to(hit)
@@ -379,7 +384,8 @@ suspend fun scrollToKey(
         )
         trace(
             "step=$steps first=${info.visibleItemsInfo.firstOrNull()?.index} " +
-                "last=${info.visibleItemsInfo.lastOrNull()?.index} total=${info.totalItemsCount} " +
+                "last=${info.visibleItemsInfo.lastOrNull()?.index} " +
+                "window=${info.visibleItemsInfo.size} composed=${info.totalItemsCount} " +
                 "waited=$waited walk=${decision::class.simpleName}",
         )
         when (decision) {
@@ -398,6 +404,8 @@ suspend fun scrollToKey(
     }
     return false
 }
+
+
 
 
 
