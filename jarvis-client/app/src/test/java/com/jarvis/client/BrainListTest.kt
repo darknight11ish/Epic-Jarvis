@@ -276,12 +276,13 @@ class BrainListTest {
             assertEquals("${section.key}: a shut heading returned a count of what it drew", 0, countedShut)
         }
         // The heading that lied on the phone: "6 inside" over five plates. Its
-        // declared list is still six - the screen's items are unchanged - but the
-        // number drawn comes from what is emitted, so it cannot be six again
+        // declared list is still measured - the screen's items are unchanged
+        // except for the chatbot money limits plate, added 2026-10-12 - but the
+        // number drawn comes from what is emitted, so it cannot be seven again
         // while a pair of plates draws one of itself.
         assertEquals(
             "Money and time's plates changed; the count must still be measured, not declared",
-            6, BrainSections.platesOf("money-time").size,
+            7, BrainSections.platesOf("money-time").size,
         )
         // The count is worked out whether the heading is OPEN or SHUT, and this
         // is the second half of the rule - it was added because the PHONE caught

@@ -5078,6 +5078,15 @@ object JarvisRuntime {
     /** `GET /api/spending` - the Brain plate's read-only view. A read: never held. */
     suspend fun spendingView(): ApiResult<JsonObject> = api.spending()
 
+    /**
+     * `GET /api/chatbot/money` - the chatbot money limits and the price list,
+     * in the PC's own words ([com.jarvis.client.net.Money] reads them). A read:
+     * never held, and the phone sends no body to this route. A 503 keeps its
+     * own `message` ([JarvisApi.chatbotMoney]), which the plate draws - the PC
+     * refuses rather than reporting nothing spent.
+     */
+    suspend fun chatbotMoney(): ApiResult<JsonObject> = api.chatbotMoney()
+
     /** `GET /api/retirement/defaults` - the what-if form. A read: never held. */
     suspend fun retirementDefaults(): ApiResult<JsonObject> = api.retirementDefaults()
 

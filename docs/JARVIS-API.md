@@ -18698,9 +18698,13 @@ that decides which name a request gets:
     reset_price   -> no gate action at all
 
 A request that names no `action` is refused. A request from the phone, or from
-anything that is not this PC, is refused **403 `pc_only` before anything is read or
-written** - the owner's own decision, "a monthly amount per service, set on the PC",
-the same shape `jarvis_spending.py` uses for its own PC-only routes.
+anything that is not this PC, is **no longer refused outright** (the module's own note,
+2026-10-11): a RAISE "raises the same card a raise from the PC raises, and that card is
+answered with the asking phone's own fingerprint or PIN"; a LOWERING or a REMOVAL
+applies at once, with no card, from either app; a PRICE is corrected from either app
+too, with no card and no signature, because correcting an estimate spends nothing. So
+nothing on this route answers 403 `pc_only` any more, and the sentence by that name now
+says what IS still the PC's own - the **API key itself**.
 
 ### 122.3 Failing closed, and what the answer never holds
 
@@ -18711,6 +18715,41 @@ a refusal in the module's own words (`_file_words`), never into a zero.
 The answer holds service ids, model names, dollars, dates and the PC's own sentences.
 No key, no message, no chat and no piece of one is ever read or written here, and the
 audit line carries the action, the service and the dollar amounts only.
+
+### 122.4 The phone's half (added 2026-10-12)
+
+`jarvis-client/.../net/Money.kt`, `ui/screens/MoneyPlate.kt`,
+`JarvisRuntime.chatbotMoney` and `JarvisApi.chatbotMoney`. Brain -> **Money and time**
+("Chatbot money limits"), always drawn, beside Spending and the retirement what-if - the
+desktop's Settings -> Chatbot API keys page, read from the phone.
+
+**Step 1 is the READ, and only the read.** The phone sends no body to this route: there is
+no Raise control, no price box and no `WRITE_PATHS` entry until the caller that uses one
+exists (CLAUDE.md's "a `WRITE_PATHS` entry must ship with its caller or not at all"). The
+plate draws only what the PC sent, in the PC's own words - each service's own `line`, its
+model, its model's price `line` with `source` `yours`/`default` and the `UNVERIFIED` mark
+(a default price is drawn in the warning ink), its answer-length `cap`, and `about`,
+`estimates` and `pc_only` - plus the desktop's own figures sentence for that row
+(`chatbot-api-keys-settings.js`'s `moneyRow`: "Spent this month: ... Left: ..."), whose
+three values are the PC's `spent_words`, `left_words` and `until`, unchanged. Nothing is
+added up, rounded or re-worded; nothing is written to disk, saved state or a log, and the
+amounts are hidden with the memory lists like the other two finance plates.
+
+**The 503 is the case this half must get right.** When the money file is there but
+unreadable, the route answers
+
+    503  {"ok": false, "available": false, "error": "money_unreadable",
+          "message": <the PC's own words>}
+
+A 503 is normally `ApiError.NotAvailable`, which carries no body, so this route is read
+through `JarvisApi.probeKeeping503`; `Money.readFailure` turns the body into the PC's own
+`message`, and the plate draws that sentence. A blank, or a "0.00", standing in for a
+refusal is the one thing this plate exists to prevent - `MoneyTest` holds both halves
+against a 503 body printed by the real handler.
+
+**Parity.** `tools/check_parity.py` classified this route `deliberate` (kept off the
+phone) while only the desktop called it; it is `ported` now that the phone reads it, and
+its entry names the read half and says the write half is still to come.
 
 ## 123. The limits and frequencies, and the interruption budget (added 2026-10-09)
 

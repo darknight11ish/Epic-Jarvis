@@ -272,6 +272,12 @@ internal object BrainSections {
                 Plate("widgets", guard = "brain.work.widgets"),
                 Plate("coming-up", guard = "brain.work.coming-up"),
                 Plate("spending", guard = "settings.spending"),
+                // Not guarded: the phone has no menu id for the chatbot money
+                // limits page (the desktop's own "Chatbot API keys" id is
+                // PC-only here, OpenPlace.PC_ONLY), and the plate is a READ of
+                // `GET /api/chatbot/money` - it draws the PC's own sentence when
+                // that route is not on the PC, so there is nothing to hide.
+                Plate("chatbot-money", note = "always drawn; draws the PC's own sentence when the money view is not on the PC"),
                 Plate("retirement", guard = "brain.work.retirement"),
             ),
         ),
