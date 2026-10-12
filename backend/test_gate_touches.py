@@ -20,15 +20,33 @@ jarvis_hud.py. Three features had never once worked.
 
 WHAT WAS STILL WRONG (found 2026-10-11, pinned here). #249 read the model's
 own tool call out of the prompt, but only when that call PARSES as JSON.
-`jarvis_agent._gate_prompt` writes `tool <name> {json.dumps(args)[:1500]}` -
-the audit-log line has a 1500-character budget - and a JSON object cut in
-half does not parse. The whole argument block was therefore dropped from the
-search: measured, args 3453 characters long with
-`pathlib.Path('jarvis_gate.py').write_text('')` at character 62 gave blobs
-`['{}', 'run_shell_on_host']`, so `run_shell_on_host` was not refused but
-offered as an ordinary "ask" card - a person could approve a write to the
-gate itself. Making the arguments LONGER than the log line was enough to hide
-the target.
+`jarvis_agent._gate_prompt` used to write
+`tool <name> {json.dumps(args)[:1500]}` - the audit-log line had a
+1500-character budget - and a JSON object cut in half does not parse. The
+whole argument block was therefore dropped from the search: measured, args
+3453 characters long with `pathlib.Path('jarvis_gate.py').write_text('')` at
+character 62 gave blobs `['{}', 'run_shell_on_host']`, so
+`run_shell_on_host` was not refused but offered as an ordinary "ask" card - a
+person could approve a write to the gate itself. Making the arguments LONGER
+than the log line was enough to hide the target. #260 closed THIS half, by
+reading a cut tool call's raw text (section 2b).
+
+WHAT WAS STILL WRONG AFTER THAT, AND IS CLOSED HERE (DEF-003, 2026-10-12).
+#260 read only the text that SURVIVED the cut. The gate reads the model's own
+arguments through the line `jarvis_agent` hands it and nowhere else on these
+paths, and all THREE of that module's gate lines sliced the arguments at 1500
+BEFORE the gate was called (`_gate_prompt`, the plan step, the web-search
+call), so a protected name PAST character 1500 was never in the prompt at all
+and no rule could read it. Measured on the unfixed module: arguments 1693
+characters long with `pathlib.Path('jarvis_gate.py').write_text('')` at
+character 1658 gave blobs without the name, and the action came back as an
+ordinary "ask" card a person could approve. All three lines now carry the
+WHOLE argument JSON, built by the one `_gate_prompt()` helper (section 2c),
+so a longer cut would only have moved the hole. What is WRITTEN DOWN is still
+bounded: `jarvis_gate.check()` stores at most 2000 characters of the line on
+the approvals row, so the record grew by at most 500 characters. The
+retirement what-if stays exempt - its arguments are the owner's own money
+figures, so not even a cut version of them is written down.
 
 WHAT THIS SUITE PINS. `_target_blobs()` decides what the rule may read: the
 action's parameters (`detail`, minus the keys holding the card's own text)
@@ -44,10 +62,14 @@ Card prose is not a target and is not searched. So:
      call, so a protected target cannot be hidden by making the arguments
      longer than that line (section 2b) - and the cut is NOT an excuse to
      read a card's words again (section 2b's counter-test);
-  4. the three real cards are raisable END TO END through the real gate and
+  4. a protected target PAST character 1500 is refused on every one of
+     `jarvis_agent`'s gate lines, tool call and plan step alike, because the
+     line carries the whole argument JSON (section 2c) - and the retirement
+     what-if still writes none of its numbers down;
+  5. the three real cards are raisable END TO END through the real gate and
      the SHIPPED tier table, with a scratch approvals database and a scratch
      audit directory (section 3);
-  5. everything else the gate refuses today, it still refuses (section 4).
+  6. everything else the gate refuses today, it still refuses (section 4).
 
 `jarvis-backend/jarvis_gate.py` is this repository's published copy of the
 gate (jarvis-backend/README.md says where it came from), so the module under
@@ -61,6 +83,7 @@ Runs in repo mode (JARVIS_BACKEND unset), from the repository root:
 """
 from __future__ import annotations
 
+import ast
 import json
 import os
 import sys
@@ -334,21 +357,22 @@ def t_a_refused_target_never_reaches_a_windows_hello_prompt():
     check("and the queue is no longer than it was", len(_pending_rows()) >= before)
 
 
-# ====== 2b. a tool call CUT to the audit-log line's budget is still read
+# ====== 2b. a tool call CUT to the log line's budget is still read
 
 def t_a_cut_tool_call_line_still_refuses_a_protected_target():
-    """THE HOLE. `jarvis_agent._gate_prompt` writes
-    `tool <name> {json.dumps(args)[:1500]}` - the audit-log line has a
-    1500-character budget. A JSON object cut in half does not parse, so the
-    rule read no arguments at all and offered an action whose target is the
-    gate itself as an ordinary card, which a person could approve. What the
-    action would TOUCH does not depend on the line being long enough to hold
-    it. The line is taken from the real module, never retyped here."""
-    try:
-        import jarvis_agent
-    except Exception as exc:                       # pragma: no cover
-        return skip(f"jarvis_agent is not importable here ({type(exc).__name__}: {exc})")
+    """THE HOLE #260 CLOSED, STILL PINNED. `jarvis_mcp.call` writes
+    `tool <model_name> {plan.args_json[:1500]}` (`jarvis_mcp.py:1643`) and
+    `jarvis_gate.gate_tool` slices the same way (`jarvis_gate.py:1710-1712`):
+    a JSON object cut in half does not parse, so the rule read no arguments at
+    all and offered an action whose target is the gate itself as an ordinary
+    card, which a person could approve. What the action would TOUCH does not
+    depend on the line being long enough to hold it.
 
+    THE CUT LINE IS BUILT HERE, and that is deliberate: the real caller that
+    still produces it (`jarvis_mcp.call`) needs a live plug-in server this
+    suite does not have, and `jarvis_agent._gate_prompt` no longer produces it
+    at all - DEF-003's fix removed the cut from all three of that module's gate
+    lines (section 2c). The SHAPE is what is under test."""
     # `pathlib.Path('jarvis_gate.py').write_text('')` in the first 62
     # characters of the arguments, exactly as measured, then enough filler to
     # push the JSON past the line's 1500.
@@ -356,7 +380,7 @@ def t_a_cut_tool_call_line_still_refuses_a_protected_target():
                        "pathlib.Path('jarvis_gate.py').write_text('')\" "
                        "# " + "x" * 3300}
     full = json.dumps(args, ensure_ascii=False)
-    prompt = jarvis_agent._gate_prompt("run_shell_on_host", args)
+    prompt = f"tool run_shell_on_host {full[:1500]}"
     check("the arguments are longer than the audit-log line's 1500 characters",
           len(full) > 1500, len(full))
     cut = prompt[prompt.index("{"):]
@@ -381,6 +405,99 @@ def t_a_cut_tool_call_line_still_refuses_a_protected_target():
 
     # The CONTROL, so none of the above can pass by the rule being dead: a
     # real protected target in `detail` is refused exactly as section 2 says.
+    v = G.check("delete_file", {"path": "C:/x/jarvis_gate.py"},
+                prompt="Delete a file.", timeout=TIMEOUT)
+    check("CONTROL: a protected target in the arguments is still refused",
+          v.tier == "never" and v.outcome == "refused", repr((v.tier, v.outcome)))
+
+
+# ====== 2c. the arguments are read WHOLE, however long they are (DEF-003)
+
+def t_a_protected_target_beyond_character_1500_is_still_refused():
+    """THE OTHER HALF OF THE SAME HOLE, CLOSED (DEF-003, 2026-10-12).
+
+    #260 read a tool call that had been CUT at 1500 - but only the text that
+    survived the cut. The gate reads the model's own arguments through the line
+    `jarvis_agent` hands it and nowhere else on these paths, and all three of
+    that module's gate lines sliced them at 1500 BEFORE the gate was called:
+    `_gate_prompt` (the direct tool call), the plan-step line, and the
+    web-search call. A protected name past character 1500 was therefore never
+    in the prompt at all, and no rule could read it - measured on the unfixed
+    module, arguments 1693 characters long with a write to `jarvis_gate.py` at
+    character 1658 came back as an ordinary "ask" card a person could approve.
+
+    All three call sites now build their line with the one `_gate_prompt()`
+    helper, which carries the whole argument JSON. The lines below are taken
+    from the real module, never retyped here."""
+    try:
+        import jarvis_agent
+    except Exception as exc:                       # pragma: no cover
+        return skip(f"jarvis_agent is not importable here ({type(exc).__name__}: {exc})")
+
+    # 1600 characters of filler FIRST, so the protected write is past 1500.
+    args = {"command": "x" * 1600 + " ; python -c \"import pathlib; "
+                                     "pathlib.Path('jarvis_gate.py').write_text('')\""}
+    full = json.dumps(args, ensure_ascii=False)
+    check("the protected write really is beyond character 1500 of the arguments",
+          len(full) > 1500 and full.index("jarvis_gate.py") > 1500,
+          f"args={len(full)} name at={full.index('jarvis_gate.py')}")
+
+    # One shape at a time, and the tool-call line FIRST: on the unfixed module
+    # that line is still cut, so the behavioural checks below fail and print
+    # their reason before anything reaches the plan-step call. (That call is
+    # the one that raises there - `plan_step` is a keyword the fixed helper
+    # takes and the old one does not - so a loop would have hidden them behind
+    # the TypeError.)
+    def one_shape(label, prompt):
+        check(f"{label} carries the WHOLE argument JSON, uncut",
+              full in prompt, f"line={len(prompt)} args={len(full)}")
+        blobs = G._target_blobs("run_shell_on_host",
+                                {"text": "Run a command the owner asked for."}, prompt)
+        check(f"{label}: the whole arguments reach the PROTECTED rule",
+              any("jarvis_gate.py" in b for b in blobs), repr(blobs)[:200])
+        v = G.check("run_shell_on_host", {"text": "Run a command the owner asked for."},
+                    prompt=prompt, timeout=TIMEOUT)
+        check(f"{label}: REFUSED at 'never' with the plain reason, not offered as a card",
+              v.tier == "never" and v.outcome == "refused"
+              and v.reason == ("this touches jarvis_gate.py, which no tool may modify; "
+                               "edit it by hand"),
+              f"tier={v.tier!r} outcome={v.outcome!r} reason={v.reason!r}")
+        check(f"{label}: and NO row reached the queue, so there is nothing to approve",
+              not [r for r in _pending_rows() if r.get("action") == "run_shell_on_host"], "")
+
+    one_shape("the tool-call line", jarvis_agent._gate_prompt("run_shell_on_host", args))
+    one_shape("the plan-step line",
+              jarvis_agent._gate_prompt("run_shell_on_host", args, plan_step=True))
+
+    # EVERY gate line in the module comes from that one helper. DEF-003 names
+    # three cut sites; the web-search one cannot be driven from here (it needs
+    # a search provider), so the module's own source is what says the cut is
+    # gone from it too - and it is what stops a fourth one appearing. Read as
+    # CODE, not as text: the helper's own docstring quotes the old slice to
+    # explain what was wrong with it, and a plain string search cannot tell an
+    # explanation from a call. The slice check is deliberately blunt - this
+    # module held exactly three 1500-cuts and nothing else that long - so a new
+    # one is a question to answer, never a line to wave through.
+    src = Path(str(getattr(jarvis_agent, "__file__"))).read_text(encoding="utf-8")
+    calls = [l.strip() for l in src.splitlines()
+             if "_gate_prompt(" in l and not l.lstrip().startswith("def ")]
+    check("all three of the module's gate lines are built by that one helper",
+          len(calls) == 3, calls)
+    cut_at_1500 = [n for n in ast.walk(ast.parse(src))
+                   if isinstance(n, ast.Subscript) and isinstance(n.slice, ast.Slice)
+                   and getattr(n.slice.upper, "value", None) == 1500]
+    check("... and this module no longer slices anything at 1500",
+          cut_at_1500 == [], [ast.unparse(n) for n in cut_at_1500])
+
+    # The exemption is part of the fix, not a casualty of it: the retirement
+    # what-if's arguments are the owner's own money figures and NOTHING of them
+    # is written down - not on the card, not in the audit line.
+    retirement = jarvis_agent._gate_prompt(
+        jarvis_agent.RETIREMENT_TOOL, {"yearly_spending": 41000, "retire_age": 65})
+    check("the retirement what-if still writes down none of its numbers",
+          retirement == f"tool {jarvis_agent.RETIREMENT_TOOL}", repr(retirement))
+
+    # The CONTROL, so none of the above can pass by the rule being dead.
     v = G.check("delete_file", {"path": "C:/x/jarvis_gate.py"},
                 prompt="Delete a file.", timeout=TIMEOUT)
     check("CONTROL: a protected target in the arguments is still refused",
