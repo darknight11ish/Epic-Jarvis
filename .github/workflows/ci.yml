@@ -1493,6 +1493,17 @@ jobs:
       # network.
       - name: The defect register is well-formed and names only real files
         run: python3 ../../tools/check_defect_register.py
+      # docs/README.md is the map of docs/, and it opens by stating how many
+      # markdown documents are here and how big they are. Both are hand-typed,
+      # and nothing re-measured them: on 2026-10-11 the page still said 290
+      # documents and about 6.8 MB, measured 2026-10-06, while the tree held
+      # 342 and 8,144,671 bytes. That is the plug-in catalogue's failure again
+      # (138 entries against a 139-patch stack, through eighteen merges), so it
+      # gets the catalogue's answer: the count exactly, the size to within a
+      # tenth because the page itself says "about" and tells the reader to
+      # re-measure rather than trust the digits.
+      - name: The documents page's own count and size match docs/
+        run: python3 ../../tools/check_docs_map.py
 
   python-advisories:
     # The backend's Python packages, next to `cargo deny` above (feasibility
