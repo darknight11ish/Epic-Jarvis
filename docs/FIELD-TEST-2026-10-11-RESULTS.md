@@ -156,6 +156,15 @@ this file; and the phone is driven by one process at a time.
   confirm it is you.`** So **five of the 45 — `pinned-facts`, `memory-as-of`, `between-us`,
   `memory-known`, `memory-tab` — are BLOCKED by one setting, not by five bugs.** That is the
   field test doing its job: "cannot be reached" and "is broken" are different answers.
+
+  **Note added 2026-10-12, with the owner's authority to change it - and measured, not assumed:** that
+  fingerprint is the whole answer, and the switch will not move for a harness at all. Tapping
+  `Hide memory lists and chat history` drew **`Loosen security` / `Confirm it is you.` / `Touch the
+  fingerprint sensor`**; the prompt was cancelled and the switch was re-read still ON. The Brain's own
+  `Show` control drew the same gate (**`Show memory lists` / `Confirm it is you.`**). So these rows are
+  BLOCKED by a **biometric gate, and only the owner can lift them** - not by a preference a pass could
+  flip. See `docs/FIELD-TEST-2026-10-12-TOPUP-3.md` (PR #340). **The bullet above stays exactly as the
+  pass wrote it.**
 - **2026-10-11, desktop quickbar, two more driven** — `watch-with-me` (**PASS**: the control
   toggled and reported `Off`, meaning a session was live and the click ended it; left **off**
   deliberately, since starting it again would begin screen watching) and `temporary-chat`
