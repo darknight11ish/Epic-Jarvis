@@ -335,6 +335,67 @@ class BrainPlateVisibilityTest {
         }
     }
 
+    /**
+     * THE TRAP, pinned. "Has this plate got a hidden twin?" is NOT the same
+     * question as "is it in the pairs the declarations name".
+     *
+     * `memory`, `wiki` and `memory-as-of` carry `drawnWith` on their
+     * `BrainSections.kt` declarations, which is what `BrainSections.PAIRS` is
+     * built from. `deep-questions` and `deep-questions-hidden` carry **neither**
+     * - they are a pair only by what their call sites do - so a fix (or a test)
+     * that asks the pairs table "has this got a twin?" gets **no** for
+     * `deep-questions` and draws it. Its visible half has no guard inside it, so
+     * with the lists hidden it would simply show the owner's own questions.
+     *
+     * So the twin is decided HERE by name and guard, which is the question that
+     * covers both kinds of pair, and the whole chain is held down: the visible
+     * half dropped, the `-hidden` half drawn (that half IS the prompt), and
+     * neither carrying an override.
+     */
+    @Test
+    fun `deep-questions keeps the rule, though its twin is not in the pairs table`() {
+        assertOverrideComesFirst()
+        val declared = declarations().associateBy { it.name }
+        val visible = declared["deep-questions"]
+            ?: error("\"deep-questions\" is no longer declared in BrainSections.kt")
+        val prompt = declared["deep-questions-hidden"]
+            ?: error(
+                "\"deep-questions\" no longer has a \"-hidden\" twin. It would then be a " +
+                    "memory plate with no prompt to draw, and the heading's rule - which " +
+                    "drops it - is the only thing keeping it private.",
+            )
+        assertEquals(
+            "the two halves of the deep questions no longer share a guard, so they are not " +
+                "selected together and one of them can be drawn alone",
+            visible.guard,
+            prompt.guard,
+        )
+        val overrides = allCalls().filter { it.second }.map { it.first }.toSet()
+        assertFalse(
+            "PRIVACY: the visible half of the deep questions carries `drawn = { true }`. Its " +
+                "own composable takes no hidden flag, so drawing it with the lists hidden " +
+                "shows the owner's questions and answers.",
+            "deep-questions" in overrides,
+        )
+        assertFalse(
+            "PRIVACY: the PROMPT half of the deep questions carries `drawn = { true }`. The " +
+                "pair only works because the heading's rule drops the visible half and draws " +
+                "this one; overriding this half breaks that choice the same way.",
+            "deep-questions-hidden" in overrides,
+        )
+        assertFalse(
+            "\"deep-questions\" must be dropped while the lists are hidden - the heading's " +
+                "rule is the only thing protecting it",
+            shown("deep-questions", overrides),
+        )
+        assertTrue(
+            "the \"-hidden\" half of the deep questions must still be DRAWN while the lists " +
+                "are hidden: it is the plate that draws the \"Tap Show\" prompt, and the pair " +
+                "shows nothing at all without it",
+            shown("deep-questions-hidden", overrides),
+        )
+    }
+
     private companion object {
         const val BASE = "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/"
         const val BRAIN = BASE + "BrainScreen.kt"
