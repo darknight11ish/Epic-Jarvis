@@ -133,10 +133,26 @@ it is a one-file change.
      constant they both read.**
    - **Still to mutate, named exactly:** `progress.mjs` was **not** mutated. Its
      `composed` ramp is built at `tests/progress.mjs:400-407` and compared to its
-     fixture at `:424-425`; the plan is to corrupt **one level's fill** and record
-     **which** assertion fires first - `:404` (alpha), `:429` (hue), or `:425`
-     (the fixture ratios) - because *which check catches it* is part of the
-     finding.
+     fixture at `:424-425` (`jarvis-desktop/tests/fixtures/progress-cases.json`);
+     the plan is to corrupt **one fixture ratio** and record **which** assertion
+     fires first - `:404` (alpha), `:429` (hue), or `:425` (the fixture ratios) -
+     because *which check catches it* is part of the finding. **Two attempts were
+     made and both were refused by the rule below**, so nothing was mutated.
+   - **THE RULE THIS AUDIT LEARNED ABOUT ITS OWN INSTRUMENT, and it belongs in the
+     findings, not in a footnote: a mutation must ASSERT THAT IT ACTUALLY CHANGED
+     SOMETHING before its run is trusted.** The first attempt at the `hud.mjs`
+     mutation **silently did nothing** - PowerShell mangled the quoting, the file
+     was never touched, and `node tests/hud.mjs` printed `all passed` on an
+     **unmutated** file. That is **a false green manufactured by the mutation tool
+     itself** - this audit's disease turned on this audit - and it was caught only
+     because the patch script asserted the occurrence count it was replacing. The
+     same rule then caught both `progress.mjs` attempts: the first refused because
+     **two** files matched its search (the test *and* its fixture) rather than
+     guessing between them, and the second refused because its pattern did not
+     match the fixture's JSON (`"over_surface": [` - a quoted key). **In both
+     refused cases the suite run printed green, on an unmutated tree.** A green
+     from a mutation that did not land says nothing at all, and anyone building
+     this instrument should make it refuse loudly, exactly as these did.
    - **Sizing the remaining gap honestly: two of 182 suites have been run and one
      of those two has been mutated.** The rest of the glob is un-run *and*
      un-mutated, so nothing here should be read as clearing the desktop side.
