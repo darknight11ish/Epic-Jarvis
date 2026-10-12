@@ -9,6 +9,23 @@ than one that is late**, so the two audits that have drifted now carry a *Settle
 original lines, in the pattern #312 settled: **keep the limit as written, put what is true now next to
 it.**
 
+## THE HEADLINE, FIRST: his machine is nearly current, and that is the good news
+
+**He re-ran the patcher at 21:01 and it closed the machine-versus-repo audit's central gap.** That
+audit said three features were absent and eight module checks failed; measured again with the same
+rule, **the preflight reads 190 identical, 0 missing, 0 different - every one of those FAILs is gone**,
+142 of 144 patches applied, and all three modules present. Two patch names are still missing from his
+record and **they touch files that are byte-identical to main's**, so nothing observable is missing.
+`AUDIT-2026-10-11-MACHINE-VS-REPO.md` now carries that as a **Settlement** block beside its original
+lines - and with it a correction to one of its own tests, because `work.patch` wires `jarvis_work` as
+route handlers rather than a startup call.
+
+**What did not close is the desktop and the phone**, because both need an *install* rather than a patch
+run: the desktop is now **five published builds behind** (0.2.140 against 0.2.145) and the phone is
+**62 commits** behind. That is the gap that still costs him something.
+
+---
+
 ## 1. What I ran, and what it said
 
 The `audit` job has **13 steps** (the brief said 17; `ci.yml` at `9c91e1fb` has 13 in that job). All
@@ -36,7 +53,10 @@ this branch carries the fix. Two things worth adding to it:
 * **Seven checkers are named by no workflow** and therefore no job runs them, whichever branch you are
   on: `check_feature_list.py`, `check_lanes.py`, `check_obscura.py`, `check_registry_phone.py`,
   `check_screen_safety.py`, `check_stale_twins.py`, `check_work_claims.py` (the coherence audit's §1;
-  its count still holds, though `tools/check_*.py` is 22 now rather than 24).
+  its count still holds, though `tools/check_*.py` is 22 now rather than 24). **Two independent audits
+  reached the same seven**, and **#316 wires five of them** (`check_stale_twins`, `check_feature_list`,
+  `check_lanes`, `check_registry_phone`, `check_screen_safety`); the other two cannot run anywhere but
+  the owner's PC.
 * **Three of those cannot pass anywhere but the owner's PC** and were red when run here for those
   reasons alone: `check_apk_16kb.py` (no APK built), `check_obscura.py` (Obscura not installed),
   `check_work_claims.py` (its evidence is untracked - `exit=2` by design). `check_claims.py`, which the
@@ -65,7 +85,7 @@ These hold, and something checks them:
 | `AUDIT-2026-10-11-MACHINE-VS-REPO.md` | **he re-ran the patcher at 21:01**, so its central gap closed: `run: partial` with **142 of 144** patches (was 139), **two** patches unapplied (was five), **all three modules present**, and the preflight's rule reads **190 identical, 0 missing, 0 different** (was 182/3/5). It also had **one wrong test**: `work.patch` wires `jarvis_work` as route handlers, not a startup call. The desktop moved on too (0.2.142 -> **0.2.145**) and the phone (45 -> **62** commits). | its own **Settlement** block, added by this PR |
 | `AUDIT-2026-10-11-IS-MAIN-COHERENT.md` | `tools/check_*.py` is **22**, not 24 (the seven unnamed checkers are unchanged); its §4 "red today" row for `check_claims.py` is environmental rather than main's | its own **Settlement** block, added by this PR |
 | `docs/README.md` (**the page itself**) | main's tree held **352** documents while the page said **351**; that one-number lag is what has had **seven open PRs red on the `audit` job** | the page now carries the tool's own count for the tree it ships |
-| `docs/CHECKS-THAT-PROVE-NOTHING.md` | **it is not on main** - `git ls-tree -r origin/main` has no such file, and a search of the scratch worktrees found none. It may be on an unfetched branch | **cannot be reviewed here**; tell me the branch and I will review it |
+| `AUDIT-2026-10-11-CHECKS-THAT-PROVE-NOTHING.md` | **not on main, because it is on #310's branch `docs/checks-that-prove-nothing`** - which is also why a search of the scratch worktrees found nothing, and why the brief's file name differs from the real one. **Reviewed there**: its §2.1 MEDIUM finding - `backend/test_agent.py`'s `check("run_local_turn returns rather than looping forever", True)` - is **already settled on main** by `50b65550` ("a hanging check becomes a failing check"), which bounds the fake model so a runaway loop now **fails** instead of hanging, and adds a real assertion beside it (`len(calls) <= 3 + 1`, with the reason it is four calls). Its **line number is stale: 786 on that branch, 801 on main** | that branch carries its own page fix; the finding itself needs no action |
 
 ## 4. Today's work that was not written down anywhere durable
 
@@ -77,6 +97,11 @@ These hold, and something checks them:
   `jarvis-backend/README.md:211`; it is now also in `CLAUDE.md`, with the "not on CI" warning attached.
 * **The phone may raise a spending limit with its own fingerprint** (#314, merged 2026-10-12) - already
   written down at `CLAUDE.md:666`; deliberately not duplicated.
+* **`audit` and `python-advisories` are informational; six required checks gate a merge** - now in
+  `CLAUDE.md`, with **both** pieces of evidence: the ruleset refused a direct push to `main` with
+  *"6 of 6 required status checks are expected"*, and five PRs (#312, #314, #315, #317, #318) merged with
+  those six green **while `audit` was red**. A red `audit` is therefore a signal to fix main's own state,
+  never a reason to hold a PR.
 * **The three dead ids in the field-test record** - `crash-notes`, `first-run` and `notifications` are
   named by its rows and are not on the current feature list. **Reconciliation is another agent's work,
   so this page only notes it** rather than duplicating it; until then the record's row list should not be
@@ -84,11 +109,13 @@ These hold, and something checks them:
 
 ## 5. What I could not run or verify
 
-* **The `audit` job is informational in this repository as far as I can see.** The brief says six
-  required checks gate a merge; **I could not confirm that**: the branch-protection API answers
-  `404 Branch not protected` for `main` (which can also mean the token cannot read it), and no document
-  in the tree lists those six. **This is the one claim above I am not recording as a decision**, because
-  I cannot check it - if it is true it belongs in `CLAUDE.md` too, and I will add it on your word.
+* **The one claim I could not verify from here has since been settled, and is now written down.** I could
+  not confirm that six required checks gate a merge: the branch-protection API answers
+  `404 Branch not protected`, which is a token-permission answer rather than a fact about the branch.
+  **Two independent measurements settle it** - the ruleset refused a direct push to `main` with
+  ***"6 of 6 required status checks are expected"***, and five PRs (#312, #314, #315, #317, #318) merged
+  with those six green while `audit` was red. It is in `CLAUDE.md` now, with both, **because the cost of
+  not knowing it was hours of holding mergeable work.**
 * **Checks that need the owner's PC or a build**: `check_apk_16kb.py`, `check_obscura.py`,
   `check_work_claims.py`, and any suite that wants `JARVIS_BACKEND` pointed at his install. Not run; the
   reasons are in §1.

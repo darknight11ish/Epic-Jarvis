@@ -2292,3 +2292,13 @@ from a commit message:
 - The same day's owner decision - **the phone may raise a spending limit with its
   own fingerprint** - is recorded above under "Amended by the owner on 2026-10-11"
   and is deliberately not repeated here.
+
+**`audit` and `python-advisories` are informational. Six required checks are what
+gate a merge** - `rust`, `frontend`, `backend`, `backend-windows`,
+`credential-manager` and `powershell-5` - and the ruleset says so itself: a direct
+push to `main` was refused with ***"6 of 6 required status checks are expected."***
+The owner's evidence for the other half is five merged PRs (#312, #314, #315, #317,
+#318) that each had those six green **while `audit` was red**. So **a red `audit` is
+a signal to fix `main`'s own state - never a reason to hold a PR.** The cost of not
+knowing this was hours of holding mergeable work, which is why it is written here
+rather than left to be inferred.
