@@ -2273,3 +2273,22 @@ the next version, and every version goes on GitHub.
 
 The Python backend lives on the owner's machine, not in this repo. `backend/`
 holds patches against it plus tests that prove the patches work.
+
+Decided 2026-10-11, written down here on 2026-10-12 by the docs review, because
+these are rules the project now runs on and a reader should not have to infer them
+from a commit message:
+
+- **BLOCKED and NOT-TESTABLE are never counted as passes.** A field-test row that
+  could not be reached is written as BLOCKED, PARTIAL or NOT-TESTABLE and reads as
+  such; only a feature driven on real hardware is a PASS. The rule and the rows it
+  applies to are in `docs/FIELD-TEST-MATRIX-2026-10-11.md`.
+- **Editing any file under `backend/` is a two-file change.** `backend/<file>` and
+  `jarvis-backend/<file>` are kept equal - the second is the published base an
+  installer starts from - so a change to one must be carried to the other, and
+  `backend/test_base_matches_repo.py` is run before pushing. `tools/check_stale_twins.py`
+  is the same comparison as a tool. **Neither is run by a workflow** (see
+  `docs/AUDIT-2026-10-11-IS-MAIN-COHERENT.md` section 1), so this one is on the
+  person pushing, not on CI.
+- The same day's owner decision - **the phone may raise a spending limit with its
+  own fingerprint** - is recorded above under "Amended by the owner on 2026-10-11"
+  and is deliberately not repeated here.
