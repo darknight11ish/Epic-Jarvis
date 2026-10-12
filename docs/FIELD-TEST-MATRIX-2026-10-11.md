@@ -16,7 +16,7 @@ The owner asked: *"are there any features that haven't been field tested on the 
 | NOT FOUND | **15** |
 | **total** | **127** |
 
-> **Overtaken 2026-10-11, later the same day.** The counts below are what this document measured that night; the **second pass** (section after "Build freshness") re-ran 45 of these on real builds - the phone on **real CI builds and locally-built branches of #294**, the desktop on **0.2.140** - and its verdicts stand beside these. The rows below are left exactly as they were measured, and the marker here is the document's own convention for being overtaken.
+> **Overtaken 2026-10-11, later the same day.** The counts below are what this document measured that night; the **second pass** (section after "Build freshness") drove **43 of these 45** on real hardware and **could not drive 2** - the phone on **real CI builds and locally-built branches of #294**, the desktop on **0.2.140** - and its verdicts stand beside these. The rows below are left exactly as they were measured, and the marker here is the document's own convention for being overtaken.
 
 ## What each verdict means here, exactly
 
@@ -68,7 +68,7 @@ Measured, not assumed: `git rev-list --count 6947f458..main` = 37 and `git rev-l
 | 44 | Watch with me (`watch-with-me`) | desktop 0.2.140 | **the "Jarvis is watching" badge does not clear after the session ends**: the backend says `GET /api/screen` → `"state":"ended"`, `"ended":"owner"` (`ended_words":"you stopped it"`) while the badge stays on screen with a **decreasing countdown** for ~10 more minutes (`watch-badge.js:156`/`:161`). The session itself **was** stopped, by the owner's own click - an earlier write-up called it unstoppable and the backend's state corrected that |
 | 89 | Hang and crash notes (`crash-notes`) | desktop 0.2.140 | the row is **not on his Settings page at all**: the word `crash` appears **zero times** in all **2,067** strings the Settings window exposes, though the row is supposed to be there (`jarvis_settings_registry.py:289-292`, `DESKTOP`-gated) |
 
-### BLOCKED (9)
+### BLOCKED (10)
 
 | # | feature | build | the blocker, in the record's own words |
 |---|---|---|---|
@@ -81,8 +81,9 @@ Measured, not assumed: `git rev-list --count 6947f458..main` = 37 and `git rev-l
 | 32 | Between us (`between-us`) | phone CI build | **not a defect - a privacy setting**: Find → `between` says **`Nothing matches that.`** |
 | 40 | Chat tags (`chat-tags`) | phone CI build | Find → `tags` says **`Nothing matches that.`** - part of the same hidden group |
 | 105 | The big model (slow) (`big-model`) | desktop 0.2.140 | the row exists (`Big model (slow)`); turning it on needs the owner's click through Windows Hello |
+| 101 | The Work tab (`work-tab`) | desktop 0.2.140 | it lives in the **desktop Brain window**, which could not be opened from here: **three routes tried and all failed** - the tray icon is inside the "Show Hidden Icons" overflow and a right-click produced **no readable menu**, no in-app control opens the Brain (the Settings page says *"open it from the tray icon, 'Open the Brain'"*), and the HUD's **GALAXY tab is a different view**. **A person at the machine with a mouse reaches it in two clicks; this harness cannot** |
 
-### PARTIAL (17)
+### PARTIAL (19)
 
 | # | feature | build | exactly which part was driven, and why the rest was not |
 |---|---|---|---|
@@ -103,8 +104,10 @@ Measured, not assumed: `git rev-list --count 6947f458..main` = 37 and `git rev-l
 | 4 | Say "Hey Jarvis" (`wake-word`) | phone CI build | **no row** - Find → `hey jarvis` offers one unrelated match (`Screens / Jarvis Live`); it is a behaviour needing a voice |
 | 54 | PC help (`pc-help`) | phone CI build | **no screen of its own** - Find → `PC help` landed in the Brain; like `find-phone` it is an action |
 | 99 | Notifications (`notifications`) | desktop 0.2.140 | the desktop Settings section is real (`Start reading notifications from apps you choose on your phone - Asks you first, every time`) - not driven |
+| 13 | The extras around Live (`live-extras`) | phone CI build | **no row of its own** - Find → `live extras` offers two matches (`Screens / Jarvis Live` and `Settings / Voice`). The extras are **behaviours and OS surfaces** (a Quick Settings tile, a headset button, a 10-minute "Live ended - Resume" notification, a PC hotkey, preferring a Bluetooth headset mic, and "Talk about this in Live" from Share), so testing them needs a Live session and, for some, hardware |
+| 12 | Jarvis Live (`live`) | phone CI build | **the screen is real and reachable**: Find → `jarvis live` drew `Jarvis Live` with a **`Start Jarvis Live`** control. **The session itself was not started, deliberately** - a Live session opens the phone's microphone and there is nobody here to talk to it, so starting one would have tested the microphone rather than the feature |
 
-### PASS (11)
+### PASS (12)
 
 | # | feature | build | the evidence, in the record's own words |
 |---|---|---|---|
@@ -119,23 +122,31 @@ Measured, not assumed: `git rev-list --count 6947f458..main` = 37 and `git rev-l
 | 80 | Let Jarvis read phone notifications (`phone-notifications`) | phone CI build | `PHONE NOTIFICATIONS` with its live state: `Notification access: not granted yet.`, `Turn on Notification access`, `Apps Jarvis may read` |
 | 86 | Ring my phone (`find-phone`) | phone CI build | **driven by asking** (`ring my phone`), and the phone's own notification confirms it really rang: `title = "Jarvis is ringing this phone"`, `SCHEDULE_KIND = ring_phone`, `channel = jarvis_alarm` |
 | 93 | Show or hide menus (`menu-visibility`) | phone CI build | `SHOW OR HIDE MENUS`, `This hides menus on this device only.`, `Nothing is hidden.`, `Show everything`, and per-menu rows naming what each hides |
+| 43 | Look at this (`look-at-this`) | desktop 0.2.140 | **driven with its own key** - the Settings page names it (`Look at this: Alt + Shift + S`), and sending it opened **`Jarvis and your screen`** showing **`Looked at: DeepSeek Harness window - words only`** (the window that was in front), a **`Forget this look`** control, and `Secrets in pictures you attach are covered with black boxes before Jarvis looks.` One press, one read, and the words-only mode reported honestly |
 
-### Not tested, and not testable - with the reason
+### All 45, and where each verdict came from
 
-| # | feature | why it was not driven |
+**PASS 12, FAIL 2, PARTIAL 19, BLOCKED 10, NOT-TESTABLE 2 = 45.** Every count above is derived from
+the record's own table (`.dsh-scratch/fieldtest-2026-10-11/RESULTS.md`), not adjusted here: the rows
+are the record's rows.
+
+### NOT-TESTABLE (2), and the three that were driven only in part
+
+| # | feature | why it could not be driven |
 |---|---|---|
 | 67 | Crisis help (`crisis-help`) | **deliberately not provoked** ("must not be provoked casually") - the one feature this pass refused to drive |
-| 68 | Ask how the house is (`home-status`) | **NOT-TESTABLE**: needs Home Assistant |
-| 81 | Smartwatch notifications (`phone-watch`) | **no paired watch** - the row is evidenced above; the behaviour is not |
-| 105 | The big model (slow) (`big-model`) | needs **his** click through Windows Hello (BLOCKED above) |
-| 90 | Choose Jarvis's face (`faces`) | the picker is **drawn, not text**, and there is **no vision provider on this machine** (PARTIAL above) |
-| 12, 13, 43, 101 | Jarvis Live (`live`), the extras around Live (`live-extras`), Look at this (`look-at-this`), the Work tab (`work-tab`) | **not started** in this pass |
+| 68 | Ask how the house is (`home-status`) | needs **Home Assistant**, which this machine does not have |
 
-The pass's own summary of the pattern, kept because it is what the counts do not show: across four batches, **the features that drew a screen when asked passed almost every time, and the ones that failed were almost all features with no screen of their own** (actions and behaviours) **or features whose menu the owner's privacy setting hides**. Twenty of the 45 now read PARTIAL or BLOCKED, and most of those are "there is nothing to point at", not "it is broken".
+Three more could only be driven in part, and their reasons are in their own rows above:
+`phone-watch` (81, PARTIAL - the row is real and readable, but there is **no paired watch**),
+`big-model` (105, BLOCKED - the row exists; turning it on needs the owner's click through Windows Hello),
+and `faces` (90, PARTIAL - the picker is **drawn, not text**, and there is **no vision provider here**).
+
+The pass's own summary of the pattern, kept because it is what the counts do not show: across four batches, **the features that drew a screen when asked passed almost every time, and the ones that failed were almost all features with no screen of their own** (actions and behaviours) **or features whose menu the owner's privacy setting hides**. **Twenty-nine of the 45 now read PARTIAL or BLOCKED** (19 PARTIAL + 10 BLOCKED), and most of those are "there is nothing to point at", not "it is broken". (The record's batch note said twenty of the 45 at the time it was written; the last four were driven after it, so this line carries today's number.)
 
 ## The headline: features that have NEVER run on a real device
 
-> **Overtaken 2026-10-11, later the same day:** the second pass above re-ran most of this queue on real builds - the phone on real CI builds and locally-built branches of #294, the desktop on 0.2.140. The list below is left as it was written that night; read the **Second pass** verdicts above for what each one did when it was driven.
+> **Overtaken 2026-10-11, later the same day:** the second pass above drove **43 of the 45** in this queue on real hardware and could not drive 2 (crisis-help and home-status) - the phone on real CI builds and locally-built branches of #294, the desktop on 0.2.140. The list below is left as it was written that night; read the **Second pass** verdicts above for what each one did when it was driven.
 
 The whole NEVER TESTED and NOT FOUND set - this is the testing queue from the device side:
 
