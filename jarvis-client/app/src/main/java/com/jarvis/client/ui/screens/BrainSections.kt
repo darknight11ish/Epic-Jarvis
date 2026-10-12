@@ -281,6 +281,7 @@ internal object BrainSections {
             hint = "",
             plates = listOf(
                 Plate("progress", guard = "brain.projects.progress"),
+                Plate("pictures", guard = "brain.projects.pictures"),
                 Plate("projects", guard = "brain.tab.projects"),
                 Plate("goals", guard = "brain.work.goals"),
             ),
@@ -584,11 +585,35 @@ sealed class PlateList {
      * name, kept verbatim inside the key, so a link, a jump or a `MenuPlaces`
      * entry that names a plate still names the same thing - it is only the item
      * key that carries the namespace.
+     *
+     * [drawn] overrides the heading's own rule for THIS plate. The heading hands
+     * every plate one rule (`visible = ::plateDrawn`, the private-lists test),
+     * which is right for a memory LIST: hiding the list hides the names, and the
+     * plate is not drawn at all. It is WRONG for a plate that guards ITSELF and
+     * has no second half - `people-and-things`, the Galaxy. Dropping that one did
+     * not hide any name; it removed the prompt the plate was going to draw, so
+     * the owner saw nothing where the thing he asked for should be, and a jump
+     * to it found no item and ended at the bottom of the list (2026-10-11). Such
+     * a plate passes `{ true }` and draws its own guard.
      */
-    abstract fun plate(key: String, content: @Composable () -> Unit)
+    abstract fun plate(
+        key: String,
+        drawn: ((String) -> Boolean)? = null,
+        content: @Composable () -> Unit,
+    )
 
     protected fun checkName(key: String) = BrainSections.checkPlateName(key)
 }
+
+/**
+ * One plate the recorder is holding: its name and what draws it.
+ *
+ * At the top level rather than in [PlateList]'s companion: a nested class inside
+ * a companion object is not resolved by the compiler from the class that uses
+ * it here, and the pairs it has to replace (`key to content`) may not be used
+ * because a pair of a `@Composable` lambda loses the composable type.
+ */
+private class BoundPlate(val key: String, val content: @Composable () -> Unit)
 
 /**
  * The real one: records the plates as they are written, then emits the recorded
@@ -605,24 +630,30 @@ internal class LazyPlateList(
     override val visible: (String) -> Boolean = { true },
 ) : PlateList() {
     private val emitted = ArrayList<String>()
-    private val bound = ArrayList<Pair<String, @Composable () -> Unit>>()
+    private val bound = ArrayList<BoundPlate>()
 
     /**
      * The plate keys this recorder is holding, in the order they were written.
      * This is the count a heading shows: while it is OPEN, the plates written for
      * it in this pass; while it is SHUT, the ones its last open wrote.
      */
-    override val keys: List<String> get() = if (emitting) emitted else bound.map { it.first }
+    override val keys: List<String> get() = if (emitting) emitted else bound.map { it.key }
 
     private var emitting = false
 
-    override fun plate(key: String, content: @Composable () -> Unit) {
+    override fun plate(
+        key: String,
+        drawn: ((String) -> Boolean)?,
+        content: @Composable () -> Unit,
+    ) {
         checkName(key)
         // A plate the screen says is not drawn is not written down either: the
         // count a shut heading shows has to be the number of plates the tap will
-        // really reveal.
-        if (!visible(key)) return
-        bound.add(key to content)
+        // really reveal. A plate that passes its own [drawn] answers for itself
+        // - `{ true }` for one that guards itself instead of vanishing.
+        val shown = drawn?.invoke(key) ?: visible(key)
+        if (!shown) return
+        bound.add(BoundPlate(key, content))
     }
 
     /** Writes the plates of one heading down, without emitting them: the count. */
@@ -641,9 +672,9 @@ internal class LazyPlateList(
         bound.clear()
         emitting = true
         plates()
-        for ((key, content) in bound) {
-            out.add(key)
-            list.item(key = PLATE_PREFIX + key) { content() }
+        for (plate in bound) {
+            out.add(plate.key)
+            list.item(key = PLATE_PREFIX + plate.key) { plate.content() }
         }
         emitting = false
     }

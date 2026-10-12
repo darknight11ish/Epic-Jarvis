@@ -80,9 +80,20 @@ class PhoneGalaxyTest {
      * these is a plate nothing can reach, which is what the caller is asking.
      */
     private fun String.draws(name: String): Boolean =
-        contains("plate(\"$name\")") ||
+        plateDrawnUnder(name) ||
             contains("item(key = \"$name\")") ||
             contains("item(key = \"${PlateList.PLATE_PREFIX}$name\")")
+
+    /**
+     * Whether some `plate("...")` call here names [name] - with or without the
+     * `drawn = ...` argument a plate that guards ITSELF passes. The Galaxy is
+     * one of those since 2026-10-11: with "Hide memory lists and chat history"
+     * on, the heading's own rule dropped it, so the prompt it draws instead of
+     * its list was never composed and Home's button landed at the bottom of
+     * Brain's list.
+     */
+    private fun String.plateDrawnUnder(name: String): Boolean =
+        Regex("""plate\(\s*"${Regex.escape(name)}"\s*[,)]""").containsMatchIn(this)
 
     // ------------------------------------------------------- reachable ---
 
@@ -102,6 +113,20 @@ class PhoneGalaxyTest {
         assertTrue(
             "the Galaxy plate is not drawn on Brain",
             screen.draws("people-and-things"),
+        )
+
+        // And drawn WHATEVER the private-lists rule says, because it guards
+        // itself rather than vanishing (2026-10-11). The heading hands every
+        // plate `visible = ::plateDrawn`, and `plateDrawn("people-and-things")`
+        // is `!privateHidden` - false with the lists hidden - so without the
+        // `drawn = { true }` below, that heading DROPS the plate: the
+        // `HiddenSection` prompt inside it is never composed, and Home's Galaxy
+        // button lands on the last item of Brain's list instead of the thing it
+        // named. `EntitiesPlate`'s own guard is asserted by EntitiesTest.
+        val call = screen.substringAfter("""plate("people-and-things"""")
+        assertTrue(
+            "the Galaxy plate is dropped by the private-lists rule, so its own hidden prompt never draws",
+            call.substringBefore(") {").contains("drawn = { true }"),
         )
 
         // Under a heading - and the heading that fits. "What Jarvis knows about
@@ -340,8 +365,7 @@ class PhoneGalaxyTest {
     }
 
     @Test
-    fun theHiddenMenuRuleStillCoversTheGalaxy() {
-        // The names are a memory list, so "Hide memory lists and chat history"
+    fun theHiddenMenuRuleStillCoversTheGalaxy() {        // The names are a memory list, so "Hide memory lists and chat history"
         // replaces the whole screen - the panel included, and therefore the
         // connections too. That is what makes a read-only list safe to put on a
         // phone that can be picked up by someone else.
@@ -372,6 +396,69 @@ class PhoneGalaxyTest {
             "the hidden case must stop, not fall through to the list",
             body.substring(gateAt, minOf(body.length, gateAt + 220)).contains("return"),
         )
+    }
+
+    // ------------------------- a direct button on Home (2026-10-11) ----
+    // The owner's words: "the galaxy on the android app should be a direct
+    // button thr main screen if the app". The button is another DOOR to the
+    // same plate - it must not become a second Galaxy, and it must not become
+    // a way around the hidden-lists guard.
+
+    @Test
+    fun homeHasADirectGalaxyButtonThatOpensTheSamePlate() {
+        val home = repoFile(main + "ui/screens/HomeScreen.kt").readText()
+        val activity = repoFile(main + "MainActivity.kt").readText()
+        val openPlace = repoFile(main + "ui/OpenPlace.kt").readText()
+
+        // The button exists, is labelled plainly, and calls the one action.
+        assertTrue("Home has no \"The Galaxy →\" button", home.contains("\"The Galaxy →\""))
+        assertTrue("the Galaxy button calls no action", home.contains("actions.onOpenGalaxy"))
+        assertTrue("the Galaxy button has no action of its own", home.contains("val onOpenGalaxy: () -> Unit"))
+
+        // ALWAYS drawn, not only while the face-tap opens the Brain: the owner
+        // can turn that setting off without meaning to shut this door, and a
+        // button that disappears is the confusing part. The Brain link is the
+        // one that leans on `opensMind`.
+        val galaxyAt = home.indexOf("\"The Galaxy →\"")
+        assertTrue("the Galaxy button is gone", galaxyAt > 0)
+        val above = home.substring(maxOf(0, galaxyAt - 1400), galaxyAt)
+        assertTrue(
+            "the Galaxy button is drawn behind the face-tap setting",
+            above.contains("if (showCaption) {"),
+        )
+
+        // It opens the SAME plate - no second Galaxy, no new reader.
+        assertTrue(
+            "the Galaxy button does not open the Galaxy's own plate",
+            activity.contains("onOpenGalaxy = {") &&
+                activity.contains("pendingSection = \"people-and-things\""),
+        )
+        assertTrue(
+            "the Galaxy button names a screen of its own rather than the Brain's plate",
+            !activity.substringAfter("onOpenGalaxy = {").substringBefore("},").contains("Screen.") ||
+                activity.substringAfter("onOpenGalaxy = {").substringBefore("},").contains("Screen.BRAIN"),
+        )
+
+        // "open the galaxy", by voice or chat, finds it too - the same door as
+        // the button, and the same plate. Without this it answered "only in
+        // Jarvis on your PC" while the plate sat on the phone (the defect the
+        // "spending" line was added for).
+        for (id in listOf("galaxy", "brain.tab.galaxy")) {
+            assertTrue(
+                "\"$id\" has no phone place, so \"open the galaxy\" cannot reach it",
+                openPlace.contains("\"$id\" to Where.Go(Screen.BRAIN, \"people-and-things\")"),
+            )
+        }
+
+        // And no route, no reader and no write was added for any of this: the
+        // button is navigation, so it names none of the things this test's
+        // read-only half forbids.
+        val button = home.substring(galaxyAt, minOf(home.length, galaxyAt + 400))
+        assertFalse("the Galaxy button names a route", button.contains("/api/"))
+        assertFalse("the Galaxy button posts", button.contains("api.post"))
+        for (w in listOf("forgetAutoFact", "eraseFact", "entitiesMerge", "entitiesRename")) {
+            assertFalse("the Galaxy button calls $w", button.contains(w))
+        }
     }
 
     // ---------------------------------------------------- accessible ----

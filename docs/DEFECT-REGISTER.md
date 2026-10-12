@@ -56,6 +56,37 @@ An example row (every gap between two words below is one TAB):
 DEF-003	some-agent	2026-10-11	open	tools/example.py	tools/example.py:41 returns before the check; test_example.py fails	x/some-branch @ 1a2b3c4
 ```
 
+## Before reporting a NEGATIVE result, check the instrument
+
+**A "nothing found" is the shape that most looks like a clean run, so it needs
+the most proof. Before a negative result is reported, ask whether the step that
+was supposed to happen actually happened.** The practical form of that rule:
+**make the check say what it did, not only what it found.**
+
+Three examples from 2026-10-11, all on real work, none of them hypothetical:
+
+- **The plate.** `BrainScreen`'s source said a plate was drawn; the runtime
+  dropped it from the list. Every check that read the source was green while the
+  thing being checked for was never on screen. *A claim in the source is not
+  evidence the thing is drawn.*
+- **The zero-line probe.** `adb logcat -d -s JarvisRuntime:I` returned **0 lines
+  in total** - not "no reconcile line". It read like "nothing wrong". *A probe
+  that returns nothing is not evidence of absence; it is not evidence at all
+  until the probe is shown to work.*
+- **The reading that was nearly sent.** An armed watcher **did** catch the
+  orphan condition at 16:05, then failed to find a Coming up row, fell back to
+  tapping the Brain tab, and printed **"STILL POSTED"** - an instrument failure
+  wearing a result's clothes. What stopped it being reported was one diagnostic
+  line above the verdict: *"no Coming up row found"*. *A negative verdict is
+  worth nothing if the step it depended on did not run.*
+
+All three were caught by a line that **contradicted the verdict** rather than by
+the verdict itself, which is why the check has to narrate its own steps. **The
+paired rule for positive results:** a test that passes because it is looking at
+nowhere or nothing proves nothing either - run the allowed case first and watch
+it FIND what the forbidden case must not contain
+(`docs/PIP-DESIGN.md` section 7.1 is that rule written out for one feature).
+
 ## Why this exists (history, not an open defect)
 
 On the night of 2026-10-11 the same real bug was repaired several times over,

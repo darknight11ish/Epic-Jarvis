@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.data.SecurityRules
 import com.jarvis.client.net.AsksFirst
+import com.jarvis.client.net.CardSummary
 import com.jarvis.client.net.CardWords
 import com.jarvis.client.net.FormReview
 import com.jarvis.client.net.PendingItem
@@ -97,6 +98,9 @@ fun ApprovalCard(
     pictureHidden: Boolean = false,
     modifier: Modifier = Modifier,
     showFooter: Boolean = true,
+    cardMode: String = CardSummary.DEFAULT,
+    moreLabel: String = CardSummary.MORE_LABEL,
+    lessLabel: String = CardSummary.LESS_LABEL,
 ) = ApprovalCard(
     item = item,
     blocker = blocker,
@@ -108,6 +112,9 @@ fun ApprovalCard(
     pictureHidden = pictureHidden,
     modifier = modifier,
     showFooter = showFooter,
+    cardMode = cardMode,
+    moreLabel = moreLabel,
+    lessLabel = lessLabel,
 )
 
 @Composable
@@ -157,13 +164,45 @@ fun ApprovalCard(
      * nothing, and turning it off changes no decision path.
      */
     showFooter: Boolean = true,
+    /**
+     * The PC's own card setting ([com.jarvis.client.net.CardSummary]): "start
+     * short" (the default) draws the short summary with an "Explain more"
+     * control, "always show everything" draws the whole card from the start.
+     * Cosmetic only - it changes which words are drawn and nothing about the
+     * decision, and it is read from the PC so both apps agree.
+     */
+    cardMode: String = CardSummary.DEFAULT,
+    /** The control's own words, as the PC last sent them. */
+    moreLabel: String = CardSummary.MORE_LABEL,
+    lessLabel: String = CardSummary.LESS_LABEL,
 ) {
     val scope = rememberCoroutineScope()
     val chrome = LocalChrome.current
     val accent = LocalAccent.current
     val cardShape = LocalRadii.current.cardShape
     val offset = remember(item.id) { Animatable(0f) }
-    var showDetail by rememberSaveable(item.id) { mutableStateOf(false) }
+    // The owner's "Explain more" (2026-10-09; net/CardSummary): which text
+    // this card draws, and whether its own control is open.
+    //
+    // KEYED ON item.id, exactly as showContext and showAmend below are, and
+    // that is what keeps one card's opening from touching another's: a
+    // different card is a different key, so it starts folded, and the state is
+    // dropped when the card leaves the queue instead of being carried onto the
+    // next one that reuses a slot in the list.
+    var showMore by rememberSaveable(item.id) { mutableStateOf(false) }
+    val shown = CardSummary.shown(
+        mode = cardMode,
+        summary = item.notice?.summary,
+        full = item.notice?.full,
+        detail = item.detail,
+        expanded = showMore,
+        moreLabel = moreLabel,
+        lessLabel = lessLabel,
+    )
+    // The card's OWN first sentence, never blank and never cut mid-word, for a
+    // PC whose notice carries no short words yet (an older backend): the same
+    // fallback jarvis_card_words.summary_for uses, so the two agree.
+    val foldedLine = shown.summary ?: CardWords.summaryFallback(item.notice?.full, item.title)
     var showContext by rememberSaveable(item.id) { mutableStateOf(false) }
     var showAmend by rememberSaveable(item.id) { mutableStateOf(false) }
     var amendText by rememberSaveable(item.id) { mutableStateOf("") }
@@ -208,11 +247,11 @@ fun ApprovalCard(
 
     // Feasibility I110, "Slower Approve on risky cards": a heavy card's
     // Approve stays disabled for HEAVY_APPROVE_DELAY_MS AND until the card's
-    // whole text has been in view. On this screen `detail` (when there is
-    // one) starts collapsed behind "Show detail" rather than in a scrolling
-    // box - see the toggle further down - so "in view" here means "opened at
-    // least once"; a card with no `detail` at all has nothing hidden, so
-    // that half is satisfied from the start. Deny is never gated by this.
+    // whole text has been in view. On this screen the whole text starts folded
+    // behind "Explain more" rather than in a scrolling box - see the control
+    // further down - so "in view" here means "opened at least once"; a card
+    // with nothing folded away has nothing hidden, so that half is satisfied
+    // from the start. Deny is never gated by this.
     val heavy = item.isHeavy
     var heavyDelayElapsed by remember(item.id) { mutableStateOf(!heavy) }
     LaunchedEffect(item.id, heavy) {
@@ -221,7 +260,7 @@ fun ApprovalCard(
         heavyDelayElapsed = true
     }
     var heavyTextSeen by remember(item.id) {
-        mutableStateOf(!heavy || item.detail.isNullOrBlank())
+        mutableStateOf(!heavy || !shown.control)
     }
     val heavyGateOk = !heavy || (heavyDelayElapsed && heavyTextSeen)
 
@@ -395,17 +434,74 @@ fun ApprovalCard(
         Spacer(Modifier.height(6.dp))
         ReachBadge(item)
 
-        // A tag-suggestion card shows the version without the chat's title while
-        // "Hide memory lists and chat history" is on (TagSuggest.cardText).
-        val shownSummary = item.shownSummary(JarvisRuntime.privateListsHidden)
-        if (shownSummary.isNotBlank()) {
+        // The card's own first sentence, when the PC sent no short words (an
+        // older backend). Outside the fold: it IS the short summary then.
+        if (shown.summary == null && shown.body.isEmpty() && foldedLine.isNotBlank()) {
             Spacer(Modifier.height(8.dp))
             Text(
-                shownSummary,
+                foldedLine,
                 style = MaterialTheme.typography.bodyMedium,
                 color = chrome.textHi,
                 modifier = Modifier
                     .heightIn(max = 240.dp)
+                    .verticalScroll(rememberScrollState()),
+            )
+        }
+
+        // THE SHORT SUMMARY, then the "Explain more" control (the owner's
+        // request of 2026-10-09). Folded, the summary is what the card shows
+        // and the whole text is one tap away; "always show everything" puts
+        // the whole text here instead and draws no control, because there is
+        // nothing folded away.
+        //
+        // A tag-suggestion card shows the version without the chat's title
+        // while "Hide memory lists and chat history" is on (TagSuggest), and
+        // [PendingItem.shownSummary] is the one place that decides it - the
+        // line it stood on before this change.
+        val line = shown.summary?.let { s ->
+            if (s == item.summary) item.shownSummary(JarvisRuntime.privateListsHidden) else s
+        }
+        if (!line.isNullOrBlank()) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                line,
+                style = MaterialTheme.typography.bodyMedium,
+                color = chrome.textHi,
+            )
+        }
+        if (shown.control) {
+            Spacer(Modifier.height(4.dp))
+            // The shared `Quiet` part, not `clickable` on a Text - the -10dp
+            // offset cancels its own inner padding so the words line up with
+            // the text above, exactly as "Show detail" below does.
+            Quiet(
+                text = shown.label,
+                modifier = Modifier.offset(x = (-10).dp),
+                onClick = {
+                    showMore = !showMore
+                    // Feasibility I110: read once, satisfied for good - closing
+                    // it again afterwards must not re-lock Approve. "The whole
+                    // text has been in view" is what unlocking means, and the
+                    // control is how it gets in view now.
+                    heavyTextSeen = true
+                },
+            )
+        }
+        if (shown.body.isNotBlank()) {
+            Spacer(Modifier.height(if (shown.expanded) 4.dp else 0.dp))
+            // The whole card: the PC's own `full` text (why it matters, whether
+            // outside text pushed it up, that nothing has happened yet) and the
+            // row's own `detail` (the exact line, command or value being agreed
+            // to). Both together are everything a person is agreeing to.
+            Text(
+                text = shown.body,
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontFamily = JarvisType.mono,
+                ),
+                color = chrome.textMid,
+                modifier = Modifier
+                    .padding(top = 2.dp)
+                    .heightIn(max = 320.dp)
                     .verticalScroll(rememberScrollState()),
             )
         }
@@ -471,38 +567,11 @@ fun ApprovalCard(
             }
         }
 
-        // The show/hide toggles below are the shared `Quiet` part, not
-        // `clickable` on a Text. `clickable` brought Material's ripple - the
-        // last three in the app's own UI were all on this card - and `Quiet`
-        // brings the same 48dp target and spring-press every other text
-        // action has. The -10dp offset cancels Quiet's own inner padding, so
-        // the words still line up with the left edge of the text above.
-        item.detail?.takeIf { it.isNotBlank() }?.let { detail ->
-            Spacer(Modifier.height(4.dp))
-            Quiet(
-                text = if (showDetail) "Hide detail" else "Show detail",
-                modifier = Modifier.offset(x = (-10).dp),
-                onClick = {
-                    showDetail = !showDetail
-                    // Feasibility I110: read once, satisfied for good - hiding
-                    // it again afterwards must not re-lock Approve.
-                    if (showDetail) heavyTextSeen = true
-                },
-            )
-            AnimatedVisibility(showDetail) {
-                Text(
-                    text = detail,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontFamily = JarvisType.mono,
-                    ),
-                    color = chrome.textMid,
-                    modifier = Modifier
-                        .padding(top = 2.dp)
-                        .heightIn(max = 260.dp)
-                        .verticalScroll(rememberScrollState()),
-                )
-            }
-        }
+        // The old "Show detail" toggle that stood here is GONE, and its text is
+        // not: the row's own `detail` (a command, a diff, a plan's text) is now
+        // the second half of what "Explain more" opens, above. One control on
+        // the card instead of two, which is the point of the owner's request -
+        // and `shown.body` still draws it word for word.
 
         // The picture of a web form Jarvis filled in (FormReview). Only a
         // "submit this form" card has one; nothing else changes - the decision

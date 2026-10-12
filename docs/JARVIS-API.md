@@ -19022,7 +19022,7 @@ until a client calls it.
 
 ---
 
-## 125. The big coding model: both cards, with Jarvis paused
+## 126. The big coding model: both cards, with Jarvis paused
 
 `qwen3-coder-30b-a3b-ud-q3-k-xl` (UD-Q3_K_XL, 13,806,312,608 B, Apache 2.0) is
 the one model on this PC that needs **both** graphics cards. It is the best
@@ -19039,7 +19039,7 @@ not re-litigate: **OFF by default, never resident beside the two live lanes,
 the pause announced before it starts, and both lanes put back exactly as they
 were - proved from `/api/ps`.**
 
-### 125.1 The three routes
+### 126.1 The three routes
 
 | Route | Method | Body | What it does |
 |---|---|---|---|
@@ -19058,7 +19058,7 @@ the big coding model", a `BoolSetting` in `jarvis_settings_registry.py`). The
 page row needs its own Rust command and JavaScript, like every other switch on
 that page.
 
-### 125.2 The order, which is the contract
+### 126.2 The order, which is the contract
 
 1. The switch must be on, no multi-step task may be running, and the gate must
    allow it. Otherwise **nothing is touched at all**.
@@ -19087,9 +19087,9 @@ that page.
 
 Nothing here downloads anything, and nothing leaves this PC.
 
-### 125.3 What is not built
+### 126.3 What is not built
 
-- The desktop Settings row and any phone control (section 125.1).
+- The desktop Settings row and any phone control (section 126.1).
 - `tools/check_parity.py` does not yet classify these routes: they are the
   backend half, called by no client, and a follow-up lists them there.
 - No real load was run while this was written: the owner's two lanes are live
@@ -19101,3 +19101,432 @@ Nothing here downloads anything, and nothing leaves this PC.
   server on port 11434 did not know the model** (`POST /api/show` answered
   404), so the mode's own both-cards server is what will see it.
 
+---
+
+## 127. Approval cards read short: the summary, "Explain more", and the setting (added 2026-10-10)
+
+The owner, 2026-10-09, in their own words: *"for approval cards, there should be
+a more simple summary, with an explain more button that expands the approval
+card total word length and explains the details more. and approval card
+preferences such as this should be changeable in the settings"*.
+
+Built by `backend/card-prefs.patch` (one route), the shipped
+`backend/jarvis_card_summary.py` (the preference and the "what one card shows"
+rule), the shipped `backend/jarvis_card_words.py` (`SUMMARY`, the short words -
+the same one source the title already comes from), `backend/approval-notice.patch`
+(the two new fields on every pending row), `backend/test_card_short_words.py`,
+and the phone's `net/CardSummary.kt` + `ui/screens/ApprovalCardsPlate.kt` +
+`CardSummaryTest.kt`. **This section exists because the route and the two fields
+were not written down anywhere else.**
+
+### 127.1 One line first, the whole card one tap away
+
+Every pending row already carried `notice` (`approval-notice.patch`, §3). It now
+carries **two more fields**, and they are the whole feature:
+
+| field | what it is |
+|---|---|
+| `notice.summary` | the SHORT line a card shows first: "Jarvis wants to send the email shown." |
+| `notice.full` | the WHOLE card, word for word as `body` always was - what "Explain more" opens |
+
+`notice.body` is **unchanged and still equals `notice.full`**, so a client that
+has never heard of the control draws exactly what it drew before. Neither field
+ever carries `detail`, `prompt` or the contents of `raised`: both are built from
+the action NAME, `jarvis_card_words.py`'s own tables and the risk table, which is
+what keeps a notice safe to put on a lock screen.
+
+**A summary is never blank and never the raw action id.** In order,
+`jarvis_card_words.summary_for`: the written short phrase for that action; else
+the card's own FIRST WHOLE SENTENCE ("never cut mid-word"); else the readable
+title `title_for` already guarantees. `backend/test_card_short_words.py` pins all
+three, and fails by name when an action the gate knows has no short row.
+
+### 127.2 The preference, in one file both apps read
+
+    GET  /api/card-prefs     the setting, its two choices and the words to show
+    POST /api/card-prefs     {"mode": "start_short" | "always_full"}
+
+Kept in `<config dir>/card-prefs.json`, **beside `appearance.json` and
+`animal.json`** - so the phone and the desktop read one value and cannot
+disagree. `start_short` is the default, and it is the default for a missing
+file, a damaged one, an unknown mode or a value of the wrong type; none of those
+is ever read as a choice. `mode` is the field a client draws from:
+
+| `mode` | what a card does |
+|---|---|
+| `start_short` | the short summary, with an "Explain more" control |
+| `always_full` | drawn open, whole text, **no control** - nothing is folded away |
+
+`available` is the read flag (a client checks it before believing `mode`),
+`stored` says whether a real choice is saved or the default is merely in force,
+`choices` carries both ids with their labels and the default marked, and
+`more_label` / `less_label` are the control's own words - the PC's, so the two
+apps cannot word the same button differently.
+
+**Both directions are cosmetic and both are immediate: no approval card, either
+way, from either app or by asking.** This changes which words a card draws and
+nothing else - it approves nothing, starts nothing and reaches nothing - which is
+the same rule the animal options and "How Jarvis talks" follow. An unknown mode
+is refused with `400` rather than quietly saved as something else.
+
+**By asking:** "always show me the whole approval card", "show me the whole
+card", "the short summary", "start short" - `jarvis_card_summary.spoken`'s own
+list, read by `jarvis_settings_registry.find_card_mode` and applied through
+`set_card_mode`, which calls the one function the route calls. A sentence it does
+not recognise is `None` and falls through to the model rather than picking a card
+style on the owner's behalf. "Show everything" on its own deliberately stays
+`jarvis_menus.ALL_MENUS_PHRASES` (the older "show me every menu"), which
+`jarvis_quick.match` checks first.
+
+### 127.3 Where the control is, in each app
+
+- **Phone** (`jarvis-client`): the card's own text (`ApprovalCard.kt`), folded by
+  default, with "Explain more" / "Show less" under the summary. The setting is
+  Settings → **"Approval cards"**, right under Appearance
+  (`ApprovalCardsPlate.kt`, `item(key = "approval-cards")`). Opening one card
+  touches no other: the open/closed state is keyed on the card's own id.
+- **Desktop** (`jarvis-desktop/` + `src-tauri/`): **not built on this branch** -
+  those folders belong to another conversation, and the owner's brief for this
+  work says not to edit them. What it needs is written up in
+  `docs/DESKTOP-APPROVAL-CARD-PREF.md`: the file (`src/main.js`,
+  `refreshApproval`), the control, and the field it reads (`mode`). Until its
+  card in `settings.html` lands, the backend's
+  `jarvis_settings_registry.SECTIONS` entry for `approval-cards` stays
+  `app="phone"`, so "open approval cards" never names a place the desktop does
+  not have; the desktop can still change the setting by asking.
+
+## 128. Work setups: five model combinations for a kind of work (added 2026-10-10)
+
+The owner asked (2026-10-10):
+
+> "analyze what different model combinations from the latest and best models
+> available for download would be best for different work for jarvis. like if i
+> was going to code an android app, or work on admin stuff from my own life.
+> and have these as selectable options that explain what they do before i start
+> work. and jarvis can also recommend loading up certain combos if i talk about
+> work i'd like to do"
+
+`backend/jarvis_work.py` (shipped whole; `backend/work.patch` adds the three
+routes to `jarvis_hud.py`) holds **five combinations of local models**, each
+chosen for a kind of work, with the measured cost of each on its own label.
+The design note and every measurement are
+`.dsh-scratch/android-verify/WORK-SETUPS-DESIGN-2026-10-10.md`,
+`MODEL-BENCH-2026-10-10.md` and `MODEL-STRATEGY-2026-10-10.md`, on the owner's
+PC and not in this repository; `tools/check_work_claims.py` fails if a number or
+a quoted phrase in the module cannot be traced back to them.
+
+### 128.1 The three routes
+
+    GET  /api/work                 the five setups for THIS PC's cards: names,
+                                   what each is for, which model goes on which
+                                   card, its measured speed and context, what it
+                                   costs, what it is honestly worse at, which
+                                   models are already downloaded, which is
+                                   running now, and which one the owner chose
+
+    POST /api/work/choose          {"setup": "everyday"|"coding"|"admin"|
+                                    "long"|"specialist"|null}
+                                   Remember a setup, or forget it (null)
+
+    POST /api/work/recommend       {"words": "<what the owner said>"}
+                                   Which setup to OFFER for those words, and the
+                                   sentence to say
+
+`GET /api/work` also answers **`chosen`** (the remembered id, or `null`) and,
+per setup, **`ready`** - one of `ready`, `partial`, `missing` or `unknown`,
+worked out from Ollama's own `/api/tags` and never guessed, with the PC's own
+`ready_words` sentence beside it. A setup whose model is missing says so in
+words and points at the ordinary download card; this module never downloads
+anything and names **no** install route.
+
+The answer is model names, card names and measured numbers. It never carries a
+token, a prompt, an answer or anything the owner said.
+
+### 128.2 Nothing here changes a model
+
+- **`/api/work/choose` only remembers.** It writes one preference
+  (`work-setup-choice.json`, beside the other settings files) and returns the
+  **one** step that would switch a model. It changes no model and no Ollama
+  setting, and it raises no card of its own.
+- **`/api/work/recommend` switches nothing.** The answer carries
+  `switched: false`, always (`test_work.py` checks every case in the golden
+  file). Acting on an offer is the owner's tap, and the switch itself is the
+  existing `/api/models/switch` card - tier `ask`, raised by the app that posts
+  it and decided as any other model change is (the owner's decisions of
+  2026-09-18 and 2026-09-20). There is no new gate action, no new tier and no
+  new route for a model change.
+
+A crisis turn offers nothing, a turn where the owner is already talking about
+models says nothing, and one loose word is never enough - each of those is a
+case in `jarvis-client/app/src/test/resources/contract/work-setups-cases.json`.
+
+### 128.3 What is built, and the one half that is not
+
+**Built and reachable:** `GET /api/work` and `POST /api/work/choose`, and the
+phone's **Work setups** section under Brain → Hardware
+(`net/WorkSetups.kt`, `ui/screens/HardwarePlate.kt`'s `WorkSetupsSection`,
+`JarvisRuntime.refreshWorkSetups` / `chooseWorkSetup` / `workSetupStep`), with
+its own contract test (`WorkSetupsContractTest.kt`) reading the golden file the
+PC's module generates.
+
+**Built and NOT wired, deliberately:** the recommendation. Nothing in either
+app offers a setup inside a chat turn today, and this section says so outright
+because an earlier version of `docs/WORK-SETUPS.md` claimed the phone asked for
+it:
+
+- `jarvis_hud.py`'s chat route does not call `jarvis_work.match()`. The route
+  is ready and safe to call; the seam is the core file, and `work.patch`
+  deliberately does not touch it.
+- `JarvisRuntime.offerWorkSetup` is the **only** thing in either app that would
+  POST `/api/work/recommend`, and **no Kotlin file under
+  `jarvis-client/app/src/main` calls it**. So `JarvisRuntime.workOffer` is never
+  set, and the offer panel `HardwarePlate.kt` draws ("Jarvis suggests a
+  setup") can never be populated.
+
+Two checks now hold that, rather than a sentence in a document:
+
+- `backend/test_work.py` asserts that no Kotlin file under the phone's `main`
+  calls `offerWorkSetup`, with a message naming exactly what to correct when one
+  does. It is the check that fails the day the offer is wired up.
+- `tools/check_parity.py` carries `/api/work/recommend` in its `UNREACHABLE`
+  list, which names the file and the function that build it and why nothing
+  calls it. That list is checked in both directions: while the function has no
+  caller the entry must stay, and **the moment it is called the checker fails**
+  and says to delete the entry, reclassify the route, and correct the docs.
+  `backend/test_parity_callgraph.py` proves that second direction on a
+  throwaway checkout, including the harder case - a call site inside a function
+  nothing calls - which is the defect this whole guard exists to catch.
+
+The desktop's own section is still to build (`docs/WORK-SETUPS.md`, "Still to
+build"); it is not part of the same task, because `jarvis-desktop/` was another
+conversation's surface.
+
+### 128.4 Why the routes are `planned`, and not `ported`
+
+`tools/check_parity.py` classifies all three as `planned`: on the backend, in
+the phone's screen, and in **no** desktop build yet. That is what makes CI name
+the missing desktop half instead of reporting parity. For `/api/work` and
+`/api/work/choose` the warning reads "the phone calls it; the desktop does not
+yet". For `/api/work/recommend` it reads **"NEITHER app calls it"** and names the
+helper nothing calls, because the route is declared unreachable; it is also kept
+out of the "On the phone and not the desktop" list, since a literal in the
+phone's source is not a call. The old line, "the phone calls it", came from a
+string match and was never true. `backend/test_parity_callgraph.py` still pins
+the direction that matters for shipping - one real call site and the checker
+fails instead.
+---
+
+## 129. Ask for a picture, and keep it (added 2026-10-11)
+
+`backend/jarvis_pictures.py` (shipped whole), `backend/pictures.patch` (one
+`install()` call in `jarvis_hud.py`), `backend/test_pictures.py`. The owner's
+decision of 2026-09-27: *"12 GB card: longer conversations with picture
+understanding first, and **making pictures too (swapped in when asked, since
+both cannot sit on the card at once)**"* (CLAUDE.md).
+
+### 129.1 What it is, in plain words
+
+You ask Jarvis for a picture, in your own words. A picture-making program on
+this PC draws it, the picture is saved in a folder on this PC, and both apps
+show it to you again with the words that made it. **Nothing leaves the PC**
+(CLAUDE.md rule 1): the drawing program is a program on this machine, and the
+only address this module ever opens a socket to is the one the owner
+configured. The sidecar beside each picture holds the prompt, the seed, the
+model and the settings, so the owner can read what a picture was and make it
+again.
+
+### 129.2 The routes
+
+    GET  /api/pictures           the folder, how many pictures are in it, how
+                                 big it is, the switch, the chosen program and
+                                 every picture with its own prompt, seed,
+                                 model and when it was made. A read.
+    GET  /api/pictures/file      ?id=<id> - ONE picture, as base64 in JSON
+                                 with the token header, exactly as the captcha
+                                 hand-off sends its own frame
+                                 (jarvis_handoff.py). This is how the phone
+                                 saves one to itself.
+    POST /api/pictures           {"prompt": "...", "seed"?: n,
+                                  "settings"?: {"steps","width","height",
+                                                "model","negative"}}
+                                 Draw one and keep it.
+    POST /api/pictures/settings  ONE named change, and the PC REFUSES all of it
+                                 from anywhere but the PC (403 pc_only):
+
+      {"action": "enabled", "on": true}
+      {"action": "runtime", "runtime": "comfyui" | "sd_cpp" | null,
+       "address"?: "http://127.0.0.1:8188"}
+      {"action": "folder", "folder": "D:\\Jarvis pictures"}
+
+The successful `POST` answers with where the picture went and how long it took:
+
+    {"ok": true, "available": true, "name": "2026-10-11-140509-a-red-panda.png",
+     "id": "2026-10-11-140509-a-red-panda", "path": "<the folder>\\<the name>",
+     "folder": "<the folder>", "prompt": "a red panda", "seed": 1234,
+     "model": "sd_xl_base_1.0.safetensors", "runtime": "comfyui",
+     "settings": {"steps": 28, "width": 768, "height": 512},
+     "seconds": 41.2, "bytes": 812345, "made_at_words": "11 Oct 2026, 14:05",
+     "words": "Drawn in 41.2 seconds and saved as 2026-10-11-140509-a-red-panda.png."}
+
+`prompt` is required and is capped at 2000 characters; `settings` are the
+**drawing program's own knobs**, not Jarvis settings, and the two names are
+kept apart on purpose. Every refusal is `{"ok": false, "error": "<one plain
+sentence>"}` - never a traceback, never an empty 200.
+
+### 129.3 Where pictures are kept, and what is beside them
+
+- **The folder** is `folder` in `pictures.json` in the config folder (the same
+  place `folders.json` and `asks_first.json` live), defaulting to
+  `%USERPROFILE%\Pictures\Jarvis`. It is chosen **on the PC only**, the same
+  shape `jarvis_backup.py` uses for its backup folder.
+- **The name** is `YYYY-MM-DD-HHMMSS-<slug>.png`, where `<slug>` is the first
+  six words of the prompt with everything that is not a letter or a digit
+  turned into a dash (48 characters at most, `picture` if that leaves
+  nothing). **The date AND the time are both in the name**, and a name already
+  on disk gets `-2`, `-3` and so on, so two pictures asked for in the same
+  second cannot collide and **nothing is ever overwritten**.
+- **The sidecar** is `<same name>.json` beside the picture:
+  `{"jarvis_pictures": 1, "picture", "prompt", "seed", "runtime", "model",
+  "settings", "made_at", "made_at_words", "seconds"}`.
+- **Nothing is deleted on a timer.** Unlike `jarvis_backup.py`'s five kept
+  files, the owner's own pictures are never tidied away by Jarvis; the list
+  route reports the folder and its total size so the owner can see what it
+  costs. A picture whose sidecar is lost is **still listed**, with `prompt`
+  empty and `record: false`, rather than disappearing.
+
+A sidecar that cannot be written costs the record, never the picture: the PNG
+is written first and the JSON second, so a crash between them leaves a picture
+that is merely unexplained.
+
+### 129.4 The switch, and the two things the owner has to do
+
+Both cards are Turing and the everyday model already holds the 12 GB one, so
+the drawing program has to be swapped in and only one of the two can be on the
+card at a time. The owner's standing rule is that a feature using the second
+card keeps **its own switch, off until that feature is measured**; the switch
+is:
+
+    Settings > Pictures > "Making pictures"     default OFF
+
+`pictures.json` holds four keys, each read with its own fallback so a
+hand-edited or half-written file can never crash a route and can never turn
+the feature on:
+
+    {"enabled": false, "runtime": null, "address": null, "folder": null}
+
+`runtime` is **a setting with named supported values, never guessed at**,
+because two different programs are plausible and the owner may install either:
+
+| `runtime` | the program | its own default address |
+|---|---|---|
+| `comfyui` | ComfyUI (`/prompt`, `/history`, `/view`) | `http://127.0.0.1:8188` |
+| `sd_cpp` | stable-diffusion.cpp's `sd-server` (`/sdapi/v1/txt2img`) | `http://127.0.0.1:1234` |
+
+`address` overrides that runtime's own default for an owner who runs it on
+another port. Nothing here installs, starts, stops or reconfigures the drawing
+program, and nothing here chooses or downloads a model: whatever the program is
+configured with is what draws, and its model name is written into the sidecar.
+
+**What the owner sees when it is not set up is one plain sentence, never an
+error and never a silent nothing:**
+
+- with no `runtime` chosen: *"Jarvis has no picture-making program set up yet,
+  so it cannot draw one. Install ComfyUI (https://github.com/comfyanonymous/ComfyUI)
+  or stable-diffusion.cpp's server (https://github.com/leejet/stable-diffusion.cpp),
+  then choose which one you installed in Settings, under Pictures."* - `503`,
+  `available: false`.
+- with `runtime` chosen but the program not answering: *"Jarvis is set to use
+  ComfyUI, but it is not answering. Start it on this PC, then ask again."* -
+  `503`, `available: false`.
+- with the switch off: *"Making pictures is switched off. Turn on \"Making
+  pictures\" in Settings, under Pictures, when you want Jarvis to use the
+  second card for this."* - `503`, `off: true`.
+
+### 129.5 No approval card, and why that is not a loophole
+
+**Making a picture needs no approval card.** The gate exists for things that
+leave the PC, change the owner's accounts, or cannot be undone
+(`docs/ARCHITECTURE.md` section 4). A picture is none of those: it is a new
+file in a folder on this PC, drawn by a program on this PC, from words the
+owner typed. It is the same shape as a timer or a note, both of which need no
+card.
+
+**Sending that picture to anyone else would be a new named way out of the PC,
+and this is deliberately not built.** There is no email, no upload, no chat
+attachment and no web search here. The phone's own **"Save to my phone"** reads
+the picture over Tailscale or NordMesh - a way to the owner's own device, not a
+way out of the PC - exactly as the captcha hand-off's one frame does.
+
+**Where the prompt came from still matters, and is not invented here.** The
+prompt is whatever the owner typed in the box. `jarvis_pictures.py` is not a
+tool in `jarvis_agent.py`, is not imported by it, and is reachable from no
+model turn, so a prompt can never be filled in from email, a web page or a
+file by the model. `test_pictures.py` fails if any model path starts importing
+it.
+
+### 129.6 Hidden with the private things, on both apps
+
+The prompts are the owner's own words, so the gallery and the prompt text
+**hide under "Hide memory lists and chat history" like every other private
+surface** - added to that rule rather than beside it. On the desktop the answer
+is replaced in Rust (the same shape `brain/progress.rs` uses) so a page script
+cannot read round it; on the phone the plate fetches nothing at all while the
+switch is on, and shows one line saying so
+(`WORDS["hidden_short"]` = *"Turn off Hide memory lists to see your pictures."*).
+
+### 129.7 The two surfaces
+
+Both draw the same feature and both are hidden by their own menu entry -
+`brain.projects.pictures` for the gallery, `settings.pictures` for the PC's
+setup (JARVIS-API section 109).
+
+- **Desktop.** Two places, and each says where the other is. The SETUP is
+  Settings -> **Pictures** (`jarvis-desktop/src/pictures-settings.js`):
+  "Making pictures", the program that draws (the two supported values, each
+  with what to install), and the folder with its size. The GALLERY is Brain ->
+  **Projects** -> **Pictures**
+  (`jarvis-desktop/src/pictures-panel.js`, its own pane `#pictures-root`,
+  beside the Progress pictures): the box to ask for a new one, and every
+  picture with its prompt, its seed, its model and when it was made, a **Make
+  another** on each. The four commands are in
+  `jarvis-desktop/src-tauri/src/brain/pictures.rs`:
+  `brain_pictures`, `brain_pictures_file`, `brain_pictures_make`,
+  `brain_pictures_settings` and `choose_pictures_folder` (the same Windows
+  "Select folder" dialog "Folders Jarvis may look in" uses). A picture's bytes
+  are drawn as a `data:` image, which the packaged CSP already allows
+  (`img-src data:`), fetched one at a time as each picture scrolls into view.
+  There is no "save to my phone" on the PC: the picture is already on it.
+- **Phone.** Brain -> **Pictures**, in `ui/screens/PicturesPlate.kt`, reading
+  through `net/Pictures.kt`. Each picture shows with its prompt and when it was
+  made, a **Make another** button, and **Save to my phone**, which reads
+  `/api/pictures/file` and writes the PNG into the phone's own Pictures
+  collection through MediaStore. Nothing about a model, a catalogue or a
+  drawing program is on the phone: it sends a prompt and reads a picture.
+
+### 129.8 Tests, and what is honestly not proved
+
+`python3 backend/test_pictures.py` (with `JARVIS_BACKEND` set the way every
+suite here is run). **There is no graphics card, no drawing program and no
+model anywhere in it, and there must not be.** Every route is exercised with a
+**stub runtime** put in the module's own registry (`register_runtime`), so the
+suite proves the routes, the storage, the words and the switch - and proves
+**nothing** about whether ComfyUI or stable-diffusion.cpp draws a good picture.
+That split is written into the suite's own docstring rather than implied.
+
+What it covers: the route with a stub (200, where it went, how long it took);
+the storage round-trip (write, read back, the sidecar intact - prompt, seed,
+model and settings all survive); the file name and its slug; **a collision** -
+the same prompt in the same second makes two files and overwrites neither; the
+"runtime not installed" sentence; the "configured but not answering" sentence;
+the mode being **off by default** and off being refused in words that name the
+switch; the listing route (newest first, the folder and its size, a lost
+sidecar handled); the picture itself as bytes and a refusal for anything that
+is not one of our ids; `install()` and its origin/token refusals; and that no
+other backend module imports this one.
+
+Desktop: the Rust reading functions are plain functions of `(status, body)` and
+are tested without a Tauri app or a network
+(`jarvis-desktop/tests/pictures.mjs`). Phone:
+`jarvis-client/app/src/test/java/com/jarvis/client/PicturesTest.kt`.
+
+`tools/check_parity.py` carries all three routes.

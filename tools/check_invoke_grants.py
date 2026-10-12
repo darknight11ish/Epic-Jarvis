@@ -82,6 +82,8 @@ DYNAMIC_BELOW = {
     ("forget-range-panel.js", "command"): "the panel's invoke(command, args); every caller passes a literal.",
     ("progress-panel.js", "command"): "the panel's invoke(command, args); every caller passes a literal.",
     ("projects-panel.js", "command"): "the panel's invoke(command, args); every caller passes a literal.",
+    ("pictures-panel.js", "command"): "the panel's invoke(command, args); every caller passes a literal (brain_pictures, brain_pictures_make, brain_pictures_file).",
+    ("pictures-settings.js", "command"): "a settings panel's invoke(command, args); every caller passes a literal (brain_pictures, brain_pictures_settings, choose_pictures_folder).",
     ("account-secrets-settings.js", "command"): "a settings panel's invoke(command, args); every caller passes a literal.",
     ("chatbot-api-keys-settings.js", "command"): "a settings panel's invoke(command, args); every caller passes a literal (get_chatbot_api_keys, save_chatbot_api_key, forget_chatbot_api_key).",
     ("briefing-settings.js", "command"): "a settings panel's invoke(command, args); every caller passes a literal.",

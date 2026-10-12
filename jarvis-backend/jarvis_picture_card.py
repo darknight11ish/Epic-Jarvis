@@ -139,6 +139,16 @@ OFF_WORDS = (
 
 #: The two models the owner already has, and what each needs beside it. Sizes
 #: are the real files on disk, in bytes, used to say whether one is missing.
+#:
+#: `loader`, `clip_type` and `graph` are what a ComfyUI graph must use for THIS
+#: file, and they live here rather than in the drawing module so there is ONE
+#: record of the machine's picture models. `jarvis_pictures.py` builds its
+#: graph from them, and `test_pictures_graph.py` checks them against the file
+#: itself: NEITHER model is a fused checkpoint (Chroma1-HD is a diffusion
+#: model with its own text encoder and VAE beside it; the Qwen one is an
+#: sd.cpp GGUF), so `CheckpointLoaderSimple` - which takes CLIP and VAE out of
+#: the same file - cannot load either of them. Both recipes are the ones
+#: `scripts/measure-image-options.ps1:487-528` drew real pictures with.
 IMAGE_MODELS = (
     {
         "id": "big",
@@ -151,6 +161,9 @@ IMAGE_MODELS = (
             ("ae.safetensors", "vae", 335304388),
         ),
         "runtime": "comfyui",
+        "loader": "UNETLoader",
+        "clip_type": "chroma",
+        "graph": "chroma",
     },
     {
         "id": "small",
@@ -163,6 +176,9 @@ IMAGE_MODELS = (
             ("qwen_image_2.1_vae_bf16.safetensors", "vae", 675509688),
         ),
         "runtime": "comfyui",
+        "loader": "UnetLoaderGGUF",
+        "clip_type": "qwen_image",
+        "graph": "qwen_image",
     },
 )
 

@@ -1,0 +1,29 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -6828,3 +6828,26 @@
+         print(f"  optin      NOT ON ({type(exc).__name__}) - the uncensored model choices are off")
+         print("             until jarvis_optin_models.py is back: run apply-patches.ps1 again")
++    # pictures.patch ("Ask for a picture, and keep it", the owner's decision of
++    # 2026-09-27; docs/JARVIS-API.md section 129): GET /api/pictures,
++    # GET /api/pictures/file and POST /api/pictures. A prompt the owner typed,
++    # drawn by a program on this PC (ComfyUI or stable-diffusion.cpp, a setting),
++    # saved in a folder on this PC with a sidecar holding what made it. Nothing
++    # leaves the PC and no route sends a picture anywhere, so this needs NO
++    # approval card - the same shape as a timer or a note. Off until the owner
++    # turns it on (the second card is shared with the everyday model).
++    #
++    # It joins the install CHAIN, appended to the block above, and sits
++    # immediately BEFORE plugin-loader.patch - which must stay LAST OF ALL
++    # (test_gate_touches.py, test_uncensored_optins.py): every core patch goes
++    # above the loader, and only drop-in folders come after it. Because this
++    # block is appended to another install block, plugin-loader.patch's own hunk
++    # anchors on THIS block's last two lines - which is the patch
++    # tools/check_plugins.py says the hook must anchor on.
++    try:
++        import jarvis_pictures
++        print(jarvis_pictures.install(Handler, origin_ok=_origin_ok,
++                                      token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  pictures   NOT ON ({type(exc).__name__}) - asking for a picture is off")
++        print("             until jarvis_pictures.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.

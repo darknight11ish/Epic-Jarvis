@@ -872,6 +872,15 @@
         <section class="view view-panes" id="view-projects" role="tabpanel"
                  aria-labelledby="tab-projects" hidden>
           <div class="panes" id="progress-root" data-menu-id="brain.projects.progress" data-menu-group="goals-projects"></div>
+          <!-- "Ask for a picture, and keep it" (the owner's decision of
+               2026-09-27; pictures-panel.js draws it, JARVIS-API section 129).
+               The PC only: the phone reaches the same gallery through its own
+               Pictures plate. The prompts are the owner's own words, so the
+               gallery hides under "Hide memory lists and chat history" and App
+               lock, and not one picture's bytes are fetched while it is hidden.
+               Making a picture needs no approval card: it is a new file in a
+               folder on this PC, from words the owner typed. -->
+          <div class="panes" id="pictures-root" data-menu-id="brain.projects.pictures" data-menu-group="goals-projects"></div>
           <div class="panes" id="projects-root"></div>
         </section>
 

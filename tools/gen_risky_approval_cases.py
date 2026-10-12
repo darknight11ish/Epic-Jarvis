@@ -34,11 +34,24 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-BACKEND = ROOT / "backend"
 FIXTURE = ROOT / "jarvis-desktop" / "tests" / "fixtures" / "risky-approval-cases.json"
 PHONE_FIXTURE = (ROOT / "jarvis-client" / "app" / "src" / "test" / "resources" / "contract"
                  / "risky-approval-cases.json")
 COPIES = (FIXTURE, PHONE_FIXTURE)
+
+# WHICH BACKEND THIS MEASURES, and why it is not simply ROOT/"backend".
+#
+# `backend/test_owner_check.py` runs this file as a subprocess from inside
+# `backend/run_suites.py`, which sets JARVIS_BACKEND to the folder the suites
+# are really exercising (a temporary copy of every shipped module, so the
+# shipped LAYOUT is tested rather than this repository's). Hard-coding
+# ROOT/"backend" here made the two disagree: the suite imported one
+# `jarvis_owner_check` and this file built its rows with another, so the check
+# reported the fixture out of date while running the tool by hand said it was
+# current (measured 2026-10-10). `_where` is the one answer both use.
+sys.path.insert(0, str(ROOT / "backend"))
+from _where import BACKEND  # noqa: E402
+
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 

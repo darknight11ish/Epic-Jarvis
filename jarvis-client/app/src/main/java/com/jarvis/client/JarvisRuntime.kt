@@ -36,6 +36,7 @@ import com.jarvis.client.net.SignedApproval
 import com.jarvis.client.net.StatusInfo
 import com.jarvis.client.net.Tasks
 import com.jarvis.client.net.VersionInfo
+import com.jarvis.client.net.WorkSetups
 import com.jarvis.client.platform.UpdateChecker
 import com.jarvis.client.widget.ApprovalWidget
 import com.jarvis.client.widget.QuickLinkWidget
@@ -449,6 +450,23 @@ object JarvisRuntime {
     private val _hardware = MutableStateFlow<Hardware.Read>(Hardware.Read.NotAsked)
     val hardware: StateFlow<Hardware.Read> = _hardware.asStateFlow()
 
+    /**
+     * `/api/work`: the five work setups for THIS PC's cards, each explained in
+     * plain words before the owner starts ([WorkSetups]). Read under the
+     * Hardware plate and after every choice and step. Nothing here switches a
+     * model: the one step a setup can need is the existing `/api/models/switch`
+     * card ([WorkSetups.SWITCH_PATH], posted through `api.hardwarePost`).
+     */
+    private val _workSetups = MutableStateFlow<WorkSetups.Read>(WorkSetups.Read.NotAsked)
+    val workSetups: StateFlow<WorkSetups.Read> = _workSetups.asStateFlow()
+
+    /**
+     * What Jarvis offers for the owner's own words ([WorkSetups.Offer]), or
+     * null. Shown once, as a suggestion; it never changes a model by itself.
+     */
+    private val _workOffer = MutableStateFlow<WorkSetups.Offer?>(null)
+    val workOffer: StateFlow<WorkSetups.Offer?> = _workOffer.asStateFlow()
+
     private val _power = MutableStateFlow("active")
     val power: StateFlow<String> = _power.asStateFlow()
 
@@ -482,6 +500,73 @@ object JarvisRuntime {
 
     private val _pending = MutableStateFlow<List<PendingItem>>(emptyList())
     val pending: StateFlow<List<PendingItem>> = _pending.asStateFlow()
+
+    /**
+     * How much of an approval card is shown at first (the owner's request of
+     * 2026-10-09; [com.jarvis.client.net.CardSummary], backend
+     * `jarvis_card_summary.py`).
+     *
+     * THE SETTING IS THE PC'S, kept in card-prefs.json beside appearance.json,
+     * and read over `GET /api/card-prefs` - read again on every refresh of the
+     * approval queue, so a change made on the PC (or by asking Jarvis) is
+     * picked up here without a restart, and a click that arrives from the PC's
+     * own event stream is honoured too.
+     *
+     * The default until a read answers is "start short": nothing is guessed
+     * about the owner's choice, and a PC with no such route draws cards as it
+     * always did.
+     */
+    private val _cardMode = MutableStateFlow(com.jarvis.client.net.CardSummary.DEFAULT)
+    val cardMode: StateFlow<String> = _cardMode.asStateFlow()
+
+    /** The control's own words, as the PC last sent them. */
+    private val _cardMoreLabel = MutableStateFlow(com.jarvis.client.net.CardSummary.MORE_LABEL)
+    val cardMoreLabel: StateFlow<String> = _cardMoreLabel.asStateFlow()
+
+    /** True when the PC says a real choice is saved, rather than the default in use. */
+    private val _cardModeStored = MutableStateFlow(false)
+    val cardModeStored: StateFlow<Boolean> = _cardModeStored.asStateFlow()
+
+    /**
+     * Reads the PC's card setting. A failure leaves the last value alone and is
+     * never fatal: this only decides which words a card draws, so a PC that
+     * cannot answer must not stop a card from being decided.
+     */
+    suspend fun refreshCardPrefs() {
+        when (val r = api.cardPrefs()) {
+            is ApiResult.Ok -> {
+                val view = com.jarvis.client.net.CardSummary.parse(r.value) ?: return
+                _cardMode.value = view.mode
+                _cardMoreLabel.value = view.moreLabel
+                _cardModeStored.value = view.stored
+            }
+            is ApiResult.Failed -> Log.w(TAG, "could not read the card setting: ${r.error}")
+        }
+    }
+
+    /**
+     * `GET /api/card-prefs` for the Settings row, which draws the two choices
+     * itself (ui/screens/ApprovalCardsPlate.kt). A read; 404 is an older PC.
+     */
+    suspend fun cardPrefsRead(): ApiResult<JsonObject> = api.cardPrefs()
+
+    /**
+     * Choose how much of a card is shown at first. COSMETIC, so it is at once
+     * in both directions with no approval card and no `actionBlocker` - it
+     * approves nothing, starts nothing and reaches nothing, which is the same
+     * rule the animal options and "How Jarvis talks" follow.
+     *
+     * @return the sentence to show, which is the PC's own ([CardSummary.said]).
+     */
+    suspend fun setCardMode(mode: String): String {
+        val body = com.jarvis.client.net.CardSummary.modeBody(mode)
+            ?: return "That is not one of the two choices."
+        val said = com.jarvis.client.net.CardSummary.said(api.cardPrefsPost(body))
+        // Read back rather than assume: the lines on the screen then say what
+        // the PC really holds, and a refusal changes nothing here.
+        refreshCardPrefs()
+        return said
+    }
 
     /**
      * The ids whose approve or deny is in flight right now.
@@ -968,7 +1053,7 @@ object JarvisRuntime {
      * the scrubbed technical detail are kept in [problem] for Home's notice.
      * [handshake]: `GET /api/version`, where a 404 means "not Jarvis at all".
      */
-    private fun describe(e: ApiError, handshake: Boolean = false): String {
+    internal fun describe(e: ApiError, handshake: Boolean = false): String {
         if (e == ApiError.AlreadyHandled) return "Already handled elsewhere."
         val plain = com.jarvis.client.net.PlainErrors.forApiError(e, handshake)
         // A refused key whose 401 said why (docs/PAIRING-DESIGN.md §5.3):
@@ -1413,6 +1498,13 @@ object JarvisRuntime {
                 val hw = _hardware.value
                 if (hw is Hardware.Read.Loaded && hw.status.applying != null) {
                     scope.launch { refreshHardware() }
+                }
+                // A work setup's step whose card was up: a decided card is the
+                // moment the model is really switched, and whether the setup's
+                // model is the running one changes with it. No event for it.
+                val ws = _workSetups.value
+                if (ws is WorkSetups.Read.Loaded && ws.status.chosen != null) {
+                    scope.launch { refreshWorkSetups() }
                 }
                 // And the voice cards: "hey Jarvis" ON and a voice training.
                 // Neither has an event of its own either, so without this the
@@ -2113,6 +2205,71 @@ object JarvisRuntime {
         val result = api.hardwarePost(Hardware.MEASURE_PATH, "{}")
         refreshHardware()
         return Hardware.replyLine(result)
+    }
+
+    // ------------------------------------------------------- work setups ----
+
+    /** Re-reads `/api/work`. Reads only; a failed read is said in words. */
+    suspend fun refreshWorkSetups() {
+        _workSetups.value = WorkSetups.readOf(api.workSetups())
+    }
+
+    /**
+     * Chooses a work setup, or forgets the choice ([id] null). Choosing changes
+     * no model and no setting on the PC: it remembers the preference and lists
+     * the one step that would switch a model. Held on a stale link (rule 4);
+     * forgetting is not - it only narrows what runs.
+     */
+    suspend fun chooseWorkSetup(id: String?): String {
+        if (id != null) actionBlocker()?.let { return it }
+        val result = api.workPost(WorkSetups.CHOOSE_PATH, WorkSetups.chooseBody(id))
+        refreshWorkSetups()
+        return WorkSetups.replyLine(result)
+    }
+
+    /**
+     * Asks for the ONE step a chosen setup needs - the model switch - and
+     * nothing else. The route and body are read from the PC's own answer
+     * ([WorkSetups.stepRequest]) and posted through the existing switch path,
+     * so the card it raises is the card the owner already knows. There is no
+     * "do them all" and no download from here.
+     */
+    suspend fun workSetupStep(id: String): String {
+        actionBlocker()?.let { return it }
+        refreshWorkSetups()
+        val status = (_workSetups.value as? WorkSetups.Read.Loaded)?.status
+            ?: return WorkSetups.readLine(_workSetups.value) ?: WorkSetups.UPDATE
+        val setup = status.setup(id)
+            ?: return "That work setup is not there any more. Open it again."
+        return when (val ask = WorkSetups.stepRequest(status, setup)) {
+            is WorkSetups.StepAsk.No -> ask.reason
+            is WorkSetups.StepAsk.Post -> {
+                val result = api.hardwarePost(ask.route, ask.body)
+                if (result is ApiResult.Ok) refreshPending()
+                refreshHardware()
+                refreshWorkSetups()
+                Hardware.replyLine(result)
+            }
+        }
+    }
+
+    /**
+     * Asks the PC which setup to offer for the owner's own words, and keeps the
+     * answer for one look. It SWITCHES NOTHING: the PC's answer carries
+     * `switched: false`, and acting on the offer is the owner's tap. A PC whose
+     * backend predates work.patch answers nothing and nothing is shown.
+     */
+    suspend fun offerWorkSetup(words: String): WorkSetups.Offer? {
+        if (words.isBlank()) return null
+        val result = api.workPost(WorkSetups.RECOMMEND_PATH, WorkSetups.recommendBody(words))
+        val offer = (result as? ApiResult.Ok)?.value?.let { WorkSetups.parseOffer(it) }
+        _workOffer.value = offer?.takeIf { it.offered }
+        return _workOffer.value
+    }
+
+    /** The offer has been read (or dismissed). Nothing on the PC changes. */
+    fun clearWorkOffer() {
+        _workOffer.value = null
     }
 
     // ------------------------------------------------------- web search ----
@@ -3236,6 +3393,13 @@ object JarvisRuntime {
                     }
                 }
                 _absent.value = _absent.value - "approvals"
+                // The PC's own card setting (the owner's request of
+                // 2026-10-09): read again only while a card is actually
+                // waiting, so an idle phone makes no extra request for a
+                // preference nothing is drawn with - and a change made on the
+                // PC lands with the next refresh of the queue, without a
+                // restart.
+                if (items.isNotEmpty()) refreshCardPrefs()
                 // What is on screen is now what the desktop holds. This is the
                 // only thing that earns the gate the right to open.
                 refreshedSinceOpen = true
@@ -3445,6 +3609,7 @@ object JarvisRuntime {
                 val secondCardRead = async { refreshSecondCard() }
                 val bigModelRead = async { refreshBigModel() }
                 val hardwareRead = async { refreshHardware() }
+                val workRead = async { refreshWorkSetups() }
                 val deepRead = async { refreshDeep() }
                 val (computeData, computeRead) = compute.await()
                 val (memoryData, memoryRead) = memory.await()
@@ -3500,6 +3665,7 @@ object JarvisRuntime {
                 secondCardRead.await()
                 bigModelRead.await()
                 hardwareRead.await()
+                workRead.await()
                 deepRead.await()
             }
         } finally {
@@ -5228,11 +5394,56 @@ object JarvisRuntime {
             ring = true,
             key = tag,
             timeoutMs = com.jarvis.client.net.FindPhone.ringMillis(ring),
+            // A job on the same schedule: if the PC stops listing it, the ring
+            // goes with it rather than ringing on for ever.
+            scheduleKind = com.jarvis.client.net.FindPhone.EVENT,
         )
     }
 
     /** `GET /api/schedule`. A read: never held. */
-    suspend fun schedule(): ApiResult<JsonObject> = api.schedule()
+    suspend fun schedule(): ApiResult<JsonObject> {
+        val r = api.schedule()
+        // A read that SUCCEEDED is the only thing that may take a "went off"
+        // notification away for a job the PC no longer lists - never a read
+        // that failed, which would make a still-true notice vanish because the
+        // link blipped (the owner's report of 2026-10-11).
+        if (r is ApiResult.Ok) reconcileScheduleNotifications(r.value)
+        return r
+    }
+
+    /**
+     * Takes away every "went off" notification whose job the PC no longer
+     * lists AT ALL (the owner's report of 2026-10-11, in its worst form: a job
+     * deleted on the PC while the phone still showed it kept ringing for
+     * ever, because the PC's `changed` event - the only cancellation this app
+     * had - is never sent for a job that no longer exists).
+     *
+     * Called only with the body of a `GET /api/schedule` that SUCCEEDED. The
+     * job ids come from the active jobs, the open to-do items and the ones
+     * that went off in the last hour: a job in none of those lists is gone.
+     * A read that failed never calls this, so "the job is gone" and "I could
+     * not ask" can never be confused.
+     *
+     * It can only ever touch a schedule notification: [ScheduleNotifier.posted]
+     * hands back just the notifications this app posted on its own id that
+     * carry a schedule kind, so an approval card, the Jarvis link, "Live
+     * ended" and a morning briefing's notice are never cancelled. A job
+     * merely snoozed, deleted or done while its notification was up is
+     * already handled by the `changed` event and by [scheduleAct] - this adds
+     * the one case those cannot reach.
+     */
+    private fun reconcileScheduleNotifications(body: JsonObject) {
+        val context = appContext ?: return
+        val view = com.jarvis.client.net.Schedule.parse(body) ?: return
+        val known = com.jarvis.client.net.Schedule.knownIds(view)
+        val gone = com.jarvis.client.net.Schedule.stopsWhenJobGone(
+            com.jarvis.client.service.ScheduleNotifier.posted(context), known,
+        )
+        for ((tag, jobId) in gone) {
+            Log.i(TAG, "a schedule notification for $jobId is still up, but the PC no longer lists that job: taking it away")
+            runCatching { com.jarvis.client.service.ScheduleNotifier.cancel(context, jobId, tag) }
+        }
+    }
 
     /**
      * ONE job: pause, resume, delete or done. No card - none of them can make
@@ -6243,6 +6454,9 @@ object JarvisRuntime {
                 // An alarm keeps ringing until seen (2026-09-25).
                 ring = com.jarvis.client.net.Schedule.rings(kind, urgent = false),
                 quiet = late,
+                // A job "going off": a notification whose job the PC no longer
+                // lists at all is taken away by the reconcile pass.
+                scheduleKind = kind,
             )
         }
     }
@@ -6283,6 +6497,7 @@ object JarvisRuntime {
                 ring = if (late) false else com.jarvis.client.net.Schedule.rings(kind, urgent),
                 key = key,
                 quiet = late,
+                scheduleKind = kind,
             )
         }
     }
@@ -7796,6 +8011,86 @@ object JarvisRuntime {
             is ApiResult.Ok -> com.jarvis.client.net.Progress.saved(r.value)
             is ApiResult.Failed -> com.jarvis.client.net.Progress.Outcome(
                 false, "Not changed. " + describe(r.error), null,
+            )
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // "Ask for a picture, and keep it" (the owner's decision of 2026-09-27;
+    // docs/JARVIS-API.md section 129; [com.jarvis.client.net.Pictures] and
+    // ui/screens/PicturesPlate.kt).
+    //
+    // NOTHING LEAVES THE OWNER'S OWN MACHINES. The prompt is typed on this
+    // phone and drawn by a program on the PC; "Save to my phone" writes the
+    // picture into THIS phone's own Pictures collection over Tailscale or
+    // Meshnet, which is the owner's own device and not a way out of the PC.
+    //
+    // MAKING ONE NEEDS NO APPROVAL CARD: a picture is a new file in a folder
+    // on the PC, from words the owner typed - the same shape as a timer or a
+    // note. Drawing one is still held on a stale link (rule 4), because it
+    // does write a file.
+    //
+    // THE SWITCH, THE DRAWING PROGRAM AND THE FOLDER ARE THE PC'S. There is no
+    // call from here for any of them, and the backend refuses them from
+    // anywhere but the PC.
+    // ---------------------------------------------------------------------
+
+    /**
+     * The gallery: the folder, its size, the switch and every picture with its
+     * own prompt, seed and when it was made. A read; never held, never spoken,
+     * never put in a notification.
+     */
+    suspend fun pictures(): ApiResult<com.jarvis.client.net.Pictures.Reply> = api.pictures()
+
+    /**
+     * ONE picture's PNG bytes, for "Save to my phone". Refused while "Hide
+     * memory lists and chat history" is on, and the id is checked before
+     * anything is sent, so the phone can never ask the PC for another path.
+     */
+    suspend fun pictureBytes(id: String): ApiResult<ByteArray> {
+        com.jarvis.client.net.Pictures.filePath(id)
+            ?: return ApiResult.Failed(ApiError.Malformed(com.jarvis.client.net.Pictures.WORDS.getValue("unreadable")))
+        if (privateListsHidden) {
+            return ApiResult.Failed(
+                ApiError.Malformed(com.jarvis.client.net.Pictures.WORDS.getValue("hidden_short")),
+            )
+        }
+        return api.pictureBytes(id)
+    }
+
+    /**
+     * Draws ONE picture from the owner's own words and keeps it on the PC.
+     *
+     * NO CARD. Held on a stale link, and refused while the private lists are
+     * hidden (the gallery's own words are not on screen then, so there is
+     * nothing to ask "another" of). The PC's own sentence comes back as sent:
+     * a plain "start it on this PC", "nothing is set up yet" or "the switch is
+     * off" - never a code, never a blank.
+     */
+    suspend fun makePicture(prompt: String): com.jarvis.client.net.PicturesMake {
+        val body = com.jarvis.client.net.Pictures.makeBody(prompt)
+            ?: return com.jarvis.client.net.PicturesMake(
+                false, com.jarvis.client.net.Pictures.WORDS.getValue("no_words"), null,
+            )
+        if (privateListsHidden) {
+            return com.jarvis.client.net.PicturesMake(
+                false, com.jarvis.client.net.Pictures.WORDS.getValue("hidden_short"), null,
+            )
+        }
+        actionBlocker()?.let { return com.jarvis.client.net.PicturesMake(false, it, null) }
+        return when (val r = api.makePicture(body)) {
+            is ApiResult.Ok -> {
+                // The PC's own sentence ("Drawn in 41.2 seconds and saved as
+                // ..."), shown word for word. Read as a plain string, never
+                // rebuilt here.
+                val words = com.jarvis.client.net.Pictures.madeWords(r.value)
+                com.jarvis.client.net.PicturesMake(
+                    true, words.ifBlank { "Drawn and kept on your PC." },
+                    com.jarvis.client.net.Pictures.madeId(r.value),
+                )
+            }
+            is ApiResult.Failed -> com.jarvis.client.net.PicturesMake(
+                false, describe(r.error), null,
             )
         }
     }

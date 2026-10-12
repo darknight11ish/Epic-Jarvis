@@ -8,7 +8,7 @@ this folder into the backend's `jarvis_plugins\` folder (or run
 
 - Module the loader calls: `jarvis_picture_card.install()` (takes the core's Handler)
 - The patch this replaces: `backend/picture-card.patch`
-- Position in the old patch stack: 136 of 138
+- Position in the old patch stack: 138 of 142
 
 The module itself is one of the ones this repository already ships
 (`backend/jarvis_picture_card.py`), copied into the backend by

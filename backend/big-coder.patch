@@ -3,7 +3,7 @@
 @@ -2601,3 +2601,20 @@
 +        if path == "/api/big-coder":
 +            # big-coder.patch - the 30B coder: both cards, with Jarvis paused
-+            # (jarvis_big_coder.py, JARVIS-API section 125). READ-ONLY: the
++            # (jarvis_big_coder.py, JARVIS-API section 126). READ-ONLY: the
 +            # opt-in switch, what is loaded where right now, and what a start
 +            # would touch. It changes nothing, loads nothing, downloads
 +            # nothing, and every call is loopback.

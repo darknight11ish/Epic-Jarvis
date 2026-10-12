@@ -595,9 +595,18 @@ def t_listed_and_applies():
     check("...so the loader stays LAST, which is the repository's own rule for it "
           "(everything after the loader must be a drop-in folder, never a core patch)",
           order[-1] == "plugin-loader.patch", order[-1])
-    check("...and the loader's own hunk was re-anchored onto THIS patch's printed lines",
-          "until jarvis_optin_models.py is back"
+    # The anchor moved on 2026-10-11, and this patch is not at fault: the "ask
+    # for a picture" patch (pictures.patch, section 129) joined the install
+    # CHAIN between this patch's block and the loader, so the loader's hunk now
+    # finds THAT block's last two printed lines. Which patch it must anchor on
+    # is derived from the patch text by tools/check_plugins.py, which fails if
+    # the two ever disagree - so this check names the derived answer rather than
+    # losing its teeth: the loader is anchored on the block it now follows, not
+    # invented from nothing.
+    check("...and the loader's own hunk was re-anchored onto the block it now follows",
+          "until jarvis_pictures.py is back"
           in (HERE / "plugin-loader.patch").read_text(encoding="utf-8"),
+          "pictures.patch joined the chain between this patch and the loader; "
           "tools/check_plugins.py derives that anchor, and fails if it drifts")
     check("a core patch in front of the loader is named in the plug-in catalogue",
           "uncensored-optins.patch" in (HERE.parent / "plugins" / "registry.json")

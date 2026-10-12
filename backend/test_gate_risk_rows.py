@@ -129,6 +129,15 @@ def t_the_patch_is_registered_last():
              # touch jarvis_gate.py at all, so it rewrites nothing this patch
              # wrote.
              "plugin-loader.patch",
+             # card-prefs.patch (2026-10-10, "cards read short") sits after
+             # gate-touches.patch and before picture-card.patch (so, before
+             # plugin-loader.patch too) and has exactly ONE hunk, in
+             # jarvis_hud.py: fifteen ADDED lines, an install block straight
+             # after animal.patch's own. It removes no line and
+             # does not touch jarvis_gate.py at all - no gate list entry, no
+             # risk row, no _TOOL_ACTIONS line - so it rewrites nothing the
+             # two stale rows this patch removes ever sat near.
+             "card-prefs.patch",
              # gate-touches.patch (2026-10-10) is the one name here that DOES
              # touch jarvis_gate.py: two hunks, its own PROTECTED block (what an
              # action TOUCHES, rather than the words printed on its card) and
@@ -154,7 +163,21 @@ def t_the_patch_is_registered_last():
              # adds no _TOOL_ACTIONS line and does not touch register_approval_key, so
              # it cannot rewrite a line this patch wrote.
              "uncensored-optins.patch",
+             # work.patch (2026-10-10) comes after it too: exactly TWO hunks, both
+             # in jarvis_hud.py - one GET route in the read-only set and one POST
+             # block, each anchored on a route that predates it. It removes no line
+             # and touches jarvis_gate.py not at all - no gate list entry, no risk
+             # row, no _TOOL_ACTIONS line - so it cannot rewrite the stale rows
+             # this patch removes.
+             "work.patch",
              "picture-card.patch",
+             # pictures.patch (2026-10-11) is appended last and has exactly ONE
+             # hunk, in jarvis_hud.py: an install block at the end of the
+             # install chain. It removes no line and does not touch
+             # jarvis_gate.py at all - no gate list entry, no risk row, no
+             # _TOOL_ACTIONS line - so it rewrites nothing the two stale rows
+             # this patch removes.
+             "pictures.patch",
              # big-coder.patch (2026-10-11) is appended after it, before
              # plugin-loader.patch: two ADDED route blocks in jarvis_hud.py, no
              # gate list, no tier row and no _RISK row.

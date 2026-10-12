@@ -1,0 +1,54 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -2601,3 +2601,20 @@
++        if path == "/api/big-coder":
++            # big-coder.patch - the 30B coder: both cards, with Jarvis paused
++            # (jarvis_big_coder.py, JARVIS-API section 125). READ-ONLY: the
++            # opt-in switch, what is loaded where right now, and what a start
++            # would touch. It changes nothing, loads nothing, downloads
++            # nothing, and every call is loopback.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                import jarvis_big_coder
++            except Exception as exc:
++                return self._send(503, {"available": False,
++                                        "error": f"{type(exc).__name__}: {exc}"})
++            code, out = jarvis_big_coder.handle_get()
++            return self._send(code, out)
+         if path == "/api/data-health":
+             # data-health.patch - "Data health in the preflight" (feasibility
+             # I97, docs/FEASIBILITY-AUDIT-2026-09-26.md: "Small, read-only" /
+@@ -4317,3 +4334,30 @@
++        if route == "/api/big-coder":
++            # big-coder.patch - the one write. {"on": true|false} sets the
++            # opt-in switch (ON is ONE approval card, change_own_config, tier
++            # "ask"; OFF is immediate). {"action": "start"|"stop"} runs the
++            # mode: it announces the pause, pauses BOTH live lanes, proves from
++            # /api/ps that they went, loads the model on both cards at the
++            # largest zero-spill context measured, and puts both lanes back
++            # exactly as they were when it stops. A lane that will not pause
++            # means NOTHING is loaded - it never runs beside a lane. No new
++            # gate action, no download, nothing leaves this PC.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                body = json.loads(_read_body(self) or b"{}")
++            except (ValueError, json.JSONDecodeError) as exc:
++                return self._send(400, {"error": str(exc)})
++            try:
++                import jarvis_big_coder
++            except Exception as exc:
++                return self._send(503, {"available": False,
++                                        "error": f"{type(exc).__name__}: {exc}"})
++            host = str((getattr(self, "client_address", None) or ("",))[0])
++            by = "this PC" if host in ("127.0.0.1", "::1") else "another device"
++            code, out = jarvis_big_coder.handle_post(body, by=by)
++            return self._send(code, out)
+         if route == "/api/memory/decide":
+             if not _origin_ok(self):
+                 return self._send(403, {"error": "cross-origin request refused"})

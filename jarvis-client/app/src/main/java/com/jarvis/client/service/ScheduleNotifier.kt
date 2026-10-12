@@ -68,6 +68,40 @@ object ScheduleNotifier {
     /** The kinds that carry a Snooze (jarvis_schedule.SNOOZABLE). */
     private val SNOOZABLE = com.jarvis.client.net.Schedule.SNOOZABLE
 
+    /**
+     * Every "went off" notification Android says is still up, as (tag, job id).
+     *
+     * Read from Android itself rather than from a set kept here, so a
+     * notification posted by an EARLIER process is seen too - that is exactly
+     * the case that bit the owner on 2026-10-11 (the job was deleted on the PC
+     * while the phone kept ringing, and nothing on this side knew).
+     *
+     * Only notifications this app posted on [NOTIFICATION_ID], carrying a
+     * schedule kind and a job id. An approval card, the Jarvis link, "Live
+     * ended" and every other notification are a different id, and a morning
+     * briefing's notice carries no kind, so none of them is ever touched.
+     */
+    fun posted(context: Context): List<Pair<String, String>> {
+        val manager = NotificationManagerCompat.from(context)
+        val out = ArrayList<Pair<String, String>>()
+        runCatching {
+            for (s in manager.activeNotifications) {
+                if (s.id != NOTIFICATION_ID) continue
+                val tag = s.tag ?: continue
+                // Only a job "going off": a briefing's notice carries no kind
+                // and is never reconciled away.
+                if (s.notification.extras.getString(EXTRA_SCHEDULE_KIND).isNullOrEmpty()) continue
+                // The job's own id: for a timer, alarm or reminder it is the
+                // job id; for a "tell me when" MATCH it is the composed
+                // `id#match@…` key, whose job is the id before the separator.
+                val key = s.notification.extras.getString(EXTRA_JOB_ID) ?: continue
+                if (key.isEmpty()) continue
+                out.add(tag to com.jarvis.client.net.Schedule.jobIdFromTag(key))
+            }
+        }.onFailure { Log.w(TAG, "could not read the live notifications", it) }
+        return out
+    }
+
     /** The job id a Snooze action carries. */
     const val EXTRA_JOB_ID = "com.jarvis.client.extra.JOB_ID"
 
@@ -75,12 +109,24 @@ object ScheduleNotifier {
     const val EXTRA_TAG = "com.jarvis.client.extra.NOTIFICATION_TAG"
 
     /**
+     * The PC's kind word for a schedule notification ("timer", "alarm",
+     * "reminder", "tellme"), put on the notification by [post] and read back
+     * by [posted] to tell a job "going off" apart from every other notice this
+     * app posts on the same id (a morning briefing carries no kind).
+     */
+    const val EXTRA_SCHEDULE_KIND = "com.jarvis.client.extra.SCHEDULE_KIND"
+
+    /**
      * Takes one job's "went off" notification away: after a Snooze went
      * through, and when the PC says the job changed - snoozed, deleted or
      * done somewhere else (bug audit #1). A ringing one stops with it.
+     *
+     * [tag] names the exact notification when it is not the job id (a
+     * "tell me when" match's own key, whose job is the id before the
+     * `#match@` separator).
      */
-    fun cancel(context: Context, jobId: String) {
-        runCatching { NotificationManagerCompat.from(context).cancel(jobId, NOTIFICATION_ID) }
+    fun cancel(context: Context, jobId: String, tag: String = jobId) {
+        runCatching { NotificationManagerCompat.from(context).cancel(tag, NOTIFICATION_ID) }
     }
 
     /** Distinct per key, so no two notifications share a PendingIntent. */
@@ -139,13 +185,24 @@ object ScheduleNotifier {
          * stays until seen, as an alarm does.
          */
         timeoutMs: Long? = null,
+        /**
+         * A SCHEDULE notification, in the words the PC used for its kind
+         * ("timer", "alarm", "reminder", "tellme") - empty for anything that
+         * is not one (a morning briefing). It is put on the notification, and
+         * [posted] hands back only the ones that carry it, so
+         * `JarvisRuntime.reconcileScheduleNotifications` can never take away a
+         * briefing's notice because its job is not in `GET /api/schedule`.
+         */
+        scheduleKind: String = "",
     ): Boolean {
         if (!allowed(context)) {
             Log.w(TAG, "POST_NOTIFICATIONS is not granted, so a $kind that went off is not shown")
             return false
         }
         if (ring && !quiet) {
-            return postRinging(context, key, jobId, kind, title, text, lockScreen, openBriefing, timeoutMs)
+            return postRinging(
+                context, key, jobId, kind, title, text, lockScreen, openBriefing, timeoutMs, scheduleKind,
+            )
         }
         val n = NotificationCompat.Builder(context, SCHEDULE_CHANNEL_ID)
             // Stays on this phone unless the owner turned on "Show
@@ -165,6 +222,15 @@ object ScheduleNotifier {
             .setAutoCancel(true)
             .setSilent(quiet)
             .setContentIntent(open(context, key, openBriefing))
+            // The job this notification belongs to, on the notification
+            // itself: `posted` reads it back so a notification whose job the
+            // PC no longer lists can be taken away even after a restart.
+            .addExtras(
+                android.os.Bundle().apply {
+                    putString(EXTRA_JOB_ID, jobId)
+                    putString(EXTRA_SCHEDULE_KIND, scheduleKind)
+                },
+            )
             .apply {
                 if (kind in SNOOZABLE && !openBriefing && !quiet) {
                     addAction(
@@ -172,6 +238,18 @@ object ScheduleNotifier {
                         com.jarvis.client.net.Schedule.SNOOZE,
                         snoozeIntent(context, jobId, key),
                     )
+                }
+                // A way to take this notification away without opening
+                // anything (the owner's report of 2026-10-11: on the desktop
+                // "theres not turn off alarm, only a snooze", and the same
+                // shape was measured here - a timer's notification carried
+                // Snooze and nothing else, so it could only be snoozed or
+                // tapped through into the app). Stop is the ringing path's own
+                // button: it silences and removes exactly this notification
+                // and does nothing else. The quiet/late notice below keeps NO
+                // action - that is the owner's decision of 2026-09-26.
+                if (!quiet && !openBriefing) {
+                    addAction(0, STOP, stopIntent(context, key))
                 }
             }
             .build()
@@ -205,6 +283,7 @@ object ScheduleNotifier {
         lockScreen: String,
         openBriefing: Boolean,
         timeoutMs: Long? = null,
+        scheduleKind: String = "",
     ): Boolean {
         val n = NotificationCompat.Builder(context, ALARM_CHANNEL_ID)
             // Stays on this phone unless the owner turned on "Show
@@ -222,6 +301,12 @@ object ScheduleNotifier {
             .setOngoing(true)
             .setAutoCancel(true)
             .setContentIntent(open(context, key, openBriefing))
+            .addExtras(
+                android.os.Bundle().apply {
+                    putString(EXTRA_JOB_ID, jobId)
+                    putString(EXTRA_SCHEDULE_KIND, scheduleKind)
+                },
+            )
             .addAction(0, STOP, stopIntent(context, key))
             .apply {
                 // "Ring my phone": it stops by itself after its time.

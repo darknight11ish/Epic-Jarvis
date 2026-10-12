@@ -1,0 +1,25 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -3670,6 +3670,22 @@
+     except Exception as exc:
+         print(f"  plugins    NOT ON ({type(exc).__name__}) - drop-in modules are off")
+         print("             until jarvis_plugins.py is back: run apply-patches.ps1 again")
++    # pictures.patch ("Ask for a picture, and keep it", the owner's decision of
++    # 2026-09-27; docs/JARVIS-API.md section 124): GET /api/pictures,
++    # GET /api/pictures/file and POST /api/pictures. A prompt the owner typed,
++    # drawn by a program on this PC (ComfyUI or stable-diffusion.cpp, a setting),
++    # saved in a folder on this PC with a sidecar holding what made it. Nothing
++    # leaves the PC and there is no route that sends a picture anywhere, so this
++    # needs NO approval card - the same shape as a timer or a note. Off until the
++    # owner turns it on (the second card is shared with the everyday model).
++    # Wrapped round Handler here, before anything listens, like the blocks above.
++    try:
++        import jarvis_pictures
++        print(jarvis_pictures.install(Handler, origin_ok=_origin_ok,
++                                      token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  pictures   NOT ON ({type(exc).__name__}) - asking for a picture is off")
++        print("             until jarvis_pictures.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")

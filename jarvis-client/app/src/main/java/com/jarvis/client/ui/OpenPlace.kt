@@ -50,6 +50,11 @@ object OpenPlace {
         // "Animal options" is a card of its own on the desktop; on the phone it
         // is inside Appearance, so the same row is where it opens.
         "animal-options" to Where.Go(Screen.SETTINGS, "appearance-card"),
+        // "Approval cards" (the owner's request of 2026-10-09): its own row on
+        // Settings, right under Appearance, and the setting itself is the PC's
+        // (GET/POST /api/card-prefs) - so "open approval cards" lands on the
+        // row that changes it.
+        "approval-cards" to Where.Go(Screen.SETTINGS, "approval-cards"),
         "manner" to Where.Go(Screen.SETTINGS, "manner"),
         "web-search" to Where.Go(Screen.SETTINGS, "web-search"),
         // The prompt coach's master switch (docs/PROMPT-COACH-DESIGN.md,
@@ -136,6 +141,15 @@ object OpenPlace {
         // sat in [PC_ONLY] instead, so "open spending" answered "only in
         // Jarvis on your PC" with the plate one tap away.
         "spending" to Where.Go(Screen.BRAIN, "spending"),
+        // "Pictures" (the owner's decision of 2026-09-27; JARVIS-API section
+        // 129): the registry's Section for "Making pictures" is a CARD on the
+        // PC's Settings screen - the switch, the drawing program and the folder
+        // are the PC's own and the backend refuses them from the phone. The
+        // phone's half of the feature IS the gallery, drawn on the Brain
+        // (BrainScreen.kt `item(key = "pictures")`, PicturesPlate.kt), so "open
+        // my pictures" lands there rather than on the top of Settings. This
+        // line is what OpenPlaceTest's new-section check requires.
+        "pictures" to Where.Go(Screen.BRAIN, "pictures"),
         // "Forget a time frame" (2026-09-28): not a settings section - the
         // place "forget what you learned last week" opens, named by the
         // answer's `open_brain` (net/ForgetRange.kt, ChatSession).
@@ -143,6 +157,17 @@ object OpenPlace {
         // "Switch off my work topic" (2026-09-30): not a settings section - the place
         // named by the answer's `open_brain` (net/Topics.kt, ChatSession).
         com.jarvis.client.net.Topics.PLACE to Where.Go(Screen.BRAIN, "topics"),
+        // The Galaxy (the owner's request of 2026-10-11: "the galaxy on the
+        // android app should be a direct button thr main screen if the app").
+        // Its phone home is the Brain's own "people-and-things" plate
+        // (`PeopleAndThingsSection`, EntitiesPlate.kt), so "open the galaxy"
+        // goes there rather than answering "only in Jarvis on your PC" - the
+        // same defect the "spending" line above was added to fix. The plate
+        // itself carries the "Hide memory lists and chat history" guard, so
+        // this opens the prompt while the lists are hidden and never shows a
+        // name.
+        "galaxy" to Where.Go(Screen.BRAIN, "people-and-things"),
+        "brain.tab.galaxy" to Where.Go(Screen.BRAIN, "people-and-things"),
     )
 
     /**

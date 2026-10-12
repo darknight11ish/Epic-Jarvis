@@ -1305,6 +1305,23 @@ $PATCHES = @(
     # own picture and input routes are untouched, and the desktop still names
     # none of them (tests/handoff.mjs and tests/handoff-front.mjs).
     'handoff-front.patch'
+    # The work setups (the owner asked, 2026-10-10): five combinations of
+    # local models, each chosen for a kind of work - building an Android app,
+    # admin and paperwork, long conversations and big documents, quick
+    # everyday use, and a coding specialist - each explaining in plain words
+    # what it is for, what it costs and what it is honestly worse at, before
+    # the owner starts. Jarvis offers the matching one when the owner talks
+    # about work they want to do. Needs jarvis_work.py copied in; without it
+    # the two routes answer 503 in plain words and nothing else changes.
+    #
+    # It OFFERS and it REMEMBERS, and that is all: choosing a setup changes no
+    # model and no setting, and every switch or download is still the existing
+    # /api/models/switch and /api/models/install card, tier "ask". No new gate
+    # action, no new tier, and no route of its own that could start a model.
+    # It sits after hardware.patch because it adds its routes beside that
+    # patch's, and after second-card-suggest.patch because the POST block it
+    # appends to is the one that patch last rewrote.
+    'work.patch'
     # --- the owner's uncensored opt-ins, BOTH halves -------------------------
     # jarvis_optin_models.py, the owner's OWN decision of 2026-10-10 (Decision
     # 5): (a) one clearly-labelled opt-in for fiction and role-play, never the
@@ -1385,6 +1402,27 @@ $PATCHES = @(
     # both ends, so a card's own words still never reach the rule. ONE hunk
     # pair, in jarvis_gate.py alone; see backend/README.md's own section.
     'gate-touches.patch'
+    # --- approval cards read short (the owner's request of 2026-10-09) -------
+    # "for approval cards, there should be a more simple summary, with an
+    # explain more button that expands the approval card total word length and
+    # explains the details more. and approval card preferences such as this
+    # should be changeable in the settings"
+    #
+    # ONE more install block of the same shape as animal.patch's, calling
+    # jarvis_card_summary.install() - GET/POST /api/card-prefs, the "Start
+    # short" or "Always show everything" choice, kept in card-prefs.json beside
+    # appearance.json and animal.json so both apps read the one setting.
+    # Nothing else in the core changes: the words the summary is built from are
+    # jarvis_card_words.py's (shipped whole, no patch), the two extra keys on a
+    # card's notice are approval-notice.patch's, and both are already in the
+    # stack above. Cosmetic, so it is at once with no card, either way.
+    #
+    # Its ONE hunk is that block, straight after animal.patch's own block in
+    # jarvis_hud.py's install chain - it removes no line and touches
+    # jarvis_gate.py not at all. It sits here, after gate-touches.patch and
+    # before picture-card.patch, and so before plugin-loader.patch, which MUST
+    # stay last of all (see backend/test_gate_touches.py).
+    'card-prefs.patch'
     # "Which card draws the pictures" (the owner's decision of 2026-10-10; docs/PICTURE-CARDS-DESIGN.md,
     # JARVIS-API section 124): GET and POST /api/picture-card. ONE hunk in jarvis_hud.py, an install block
     # on the OWNER's own lines just before the main socket is built, NOT inside the chain of install
@@ -1401,7 +1439,7 @@ $PATCHES = @(
     # beside the everyday chat (pictures on the 12 GB card with the chat stepping aside; on the 12 GB card
     # with the chat moved to the 8 GB card; small pictures on the 8 GB card with the chat untouched), each
     # its own switch, ALL OFF until the owner turns one on. It draws nothing (asking for a picture is
-    # jarvis_pictures.py's route, section 123), starts nothing (D:\Jarvis\ImageGen\Start-Pictures.ps1 does
+    # jarvis_pictures.py's route, section 129), starts nothing (D:\Jarvis\ImageGen\Start-Pictures.ps1 does
     # that, reading these settings) and needs no gate line and no card: it only chooses a card for a local
     # program and unloads/reloads the owner's own chat. Needs jarvis_picture_card.py copied in; without it,
     # or on any error, the banner says so and the routes are simply not there.
@@ -1413,6 +1451,25 @@ $PATCHES = @(
     # must stay last of all (test_gate_touches.py). It touches no gate list, adds
     # no tier row and no _RISK row, and wires no startup call.
     'big-coder.patch'
+    # "Ask for a picture, and keep it" (the owner's decision of 2026-09-27:
+    # "12 GB card: longer conversations with picture understanding first, and
+    # making pictures too (swapped in when asked, since both cannot sit on the
+    # card at once)"; docs/JARVIS-API.md section 129).
+    #
+    # It sits immediately BEFORE plugin-loader.patch, which must stay LAST OF
+    # ALL (test_gate_touches.py, test_uncensored_optins.py): every core patch
+    # goes above the loader, and only drop-in folders come after it. Its own
+    # context is the install block progress.patch wrote, so it needs the whole
+    # stack above it. It adds ONE more block of the same shape, calling
+    # jarvis_pictures.install(), and touches no other line of jarvis_hud.py. It
+    # cannot be applied on its own, and the dry run rehearses that before
+    # anything is changed.
+    #
+    # No gate file is touched, on purpose: a picture is a new file in a folder
+    # on this PC, drawn by a program on this PC, so making one needs no
+    # approval card (the same shape as a timer or a note). Sending a picture
+    # anywhere would be a new named way out of the PC, and no route here does.
+    'pictures.patch'
     'plugin-loader.patch'
 )
 
@@ -1485,6 +1542,7 @@ $SHIPPED = @(
     'jarvis_entities.py'         # the entity layer's optional local-model pass (off by default); jarvis_auto_learn.py calls it
     'jarvis_profiles.py'         # hardware.patch: the three setups' arithmetic, words and one-line command (no I/O)
     'jarvis_hardware.py'         # hardware.patch: finding the cards, the steps, making a tuned model, measuring
+    'jarvis_work.py'             # work.patch: the five work setups, their plain words, and which one to offer (no I/O of its own)
     'jarvis_scrub.py'            # log-scrub.patch: passwords, keys and the token kept out of backend.log
     'jarvis_sqlite.py'           # the one connection class that CLOSES when its `with` block ends, shared by
                                  # jarvis_schedule.py, jarvis_goals.py and jarvis_projects.py (2026-10-08; the
@@ -1499,6 +1557,7 @@ $SHIPPED = @(
     'jarvis_owner_check.py'      # owner-check.patch: Windows Hello for risky approvals from this PC, and the approval stamp
     'jarvis_manner.py'           # manner.patch: warm and brief, or plain - the wording of answers only
     'jarvis_card_words.py'       # approval-notice.patch: every approval card's plain title, and what Jarvis says aloud about a card
+    'jarvis_card_summary.py'     # card-prefs.patch (the owner's request of 2026-10-09): the "Start short" / "Always show everything" choice for approval cards - GET/POST /api/card-prefs, kept in card-prefs.json so BOTH apps read the one setting. Cosmetic, so no card either way. The summary's words are jarvis_card_words.py's; this owns the preference and the "what one card shows" rule both apps follow
     # --- the tools jarvis_agent.py offers the model ---
     # Each is imported inside a try, so a missing one never stops anything:
     # the tool just answers "unavailable". Copying one in does not switch it
@@ -1714,6 +1773,8 @@ $SHIPPED = @(
     'jarvis_optin_models.py'     # The owner chose BOTH halves: one clearly-labelled opt-in for fiction/role-play, never the everyday assistant and never a default, AND the abliterated models already on disk made usable as opt-in choices with no new download. TWO switches, each off on a machine that has never run it, in their own optin-models.json beside hardware-choice.json; the labelled list carries the measured cost in plain words (TruthfulQA -5.8 to -6.9 points on this family, MMLU about noise, the only fitting build 7 months old against a 5-day-old official one). Uses Ollama's own import - a local .gguf PATH, so nothing is downloaded - and the EXISTING switch the model screen already calls; adds no route, no tool, and never writes jarvis-framework.toml - no patch
     # --- What this machine can hold (2026-10-10, the owner's Decision 6) ---
     'jarvis_storage.py'          # the machine decides what may be offered: free space on the drive models live on, card count and video memory, then the Lean / Comfortable / Generous tiers, each labelled with its size on disk, what it is for, which card it uses and what it leaves free. may_download() is the ONE gate every download passes: never a silent download, and never one that would leave less than 25 GB free - the night C: hit 5.7 GB free and every build on this PC broke. Reads no network, starts nothing, downloads nothing. The work setups use it rather than building a second chooser - no patch, no route
+    # --- Ask for a picture, and keep it (2026-10-11, pictures.patch, JARVIS-API section 129) ---
+    'jarvis_pictures.py'         # /api/pictures, /api/pictures/file and POST /api/pictures: a prompt the owner typed, drawn by a program ON THIS PC (ComfyUI or stable-diffusion.cpp, a setting with named values, never guessed at), saved as a PNG in a folder on this PC (Pictures\Jarvis by default, PC-only) with a sidecar holding the prompt, the seed, the model and the settings so it can be made again. Nothing leaves the PC; no route sends a picture anywhere, so making one needs NO approval card. Nothing is deleted on a timer. The switch ("Making pictures") is OFF by default - the second card is shared with the everyday model - and with nothing configured the owner gets ONE plain sentence naming both programs to install, never a crash. Not a tool in jarvis_agent.py, so no model turn can fill in a prompt
     # --- The 30B coder, both cards (2026-10-11) ---
     'jarvis_big_coder.py'        # One model the owner asked for by name (qwen3-coder-30b-a3b-ud-q3-k-xl): the best coder and the fastest writer measured on this PC (10/10 coding, ~101/76.5/76.3 tok/s, no thinking mode), and the only model here that needs BOTH cards - it cannot sit beside anything. An OPT-IN mode, off by default, that pauses the two live lanes, proves from /api/ps that both went, loads at the largest zero-spill context measured (28,672), announces the pause BEFORE it starts, and puts both lanes back exactly as they were, proved again. Turning it on is ONE card (change_own_config, ask); the pause goes through power_manage. Nothing downloads; every call is loopback. big-coder.patch wires its three routes
 )

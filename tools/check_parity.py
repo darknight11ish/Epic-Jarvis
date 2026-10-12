@@ -64,7 +64,13 @@ import os
 import re
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = (os.environ.get("JARVIS_PARITY_ROOT")
+        or os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# `JARVIS_PARITY_ROOT` is for `backend/test_parity_callgraph.py`, and nothing
+# else: that suite points this checker at a throwaway checkout holding three
+# Kotlin constants so it can prove the UNREACHABLE declaration below fails
+# loudly when the route it guards is wired up. CI runs this tool with the
+# variable unset, against the checkout it lives in.
 DESKTOP_DIRS = [
     ("jarvis-desktop/src-tauri/src", (".rs",)),
     ("jarvis-desktop/src", (".js", ".mjs", ".html")),
@@ -80,6 +86,8 @@ _LIT = r"[A-Za-z0-9_-]+"
 _PH = r"(?:\$\{[^}\n]*\}|\{[^}/\"\n]*\}|\$[A-Za-z_][A-Za-z0-9_]*)"
 ROUTE = re.compile(rf"/api/{_LIT}(?:/(?:{_LIT}|{_PH}))*/?")
 _IS_PH = re.compile(rf"^{_PH}$")
+# `fun offerWorkSetup(` - the declaration half of the call check below.
+_FUN = re.compile(r"\bfun\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")
 
 # Allow-lists: files whose routes are a list of what a window MAY read, not
 # calls. {file: (the constant holding the list, the command that reads it)}.
@@ -109,6 +117,14 @@ CLASSIFICATION = {
     "/api/hardware/apply": ("ported", "Choose a setup, or forget the choice. Changes no model and no setting by itself: it lists the steps. Both apps hold choosing on a stale link; forgetting is not held."),
     "/api/hardware/create": ("ported", "One step of a chosen setup: make jarvis-chat / jarvis-long / jarvis-vision. ONE approval card (models_create, tier ask). Both apps post it only as a step read from the PC's own GET answer, and only the next step (hardware.rs step_request, Hardware.stepRequest)."),
     "/api/hardware/measure": ("ported", "Time each model of the setup on this PC and check it is all on the card. Both apps: one button, held on a stale link."),
+    # The work setups (the owner asked, 2026-10-10; backend/work.patch, jarvis_work.py;
+    # the design note .dsh-scratch/android-verify/WORK-SETUPS-DESIGN-2026-10-10.md).
+    # The phone half is built; the desktop's own section is not part of that task
+    # (jarvis-desktop/ and src-tauri/ were another conversation's surface), so these
+    # three are `planned` and the desktop is what is missing - not the phone.
+    "/api/work": ("planned", "The five work setups: combinations of local models for a kind of work - building an Android app, admin and paperwork, long conversations and big documents, everyday quick answers, and a coding specialist - each with what it is for, which model goes on which card, what it costs and what it is honestly worse at, in the PC's own words. Not a model catalogue: five combinations of models already on this PC, no list of what could be installed and no search. Phone: Brain, Hardware, Work setups (net/WorkSetups.kt, HardwarePlate.kt WorkSetupsSection). Desktop: still to build - Settings, Hardware and models needs its own section; the golden file (jarvis-client/app/src/test/resources/contract/work-setups-cases.json, tools/gen_work_cases.py) is the shape it builds against."),
+    "/api/work/choose": ("planned", "Remember a work setup, or forget it. It changes NO model and no setting: choosing records a preference in work-setup-choice.json and returns the ONE step that would switch the model. Phone: JarvisRuntime.chooseWorkSetup, held on a stale link; forgetting is not held. Desktop: still to build."),
+    "/api/work/recommend": ("planned", "What setup to OFFER for the owner's own words, and the sentence to say. It SWITCHES NOTHING: the answer carries switched: false, and acting on it is the owner's tap - the switch itself is the existing /api/models/switch card. Phone: the screen and the parse are built (net/WorkSetups.kt, HardwarePlate.kt WorkSetupsSection), but the request is NOT wired: `JarvisRuntime.offerWorkSetup` is the only thing that posts this route and nothing calls it, so the offer panel can never be populated (tools/check_parity.py's UNREACHABLE, 2026-10-11). Desktop: still to build. The offer is deliberately NOT wired into the chat turn yet: that seam is jarvis_hud.py's chat route, which this feature's patch does not touch."),
     "/api/schedule": ("ported", "Coming up: timers, alarms, reminders, repeating jobs with their next time, and the to-do list (backend/schedule.patch, the owner's decisions of 2026-09-25; JARVIS-API section 21). Desktop: the Brain's Work tab (brain/schedule.rs brain_schedule, Brain only; the words taken out in Rust while the private lists are hidden) and the toast when a job goes off (stream.rs -> toast_fired, `?id=`). Phone: Brain, Coming up (ComingUpPlate.kt, net/Schedule.kt) and the notification when a job goes off (JarvisRuntime.onScheduleEvent -> ScheduleNotifier, `?id=`)."),
     "/api/schedule/act": ("ported", "ONE job: pause, resume, delete, done, and (2026-09-25) Snooze 10 minutes on something that just went off - the same buttons in both apps (adding time to a timer is said or typed to Jarvis); the phone's notification and the Windows toast carry Snooze too. No card. The one list form, also since 2026-09-25: clearing ONE named list after \"are you sure?\", with the count the app showed (brain_schedule_clear_list, JarvisRuntime.clearList). Both apps hold every one on a stale link (brain_schedule_act, JarvisRuntime.scheduleAct)."),
     "/api/briefing": ("ported", "The morning briefing (backend/briefing.patch, the owner's decisions of 2026-09-25; JARVIS-API section 22): the latest one, the briefing jobs and what a briefing includes. Desktop: Brain -> Work (brain/briefing.rs brain_briefing; the lines taken out in Rust while the private lists are hidden) and Settings -> Morning briefing (get_briefing_setup, the briefing itself taken out). Phone: Brain -> Morning briefing (BriefingPlate.kt, net/Briefing.kt). Setting one up and stopping one use /api/schedule/add and /act with kind \"briefing\" in both apps (set_briefing / stop_briefing, JarvisRuntime.setBriefing / stopBriefing), held on a stale link."),
@@ -289,6 +305,17 @@ CLASSIFICATION = {
     # net/Progress.kt + ProjectsPlate.kt). Flip these to "ported" when each app calls them.
     "/api/progress/activity": ("ported", "The activity heatmap: the last 4 to 26 weeks (12 by default) of days, each with a count and a shade level, Monday first, none in the future, and the one line \"Last 12 weeks: 23 things on 14 days.\" A count is steps ticked plus numbers logged; a health or money number shades its day and is never named (`keep_on_screen`). No streak, no percentage, no red. Screen only; hidden under \"Hide memory lists and chat history\". A read. Both apps, in Brain -> Projects."),
     "/api/progress/balance": ("ported", "The balance chart: GET the 3 to 8 areas the owner picked (each a number or goal against its own target, with the value printed and no overall score) and what can be picked; POST replaces the whole pick (or clears it) - no card, the owner's own display choice. Screen only; a private area is flagged and hidden under \"Hide memory lists and chat history\". Both apps, in Brain -> Projects."),
+    # "Ask for a picture, and keep it" (the owner's decision of 2026-09-27:
+    # "12 GB card: longer conversations with picture understanding first, and
+    # making pictures too (swapped in when asked, since both cannot sit on the
+    # card at once)"; pictures.patch, JARVIS-API.md section 129). The drawing
+    # program is a program ON THIS PC (ComfyUI or stable-diffusion.cpp, a
+    # setting with named supported values, never guessed at) and the only
+    # address the backend opens is the one the owner configured, so NOTHING
+    # LEAVES THE PC and there is no route here that sends a picture anywhere.
+    "/api/pictures": ("ported", "\"Pictures\": GET the folder pictures are kept in, how many there are, how big it is, the switch, the two drawing programs this PC supports and every picture with its own prompt, seed, model and when it was made; POST {\"prompt\": ...} draws ONE picture from the owner's own words and keeps it. NO CARD: a picture is a new file in a folder on this PC, drawn by a program on this PC - the same shape as a timer or a note - and drawing one is held on a stale link because it does write. The switch (\"Making pictures\") is OFF by default (the 12 GB card is shared with the everyday model) and with nothing configured the PC answers ONE plain sentence naming both programs to install, never a crash. Desktop: brain/pictures.rs, pictures-panel.js, in Brain -> Projects. Phone: net/Pictures.kt, ui/screens/PicturesPlate.kt, in Brain -> Pictures. The prompts hide with the memory lists on both apps, and the phone fetches nothing at all while they are hidden."),
+    "/api/pictures/file": ("ported", "ONE picture as base64 PNG, asked for by id: how the phone's own \"Save to my phone\" reads it. It is sent with the token header, exactly as the captcha hand-off sends its own one frame (jarvis_handoff.py), so it reaches the owner's own device over Tailscale or Meshnet and is not a way out of the PC. The id must be a bare file stem the PC itself could have written - no separator and no \"..\" - so a page or a phone can never ask for another path. Hidden with the memory lists: while they are hidden the phone never asks for the bytes at all. Desktop: brain/pictures.rs brain_pictures_file (draws it as a data: image; the packaged CSP already allows img-src data:). Phone: net/Pictures.kt, PicturesPlate.kt (writes the PNG into the phone's own Pictures collection)."),
+    "/api/pictures/settings": ("deliberate", "The switch, the drawing program (ComfyUI or stable-diffusion.cpp) and the folder pictures are kept in - ONE named change at a time, and THE PC'S OWN BUSINESS: the backend refuses all of it from anywhere but the PC (403 pc_only), the same rule the chatbot money limits follow, so the phone's net/Pictures.kt has no field for any of it and nothing to send. No card, because it opens no way out of the PC and loosens no rule: the folder is the same shape jarvis_backup.py uses for its backup folder (a settings-file value on the PC, default %USERPROFILE%\\Pictures\\Jarvis). Desktop only, through brain/pictures.rs brain_pictures_settings and choose_pictures_folder (the SAME Windows \"Select folder\" dialog \"Folders Jarvis may look in\" uses)."),
     "/api/memory/profile": ("ported", "\"Always keep in mind\" (owner, 2026-09-24; backend/memory-profile.patch, rebuilt/jarvis_memory.py pin()): the facts Jarvis reads with every question, word for word, at most 1,200 characters. GET lists them, POST pins or unpins ONE fact - no card, held on a stale link. Desktop: Brain, Memory - its own section, and Pin / Unpin on every current fact in Saved automatically and What Jarvis knows about you (brain/profile.rs). Phone: Brain - its own section with Unpin, and Pin / Unpin in Saved automatically, the one list of current facts the phone shows (ProfilePlate.kt, AutoLearnPlate.kt, net/MemoryProfile.kt); pinning a fact that was not saved automatically is desktop-only, like Forget of one (ARCHITECTURE.md section 8)."),
     "/api/memory/shared": ("ported", "\"Between us\" (owner, 2026-09-27; backend/memory-shared.patch, rebuilt/jarvis_memory.py shared()): facts tagged as a shared joke or nickname (meta.kind = \"shared\"), a label, never a new way to save a fact. GET lists them, POST tags or untags ONE fact - no card, held on a stale link. Desktop: Brain, Memory - its own section with \"Not between us\" and Forget, and a \"Between us\" toggle on every current fact in Saved automatically and What Jarvis knows about you (brain/shared.rs). Phone: Brain - its own section with \"Not between us\" and Forget, and the same toggle in Saved automatically, the one list of current facts the phone shows (SharedPlate.kt, AutoLearnPlate.kt, net/MemoryShared.kt); tagging a fact that was not saved automatically is desktop-only, like Pin of one (ARCHITECTURE.md section 8)."),
     # Automatic learning (docs/JARVIS-API.md section 19, 2026-09-24): built
@@ -536,6 +563,15 @@ PHONE_ONLY = {
     "/api/devices/approval-key": ("phone-only", "The phone turns on signed approvals (docs/PAIRING-DESIGN.md 11.2, docs/JARVIS-API.md section 91): it sends its Keystore public key, and ONE register_approval_key card is approved on the PC with Windows Hello. The desktop is the PC - it holds the shared key and approves risky cards with Windows Hello itself - so it has no signing key to register and only READS the result (`approval_key` in the device list). ARCHITECTURE section 8."),
     "/api/approve/challenge": ("phone-only", "The phone asks for a one-use challenge before signing a risky approval with its fingerprint or PIN (docs/PAIRING-DESIGN.md 11.3, docs/JARVIS-API.md section 91). The desktop's own risky approvals are checked by Windows Hello on the PC, not by a signature, so it never calls this. ARCHITECTURE section 8."),
     "/api/notifications/phone": ("phone-only", "Reading phone notifications (the owner's decision, CLAUDE.md 2026-09-26; built 2026-09-28; docs/JARVIS-API.md §61). A Windows desktop has no equivalent to \"which app posted a notification\" - NotificationListenerService is Android-only. The setting still lives on the PC, like every other approval-card switch, but only the phone ever reads or acts on it (docs/ARCHITECTURE.md §8)."),
+    # "Approval cards read short" (the owner's request of 2026-10-09; docs/JARVIS-API.md
+    # section 127): the "Start short" / "Always show everything" choice for every
+    # approval card, kept in card-prefs.json on the PC so BOTH apps read the one
+    # value. "desktop-todo", never "phone-only": the desktop SHOULD have it too,
+    # and its own card is simply not built yet - this branch was asked not to edit
+    # jarvis-desktop/, and docs/DESKTOP-APPROVAL-CARD-PREF.md says exactly what it
+    # needs. Move this to CLASSIFICATION as "ported" the moment the desktop's own
+    # card calls the route.
+    "/api/card-prefs": ("desktop-todo", "\"Approval cards read short\" (the owner's request of 2026-10-09; docs/JARVIS-API.md section 127; backend/jarvis_card_summary.py, card-prefs.patch): the \"Start short\" / \"Always show everything\" choice for each approval card, kept in card-prefs.json so both apps read one value. The PHONE has it today (net/CardSummary.kt, ui/screens/ApprovalCardsPlate.kt, Settings under Appearance); the desktop's own card is NOT built yet, which is why this is desktop-todo rather than phone-only. docs/DESKTOP-APPROVAL-CARD-PREF.md names what it needs (src/main.js's refreshApproval, a settings.html card, and the `mode` field it reads); until then the desktop changes the setting by asking, and jarvis_settings_registry.SECTIONS keeps its settings.approval-cards row app=\"phone\" so \"open approval cards\" never names a place the desktop does not have."),
 }
 PHONE_STATUSES = {"phone-only", "desktop-todo"}
 
@@ -685,9 +721,143 @@ PHONE_BUILT_ROUTES = {
                                     '"${com.jarvis.client.net.QuizCloud.PATH}/${cur.id}/cancel"'),
 }
 
+# A `/api/...` literal proves a route is BUILT, not that the phone ever asks for
+# it - and this checker used to count the literal and stop there. That is how it
+# told this project two apps matched when only one had the code: the phone's
+# `/api/work/recommend` is built inside `JarvisRuntime.offerWorkSetup`, nothing
+# calls that function, and the offer panel it feeds (`HardwarePlate.kt`, "Jarvis
+# suggests a setup") can never be populated (2026-10-11).
+#
+# So a route whose ONLY call site is a function nothing calls must be declared
+# here, with the reason. Each entry is checked both ways: while the function has
+# no caller, any entry for it must stay (a route that is wired up must not be
+# left declared unreachable); once the function IS called, its entry must GO -
+# the checker fails and says which one, so the wiring cannot land while the
+# "nothing is wired" note, or this declaration, lives on. The route stays in the
+# phone's calls either way, so `CLASSIFICATION` and the two count lines above
+# cannot quietly change, and main() NAMES it in the warnings while keeping it out
+# of the "on the phone" list - so the tool says the missing half out loud, rather
+# than claiming the phone calls it (the defect of 2026-10-11) or saying nothing
+# at all about it (the follow-up of the same day). key -> (the text that proves
+# the function still builds the route, the file that holds the function, the
+# function, why nothing calls it).
+UNREACHABLE = {
+    "/api/work/recommend": (
+        "WorkSetups.RECOMMEND_PATH",
+        "jarvis-client/app/src/main/java/com/jarvis/client/JarvisRuntime.kt",
+        "offerWorkSetup",
+        "this route is built by JarvisRuntime.offerWorkSetup and NO Kotlin file "
+        "under jarvis-client/app/src/main calls it, so the offer HardwarePlate.kt "
+        "draws from JarvisRuntime.workOffer is never populated. Nothing offers a "
+        "setup inside a chat turn yet"),
+}
 
-def phone_built_routes():
+
+def _nothing_calls_it(route: str) -> str:
+    """The one sentence for a route whose declaration still holds: no app calls
+    it. Shared by the two warning sites below that used to say either too much
+    ("the phone calls it", which was false) or too little (nothing at all).
+    """
+    return (f"{route} is 'planned' and NEITHER app calls it: the phone builds the "
+            f"route in a helper nothing calls ({UNREACHABLE[route][3]}).")
+
+
+def _call_sites(text, func):
+    """(line number, line) for every place `func(` is CALLED, never the place it
+    is declared (`fun func(`, `suspend fun func(`, `private fun func(`)."""
+    hits = []
+    for line_no, line in enumerate(text.splitlines(), 1):
+        stripped = line.strip()
+        if re.match(rf"^(?:\w+\s+)*fun\s+{re.escape(func)}\s*\(", stripped):
+            continue
+        if re.search(rf"(?<![\w])(?<!fun\s){re.escape(func)}\s*\(", line):
+            hits.append((line_no, stripped))
+    return hits
+
+
+def _holder_of(text, line_no):
+    """The function a call on `line_no` is written INSIDE, or None when the call
+    is at the top level. Resolved by indentation, because a Kotlin function
+    declaration may itself sit inside a class or an object (and so be indented)."""
+    best = None
+    for i, line in enumerate(text.splitlines(), 1):
+        if i > line_no:
+            break
+        m = re.match(r"(\s*)(?:\w+\s+)*fun\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", line)
+        if m:
+            best = (m.group(2), len(m.group(1)))
+    if best is None:
+        return None
+    name, body_indent = best
+    stripped = text.splitlines()[line_no - 1]
+    call_col = len(stripped) - len(stripped.lstrip())
+    return name if call_col > body_indent else None
+
+
+def _kt_texts():
+    """(relative path, comment-free source) for every Kotlin file the phone
+    scan reads."""
+    for dirpath, _, names in os.walk(os.path.join(ROOT, PHONE_DIRS[0][0])):
+        for n in sorted(names):
+            if os.path.splitext(n)[1] != ".kt":
+                continue
+            path = os.path.join(dirpath, n)
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                yield (os.path.relpath(path, ROOT).replace(os.sep, "/"),
+                       strip_comments(fh.read(), ".kt"))
+
+
+def reachable_calls(problems):
+    """The declared routes whose builder function is CALLED from code that is
+    itself reached. A declared route that is not in the answer, or that is not
+    built where the declaration says, is a failure - named in `problems`.
+
+    A call site is not enough on its own: a function nothing calls may call the
+    builder, and that is the same dead end one level down - the shape this
+    checker exists to catch. So each call site's OWN function is resolved, one
+    level, and the site only counts while that function is called somewhere."""
+    out = set()
+    texts = list(_kt_texts())
+    for route, (needle, rel, func, why) in UNREACHABLE.items():
+        try:
+            with open(os.path.join(ROOT, rel), encoding="utf-8",
+                      errors="replace") as fh:
+                builds_it = needle in fh.read()
+        except OSError:
+            builds_it = False
+        calls = []
+        for rel_kt, text in texts:
+            for line_no, _line in _call_sites(text, func):
+                holder = _holder_of(text, line_no)
+                if holder and holder != func and _call_sites(text, holder):
+                    calls.append(f"{rel_kt}:{line_no} in {holder}()")
+        if not builds_it:
+            problems.append(
+                f"{route} is declared unreachable in tools/check_parity.py, but {rel} "
+                f"no longer builds it ({needle!r} is gone). Delete the UNREACHABLE "
+                "entry, or point it at the file that does.")
+        elif calls:
+            problems.append(
+                f"{route} is declared unreachable in tools/check_parity.py, but "
+                f"{func} is now REACHED ({'; '.join(sorted(calls))}) - so it is wired "
+                f"up. Delete the UNREACHABLE entry, reclassify {route}, and correct "
+                "the docs that say it is not wired yet.")
+        else:
+            out.add(route)
+    return out
+
+
+def phone_built_routes(problems):
+    """(routes the phone's source builds, the declared routes nothing calls).
+
+    The second value is `reachable_calls`' own answer: the routes declared in
+    `UNREACHABLE` whose builder is still called by nobody. `main()` needs it to
+    say so out loud and to keep them out of the "on the phone" list - a route in
+    `phone` only because its literal is somewhere in the phone's source is not a
+    route the phone is on.
+    """
     found = {}
+    nothing_calls_it = reachable_calls(problems)
     for route, (rel, needle) in PHONE_BUILT_ROUTES.items():
         try:
             with open(os.path.join(ROOT, rel), encoding="utf-8", errors="replace") as fh:
@@ -695,7 +865,10 @@ def phone_built_routes():
                     found[route] = {rel}
         except OSError:
             pass
-    return found
+    for route, (_needle, rel, _func, _why) in UNREACHABLE.items():
+        if route not in nothing_calls_it:
+            found.setdefault(route, set()).add(rel)
+    return found, nothing_calls_it
 
 
 def check_route_fields(problems, warnings):
@@ -718,10 +891,11 @@ def main():
     desk_at = scan(DESKTOP_DIRS, allow)
     unused_allow = apply_allowlists(desk_at, allow)
     phone_at = scan(PHONE_DIRS)
-    for route, files in phone_built_routes().items():
+    problems, warnings = [], []
+    built, nothing_calls_it = phone_built_routes(problems)
+    for route, files in built.items():
         phone_at.setdefault(route, set()).update(files)
     desk, phone = set(desk_at), set(phone_at)
-    problems, warnings = [], []
 
     for r, (s, _) in CLASSIFICATION.items():
         if s not in STATUSES:
@@ -753,7 +927,23 @@ def main():
         warnings.append(f"{r} is 'planned' but the desktop now calls it - reclassify it as "
                         f"'ported' (if the phone calls it too) or 'todo'.")
     for r in sorted(by("planned") & phone - desk):
+        if r in nothing_calls_it:
+            # Counted in the phone's set (the phone's source carries a literal
+            # for it, which is not a call), but nothing calls it. Say so: this
+            # used to read "the phone calls it", which was the defect itself.
+            warnings.append(_nothing_calls_it(r))
+            continue
         warnings.append(f"{r} is 'planned' and the phone calls it; the desktop does not yet.")
+    for r in sorted(by("planned") - desk - phone):
+        if r in nothing_calls_it:
+            # The route is in no app at all: the phone's only reference to it is
+            # a helper nothing calls.
+            warnings.append(_nothing_calls_it(r))
+        else:
+            problems.append(
+                f"{r} is classified 'planned' but nothing checks it: the desktop does "
+                "not call it, the phone does not call it, and it is not declared in "
+                "UNREACHABLE. Classify it for real, or record why it is unreachable.")
     for r in sorted(set(CLASSIFICATION) - desk - by("planned")):
         problems.append(
             f"{r} is classified here but the desktop no longer calls it. "
@@ -784,7 +974,10 @@ def main():
         print("\nStill to port:")
         for r in todo:
             print(f"  {r:<26} {CLASSIFICATION[r][1]}")
-    ahead = sorted(phone - desk)
+    # A route in `nothing_calls_it` is in `phone` only because the phone's source
+    # carries a literal for it; nothing asks for it, so it is not a route the
+    # phone is on and must not be listed here as one. The warning above names it.
+    ahead = sorted(phone - desk - nothing_calls_it)
     if ahead:
         print("\nOn the phone and not the desktop (parity runs both ways):")
         for r in ahead:

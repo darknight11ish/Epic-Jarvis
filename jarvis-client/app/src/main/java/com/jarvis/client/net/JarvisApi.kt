@@ -10,6 +10,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.builtins.ListSerializer
@@ -290,6 +291,21 @@ class JarvisApi(
     private val shortCall: OkHttpClient = client.newBuilder()
         .readTimeout(15, TimeUnit.SECONDS)
         .callTimeout(20, TimeUnit.SECONDS)
+        .build()
+
+    /**
+     * For the calls that make the PC's own graphics card work: drawing a
+     * picture (JARVIS-API section 129) shares the 12 GB card with the everyday
+     * model, so it can take minutes, not seconds. The PC waits for the drawing
+     * program itself and answers only when it is done, so a short budget here
+     * would cut off a picture that was about to arrive. Five minutes is the
+     * same patience the PC's own route has, and the phone says "Drawing…" the
+     * whole time rather than appearing to have hung.
+     */
+    private val writeCall: OkHttpClient = client.newBuilder()
+        .readTimeout(300, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .callTimeout(300, TimeUnit.SECONDS)
         .build()
 
     fun baseUrl(): String? = settings.baseUrl()
@@ -1421,11 +1437,102 @@ class JarvisApi(
         }
 
     /**
+     * The picture gallery (docs/JARVIS-API.md section 129): a GET of
+     * `/api/pictures`. A 404 from a PC without the route draws nothing at all
+     * ([Pictures.Reply.MISSING]); a body saying `hidden` is the PC telling the
+     * phone that the private lists are hidden, and not one prompt is in it.
+     * A read; nothing is kept.
+     */
+    suspend fun pictures(): ApiResult<Pictures.Reply> =
+        picturesCall("/api/pictures", null).let { result ->
+            when (result) {
+                is ApiResult.Ok -> ApiResult.Ok(Pictures.readReply(result.value.first, result.value.second))
+                is ApiResult.Failed -> result
+            }
+        }
+
+    /**
+     * ONE picture's PNG bytes: a GET of `/api/pictures/file?id=<id>`. The id
+     * is checked by [Pictures.filePath] before this is called, so the phone can
+     * never ask the PC for another path. The picture is decoded from base64 and
+     * never written to disk by this layer - the plate hands it to the phone's
+     * own Pictures collection.
+     */
+    suspend fun pictureBytes(id: String): ApiResult<ByteArray> {
+        val path = Pictures.filePath(id) ?: return ApiResult.Failed(ApiError.NotFound)
+        return when (val r = picturesCall(path, null)) {
+            is ApiResult.Ok -> {
+                val bytes = Pictures.pngBytes(r.value.second)
+                if (bytes == null || bytes.isEmpty()) {
+                    ApiResult.Failed(ApiError.Malformed(Pictures.WORDS.getValue("unreadable")))
+                } else {
+                    ApiResult.Ok(bytes)
+                }
+            }
+            is ApiResult.Failed -> r
+        }
+    }
+
+    /**
+     * Draws one picture (section 129): a POST of `/api/pictures` with the words
+     * the owner typed. No card. A refusal comes back as its own status and
+     * sentence - "nothing is set up yet", "start it on this PC" or "the switch
+     * is off" - and the caller shows that sentence as sent.
+     */
+    suspend fun makePicture(body: String): ApiResult<JsonObject> =
+        picturesCall("/api/pictures", body).let { result ->
+            when (result) {
+                is ApiResult.Ok -> {
+                    val obj = result.value.second
+                    if (result.value.first >= 400 || obj?.get("ok")?.jsonPrimitive?.booleanOrNull == false) {
+                        ApiResult.Failed(ApiError.Server(result.value.first, Pictures.refusal(obj)))
+                    } else {
+                        ApiResult.Ok(obj ?: JsonObject(emptyMap()))
+                    }
+                }
+                is ApiResult.Failed -> result
+            }
+        }
+
+    /**
+     * The one shape all three picture calls share. `(status, body)` comes back
+     * whole, because a 404 that means "this PC has no pictures route" and a 503
+     * carrying the PC's own plain sentence must read differently.
+     */
+    private suspend fun picturesCall(
+        path: String,
+        json: String?,
+    ): ApiResult<Pair<Int, JsonObject?>> = withContext(Dispatchers.IO) {
+        val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
+        val builder = Request.Builder().url(target)
+        if (json == null) {
+            builder.get()
+        } else {
+            builder.post(json.toRequestBody("application/json".toMediaType()))
+        }
+        val req = builder.authed().build()
+        runCatching {
+            // A drawing takes far longer than a read: the PC waits for the
+            // program itself. The same longer budget the quiz's own
+            // model-backed calls use, so a slow card is not cut off.
+            val call = if (json == null) shortCall else writeCall
+            call.newCall(req).execute().use { resp ->
+                val text = resp.body?.string().orEmpty()
+                val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                if (resp.code == 401 || resp.code == 403) {
+                    ApiResult.Failed(ApiError.BadToken)
+                } else {
+                    ApiResult.Ok(resp.code to obj)
+                }
+            }
+        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+    }
+
+    /**
      * `POST /api/memory/shared`: tag or untag ONE fact "Between us" (the
      * owner's decision, 2026-09-27). The status and body come back whole
      * ([MemoryShared.Reply]), like [pinFact]: a 404 that says "no such
-     * fact" and a 404 from a PC without the route must read differently, and
-     * a 409 carries the PC's own sentence. [MemoryShared.said] reads it.
+     * fact" and a 404 from a PC without the route must read differently, and     * a 409 carries the PC's own sentence. [MemoryShared.said] reads it.
      */
     suspend fun setShared(id: Long, shared: Boolean): ApiResult<MemoryShared.Reply> =
         withContext(Dispatchers.IO) {
@@ -2441,6 +2548,38 @@ class JarvisApi(
     suspend fun animal(): ApiResult<JsonObject> = probe(AnimalOptions.PATH)
 
     /**
+     * `GET /api/card-prefs` - how much of an approval card is shown at first
+     * ("Start short" with an "Explain more" control, or "Always show
+     * everything"), with the PC's own words ([CardSummary.parse]). The setting
+     * is the PC's, kept in card-prefs.json beside appearance.json, so this
+     * phone and the desktop read one value. A read; 404 is an older PC, which
+     * draws cards exactly as it always did.
+     */
+    suspend fun cardPrefs(): ApiResult<JsonObject> = probe(CardSummary.PATH)
+
+    /**
+     * `POST /api/card-prefs` with the one change made by [CardSummary.modeBody].
+     * Cosmetic, so no approval card either way - the same route and the same
+     * function the desktop's own switch calls.
+     */
+    suspend fun cardPrefsPost(json: String): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val target = url(CardSummary.PATH) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    WebSearch.classifyPost(resp.code, obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
      * `POST /api/animal` with ONE change made by [AnimalOptions.body]. No card
      * either way - these only change how the animal moves.
      */
@@ -2549,6 +2688,46 @@ class JarvisApi(
                     Hardware.classifyPost(resp.code, obj)
                 }
             }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    // ------------------------------------------------------- work setups ----
+
+    /**
+     * `GET /api/work` - the five work setups for THIS PC's cards, each with
+     * what it is for, which model goes on which card, what it costs and what it
+     * is worse at ([WorkSetups.parse]). Reads only: the PC starts, loads and
+     * changes nothing. A 404 means the backend predates `work.patch`.
+     */
+    suspend fun workSetups(): ApiResult<JsonObject> = probe(WorkSetups.PATH)
+
+    /**
+     * One of the two work-setup POSTs: choosing a setup
+     * ([WorkSetups.CHOOSE_PATH]) or asking which setup to offer for the owner's
+     * own words ([WorkSetups.RECOMMEND_PATH]). Anything else is refused here,
+     * before anything is sent - neither of these routes switches a model, and
+     * the switch a chosen setup may need is the existing
+     * `/api/models/switch` card, posted through [hardwarePost] like every other
+     * step. A success never means a model changed; re-read [workSetups].
+     */
+    suspend fun workPost(path: String, json: String): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            if (path != WorkSetups.CHOOSE_PATH && path != WorkSetups.RECOMMEND_PATH) {
+                return@withContext ApiResult.Failed(ApiError.Malformed("not a work-setup route"))
+            }
+            val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    WorkSetups.classifyPost(resp.code, obj)
+                }
+            }.getOrElse {
+                ApiResult.Failed(ApiError.Unreachable(it.readableMessage(),
+                    PlainErrors.networkKind(it)))
+            }
         }
 
     // --------------------------------------------------------- big model ----

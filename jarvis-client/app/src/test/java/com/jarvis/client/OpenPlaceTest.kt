@@ -30,6 +30,12 @@ class OpenPlaceTest {
         for ((id, key) in listOf(
             "briefing-settings" to "briefing",
             "spending" to "spending",
+            // The Galaxy (2026-10-11): the phone's Galaxy is the Brain's
+            // "people-and-things" plate, so "open the galaxy" goes there
+            // instead of answering "only in Jarvis on your PC". The plate
+            // carries the hidden-lists guard itself.
+            "galaxy" to "people-and-things",
+            "brain.tab.galaxy" to "people-and-things",
         )) {
             assertEquals(id, OpenPlace.Where.Go(Screen.BRAIN, key), OpenPlace.whereFor(id))
         }
@@ -118,9 +124,18 @@ class OpenPlaceTest {
      * spelling, which is what `BrainListTest` pins.
      */
     private fun String.draws(name: String): Boolean =
-        contains("plate(\"$name\")") ||
+        plateDrawnUnder(name) ||
             contains("item(key = \"$name\")") ||
             contains("item(key = \"${PlateList.PLATE_PREFIX}$name\")")
+
+    /**
+     * Whether some `plate("...")` call here names [name] - with or without the
+     * `drawn = ...` argument a plate that guards ITSELF passes (2026-10-11:
+     * `people-and-things` asks to be drawn whatever the private-lists rule says,
+     * because it draws its own "Hidden. Tap Show" prompt rather than vanishing).
+     */
+    private fun String.plateDrawnUnder(name: String): Boolean =
+        Regex("""plate\(\s*"${Regex.escape(name)}"\s*[,)]""").containsMatchIn(this)
 
     /** Walks up from Gradle's working folder (`jarvis-client/app`) to the repository. */
     private fun repoFile(rel: String): File {
