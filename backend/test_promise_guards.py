@@ -233,7 +233,10 @@ def _norm(text: str) -> str:
 #   The promises. Each entry is the mapping the audit proved by breaking it.
 #
 #   promise  the project's own words (checked against the file named in `doc`)
-#   doc      where those words are written
+#   doc      where those words are written. The owner's dated decisions moved out of
+#            CLAUDE.md into docs/DECISIONS.md on 2026-10-12, so a promise whose words
+#            moved names the record - and the rest still name CLAUDE.md, because the
+#            rules themselves stayed there.
 #   module   the product module holding the guard
 #   symbols  the guard: (name, kind) pairs that must still be defined
 #   suite    the suite that owns the promise, and the test function(s) in it
@@ -245,7 +248,7 @@ PROMISES = (
     {
         "id": "P1",
         "promise": "wipes the fact's text for good (and its search entry)",
-        "doc": "CLAUDE.md",
+        "doc": "docs/DECISIONS.md",
         "module": "jarvis_memory.py",
         "symbols": (("_scrub_file", "function"), ("erase", "function")),
         "suite": "test_memory_erase.py",
@@ -298,7 +301,7 @@ PROMISES = (
     {
         "id": "P6",
         "promise": "The apps accept a server address on the owner's own networks only",
-        "doc": "CLAUDE.md",
+        "doc": "docs/DECISIONS.md",
         "module": "jarvis_local_http.py",
         "symbols": (("_own_network", "function"), ("_OWN_NETS", "constant"),
                     ("_OWN_SUFFIXES", "constant")),
@@ -354,7 +357,7 @@ PROMISES = (
     {
         "id": "P11",
         "promise": "Crisis messages are never learned from and never counted.",
-        "doc": "CLAUDE.md",
+        "doc": "docs/DECISIONS.md",
         "module": "jarvis_wellbeing.py",
         "symbols": (("crisis", "function"), ("CRISIS_PHRASES_EN", "constant")),
         "suite": "test_wellbeing.py",
@@ -365,7 +368,7 @@ PROMISES = (
     {
         "id": "P12",
         "promise": "and passwords/PINs/account/ID numbers, still wait for a yes",
-        "doc": "CLAUDE.md",
+        "doc": "docs/DECISIONS.md",
         "module": "jarvis_auto_learn.py",
         "symbols": (("check_sensitive", "function"),),
         "suite": "test_auto_learn.py",
