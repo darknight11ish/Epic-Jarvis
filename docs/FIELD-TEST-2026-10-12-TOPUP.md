@@ -150,7 +150,21 @@ an invented obstacle is worse than an honest gap.
 | `settings-file` | The settings file, the logs and starting with Windows | desktop | UNTESTED | not driven in this pass; the instruments were available and the pass was bounded - no reason is invented for it |
 | `settings-entry` | Settings itself | both | UNTESTED | not driven in this pass; the instruments were available and the pass was bounded - no reason is invented for it |
 
-## 7. What this pass did not do
+## 7. Not verified on screen, and not claimed: the grey frames (#324)
+
+**The owner's report:** two flat grey boxes that vanish when Jarvis exits and return when it starts - a
+wide band upper-middle **from the bar**, and a large square bottom-right **from notifications** - and
+`rgb(84,84,84)` appears nowhere in this repository, so it is a platform/WebView2 default rather than a
+colour anybody chose. **#324** (`fix/transparent-windows-set-their-background`) makes the transparent
+windows set their own background, so an unpainted frame shows the desktop rather than the platform grey.
+
+**Its status here is plain: NOT YET VERIFIED ON SCREEN.** The mechanism is established and it compiles
+clean; **nobody has watched it draw** - and this pass did not either. Two reasons, both stated rather
+than glossed: UI Automation reads the page's own structures and says nothing about pixels, and there is
+**no vision provider on this machine**. So neither the bar nor the notifications window can be confirmed
+fixed by this method, and this record does not claim it.
+
+## 8. What this pass did not do
 
 - **No setting was changed.** On the phone the harness only went Home, opened Find, searched and tapped a
   result row. On the desktop the Settings window was opened with its own gear (and is where it was left).
