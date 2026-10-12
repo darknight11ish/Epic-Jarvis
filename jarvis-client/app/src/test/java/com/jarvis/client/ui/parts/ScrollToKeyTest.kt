@@ -28,22 +28,43 @@ class ScrollToKeyTest {
     private val main = "jarvis-client/app/src/main/java/com/jarvis/client/"
 
     /**
-     * A stand-in for a lazy list: a window of visible items and a total count,
-     * which a "composition" can extend - exactly what opening a heading does to
-     * Brain's list.
+     * A stand-in for a `LazyListState` - and it has to model the part that
+     * caused the 2026-10-11 defect: **`totalItemsCount` is what the list has
+     * COMPOSED, not how long it is.**
+     *
+     * [rows] is the whole list. [composedTo] is the last index the list knows
+     * about; a real list grows it when it is scrolled past, so [window]'s own
+     * movement does the same here. A fake with a fixed `total` cannot tell a
+     * walk that reached the END OF THE LIST from one that reached the end of
+     * what had been composed - which is the entire defect, so the fake has to
+     * be able to represent it.
      */
     private class FakeList(
         val keys: List<String>,
-        var total: Int,
-        var window: IntRange,
+        var composedTo: Int = 0,
+        var window: IntRange = 0..0,
+        /** How far past the viewport the list composes ahead of it. */
+        val buffer: Int = 4,
     ) {
         val firstVisibleIndex: Int get() = window.first
-        override fun toString() = "keys=$keys total=$total window=$window"
+        /** What the list reports it knows about, exactly like `totalItemsCount`. */
+        val total: Int get() = (composedTo + 1).coerceAtMost(keys.size)
+        /** Whether the whole list is composed - the only state where "the end" is the end. */
+        val everythingComposed: Boolean get() = total >= keys.size
+        /** The list composes more as its window moves down - and never forgets. */
+        fun composedOnWindow() {
+            composedTo = maxOf(composedTo, window.last + buffer).coerceAtMost(keys.size - 1)
+        }
+        override fun toString() = "keys=${keys.size} composed=$total window=$window"
     }
 
     /**
      * Runs [walkStep] frame by frame over [list] and returns (final index, the
      * decisions, whether the walk stopped early).
+     *
+     * It moves the window the way the real walk does, and lets the fake list
+     * compose ahead of it - so a test can assert about a walk on a list that is
+     * still growing, which is the case the device hit.
      */
     private fun walk(
         list: FakeList,
@@ -53,10 +74,16 @@ class ScrollToKeyTest {
         var index: Int? = null
         var steps = 0
         var waited = 0
+        var advances = 0
+        var lastTotal = -1
         val decisions = ArrayList<Walk>()
         var frame = 0
-        while (steps < 60 && frame < 200) {
+        while (steps < 60 && frame < 400) {
             onFrame(frame, list)
+            if (list.total != lastTotal) {
+                lastTotal = list.total
+                advances = 0
+            }
             val window = list.window.intersect(0 until list.total)
             val decision = walkStep(
                 key = key,
@@ -65,6 +92,8 @@ class ScrollToKeyTest {
                 visibleKeys = window.map { list.keys[it] },
                 visibleIndexes = window.toList(),
                 waited = waited,
+                advances = advances,
+                listSize = list.keys.size,
             )
             decisions.add(decision)
             frame++
@@ -77,8 +106,17 @@ class ScrollToKeyTest {
                     waited = 0
                     steps++
                     list.window = (decision.index..(decision.index + list.window.count() - 1))
+                    list.composedOnWindow()
                 }
                 Walk.Wait -> waited++
+                Walk.Advance -> {
+                    advances++
+                    waited = 0
+                    val next = (list.window.last + 1).coerceAtMost(list.keys.size - 1)
+                    list.window = (next..(next + list.window.count() - 1))
+                        .let { it.first..it.last.coerceAtMost(list.keys.size - 1) }
+                    list.composedOnWindow()
+                }
                 Walk.GiveUp -> return Triple(null, decisions, true)
             }
         }
@@ -90,13 +128,13 @@ class ScrollToKeyTest {
         // The real shape: a short list today, and the plate added when the
         // heading opens. The old walk ended on the frame before that.
         val keys = ArrayList(listOf("head-a", "plate-a", "head-b", "tail"))
-        val list = FakeList(keys, total = 4, window = 0..3)
+        val list = FakeList(keys, composedTo = keys.size - 1, window = 0..3)
         val (found, decisions, gaveUp) = walk(list, "brain-plate:people-and-things") { frame, l ->
             if (frame == 2) {
                 // Opening the heading: the plate appears, and the count grows.
                 @Suppress("UNCHECKED_CAST")
                 (l.keys as ArrayList<String>).add("brain-plate:people-and-things")
-                l.total = 5
+                l.composedTo = keys.size - 1
             }
         }
         assertFalse("the walk gave up while the item was still coming: $decisions", gaveUp)
@@ -111,7 +149,7 @@ class ScrollToKeyTest {
     @Test
     fun `the walk still ends when the item is genuinely not there`() {
         val keys = listOf("head-a", "plate-a", "head-b", "tail")
-        val list = FakeList(keys, total = 4, window = 0..3)
+        val list = FakeList(keys, composedTo = keys.size - 1, window = 0..3)
         val (found, decisions, gaveUp) = walk(list, "brain-plate:not-here")
         assertEquals(null, found)
         assertTrue("the walk never gave up on an item that does not exist", gaveUp)
@@ -153,7 +191,7 @@ class ScrollToKeyTest {
     @Test
     fun `the walk scrolls a screenful while there is room and finds the key`() {
         val keys = (0 until 40).map { "row-$it" }
-        val list = FakeList(keys, total = 40, window = 0..5)
+        val list = FakeList(keys, composedTo = keys.size - 1, window = 0..5)
         val (found, _, gaveUp) = walk(list, "row-30")
         assertFalse("the walk gave up before the end of the list: window=${list.window}", gaveUp)
         assertEquals(30, found)
@@ -168,7 +206,7 @@ class ScrollToKeyTest {
         // in it. This is the half a green suite could not see: "opened" and
         // "laid out" are different frames (2026-10-11).
         val keys = ArrayList(listOf("head-a", "head-b", "tail"))
-        val list = FakeList(keys, total = 3, window = 0..2)
+        val list = FakeList(keys, composedTo = keys.size - 1, window = 0..2)
 
         val first = walk(list, "brain-plate:people-and-things")
         assertTrue("the first pass was expected to miss: $first", first.third)
@@ -178,7 +216,7 @@ class ScrollToKeyTest {
         // again from the top.
         @Suppress("UNCHECKED_CAST")
         (list.keys as ArrayList<String>).add("brain-plate:people-and-things")
-        list.total = 4
+        list.composedTo = keys.size - 1
         list.window = 0..2
         val second = walk(list, "brain-plate:people-and-things")
         assertFalse("the retry did not find the plate: $second", second.third)
@@ -195,17 +233,93 @@ class ScrollToKeyTest {
         // what the jump must land on. Without it the screen was left on the
         // attention budget, the last item in Brain's list.
         val keys = listOf("brain-heading:waiting", "brain-plate:memory", "brain-heading:knows", "brain-plate:attention", "brain-plate:tail")
-        val list = FakeList(keys, total = keys.size, window = 0..2)
+        val list = FakeList(keys, composedTo = keys.size - 1, window = 0..2)
 
-        // The plate is nowhere in this list, so its own walk misses.
+        // The plate is nowhere in this list, so its own walk has nothing to find.
         val miss = walk(list, "brain-plate:people-and-things")
-        assertTrue("the plate's walk was expected to miss: $miss", miss.third)
+        assertTrue(
+            "the plate's walk was expected to miss, and it did not: $miss",
+            miss.first == null,
+        )
 
         // The fallback: walk the heading that holds it, from the top.
-        val (found, _, gaveUp) = walk(list, "brain-heading:knows")
+        // A FRESH list for the heading walk: the first `walk` moved this one's
+        // window and made it compose, so walking the same instance again starts
+        // from wherever the failed search stopped - which is precisely the state
+        // a fallback must not be tested from.
+        val forHeading = FakeList(keys, composedTo = keys.size - 1, window = 0..2)
+        val (found, _, gaveUp) = walk(forHeading, "brain-heading:knows")
         assertFalse("the heading was not found either: $gaveUp", gaveUp)
         assertEquals(2, found)
         assertEquals("brain-heading:knows", list.keys[found!!])
+    }
+
+    @Test
+    fun `a walk reaches an item the list has not composed yet`() {
+        // THE DEVICE DEFECT OF 2026-10-11, and the one the old fake could not
+        // express. The trace read `first=6 last=10 composed=11 walk=Wait` on
+        // fourteen consecutive frames and then `GiveUp`: the walk saw
+        // `last >= composed - 1`, called it the end of the list, and waited for
+        // ever - because a `LazyList` only composes more when it is SCROLLED, and
+        // nothing had asked it to. The item was several sections further down.
+        //
+        // The baseline line proved it: `composed=11` before AND after, while the
+        // window moved six rows. A real end of list does not let you scroll past
+        // it.
+        //
+        // Forty rows, only the first six composed, and the item at index 30.
+        val keys = (0 until 40).map { "row-$it" }
+        val list = FakeList(keys, composedTo = 5, window = 0..5)
+
+        val (found, decisions, gaveUp) = walk(list, "row-30")
+        assertFalse(
+            "the walk gave up on a list it had never asked to compose more of: " +
+                "decisions=${decisions.takeLast(5)}",
+            gaveUp,
+        )
+        assertEquals("the walk landed on the wrong row", 30, found)
+        assertTrue(
+            "the walk never asked the list for more rows, so it could only have been lucky: " +
+                "decisions=$decisions",
+            decisions.contains(Walk.Advance),
+        )
+    }
+
+    @Test
+    fun `a jump that knows what holds its item asks to land on the holder first`() {
+        // THE DEVICE'S FOURTH VARIANT (2026-10-11, found by the lead on build
+        // 0.2.1232). The log said `initiallyOpen=money-time openKey=money-time`:
+        // the holder was ALREADY OPEN, so opening it did nothing, and the item
+        // inside it was never reached. The walk that followed looked at the rows
+        // composed when it ran - and the section's plates were still being
+        // composed, so every row added ABOVE the item moved it further down and
+        // the index aimed at was the one from before those rows existed.
+        //
+        // The rule that removes the whole class is a PURE one, so it is tested
+        // here rather than described: a jump that knows of a holder lands on the
+        // holder FIRST, whatever state the list is in. Anchoring stops the rows
+        // above the item from growing, so the walk that follows runs against a
+        // list that no longer moves under it.
+        //
+        // This is the assertion whose absence let the defect through: the tests
+        // before it proved a SHUT holder is opened, and nothing proved anything
+        // about an OPEN one.
+        assertEquals(
+            "a jump with a holder must land on the holder first, open or shut",
+            "brain-heading:money-time",
+            landingOrder(target = "brain-plate:coming-up", holder = "brain-heading:money-time").first(),
+        )
+        assertEquals(
+            "the item itself is still what the jump is for",
+            "brain-plate:coming-up",
+            landingOrder(target = "brain-plate:coming-up", holder = "brain-heading:money-time").last(),
+        )
+        // With no holder known, the item is the only stop - the shape every
+        // screen without headings uses.
+        assertEquals(
+            listOf("brain-plate:coming-up"),
+            landingOrder(target = "brain-plate:coming-up", holder = null),
+        )
     }
 
     // ------------------- the jump really names the plate ----------------
@@ -276,3 +390,5 @@ class ScrollToKeyTest {
         error("$rel not found above ${System.getProperty("user.dir")}")
     }
 }
+
+

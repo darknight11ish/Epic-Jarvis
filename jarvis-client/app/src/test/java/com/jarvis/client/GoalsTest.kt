@@ -290,8 +290,15 @@ class GoalsTest {
         // exact `item(key = "goals")` this used to look for is no longer a line of
         // its own, and `indexOf` returned -1. Coming up is still drawn above
         // Goals, which is the thing this test is about; the order is unchanged.
-        val comingUp = brain.indexOf("plate(\"coming-up\")")
-        val goals = brain.indexOf("plate(\"goals\")")
+        // 2026-10-11: a plate's call may now carry the private-lists override -
+        // `plate("coming-up", drawn = { true })` - because the heading's own rule
+        // drops every plate that is not memory while "Hide memory lists and chat
+        // history" is on. So the search tolerates an argument after the name, the
+        // same shape `MenuVisibilityTest` uses (`plate\(\s*"key"\s*[,)]`). What
+        // this test is about is unchanged: Coming up is drawn on Brain, above
+        // Goals, and the two positions are still compared.
+        val comingUp = Regex("""plate\(\s*"coming-up"\s*[,)]""").find(brain)?.range?.first ?: -1
+        val goals = Regex("""plate\(\s*"goals"\s*[,)]""").find(brain)?.range?.first ?: -1
         assertTrue("Coming up is on Brain", comingUp >= 0)
         assertTrue("Goals is on Brain", goals >= 0)
         assertTrue("Goals is below Coming up", comingUp < goals)
