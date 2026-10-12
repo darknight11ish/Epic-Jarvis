@@ -707,17 +707,11 @@ fun ApprovalCard(
             // above), and he still tapped: a faded control captioned by a line
             // he had not connected to it does not read as "you cannot act".
             //
-            // So the dead state is not expressed by dimming the pair. The
-            // reason takes their place, and there is nothing left to tap. The
-            // wording is the card's own, unchanged.
-            if (expired) {
-                Text(
-                    EXPIRED_WHY,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = chrome.badInk,
-                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                )
-            } else {
+            // So the dead state is no longer expressed by dimming the pair: while
+            // expired this row draws NOTHING AT ALL. Nothing to tap, and the
+            // reason is said ONCE, above, where the decision would have been -
+            // not twice on one small card (the lead's ruling, 2026-10-11).
+            if (!expired) {
                 Refuse(CardWords.BUTTONS[0], enabled = canDecide && !decided, onClick = deny)
                 Affirm(CardWords.BUTTONS[1], enabled = canApprove && !decided, onClick = approve)
                 if (SecurityRules.riskyByToday(item)) {

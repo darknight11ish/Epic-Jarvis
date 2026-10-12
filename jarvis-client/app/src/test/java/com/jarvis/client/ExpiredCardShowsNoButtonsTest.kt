@@ -60,23 +60,11 @@ class ExpiredCardShowsNoButtonsTest {
         val src = repoFile(card).readText()
         val row = buttonRow(src)
 
-        val guard = row.indexOf("if (expired)")
-        assertTrue("the button row is not guarded by `expired`", guard > 0)
-        val elseAt = row.indexOf("} else {", guard)
-        assertTrue("the guard has no else branch, so something is drawn either way", elseAt > guard)
+        val guard = row.indexOf("!expired")
+        assertTrue("the button row is not guarded by `!expired`", guard > 0)
 
-        // The buttons live in the else: reached only when NOT expired.
-        val decision = row.substring(guard, elseAt)
-        assertFalse(
-            "a decision button is drawn in the expired branch, which is what the owner tapped",
-            decision.contains("Refuse(") || decision.contains("Affirm("),
-        )
-        assertTrue(
-            "the expired branch does not draw the reason, so it would show nothing at all",
-            decision.contains("EXPIRED_WHY"),
-        )
-
-        val notExpired = row.substring(elseAt)
+        // The buttons live inside the guard: reached only when NOT expired.
+        val notExpired = row.substring(guard - 4)
         assertTrue(
             "the unexpired branch no longer draws Deny",
             notExpired.contains("Refuse("),
@@ -92,8 +80,17 @@ class ExpiredCardShowsNoButtonsTest {
         val inRow = Regex("\\b(Refuse|Affirm)\\(").findAll(notExpired).count()
         assertTrue(
             "there are $allButtons decision buttons in this file but only $inRow inside the " +
-                "row's unexpired branch: one is reachable while the card is expired",
-            allButtons == inRow,
+                "`!expired` guard: one is reachable while the card is expired",
+            allButtons == inRow && allButtons > 0,
+        )
+
+        // ONE COPY OF THE REASON, NOT TWO (the lead's ruling, 2026-10-11): the
+        // red line above already carries it, so the empty row draws nothing.
+        // The card's text must therefore hold the sentence exactly once, and
+        // that one place is `why`.
+        assertTrue(
+            "the reason is no longer drawn anywhere, so an expired card would explain nothing",
+            src.contains("expired -> EXPIRED_WHY"),
         )
     }
 
