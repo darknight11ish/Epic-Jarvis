@@ -711,9 +711,22 @@ fun ApprovalCard(
             // expired this row draws NOTHING AT ALL. Nothing to tap, and the
             // reason is said ONCE, above, where the decision would have been -
             // not twice on one small card (the lead's ruling, 2026-10-11).
+            // AND A PC-ONLY CARD LOSES ITS APPROVE, KEEPING ITS DENY.
+            //
+            // Same measurement, the other branch: a LIVE card the phone may not
+            // approve (`raise_api_limit`) drew a dimmed **Approve** that could
+            // never work. The gate knew (`canApprove`'s `!item.pcOnly`, and
+            // `decide()`'s own refusal); only the drawing disagreed with it.
+            //
+            // **Deny stays**, because it does still work here and
+            // `AsksFirst.APPROVE_ON_PC` says so in as many words - "Deny still
+            // works here." Emptying this whole row for a pcOnly card would make
+            // the phone's own sentence a lie.
             if (!expired) {
                 Refuse(CardWords.BUTTONS[0], enabled = canDecide && !decided, onClick = deny)
-                Affirm(CardWords.BUTTONS[1], enabled = canApprove && !decided, onClick = approve)
+                if (!item.pcOnly) {
+                    Affirm(CardWords.BUTTONS[1], enabled = canApprove && !decided, onClick = approve)
+                }
                 if (SecurityRules.riskyByToday(item)) {
                     Text(
                         text = "Fingerprint follows",

@@ -124,6 +124,54 @@ class ExpiredCardShowsNoButtonsTest {
         )
     }
 
+    /**
+     * THE THIRD CAUSE OF THE SAME SHAPE, measured on the same phone the same
+     * evening: a **live** card the phone may not approve.
+     *
+     * `raise_api_limit` is in the backend's `PC_ONLY_ACTIONS`, so `canApprove`
+     * is false for it and `decide()` refuses it - and yet the card drew a
+     * dimmed **Approve** that could never work, beside a line telling the owner
+     * to turn on signed approvals. Turning it on cannot help; he reported "it is
+     * still not working".
+     *
+     * **Deny must survive**, and that is the part worth pinning: the phone's own
+     * sentence for this card ends *"Deny still works here."* A test that only
+     * asserted "no Approve" would pass on a row that had been emptied
+     * altogether, which would make the app's own sentence a lie. So this asserts
+     * both halves, and asserts them in the right places.
+     */
+    @Test
+    fun `a pc-only card loses its Approve and keeps its Deny`() {
+        val src = repoFile(card).readText()
+        val row = buttonRow(src)
+
+        // THE CODE FORM, NOT THE BARE TOKEN. This test failed its first run
+        // because the row's own comment mentions `!item.pcOnly` in prose, and
+        // the index landed on the comment instead of the guard - a check on
+        // text positions fooled by the text beside them. Matching `if (`
+        // and the brace can only match the statement.
+        val pcGuard = row.indexOf("if (!item.pcOnly) {")
+        assertTrue(
+            "the card does not gate Approve on !item.pcOnly, so it can draw an Approve " +
+                "that decide() will refuse whatever the owner does",
+            pcGuard > 0,
+        )
+
+        // `Affirm` sits INSIDE the pcOnly guard; `Refuse` sits OUTSIDE it and
+        // inside the expiry guard - i.e. Deny is drawn for a pcOnly card.
+        val affirm = row.indexOf("Affirm(")
+        assertTrue("the button row no longer draws Approve at all", affirm > 0)
+        assertTrue(
+            "Approve is drawn before the !item.pcOnly guard, so a pc-only card would show it",
+            affirm > pcGuard,
+        )
+        val refuse = row.indexOf("Refuse(")
+        assertTrue(
+            "Deny is no longer drawn, but the card's own sentence promises 'Deny still works here'",
+            refuse in 1 until pcGuard,
+        )
+    }
+
     /** Walks up from Gradle's working folder (`jarvis-client/app`) to the repository. */
     private fun repoFile(rel: String): File {
         var dir: File? = File(System.getProperty("user.dir") ?: ".").absoluteFile
