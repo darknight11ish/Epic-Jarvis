@@ -3832,7 +3832,7 @@
     "minutes_label": "Most minutes",
     "missing": "Your PC's Jarvis cannot talk to chatbots yet - run apply-patches.ps1 on the PC.",
     "money_left": "About {left} of {limit} left this month for {company} (prices are estimates you can correct on the PC).",
-    "money_pc_only": "Each service with a key needs a monthly money limit before Jarvis uses it. Limits and prices are set on the PC only, like keys; the amounts are estimates.",
+    "money_pc_only": "Each service with a key needs a monthly money limit before Jarvis uses it. You can raise one here with your fingerprint or PIN; lowering one, removing one and correcting a price change at once, with no card. The amounts are estimates.",
     "never_label": "Words it must never send (optional, separated by commas)",
     "none_built": "No chatbot can be reached from this PC yet. The line beside each one says what is missing. Start waits until one can.",
     "notify_compare_paused": "Paused: comparing {count} chatbots",

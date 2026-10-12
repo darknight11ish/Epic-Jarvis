@@ -1,0 +1,201 @@
+#!/usr/bin/env python3
+"""Write the two numbers `docs/README.md` states about this directory.
+
+WHY THIS EXISTS. `tools/check_docs_map.py` checks the document count and the
+size of `docs/` in every place the page states them, and fails when they are
+stale. Correcting them meant a person re-running the page's two commands and
+typing the results - and typing the size CHANGES the size: on 2026-10-11 two
+consecutive runs of the checker on ONE tree moved the byte figure
+8,417,863 -> 8,417,870, because writing it into the page changed the page
+(DEF-011). A hand-typed figure that changes when you write it cannot be left
+correct, and every docs pull request that edited it conflicted with every other
+one by construction.
+
+WHAT IT DOES. It measures the tree the way the checker does - importing
+`check_docs_map`, so there is ONE definition of where the numbers live and how
+they are measured, never a second copy that can drift - and rewrites the digits
+in every spot the checker reads:
+
+    count  the prose line, and the comment on the measuring command;
+    size   the prose line (MB), the comment (bytes), and the "around N MB"
+           reminder.
+
+The wording is never touched, only the number inside it, so the page keeps
+saying "about" and "around" and the checker's tenth-of-a-size looseness still
+applies. Then it runs the checker on what it wrote and fails if the checker is
+not satisfied, so this tool cannot produce a page its own authority rejects.
+
+It also reports any place still stating the OLD number that the checker does not
+read - a spot this generator cannot write because nothing defines it - because a
+page half-updated is worse than one left alone.
+
+THE FIXED-POINT LOOP IS EXERCISED BY A TEST, because nothing else checks it:
+tools/check_docs_map.py allows a tenth on the size, so a marginally wrong MB
+figure passes it silently. backend/test_docs_map_generator.py builds a synthetic
+page whose size sits on a rounding boundary and proves that a SINGLE pass is not
+the fixed point - the one-pass page fails this tool's own --check - while the
+real docs/README.md is left byte-identical.
+
+Run:  py -3 tools/gen_docs_map.py            # write the measured numbers
+      py -3 tools/gen_docs_map.py --check    # write nothing; fail if it would
+Exit: 0 when the page states the measured numbers (and the checker agrees),
+      1 otherwise, naming what it could not write.
+"""
+from __future__ import annotations
+
+import argparse
+import importlib.util
+import re
+import sys
+from pathlib import Path
+
+TOOLS = Path(__file__).resolve().parent
+ROOT = TOOLS.parent
+
+
+def _checker():
+    """`check_docs_map`, loaded by path: the spots and the measurement are its
+    own, so this tool and the check that judges it cannot disagree."""
+    spec = importlib.util.spec_from_file_location(
+        "check_docs_map", TOOLS / "check_docs_map.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def mb(byte_count: int, module) -> str:
+    """The page's MB figure, with the fewest decimals the checker's tenth allows.
+
+    One decimal ("8.3") is what this repository's page uses and is well inside
+    the slack on megabytes. It is NOT enough on a small tree: 50,005 bytes is
+    0.050005 MB, which one decimal writes as "0.1" - a hundred per cent out, and
+    the checker rejects it. The test found that, so the rule is a number the
+    checker accepts rather than a fixed width.
+    """
+    for places in (1, 2, 3, 4):
+        text = f"{byte_count / module.BYTES_PER_MB:.{places}f}"
+        if abs(int(float(text) * module.BYTES_PER_MB) - byte_count) <= byte_count * module.SIZE_SLACK:
+            return text
+    return f"{byte_count / module.BYTES_PER_MB:.4f}"
+
+
+def _swap(pattern: re.Pattern, new: str):
+    def replace(m):
+        return m.group(0).replace(m.group(1), new)
+    return replace
+
+
+def render_page(page: str, real_count: int, others: int, module) -> str:
+    """`page` with every spot set to the measured values, ONE pass.
+
+    `others` is the size of everything under `docs/` EXCEPT this page; the page's
+    own length is added here, per candidate, because the page is inside the tree
+    it measures (DEF-011). One pass is not enough on its own - see `main`: the
+    digits' length changes the page's length, which changes the figure - so this
+    is exposed for the test that proves a single pass FAILS.
+    """
+    measured = others + len(page.encode("utf-8"))
+    out = page
+    for spot in module.COUNT_SPOTS:
+        out = spot[1].sub(_swap(spot[1], module.thousands(real_count)), out)
+    for spot in module.SIZE_SPOTS:
+        unit = spot[2] if len(spot) > 2 else "bytes"
+        value = mb(measured, module) if unit == "mb" else module.thousands(measured)
+        out = spot[1].sub(_swap(spot[1], value), out)
+    return out
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Write the document count and size into docs/README.md, "
+                    "in every spot tools/check_docs_map.py reads.")
+    parser.add_argument("--docs", default=str(ROOT / "docs"),
+                        help="the directory to measure (default: <repo>/docs)")
+    parser.add_argument("--readme", default=None,
+                        help="the page to write (default: <docs>/README.md)")
+    parser.add_argument("--check", action="store_true",
+                        help="write nothing; fail if the page would change")
+    args = parser.parse_args(argv)
+
+    module = _checker()
+    docs = Path(args.docs)
+    readme = Path(args.readme) if args.readme else docs / "README.md"
+    if not docs.is_dir() or not readme.is_file():
+        print(f"gen docs map FAILED: {docs} or {readme} is missing")
+        return 1
+
+    files = module.documents(docs)
+    real_count = len(files)
+    # The page is INSIDE the directory it measures, so its own bytes count: the
+    # size moves every time the figure is written into it (DEF-011). Everything
+    # except this page is therefore measured once, and the page's own length is
+    # added per candidate.
+    others = sum(p.stat().st_size for p in files if p.resolve() != readme.resolve())
+    original = readme.read_text(encoding="utf-8")
+
+    # Iterate to the fixed point: writing the figure changes the figure, and one
+    # pass is not enough when the digits' own length changes.
+    text = original
+    for _ in range(10):
+        nxt = render_page(text, real_count, others, module)
+        if nxt == text:
+            break
+        text = nxt
+    else:
+        print("gen docs map FAILED: the page's own size does not settle after ten "
+              "passes - writing the figure keeps changing it; report this rather "
+              "than committing a number that is wrong the moment it is written")
+        return 1
+
+    written = []
+    for spot in module.COUNT_SPOTS:
+        written.append((f"{spot[0]} (count)", len(spot[1].findall(original))))
+    for spot in module.SIZE_SPOTS:
+        unit = spot[2] if len(spot) > 2 else "bytes"
+        written.append((f"{spot[0]} ({unit})", len(spot[1].findall(original))))
+
+    for where, n in written:
+        print(f"{'found' if n else 'none '} {where}: {n} spot(s)")
+
+    counts = sum(n for where, n in written if "(count)" in where)
+    sizes = sum(n for where, n in written if "(count)" not in where)
+    if not counts or not sizes:
+        print("gen docs map FAILED: the page states no count or no size in any "
+              "spot the checker reads, so there is nothing to write - correct "
+              "the page's wording first")
+        return 1
+
+    # A spot the checker does NOT read cannot be written by this tool: report it
+    # rather than leaving a page that disagrees with itself.
+    readable = module.COUNT_SPOTS + module.SIZE_SPOTS
+    for old_number in sorted({m.group(1) for s in readable for m in s[1].finditer(original)}):
+        if old_number not in text:
+            continue                      # it was replaced, which is the point
+        for number, line in enumerate(text.splitlines(), start=1):
+            if old_number in line and not any(s[1].search(line) for s in readable):
+                print(f"WARN  line {number} still states {old_number} where the "
+                      f"checker does not read it: {line.strip()[:110]}")
+
+    changed = text != original
+    if args.check:
+        if changed:
+            print("gen docs map FAILED: the page would change; run it without "
+                  "--check and commit what it writes")
+            return 1
+        print("gen docs map OK: the page already states the measured numbers")
+    else:
+        if changed:
+            readme.write_text(text, encoding="utf-8", newline="\n")
+            print(f"gen docs map: wrote {readme}")
+        else:
+            print("gen docs map: nothing to change")
+
+    verdict = module.main(["--docs", str(docs), "--readme", str(readme)])
+    if verdict != 0:
+        print("gen docs map FAILED: the checker rejects what this tool wrote")
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
