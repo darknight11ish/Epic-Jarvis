@@ -164,7 +164,9 @@ it is a one-file change.
    - **Sizing the remaining gap honestly: two of 182 desktop suites have been run,
      and both of those two have been mutated** - `hud.mjs` red at `:373`,
      `progress.mjs` red at `:425`. The rest of the glob is un-run *and* un-mutated,
-     so nothing here should be read as clearing the desktop side.
+     so nothing here should be read as clearing the desktop side. **Why that number
+     is a structural limit rather than neglect - and the bed that lifts it - is
+     3.1, written 2026-10-12 once the bed existed and its red had been witnessed.**
 2. **`cargo test` was not run** (it OOMs here, per the brief), so the Rust-side
    assertions are not covered either.
 3. **The mutations I would run next, in order, with budget:** (a) make
@@ -177,6 +179,53 @@ it is a one-file change.
    *shape* is absent; it does not prove any individual check would notice its
    subject breaking. Those are different claims, and this document does not
    merge them.
+
+### 3.1 Why this record sits at two of 182 - the structural limit, and the bed that lifts it
+
+**A mutation pass needs one tree where the suite can run AND the file may be
+edited.** The desktop `.mjs` suites are runnable in exactly one worktree -
+`node_modules` and Playwright are present in `.dsh-scratch/wt-suites/jarvis-desktop`
+and absent from every other - and that worktree is shared, so **the only bed that
+may be mutated is the one bed that must not be.** That is why this record sits at
+2 of 182, and it is a **structural limit, not neglect.**
+
+**And the trap that limit avoided, written down because it looks like success:**
+mutating in one worktree while running the suite in another tests the **unmutated**
+copy - so every mutation comes back green, and the table reads as the strongest
+possible result while being twenty false findings. **An instrument answering a
+question about a different tree.** It is the colour tool reading one channel, the
+two-dot diff, and a sweep reading silence, in one shape - and it was caught before
+a single mutation was run.
+
+**The bed now exists and its red has been demonstrated**, which is what makes the
+next session's twenty mutations evidence rather than decoration (`.dsh-scratch/`
+is scratch space, so nothing here is committed; the bed itself carries no branch
+and no commits, verified 2026-10-12 detached at the then-current `origin/main`):
+
+```
+worktree : .dsh-scratch/mutation-bed     detached at origin/main, no branch, carries no commits
+junction : jarvis-desktop/node_modules -> wt-suites/jarvis-desktop/node_modules
+           (wt-suites NOT modified; Chromium shared from %LOCALAPPDATA%\ms-playwright)
+
+baseline           node tests/chatbot.mjs                                 -> exit 0
+MUTATION           src/chatbot.js: "the amounts are estimates." -> "GUESSES."
+run with mutation  node tests/chatbot.mjs                                 -> exit 1
+                   FAIL  the words are the PC's and the phone's, word for word
+restore            git checkout -- jarvis-desktop/src/chatbot.js
+restored run       node tests/chatbot.mjs                                 -> exit 0
+```
+
+**Green, red, green - a witnessed failure and a witnessed recovery in the bed
+itself**, and the junction survives all of it, so **no per-bed `npm i` is needed.**
+The next session starts with exactly this:
+
+```
+cd .dsh-scratch/mutation-bed/jarvis-desktop && node tests/<suite>.mjs
+```
+
+**A bed whose red has not been demonstrated will report twenty false greens.** That
+is why this proof lives in the record rather than in a message: the next reader has
+to be able to check the bed before trusting anything it says.
 
 ---
 
