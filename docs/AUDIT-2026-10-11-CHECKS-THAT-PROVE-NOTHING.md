@@ -343,3 +343,76 @@ green baseline rather than from "can this even build".
   claimed for it.
 
 **Nothing in this document clears either glob.**
+
+---
+
+## 8. Re-attribution: the plate-placement tests are the phone's, and the pattern behind two mis-attributions
+
+This slice was a search, not a mutation, because the incident list **described
+symptoms rather than locations** - and checking before mutating is what turned two
+of the three attributions I was sent into corrections.
+
+### 8.1 The pattern, as a finding about this audit's own inputs
+
+**An incident list written from symptoms lands on different files than the brief
+says, and a symptom is not a location.** Two of the three attributions given to me
+for mutation did not match the files:
+
+1. **`initiallyOpen`** - described as an assertion that "could never fail". It is a
+   **log field name**, not an assertion, and it is already fixed (section 7.1).
+   Mutating `ScrollToKeyTest.kt` for it would have produced a result about
+   something else.
+2. **"GoalsTest, RetirementTest on plate placement"** - checked, and **neither file
+   contains a plate-placement assertion.** `GoalsTest.kt` asserts goal parsing and
+   error mapping (`:49`, `:51-52`, `:60`, `:62-65`); `RetirementTest.kt` asserts the
+   what-if's own words and constants (`:53`, `:59`, `:60-61`). Mutating either would
+   have produced **a red or a green about goal parsing, recorded against an incident
+   about plate placement - a fact about the wrong subject, which is worse than no
+   fact.** So neither was mutated, and no row was written claiming otherwise.
+
+**The credit, and the correction, belong to reading the source before spending the
+budget.** The brief relayed the incident list as if it were a file list; it was not.
+A `git show origin/main:<path>` read is what settled both, and that is the step
+anyone re-attributing these should repeat.
+
+### 8.2 Where the plate-placement tests actually are
+
+Searched **both globs** for plate assertions. The answer is the **phone glob**:
+
+- **`jarvis-client/app/src/test/java/com/jarvis/client/ui/parts/ScrollToKeyTest.kt`** -
+  the walk over plates. The two passages that assert a plate arriving *after* the
+  walk starts are `:130-144` (the holder opens, `brain-plate:people-and-things` is
+  added to the list, and the count grows) and `:205-218` (the retry, where "only
+  that second pass has the plate"). A plate that is absent is asserted at `:151-153`.
+- **The desktop glob does NOT hold them.** `plate` appears in
+  `jarvis-desktop/tests/*.mjs` only as **`deep.mjs`'s "deep plate"** - the Reading
+  plate on the Memory tab (`deep.mjs:22`, `:44`, `:103`, `:108`, `:143`) - which is a
+  different feature with a different subject.
+
+**Which workflow was red, therefore, is settled by evidence rather than a guess: the
+phone's.** The plate-placement tests live in `jarvis-client`, so the run that failed
+them was `.github/workflows/jarvis-client.yml` - **the workflow that is not one of
+the six required checks, and the one that `ci.yml` never invokes for a pull
+request** (section 7). That is the same hole, seen from the other end: the incident
+happened in the tests whose invocation is optional.
+
+**And the useful surprise:** the suite holding the plate-placement tests is
+**`ScrollToKeyTest` - the same suite I ran green** (`BUILD SUCCESSFUL in 1m 51s`,
+section 7). So the two tests CI failed on are **runnable here right now**, on a
+green baseline, which is exactly the starting point the next mutation needs.
+
+### 8.3 What I did NOT do, and the limit on this pointer
+
+**I did not mutate anything in this slice, and I did not confirm which two `@Test`
+functions failed in that CI run** - I have no access to the historical run, only to
+the assertions in the file. What is named above is the **file and the lines**, which
+is what a correct pointer needs; the pairing of the failing tests to those lines is
+an inference from the incident's description ("two tests about exactly that"), not a
+measured fact, and it is labelled as such here.
+
+**Sizing, two globs, separate and never added - unchanged:**
+- **Desktop: two of 182 suites run, and both of those two mutated.**
+- **Phone: one suite (`ScrollToKeyTest`) run and green; none mutated; no
+  denominator claimed** for the phone's glob.
+
+**Nothing in this document clears either glob.**
