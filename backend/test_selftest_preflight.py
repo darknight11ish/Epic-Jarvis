@@ -1071,6 +1071,64 @@ def t_phone_powershell_is_windows_only():
           "\n" not in S.FIREWALL_QUERY and "\n" not in S.ADDRESS_QUERY)
 
 
+def t_a_model_on_a_lane_is_found_not_called_missing():
+    """The wrong-port bug, as a test - with its control.
+
+    Measured on the owner's PC, 2026-10-11: the checker asked 127.0.0.1:11434,
+    which held NO models at all, while his running lane 11436 held qwen3.5:9b
+    (9.8 GB in VRAM, context 196,608) - so the preflight told him his configured
+    model was "not downloaded" and "did not answer a one-word question" while
+    Jarvis was answering on that exact model in 2.3 seconds. The rule this pins
+    is NOT "11434 is the wrong number". It is **never report a model missing
+    because you asked a port nobody told you about**: the base may move, but only
+    to a port that really HOLDS the model - and the CONTROL below is what stops
+    that from becoming "never say missing".
+    """
+    import jarvis_big_coder as BC
+    lane = next((getattr(l, "port", None) for l in getattr(BC, "LANES", ())
+                 if getattr(l, "port", None)), None)
+    check("the backend's own lane table names a port (this test's premise)",
+          lane is not None)
+
+    class LaneOllama(FakeOllama):
+        """The default port answers with no models; the lane answers with it."""
+
+        def fetch(self, url):
+            self.gets.append(url)
+            base = url.split("/api/")[0]
+            held = [{"name": MODEL}] if str(lane) in base else []
+            return {"/api/version": {"version": "0.12.0"},
+                    "/api/tags": {"models": held},
+                    "/api/ps": {"models": []}}[url[len(base):]]
+
+    ollama = LaneOllama()
+    live, _fake, _o = _live(ollama=ollama, ollama_base=None)
+    live.status = {"lane": "local", "model": MODEL}
+
+    check("the base follows the model to the lane that really has it",
+          S._ollama_base_with(MODEL, fetch=ollama.fetch) == f"http://127.0.0.1:{lane}",
+          S._ollama_base_with(MODEL, fetch=ollama.fetch))
+    _p, _f, _w, _s, rows, _text = _run(live, only=["model"])
+    check("...and a model that IS on a lane is not reported missing",
+          not any("is not downloaded" in what for _k, _st, what, _d in rows),
+          _rows(rows, "model"))
+
+    class EmptyOllama(LaneOllama):
+        def fetch(self, url):
+            doc = super().fetch(url)
+            return {"models": []} if url.endswith("/api/tags") else doc
+
+    empty = EmptyOllama()
+    check("the control: a model on no port keeps the base it was configured with",
+          S._ollama_base_with(MODEL, fetch=empty.fetch) == S._ollama_base())
+    live2, _f2, _o2 = _live(ollama=empty, ollama_base=None)
+    live2.status = {"lane": "local", "model": MODEL}
+    _p2, _f3, _w2, _s2, rows2, _t2 = _run(live2, only=["model"])
+    check("...and it is still reported missing, in words",
+          any("is not downloaded" in what for _k, _st, what, _d in rows2),
+          _rows(rows2, "model"))
+
+
 def main() -> int:
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):
