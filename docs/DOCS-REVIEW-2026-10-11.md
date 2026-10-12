@@ -124,3 +124,15 @@ These hold, and something checks them:
 * **No surface stamps the commit it was built from** (the backend manifest has hashes, the desktop's two
   version fields both say `0.2.0`, the phone's `versionName` is a local counter), so "what is he running"
   is still inferred rather than read - the gap the machine-vs-repo audit's §"honest part" describes.
+
+## 6. The one follow-up worth doing next: the page is a conflict magnet
+
+**`docs/README.md` is edited by every docs PR, because its count and size are hand-typed numbers that must
+change whenever a document lands** - so **any two docs PRs conflict by construction.** Tonight alone that
+cost this branch twice, the top-up once, and **#310 sits at 6/6 refused** for the same reason. It is not
+carelessness; it is the design.
+
+**The durable fix, not done tonight:** have the checker **print** the numbers and have the page quote a
+**single generated line** (or a small file the checker writes), so that no docs PR ever edits a number by
+hand. Until then the rule stands - **run the tool and set its numbers** - but the cost is structural and
+worth paying once.
