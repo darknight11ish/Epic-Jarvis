@@ -229,6 +229,40 @@ to be able to check the bed before trusting anything it says.
 
 ---
 
+### 3.2 Which desktop suites were mutated, and what caught it
+
+**A mutation pass needs ONE tree where the suite can run AND the file may be
+edited.** Playwright is installed in exactly one worktree (`.dsh-scratch/wt-suites`,
+section 1) and that worktree is shared - so the only bed that may be mutated is
+the one bed that must not be. **That is why this section is one row and not ten,
+and it is a structural limit rather than neglect.**
+
+Mutating in one worktree while running the suite in another tests the *unmutated*
+copy and reports **green for every mutation** - a table of false findings dressed
+as the strongest possible result. That trap is why the bed below was built and
+**proved red before any mutation was counted**.
+
+The bed: `.dsh-scratch/mutation-bed`, a detached worktree at `origin/main`, with
+`jarvis-desktop/node_modules` **junctioned** to `wt-suites`'. `wt-suites` was not
+modified. The junction survives repeated runs and Chromium is shared from
+`%LOCALAPPDATA%\ms-playwright`, so no per-bed install is needed.
+
+**Proved before use:** `node tests/chatbot.mjs` green; `src/chatbot.js`
+`"estimates."` -> `"GUESSES."` **red** (`FAIL the words are the PC's and the
+phone's, word for word`); restored; green again.
+
+| # | suite | what was mutated | result | the assertion that caught it |
+|---|---|---|---|---|
+| 1 | `chatbot-api-keys.mjs` | `src/chatbot-api-keys.js:30` - renamed the first entry of the exported `SERVICES` list, `"openai"` -> `"openai-typo"` | **RED** | `readChatbotApiKeys always returns the six, in order, even from an odd answer` **and** `CONTROL: the six services are the generated fixture's, in its order` |
+| 2-10 | the rest of the safety-critical ten | **not mutated** | - | next session; the bed is built and its red demonstrated |
+
+**Restored after each mutation and proved green again: mutation 1 left the bed
+with 0 modified files and `chatbot-api-keys.mjs` passing (exit 0).**
+
+**One suite of the ten, done properly, rather than ten claimed.** The method is
+proved end to end - find a constant the suite asserts, change it, watch the suite
+go red, restore, watch it go green - and the bed is ready for the remaining nine
+with no setup.
 ## 4. The other half: checks examined and found SOUND
 
 An audit that lists only problems is not an audit. These are the checks I read
