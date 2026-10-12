@@ -249,6 +249,10 @@ await check("Settings: Test search says what happened, with the offer to switch"
 
 await check("Settings: a key goes to save_search_key only, the box empties, it is never shown", async () => {
   const page = await settings(PLAIN);
+  // The keys are one TAB per service now (owner, 2026-10-11), so open Tavily's
+  // own tab before typing: a hidden input cannot be typed into, and Playwright
+  // proved that here (fill resolved, then timed out waiting to act on it).
+  await page.locator("#tab-ws-key-tavily").click();
   await page.locator("#ws-key-tavily").fill(FAKE);
   await page.locator('#ws-keys [data-key="tavily"] button', { hasText: "Save key" }).click();
   await page.waitForTimeout(500);
