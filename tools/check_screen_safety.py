@@ -23,6 +23,16 @@ it painted black, by program name and title (this is on your own PC, in your
 own terminal - Jarvis never says these anywhere else).
 
 Nothing is sent anywhere. The made-up secrets are not real.
+
+SKIPPED OFF THE OWNER'S PC. The default run makes its test picture with the
+machine's own Windows PowerShell and reads it with Windows' own text reader, and
+`--screen` photographs this PC's screen, so on any other host (a CI runner
+included) this prints the reason and exits 0 rather than reporting a failure that
+is only about the host - see THE HOST GUARD in main(). A picture passed on the
+command line is never skipped: that path is pure file work the caller supplied.
+A claim about CI has to be tested where CI runs, or it is a claim about the
+owner's desk: the skip below is proven by running the Linux branch on his PC with
+sys.platform monkeypatched, not by waiting for a runner.
 """
 from __future__ import annotations
 
@@ -120,14 +130,39 @@ def screen_check(out_png: Path, say=print) -> int:
 def main(argv) -> int:
     tmp = Path(tempfile.gettempdir())
     if argv and argv[0] == "--screen":
+        # THE HOST GUARD, the same shape as check_lanes.py. --screen photographs
+        # THIS PC's screen and reads it with Windows' own text reader, so on any
+        # other host there is nothing to check. Say so and exit 0 rather than
+        # reporting a failure that is only about the host - a red that means
+        # "wrong machine" makes every pull request red and teaches nobody anything.
+        if sys.platform != "win32":
+            print("SKIP: --screen photographs the owner's PC, and this is not it")
+            print(f"  host: sys.platform == {sys.platform!r}, and it needs 'win32'.")
+            print("  NOTHING WAS CHECKED, and that is not the same as safe: run this on")
+            print("  the owner's PC, or pass a picture of your own to check instead.")
+            print("exit code: 0 (skipped - the reason is above)")
+            return 0
         return screen_check(tmp / "jarvis-screen-safety-screen.png")
     if argv:
         src = Path(argv[0])
         out = src.with_name(src.stem + "-cleaned.png")
     else:
-        if os.name != "nt":
-            print("This check needs Windows (Windows' own text reader). Run it on the PC.")
-            return 1
+        # THE HOST GUARD. The default run makes its test picture with the machine's
+        # own Windows PowerShell (System32\WindowsPowerShell\...) and reads it with
+        # Windows' own text reader, so off the owner's PC there is nothing to check:
+        # say so and exit 0 rather than reporting a failure that is only about the
+        # host. A picture passed on the command line is never skipped - that path is
+        # pure file work and the caller supplied it - and a real leak on the owner's
+        # PC still exits non-zero, because the skip is about the host, never the
+        # subject.
+        if sys.platform != "win32":
+            print("SKIP: this check reads pictures with Windows' own text reader, and this is not it")
+            print(f"  host: sys.platform == {sys.platform!r}, and it needs 'win32'.")
+            print("  NOTHING WAS CHECKED, and that is not the same as safe: run this on the")
+            print("  owner's PC, or pass a picture of your own to check instead:")
+            print("    py -3 tools/check_screen_safety.py YOUR.png")
+            print("exit code: 0 (skipped - the reason is above)")
+            return 0
         src, out = tmp / "jarvis-screen-safety-test.png", tmp / "jarvis-screen-safety-cleaned.png"
         make_test_picture(src)
         print(f"Made a test picture with fake secrets: {src}")
