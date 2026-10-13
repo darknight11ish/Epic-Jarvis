@@ -48,4 +48,36 @@ class PcMediaTest {
             .firstOrNull { it.isFile }?.readText()?.replace(Regex("\"\\s*\\n\\s*\""), "")
         if (py != null) assertTrue(py.contains(PcMedia.MISSING))
     }
+
+    /**
+     * The plate is drawn only while a track is ACTUALLY PLAYING (the owner,
+     * 2026-10-13). `GET /api/media` sends only `{"ok", "said"}`, so these are
+     * the three sentences jarvis_media.now_playing can really produce, plus
+     * the failed and the unrecognised cases - and every one but the first has
+     * to come back false, or the plate is on screen while nothing plays.
+     */
+    @Test
+    fun onlyAReallyPlayingTrackCounts() {
+        // The PC's own three shapes, word for word (jarvis_media.now_playing).
+        assertTrue(PcMedia.playing("Playing: “Everything In Its Right Place” by Radiohead."))
+        assertTrue(PcMedia.playing("Playing: “Untitled”."))
+        assertTrue(PcMedia.playing("Playing: something by Radiohead."))
+        assertFalse(
+            "a paused track is not actively playing - the owner's words",
+            PcMedia.playing("Paused: “Everything In Its Right Place” by Radiohead."),
+        )
+        assertFalse(
+            "the empty answer must not draw the plate",
+            PcMedia.playing(PcMedia.NOTHING),
+        )
+        // Failed and unknown reads claim nothing.
+        assertFalse(PcMedia.playing(null))
+        assertFalse(PcMedia.playing(""))
+        assertFalse(PcMedia.playing("   "))
+        assertFalse(PcMedia.playing("Done."))
+        // CONTROL: the gate is not simply "any sentence is true" - the three
+        // shapes above are distinguished, and the prefix is what decides.
+        assertTrue(PcMedia.PLAYING_PREFIX.startsWith("Playing"))
+        assertFalse(PcMedia.PAUSED_PREFIX == PcMedia.PLAYING_PREFIX)
+    }
 }

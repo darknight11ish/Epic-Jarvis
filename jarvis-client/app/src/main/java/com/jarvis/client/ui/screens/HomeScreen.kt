@@ -138,6 +138,7 @@ import com.jarvis.client.ui.parts.TextInput
 import com.jarvis.client.ui.parts.VoiceButton
 import com.jarvis.client.ui.parts.VoiceStrip
 import com.jarvis.client.voice.VoiceSession
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.State
 import com.jarvis.client.ui.parts.pressable
@@ -2516,9 +2517,22 @@ private fun PhoneWatchStartPlate(state: HomeState, actions: HomeActions) {
 
 /**
  * "Playing on your PC" (2026-09-28; [com.jarvis.client.net.PcMedia]): what is
- * playing, in the PC's own sentence - read when Home shows it, and again
- * after each button - and four buttons, ONE action per tap. Greyed while the
- * link is stale (rule 4); the runtime refuses then too. No card.
+ * playing, in the PC's own sentence, and four buttons, ONE action per tap.
+ * Greyed while the link is stale (rule 4); the runtime refuses then too. No
+ * card.
+ *
+ * IT IS DRAWN ONLY WHILE SOMETHING IS ACTUALLY PLAYING (the owner,
+ * 2026-10-13: "playing on pc shouldnt show up unless there is something
+ * actively playing on the pc"). It used to be drawn always: with the PC's
+ * "Nothing seems to be playing right now." as its body when the PC had
+ * nothing, and with its own hint sentence before the first read even landed -
+ * so the plate was on screen whenever Home was. Both are gone:
+ * [com.jarvis.client.net.PcMedia.playing] decides, and an unrecognised answer
+ * hides it rather than showing a control that may not mean anything.
+ *
+ * The read repeats while Home is on screen ([com.jarvis.client.net.PcMedia.POLL_MS])
+ * because a hidden plate that never asked again could never appear when the
+ * owner starts a track.
  */
 @Composable
 private fun PcMediaPlate(canAct: Boolean, actions: HomeActions) {
@@ -2527,13 +2541,23 @@ private fun PcMediaPlate(canAct: Boolean, actions: HomeActions) {
     var said by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     LaunchedEffect(canAct) {
-        if (canAct) said = actions.onPcMedia()
+        while (canAct) {
+            said = actions.onPcMedia()
+            delay(com.jarvis.client.net.PcMedia.POLL_MS)
+        }
+        // The link went down: nothing is known, so nothing is claimed.
+        said = null
     }
+    // Nothing playing, nothing readable, or anything unrecognised: no plate.
+    if (!com.jarvis.client.net.PcMedia.playing(said)) return
     Plate {
         Kicker(com.jarvis.client.net.PcMedia.TITLE)
         Gap(4)
         Text(
-            said ?: com.jarvis.client.net.PcMedia.HINT,
+            // Never the hint and never "Nothing seems to be playing right
+            // now.": this plate is only composed when the PC said a track is
+            // really playing, so the sentence is always a real one.
+            said.orEmpty(),
             style = MaterialTheme.typography.labelSmall,
             color = chrome.textLo,
         )
