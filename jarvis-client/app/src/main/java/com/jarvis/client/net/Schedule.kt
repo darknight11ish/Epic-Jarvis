@@ -51,8 +51,10 @@ import kotlinx.serialization.json.doubleOrNull
  * SINCE 2026-09-25 (the creativity audit's everyday quick wins), in the
  * desktop's words: "Just went off" - a timer, alarm or reminder that went off
  * in the last hour, with Snooze ([SNOOZE]: a one-off copy ten minutes later
- * on the PC; a repeating one keeps its usual times; no card) - also on the
- * notification ([com.jarvis.client.service.ScheduleNotifier]); and NAMED
+ * on the PC; a repeating one keeps its usual times; no card) and, since
+ * 2026-10-13, Delete ([WENT_OFF_ACTIONS]: DEF-008 - deleting a job that has
+ * already gone off works now) - also on the notification
+ * ([com.jarvis.client.service.ScheduleNotifier]); and NAMED
  * lists ("shopping"), each with its items, an Add box and "Clear list",
  * which asks "are you sure?" first ([clearListQuestion]) and sends how many
  * items it showed ([clearListBody]), so nothing added since is lost. The
@@ -115,8 +117,29 @@ object Schedule {
     /** How long Snooze sets (jarvis_schedule.SNOOZE_DEFAULT). */
     const val SNOOZE_SECONDS = 600
 
-    /** Under "Just went off", one button: Snooze - ONE job per tap. */
-    val WENT_OFF_ACTIONS = listOf("snooze")
+    /**
+     * Under "Just went off", two buttons: Snooze and Delete - ONE job per tap.
+     *
+     * Delete is the same word and the same `delete` the live rows offer (both
+     * the desktop's `WENT_OFF_ACTIONS` and this list feed their own
+     * `labelOf`, so neither app invents a second word for one action). It is
+     * here because a fired entry is one the owner can SEE: until 2026-10-13
+     * the route refused it (DEF-008, `act()`'s own state gate), so the only
+     * way off that row was to wait an hour. Since then
+     * `jarvis_schedule.act()` routes `do == "delete"` before that gate,
+     * exactly as `snooze` already was. Nothing else about the row moved: it
+     * still ages out after an hour, Snooze is still 24 hours, and neither
+     * asks anything first - no card and no "are you sure?", because clearing
+     * an entry that has ALREADY gone off changes nothing about the future
+     * (the owner's 2026-09-25 decision: a plain timer or a one-time reminder
+     * needs no approval card).
+     *
+     * "Delete" rather than the register's own phrase "Clear this": this file
+     * names this action "Delete" everywhere ([DELETE], [labelOf]), the
+     * desktop's rows say the same, and "Clear" is already taken here by
+     * "Clear list", which means a whole list.
+     */
+    val WENT_OFF_ACTIONS = listOf("snooze", "delete")
 
     /** A snoozed copy's tag ends with this ("alarm, snoozed"). */
     const val SNOOZED_TAG = "snoozed"

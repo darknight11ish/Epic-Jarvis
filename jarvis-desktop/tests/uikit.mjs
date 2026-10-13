@@ -1623,12 +1623,15 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
               sc.jobs.push(copy);
               return { ok: true, id: args.id, job: copy, said: "Snoozed for 10 minutes - until 12:10." };
             }
-            const all = [...sc.jobs, ...sc.todo];
+            const all = [...sc.jobs, ...sc.todo, ...(sc.went_off || [])];
             const j = all.find((x) => x.id === args.id);
             if (!j) throw new Error("That is not on the list any more.");
             if (args.action === "delete" || args.action === "done") {
+              // A fired job is under went_off, not jobs: jarvis_schedule's
+              // delete() takes it out of both (DEF-008, 2026-10-13).
               sc.jobs = sc.jobs.filter((x) => x.id !== args.id);
               sc.todo = sc.todo.filter((x) => x.id !== args.id);
+              if (sc.went_off) sc.went_off = sc.went_off.filter((x) => x.id !== args.id);
             } else if (args.action === "pause") j.state = "paused";
             else if (args.action === "resume") j.state = "active";
             return { ok: true, id: args.id, said: { delete: "Deleted.", done: "Marked done.",

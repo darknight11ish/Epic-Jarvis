@@ -226,8 +226,14 @@ class ScheduleTest {
     fun snoozeIsOneJobTenMinutesAndClearingNamesOneListAndItsCount() {
         assertEquals("""{"id":"s0000000001","do":"snooze","seconds":600}""", Schedule.actBody("s0000000001", "snooze"))
         assertNull(Schedule.actBody("all", "snooze"))
-        assertEquals(listOf("snooze"), Schedule.WENT_OFF_ACTIONS)
+        // A fired entry can be CLEARED as well as snoozed (DEF-008, the
+        // owner's decision of 2026-10-13): the second button is the same
+        // "delete" every other row offers, worded "Delete" - never a second
+        // word for one action, and never "clear", which means a whole list.
+        assertEquals(listOf("snooze", "delete"), Schedule.WENT_OFF_ACTIONS)
         assertEquals("Snooze 10 minutes", Schedule.labelOf("snooze"))
+        assertEquals("Delete", Schedule.labelOf("delete"))
+        assertEquals("""{"id":"s00000000c1","do":"delete"}""", Schedule.actBody("s00000000c1", "delete"))
         assertEquals("""{"do":"clear_list","list":"shopping","count":3}""", Schedule.clearListBody("shopping", 3))
         for (bad in listOf("", "*", "Shopping", "a b c d", "shop,ping")) {
             assertNull(bad, Schedule.clearListBody(bad, 1))
