@@ -34,6 +34,30 @@ services:
     # The name backend/README.md uses and the name Jarvis's own message shows.
     container_name: searxng
     restart: unless-stopped
+    # WHY THIS IS HERE (2026-10-13). Measured on the owner's PC: SearXNG was up,
+    # the front page answered 200, and every search returned
+    # "results": [] with all five engines timing out. The cause was NOT the
+    # engines and NOT the host's internet - it was name resolution INSIDE the
+    # container. From the Docker Desktop VM:
+    #
+    #   /etc/resolv.conf      nameserver 10.255.255.254   <- WSL's DNS proxy
+    #   nslookup en.wikipedia.org        -> timed out, no servers could be reached
+    #   nslookup en.wikipedia.org 8.8.8.8 -> answers fine
+    #   wget https://1.1.1.1/ (raw IP)    -> fetches a page
+    #
+    # So the container's egress is fine and only its resolver is dead, which is
+    # what makes a search fail while the container looks healthy. Naming the
+    # resolvers here gives the container its own, instead of the WSL proxy that
+    # was not answering. What leaves this PC is unchanged: the resolver sees the
+    # search engines' own hostnames (google.com, duckduckgo.com), never the
+    # owner's search words, which go to the engines themselves as before.
+    #
+    # TAKING EFFECT NEEDS THE CONTAINER RECREATED (docker compose up -d here).
+    # That is a change to the owner's running setup, so it is his call, not a
+    # side effect of this file changing.
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     environment:
       # Says out loud which address this instance answers on, so the links
       # SearXNG builds for itself point at this PC's own loopback and nowhere
