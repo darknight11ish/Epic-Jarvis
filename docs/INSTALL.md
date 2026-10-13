@@ -1108,12 +1108,21 @@ into both apps too).
    backend folder).
 4. Connect.
 
-#### On GrapheneOS, two extra taps first
+#### Before you pair: the private network comes first
+
+This is not a GrapheneOS step — it is true of every phone — but it is worth doing in this order,
+because getting it wrong does not look like a network problem. **Jarvis has no transport of its
+own:** the phone reaches the PC only over Tailscale or NordVPN Meshnet (sections 3.1 and 3.2). So
+install the app, then **install and sign in to Tailscale or Meshnet and only then pair**. With no
+mesh running, the app does not say "the network is off" — it says **"Your PC isn't answering."**,
+which reads as a Jarvis fault and sends you looking at the PC.
+
+#### On GrapheneOS, three extra taps first
 
 GrapheneOS is a more locked-down Android built by a different team from
 Google's. The app is built for exactly that — it needs none of Google's
-services — so the steps above do not change. But two of them behave
-differently, and both are easy to misread as "the app is broken".
+services — so the steps above do not change. But three of them behave
+differently, and all three are easy to misread as "the app is broken".
 
 1. **Unlock the phone before you plug in the USB cable.** GrapheneOS's USB-C
    port defaults to *charging only while the phone is locked*, so on a locked
@@ -1133,6 +1142,13 @@ differently, and both are easy to misread as "the app is broken".
    - then turn the feature on inside Jarvis's own settings.
 
    Nothing else in the app needs this step.
+
+3. **Wait a second before tapping "Allow".** On GrapheneOS the allow button on
+   a permission prompt — and on the "allow USB debugging?" prompt — is
+   deliberately dead for one second after the dialog appears, so a tap that
+   lands during a sneak attack cannot grant anything. **A fast tap simply does
+   nothing**, which looks exactly like a tap that was ignored. Pause, then tap;
+   if it did not take, tap again.
 
 **One more thing worth knowing before you chase a phantom fault:** GrapheneOS
 adds its own per-app **Network** on/off toggle. If that is ever switched off,
