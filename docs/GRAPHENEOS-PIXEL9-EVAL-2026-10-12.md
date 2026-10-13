@@ -457,3 +457,96 @@ Re-check these before relying on this document:
 `jarvis-client/app/src/main/AndroidManifest.xml` · `jarvis-client/app/build.gradle.kts` ·
 `platform/ApprovalKey.kt` · `ui/approval/BiometricGate.kt` · `audio/Speaker.kt` ·
 `platform/PlatformReadiness.kt` · `data/NotificationRedactor.kt` · `net/AlsoOnPhone.kt`
+
+---
+
+## Addendum — 2026-10-13: the owner's local draft, folded in
+
+The text above is `origin/main`'s version of this document, unchanged. The owner
+was working from a local draft of the same document that carried research this
+version does not have; that extra work is folded in here rather than lost —
+verbatim, by section, with its own sources. **Nothing above was rewritten and
+nothing was removed.** Where an excerpt continues a sentence that is in the text
+above, it is marked with an ellipsis.
+
+### Header — how long the Pixel 9 is supported, and which Android the base really is
+
+> which is based on **Android 17**. GrapheneOS lists the Pixel 9 as officially supported *and* on
+> its "strongly recommend" list, with OEM support to August 2031 (7 years)
+> ([releases](https://grapheneos.org/releases#tokay), [FAQ](https://grapheneos.org/faq#device-lifetime)).
+>
+> *One trap for a reader:* the intro of the features page still says the improvements are "beyond
+> what's provided by version 16 of the Android Open Source Project" — that prose is stale. The
+> 2026100600 changelog itself says "migrate to the latest upstream **Android 17** branch from our
+> own port to Android 17", and the security-preview entries name Android 17 QPR1. Treat Android 17
+> as the base.
+
+### §4.2 USB-C port control — the exact setting, and the FAQ's own words
+
+> The setting lives at **Settings → Security → Exploit protection → USB-C port**, and the FAQ
+> describes the default as: *"by default the USB-C port and pogo pins block new connections as
+> soon as the device is locked by default and disable USB data when any existing connections
+> end."* The same front page groups this with the camera and **quick tiles** as "restrictions when
+> the device is locked" — which is why the Quick Settings tiles (below) need an unlock.
+>
+> Sources: [GrapheneOS FAQ — transferring files](https://grapheneos.org/faq#file-transfer),
+> [GrapheneOS usage — USB-C port control](https://grapheneos.org/usage#usb-c-port-and-pogo-pins-control),
+> [GrapheneOS front page — restrictions when locked](https://grapheneos.org/).
+
+### §5.1 Text-to-speech — GrapheneOS's own instruction, and why not sandboxed Play
+
+> … **eSpeak NG** as the usual choices, and gives one instruction that is easy to miss: *"After
+> installing a TTS service, you need to select it in the OS configuration to accept activating it.
+> The OS will display one of them as already selected, but it won't simply work from being
+> installed as that wouldn't be safe."* So installing the app is not enough — it must be selected.
+>
+> *(There is a third route — sandboxed Google Play can be installed and used as a TTS provider,
+> "on a level playing field with other apps". For this project that route is not the one to take:
+> it means putting Google's services on the phone, which rule 1 exists to avoid. RHVoice or
+> eSpeak NG are the aligned choice.)*
+>
+> Sources: [GrapheneOS usage — accessibility](https://grapheneos.org/usage#accessibility);
+> [GrapheneOS usage — sandboxed Play limitations](https://grapheneos.org/usage#sandboxed-google-play-limitations);
+> the app's own behaviour is `audio/Speaker.kt`.
+
+### Voice — "Hey Jarvis" crashes: crash reporting, memory tagging, and how much it actually matters
+
+> **What to do if "Hey Jarvis" crashes or stops responding:** GrapheneOS does not leave this a
+> mystery. It has "user-facing crash reporting with special support for memory corruption caught by
+> hardened_malloc and hardware memory tagging **informing users that memory corruption was
+> detected**", with the choice of whether to enable the compatibility toggles for that app. The
+> switches are at **Settings → Security → Exploit protection** (the FAQ gives this path; one other
+> page on the same site writes "Security & privacy"), and cover secure app spawning, MTE, native
+> code debugging, dynamic code loading and the hardened-allocator compatibility mode. Turning off
+> **Secure app spawning for Jarvis only** is the first thing to try, and is a known-good remedy for
+> this shape of failure. Write down which switch fixed it.
+>
+> **How much does this worry us?** Less than it first appears. GrapheneOS turns on hardware memory
+> tagging by default only for the base OS and for "**known compatible** user installed apps", with
+> an opt-out for the few that are incompatible — so a third-party app like Jarvis is not MTE'd by
+> default. `hardened_malloc` does apply, but ONNX Runtime allocates in the ordinary way.
+>
+> Sources: [GrapheneOS features — exploit mitigations](https://grapheneos.org/features#exploit-mitigations),
+> [GrapheneOS features — crash reporting](https://grapheneos.org/features#log-viewer-and-crash-reporting),
+> [GrapheneOS FAQ — recommended devices (MTE)](https://grapheneos.org/faq#recommended-devices),
+> [GrapheneOS usage — exec spawning](https://grapheneos.org/usage#exec-spawning),
+> [GrapheneOS usage — bugs uncovered by security features](https://grapheneos.org/usage#bugs-uncovered-by-security-features).
+
+### Q&A table — a new transport row, and the evidence behind the always-on link
+
+The row on the always-on link gains its own examples:
+
+> … its own FAQ names foreground service + battery exemption as the supported pattern for exactly
+> this, and cites FairEmail and Signal as examples of apps doing it right.
+
+And one row is **new** — the app's transport, which is the one dependency outside the app's
+control:
+
+> | Does the app's transport depend on something GrapheneOS doesn't ship or vouch for? | **Yes, one thing — and it is outside the app's control.** Jarvis dials the PC over **Tailscale** or **NordVPN Meshnet**, so it needs one of those VPN apps installed and running. GrapheneOS's usage guide only *recommends* the official WireGuard and Mullvad apps for VPN use, and notes the official WireGuard app trips hardware memory tagging — Tailscale and NordVPN are third-party and untested by GrapheneOS. Nothing suggests they fail, but this dependency is worth knowing: **if the mesh is down, Jarvis reports a network problem, not a Jarvis problem.** GrapheneOS also enables the "Always-on VPN" and "Block connections without VPN" toggles for VPN apps by default, and its improved VPN leak blocking is a plus here — but with "Block connections without VPN" on, a dropped Tailscale looks exactly like the network being down. |
+
+### Install steps — the mesh comes first
+
+> 3. **Install Tailscale or NordVPN Meshnet first** and sign in — Jarvis has no transport of its
+>    own, and every later step depends on the mesh being up. Then **open Jarvis and pair** exactly
+>    as `docs/INSTALL.md` §3 says (`*.ts.net` or `*.nord` address, then the token or QR code). If a
+>    permission dialog appears, wait one second before tapping Allow.
