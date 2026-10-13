@@ -160,7 +160,7 @@ PC_ONLY = ("This card can only be approved on the PC, with Windows Hello, so not
 
 #: The shipped approval_timeout_seconds, used when a row carries no
 #: `expires_in` (a backend without approval-expiry.patch).
-DEFAULT_TIME_LEFT = 600.0
+DEFAULT_TIME_LEFT = 900.0
 
 # ---------------------------------------------------------------------------
 # Which approvals are risky - ONE rule, three places
@@ -288,9 +288,13 @@ _SECRET = secrets.token_bytes(32)
 _STAMPS: dict = {}
 _STAMPS_LOCK = threading.Lock()
 _MAX_STAMPS = 256
-#: Longer than any card waits (600 s shipped since 2026-10-13), so a stamp
-#: never outlives the card it was made for by much.
-_STAMP_TTL = 15 * 60.0
+#: Longer than any card waits (900 s shipped since 2026-10-13, and changeable
+#: from Settings), so a stamp never outlives the card it was made for by much.
+#: 20 minutes is a deliberate margin over the 15-minute default: if the two
+#: were equal, a stamp made at the start of a card would expire exactly as the
+#: card did, and a late approval could be refused for a Hello it had already
+#: given. backend/test_limits.py holds this relationship.
+_STAMP_TTL = 20 * 60.0
 
 
 def _mac(request_id, action) -> bytes:

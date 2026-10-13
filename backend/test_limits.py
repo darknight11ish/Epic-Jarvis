@@ -361,17 +361,24 @@ def t_every_entry_says_which_direction_loosens():
     behaviour already had - so converting `loosen_up` into `loosening` changed
     no existing row's behaviour. `undo_window` and `memory_people` go UP; every
     other row here has no loosening direction at all; and the voice check's bar
-    is the one row that goes DOWN."""
+    is the one row that goes DOWN.
+
+    `approval_wait` joined the UP rows on 2026-10-13, when the owner asked for a
+    15-minute approval card whose limit he can change in Settings. A LONGER wait
+    is the loosening direction and so it asks, exactly as `undo_window` does -
+    a card that stays answerable for longer is more, not less. Turning it down
+    tightens, and is immediate."""
     directions = {limit.key: limit.loosening for limit in L.LIMITS}
     check("every entry names a direction this module understands",
           bool(directions) and set(directions.values()) <= {"up", "down", "none"},
           directions)
-    check("the two entries that always asked still go up",
-          directions["undo_window"] == "up" and directions["memory_people"] == "up",
+    check("the three entries that always asked still go up",
+          directions["undo_window"] == "up" and directions["memory_people"] == "up"
+          and directions["approval_wait"] == "up",
           directions)
     check("... and nothing else does",
           sorted(k for k, d in directions.items() if d == "up")
-          == ["memory_people", "undo_window"], directions)
+          == ["approval_wait", "memory_people", "undo_window"], directions)
     check("the voice check's bar is the one that goes down",
           directions.get("voice_bar") == "down", directions)
     shown = {r["key"]: r["loosen_up"] for r in L.view()["limits"]}

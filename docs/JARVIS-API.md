@@ -328,8 +328,9 @@ came from that text rather than from the owner (§4, "Tool calls and outside
 text"). It is part of the text; show it the way the rest is shown.
 
 `expires_in` is seconds left before the gate stops waiting and refuses the
-card (`approval_timeout_seconds`, 600 in the shipped config since 2026-10-13 -
-ten minutes; it was 180). Seconds left,
+card (`approval_timeout_seconds`, 900 in the shipped config since 2026-10-13 -
+fifteen minutes, and changeable in Settings on either app, 5 minutes to an hour;
+it was 600, and 180 before that). Seconds left,
 not a clock time, so the phone's clock does not have to agree with the PC's.
 Without the patch the field is absent and no countdown is shown.
 `backend/test_approval_contract.py` builds these rows from the real

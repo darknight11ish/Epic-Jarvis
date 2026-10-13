@@ -375,6 +375,17 @@ def _ttl_says(v) -> str:
             168: "keep undo for a week"}.get(int(v), f"keep undo for {int(v)} hours")
 
 
+def _wait_says(v) -> str:
+    """The approval window in the owner's words. The stored value is SECONDS
+    (`[autonomy].approval_timeout_seconds`, which jarvis_gate reads), because
+    that is the key every module already reads; only the words here are in
+    minutes, and no number of minutes is ever shown raw."""
+    mins = int(v) // 60
+    return {5: "wait 5 minutes", 15: "wait 15 minutes",
+            30: "wait half an hour", 60: "wait up to an hour"}.get(
+                mins, f"wait {mins} minutes")
+
+
 
 
 
@@ -486,6 +497,31 @@ LIMITS: tuple = (
           app="both", unit="hours",
           note="A longer window keeps older copies of your files on this PC.",
           says=_ttl_says),
+    # `[autonomy].approval_timeout_seconds` - how long an approval card waits
+    # before it times out and is refused (the owner's decision, 2026-10-13:
+    # "boost the cards to 15 minutes with this time limit changeable in the
+    # settings"). 15 minutes is the shipped default; this row is how he changes
+    # it, on either app, and the value lives in the owner's settings file, so it
+    # survives a restart - which is also the key jarvis_gate actually reads, so
+    # the control and the behaviour cannot drift apart.
+    #
+    # A LONGER wait keeps a card actionable for longer, so UP is the direction
+    # that asks (the same shape as `undo_window` above); turning it DOWN is a
+    # tightening and takes effect at once, with no card. Waiting approves
+    # nothing: when the window runs out the card is refused, not allowed.
+    #
+    # Bounded on purpose: 5 minutes to 1 hour, in four steps. There is no zero
+    # (a card that cannot be answered) and no unbounded or "forever" value -
+    # the owner rejected forever, and a card that never expires holds a thread
+    # and can approve something long after it was meant.
+    Limit("approval_wait", "autonomy", "approval_timeout_seconds",
+          "How long an approval card waits", "int", 900,
+          low=300, high=3600, choices=(300, 900, 1800, 3600), loosening="up",
+          app="both", unit="seconds",
+          note="How long you have to answer a card before it times out and is "
+               "refused. A longer wait gives you more time; it never approves "
+               "anything by itself.",
+          says=_wait_says),
     # `[jobs].max_jobs_per_tick` - how much Jarvis gets on with at once.
     # Nothing leaves the PC and nothing is spent, so neither direction asks.
     Limit("jobs_per_tick", "jobs", "max_jobs_per_tick", "Jobs at once",

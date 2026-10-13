@@ -1543,7 +1543,7 @@ def _gate(action: str, detail: dict, prompt: str):
 def _timeout() -> float:
     try:
         return float(fw.load_framework().get("autonomy", {})
-                     .get("approval_timeout_seconds", 600))
+                     .get("approval_timeout_seconds", 900))
     except Exception:
         return 600.0
 

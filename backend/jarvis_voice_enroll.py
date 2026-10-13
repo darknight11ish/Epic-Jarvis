@@ -36,7 +36,7 @@ owner" in one tap.
 THE CARD. Raised through jarvis_gate.check() on a background thread, the
 same way jarvis_skill_discovery.offer() raises its "make this a skill?"
 card: check() blocks until a person answers or the gate's own timeout
-(`approval_timeout_seconds`, 600 s in the shipped config) passes, so it must
+(`approval_timeout_seconds`, 900 s in the shipped config) passes, so it must
 not run on the request thread. The tier is checked BEFORE a card is raised
 and AGAIN on the verdict, because `allowed` is True on tiers auto and notify
 with nobody asked (docs/ARCHITECTURE.md §3) - a voice print must not be
@@ -357,7 +357,7 @@ def _gate(action: str, detail: dict, prompt: str):
 def _timeout() -> float:
     try:
         return float(_fw().load_framework().get("autonomy", {})
-                     .get("approval_timeout_seconds", 600))
+                     .get("approval_timeout_seconds", 900))
     except Exception:
         return 600.0
 
