@@ -26,7 +26,20 @@
 # RUN `-Prove` FIRST. It paints a picture with a colour it knows and checks this
 # tool finds exactly that rectangle, and prints `CONTROL PASS` or `CONTROL FAIL`
 # from the RESULT - never from the words above. A tool that cannot find its own
-# rectangle cannot be believed about the screen.
+# rectangle cannot be believed about the screen. A failed control now exits 1, so
+# "mandatory" is enforced rather than only suggested.
+#
+# FIXED 2026-10-12: THAT CONTROL COULD NEVER PASS, for two independent reasons,
+# and both are fixed here. (1) It painted a 120x80 = 9,600 px rectangle while
+# `-MinArea` defaults to 20,000, and the `-Prove` path never lowered it - so the
+# finder threw away the very rectangle the verdict was looking for, and every run
+# printed `CONTROL FAIL`. Measured: with the floor removed through the tool's own
+# parameter the rectangle WAS found, still reported at y=32 rather than the
+# painted y=30, and the control still failed - which is the second fault.
+# (2) The rectangle was painted at y=30 with `-Step` 4, but a region's bounds are
+# reported snapped to the sampling grid (`$minY * $Step`), so the comparison
+# against 30 could never be true. The control's rectangle is now a whole number
+# of SAMPLES on every side, so it is found exactly where it was painted.
 #
 # Read-only: it captures the screen and looks things up. Nothing is clicked,
 # typed into or changed. What it cannot see: the screen is sampled every `-Step`
@@ -73,18 +86,29 @@ function Get-WindowAt([int]$x, [int]$y) {
 }
 
 # The control's own rectangle, in one place so the picture and the check cannot
-# drift apart.
-$ProveX = 40; $ProveY = 30; $ProveW = 120; $ProveH = 80; $ProveV = 84
+# drift apart. Every side is a whole number of SAMPLES, because a region's bounds
+# are reported snapped to the sampling grid: a control painted at a position or a
+# size that is not a multiple of `-Step` can never be found where it was painted.
+# At the default Step=4 this is 120x80 at (40,32) - 9,600 px.
+$ProveX = 10 * $Step; $ProveY = 8 * $Step; $ProveW = 30 * $Step; $ProveH = 20 * $Step; $ProveV = 84
 
 if ($Prove) {
-  $b = [pscustomobject]@{ Left = 0; Top = 0; Width = 400; Height = 300 }
-  $bmp = New-Object System.Drawing.Bitmap(400, 300)
+  # The control must not be deleted by a floor that exists to throw away noise on
+  # a real screen. A control the tool's own filter removes cannot pass, and a
+  # check that cannot pass is not a check - which is exactly what this one was.
+  # The control's rectangle is 600 samples (9,600 px at Step=4), well under the
+  # 20,000 px default, so it HAS to be judged with its own floor.
+  $MinArea = 0
+  # A picture just big enough to hold the rectangle plus a background margin, so
+  # the control still fits at a larger `-Step`.
+  $b = [pscustomobject]@{ Left = 0; Top = 0; Width = $ProveX + $ProveW + (30 * $Step); Height = $ProveY + $ProveH + (20 * $Step) }
+  $bmp = New-Object System.Drawing.Bitmap($b.Width, $b.Height)
   $g = [System.Drawing.Graphics]::FromImage($bmp)
   $g.Clear([System.Drawing.Color]::FromArgb(0, 0, 23))
   $brush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb($ProveV, $ProveV, $ProveV))
   $g.FillRectangle($brush, $ProveX, $ProveY, $ProveW, $ProveH)
   $g.Dispose(); $brush.Dispose()
-  Write-Output "PROVE: synthetic 400x300 picture, rgb($ProveV,$ProveV,$ProveV) at ($ProveX,$ProveY) ${ProveW}x${ProveH}"
+  Write-Output "PROVE: synthetic $($b.Width)x$($b.Height) picture, rgb($ProveV,$ProveV,$ProveV) at ($ProveX,$ProveY) ${ProveW}x${ProveH} (Step $Step)"
   Write-Output ""
 } else {
   $b = [System.Windows.Forms.SystemInformation]::VirtualScreen
@@ -182,7 +206,12 @@ if ($Prove) {
   })
   if ($hit.Count -eq 1) {
     Write-Output "CONTROL PASS: found [$ProveX,$ProveY ${ProveW}x${ProveH}] $($hit[0].Pixels) px rgb($ProveV,$ProveV,$ProveV) exactly"
+    exit 0
   } else {
     Write-Output "CONTROL FAIL: the painted rgb($ProveV,$ProveV,$ProveV) rectangle at ($ProveX,$ProveY) ${ProveW}x${ProveH} was NOT found; regions found: $($found.Count)"
+    # The exit code IS the verdict. The prose above can be scrolled past or piped
+    # away; a caller reading only the exit code must still see the failure, or
+    # "RUN -Prove FIRST" is a suggestion rather than a gate.
+    exit 1
   }
 }
