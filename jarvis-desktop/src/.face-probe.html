@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>probe</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #05070a; overflow: hidden; }
+  iframe { display: block; border: 0; background: transparent; }
+</style>
+</head>
+<body>
+<iframe id="f" title="probe" tabindex="-1" aria-hidden="true"></iframe>
+<script>
+  const p = new URLSearchParams(location.search);
+  const w = Number(p.get("w") || 120);
+  const face = p.get("face") || "";
+  const state = p.get("state") || "idle";
+  const f = document.getElementById("f");
+  f.style.width = w + "px";
+  f.style.height = w + "px";
+  f.src = "faces.html?mode=display&feed=parent" + (face ? "&face=" + encodeURIComponent(face) : "");
+  window.__ready = false;
+  window.__samples = null;
+  f.addEventListener("load", () => {
+    setTimeout(() => {
+      f.contentWindow.postMessage({ type: "jarvis-hud-face", state: state, offline: false }, location.origin);
+      // Read the frame's own surface cost out of its debug hooks for a while.
+      const doc = () => f.contentDocument;
+      setTimeout(() => {
+        const sw = doc().defaultView;
+        const s = sw.__faceSwitch && sw.__faceSwitch.surface;
+        const cv = doc().getElementById("display-canvas");
+        const first = sw.__faceVoice && sw.__faceVoice.lastState;
+        if (!s) { window.__ready = true; return; }
+        const t0 = performance.now();
+        window.__series = [];
+        const id = setInterval(() => {
+          window.__samples = {
+            w: s.w, devpx: s.devpx, cssW: cv.clientWidth,
+            gpuMs: s.gpuMs, gpuTrips: s.gpuTrips, cost: s.cost, frames: s.frames,
+            state: first, ms: performance.now() - t0,
+          };
+          window.__series.push([Math.round(performance.now() - t0), Math.round((s.gpuMs || 0) * 100) / 100, s.gpuTrips, s.frames]);
+        }, 200);
+        setTimeout(() => { clearInterval(id); window.__ready = true; }, 8000);
+      }, 3000);
+    }, 1800);
+  });
+</script>
+</body>
+</html>

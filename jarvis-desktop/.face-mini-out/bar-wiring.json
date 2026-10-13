@@ -1,0 +1,61 @@
+{
+  "out": [
+    [
+      "after load",
+      {
+        "ready": "ready",
+        "canvas": [
+          480,
+          40
+        ],
+        "label": "Jarvis is idle",
+        "offline": "false",
+        "faceId": "arc",
+        "lastState": "idle"
+      }
+    ],
+    [
+      "thinking",
+      {
+        "ready": "ready",
+        "canvas": [
+          480,
+          40
+        ],
+        "label": "Jarvis is working",
+        "offline": "false",
+        "faceId": "arc",
+        "lastState": "thinking"
+      }
+    ],
+    [
+      "appearance=pygmyowl",
+      {
+        "ready": "ready",
+        "canvas": [
+          240,
+          40
+        ],
+        "label": "Jarvis is working",
+        "offline": "false",
+        "faceId": "pygmyowl",
+        "lastState": "thinking"
+      }
+    ],
+    [
+      "offline",
+      {
+        "ready": "ready",
+        "canvas": [
+          360,
+          40
+        ],
+        "label": "Jarvis isn't connected",
+        "offline": "true",
+        "faceId": "pygmyowl",
+        "lastState": "standby"
+      }
+    ]
+  ],
+  "errors": []
+}
