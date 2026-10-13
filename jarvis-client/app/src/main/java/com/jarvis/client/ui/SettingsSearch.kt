@@ -29,6 +29,22 @@ package com.jarvis.client.ui
  *
  * It changes nothing: no section, switch or value is touched, and clearing
  * the box puts every row back. Nothing here calls the network or the desktop.
+ *
+ * HOW A QUERY MATCHES (2026-10-13). The box used to be one strict substring
+ * test, so ONE typo found nothing: "notifcation" hid the very section it
+ * should have found. It now tokenises the query, needs EVERY word typed to be
+ * found (AND, not OR), ranks a heading word above a body word, and reaches
+ * "the closest recognised wording" only as a last step after exact and prefix
+ * have both failed - see [rank], [rankPart], [tokenTier] and [fuzzyHit], where
+ * the four tiers, the edit-distance table and the two-character prefix guard
+ * are written down with their reasons. This is the phone's half of the
+ * owner's "find settings by the closest recognised wording" request; the
+ * desktop's `rank` (`jarvis-desktop/src/settings-search.js`) carries the same
+ * rule, and the SHARED fixture
+ * (`jarvis-desktop/tests/fixtures/settings-search-cases.json`, generated from
+ * the desktop engine) is read by [SettingsSearchTest] so the two cannot drift
+ * on the rules - two clients that describe one box differently is the drift
+ * this repository has already paid for once.
  */
 object SettingsSearch {
 
@@ -53,6 +69,17 @@ object SettingsSearch {
 
     /** Where a title is checked, relative to `jarvis-client/.../com/jarvis/client/`. */
     private val SCREEN = listOf("ui/screens/SettingsScreen.kt")
+
+    /**
+     * The four ways a word typed can be found, strongest first - the same
+     * numbers the desktop's `settings-search.js` uses (`EXACT`, `PREFIX`,
+     * `FUZZY`, `DETAIL`), so a rank from either app means the same thing.
+     * See [rank] for what each one matches.
+     */
+    private const val EXACT = 4
+    private const val PREFIX = 3
+    private const val FUZZY = 2
+    private const val DETAIL = 1
     private val JUMP = listOf("ui/SettingsJump.kt")
     private val PLATES = "ui/screens/"
 
@@ -328,17 +355,203 @@ object SettingsSearch {
     }
 
     /**
-     * Does this section match? THE one rule, and the same three steps as the
-     * desktop's `rank` (`settings-search.js`): the heading is a stronger
-     * match than the text, and both sides go through [normalise] first - so
-     * "wi fi" finds "Wi-Fi" and "cafe" finds "café" on both apps.
+     * Does this section match, and how strongly? The same four numbers as the
+     * desktop's `rank` (`jarvis-desktop/src/settings-search.js`), because the
+     * two apps must not describe one search box in two different ways:
+     *
+     *  - **4 EXACT** - a word typed IS one of the heading's own words
+     *    ("voice" finds "Voice");
+     *  - **3 PREFIX** - a word typed starts one of the heading's words
+     *    ("voic" finds "Voice");
+     *  - **2 FUZZY** - a word typed is a near miss of one of the heading's
+     *    words ("voise" finds "Voice");
+     *  - **1 DETAIL** - a word typed is found in the section's own text at
+     *    large, the heading's words included ("search" finds "Web search");
+     *  - **0** - no match.
+     *
+     * A section's rank is the WEAKEST of its words typed (see [tokens]), so
+     * one exact word beside one near miss ranks as the near miss, and one word
+     * finding nothing makes the whole query find nothing: typing more words
+     * narrows, never widens. That is what keeps the heading stronger than the
+     * body - a heading word is worth 4, 3 or 2 where the same word in a
+     * paragraph is worth 1.
+     *
+     * Both sides go through [normalise] first, so "wi fi" finds "Wi-Fi" and
+     * "cafe" finds "café" on both apps.
      */
-    fun matches(key: String, query: String): Boolean {
-        val q = normalise(query)
-        if (q.isEmpty()) return false
-        val r = row(key) ?: return false
-        if (normalise(r.title).contains(q)) return true
-        return normalise(wordsFor(key)).contains(q)
+    fun rank(key: String, query: String): Int {
+        val r = row(key) ?: return 0
+        return rankPart(r.title, r.label + " " + r.quotes.joinToString(" "), query)
+    }
+
+    /**
+     * [rank]'s rule on one part named by its words rather than by a section
+     * key: `label` is the heading side, `text` everything else the part says.
+     * It is the same shape as the desktop's `rank(label, text, query)`, which
+     * is what lets the phone be held to the shared cross-app fixture
+     * (`jarvis-desktop/tests/fixtures/settings-search-cases.json`) - a fixture
+     * of made-up parts has no settings key to look up.
+     */
+    fun rankPart(label: String, text: String, query: String): Int {
+        val tokens = tokens(query)
+        if (tokens.isEmpty()) return 0
+        val heading = normalise(label)
+        val detail = normalise(text)
+        var weakest = EXACT
+        for (token in tokens) {
+            val tier = tokenTier(token, heading, detail)
+            if (tier == 0) return 0
+            if (tier < weakest) weakest = tier
+        }
+        return weakest
+    }
+
+    /**
+     * Does this section match the query at all? True when [rank] is above
+     * zero - the four tiers are [rank]'s job, and [matching] uses it only to
+     * keep the section.
+     */
+    fun matches(key: String, query: String): Boolean = rank(key, query) > 0
+
+    /** The query's words, already folded: the query side of the rule. */
+    private fun tokens(query: String): List<String> =
+        normalise(query).split(' ').filter { it.isNotEmpty() }
+
+    /** The words of one side of a section, already folded. */
+    private fun words(text: String): List<String> =
+        normalise(text).split(' ').filter { it.isNotEmpty() }
+
+    /**
+     * The best ONE word typed can do against ONE section: a tier, or 0.
+     *
+     * The heading's own words are tried first and are worth the most. The
+     * detail side is the floor, and it is two separate tests, exactly as the
+     * desktop's `tokenTier` has them: the word typed is one of the detail's
+     * whole words, or it is a near miss of one. It is NOT "the detail text
+     * contains these letters", which the box used to do and which is a
+     * footgun on short tokens - "voice" appeared inside "conVersation" and
+     * showed a card about starting a new conversation. Matching the suffix of
+     * an unrelated word is the behaviour "find by the closest recognised
+     * wording" replaces, so it is deliberately gone.
+     */
+    private fun tokenTier(token: String, heading: String, detail: String): Int {
+        val names = words(heading)
+        if (names.contains(token)) return EXACT
+        if (names.any { it.startsWith(token) }) return PREFIX
+        if (names.any { fuzzyHit(token, it) }) return FUZZY
+        val body = words(detail)
+        if (body.contains(token)) return DETAIL
+        if (body.any { fuzzyHit(token, it) }) return DETAIL
+        return 0
+    }
+
+    /**
+     * [tokenTier] pointed at one word a caller names, so a test can ask what
+     * "cat" does against "chat" without the app having to say "chat" on any
+     * of its screens. Both sides are folded first.
+     */
+    fun wordMatches(queryToken: String, word: String): Boolean =
+        tokenTier(normalise(queryToken), normalise(word), "") > 0
+
+    /**
+     * The typo step: the last thing tried, and only after equal and prefix
+     * have both failed.
+     *
+     * It allows an edit distance (insert, delete or substitute - plus ONE
+     * transposition of two touching letters, counted as one edit, so "voise"
+     * for "voice" is a single mistake) of:
+     *
+     *  - **0 for tokens of 1-3 characters**: one edit in "cat" is "chat",
+     *    "cut", "car" or "at", so any tolerance at this length turns a short
+     *    word into a different one;
+     *  - **at most 1 for 4-7 characters**: long enough that one mistake is
+     *    still recognisably the same word;
+     *  - **at most 2 for 8 or more**: a long word can carry two and stay
+     *    itself, and at this length two edits are a small fraction of it.
+     *
+     * PLUS THE PREFIX GUARD: the token and the word must agree on their
+     * FIRST TWO CHARACTERS. That is what stops "cat" ever reaching "chat"
+     * (the distance is 1 as well, but a short token is refused by the table;
+     * the guard is what keeps whole families of unrelated words apart) and
+     * keeps "backup" from leaping to "pack up" or "security" from matching a
+     * word that merely shares its shape further in. Typing the first two
+     * letters right is the cheapest evidence a person means this word.
+     *
+     * A word shorter than the token is never a fuzzy match: with the prefix
+     * guard in place its distance is always at least the length gap, which the
+     * table above already refuses. The check says so out loud rather than
+     * leaning on the arithmetic.
+     */
+    private fun fuzzyHit(token: String, word: String): Boolean {
+        val tank = when {
+            token.length >= 8 -> 2
+            token.length >= 4 -> 1
+            else -> 0
+        }
+        if (tank == 0) return false
+        if (token.length < 2 || word.length < 2) return false
+        if (token[0] != word[0] || token[1] != word[1]) return false
+        if (word.length < token.length) return false
+        return typoDistance(token, word) <= tank
+    }
+
+    /**
+     * Edit distance where insert, delete and substitute cost 1 and ONE
+     * transposition of two touching characters also costs 1 - the true
+     * Damerau-Levenshtein distance, not the cheaper "did the pair sit next to
+     * each other on the diagonal" form. The difference is real and was caught
+     * here: that cheaper form reads "securtiy" -> "security" as two edits
+     * (substitute, substitute) and refuses it, because the pair is transposed
+     * across the far side of a longer word. A swapped pair is one mistake
+     * wherever it sits, so the matrix keeps each letter's last row and looks
+     * a transposition up there.
+     *
+     * Written out rather than pulled in: the file stays pure, adds no
+     * dependency, and is short enough to read.
+     */
+    private fun typoDistance(a: String, b: String): Int {
+        val rows = Array(a.length + 2) { IntArray(b.length + 2) }
+        val edge = a.length + b.length
+        rows[0][0] = edge
+        for (i in 0..a.length) {
+            rows[i + 1][0] = edge
+            rows[i + 1][1] = i
+        }
+        for (j in 0..b.length) {
+            rows[0][j + 1] = edge
+            rows[1][j + 1] = j
+        }
+        // The ROW each letter of `b` was last seen on - a row index, not a
+        // column. That is what the swap term needs (`rows[same]`), and it is
+        // safe to look up because it is only ever written at the end of a row
+        // that has already been filled in. An earlier version stored the
+        // COLUMN and blew up on "notifcation" against "notifications":
+        // `lastB['s']` still held 14 from the row above while the matrix had
+        // only 13 rows.
+        val lastRowOf = HashMap<Char, Int>()
+        for (i in 1..a.length) {
+            // The column where THIS row last matched, for the swap's column.
+            var lastMatch = 0
+            for (j in 1..b.length) {
+                val same = lastRowOf[b[j - 1]] ?: 0
+                val other = lastMatch
+                var cost = 1
+                if (a[i - 1] == b[j - 1]) {
+                    cost = 0
+                    lastMatch = j
+                }
+                rows[i + 1][j + 1] = minOf(
+                    rows[i][j] + cost, // substitute or keep the letter
+                    rows[i + 1][j] + 1, // insert
+                    rows[i][j + 1] + 1, // delete
+                    // Swap the pair: the letters between the two rows and the
+                    // two columns are deleted and inserted, and the swap costs 1.
+                    rows[same][other] + (i - same - 1) + 1 + (j - other - 1),
+                )
+            }
+            lastRowOf[a[i - 1]] = i
+        }
+        return rows[a.length + 1][b.length + 1]
     }
 
     /**
