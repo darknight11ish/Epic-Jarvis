@@ -70,7 +70,7 @@ so keep it there where you see it.
    powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "<your backend folder>"
    ```
 
-4. **Get the model** (section 1.7). About 5 GB, downloaded into Ollama's
+4. **Get the model** (section 1.8). About 5 GB, downloaded into Ollama's
    own models folder (`C:\Users\<you>\.ollama\models`). Then quit Ollama from
    its tray icon and start it again from the Start menu:
 
@@ -107,7 +107,7 @@ so keep it there where you see it.
    Jarvis bar**, if another program took that key), type `hello`, and press
    Enter. An answer means the whole chain works.
 
-8. **Check everything at once** (section 1.10), from the repository folder.
+8. **Check everything at once** (section 1.11), from the repository folder.
    It changes nothing, and saves its result as `preflight.txt` on your
    Desktop:
 
@@ -443,7 +443,46 @@ each. `backend\README.md` has a section per tool saying what it needs set up
 first and which approval tier it asks under. Restart the backend after
 editing the file.
 
-### 1.7 The model
+### 1.7 Web search, if you want it to work straight away
+
+Skip this if you do not care about web search yet - but know what it costs
+to skip. **Jarvis's shipped search is SearXNG, and SearXNG is a Docker
+container on this PC.** With Docker not installed or not running, your first
+"look that up" fails, and the reason is not one this guide has raised until
+now. Nothing else in Jarvis needs Docker: this is the one thing it is for.
+
+**The way that needs no Docker: use DuckDuckGo instead.** It is built in (it
+needs one Python package, `ddgs`, which step 1.5 installs) and needs no key
+and no account. Say to Jarvis:
+
+> use DuckDuckGo for web search
+
+**The default way, in four lines.** Install **Docker Desktop** (with WSL 2,
+which its own installer offers), **leave it running**, then:
+
+```powershell
+cd "$env:USERPROFILE\Epic-Jarvis\docker\searxng"; docker compose up -d; docker compose ps
+```
+
+`docker compose ps` should list `searxng` with a status starting `Up`. Its
+files are the repository's `docker\searxng\` folder, and it answers only on
+this PC - never your home network, never the internet - because the compose
+file publishes it on `127.0.0.1`.
+
+**What you will see if neither is running**, in Jarvis's own words:
+
+> SearXNG isn't running on this PC - nothing answered at http://127.0.0.1:8888.
+> Start it in Docker Desktop (backend/README.md, "Web search"), or switch web
+> search to another provider.
+
+That message offers to switch, and says how: say **"use DuckDuckGo for web
+search"**, or choose a provider in Settings, Web search. Those two are the
+providers that need no key and no account; Jarvis has five, and
+`backend\README.md`, "Web search", step 3a is the full runbook for the
+default one (the one setting SearXNG needs, how to check it answers, how to
+stop it).
+
+### 1.8 The model
 
 One time. The first two lines are settings Ollama reads at start-up (a
 Modelfile cannot hold them); the rest downloads the base model (about 5 GB)
@@ -471,7 +510,7 @@ all on the graphics card.
 PC as well. `backend\README.md`, section **"Voice that works"**, has the
 steps.
 
-### 1.8 Start it
+### 1.9 Start it
 
 One line (change the path if your backend folder is elsewhere):
 
@@ -515,7 +554,7 @@ line again - or until the desktop app starts it for you (step 2.5, "Let
 Jarvis Desktop start and stop Jarvis", together with "Start Jarvis Desktop
 when Windows starts").
 
-### 1.9 Keep the PC awake
+### 1.10 Keep the PC awake
 
 **Alarms, reminders and "tell me when" go off on the PC, by the PC's clock.**
 While Windows has the PC asleep, nothing goes off, and the phone cannot reach
@@ -534,7 +573,7 @@ To undo it, the same line with a number of minutes instead of `0`, or
 Windows Settings → System → Power → Screen and sleep. The live check
 (below) warns when the PC sleeps on mains power.
 
-### 1.10 Check that it all works
+### 1.11 Check that it all works
 
 With Jarvis running, open a **second** PowerShell window in this
 repository's folder (`cd "$env:USERPROFILE\Epic-Jarvis"`) and run this one
@@ -610,7 +649,7 @@ The README used to say the app has no window at startup. **It does.** Expect:
 If the HUD window says **"demo · not connected"** with a banner telling you to
 run `py -3 jarvis_hud.py`, the desktop app could not reach Jarvis: the HUD's
 requests go through the desktop app (since 2026-09-25), to the address in
-Settings → Connection. Check that Jarvis is running (Part 1, step 1.8) and
+Settings → Connection. Check that Jarvis is running (Part 1, step 1.9) and
 that address (step 2.5). The HUD checks only when it opens, and closing its
 window only hides it, so then quit Jarvis Desktop (tray icon → **Quit
 Jarvis**) and start it again from the Start menu. (This page
@@ -1165,7 +1204,7 @@ GrapheneOS phone, is in
 The phone says one of these (the desktop app uses the same words):
 
 - *"Your PC isn't answering."* Nothing answered at all. The PC may be asleep
-  or switched off (step 1.9), or Tailscale or Meshnet may be off at one end.
+  or switched off (step 1.10), or Tailscale or Meshnet may be off at one end.
   Windows Firewall blocking the port looks the same (step 3.2, the firewall
   line).
 - *"Jarvis isn't running on your PC."* The PC answered, but nothing was
@@ -1181,7 +1220,7 @@ The phone says one of these (the desktop app uses the same words):
   and Meshnet run as one. Switch it on in the Tailscale or NordVPN app; the
   phone reconnects by itself as soon as the network changes.
 
-On the PC, `selftest.py --preflight` (step 1.10) checks the PC's half in
+On the PC, `selftest.py --preflight` (step 1.11) checks the PC's half in
 one go - the phone address, Tailscale or Meshnet on the PC, Jarvis
 listening for the phone, and the firewall rule - under "Can your phone
 reach Jarvis?".
@@ -1190,7 +1229,7 @@ reach Jarvis?".
   server accepts only callers on the PC itself, so the phone is refused as
   if the key were wrong. (Normally the backend makes and saves a key for
   itself; `NONE` almost always means `jarvis_token_store.py` is missing -
-  see step 1.8. The lines under it say why.)
+  see step 1.9. The lines under it say why.)
 
 Every message has a **Details** line under it for a bug report, with keys
 and passwords taken out. It can be selected and copied by hand.
@@ -1263,7 +1302,7 @@ as you set them.
    cd "$env:USERPROFILE\Epic-Jarvis"; git pull; powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
    ```
 
-   Then start Jarvis again (step 1.8).
+   Then start Jarvis again (step 1.9).
 2. **The desktop app.** If the update signing key is set up ("The desktop
    installer, and the update signing key", above), it is now the app's own
    button: Settings → Updates → **Check now**, then **Install**. Until that
@@ -1272,7 +1311,7 @@ as you set them.
 3. **The phone app.** Download the newest `.apk` from the `client-latest`
    release and install it over the old one (step 3.3, 1-2). It stays
    paired: an update signed with the same key keeps the app's data.
-4. **Check** with the live check (step 1.10).
+4. **Check** with the live check (step 1.11).
 
 **Not the same thing:** Settings → **Check for tool updates** looks up
 whether the Python packages and other building blocks Jarvis is made from
