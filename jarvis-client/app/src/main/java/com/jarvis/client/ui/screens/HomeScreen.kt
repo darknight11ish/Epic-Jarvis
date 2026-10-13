@@ -657,6 +657,16 @@ data class HomeActions(
     val onOpenInbox: () -> Unit,
     val onOpenBrain: () -> Unit,
     /**
+     * "Choose a model" on a plain-error notice ([com.jarvis.client.net.PlainErrors.MODELS],
+     * the `model_missing` kind). SEPARATE from [onOpenBrain] on purpose: the
+     * owner reported on 2026-10-13 that the button "doesn't take me to a list
+     * to actually choose from", and it did not - it opened the Brain at its
+     * first section with nothing scrolled to and nothing opened, while the
+     * Models plate is at the bottom of the "Jarvis on your PC" heading, behind
+     * its own menu. This one opens the Brain AT that plate.
+     */
+    val onOpenModelChoices: () -> Unit,
+    /**
      * The Galaxy, from Home (the owner's request of 2026-10-11: "the galaxy on
      * the android app should be a direct button thr main screen if the app").
      * It opens the Brain's own "people-and-things" plate - the phone's Galaxy,
@@ -872,7 +882,7 @@ internal fun noticeAction(
         com.jarvis.client.net.PlainErrors.RETRY -> if (p.chat) actions.onRetryQuestion else actions.onReconnect
         com.jarvis.client.net.PlainErrors.RECONNECT -> actions.onReconnect
         com.jarvis.client.net.PlainErrors.CONNECTION -> actions.onOpenChecks
-        com.jarvis.client.net.PlainErrors.MODELS -> actions.onOpenBrain
+        com.jarvis.client.net.PlainErrors.MODELS -> actions.onOpenModelChoices
         else -> null
     }
 }
