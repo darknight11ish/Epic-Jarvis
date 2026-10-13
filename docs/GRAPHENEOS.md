@@ -10,6 +10,11 @@ the switch happened.
 > stands today and against GrapheneOS's current Android 17 release for the
 > Pixel 9. **The answer is yes: the app works on a GrapheneOS Pixel 9 and needs
 > no code change to do so** — it uses no Google services at all, on purpose.
+> **This is a paper evaluation: no GrapheneOS phone has ever run this app.**
+> Everything here was reached by reading the source, the manifest, the Gradle
+> dependencies and the shipped native libraries against GrapheneOS's own
+> documentation — so the ONNX "Hey Jarvis" wake word is **expected to work but
+> unproven** (see "The one real uncertainty" below).
 >
 > That evaluation is
 > [`GRAPHENEOS-PIXEL9-EVAL-2026-10-12.md`](GRAPHENEOS-PIXEL9-EVAL-2026-10-12.md).
@@ -17,7 +22,7 @@ the switch happened.
 >
 > - the **hard prerequisite** below, which must be met before anyone raises
 >   `targetSdk` to 37 (the app is safe at 36 today);
-> - the **three accepted differences**, below that, so none of them is
+> - the **four accepted differences**, below that, so none of them is
 >   diagnosed as a bug on the first run.
 >
 > The original five first-run checks further down are still correct; they are
@@ -26,8 +31,9 @@ the switch happened.
 ## HARD PREREQUISITE for any targetSdk 37 bump
 
 **Do not raise `jarvis-client`'s `targetSdk` above 36 until the
-`ACCESS_LOCAL_NETWORK` flow below exists and has been tested on a real
-GrapheneOS phone.** This is the one item in this whole page that can break the
+`ACCESS_LOCAL_NETWORK` flow below has been tested on a real
+GrapheneOS phone.** The flow itself is **built** (PR #348, 2026-10-13); what is
+missing is the test on the phone, and that is now the whole prerequisite. This is the one item in this whole page that can break the
 app silently, and it is written here as a standing rule rather than as advice,
 because the failure it causes looks like something else entirely.
 
@@ -50,8 +56,8 @@ workaround: the app-compat override cannot be disabled for a non-debuggable
 app on a user build. A real report of exactly this is Kodi on GrapheneOS with
 Android 17.
 
-**What the fix is, when it is built** (five changes, no design work — full
-detail in §6 of
+**What the fix is, and how much of it is already built** (five changes, no design
+work — full detail in §6 of
 [`GRAPHENEOS-PIXEL9-EVAL-2026-10-12.md`](GRAPHENEOS-PIXEL9-EVAL-2026-10-12.md)):
 
 1. Declare `<uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />`
@@ -65,6 +71,25 @@ detail in §6 of
 5. Test both mesh paths (Tailscale and Meshnet) on the real GrapheneOS phone
    with `targetSdk 37`, before that bump ships.
 
+**State of play, checked 2026-10-13: four of the five are BUILT, and only step 5
+is left.** PR [#348](https://github.com/darknight11ish/Epic-Jarvis/pull/348)
+("ask for local network access, so Android 17 cannot silently cut the link",
+merged 2026-10-13 01:59) landed steps 1-4, and its own CI compiled and tested
+them — on that PR, `build`, `smoke` and `phone-unit-tests` all passed. The code
+now in `origin/main`:
+
+| step | state | where it is |
+|---|---|---|
+| 1. declare the permission | **BUILT** | `jarvis-client/app/src/main/AndroidManifest.xml:24` |
+| 2. ask at the pairing screen | **BUILT** | `jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/PairingScreen.kt:197` (the launcher; `LocalNetworkPermission.kt` holds the rule) |
+| 3. a plain refusal, not a silent timeout | **BUILT** | `PairingScreen.kt:206` (granted/refused), `:335` and `:355` (the message and its **Try again**) |
+| 4. a Checks row | **BUILT** | `jarvis-client/app/src/main/java/com/jarvis/client/platform/PlatformReadiness.kt:217-240` |
+| 5. test both mesh paths on a real GrapheneOS phone at `targetSdk 37` | **STILL OUTSTANDING** | needs the phone — nothing in this project can do it, and a GrapheneOS phone has never run this app |
+
+So this prerequisite is now **one test, not a piece of work**. `targetSdk` is
+still **36** (`jarvis-client/app/build.gradle.kts:173`), which is the thing that
+keeps the app safe today.
+
 **A genuine ambiguity, to be settled by that test rather than assumed:**
 Android's guidance also says a local network "excludes cellular and **VPN**
 connections", and this app's traffic to the PC goes out over the VPN interface.
@@ -72,7 +97,7 @@ If the rule follows the interface, Jarvis is exempt even at 37; if it follows
 the address range, it is not. Both statements are in the official material, so
 step 5 is what decides it.
 
-## Three things that work differently on GrapheneOS, accepted
+## Four things that work differently on GrapheneOS, accepted
 
 None of these is a defect in the app, and none needs a code change. They are
 written down so they are not diagnosed as bugs later — each one already has a
@@ -83,6 +108,7 @@ plain-language message or a safe fallback built in.
 | **No text-to-speech engine.** GrapheneOS ships without one. | If the PC has no voice pack, the phone cannot speak the reply. It says so: *"No offline voice on this phone, so it was not spoken aloud. The reply is on screen."* | The app deliberately refuses network voices (rule 1), so silence plus the reply on screen is the **correct** outcome, not a fault. The normal voice is the PC's own and is unaffected. **Do not change the voice behaviour to make it speak here.** |
 | **No calendar app.** GrapheneOS bundles none. | The reminder half of "Also on my phone" has nothing to hand an event to. The app says so: *"This phone has no calendar app that takes events from other apps."* The alarm half still works. | A missing feature, correctly reported. Install a calendar app if the reminder half is wanted — noting that a third-party one may sync to a cloud account, which is the owner's own choice. |
 | **No face unlock.** | Risky approvals rest on the fingerprint or the PIN instead. | **Harmless.** The app already asks for `BIOMETRIC_STRONG or DEVICE_CREDENTIAL` and explicitly refuses weak biometrics, so GrapheneOS removes an option the app never wanted. |
+| **Quick Settings tiles need an unlock.** | A tile in the notification shade cannot be used while the phone is locked. | **Expected, not a fault.** GrapheneOS requires an unlock for system tiles by default. Once the phone is unlocked the tiles work normally; nothing in the app changes. |
 
 ## The short answer
 
