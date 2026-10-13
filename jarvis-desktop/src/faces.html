@@ -121,6 +121,19 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
 .solo-line[hidden]{display:none}
 details.dev{margin-top:26px;color:var(--dimmer);font-size:12px}
 details.dev summary{cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--dim)}
+/* ---------- display mode: the Widget, the HUD and the floating face --------
+   These two rules MUST stay here, in the page's own <style>, and must not be
+   built at run time by bootDisplay(). The app's CSP is rewritten by Tauri, which
+   puts a nonce on this element and adds 'nonce-...' to style-src; a directive
+   that carries a nonce makes Chromium IGNORE 'unsafe-inline', so a <style>
+   element created by script is refused outright (found 2026-10-07, and it is
+   why the owner's face was drawn far too large and clipped). With no CSS size
+   the display canvas lays out at its own backing-store size - 1200 px inside a
+   232 px frame - and only a sliver of the face is in view. Scoped to
+   html.display-mode so the editor, which sizes its tiles from `.card canvas`
+   above, is not touched. */
+html.display-mode, html.display-mode body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:transparent}
+html.display-mode #display-canvas{display:block;width:100%;height:100%}
 </style>
 
 <div class="wrap">
@@ -6936,14 +6949,15 @@ function specState(link) {
 }
 
 async function bootDisplay() {
+  // The `display-mode` class is what selects the two rules in THIS page's own
+  // <style> that give the canvas its size. They are deliberately not built here
+  // any more: the app's CSP carries a nonce on this page's own style element,
+  // and a nonce makes Chromium ignore 'unsafe-inline' - so a <style> element
+  // created at run time was refused, the canvas fell back to its backing-store
+  // size (1200 px inside a 232 px frame) and only a sliver of the face was in
+  // view. See the rule's own comment at the top of this file.
   document.documentElement.classList.add("display-mode");
   document.body.innerHTML = "";
-  const style = document.createElement("style");
-  style.textContent = `
-    html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:transparent; }
-    #display-canvas { display:block; width:100%; height:100%; }
-  `;
-  document.head.appendChild(style);
   const canvas = document.createElement("canvas");
   canvas.id = "display-canvas";
   // A picture with a name. The windows that embed this frame hide it from
