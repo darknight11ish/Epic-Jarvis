@@ -2127,3 +2127,36 @@ This replaces the earlier position in the same day's work that the tool "ships
 OFF, like every tool but `web_search`". That was the safe default while the
 choice was still open; it is no longer what the project does.
 
+Decided 2026-10-13, the owner's explicit answer to a question the audits left
+open on 2026-09-25 - **idea I-1**, question 1 of
+`docs/creativity-2026-09-25/rules.md` section 6:
+
+- **A web search asks first only when private words could actually end up in the
+  search.** This is a LOOSENING - fewer cards, less asking - so it was put to him
+  as one, and he said yes; the project's rule is that loosening anything
+  privacy-related is his call and asks first.
+- **It is the same rule as the 2026-09-25 entry above, which landed then, so NO
+  CODE CHANGED for this entry.** What this adds is the record of his explicit yes
+  to it *as a loosening*, and the proof that the behaviour now shipped is the
+  behaviour he chose. It was checked on 2026-10-13 rather than assumed.
+- **Where it lives in the code.** `jarvis_agent.web_search_card_lines` builds the
+  card's reasons; the memory reason asks `jarvis_search.repeated_facts`, which
+  needs the SEARCH WORDS to match a saved fact's own words (words the owner used
+  themselves do not count), plus `jarvis_search.fact_topic` for sensitive facts.
+  A pinned "Always keep in mind" fact on its own therefore raises no card - it is
+  added to every question, which is what made it the most frequent unneeded card
+  (`docs/creativity-2026-09-25/experience.md` section 0.4).
+- **Verified on 2026-10-13** in `.dsh-scratch/wt-searchask`, `JARVIS_BACKEND`
+  unset: a pinned, non-sensitive fact with a plainly public search -> **no card,
+  0 lines**; a sensitive saved fact with the same public search -> **a card**,
+  whose exact line is *"Jarvis used a saved fact about health for this question,
+  so it asks before searching - something private could be in the search words."*;
+  search words that repeat the fact -> a card; `backend/test_web_search.py` ->
+  343 passed, 0 skipped, 0 failed.
+- **What deliberately did not move:** sensitive saved facts (health, money,
+  passwords and account details, and private details about other people), search
+  words that repeat a saved fact, outside text read in the conversation, pasted or
+  shared text, the owner's own "Ask before every web search", and password-looking
+  words refused outright, which is never a card. Every card still shows the exact
+  search words and says why in plain words.
+
