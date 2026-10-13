@@ -672,6 +672,16 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # it cannot rewrite a line devices.patch wrote, and
                                 # the later_rewriting() half below proves it.
                                 "card-prefs.patch",
+                                # gate-raise-rows.patch (2026-10-09; rescued onto
+                                # main 2026-10-13) gives the two raise actions
+                                # their rows in the same two gate lists, at
+                                # quiz-cloud.patch's own `quiz_cloud_grade` rows -
+                                # hundreds of lines after the three rows
+                                # devices.patch wrote, and it names none of them.
+                                # It sits before gate-touches.patch, not at the
+                                # end: see its entry in apply-patches.ps1. The
+                                # later_rewriting() half below proves it.
+                                "gate-raise-rows.patch",
                                 # gate-touches.patch (2026-10-11) is appended last and
                                 # has exactly TWO hunks, both in jarvis_gate.py: under
                                 # `_PROTECTED`/`_PROTECTED_RE` and at check()'s own

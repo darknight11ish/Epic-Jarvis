@@ -263,6 +263,33 @@ RATCHET = {
     #:     anchor on, so a fresh copy of the owner's file does too.
     #:
     #: A ratchet: it may still only go down.
+    #:
+    #: NOT RAISED for the rescued `gate-raise-rows.patch` (2026-10-13): it
+    #: materialises NOTHING and this file still reads 25, which is why the pin
+    #: is unchanged. That was worth measuring rather than assuming - the first
+    #: two attempts at placing that patch both cost the walk, in two different
+    #: ways, and both were caught by other suites rather than by this one:
+    #:
+    #:   * Placed after quiz-cloud.patch but BEFORE readpage.patch, its
+    #:     `_NO_RULE_FROM_DENIAL` hunk (trailing context `read_web_page`, which
+    #:     readpage.patch writes) could not match: materialised at the END of
+    #:     the file, leaving `quiz_cloud_grade` TWICE in `_RISK`. Dead code -
+    #:     test_gate_risk_words.py caught it.
+    #:   * Placed after readpage.patch but BEFORE the handoff pair, it pushes
+    #:     handoff-mode.patch's own `_NO_RULE_FROM_DENIAL` hunk - which anchors
+    #:     on that same `quiz_cloud_grade` row, the owner's text - out of reach,
+    #:     so THAT hunk is materialised past the set's closing brace and the two
+    #:     handoff actions end up in no set at all. test_gate_denial_rule.py
+    #:     caught that one. The count would have gone 25 -> 26 and looked
+    #:     "honest" here; it was not, and the ratchet alone would not have said
+    #:     so. Worth remembering: this pin is one signal among several, not the
+    #:     safety net.
+    #:
+    #: It now sits after the handoff pair and before gate-touches.patch (see its
+    #: entry in apply-patches.ps1), where both of its hunks apply to real
+    #: context and nothing else moves.
+    #:
+    #: A ratchet: it may still only go down.
     "jarvis_gate.py": 25,
     "jarvis_extract.py": 9,
     "jarvis_models.py": 5,

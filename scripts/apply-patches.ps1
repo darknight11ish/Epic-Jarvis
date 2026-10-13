@@ -1305,6 +1305,51 @@ $PATCHES = @(
     # own picture and input routes are untouched, and the desktop still names
     # none of them (tests/handoff.mjs and tests/handoff-front.mjs).
     'handoff-front.patch'
+    # The last two actions with no row in the gate's own tables (2026-10-09;
+    # ported onto current main 2026-10-13 as a rescue). `raise_a_limit`
+    # (jarvis_limits.py) and `raise_attention_budget` (jarvis_arbiter.py) each
+    # had their own [autonomy.tiers] line and no row in `_NO_RULE_FROM_DENIAL`
+    # or `_RISK`, so risk_for() fell back to _UNKNOWN_RISK: the card called each
+    # one unclassified, irreversible and outbound. All three are untrue - each
+    # sends nothing anywhere (both put "leaves_this_pc": False on their own
+    # card) and each writes ONE number into the owner's own settings file. It is
+    # ONE patch, not a hunk added to limits-settings.patch and
+    # attention-settings.patch, because those two own one ROUTE each in
+    # jarvis_hud.py; and because the rows cannot go at the END of either table -
+    # handoff-mode.patch's and handoff-front.patch's own rows end `_RISK` in
+    # this stack, so a patch anchored there would land in a different place here
+    # than in the published base.
+    #
+    # WHERE IT SITS, and why it is not simply appended last. Three constraints,
+    # and every one of them was measured rather than reasoned about - the first
+    # two attempts at placing this patch were wrong, each in a different way:
+    #
+    #   * AFTER quiz-cloud.patch - its `_RISK` hunk anchors on that patch's own
+    #     `quiz_cloud_grade` row and the comment above it.
+    #   * AFTER readpage.patch - its `_NO_RULE_FROM_DENIAL` hunk has
+    #     `read_web_page` as TRAILING context, and readpage.patch writes that
+    #     row. Placed after quiz-cloud.patch but BEFORE readpage.patch, both
+    #     hunks still apply to the owner's real file, but in this repository's
+    #     whole-stack stand-in (backend/_stack.py) `read_web_page` is not there
+    #     yet: the hunk is materialised at the END of the file and `_RISK` ends
+    #     up holding `quiz_cloud_grade` TWICE - dead code, which
+    #     test_gate_risk_words.py caught.
+    #   * AFTER handoff-front.patch - handoff-mode.patch's own
+    #     `_NO_RULE_FROM_DENIAL` hunk anchors on that same `quiz_cloud_grade`
+    #     row. Placing this patch BEFORE the handoff pair pushes handoff-mode's
+    #     context out of reach, so its hunk is materialised at the end of the
+    #     file too, past `_NO_RULE_FROM_DENIAL`'s closing brace - and then
+    #     `handoff_keep_offering` and `handoff_bring_to_front` are not in the
+    #     set at all, which test_gate_denial_rule.py caught.
+    #
+    #   * AND BEFORE gate-touches.patch. Both patches write jarvis_gate.py, and
+    #     test_gate_touches.py checks that gate-touches.patch is the LAST such
+    #     patch in this list.
+    #
+    # Here - between the handoff pair and the money-limits gate half - both
+    # hunks apply to real context, this patch materialises nothing, and no
+    # earlier patch's hunk is disturbed.
+    'gate-raise-rows.patch'
     # The work setups (the owner asked, 2026-10-10): five combinations of
     # local models, each chosen for a kind of work - building an Android app,
     # admin and paperwork, long conversations and big documents, quick

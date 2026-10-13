@@ -709,6 +709,12 @@ def t_the_patch_and_the_lists():
              # HUD's read-only route set. jarvis_gate.py not at all again, so it
              # rewrites nothing referee.patch's hunks anchor on either.
              "limits-read.patch",
+             # gate-raise-rows.patch (2026-10-09; rescued onto main 2026-10-13):
+             # two hunks in jarvis_gate.py, both ADDING rows to the two lists
+             # referee.patch's own hunks anchor on - but at quiz-cloud.patch's
+             # `quiz_cloud_grade` rows, which sit AFTER `referee_tick` in both,
+             # so it rewrites none of referee.patch's lines either.
+             "gate-raise-rows.patch",
              # handoff-front.patch (2026-10-09): the same two hunks in
              # jarvis_gate.py as handoff-mode.patch's, both at the END of the
              # "acts only on tier ask" set and the _RISK table, so it rewrites

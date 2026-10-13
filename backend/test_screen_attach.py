@@ -484,9 +484,14 @@ def t_hygiene():
     # (2026-10-08) is written after it too, and has no jarvis_hud.py hunk at
     # all (its two hunks are in jarvis_gate.py), so it cannot rewrite the
     # block this patch installs either - and handoff-front.patch (2026-10-09)
-    # is the same shape, after that one.
+    # is the same shape, after that one. gate-raise-rows.patch (2026-10-09;
+    # rescued onto main 2026-10-13) is the same shape again: TWO hunks, both in
+    # jarvis_gate.py - one row per raise action in each of the gate's two tables
+    # - and no jarvis_hud.py hunk at all, so it cannot rewrite the POST
+    # /api/screen wrapper this patch installs.
     stack_order = __import__("_stack").order()
     later = {"retrieve-count.patch", "handoff-mode.patch", "handoff-front.patch",
+             "gate-raise-rows.patch",
              "plugin-loader.patch",
              # card-prefs.patch (2026-10-10, "cards read short"): ONE added block
              # in jarvis_hud.py, straight after animal.patch's own and before
