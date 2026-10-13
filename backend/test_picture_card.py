@@ -221,6 +221,19 @@ def t_a_part_downloaded_file_is_not_ready():
               PC.model_files("big", str(comfy))["ready"] is False)
     finally:
         PC.IMAGE_MODELS = real_models
+        # THE 4.8 GB FILE GOES WITH IT (2026-10-13). The block above makes one
+        # companion the model's REAL size with `truncate` - 5,157,348,688 bytes
+        # for the big one - and on NTFS that is the whole file, not a sparse
+        # one: removing such a directory was measured freeing 4.84 GB. This
+        # directory is created in the system temp folder, and nothing used to
+        # remove it, so one run of this suite left 4,918.43 MB there for good.
+        # Measured that night: 23 of them, 110.47 GB, on the same drive as the
+        # owner's voice print and chat history - and how C: reached 1.47 GB
+        # free. The `finally` is the point: it runs when a check fails and when
+        # the block raises, not only when everything passes. `ignore_errors` so
+        # a file another process holds open cannot turn a passing suite into a
+        # failing one; every check above has already run by now.
+        shutil.rmtree(comfy, ignore_errors=True)
 
 
 def t_A_unloads_the_chat_and_warms_it_back():
