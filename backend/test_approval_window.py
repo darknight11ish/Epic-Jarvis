@@ -72,6 +72,12 @@ def t_the_gate_takes_the_value_from_the_file():
             "approval_timeout_seconds = 900", "approval_timeout_seconds = 1234")
         cfg.write_text(text, encoding="utf-8")
         os.environ.pop("JARVIS_APPROVAL_TIMEOUT", None)
+        # JARVIS_FRAMEWORK_TOML is tried BEFORE CONFIG_DIR (jarvis_framework.py:112,
+        # `_explicit()` first), and both CI jobs set it to their own private copy of
+        # the file. Without pointing it at the file written here, the gate reads CI's
+        # copy - 900 - so this check failed there and passed locally (2026-10-13).
+        old_env = os.environ.get("JARVIS_FRAMEWORK_TOML")
+        os.environ["JARVIS_FRAMEWORK_TOML"] = str(cfg)
         import jarvis_framework as fw
         old = getattr(fw, "CONFIG_DIR", None)
         fw.CONFIG_DIR = tmp
@@ -84,6 +90,10 @@ def t_the_gate_takes_the_value_from_the_file():
         finally:
             if old is not None:
                 fw.CONFIG_DIR = old
+            if old_env is None:
+                os.environ.pop("JARVIS_FRAMEWORK_TOML", None)
+            else:
+                os.environ["JARVIS_FRAMEWORK_TOML"] = old_env
             sys.modules.pop("jarvis_gate", None)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -102,6 +112,9 @@ def t_settings_reaches_the_key_the_gate_reads():
               v == "1800", f"found {v!r}")
         # And the gate, reading that same file, now waits longer.
         os.environ.pop("JARVIS_APPROVAL_TIMEOUT", None)
+        # Same reason as above: the env override wins over CONFIG_DIR, and CI sets it.
+        old_env = os.environ.get("JARVIS_FRAMEWORK_TOML")
+        os.environ["JARVIS_FRAMEWORK_TOML"] = str(cfg)
         import jarvis_framework as fw
         old = getattr(fw, "CONFIG_DIR", None)
         fw.CONFIG_DIR = tmp
@@ -113,6 +126,10 @@ def t_settings_reaches_the_key_the_gate_reads():
         finally:
             if old is not None:
                 fw.CONFIG_DIR = old
+            if old_env is None:
+                os.environ.pop("JARVIS_FRAMEWORK_TOML", None)
+            else:
+                os.environ["JARVIS_FRAMEWORK_TOML"] = old_env
             sys.modules.pop("jarvis_gate", None)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
