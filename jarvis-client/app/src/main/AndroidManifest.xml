@@ -5,6 +5,24 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Local network access, which Android 17 (API 37) newly gates.
+         (platform/LocalNetworkPermission.kt holds the whole story.)
+
+         WHY IT IS DECLARED EVEN THOUGH IT DOES NOTHING TODAY: this app targets
+         API 36, and enforcement is keyed to targetSdk 37+. So the declaration
+         is inert right now, and it is here so that the day anyone raises that
+         number the permission is already in place. Without it a targetSdk 37
+         build would install, start and pair normally and then never reach the
+         PC - reporting "Your PC isn't answering" for ever, with nothing
+         naming a permission. Android's local-network definition includes the
+         CGNAT range 100.64.0.0/10, which is exactly Tailscale's and NordVPN
+         Meshnet's - the app's whole transport.
+
+         It is a normal permission: no `tools:ignore`, no maxSdkVersion, and
+         nothing to remove later. Unknown to API 36 and below, which simply
+         ignore it. -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+
     <!-- Reading phone notifications (data/NotificationAllowListStore.kt
          `installedApps()`): without this, Android 11+'s package-visibility
          rules would quietly filter `PackageManager.getInstalledApplications`

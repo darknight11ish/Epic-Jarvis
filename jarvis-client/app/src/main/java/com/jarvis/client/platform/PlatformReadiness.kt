@@ -44,7 +44,7 @@ data class ReadinessItem(
      * so a button can never again sit in a strip far from the card that
      * explains why it is there.
      */
-    enum class Fix { NOTIFICATIONS, BATTERY, START_LINK, ASSISTANT_ROLE }
+    enum class Fix { NOTIFICATIONS, BATTERY, START_LINK, ASSISTANT_ROLE, LOCAL_NETWORK }
 }
 
 object PlatformReadiness {
@@ -210,6 +210,37 @@ object PlatformReadiness {
                 ReadinessItem.State.OK
             } else {
                 ReadinessItem.State.WARN
+            },
+        ),
+        ReadinessItem(
+            title = "Local network",
+            detail = if (LocalNetworkPermission.blocked(context)) {
+                "Not allowed yet. Android is keeping this app off your local " +
+                    "network, which is how it reaches your PC. Tap below and " +
+                    "allow it, or Jarvis cannot connect."
+            } else if (LocalNetworkPermission.required()) {
+                "Allowed. Android lets Jarvis reach your PC on your private network."
+            } else {
+                "No permission needed on this Android version. Nothing to do."
+            },
+            technical = "ACCESS_LOCAL_NETWORK. Android 17 (API 37) blocks local " +
+                "network access by default for apps targeting API 37 or higher, " +
+                "and Android counts the CGNAT range 100.64.0.0/10 as local - " +
+                "which is Tailscale's and NordVPN Meshnet's range, so the app's " +
+                "whole transport to the PC falls inside it. This app targets " +
+                "API 36 today, where the permission is declared but inert, so " +
+                "this row reads 'nothing to do' on every phone in use. No " +
+                "workaround exists once it applies: a user build cannot disable " +
+                "the app-compat override for a non-debuggable app.",
+            state = if (LocalNetworkPermission.blocked(context)) {
+                ReadinessItem.State.WARN
+            } else {
+                ReadinessItem.State.OK
+            },
+            fix = if (LocalNetworkPermission.blocked(context)) {
+                ReadinessItem.Fix.LOCAL_NETWORK
+            } else {
+                null
             },
         ),
         ReadinessItem(
