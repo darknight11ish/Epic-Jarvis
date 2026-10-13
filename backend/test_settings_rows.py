@@ -207,8 +207,8 @@ def t_setting_links_are_real():
            if r.setting and r.setting not in keys]
     check("every row's `setting` names a real BoolSetting", not bad, "; ".join(bad))
     linked = sorted(r.dom_id for r in R.DESKTOP_ROWS if r.setting)
-    check("seven desktop rows are the same switch as a spoken setting",
-          len(linked) == 7, f"{linked} - if this grew, the row was given a setter")
+    check("fifteen desktop rows are the same switch as a spoken setting",
+          len(linked) == 15, f"{linked} - if this grew, the row was given a setter")
     # The spoken settings with no desktop toggle. Three have no switch row at
     # all on this page (two are on the Brain's Memory tab, one is a row inside
     # "What asks first"), and two are the phone's own. `big_coder` joined them
@@ -268,6 +268,15 @@ def t_bool_settings_is_the_measured_thirteen():
       * the 30B coder's opt-in (`big_coder`) - the row the big-coder mode
         turns on, which the spoken table answers for too.
 
+    Twenty-one since 2026-10-13, when EIGHT names joined it (the settings a
+    chat turn could not reach before - the audit in
+    `.dsh-scratch/settings-reachability-audit.md`): the five notification
+    switches, humour, "Voice follows the face" and the better voice. Every one
+    already had a route and a tier; the change adds the PHRASE and nothing
+    else, and each setter calls the same function the Settings screen calls.
+    They raise the rows they are the same switch as from seven to fifteen,
+    which this file's other check states.
+
     Neither is a row added "beside" the spoken table: each is a switch the
     owner can say out loud, which is what this table is. The growth is argued
     where each lives - the BoolSetting's own comment and the setter's docstring
@@ -275,8 +284,8 @@ def t_bool_settings_is_the_measured_thirteen():
     phrase and dispatches on the same key, so both phrases really work. Any
     further growth has to be argued the same way.
     """
-    check("BOOL_SETTINGS holds its thirteen spoken settings",
-          len(R.BOOL_SETTINGS) == 13, str(len(R.BOOL_SETTINGS)))
+    check("BOOL_SETTINGS holds its twenty-one spoken settings",
+          len(R.BOOL_SETTINGS) == 21, str(len(R.BOOL_SETTINGS)))
 
 
 def main() -> int:

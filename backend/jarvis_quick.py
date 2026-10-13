@@ -2753,6 +2753,19 @@ _ADJUST_ONOFF = re.compile(
     r"|(enable)\s+(.+)"
     r"|(disable)\s+(.+)")
 
+#: A sentence that asks to change A SETTING and names one nothing knows
+#: (2026-10-13): "turn off the turbo setting", "change my security settings",
+#: "enable the settings thing". The word "setting"/"settings" is REQUIRED, and
+#: that is the whole safety of this pattern: a device ("turn off the kitchen
+#: light"), a timer, a menu, an animal option and every other feature this file
+#: answers do not carry it, so nothing already answered changes hands.
+_SETTING_UNKNOWN = re.compile(
+    r"(?:turn|switch)\s+(?:on|off)\s+(?:the\s+|my\s+|a\s+)?(.+?)\s+settings?"
+    r"|(?:enable|disable|change|set|adjust|edit|update)\s+(?:the\s+|my\s+|a\s+)?"
+    r"(.+?)\s+settings?"
+    r"|(?:change|edit|adjust|update)\s+(?:my|the|a)\s+settings"
+    r"|(?:turn|switch)\s+(?:on|off)\s+(?:my|the|a)\s+settings")
+
 #: "What asks first" (jarvis_asks_first.LOOSE): stricter (ask again) or
 #: looser (stop asking - the PC only, one card plus Windows Hello). An
 #: optional "jarvis reads/accesses/checks/writes" is taken off first, so
@@ -2882,6 +2895,22 @@ def _settings_adjust(s: str) -> Optional[Intent]:
         setting = R.find_bool_setting(name)
         if setting is not None:
             return Intent("settings_bool", {"key": setting.key, "on": on})
+        # The name is a real switch on the Settings page that this backend has
+        # no route to change (2026-10-13). Answer in words rather than letting
+        # it fall to the model, which has no settings tool and would sound as
+        # if it had done something. Nothing is changed and no card is raised.
+        dom_id = R.find_not_by_asking(name)
+        if dom_id is not None:
+            return Intent("settings_not_by_asking", {"dom_id": dom_id})
+    # A sentence that clearly asks to change A SETTING, naming one nothing
+    # above knows: "turn off the turbo setting", "change my security settings",
+    # "enable the settings thing". Answered honestly rather than handed to the
+    # model. The word "setting"/"settings" is required, deliberately: a device
+    # ("turn off the kitchen light") and every other feature reachable from a
+    # chat turn do not carry it, so nothing already answered changes hands -
+    # and `_settings_help` above has already claimed "what can I change?".
+    if _SETTING_UNKNOWN.fullmatch(s):
+        return Intent("settings_unknown")
     return None
 
 
@@ -3915,6 +3944,31 @@ def _run_settings_bool(f: dict, peer, local) -> Result:
     return Result(out.said, "settings_bool")
 
 
+def _run_settings_not_by_asking(f: dict) -> Result:
+    """A real setting this backend has no route to change (2026-10-13).
+
+    Nothing is changed, no card is raised and no model is used: the answer says
+    where the switch really lives, so the owner is not left believing it was
+    done. See jarvis_settings_registry.NOT_BY_ASKING for the ten and why."""
+    import jarvis_settings_registry as R
+    dom_id = f.get("dom_id") or ""
+    if not dom_id:
+        return Result(SETTINGS_MISSING, "settings_not_by_asking")
+    return Result(R.not_by_asking_sentence(dom_id), "settings_not_by_asking")
+
+
+def _run_settings_unknown() -> Result:
+    """A settings request naming something nothing here knows (2026-10-13).
+
+    Answered in words rather than handed to the model, which has no settings
+    tool and is not told so - the failure that used to look like success."""
+    return Result(
+        "I cannot change that setting by asking yet. Say \"what can I change?\" "
+        "and I will list the ones I can, or name the screen and I will open it - "
+        "\"open security\".",
+        "settings_unknown")
+
+
 def _run_settings_budget(f: dict, peer, local) -> Result:
     """"How much Jarvis may interrupt you", by asking (2026-10-08).
 
@@ -4032,6 +4086,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_menu_visibility(f)
     if n == "settings_bool":
         return _run_settings_bool(f, peer, local)
+    if n == "settings_not_by_asking":
+        return _run_settings_not_by_asking(f)
+    if n == "settings_unknown":
+        return _run_settings_unknown()
     if n == "settings_budget":
         return _run_settings_budget(f, peer, local)
     if n == "settings_card_mode":

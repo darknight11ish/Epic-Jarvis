@@ -174,7 +174,7 @@ export const ROWS = [
   },
   {
     "id": "mn-humor",
-    "setting": null,
+    "setting": "humor",
     "owner": "desktop",
     "section": "manner",
     "order": 8,
@@ -240,7 +240,7 @@ export const ROWS = [
   },
   {
     "id": "notif-alarms",
-    "setting": null,
+    "setting": "pc_alarm_sounds",
     "owner": "desktop",
     "section": "notifications",
     "order": 11,
@@ -262,7 +262,7 @@ export const ROWS = [
   },
   {
     "id": "notif-reminders",
-    "setting": null,
+    "setting": "pc_reminder_sounds",
     "owner": "desktop",
     "section": "notifications",
     "order": 12,
@@ -284,7 +284,7 @@ export const ROWS = [
   },
   {
     "id": "notif-briefing",
-    "setting": null,
+    "setting": "pc_briefing_notification",
     "owner": "desktop",
     "section": "notifications",
     "order": 13,
@@ -306,7 +306,7 @@ export const ROWS = [
   },
   {
     "id": "notif-handoff",
-    "setting": null,
+    "setting": "pc_handoff_notification",
     "owner": "desktop",
     "section": "notifications",
     "order": 14,
@@ -328,7 +328,7 @@ export const ROWS = [
   },
   {
     "id": "notif-quiet-enabled",
-    "setting": null,
+    "setting": "pc_quiet_hours",
     "owner": "desktop",
     "section": "notifications",
     "order": 15,
@@ -416,7 +416,7 @@ export const ROWS = [
   },
   {
     "id": "cv-face-switch",
-    "setting": null,
+    "setting": "voice_follows_face",
     "owner": "desktop",
     "section": "voices",
     "order": 19,
@@ -438,7 +438,7 @@ export const ROWS = [
   },
   {
     "id": "cv-better-switch",
-    "setting": null,
+    "setting": "better_voice",
     "owner": "desktop",
     "section": "voices",
     "order": 20,

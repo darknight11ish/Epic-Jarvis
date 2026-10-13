@@ -170,7 +170,7 @@
     },
     {
       "id": "mn-humor",
-      "setting": null,
+      "setting": "humor",
       "owner": "desktop",
       "section": "manner",
       "order": 8,
@@ -236,7 +236,7 @@
     },
     {
       "id": "notif-alarms",
-      "setting": null,
+      "setting": "pc_alarm_sounds",
       "owner": "desktop",
       "section": "notifications",
       "order": 11,
@@ -258,7 +258,7 @@
     },
     {
       "id": "notif-reminders",
-      "setting": null,
+      "setting": "pc_reminder_sounds",
       "owner": "desktop",
       "section": "notifications",
       "order": 12,
@@ -280,7 +280,7 @@
     },
     {
       "id": "notif-briefing",
-      "setting": null,
+      "setting": "pc_briefing_notification",
       "owner": "desktop",
       "section": "notifications",
       "order": 13,
@@ -302,7 +302,7 @@
     },
     {
       "id": "notif-handoff",
-      "setting": null,
+      "setting": "pc_handoff_notification",
       "owner": "desktop",
       "section": "notifications",
       "order": 14,
@@ -324,7 +324,7 @@
     },
     {
       "id": "notif-quiet-enabled",
-      "setting": null,
+      "setting": "pc_quiet_hours",
       "owner": "desktop",
       "section": "notifications",
       "order": 15,
@@ -412,7 +412,7 @@
     },
     {
       "id": "cv-face-switch",
-      "setting": null,
+      "setting": "voice_follows_face",
       "owner": "desktop",
       "section": "voices",
       "order": 19,
@@ -434,7 +434,7 @@
     },
     {
       "id": "cv-better-switch",
-      "setting": null,
+      "setting": "better_voice",
       "owner": "desktop",
       "section": "voices",
       "order": 20,

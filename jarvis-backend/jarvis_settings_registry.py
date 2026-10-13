@@ -692,6 +692,115 @@ def set_briefing_senders(on: bool, *, peer=None, local=None) -> Outcome:
     return _say(code, out)
 
 
+# --------------------------------------------------------------------------
+#   The settings that were reachable only by opening Settings (2026-10-13).
+#
+#   Every one of these already had a working route and its own tier before
+#   this file named it - the audit of 2026-10-13 (settings-reachability-audit)
+#   found that none of them was missing a route or a gate, only a phrase. So
+#   each setter below calls the EXACT function the screen calls, and invents
+#   no tier of its own:
+#
+#     * the five notification switches ride jarvis_limits.change(), the same
+#       route the phone's Settings rows use. All seven of those rows are
+#       `loosening="none"` on purpose (jarvis_limits.py:406-414): a bigger
+#       quiet window or a switch turned on only changes when this PC shows its
+#       owner a toast, so nothing here raises a card - and an alarm must never
+#       fail to ring because a card about it was not answered.
+#     * humour is jarvis_manner.handle_post(), at once either way, like manner.
+#     * "Voice follows the face" is jarvis_voices.set_face_voice(), at once.
+#     * the better voice is jarvis_voices.set_better(), OFF at once and ON
+#       through its OWN card (better_voice_enable) - unchanged here.
+# --------------------------------------------------------------------------
+
+#: The five notification switches, and the `jarvis_limits` key each one is.
+_NOTIFY_LIMIT = {
+    "pc_alarm_sounds": "notif_alarms",
+    "pc_reminder_sounds": "notif_reminders",
+    "pc_briefing_notification": "notif_briefing",
+    "pc_handoff_notification": "notif_handoff",
+    "pc_quiet_hours": "notif_quiet_enabled",
+}
+
+#: What each of the five is called in plain words, for the sentence when that
+#: backend does not have the row (an older PC) - never invented here.
+_NOTIFY_PLAIN = {
+    "pc_alarm_sounds": "alarm sounds on your PC",
+    "pc_reminder_sounds": "reminder sounds on your PC",
+    "pc_briefing_notification": "the briefing notification on your PC",
+    "pc_handoff_notification": "the \"a website needs you\" notification",
+    "pc_quiet_hours": "quiet hours on your PC",
+}
+
+
+def _set_notify(key: str, on: bool, *, peer=None, local=None) -> Outcome:
+    """One of the five `[notifications]` switches, through jarvis_limits.change.
+
+    The same route the phone's own Settings row calls. `loosening="none"` on
+    all five, so no card - a change here only moves when this PC speaks up."""
+    try:
+        import jarvis_limits as LIM
+    except Exception:
+        return _missing(_NOTIFY_PLAIN.get(key, "that notification setting"))
+    limit_key = _NOTIFY_LIMIT[key]
+    code, out = LIM.change({"key": limit_key, "value": bool(on)}, peer=peer, local=local)
+    return _say(code, out, on_ok=("Done." if on else "Done - Jarvis stays quiet about that."))
+
+
+def set_pc_alarm_sounds(on: bool, *, peer=None, local=None) -> Outcome:
+    return _set_notify("pc_alarm_sounds", on, peer=peer, local=local)
+
+
+def set_pc_reminder_sounds(on: bool, *, peer=None, local=None) -> Outcome:
+    return _set_notify("pc_reminder_sounds", on, peer=peer, local=local)
+
+
+def set_pc_briefing_notification(on: bool, *, peer=None, local=None) -> Outcome:
+    return _set_notify("pc_briefing_notification", on, peer=peer, local=local)
+
+
+def set_pc_handoff_notification(on: bool, *, peer=None, local=None) -> Outcome:
+    return _set_notify("pc_handoff_notification", on, peer=peer, local=local)
+
+
+def set_pc_quiet_hours(on: bool, *, peer=None, local=None) -> Outcome:
+    return _set_notify("pc_quiet_hours", on, peer=peer, local=local)
+
+
+def set_humor(on: bool, *, peer=None, local=None) -> Outcome:
+    """The humour switch: `jarvis_manner.handle_post({"humor": ...})`, the same
+    function Settings calls. At once either way - it changes wording only."""
+    try:
+        import jarvis_manner as MN
+    except Exception:
+        return _missing("the humour switch")
+    code, out = MN.handle_post({"humor": bool(on)})
+    return _say(code, out, on_ok=("Done." if on else "Done - no jokes."))
+
+
+def set_voice_follows_face(on: bool, *, peer=None, local=None) -> Outcome:
+    """`jarvis_voices.set_face_voice({"enabled": ...})` - at once, no card
+    either way (jarvis_voices.py:1340)."""
+    try:
+        import jarvis_voices as JV
+    except Exception:
+        return _missing("\"voice follows the face\"")
+    code, out = JV.set_face_voice({"enabled": bool(on)})
+    return _say(code, out)
+
+
+def set_better_voice(on: bool, *, peer=None, local=None) -> Outcome:
+    """`jarvis_voices.set_better({"enabled": ...})`: OFF at once, ON through
+    its own card (better_voice_enable). Nothing about that tier is changed
+    here - this file adds the phrase, not the rule."""
+    try:
+        import jarvis_voices as JV
+    except Exception:
+        return _missing("the better voice")
+    code, out = JV.set_better({"enabled": bool(on)})
+    return _say(code, out)
+
+
 # --- "what asks first": loosening a named action, the PC only -------------
 # jarvis_owner_check.PC_ONLY_ACTIONS holds "loosen_what_asks_first" itself
 # (the CARD's approval is PC-only+Hello); the REQUEST to raise that card is
@@ -1064,7 +1173,7 @@ SETTINGS_ROWS: tuple = (
         fallback=True),
     SettingRow(
         "mn-humor",
-        None,
+        "humor",
         "",
         "",
         "mn-humor-detail",
@@ -1106,7 +1215,7 @@ SETTINGS_ROWS: tuple = (
         has_detail=True),
     SettingRow(
         "notif-alarms",
-        None,
+        "pc_alarm_sounds",
         "notif-alarms-row",
         "",
         "",
@@ -1120,7 +1229,7 @@ SETTINGS_ROWS: tuple = (
         checked=True),
     SettingRow(
         "notif-reminders",
-        None,
+        "pc_reminder_sounds",
         "notif-reminders-row",
         "",
         "",
@@ -1134,7 +1243,7 @@ SETTINGS_ROWS: tuple = (
         checked=True),
     SettingRow(
         "notif-briefing",
-        None,
+        "pc_briefing_notification",
         "notif-briefing-row",
         "",
         "",
@@ -1148,7 +1257,7 @@ SETTINGS_ROWS: tuple = (
         checked=True),
     SettingRow(
         "notif-handoff",
-        None,
+        "pc_handoff_notification",
         "notif-handoff-row",
         "",
         "",
@@ -1162,7 +1271,7 @@ SETTINGS_ROWS: tuple = (
         checked=True),
     SettingRow(
         "notif-quiet-enabled",
-        None,
+        "pc_quiet_hours",
         "notif-quiet-row",
         "",
         "",
@@ -1220,7 +1329,7 @@ SETTINGS_ROWS: tuple = (
         fallback=True),
     SettingRow(
         "cv-face-switch",
-        None,
+        "voice_follows_face",
         "",
         "cv-face-title",
         "cv-face-detail",
@@ -1234,7 +1343,7 @@ SETTINGS_ROWS: tuple = (
         fallback=True),
     SettingRow(
         "cv-better-switch",
-        None,
+        "better_voice",
         "",
         "",
         "",
@@ -1503,6 +1612,51 @@ BOOL_SETTINGS: tuple = (
                ("the big coding model", "the big coder", "the 30B coder",
                 "the thirty billion coder", "the coder for big jobs"),
                None, set_big_coder),
+    # --- the eight that used to be reachable only by opening Settings
+    # (2026-10-13). Each already had a route and a tier; this adds the phrase
+    # and nothing else. The `section` is the Settings card the owner is sent
+    # to by "open ...", so a person can still finish the job by hand.
+    BoolSetting("pc_alarm_sounds",
+               ("alarm sounds", "the alarm sound", "alarms and urgent alerts",
+                "notifications for alarms", "pc alarm sounds"),
+               "notifications", set_pc_alarm_sounds),
+    BoolSetting("pc_reminder_sounds",
+               ("reminder sounds", "the reminder sound", "reminder chimes",
+                "notifications for reminders", "reminders timers and to-dos"),
+               "notifications", set_pc_reminder_sounds),
+    BoolSetting("pc_briefing_notification",
+               ("the briefing notification", "briefing notifications",
+                "notify me when the briefing is ready",
+                "the morning briefing notification"),
+               "notifications", set_pc_briefing_notification),
+    BoolSetting("pc_handoff_notification",
+               ("the website needs me notification", "website needs you",
+                "notifications when a website needs me",
+                "the solve it here notification"),
+               "notifications", set_pc_handoff_notification),
+    BoolSetting("pc_quiet_hours",
+               ("quiet hours", "the quiet hours", "quiet hours on the pc",
+                "the pc's quiet hours"),
+               "notifications", set_pc_quiet_hours),
+    # "Occasional light humour in answers" (settings.html id="mn-humor").
+    # Wording only: it never changes what Jarvis does, so no card either way.
+    BoolSetting("humor",
+               ("humour", "humor", "light humour", "light humor",
+                "jokes in your answers", "the humour switch"),
+               "manner", set_humor),
+    # "Voice follows the face" (settings.html id="cv-face-switch"): a face may
+    # pick its own voice. Cosmetic, at once, no card.
+    BoolSetting("voice_follows_face",
+               ("voice follows the face", "the voice follows the face",
+                "voice follows my face", "the face voice"),
+               "voices", set_voice_follows_face),
+    # "Make custom voices on the second graphics card" (id="cv-better-switch").
+    # OFF at once; ON is its OWN card (better_voice_enable) - kept exactly.
+    BoolSetting("better_voice",
+               ("the better voice", "the better custom voice",
+                "custom voices on the second card",
+                "make custom voices on the second graphics card"),
+               "voices", set_better_voice),
 )
 
 _BOOL_BY_NAME = {_bare(name): b for b in BOOL_SETTINGS for name in b.names}
@@ -1510,6 +1664,76 @@ _BOOL_BY_NAME = {_bare(name): b for b in BOOL_SETTINGS for name in b.names}
 
 def find_bool_setting(words: str):
     return _BOOL_BY_NAME.get(_bare(words))
+
+
+# --------------------------------------------------------------------------
+#   Settings a chat turn CANNOT change yet, and the sentence that says so
+#   (2026-10-13). THE DEFECT THIS FIXES: a settings request that matched no
+#   phrase used to go to the AI model, which has no settings tool and is never
+#   told it cannot - so "the failure looks like success". Every name below is
+#   answered in words instead, and nothing is changed.
+#
+#   THE TEN NAMES ARE THE ONES WITH NO ROUTE AT ALL. Each is a real switch on
+#   the desktop's Settings page whose value is kept by the DESKTOP APP (a
+#   Tauri command, or `localStorage`), so this backend has no function to call
+#   and a phrase alone could not work. Checked one by one: no `/api/theme`,
+#   `/api/security`, `/api/autostart`, `/api/supervis*`, `hud_open_bar` or
+#   `click_through` route exists in this backend.
+#
+#   NOT INCLUDED, deliberately, and this is the trap: "Show the sun and moon
+#   behind the face" (`sky-show`) and "Auto adjust" (`face-auto`) ALSO have no
+#   BoolSetting, but both ARE reachable by asking through the animal and sky
+#   grammars (jarvis_quick._animal) - listing them here would take a working
+#   phrase away. `spd-accept` is not a preference at all.
+# --------------------------------------------------------------------------
+
+#: `SETTINGS_ROWS` id -> the words the owner might use for it. Keyed by id so
+#: the label and the Settings place come from the one table above.
+NOT_BY_ASKING: dict = {
+    "sec-app-lock": ("app lock", "the app lock"),
+    "sec-private": ("windows hello for memory lists",
+                    "windows hello for memory lists and chat history",
+                    "hello for memory lists"),
+    "floating-enabled": ("floating face", "the floating face"),
+    "floating-click-through": ("click through", "click through to what is behind",
+                               "click-through"),
+    "follow-system": ("match windows light or dark mode", "follow windows light or dark mode",
+                      "windows light or dark mode", "follow the windows theme"),
+    "voice-one-moment": ("the one moment sound", "say one moment if i am kept waiting",
+                         "the one moment message"),
+    "voice-heard-sound": ("the i heard you sound", "i heard you sound",
+                          "the short sound when i finish speaking",
+                          "the listening sound"),
+    "hud-open-bar-show": ("the open the jarvis bar button", "the jarvis bar button"),
+    "supervise": ("let jarvis desktop start and stop jarvis", "desktop supervision",
+                  "supervision"),
+    "autostart": ("autostart", "auto start", "start jarvis when windows starts",
+                  "start with windows", "run at startup", "start at login"),
+}
+
+
+def find_not_by_asking(words: str) -> Optional[str]:
+    """The `SETTINGS_ROWS` id `words` names exactly and cannot be changed by
+    asking, or None. Exact names only, like everything else here."""
+    bare = _bare(words)
+    for dom_id, names in NOT_BY_ASKING.items():
+        if any(bare == _bare(n) for n in names):
+            return dom_id
+    return None
+
+
+def not_by_asking_sentence(dom_id: str) -> str:
+    """What Jarvis says instead of pretending. One sentence, plain words, and
+    the exact place to change it by hand - never a claim that it was done."""
+    row = setting_row(dom_id)
+    label = row.label if row is not None and row.label else "that setting"
+    where = "Settings"
+    if row is not None:
+        sec = section_by_id(row.section)
+        if sec is not None and sec.names:
+            where = f"Settings, {sec.names[0]}"
+    return (f"That one lives in {where} on your PC and I cannot change it by "
+            f"asking yet - open it and it is \"{label}\".")
 
 
 # --------------------------------------------------------------------------
