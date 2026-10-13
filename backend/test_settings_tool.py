@@ -503,6 +503,62 @@ def t_an_answer_that_has_asked_too_often_changes_nothing():
     check("one under the limit still works", got2.get("changed") is True, repr(got2))
 
 
+def t_one_call_routes_it_without_the_generic_gate():
+    """The WIRING, which the rest of this suite does not touch: every other
+    check here calls _settings_call directly, so the `if name == SETTINGS_TOOL:`
+    branch in _one_call could be deleted and they would all still pass.
+
+    `checker` is the generic approval gate. It records every call, and the
+    assertion is that it is NEVER called - which is the whole safety argument:
+    the setting's own setter is the gate, so one change cannot raise two cards
+    (a generic card first, then the setting's own)."""
+    rec = _Recording(R.Outcome(True, "Done - no jokes."))
+    table = (rec.setting(key="humour", names=("humour",)),)
+    convo, steps, events, gate_calls = [], [], [], []
+
+    def checker(*a, **k):
+        gate_calls.append(a)
+        return None
+
+    call = {"id": "c1", "function": {"name": AG.SETTINGS_TOOL,
+            "arguments": json.dumps({"setting": "humour", "value": "off"})}}
+    real = R.BOOL_SETTINGS
+    R.BOOL_SETTINGS = table
+    try:
+        AG._one_call(call, [AG.SETTINGS_TOOL], convo, steps, checker, None, None,
+                     lambda *a, **k: events.append((a, k)), watch=_watch())
+    finally:
+        R.BOOL_SETTINGS = real
+    check("_one_call routes change_setting to the setting's own path",
+          rec.calls == [False], repr(rec.calls))
+    check("the generic approval gate is NEVER consulted, so one change cannot "
+          "raise two cards", gate_calls == [], repr(gate_calls))
+    check("the model is handed a tool result",
+          bool(convo) and convo[-1].get("role") == "tool", repr(convo))
+    check("the step is recorded against the tool",
+          bool(steps) and steps[0].get("tool") == AG.SETTINGS_TOOL, repr(steps))
+
+    # A call to a tool this turn was not offered changes nothing at all.
+    rec.calls.clear()
+    convo2, steps2 = [], []
+    R.BOOL_SETTINGS = table
+    try:
+        AG._one_call(call, ["calculator"], convo2, steps2, checker, None, None,
+                     lambda *a, **k: None, watch=_watch())
+    finally:
+        R.BOOL_SETTINGS = real
+    check("a call the turn was not offered changes nothing", rec.calls == [],
+          repr(rec.calls))
+    # _one_call refuses a call whose arguments or name do not fit BEFORE any
+    # step is recorded (it only tells the model), so the honest assertion is
+    # that nothing at all was recorded as running.
+    check("and nothing is recorded as having run", steps2 == [], repr(steps2))
+    told = json.loads(convo2[-1]["content"]) if convo2 else {}
+    check("the model is told the tool is not one it has here",
+          told.get("ok") is False and "no such tool" in str(told.get("error", "")),
+          repr(convo2))
+
+
 def t_every_one_of_the_21_switches_resolves_from_its_own_names():
     """The tool's resolver must reach every switch the spoken grammar reaches -
     a name that resolves for the phrase path but not for the tool would leave
@@ -534,6 +590,7 @@ if __name__ == "__main__":
                t_outside_text_stops_a_setting_change,
                t_conversation_taint_alone_does_not_stop_it,
                t_it_has_no_second_path,
+               t_one_call_routes_it_without_the_generic_gate,
                t_its_gate_action_already_exists,
                t_every_setter_calls_a_function_that_exists,
                t_a_pending_change_cannot_back_an_i_did_it_claim,
