@@ -180,6 +180,103 @@ def t_fit_is_about_real_memory():
     check("the 4.29 GB model fits the 12 GB card too", PC.fits(cards[1], "small") is True)
 
 
+def _ioctl(handle, code: int, buf=None, size: int = 0) -> None:
+    """One `DeviceIoControl`, raising OSError when it fails."""
+    import ctypes
+    from ctypes import wintypes
+
+    returned = wintypes.DWORD(0)
+    ok = ctypes.WinDLL("kernel32", use_last_error=True).DeviceIoControl(
+        handle, code, buf, size, None, 0, ctypes.byref(returned), None)
+    if not ok:
+        raise OSError(ctypes.get_last_error(), f"DeviceIoControl 0x{code:08X}")
+
+
+class _ZeroData:
+    """`FILE_ZERO_DATA_INFORMATION`: the byte range to de-allocate."""
+
+    def __new__(cls, start: int, end: int):
+        import ctypes
+
+        class ZeroData(ctypes.Structure):
+            _fields_ = [("FileOffset", ctypes.c_longlong),
+                        ("BeyondFinalZero", ctypes.c_longlong)]
+
+        return ZeroData(start, end)
+
+
+def _sparse_sized_nt(path: Path, size: int) -> None:
+    """(Windows) a `size`-byte file whose bytes are all a hole.
+
+    TWO STEPS, and the second is the one that matters. Marking a file sparse
+    and then `truncate()`-ing it is NOT enough: NTFS allocates the extended
+    range as zeros, so the file is still 4.8 GB of real disk (measured:
+    -4.84 GiB). `FSCTL_SET_ZERO_DATA` over the new range is what turns it into
+    a hole and gives those clusters back (+4.81 GiB). Measured end to end on
+    the owner's PC: net -0.04 GiB for the whole file, `st_size` unchanged.
+
+    Raises OSError if any call fails - the caller falls back to a plain file.
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    FSCTL_SET_SPARSE, FSCTL_SET_ZERO_DATA = 0x000900C4, 0x000980C8
+    GENERIC_WRITE, SHARE_READ_WRITE, OPEN_EXISTING = 0x40000000, 3, 3
+    INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
+
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                                ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD,
+                                wintypes.HANDLE]
+    k32.CreateFileW.restype = wintypes.HANDLE
+    k32.DeviceIoControl.argtypes = [wintypes.HANDLE, wintypes.DWORD, ctypes.c_void_p,
+                                    wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD,
+                                    ctypes.POINTER(wintypes.DWORD), ctypes.c_void_p]
+    k32.DeviceIoControl.restype = wintypes.BOOL
+    k32.CloseHandle.argtypes = [wintypes.HANDLE]
+    k32.CloseHandle.restype = wintypes.BOOL
+
+    path.touch()
+    # Share read/write: the truncate below goes through a second handle.
+    handle = k32.CreateFileW(str(path), GENERIC_WRITE, SHARE_READ_WRITE, None,
+                             OPEN_EXISTING, 0, None)
+    if handle == INVALID_HANDLE_VALUE:
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        _ioctl(handle, FSCTL_SET_SPARSE)
+        with path.open("r+b") as fh:
+            fh.truncate(size)
+        zero = _ZeroData(0, size)
+        import ctypes as _c
+        _ioctl(handle, FSCTL_SET_ZERO_DATA, _c.byref(zero), _c.sizeof(zero))
+    finally:
+        k32.CloseHandle(handle)
+
+
+def _sized_file(path: Path, size: int) -> None:
+    """A file of exactly `size` bytes that allocates almost nothing on disk.
+
+    WHY. The 4.8 GB companion below used to be a REAL 4.8 GB: one run of this
+    suite left 4,918.43 MB in the temp folder, and a run that was killed left
+    it for good - 23 of them, 110.47 GB, is how the owner's C: reached 1.47 GB
+    free. `st_size` is what `model_files()` reads, so the file must still BE
+    that size; a sparse one keeps the size and drops the allocation, so even a
+    hard kill (which no `finally` or `atexit` can survive) costs ~0.
+
+    POSIX needs nothing: `truncate()` leaves the new range unallocated there.
+    A machine that refuses the Windows calls gets a plain file - still
+    correct, only heavy again.
+    """
+    if os.name == "nt":
+        try:
+            _sparse_sized_nt(path, size)
+            return
+        except OSError:
+            pass
+    with path.open("wb") as fh:
+        fh.truncate(size)
+
+
 def t_a_part_downloaded_file_is_not_ready():
     """The model's own file is this test's, not the owner's PC's.
 
@@ -214,8 +311,7 @@ def t_a_part_downloaded_file_is_not_ready():
         # now make it the full size and add the VAE
         name = "t5xxl_fp8_e4m3fn_scaled.safetensors"
         want = dict((c[0], c[2]) for c in PC.IMAGE_MODELS[0]["companions"])[name]
-        with open(comfy / "models" / "text_encoders" / name, "wb") as fh:
-            fh.truncate(want)
+        _sized_file(comfy / "models" / "text_encoders" / name, want)
         (comfy / "models" / "vae" / "ae.safetensors").write_bytes(b"0" * 1024)
         check("still not ready while the VAE is short",
               PC.model_files("big", str(comfy))["ready"] is False)
