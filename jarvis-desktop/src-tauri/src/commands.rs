@@ -3372,9 +3372,11 @@ pub fn hide_widget(app: AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window(windows::WIDGET_LABEL)
         .ok_or_else(|| "the widget window was not found".to_string())?;
-    window
-        .hide()
-        .map_err(|e| format!("unable to hide the widget: {e}"))
+    // `conceal_widget` and not a bare `hide()`: it takes the Acrylic off first,
+    // so a window on its way off the screen carries no backdrop
+    // (`windows.rs`'s `reveal_quickbar` says why that matters). Still only this
+    // window, so the permission described above is unchanged.
+    windows::conceal_widget(&window)
 }
 
 /// Expands or collapses the widget. `height` carries the frontend's measured
