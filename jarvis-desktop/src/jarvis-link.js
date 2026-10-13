@@ -259,7 +259,7 @@ export function normaliseApproval(row) {
 
 /** jarvis_gate stores `detail` as `json.dumps(detail)[:4000]`. */
 const GATE_DETAIL_LIMIT = 4000;
-/** Longer than this is a wrong unit, not a gate timeout (the shipped one is 180 s). */
+/** Longer than this is a wrong unit, not a gate timeout (the shipped one is 600 s). */
 const MAX_EXPIRES_IN_SECONDS = 24 * 3600;
 
 /**

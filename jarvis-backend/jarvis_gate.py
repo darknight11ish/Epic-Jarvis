@@ -64,7 +64,7 @@ def _cfg(section: str, key: str, default):
 # The config owns this; the environment variable is an override for testing.
 APPROVAL_TIMEOUT = float(os.environ.get(
     "JARVIS_APPROVAL_TIMEOUT",
-    _cfg("autonomy", "approval_timeout_seconds", 180)))
+    _cfg("autonomy", "approval_timeout_seconds", 600)))
 POLL_SECONDS = 0.25
 
 # An action nobody thought to classify is not thereby safe. Configurable, but

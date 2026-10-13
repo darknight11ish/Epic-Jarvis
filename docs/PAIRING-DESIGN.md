@@ -532,7 +532,8 @@ Its words (`jarvis_card_words.TITLES` and the card text):
 The Windows Hello prompt shows the title, as every PC-only card does
 (`approval_message`, `jarvis_owner_check.py:167`).
 
-The card lives the usual `approval_timeout_seconds` (180 s shipped); the
+The card lives the usual `approval_timeout_seconds` (600 s shipped, ten
+minutes, since 2026-10-13; it was 180); the
 10-minute session covers the scanning before it.
 
 ### 6.4 The device list (any key)

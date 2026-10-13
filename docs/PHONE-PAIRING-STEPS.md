@@ -334,8 +334,9 @@ It **always** asks Windows Hello and can **only** be approved on the PC
 (`backend/jarvis_owner_check.py:126`; `docs/JARVIS-API.md:14716-14719`). On a
 PC with no Windows Hello it is refused.
 
-**The card lives 180 seconds** — the shipped `approval_timeout_seconds`
-default (`backend/rebuilt/jarvis-framework.toml:79`). After that the phone
+**The card lives 600 seconds** (ten minutes) — the shipped
+`approval_timeout_seconds` default (`backend/rebuilt/jarvis-framework.toml:83`),
+raised from 180 on 2026-10-13. After that the phone
 says "The card on your PC ran out of time. Start again on the PC."
 (`Pairing.kt:69`).
 

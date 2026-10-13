@@ -328,7 +328,8 @@ came from that text rather than from the owner (§4, "Tool calls and outside
 text"). It is part of the text; show it the way the rest is shown.
 
 `expires_in` is seconds left before the gate stops waiting and refuses the
-card (`approval_timeout_seconds`, 180 in the shipped config). Seconds left,
+card (`approval_timeout_seconds`, 600 in the shipped config since 2026-10-13 -
+ten minutes; it was 180). Seconds left,
 not a clock time, so the phone's clock does not have to agree with the PC's.
 Without the patch the field is absent and no countdown is shown.
 `backend/test_approval_contract.py` builds these rows from the real
@@ -4592,7 +4593,8 @@ state is `next`, by posting that step's own `body` to that step's own
 only to these four routes:** `/api/models/install`, `/api/models/switch`,
 `/api/hardware/create`, `/api/second-card` (`hardware.rs` `step_request`,
 `Hardware.stepRequest`). There is no request that asks for more than one
-step. A step asked for shows as waiting for 180 seconds even when the PC
+step. A step asked for shows as waiting for 600 seconds (ten minutes, from
+2026-10-13; it was 180) even when the PC
 cannot see its card (a download's or switch's card is shaped by the owner's
 own `jarvis_gate`), so one tap is one card.
 
