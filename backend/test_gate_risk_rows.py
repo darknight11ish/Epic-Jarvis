@@ -112,6 +112,17 @@ def t_the_patch_is_registered_last():
              # list and the _RISK table at the END of each, so it cannot rewrite
              # the two rows this patch removes either.
              "handoff-front.patch",
+             # gate-raise-rows.patch (2026-10-09; rescued onto main 2026-10-13)
+             # comes after this one too: two hunks in jarvis_gate.py, one row
+             # added to each of `_NO_RULE_FROM_DENIAL` and `_RISK` for
+             # `raise_a_limit` and `raise_attention_budget`. It only ADDS, and it
+             # anchors on quiz-cloud.patch's own `quiz_cloud_grade` rows -
+             # hundreds of lines from the two stale rows this patch removes - and
+             # it names neither of them. The checks above are what keep that
+             # true: this patch adds nothing to `_RISK` itself, and
+             # t_no_other_patch_touches_that_line refuses any patch that touches
+             # the removed rows.
+             "gate-raise-rows.patch",
              # docker.patch (2026-10-09) is the route half of the first Docker
              # integration: ONE install block in jarvis_hud.py, between
              # chatbot-limits-hud.patch's block and tutorials.patch's, and it

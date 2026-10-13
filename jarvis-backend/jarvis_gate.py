@@ -606,6 +606,21 @@ _RISK: dict[str, tuple[str, str, str]] = {
     # (ARCHITECTURE section 4) that cannot be taken back, so "no" and "outbound": a
     # risky approval (Windows Hello on the PC, a screen lock on the phone).
     "quiz_cloud_grade": ("no", "outbound", "sends the questions, your answers and the passages of one quiz, word for word as the card shows them, to the cloud AI service named on the card to be marked; it bends the rule that your study words stay on this PC for that one quiz only, it costs a little on your account, and it cannot be taken back"),
+    # gate-raise-rows.patch (the two raise actions of 2026-10-08, each named
+    # by its own module: jarvis_limits.RAISE_ACTION and
+    # jarvis_arbiter.RAISE_ACTION). Both had a tier line and NO row here, so
+    # risk_for() fell back to _UNKNOWN_RISK and the card said "not
+    # classified, so treated as irreversible and outbound" - untrue of both:
+    # neither sends anything anywhere, and each writes ONE number into the
+    # owner's own settings file. Raising either is the direction that LOOSENS
+    # (undo history kept longer, a model let read what the owner saves, or
+    # more spoken interruptions a day), and a raise takes effect at once, so
+    # "no": what it allowed may already have happened by the time the owner
+    # lowers it again - which is instant and asks nothing. By that "no"
+    # alone the card is a risky approval (Windows Hello on the PC, a screen
+    # lock on the phone).
+    "raise_a_limit": ("no", "local", "lets Jarvis keep your Undo history longer, or lets a model read what you save to find the people and things in it; the new number is written into your own settings file and takes effect at once, nothing is sent anywhere, and lowering it again is instant - but what the raise allowed may already have happened by then"),
+    "raise_attention_budget": ("no", "local", "lets Jarvis speak up more times a day than your budget allows; the new number is written into your own settings file and takes effect at once, nothing is sent anywhere, and lowering it again is instant - but an interruption the raise allowed may already have happened by then"),
     # readpage.patch (jarvis_readpage.py, JARVIS-API section 115; the owner's
     # request of 2026-10-05: "post a webpage into jarvis and it can read the
     # content out loud"). ONE card per address the owner hands over, showing
@@ -1265,6 +1280,8 @@ _NO_RULE_FROM_DENIAL = frozenset({
     "chat_tag_suggest",  # jarvis_tag_suggest.py acts only on tier "ask": ONE card per suggested tag for one chat; only the owner's tap files it (tag-suggest.patch)
     "youtube_captions_read",  # jarvis_youtube.py acts only on tier "ask": ONE card per YouTube link; caption text only, and it breaks YouTube's terms (youtube.patch)
     "quiz_cloud_grade",  # jarvis_quiz_cloud.py acts only on tier "ask": ONE card per "grade this better" request; it lists exactly what leaves the PC and bends rule 1 for that one quiz (quiz-cloud.patch)
+    "raise_a_limit",  # jarvis_limits.py acts only on tier "ask": ONE card per raise that LOOSENS - a longer Undo window, or letting a model read what you save; every other raise, and every lowering, applies at once, and denying one must not become a standing rule (limits-settings.patch; the row itself added by gate-raise-rows.patch)
+    "raise_attention_budget",  # jarvis_arbiter.py acts only on tier "ask": ONE card per raise of the number of times a day Jarvis may speak up unasked; a lowering, and moving the hour the brief arrives, apply at once, and a denial must not become a standing rule either (attention-settings.patch; the row itself added by gate-raise-rows.patch)
     "read_web_page",  # jarvis_readpage.py acts only on tier "ask": ONE card per address the owner hands over; one GET of that one page, its words read out as outside text (readpage.patch)
 })
 

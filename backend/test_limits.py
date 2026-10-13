@@ -51,6 +51,7 @@ table (`jarvis_limits.LIMITS`) and ONE route. What this file proves:
 """
 from __future__ import annotations
 
+import ast
 import contextlib
 import io
 import os
@@ -64,7 +65,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 sys.path.insert(0, str(HERE))
-from _where import require_shipped  # noqa: E402
+from _where import BACKEND, require_shipped  # noqa: E402
 import _where  # noqa: E402
 require_shipped("jarvis_limits.py", "jarvis_framework.py", "jarvis_owner_check.py",
                 "jarvis_voice.py")
@@ -618,13 +619,65 @@ def t_the_voice_bar_lives_only_in_the_print_and_is_never_logged():
     _no_print()
 
 
+def _the_gates_own_risk_table(text: str, where: str):
+    """`risk_for`, run on `text`'s OWN `_RISK`, `_UNKNOWN_RISK` and `risk_for` -
+    so this is the answer a card really gets from that file.
+
+    WHY IT CUTS THE PIECES OUT rather than importing the module: `jarvis_gate.py`
+    is not one of the modules this repository ships whole, so a plain
+    `import jarvis_gate` only works on a run that has a backend folder to import
+    from, and this suite must also run straight out of a clone. Reading the
+    file's own three pieces and running them is the same instrument
+    `test_gate_raise_rows.py` uses for the same reason, and the pieces it finds
+    are asserted below: a file whose table was renamed would say so here rather
+    than quietly grading nothing.
+
+    The pieces are kept in FILE ORDER (`compile` runs them in order), which
+    `_UNKNOWN_RISK` and `risk_for` both depend on.
+    """
+    tree = ast.parse(text)
+    keep, names = [], set()
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            ids = {t.id for t in node.targets if isinstance(t, ast.Name)}
+            if ids & {"_RISK", "_UNKNOWN_RISK"}:
+                keep.append(node)
+                names |= ids
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            # The shipped file annotates this one: `_RISK: dict[...] = {`.
+            if node.target.id in ("_RISK", "_UNKNOWN_RISK"):
+                keep.append(node)
+                names.add(node.target.id)
+        elif isinstance(node, ast.FunctionDef) and node.name == "risk_for":
+            keep.append(node)
+            names.add(node.name)
+    missing = {"_RISK", "_UNKNOWN_RISK", "risk_for"} - names
+    if missing:
+        raise AssertionError(f"{where} does not hold {sorted(missing)}")
+    ns: dict = {}
+    exec(compile(ast.Module(body=keep, type_ignores=[]),
+                 "<jarvis_gate.py>", "exec"), ns)
+    return ns["risk_for"]
+
+
 def t_the_voice_bar_loosening_is_wired_like_the_other_ones():
     """The loosening card is wired the way every other one is, and this is what
     keeping it safe depends on: the action has its own plain words, it is on the
-    "What asks first" page, and - like `raise_a_limit` - nothing in the gate
-    stack gives it a `_RISK` line, so the gate reads it as UNCLASSIFIED, which
-    is exactly what makes jarvis_owner_check require the owner's own check
-    (Windows Hello on this PC) before the card can be approved."""
+    "What asks first" page, and - still, unlike `raise_a_limit` - nothing in the
+    gate stack gives it a `_RISK` line, so the gate reads UNCLASSIFIED for it,
+    which is exactly what makes jarvis_owner_check require the owner's own check
+    (Windows Hello on this PC) before the card can be approved.
+
+    WHAT CHANGED ON 2026-10-13, and why this one assertion reads the way it does
+    now. This check used to say "neither action is classified anywhere in the
+    gate stack": that was true of the state BEFORE gate-raise-rows.patch, and
+    the existence of `raise_a_limit`'s own `_RISK` row was, at the time, the
+    harmless coincidence the comment at the tiers below describes. The patch
+    makes the raise classified ON PURPOSE, so the old phrasing now asserts the
+    opposite of the truth - and the fix is NOT to drop the check, because the
+    direction that mattered is the one it now states directly: the LOWERING is
+    unclassified, and the RAISE is classified with the exact reach and
+    reversibility this file's own `_RISK` cell names."""
     import jarvis_asks_first as AF
     import jarvis_card_words as W
     check("the card has its own plain words, and they say LOWER",
@@ -636,13 +689,51 @@ def t_the_voice_bar_loosening_is_wired_like_the_other_ones():
     check("... which the existing loosening is on too", L.RAISE_ACTION in page)
     check("... and the two are different names",
           L.LOWER_ACTION and L.LOWER_ACTION != L.RAISE_ACTION)
-    stack = ((REPO / "jarvis-backend" / "jarvis_gate.py")
-             .read_text(encoding="utf-8", errors="replace")
-             + "\n".join(q.read_text(encoding="utf-8", errors="replace")
-                         for q in sorted(HERE.glob("*.patch"))))
-    check("nothing in the gate stack classifies the new action, so the gate "
+    # WHICH TREE THIS ASKS, said plainly. `jarvis_gate.py` is one of the four
+    # files that live ONLY on the owner's PC and never in this repository
+    # (`run_suites.py`'s OWNER_FILES), so a CI run - which sets JARVIS_BACKEND
+    # to its own staged backend - has no copy of it there, and asking that path
+    # alone would read no table at all. So the candidates are tried in order and
+    # the FIRST one that is really there is the one that answers, with `where`
+    # naming it:
+    #
+    #   1. `JARVIS_BACKEND`'s own `jarvis_gate.py` when a run NAMES a backend
+    #      that has one - the owner's live file, whose answer the card on their
+    #      screen really carries;
+    #   2. `jarvis-backend/jarvis_gate.py` - THIS repository's copy, the
+    #      post-patch file `test_gate_raise_rows.py` drives and the copy the
+    #      patch is proved to produce byte for byte. CI has this one.
+    #
+    # Whatever is still missing after both is a plain failure, not a pass.
+    named = BACKEND / "jarvis_gate.py"
+    candidates = ([(named, str(named))] if os.environ.get("JARVIS_BACKEND") else [])
+    candidates.append((REPO / "jarvis-backend" / "jarvis_gate.py",
+                       "jarvis-backend/jarvis_gate.py (this repository's copy)"))
+    for gate_file, where in candidates:
+        if gate_file.is_file():
+            break
+    else:
+        check("the gate file this run reads is somewhere it can be read",
+              False, " | ".join(f"{w} is not there" for _p, w in candidates))
+        return
+    risk_for = _the_gates_own_risk_table(
+        gate_file.read_text(encoding="utf-8", errors="replace"), where)
+    lowered, raised = risk_for(L.LOWER_ACTION), risk_for(L.RAISE_ACTION)
+    check("nothing in the gate classifies the LOWERING action, so the gate "
           "reads it as unclassified",
-          L.LOWER_ACTION not in stack and L.RAISE_ACTION not in stack)
+          lowered["classified"] is False and lowered["reach"] == "outbound"
+          and lowered["reversible"] == "no", lowered)
+    check("the RAISE action is classified now, by the row this patch gives it",
+          raised["classified"] is True, raised)
+    check("... and it carries that row's own reach and reversibility, which is "
+          "why it is still a risky approval",
+          raised["reach"] == "local" and raised["reversible"] == "no"
+          and raised["swipe_ok"] is False, raised)
+    check("... with its own plain reason, no longer the worst-case fallback",
+          "not classified" not in raised["why"]
+          and "undo history" in raised["why"].lower()
+          and "nothing is sent anywhere" in raised["why"].lower()
+          and "lowering it again is instant" in raised["why"].lower(), raised["why"])
     check("an unclassified card is what makes the owner's check required "
           "(Windows Hello on the PC)",
           OC.is_risky({"action": L.LOWER_ACTION,
