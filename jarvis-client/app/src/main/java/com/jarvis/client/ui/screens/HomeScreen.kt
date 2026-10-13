@@ -155,6 +155,23 @@ import kotlin.math.sin
 /** The face's starting share of the space below the status line. */
 private const val DEFAULT_FACE_FRACTION = 0.75f
 
+/**
+ * What the face pane holds besides the face itself: the lane chip, the
+ * "Open the Brain" caption with its gaps, and the Galaxy row under it. Used to
+ * grow the pane so a CHOSEN size is really drawn at that size - see the
+ * measure block below - and deliberately a little generous: too small and the
+ * face is capped by the leftover height again, which is the fault this
+ * exists to fix.
+ */
+private val FACE_PANE_CHROME = 104.dp
+
+/**
+ * The conversation keeps at least this much, however large the face is asked
+ * to be. A card that needs deciding is always reachable, and a screen that
+ * cannot hold both simply gives the face less than it asked for.
+ */
+private val MIN_LIST_HEIGHT = 132.dp
+
 /** Neither pane may be dragged away entirely - each keeps at least this much. */
 private const val MIN_FACE_FRACTION = 0.20f
 private const val MAX_FACE_FRACTION = 0.85f
@@ -1246,7 +1263,34 @@ fun HomeScreen(
                     paneHeight.px = room
                     // The one read of `live`, here in measure: a drag frame re-runs
                     // this block and nothing above it.
-                    val faceHeight = (room * live.floatValue).roundToInt().coerceIn(0, room)
+                    var faceHeight = (room * live.floatValue).roundToInt().coerceIn(0, room)
+                    // THE CHOSEN SIZE IS WHAT THE FACE GETS (the owner,
+                    // 2026-10-13: "Full screen is large enough, the other sizes
+                    // causes jarvis face to be way too small no matter what size
+                    // i select"). A fixed size used to be only a MAXIMUM - the
+                    // pane's own share of the screen was taken first, and the
+                    // face was drawn at whatever height was left over, so Large
+                    // (260dp) and Medium (200dp) both came out at the same
+                    // leftover and choosing between them changed nothing.
+                    //
+                    // So the pane is grown to hold the size he picked, and the
+                    // conversation takes what is left. Two things still win over
+                    // it: a folded face (an approval waiting, a tap on the
+                    // handle, the keyboard - `shrunk`) keeps its small pane, and
+                    // the conversation keeps MIN_LIST_HEIGHT, so a card that
+                    // needs deciding is never pushed off the screen. The two
+                    // `fill` sizes are left alone: they are meant to grow with
+                    // the pane, and their size is the split, not a fixed box.
+                    val wanted = if (shrunk || state.faceSize.fill || state.faceSize.hidden) {
+                        0
+                    } else {
+                        with(density) {
+                            (state.faceSize.sizeDp.dp + FACE_PANE_CHROME).toPx().roundToInt()
+                        }
+                    }
+                    val listFloor = with(density) { MIN_LIST_HEIGHT.toPx().roundToInt() }
+                    val most = (room - listFloor).coerceAtLeast(0)
+                    faceHeight = maxOf(faceHeight, wanted).coerceIn(0, most)
                     val face = measurables.first { it.layoutId == PANE_FACE }
                         .measure(Constraints.fixed(width, faceHeight))
                     val list = measurables.first { it.layoutId == PANE_LIST }
@@ -2068,15 +2112,18 @@ private fun FaceBlock(
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                // The chosen size, but never more than the room left once the
-                // chip and caption below have theirs: weight(fill = false)
-                // caps the height, so a pane dragged small shrinks the face
-                // instead of pushing the caption out of the pane. FaceView
-                // draws from its smaller side, so a short box stays round.
+                // The chosen size, and the pane's measure block above grows the
+                // pane to hold it (the owner, 2026-10-13), so this is the size
+                // the face is really drawn at rather than a maximum the
+                // leftover height quietly undercut. weight(fill = false) is
+                // still the last word on a screen too short for both panes: the
+                // conversation keeps MIN_LIST_HEIGHT, and the face takes what is
+                // left. FaceView draws from its smaller side, so a short box
+                // stays round.
                 //
-                // Extra large and Full screen take ALL of that room instead
-                // (weight with fill), so the face grows with the pane rather
-                // than stopping at 260dp. Still round for the same reason.
+                // The two `fill` sizes take ALL of that room instead (weight
+                // with fill), so they grow with the pane rather than stopping at
+                // 260dp. Still round for the same reason.
                 Box(
                     Modifier
                         .then(

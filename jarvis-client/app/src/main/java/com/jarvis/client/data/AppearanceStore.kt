@@ -600,9 +600,17 @@ class AppearanceStore(context: Context) {
 /**
  * How big the face is drawn on Home - or whether it is there at all.
  *
- * Large (260dp) is the size the face has always been and stays the default.
- *  - [fill]: the face grows to fill its panel instead of stopping at 260dp.
- *    Opt-in, and costs more to draw on every frame than Large does.
+ * Extra large is the default (the owner, 2026-10-13). It was Large (260dp),
+ * and he reported that on a real phone the face was "way too small" on every
+ * option except Full screen, and that choosing a different size changed
+ * nothing he could see. He was right, and the cause was in HomeScreen, not
+ * here: a fixed size was only a MAXIMUM, so the face was capped by whatever
+ * height the pane had left rather than by the size he picked - Large (260dp)
+ * and Medium (200dp) both came out at the leftover and looked the same.
+ * HomeScreen now grows the pane to hold the chosen size, and the default is
+ * the largest size that still shows the chat under the face.
+ *  - [fill]: the face grows to fill its panel instead of stopping at [sizeDp].
+ *    Costs more to draw on every frame than a fixed size does.
  *  - [voiceOnly]: Home becomes the face and a microphone - the chat and the
  *    typing box step aside. HomeScreen brings the normal layout back on its
  *    own whenever something needs reading or deciding (an approval, a task
@@ -630,7 +638,7 @@ enum class FaceSize(
     ;
 
     companion object {
-        val DEFAULT = LARGE
+        val DEFAULT = EXTRA_LARGE
 
         /** Ids that were once offered and are not any more, and where they went. */
         private val RETIRED = mapOf("small" to MEDIUM, "tiny" to MEDIUM)
