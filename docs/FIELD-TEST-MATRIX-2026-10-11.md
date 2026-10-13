@@ -4,7 +4,7 @@
 
 The owner asked: *"are there any features that haven't been field tested on the real world jarvis android app or desktop app? Or conversation driven features that haven't been? I want thorough testing on everything."*
 
-`features/features.json` holds **127 features in 9 groups and has no `tested`, `verified` or `status` field at all** - so this document cannot be read from a file. Every verdict below was built from a dated artifact, and every row names the one it came from.
+`features/features.json` holds **128 features in 9 groups and has no `tested`, `verified` or `status` field at all** - so this document cannot be read from a file. Every verdict below was built from a dated artifact, and every row names the one it came from.
 
 ## The counts
 
@@ -15,6 +15,8 @@ The owner asked: *"are there any features that haven't been field tested on the 
 | NEVER TESTED | **17** |
 | NOT FOUND | **15** |
 | **total** | **127** |
+
+> **Corrected 2026-10-13: the list is 128 entries, and `pictures` had no row.** The tally above is the **first pass's** four-verdict count over its own 127 rows and is left as measured; `features/features.json` holds **128** (`git show origin/main:features/features.json`, 128 ids), and **`pictures`** ("Ask for a picture, and keep it") was missing from the table entirely. It is added at **row 128** with the only verdict the document set records for it - **PARTIAL**, driven on the phone on 2026-10-12 and with no screen of its own (`docs/FIELD-TEST-2026-10-12-TOPUP.md:52`). No other row was renumbered or rewritten; the dated notes below that say "the 127-feature counts" or "the 127-feature table" name the list as those passes saw it.
 
 > **Overtaken 2026-10-11, later the same day.** The counts below are what this document measured that night; the **second pass** (section after "Build freshness") drove **43 of these 45** on real hardware and **could not drive 2** - the phone on **real CI builds and locally-built branches of #294**, the desktop on **0.2.140** - and its verdicts stand beside these. The rows below are left exactly as they were measured, and the marker here is the document's own convention for being overtaken.
 >
@@ -250,7 +252,7 @@ The whole NEVER TESTED and NOT FOUND set - this is the testing queue from the de
 
 See the table at the end: every entry there says whether the **preflight** covers it and whether a **real turn** has ever driven it. The short version: the preflight last reported **35 pass / 0 fail / 3 warn (5 skipped)** against the backend of 2026-10-10 (`.dsh-scratch/preflight2.txt`, quoted in `.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md` line 30 and in `.dsh-scratch/gate-fix-msg.txt` line 65) - i.e. **before the 43 commits since**. A green preflight is a real chain test; it is still not a spoken turn, and several conversation features are not in it at all.
 
-## The 127 features
+## The 128 features
 
 `surface` is the repo's own field. `evidence` names the file and line the verdict came from.
 
@@ -383,10 +385,11 @@ See the table at the end: every entry there says whether the **preflight** cover
 | 125 | A warning when text tried to rush you (`rush-latch`) | Safety | phone | **NOT FOUND** | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
 | 126 | Jarvis marks what it read from outside (`outside-text`) | Safety | both | **NEVER TESTED** | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/.evidence/transcript-G.txt:1001 |
 | 127 | Settings itself (`settings-entry`) | Safety | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/chat-turn.log:4 |
+| 128 | Ask for a picture, and keep it (`pictures`) | Screen and pictures | both | **PARTIAL** | phone, 2026-10-12 - the record names no build | /docs/FIELD-TEST-2026-10-12-TOPUP.md:52 |
 
 ## Method, and its limits, said plainly
 
-1. The 127 entries come from `features/features.json`; no field in it records testing, so nothing here is read from the repo's own claim.
+1. The 128 entries come from `features/features.json`; no field in it records testing, so nothing here is read from the repo's own claim.
 2. The scan is keyword-based (each feature's id, its title's longer words, and a short alias table) over the dated artifacts. **False negatives are possible**: a pass record may describe a feature in words the scan does not know. False positives are the thing this document exists to avoid, so the device tier holds only the two pass records and every row cites its line.
 3. `TEST-VERIFIED ONLY` says a suite names it. It does **not** say the suite passes today; that is CI's job and `main`'s state is a separate question.
 4. **The device-tour transcripts (2026-10-09) are shown as mentions, not as runs.** They are a real record of a device, but the tour is older than either pass record, so a feature that appears only there is NEVER TESTED with the transcript named in its evidence column - a person should re-check those rows first, and they are the ones most likely to move up.
