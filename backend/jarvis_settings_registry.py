@@ -1562,18 +1562,36 @@ def set_card_mode(mode: str, *, peer=None, local=None) -> Outcome:
 # TELL him what he may change - "what can I change?" reached the AI model and
 # came back with an invention rather than this answer.
 #
-# This list is DERIVED from the table above, never typed out again: a switch
-# added to BOOL_SETTINGS appears here by itself, and one removed stops being
-# offered. A second, hand-written list would drift from the real switches and
-# nobody would notice - the exact trap this project keeps fixing.
+# This list is DERIVED from the tables above, never typed out again: a switch
+# added to BOOL_SETTINGS (or to the asks-first or tool tables) appears here by
+# itself, and one removed stops being offered. A second, hand-written list would
+# drift from the real switches and nobody would notice - the exact trap this
+# project keeps fixing.
 #
-# Deliberately NOT promised here:
-#   * anything that would LOOSEN a rule. Those still raise their card and ask
-#     for Windows Hello on the PC; "change any setting by voice" must not
-#     become a way round the gate (rule 4).
-#   * the pick-one settings (web search provider, weather source), which have
-#     their own phrasings today ("switch to Brave for search"). Naming them
-#     here would promise a phrasing that does not match yet.
+# IT MUST NOT UNDERSTATE EITHER (fixed 2026-10-13). It used to offer the 13
+# BOOL_SETTINGS alone, which told the owner he could change 13 things while
+# about 45 were reachable by asking - so most of what worked looked like it did
+# not, and he would not try it. The families whose tables live in other modules
+# are counted from those modules (see `_OTHER_REACHABLE`) rather than omitted.
+#
+# The earlier note here said loosening settings were "deliberately NOT
+# promised". That reasoning was wrong and is gone: a loosening IS reachable - it
+# is reached and then raises its card. Omitting it told the owner he could not
+# do something he can do. The answer now says plainly that a change which
+# loosens a rule still shows a card first, which is the honest form of the same
+# protection (rule 4). The pick-one settings (web search provider, weather
+# source) do have phrasings today, so they are listed as the families they are.
+#
+# STILL NOT LISTED, on purpose:
+#   * the secrets themselves - API keys, account passwords, the pairing token.
+#     Those are set on the PC only and are never spoken or typed into a chat
+#     (rule 3, and the registry's own "left out on purpose" list), so no phrase
+#     reaches them and they do not belong here.
+#   * a TOPIC's mode (learn / use / off, per topic, `set_topic_mode`). It is
+#     reachable, but `jarvis_quick` opens its picker rather than acting on a
+#     guessed topic, so the phrasing is not a plain one-liner. Listing it would
+#     promise a sentence that needs a picker first - the same reason the
+#     pick-one settings used to be held back.
 
 #: Plain short words for what a section is about, so the answer reads like a
 #: person talking rather than the Settings screen being read out. Only the
@@ -1591,36 +1609,162 @@ SECTION_PLAIN = {
     "prompt-coach": "the prompt coach",
 }
 
+#: Settings a chat turn genuinely reaches whose own table lives OUTSIDE this
+#: registry - so "derive it from the tables" alone cannot see them, and the
+#: answer used to leave every one of them out.
+#:
+#: Each entry is one row of the answer:
+#: `(plain words, group, how many settings, module that owns it)`.
+#: The count is how many separate settings that row covers, so the answer can
+#: state a truthful number without reading out 43 names. `-1` means "count it
+#: from that module" (see `_family_count`), which is what keeps the number from
+#: drifting when a switch is added.
+#:
+#: This promises no phrasing that does not exist. Writing a family here without
+#: a route behind it would be lying to the owner, so `test_settings_help.py`
+#: runs each family's phrase through the real intent matcher and fails if it
+#: reaches the model instead.
+#:
+#: WHY THESE ARE NOT IN `BOOL_SETTINGS`: they are not on/off booleans this
+#: registry sets. The animal options come from `jarvis_animal.SWITCHES` and its
+#: `DEVICE_CHANGES`; Lockdown, the menus, the thinking level, the card display,
+#: the interruption budget and the manner are reached by `jarvis_quick.py`'s own
+#: grammars.
+_OTHER_REACHABLE: tuple = (
+    # jarvis_animal.SWITCHES - the count is read from that module, never typed
+    ("the animal faces: keeping it still, listening nods, a focus buddy, small "
+     "acknowledgements, petting, idle moments, seasonal touches",
+     "the animal faces", -1, "jarvis_animal"),
+    # jarvis_quick.py's sky and weather grammar (jarvis_sky.py)
+    ("the sun and moon behind the face", "the animal faces", 1, "jarvis_sky"),
+    ("the weather behind the face, and where it comes from", "the animal faces",
+     1, "jarvis_sky"),
+    # jarvis_animal.DEVICE_CHANGES - each device changes only itself. Two
+    # settings, not fourteen: DEVICE_CHANGES lists the verbs and values the
+    # grammar accepts ("sharper", "sharpness:high", "frame_rate:60"), and
+    # sharpness and frame rate are the two things being set.
+    ("how sharp and how smooth the animal is drawn, per device",
+     "the animal faces", 2, "jarvis_animal"),
+    # jarvis_card_summary.py, reached from jarvis_quick.py
+    ("how much of an approval card is shown", "approval cards", 1,
+     "jarvis_card_summary"),
+    # jarvis_arbiter.py, reached from jarvis_quick.py
+    ("how many times a day Jarvis may speak up, and when the brief arrives",
+     "when Jarvis speaks up", 2, "jarvis_arbiter"),
+    # jarvis_manner.py, reached from jarvis_quick.py. The phrase needs its
+    # "from now on" prefix: _TO_PLAIN is only consulted after _FROM_NOW_ON, so
+    # a bare "be plainer" reaches the model instead. Verified, not assumed.
+    ("how Jarvis talks: warm and brief, or plain (say \"from now on, be "
+     "plainer\")", "how Jarvis talks", 1, "jarvis_manner"),
+    # jarvis_menus.HIDEABLE, reached from jarvis_quick.py. ONE setting, not 86:
+    # HIDEABLE lists the menus it can be applied to, and the setting is
+    # "show/hide a menu" with the menu as its parameter.
+    ("showing or hiding a menu", "the menus", 1, "jarvis_menus"),
+    # jarvis_thinking.py, reached from jarvis_quick.py
+    ("how much a model thinks before answering", "thinking", 1,
+     "jarvis_thinking"),
+    # jarvis_quick.py's "search_use" grammar (Intent("search_use")): "switch to
+    # brave for search", "use exa for the web search". A concrete value, so it
+    # can be named without promising a phrasing that is not there.
+    ("which service web search uses", "the web search", 1, "jarvis_search"),
+    # jarvis_asks_first.py, reached from jarvis_quick.py
+    ("Lockdown", "what asks first", 1, "jarvis_asks_first"),
+)
+
+def _family_count(module_name: str, fallback: int) -> int:
+    """How many settings that family covers, counted from its own module.
+
+    Only the animal switches are counted this way, because that is a real table
+    of separate on/off switches. A module that is not on this PC (an older
+    install) must not make the whole answer fail, so the fallback is used and
+    the number is never invented.
+    """
+    try:
+        mod = __import__(module_name)
+    except Exception:
+        return fallback
+    if module_name == "jarvis_animal":
+        return len(getattr(mod, "SWITCHES", ()) or ()) or fallback
+    return fallback
+
 
 def changeable_settings() -> dict:
     """Everything the owner can change by talking, in plain words.
 
-    {"switches": [(name, section_plain), ...], "count": n, "words": "..."}
-    Each name is that setting's own first alias, so what is offered is exactly
-    what a phrase can actually reach.
+    {"switches": [(name, group), ...], "count": n, "words": "..."}
+
+    `count` is the number of SETTINGS, not the number of rows: a row that covers
+    a family states how many settings it covers, so the answer can be spoken
+    without reading out 45 separate names.
+
+    WHERE THE LIST COMES FROM, and why it is not just `BOOL_SETTINGS` any more
+    (2026-10-13): this used to return the 13 on/off switches alone, so the
+    answer told the owner he could change 13 things while far more were
+    reachable by asking. The switches below are still derived from
+    `BOOL_SETTINGS`, the asks-first rows from `_ASKS_FIRST_TARGETS` and the
+    reading-tool row from `_TOOL_TARGETS`; the rest are counted from the module
+    that owns them. A switch added to any of those tables appears here by
+    itself, and the count rises with it.
     """
     rows = []
+    total = 0
     for b in BOOL_SETTINGS:
         name = b.names[0] if b.names else b.key
         where = SECTION_PLAIN.get(b.section or "", "")
         rows.append((name, where))
-    return {"switches": rows, "count": len(rows), "words": changeable_words(rows)}
+        total += 1
+
+    # "What asks first" - one row per action, named the way a person says it.
+    asks = len(_ASKS_FIRST_TARGETS)
+    if asks:
+        rows.append((f"what asks first, for {asks} things (my calendar, email, "
+                     f"notes, home status, Obsidian, Logseq, Joplin)",
+                     "what asks first"))
+        total += asks
+    # Offering a reading tool to the AI model at all.
+    tools = len(_TOOL_TARGETS)
+    if tools:
+        rows.append((f"which of {tools} reading tools the AI model may use "
+                     f"(calendar, email, notes, home status)", "what asks first"))
+        total += tools
+
+    # The families whose table lives outside this registry.
+    for what, where, count, module_name in _OTHER_REACHABLE:
+        rows.append((what, where))
+        total += _family_count(module_name, count) if count < 0 else count
+
+    return {"switches": rows, "count": total,
+            "words": changeable_words(rows, total)}
 
 
-def changeable_words(rows=None) -> str:
+def changeable_words(rows=None, count=None) -> str:
     """The answer to "what can I change?", as one thing to say.
 
     Written as a spoken sentence - semicolons between items, no bullet list
     and no markdown - because this reply may be read aloud.
+
+    `count` is how many SETTINGS the answer covers, which is not the number of
+    rows: a family row stands for several. Passing it separately is what lets
+    the sentence state a truthful number. Left out, the rows are counted, which
+    is only right when every row is one setting.
+
+    It leads with that number because the number is the whole point of the
+    answer: it used to offer 13 while far more were reachable, so the owner
+    reasonably concluded the rest could not be done by asking.
     """
     if rows is None:
-        rows = changeable_settings()["switches"]
+        got = changeable_settings()
+        rows, count = got["switches"], got["count"]
     if not rows:
         return ("Nothing can be changed by talking on this PC yet. Everything "
                 "lives in Settings in the app.")
+    if count is None:
+        count = len(rows)
     names = [f"{name} ({where})" if where else name for name, where in rows]
-    return ("You can change these by asking: " + "; ".join(names) +
-            ". Anything that loosens a rule still shows you a card first, and "
+    return (f"You can change {count} settings by asking. Here is what they "
+            "cover: " + "; ".join(names) +
+            ". A family that names a number covers that many separate settings. "
+            "Anything that loosens a rule still shows you a card first, and "
             "say \"undo\" in the same chat if you change your mind.")
 
 
