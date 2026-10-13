@@ -70,6 +70,10 @@ internal fun PcNotifySection(canAct: Boolean) {
     var readError by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<String?>(null) }
+    /** Whether the last answer wrote anything: a failed save is drawn as one. */
+    var saidFailed by remember { mutableStateOf(false) }
+    /** Which row the sentence belongs to, so it is drawn under that row. */
+    var saidFor by remember { mutableStateOf<String?>(null) }
     /** The key of the clock row whose picker is open, if any. */
     var picking by remember { mutableStateOf<String?>(null) }
     /** What really happened last time "Send test notification" was pressed. */
@@ -98,7 +102,10 @@ internal fun PcNotifySection(canAct: Boolean) {
         said = null
         scope.launch {
             try {
-                said = JarvisRuntime.setLimit(key, value)
+                val a = JarvisRuntime.setLimit(key, value)
+                said = a.sentence
+                saidFailed = !a.changed
+                saidFor = key
             } finally {
                 busy = false
                 // Re-read whatever the answer was, the same rule the limits
@@ -142,6 +149,8 @@ internal fun PcNotifySection(canAct: Boolean) {
                         LimitRow(
                             row = r,
                             enabled = canAct && !busy,
+                            said = if (saidFor == r.key) said else null,
+                            saidFailed = saidFailed,
                             onChange = { value -> change(r.key, value) },
                             onPickTime = { picking = r.key },
                         )
@@ -151,20 +160,13 @@ internal fun PcNotifySection(canAct: Boolean) {
                         LimitRow(
                             row = r,
                             enabled = canAct && !busy,
+                            said = if (saidFor == r.key) said else null,
+                            saidFailed = saidFailed,
                             onChange = { value -> change(r.key, value) },
                             onPickTime = { picking = r.key },
                         )
                     }
                 }
-            }
-            said?.let {
-                Gap(6)
-                Text(
-                    it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = chrome.textMid,
-                    modifier = Modifier.liveStatus(),
-                )
             }
 
             SubHead(NotifyRows.SUBHEAD_TEST)
