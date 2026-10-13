@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-update-both"
+description = "Enables the update_both command without any pre-configured scope."
+commands.allow = ["update_both"]
+
+[[permission]]
+identifier = "deny-update-both"
+description = "Denies the update_both command without any pre-configured scope."
+commands.deny = ["update_both"]

@@ -2416,6 +2416,80 @@
           <summary>Release notes</summary>
           <p class="note" id="update-notes-body"></p>
         </details>
+
+        <!-- ── Both halves, one button ─────────────────────────────────────
+             The owner asked for this directly (2026-10-13): one Update
+             control that updates the desktop program AND the Python backend.
+             Before this, the backend moved only by hand -
+             `scripts/apply-patches.ps1` in a PowerShell window from the repo -
+             and about eighty sentences in this app said "run
+             apply-patches.ps1 on the PC" because of it.
+
+             The order is fixed in Rust (`update.rs`'s update_both), not here:
+             the backend first, this app's own update second, and the second
+             not at all when the first did not finish. One command rather than
+             three the page could reorder.
+
+             This is NOT "Check for tool updates" below. That one is a
+             report about the packages Jarvis is built from and never installs
+             anything; this installs. They stay separate on purpose.
+
+             Where the two folders come from: `backend_update.rs`. Nothing is
+             searched for - the backend folder is read off the box here, then
+             off the folder this app already starts Jarvis from, then off
+             JARVIS_BACKEND; the program folder is only ever the box here.
+             Empty means "not said", and the run is REFUSED rather than
+             guessed at. -->
+        <div id="update-both">
+          <h3 class="subhead">Update both halves</h3>
+          <p class="note">
+            Jarvis is two programs: this desktop app, and the Python backend
+            that answers every question on this PC. This button updates both,
+            in one go. It asks first, and it reports what each half did - it
+            never installs anything on its own, and no setting here can make
+            it.
+          </p>
+          <p class="note">
+            The backend half runs <code>scripts\apply-patches.ps1</code>, the
+            same command you would paste into PowerShell yourself. It writes
+            patches into the folder Jarvis runs from, and it copies every file
+            it is about to change into a
+            <code>_jarvis-backup-&lt;date&gt;</code> folder inside that backend
+            folder first, so there is a way back. It also has to stop Jarvis
+            while it works, so answers will not arrive again until you press
+            Restart at the end.
+          </p>
+
+          <label class="field">
+            <span class="label">The Jarvis program folder on this PC</span>
+            <input id="ub-repo" type="text" spellcheck="false" autocomplete="off"
+                   placeholder="C:\Users\you\Epic-Jarvis" />
+          </label>
+          <label class="field">
+            <span class="label">Your backend folder (the one holding jarvis_hud.py)</span>
+            <input id="ub-backend" type="text" spellcheck="false" autocomplete="off"
+                   placeholder="leave blank to use the folder this app starts Jarvis from" />
+          </label>
+          <div class="row">
+            <button class="btn small" id="ub-save" type="button">Save these two folders</button>
+            <span class="status" id="ub-save-status" role="status"></span>
+          </div>
+          <p class="note" id="ub-found"></p>
+
+          <p class="state" id="ub-state">—</p>
+          <div class="row">
+            <button class="btn" id="ub-go" type="button">Update everything</button>
+            <button class="btn" id="ub-yes" type="button" hidden>Yes, update both</button>
+            <button class="btn ghost" id="ub-no" type="button" hidden>Cancel</button>
+            <span class="status" id="ub-status" role="status"></span>
+          </div>
+          <ol id="ub-steps"></ol>
+          <details class="update-notes" id="ub-log" hidden>
+            <summary>What the patch program printed</summary>
+            <pre class="note" id="ub-log-body"
+                 style="white-space: pre-wrap; max-height: 22em; overflow: auto;"></pre>
+          </details>
+        </div>
       </section>
 
       <!-- ── Check for tool updates ─────────────────────────────────────────

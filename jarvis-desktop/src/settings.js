@@ -166,6 +166,24 @@ const dom = {
   updateNotes: $("update-notes"),
   updateNotesBody: $("update-notes-body"),
 
+  // "Update both halves" (2026-10-13). Its own ids, because it is its own
+  // control: the halves it drives are the same two the two cards above drive,
+  // but the thing it does - both at once, in a fixed order - is not either of
+  // them.
+  ubRepo: $("ub-repo"),
+  ubBackend: $("ub-backend"),
+  ubSave: $("ub-save"),
+  ubSaveStatus: $("ub-save-status"),
+  ubFound: $("ub-found"),
+  ubState: $("ub-state"),
+  ubGo: $("ub-go"),
+  ubYes: $("ub-yes"),
+  ubNo: $("ub-no"),
+  ubStatus: $("ub-status"),
+  ubSteps: $("ub-steps"),
+  ubLog: $("ub-log"),
+  ubLogBody: $("ub-log-body"),
+
   hotkeyRows: $("hotkey-rows"),
   saveHotkeys: $("save-hotkeys"),
   resetHotkeys: $("reset-hotkeys"),
@@ -202,6 +220,7 @@ const OPEN_READS = new Set([
   "get_autostart",
   "get_hotkeys",
   "update_status",
+  "backend_update_status",
   "get_security_settings",
   "supervisor_status",
   "get_second_card",
@@ -1699,6 +1718,243 @@ dom.updateAuto.addEventListener("change", async () => {
 if (IS_TAURI) TAURI.event.listen("update-status", (event) => paintUpdate(event.payload));
 // Emitted only while `install_update` is downloading — see `paintProgress`.
 if (IS_TAURI) TAURI.event.listen("update-progress", (event) => paintProgress(event.payload));
+
+/* ==========================================================================
+   Update both halves
+   --------------------------------------------------------------------------
+   The owner asked for this directly (2026-10-13): one control that updates
+   the desktop program AND the Python backend. Before it, the backend moved
+   only by hand — `scripts/apply-patches.ps1` in a PowerShell window — and
+   this app answered "run apply-patches.ps1 on the PC" in about eighty places
+   whenever the two had drifted apart.
+
+   Three things this file is careful about:
+
+   1. **It asks first, and says what will happen.** Both halves in one press is
+      a bigger thing than either half, so the press opens a question naming the
+      backend folder, the fact that the backend step writes into the folder
+      Jarvis runs from, and the backup it keeps first. Cancel changes nothing.
+
+   2. **It cannot reorder anything.** There is ONE command here, `update_both`,
+      and the order lives in Rust (`update.rs`): backend first, this app's own
+      signed update second, and the second not at all when the first did not
+      finish. A page that called three commands could get that wrong in a later
+      edit; a page that calls one cannot.
+
+   3. **It never paints a half-done run as done.** The green words are gated on
+      Rust's own `updatedBoth`, which is true only when BOTH steps came back
+      `ok` — a backend that patched but could not prove its tests is `partial`,
+      and a desktop half that was not attempted is `skipped`, and neither of
+      those is a pass in this project.
+   ========================================================================== */
+
+/** The last `backend_update_status` answer, so the question can name the
+ *  folders without asking Rust again mid-press. */
+let ubWhere = null;
+let ubBusy = false;
+
+/** The two folders, in the words the owner can act on. */
+function ubFoundLine(where) {
+  if (!where) return "";
+  if (where.blocked) return where.blocked;
+  const source = where.backendSource ? ` — read from ${where.backendSource}` : "";
+  return `Backend folder: ${where.backend}${source}. Patch program: ${where.script}.`;
+}
+
+function paintBoth(where, { keepState = false } = {}) {
+  if (!where || !dom.ubState) return;
+  ubWhere = where;
+  // Never overwrite what is being typed: this paints on open and after a save,
+  // and both can land while the cursor is in one of the two boxes.
+  if (dom.ubRepo && document.activeElement !== dom.ubRepo) {
+    dom.ubRepo.value = where.repo || "";
+  }
+  if (dom.ubBackend && document.activeElement !== dom.ubBackend) {
+    dom.ubBackend.value = where.backendTyped || "";
+  }
+  if (dom.ubFound) dom.ubFound.textContent = ubFoundLine(where);
+
+  const ready = !where.blocked;
+  if (dom.ubGo) dom.ubGo.disabled = !ready || ubBusy;
+  // `keepState` is for the re-read that happens the moment a run ends: it may
+  // update the folders and the button, and it must NOT touch the two lines the
+  // outcome has just written. Repainting "Nothing has been changed yet" over
+  // "NOT fully updated" is exactly how a card would look like it had not run.
+  if (keepState) return;
+  if (!ready) {
+    report(dom.ubState, "Cannot update the backend on this PC yet — see the line above.",
+      "bad");
+    return;
+  }
+  report(dom.ubState, "Both folders are in place. Nothing has been changed yet.", "");
+  delete dom.ubState.dataset.tone;
+}
+
+async function loadBoth(keepState = false) {
+  try {
+    paintBoth(await invoke("backend_update_status"), { keepState });
+  } catch (error) {
+    // A re-read that fails after a run must not overwrite what the run said.
+    if (!keepState) report(dom.ubState, problemWords(error), "bad");
+  }
+}
+
+/** One half of the run, as a list row. */
+function fillStep(li, step) {
+  const label = step.step === "backend" ? "The backend" : "Jarvis Desktop";
+  li.textContent = `${label}: ${step.detail}`;
+  li.dataset.step = step.step;
+  if (step.state === "ok") li.dataset.tone = "ok";
+  else if (step.state === "running") delete li.dataset.tone;
+  // `partial`, `failed` and `skipped` all read as NOT a pass — the same
+  // decision the project makes everywhere else: a check that could not run is
+  // never a pass.
+  else li.dataset.tone = "bad";
+}
+
+/** Paints one step while it runs, and again when it ends. */
+function paintStep(step) {
+  if (!dom.ubSteps || !step || !step.step) return;
+  const existing = dom.ubSteps.querySelector(`[data-step="${step.step}"]`);
+  const li = existing || document.createElement("li");
+  fillStep(li, step);
+  if (!existing) dom.ubSteps.append(li);
+  report(dom.ubStatus, li.textContent, step.state === "failed" ? "bad" : "");
+}
+
+/** The ending, in words that cannot be read as "updated" unless both halves
+ *  really are. */
+function paintBothOutcome(outcome) {
+  const steps = (outcome && outcome.steps) || [];
+  if (dom.ubSteps) {
+    dom.ubSteps.replaceChildren();
+    steps.forEach((step) => {
+      const li = document.createElement("li");
+      fillStep(li, step);
+      dom.ubSteps.append(li);
+    });
+  }
+
+  const tail = steps.map((s) => s.tail || "").filter(Boolean).join("\n\n").trim();
+  if (dom.ubLog) {
+    dom.ubLog.hidden = !tail;
+    if (dom.ubLogBody) dom.ubLogBody.textContent = tail;
+  }
+
+  const updated = Boolean(outcome && outcome.updatedBoth);
+  const failed = steps.some((s) => s.state === "failed");
+  const said = updated
+    ? "Both halves are updated, and the backend's own tests proved it. " +
+      "Press Restart now so Jarvis starts again on the new files."
+    : failed
+      ? "NOT fully updated. Read what each half said above before doing anything else."
+      : "Patched, but NOT proven — see what the backend half said above. " +
+        "This is not reported as a clean update.";
+  report(dom.ubState, said, updated ? "ok" : "bad");
+  report(dom.ubStatus, steps.map((s) => s.detail).join(" "), updated ? "ok" : "bad");
+  announce(said, "assertive");
+  // The same Restart button the desktop-only install uses: either the new
+  // executable is on disk, or Jarvis was stopped for the backend half.
+  if (outcome && outcome.restartNeeded && dom.updateRestart) {
+    dom.updateRestart.hidden = false;
+    // A Restart that failed earlier left the button disabled with no way to try
+    // again; a finished run is a fresh reason to offer it.
+    dom.updateRestart.disabled = false;
+  }
+}
+
+/** The question, in as many words. Every line of it is a fact the run will
+ *  make true, so nobody has to find out afterwards. */
+function ubQuestion(where) {
+  const backend = (where && where.backend) || "your backend folder";
+  const script = (where && where.script) || "scripts\\apply-patches.ps1";
+  return [
+    "Update both halves of Jarvis?",
+    "",
+    `1. The backend. ${script} is run against:`,
+    `   ${backend}`,
+    "   It writes patches into that folder - the folder Jarvis runs from - and",
+    "   copies every file it is about to change into a _jarvis-backup-<date>",
+    "   folder inside it first, so there is a way back. Jarvis is stopped while",
+    "   this runs, and it can take several minutes.",
+    "2. Jarvis Desktop. The newest signed release is downloaded, checked",
+    "   against this copy's signing key, and installed over this one.",
+    "",
+    "The backend goes first. If it does not finish, Jarvis Desktop is NOT",
+    "updated, and you are told so. Nothing happens on its own.",
+    "",
+    "Continue?",
+  ].join("\n");
+}
+
+async function runBoth() {
+  if (ubBusy) return;
+  ubBusy = true;
+  if (dom.ubGo) dom.ubGo.disabled = true;
+  if (dom.ubYes) dom.ubYes.hidden = true;
+  if (dom.ubNo) dom.ubNo.hidden = true;
+  if (dom.ubSteps) dom.ubSteps.replaceChildren();
+  if (dom.ubLog) dom.ubLog.hidden = true;
+  report(dom.ubStatus, "");
+  report(dom.ubState, "Working. Do not close this window.", "");
+  try {
+    paintBothOutcome(await invoke("update_both"));
+  } catch (error) {
+    // The command itself refused — a build with no update key, or a bridge
+    // that would not answer. Say so, and never as an update.
+    report(dom.ubState, problemWords(error), "bad");
+    report(dom.ubStatus, "Nothing was installed.", "bad");
+  } finally {
+    ubBusy = false;
+    // Re-read WHICH folders there are, and leave the ending it just wrote on
+    // screen alone — see `keepState` above.
+    loadBoth(true);
+  }
+}
+
+if (dom.ubGo) {
+  dom.ubGo.addEventListener("click", () => {
+    if (ubBusy || !ubWhere) return;
+    // The press is the ask. `window.confirm` is this app's own "are you sure?"
+    // — the Brain, Backups and Projects all use it — and it is deliberately
+    // the only place this control can start from.
+    if (!window.confirm(ubQuestion(ubWhere))) {
+      report(dom.ubStatus, "Cancelled. Nothing was changed.", "");
+      return;
+    }
+    runBoth();
+  });
+}
+
+if (dom.ubSave) {
+  dom.ubSave.addEventListener("click", async () => {
+    dom.ubSave.disabled = true;
+    report(dom.ubSaveStatus, "Saving…");
+    try {
+      const where = await invoke("set_update_folders", {
+        repo: (dom.ubRepo && dom.ubRepo.value.trim()) || "",
+        backend: (dom.ubBackend && dom.ubBackend.value.trim()) || "",
+      });
+      paintBoth(where);
+      report(
+        dom.ubSaveStatus,
+        where.blocked
+          ? "Saved, but the backend half cannot run yet — see the line above."
+          : "Saved. Both folders are in place.",
+        where.blocked ? "bad" : "ok"
+      );
+    } catch (error) {
+      report(dom.ubSaveStatus, problemWords(error), "bad");
+    } finally {
+      dom.ubSave.disabled = false;
+    }
+  });
+}
+
+// Emitted by `update_both` as each half starts and ends. Nothing that receives
+// this starts, resumes or approves anything — it is `update-status`'s shape,
+// one step at a time, so a card is not silent for the minutes a patch run takes.
+if (IS_TAURI) TAURI.event.listen("update-step", (event) => paintStep(event.payload));
 
 // About's source link opens in the real OS browser, never inside the
 // WebView - same reasoning and the same `data-external`/`open_external_url`
@@ -3586,3 +3842,4 @@ document.addEventListener("visibilitychange", () => {
 loadCapabilities();
 
 loadUpdate();
+loadBoth();

@@ -428,6 +428,21 @@ permissions = [
   # Restart is the second half of installing one: without it the new binary
   # is on disk and the running process is still the old one.
   "allow-restart-app",
+  # Updating BOTH halves in one press (2026-10-13, the owner's own request):
+  # the Python backend's patches through the one script allowed to change that
+  # folder, then the signed desktop release. `update_both` replaces the
+  # executable AND writes into the folder Jarvis runs from, so it is the
+  # largest thing in this list and it sits here for the same reason
+  # `install_update` does - behind the window a person had to open on purpose.
+  # It is one command rather than two the page could reorder, so the order
+  # (backend first, executable second, and the executable not at all if the
+  # backend half did not finish) cannot be lost in a later edit to a page.
+  # Nothing spawns it: no timer, no startup path, and no setting turns it into
+  # an automatic install. `set_update_folders` writes two paths into this app's
+  # own settings file and cannot run anything by itself.
+  "allow-update-both",
+  "allow-backend-update-status",
+  "allow-set-update-folders",
   "allow-get-api-settings",
   "allow-set-api-settings",
   # "Send test notification" in notification settings.

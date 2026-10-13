@@ -19711,3 +19711,34 @@ outside text stops it, and the `ast` check that every setter calls a function th
 exists. `backend/test_tool_text.py`, `test_short_tool_list.py`,
 `test_agent_retirement_wiring.py`, `test_reach.py`, `test_private_aloud.py` and
 `test_tool_eval.py` carry the new tool in their own lists and generated fixtures.
+
+---
+
+## 131. Updating both halves: there is no route, and that is the design (added 2026-10-13)
+
+The owner asked for this directly, on 2026-10-13: one Update control that
+updates both the desktop program and the Python backend. **This section exists
+to say that it added nothing to this API**, so a reader looking for the routes
+of that feature finds the reason instead of nothing.
+
+The backend half runs `scripts/apply-patches.ps1` *on the PC*, from the desktop
+app, over the repository it was cloned into. That is a filesystem operation
+against the folder Jarvis runs from, and there is deliberately no route for it:
+
+- a phone cannot run it (the script, the repository and the Python folder are
+  all on the PC, and the work is `git apply`, then `pip`, then the test suites);
+- a route would put "replace the files this PC runs" behind the pairing token,
+  reachable from anywhere on the owner's private network. That is a new way in,
+  and this project's rule 4 is that nothing acts without the person at the
+  machine.
+
+So `tools/check_parity.py` has nothing to classify here, and
+`docs/ARCHITECTURE.md` §8 carries the one-sided row that says why the phone is
+not offered a control that could not work. The desktop's own half of the
+feature — the signed release check — added no route either; it is
+`jarvis-desktop/src-tauri/src/update.rs`, unchanged in what it requests.
+
+`docs/ONE-UPDATE-FOR-BOTH.md` is the whole design: the order (backend first,
+executable second, and the executable not at all when the first half did not
+finish), where the app reads the two paths from, what the owner configures once,
+and the three questions deliberately left for the owner.

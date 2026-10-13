@@ -418,6 +418,17 @@ powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPat
 changing any setting. Undo the patches with `-Revert`, skip the test run with
 `-SkipTests`, skip pip with `-SkipPackages`.
 
+**Since 2026-10-13 the desktop app can run this for you.** Settings → Updates
+→ "Update both halves" runs this same script — it is deliberately *not* a
+second patcher: no patch, no backup rule and no classification is copied into
+Rust or into a page — and then installs the signed Jarvis Desktop release. It
+asks first, in as many words, naming the folder it is about to write into; it
+backs up through this script's own `_jarvis-backup-<date>` step like any other
+run; and it reports the two halves separately, so a run that did not finish
+never reads as an updated one. Where the app reads the two folders from, and
+why it refuses rather than guessing, is
+[`docs/ONE-UPDATE-FOR-BOTH.md`](../docs/ONE-UPDATE-FOR-BOTH.md).
+
 It backs up every file it is about to touch into a timestamped folder, then
 **applies the whole stack to a throwaway copy first** — so a patch that will
 not apply stops the run before your real files are touched, rather than
