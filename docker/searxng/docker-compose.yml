@@ -34,30 +34,32 @@ services:
     # The name backend/README.md uses and the name Jarvis's own message shows.
     container_name: searxng
     restart: unless-stopped
-    # WHY THIS IS HERE (2026-10-13). Measured on the owner's PC: SearXNG was up,
-    # the front page answered 200, and every search returned
-    # "results": [] with all five engines timing out. The cause was NOT the
-    # engines and NOT the host's internet - it was name resolution INSIDE the
-    # container. From the Docker Desktop VM:
+    # DO NOT SET `dns:` HERE. It was tried on 2026-10-13 and it made things
+    # WORSE, so the reason is written down instead of the mistake.
     #
-    #   /etc/resolv.conf      nameserver 10.255.255.254   <- WSL's DNS proxy
-    #   nslookup en.wikipedia.org        -> timed out, no servers could be reached
-    #   nslookup en.wikipedia.org 8.8.8.8 -> answers fine
-    #   wget https://1.1.1.1/ (raw IP)    -> fetches a page
+    # The symptom looked like a DNS fault: SearXNG was up, its front page
+    # answered 200, and every search returned an empty result list. Docker
+    # Desktop's own DNS was not answering at the time, which is the real fault.
+    # But this PC also cannot reach an outside resolver on port 53 from inside a
+    # container AT ALL, so naming one here can only make it worse:
     #
-    # So the container's egress is fine and only its resolver is dead, which is
-    # what makes a search fail while the container looks healthy. Naming the
-    # resolvers here gives the container its own, instead of the WSL proxy that
-    # was not answering. What leaves this PC is unchanged: the resolver sees the
-    # search engines' own hostnames (google.com, duckduckgo.com), never the
-    # owner's search words, which go to the engines themselves as before.
+    #   (inside a container)  nc 1.1.1.1 53   -> refused in 0.1s
+    #                         nc 1.1.1.1 443  -> OPEN
+    #                         nc 1.1.1.1 853  -> OPEN
+    #   (inside the Docker VM) nc 1.1.1.1 53  -> OPEN, and nslookup answers
     #
-    # TAKING EFFECT NEEDS THE CONTAINER RECREATED (docker compose up -d here).
-    # That is a change to the owner's running setup, so it is his call, not a
-    # side effect of this file changing.
-    dns:
-      - 1.1.1.1
-      - 8.8.8.8
+    # Setting `dns: [1.1.1.1, 8.8.8.8]` therefore REPLACED the one resolver that
+    # does work - Docker Desktop's own host proxy - with two that cannot be
+    # reached, and the container still resolved nothing:
+    #
+    #   nameserver 127.0.0.11
+    #   # ExtServers: [1.1.1.1 8.8.8.8]      <- set by that key: dead end
+    #   # ExtServers: [host(192.168.65.7)]   <- Docker Desktop's default: works
+    #
+    # The default is right. If a search returns nothing, check Docker Desktop is
+    # running and restart it when its DNS is not answering - do not point the
+    # container at an outside resolver. backend/README.md, "Web search",
+    # step 3a, has the checks.
     environment:
       # Says out loud which address this instance answers on, so the links
       # SearXNG builds for itself point at this PC's own loopback and nowhere
