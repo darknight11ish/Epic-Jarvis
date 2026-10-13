@@ -13,6 +13,17 @@ const PARTS = {
   mail: ['Sending email', 'Send an email, drafts, recipients and replies.'],
   appearance: ['Appearance', 'Theme, colours, the face and how it all looks.'],
   search: ['Search settings', 'Type a word to show only the settings that match.'],
+  // THE SUBSTRING TRAP, added because the first version of this fixture could
+  // not catch it. The phone's floor used to be `word.contains(token)`, so a
+  // short token matched INSIDE a longer unrelated body word. The original
+  // fixture put "conversation" in a LABEL, where the heading rule handles it,
+  // and had no case with a long word in the BODY - so it would have stayed
+  // green with that bug present. This part puts the long words where the body
+  // floor reads them.
+  bodySubstring: [
+    'Sending email',
+    'The conversation and the catalogue of drafts are both kept on your PC.',
+  ],
 };
 
 const QUERIES = [
@@ -20,6 +31,10 @@ const QUERIES = [
   'email', 'emial', 'appearance', 'apearance', 'search', 'settings',
   'voice strict', 'voice backup', 'wi fi', 'cat', 'chat', 'conversation',
   'obsidian', 'theme', 'zzzz', 'docket', 'rocket',
+  // The substring class: 'cat' is INSIDE "catalogue" and 'voice' is not in
+  // "conversation" at all; 'conversation' is a whole body word. A body floor
+  // that is whole-word gives cat->[], voice->[], conversation->[bodySubstring].
+  'cat', 'voice', 'conversation', 'catalogue', 'draft',
 ];
 
 const cases = [];

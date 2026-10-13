@@ -40,6 +40,10 @@
     "search": {
       "label": "Search settings",
       "text": "Type a word to show only the settings that match."
+    },
+    "bodySubstring": {
+      "label": "Sending email",
+      "text": "The conversation and the catalogue of drafts are both kept on your PC."
     }
   },
   "budget": {
@@ -61,7 +65,8 @@
         "folders": 0,
         "mail": 0,
         "appearance": 0,
-        "search": 0
+        "search": 0,
+        "bodySubstring": 0
       }
     },
     {
@@ -76,7 +81,8 @@
         "folders": 0,
         "mail": 0,
         "appearance": 0,
-        "search": 0
+        "search": 0,
+        "bodySubstring": 0
       }
     },
     {
@@ -91,7 +97,8 @@
         "folders": 0,
         "mail": 0,
         "appearance": 0,
-        "search": 0
+        "search": 0,
+        "bodySubstring": 0
       }
     },
     {
@@ -106,7 +113,8 @@
         "folders": 0,
         "mail": 0,
         "appearance": 0,
-        "search": 0
+        "search": 0,
+        "bodySubstring": 0
       }
     },
     {
@@ -121,7 +129,8 @@
         "folders": 4,
         "mail": 0,
         "appearance": 0,
-        "search": 0
+        "search": 0,
+        "bodySubstring": 0
       }
     },
     {
@@ -136,12 +145,14 @@
         "folders": 3,
         "mail": 0,
         "appearance": 0,
-        "search": 0
+        "search": 0,
+        "bodySubstring": 0
       }
     },
     {
       "query": "email",
       "hits": [
+        "bodySubstring",
         "mail"
       ],
       "ranks": {
@@ -151,12 +162,14 @@
         "folders": 0,
         "mail": 4,
         "appearance": 0,
-        "search": 0
+        "search": 0,
+        "bodySubstring": 4
       }
     },
     {
       "query": "emial",
       "hits": [
+        "bodySubstring",
         "mail"
       ],
       "ranks": {
@@ -166,7 +179,8 @@
         "folders": 0,
         "mail": 2,
         "appearance": 0,
-        "search": 0
+        "search": 0,
+        "bodySubstring": 2
       }
     },
     {
@@ -181,7 +195,8 @@
         "folders": 0,
         "mail": 0,
         "appearance": 4,
-        "search": 0
+        "search": 0,
+        "bodySubstring": 0
       }
     },
     {
@@ -196,7 +211,8 @@
         "folders": 0,
         "mail": 0,
         "appearance": 2,
-        "search": 0
+        "search": 0,
+        "bodySubstring": 0
       }
     },
     {
@@ -211,7 +227,8 @@
         "folders": 0,
         "mail": 0,
         "appearance": 0,
-        "search": 4
+        "search": 4,
+        "bodySubstring": 0
       }
     },
     {
@@ -226,7 +243,8 @@
         "folders": 0,
         "mail": 0,
         "appearance": 0,
-        "search": 4
+        "search": 4,
+        "bodySubstring": 0
       }
     },
     {
@@ -241,7 +259,8 @@
         "folders": 0,
         "mail": 0,
         "appearance": 0,
-        "search": 0
+        "search": 0,
+        "bodySubstring": 0
       }
     },
     {
@@ -254,7 +273,8 @@
         "folders": 0,
         "mail": 0,
         "appearance": 0,
-        "search": 0
+        "search": 0,
+        "bodySubstring": 0
       }
     },
     {
@@ -267,7 +287,8 @@
         "folders": 0,
         "mail": 0,
         "appearance": 0,
-        "search": 0
+        "search": 0,
+        "bodySubstring": 0
       }
     },
     {
@@ -280,7 +301,8 @@
         "folders": 0,
         "mail": 0,
         "appearance": 0,
-        "search": 0
+        "search": 0,
+        "bodySubstring": 0
       }
     },
     {
@@ -295,12 +317,14 @@
         "folders": 0,
         "mail": 0,
         "appearance": 0,
-        "search": 0
+        "search": 0,
+        "bodySubstring": 0
       }
     },
     {
       "query": "conversation",
       "hits": [
+        "bodySubstring",
         "idleNew"
       ],
       "ranks": {
@@ -310,7 +334,8 @@
         "folders": 0,
         "mail": 0,
         "appearance": 0,
-        "search": 0
+        "search": 0,
+        "bodySubstring": 1
       }
     },
     {
@@ -325,7 +350,8 @@
         "folders": 1,
         "mail": 0,
         "appearance": 0,
-        "search": 0
+        "search": 0,
+        "bodySubstring": 0
       }
     },
     {
@@ -340,7 +366,8 @@
         "folders": 0,
         "mail": 0,
         "appearance": 1,
-        "search": 0
+        "search": 0,
+        "bodySubstring": 0
       }
     },
     {
@@ -353,7 +380,8 @@
         "folders": 0,
         "mail": 0,
         "appearance": 0,
-        "search": 0
+        "search": 0,
+        "bodySubstring": 0
       }
     },
     {
@@ -366,7 +394,8 @@
         "folders": 0,
         "mail": 0,
         "appearance": 0,
-        "search": 0
+        "search": 0,
+        "bodySubstring": 0
       }
     },
     {
@@ -379,7 +408,88 @@
         "folders": 0,
         "mail": 0,
         "appearance": 0,
-        "search": 0
+        "search": 0,
+        "bodySubstring": 0
+      }
+    },
+    {
+      "query": "cat",
+      "hits": [],
+      "ranks": {
+        "voice": 0,
+        "idleNew": 0,
+        "notifications": 0,
+        "folders": 0,
+        "mail": 0,
+        "appearance": 0,
+        "search": 0,
+        "bodySubstring": 0
+      }
+    },
+    {
+      "query": "voice",
+      "hits": [
+        "voice"
+      ],
+      "ranks": {
+        "voice": 4,
+        "idleNew": 0,
+        "notifications": 0,
+        "folders": 0,
+        "mail": 0,
+        "appearance": 0,
+        "search": 0,
+        "bodySubstring": 0
+      }
+    },
+    {
+      "query": "conversation",
+      "hits": [
+        "bodySubstring",
+        "idleNew"
+      ],
+      "ranks": {
+        "voice": 0,
+        "idleNew": 4,
+        "notifications": 0,
+        "folders": 0,
+        "mail": 0,
+        "appearance": 0,
+        "search": 0,
+        "bodySubstring": 1
+      }
+    },
+    {
+      "query": "catalogue",
+      "hits": [
+        "bodySubstring"
+      ],
+      "ranks": {
+        "voice": 0,
+        "idleNew": 0,
+        "notifications": 0,
+        "folders": 0,
+        "mail": 0,
+        "appearance": 0,
+        "search": 0,
+        "bodySubstring": 1
+      }
+    },
+    {
+      "query": "draft",
+      "hits": [
+        "bodySubstring",
+        "mail"
+      ],
+      "ranks": {
+        "voice": 0,
+        "idleNew": 0,
+        "notifications": 0,
+        "folders": 0,
+        "mail": 1,
+        "appearance": 0,
+        "search": 0,
+        "bodySubstring": 1
       }
     }
   ]

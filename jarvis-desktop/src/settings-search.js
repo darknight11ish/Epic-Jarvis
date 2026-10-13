@@ -172,8 +172,17 @@ function tokenTier(token, labelWords, textWords) {
   if (words.includes(token)) return EXACT;
   if (words.some((w) => w.startsWith(token))) return PREFIX;
   if (words.some((w) => nearMiss(token, w))) return FUZZY;
-  // The floor: the part's text at large, the old "merely contains" rule.
-  if (textWords.includes(token)) return DETAIL;
+  // The floor: a WHOLE WORD of the part's own text, or a near miss of one.
+  //
+  // This was `textWords.includes(token)`, and `textWords` is a normalised
+  // STRING - so `.includes` was a SUBSTRING test wearing a word test's clothes,
+  // and the old "merely contains" rule the header says this work replaced was
+  // still here in the body. The shared cross-app fixture caught it: with the
+  // part "Sending email" / "The conversation and the catalogue of drafts both
+  // kept on your PC", the query `cat` matched "catalogue" and returned DETAIL.
+  // The phone had already been moved to a whole-word floor, so the two engines
+  // disagreed on exactly the class of match this change exists to remove.
+  if (textWords.split(" ").includes(token)) return DETAIL;
   if (textWords.split(" ").some((w) => nearMiss(token, w))) return DETAIL;
   return 0;
 }
