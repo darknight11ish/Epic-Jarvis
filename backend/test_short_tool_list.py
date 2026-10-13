@@ -292,9 +292,15 @@ def t_what_it_saves():
     # the three ways to place the tool: the core would have added all 289 to
     # every turn, and folding it into an existing group would have made that
     # group's own one line tell the model something untrue.
-    check("more_tools itself stays small (at most 325 tokens)",
+    # Pinned 325 -> 345 on 2026-10-13 by the SAME rule and the same reasoning:
+    # `change_setting` (SETTINGS_TOOL, the model-facing settings tool) carries a
+    # 285-token description, so it goes in its own group - the core would have
+    # added all 285 to every turn. Its group costs more_tools +20 (321 -> 341)
+    # and the short list +20 (1421 -> 1441, still inside that one's 1,450). This
+    # is the note test_agent_retirement_wiring.py's own 325 pin points at.
+    check("more_tools itself stays small (at most 345 tokens)",
           AG.estimate_tokens(AG.more_tools_schema(AG.more_tools_groups(every, short=True)))
-          <= 325)
+          <= 345)
 
 
 if __name__ == "__main__":

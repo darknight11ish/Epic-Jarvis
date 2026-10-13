@@ -1498,6 +1498,17 @@
     ]
   },
   {
+    "id": "settings-by-asking",
+    "group": "The PC itself",
+    "title": "Change a setting by asking, in any words",
+    "what": "You say what you want changed - \"turn off quiet hours\", \"stop showing me notifications on my watch\" - and Jarvis changes that switch, in whatever words you use. You do not have to remember one particular phrase.",
+    "where": "Ask in the Jarvis bar on the PC, or by voice or by typing on the phone. Ask \"what can I change?\" and Jarvis lists every switch it can reach this way.",
+    "asks": "Only a change that loosens a rule, or turns on something that reads or reaches more: that raises ONE approval card - Windows Hello where that setting already asks for it - and nothing changes until you answer it. A cosmetic change (the prompt coach, humour, the voice following the face, making pictures, this PC's own notification switches) happens at once, with no card.",
+    "limit": "It changes Jarvis's own switches and nothing else - never a file, a folder, a key or anything outside. A switch it has no way to reach (App lock, the Windows Hello memory-list switch, the theme, the floating face, starting with Windows) is answered in words that say where to change it by hand: nothing is changed and no card is raised. A turn shaped by a web page, an email or a file Jarvis read changes nothing at all, so a page cannot talk it into a setting change. It stays off until \"change_setting\" is added to the tool list in the settings file - see backend/README.md.",
+    "surface": "both",
+    "covers": []
+  },
+  {
     "id": "approvals",
     "group": "Safety",
     "title": "Approval cards",

@@ -487,6 +487,21 @@ is `$SHIPPED` near the top of the script, and the same list is `SHIPPED` in
   `jarvis_notes.py`, `jarvis_home.py`. Copying one does not switch it on:
   the model is only offered a tool that `[tools].enabled` in
   `jarvis-framework.toml` names.
+- **`change_setting`** (added 2026-10-13) - the one tool that changes a
+  setting, so that asking in ANY wording works instead of only a sentence
+  that fits the fixed phrase grammar in `jarvis_quick.py`. Before it,
+  a request that missed that grammar was answered by the model, which had no
+  settings tool and was never told so: the failure looked like success.
+  **It decides no tier of its own.** It calls the setting's own `set` in
+  `jarvis_settings_registry.py` - the same function a spoken sentence calls -
+  so a cosmetic switch changes at once, and anything that loosens a rule or
+  turns on something that reads or reaches more raises that setting's own
+  approval card, with its own risk text and its own Windows Hello rule. A
+  name with no setter at all is answered in words, with nothing changed and
+  no card raised. **It ships OFF, like every tool here but `web_search`:** to
+  turn it on, add `"change_setting"` to `[tools].enabled` in your
+  `jarvis-framework.toml` and restart Jarvis. `backend/test_settings_tool.py`
+  is the suite that proves the two entrances reach one setter.
 
 Every import of these is wrapped, so a missing one never stops anything - it
 just switches a feature off without a word. Until 2026-09-24 the script

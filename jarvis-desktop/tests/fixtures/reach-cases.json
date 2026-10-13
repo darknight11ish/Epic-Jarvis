@@ -1288,6 +1288,10 @@
      "name": "Coming up (timers, alarms, reminders)"
     },
     {
+     "id": "change_setting",
+     "name": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)"
+    },
+    {
      "id": "browser_control",
      "name": "Browser control"
     }
