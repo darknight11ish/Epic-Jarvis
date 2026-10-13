@@ -501,7 +501,11 @@ is `$SHIPPED` near the top of the script, and the same list is `SHIPPED` in
   no card raised. **It ships OFF, like every tool here but `web_search`:** to
   turn it on, add `"change_setting"` to `[tools].enabled` in your
   `jarvis-framework.toml` and restart Jarvis. `backend/test_settings_tool.py`
-  is the suite that proves the two entrances reach one setter.
+  is the suite that proves the two entrances reach one setter. Its tool name is
+  mapped to the existing `change_own_config` action in `jarvis_gate.py` by
+  `gate-entries.patch` (the row `test_agent.py` requires, since it insists every
+  tool's lookup name is a key of that table) - and that patch's previous version
+  is recorded in `backend/patch-history/` as usual.
 
 Every import of these is wrapped, so a missing one never stops anything - it
 just switches a feature off without a word. Until 2026-09-24 the script

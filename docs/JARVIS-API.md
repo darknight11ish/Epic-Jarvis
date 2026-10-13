@@ -19622,10 +19622,14 @@ function, `BoolSetting.set`, and that function is what a spoken sentence runs.
 
 Because the card is the setting's OWN, it carries that setting's own risk text, its own
 Windows Hello rule and its own PC rule: no second card is ever raised for one change, and
-no generic action name has to stand in for 21 different risk texts. Its
-`gate_lookup_name` is `change_own_config`, an EXISTING action - so no new
-`jarvis_gate._TOOL_ACTIONS` line, no new `[autonomy.tiers]` row and no new card wording
-is introduced. `jarvis_reach`'s own row for the tool says in words that what asks
+no generic action name has to stand in for 21 different risk texts. The tool's own name
+maps to `change_own_config` in `jarvis_gate._TOOL_ACTIONS` - a row added on 2026-10-13 by
+`backend/gate-entries.patch` (with its previous version recorded in
+`backend/patch-history/`), because `test_agent.py` requires every tool's lookup name to be
+a KEY of that table, and the action name alone is not one. That action already carries the
+tier (`[autonomy.tiers]`, `ask`) and the card wording ("change one of its settings") that
+the lights, briefing-senders and big-coder switches use, so no new tier and no new card
+words are invented. `jarvis_reach`'s own row for the tool says in words that what asks
 depends on the setting.
 
 **What it refuses.** A name it cannot resolve against the table is answered in words
@@ -19657,6 +19661,26 @@ called `jarvis_manner.handle_post(...)`, and `jarvis_manner.py` has only `handle
 work, while the Settings page's own route (`POST /api/manner`) went through `handle_set`
 and did. `backend/test_settings_tool.py` now walks every setter's own imports with `ast`
 and fails on any module attribute that does not exist.
+
+**What a second reader changed (2026-10-13).** Two weak spots were found in the first
+version of this work, and both are fixed with regression cases:
+
+* The tolerant word matcher accepted a request whose every word fitted INSIDE a longer
+  alias name, so bare category nouns resolved to switches that had nothing to do with
+  them: "second graphics card" reached `better_voice`, "pc sounds" reached
+  `pc_alarm_sounds`, "screen mode" reached `screen_picture`, "the big model" reached
+  `big_coder`. Every one of those switches applies with NO card, so the owner's own words
+  would have flipped a switch they never named - the one outcome the matcher exists to
+  prevent. It now runs in ONE direction only: the request must CONTAIN a whole alias's
+  words, so a restatement like "stop showing me notifications on my watch" still reaches
+  `watch notifications` while a phrase that names no single setting is refused. Eleven of
+  the wrong matches are kept as regression cases in `backend/test_settings_tool.py`.
+* A change still waiting on its card emitted a `tool_finished` step event, and BOTH apps
+  draw that as "<tool> done" (`jarvis-desktop/src/step-words.js`,
+  `jarvis-client/.../net/Steps.kt`). The owner would have read "change_setting done" while
+  the card was still up and nothing had changed - the looks-like-success failure this
+  feature exists to end. No step event is emitted for a waiting change now; the card and
+  the answer carry it, exactly as on the spoken path.
 
 **Where it lives.** `jarvis_agent.py` (`SETTINGS_TOOL`, `_settings_call`, the branch in
 `_one_call`, `_PLAN_EXCLUDED_STEPS` so a plan can never name it), `jarvis_settings_registry.py`

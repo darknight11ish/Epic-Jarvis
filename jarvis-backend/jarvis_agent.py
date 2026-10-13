@@ -1566,13 +1566,20 @@ def _propose_plan_refusal(watch: "_TurnWatch") -> str:
 # and no new card wording is invented here.
 SETTINGS_TOOL = "change_setting"
 
-#: The gate action the Reach page ("What can Jarvis reach") shows for
-#: SETTINGS_TOOL. An EXISTING action, already used for exactly this class of
-#: change by jarvis_asks_first's lights, jarvis_briefing's senders and
-#: jarvis_big_coder - so this tool needs no new line in jarvis_gate's
-#: _TOOL_ACTIONS, no new [autonomy.tiers] entry and no new card words. It is
-#: the CONSERVATIVE answer for the page (tier "ask"): the true answer depends
+#: The gate action SETTINGS_TOOL resolves to, through jarvis_gate's own
+#: `_TOOL_ACTIONS` table: `"change_setting": "change_own_config"`, added there
+#: on 2026-10-13 by backend/gate-entries.patch. An EXISTING action, already
+#: used for exactly this class of change by jarvis_asks_first's lights,
+#: jarvis_briefing's senders and jarvis_big_coder - so no new
+#: [autonomy.tiers] line and no new card wording is invented. It is the
+#: CONSERVATIVE answer for the Reach page (tier "ask"): the true answer depends
 #: on the setting, which the page's plain name for the tool says.
+#:
+#: The tool does NOT carry a `gate_lookup_name` OF ITS OWN, and that matters:
+#: `test_agent.py`'s own check requires the lookup name to be a KEY of
+#: `_TOOL_ACTIONS`, so naming the action here instead of the tool would read as
+#: an unclassified tool and fail that check on the owner's PC, where
+#: jarvis_gate is importable.
 SETTINGS_GATE_ACTION = "change_own_config"
 
 
@@ -1599,13 +1606,19 @@ def _settings_tool_text() -> str:
 
 
 def _prepare_change_setting(args: dict):
-    """Present because every Tool needs a prepare; NEVER REACHED. _one_call
-    hands SETTINGS_TOOL to _settings_call before the generic
+    """Present because every Tool needs a prepare; NEVER REACHED by a real turn.
+    _one_call hands SETTINGS_TOOL to _settings_call before the generic
     prepare()/gate/execute() path, because the setting's own setter is the gate
-    (see SETTINGS_TOOL). It refuses in the RESULT rather than by raising,
-    because prepare() is called for every tool by some suites and by a plan
-    step, and a raise there would read as a broken argument rather than as
-    "this tool does not run that way"."""
+    (see SETTINGS_TOOL), and _PLAN_EXCLUDED_STEPS keeps a plan step from naming
+    it at all.
+
+    IT DOES NOT REFUSE, and it does not need to: the plan path is closed before
+    prepare() runs, and a real turn never arrives here. What makes the closure
+    safe is the other end - `_execute_change_setting` below refuses - so any
+    path that somehow reached execute() would change nothing. (An earlier
+    version of this docstring claimed this function refused in its result; a
+    second reader caught that it returns a normal prepare. Corrected
+    2026-10-13.)"""
     return None, ("Change one of Jarvis's own settings by name, through the settings "
                   "tool - that is where the setting's own rule is applied.")
 
@@ -2097,10 +2110,7 @@ TOOLS: dict = {
                       "description": "on to switch it on, off to switch it off"}},
          "required": ["setting", "value"]},
         _prepare_change_setting,
-        lambda args, state, **_: _execute_change_setting(args, state),
-        # An EXISTING action name, so this tool needs no new gate entry: see
-        # SETTINGS_GATE_ACTION. The real decision is the setting's own setter.
-        gate_lookup_name=lambda args: SETTINGS_GATE_ACTION),
+        lambda args, state, **_: _execute_change_setting(args, state)),
 }
 
 
@@ -2138,8 +2148,13 @@ SETTINGS_VALUE_WORDS = ("refused: the value has to be \"on\" or \"off\". Nothing
 
 def _settings_turn_is_shaped(watch: "_TurnWatch") -> bool:
     """Is THIS turn's request shaped by anything that is not the owner's own
-    words right now? The per-turn half of _TurnWatch.shaped_by, WITHOUT the
-    conversation's own taint.
+    words right now? The four PER-TURN signals `_TurnWatch.shaped_by` uses - a
+    reading tool that ran, the newest message not the owner's own, text the app
+    sent, planted-instruction flags - WITHOUT the conversation's own taint.
+    (Deliberately not all of shaped_by: `secrets`, `opened_after_outside` and
+    `_came_from_outside(args)` are the other three, and each needs a `read` or a
+    tool result to be set, which `read` already catches. Said precisely because
+    a second reader caught the earlier claim that this WAS the per-turn half.)
 
     WHY THAT HALF AND NOT THE WHOLE THING (2026-10-13). SCHEDULE_TOOLS refuse on
     the whole test, conversation taint included - and `tainted` is
@@ -7986,8 +8001,19 @@ def _settings_call(args: dict, call: dict, convo: list, steps: list, say_step,
         # be a new word: jarvis_skill_discovery.KNOWN_OUTCOMES stores anything
         # outside its own list as "unknown" anyway, so a new one here would be
         # silently rewritten rather than kept.
+        #
+        # AND NO STEP EVENT IS EMITTED, which is a fix (2026-10-13, found by a
+        # second reader). This used to emit say_step("tool_finished", name,
+        # ok=True), and BOTH apps render that as "<tool> done"
+        # (jarvis-desktop/src/step-words.js:34-35,
+        # jarvis-client .../net/Steps.kt:46-47) - so the owner would have seen
+        # "change_setting done" while the card was still up and nothing had
+        # changed. That is precisely the looks-like-success failure this whole
+        # feature exists to end, so it must not be reintroduced by the progress
+        # line. The card is drawn by the setter's own machinery - exactly how
+        # the SPOKEN path raises it, which emits no step at all either - and the
+        # answer the model is handed says it is waiting (step 5 above).
         steps.append({"tool": name, "ran": False, "ok": False, "outcome": "unknown"})
-        say_step("tool_finished", name, ok=True)
     elif ok:
         # "auto" is exactly what the gate reports for a change that needed no
         # card, and it is in jarvis_skill_discovery.RAN_OUTCOMES, so a setting
@@ -8054,11 +8080,17 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # here. See SCHEDULE_TOOLS for why.
         _schedule_call(name, args, call, convo, steps, say_step, watch)
         return
-    if name == SETTINGS_TOOL:
+    if name == SETTINGS_TOOL and not outside_program:
         # Not put to the gate here either, and for the same kind of reason: the
         # setting's OWN rule is the gate, and it is the only thing that can
         # carry that setting's risk text, its Windows Hello rule and its PC
         # rule. See SETTINGS_TOOL above for the argument in full.
+        #
+        # `and not outside_program` is belt: a plug-in tool is named
+        # "mcp__<server>__<tool>" (jarvis_mcp.py), so it can never equal this
+        # bare name today - but if one ever did, this branch would swallow it and
+        # it would never run. With the guard it falls through to the generic
+        # path, where a plug-in tool always needs a person's yes.
         _settings_call(args, call, convo, steps, say_step, watch=watch)
         return
     if name == "send_email":

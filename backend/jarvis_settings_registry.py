@@ -707,7 +707,10 @@ def set_briefing_senders(on: bool, *, peer=None, local=None) -> Outcome:
 #       quiet window or a switch turned on only changes when this PC shows its
 #       owner a toast, so nothing here raises a card - and an alarm must never
 #       fail to ring because a card about it was not answered.
-#     * humour is jarvis_manner.handle_post(), at once either way, like manner.
+#     * humour is jarvis_manner.handle_set(), at once either way, like manner.
+#       (`handle_set`, not `handle_post`: this header named a function that has
+#       never existed until 2026-10-13, which is one of the places the wrong name
+#       was copied from - see set_humor below.)
 #     * "Voice follows the face" is jarvis_voices.set_face_voice(), at once.
 #     * the better voice is jarvis_voices.set_better(), OFF at once and ON
 #       through its OWN card (better_voice_enable) - unchanged here.
@@ -778,8 +781,12 @@ def set_humor(on: bool, *, peer=None, local=None) -> Outcome:
     the Settings page's own route, POST /api/manner, went through handle_set and
     worked. `manner.patch` and `thinking.patch` and this file's own set_manner
     (below) all call handle_set; set_humor was the only caller in the tree
-    naming handle_post. backend/test_settings_tool.py now calls every setter in
-    BOOL_SETTINGS, so a second one cannot ship like this."""
+    naming handle_post. backend/test_settings_tool.py now walks every setter's
+    own imports with `ast` and fails on any module attribute that does not
+    exist, which is the check that catches this whole class of mistake. (It does
+    NOT call the real setters - they would write the owner's live settings; all
+    21 are recording stand-ins in that suite. Said plainly because an earlier
+    version of this line claimed it "calls every setter", which it does not.)"""
     try:
         import jarvis_manner as MN
     except Exception:
@@ -1722,8 +1729,9 @@ def find_bool_setting_words(words: str) -> Optional["BoolSetting"]:
     while it stays unambiguous:
 
       1. the stripped words ARE a stripped alias, exactly; else
-      2. every word of one alias is present in the request, or every word of
-         the request is present in one alias, whichever is the shorter.
+      2. the request CONTAINS every word of one alias - one direction only, and
+         see the comment on the rule itself for the false positives that the
+         other direction produced and why they were unacceptable.
 
     `None` means "no single setting is named", which the caller answers in
     words (see `cannot_change_setting_words`). Deliberately NOT a fuzzy score:
@@ -1743,26 +1751,34 @@ def find_bool_setting_words(words: str) -> Optional["BoolSetting"]:
         # these, and guessing which is exactly the failure to avoid.
         return None
     theirs = set(text.split())
-    # Two strengths, strongest first, and the weaker one runs ONLY when the
-    # stronger one was ambiguous or found nothing. "search the web" is why:
-    # read as "does the request contain a whole alias name", it is web_search;
-    # read as "are the request's words all inside some alias name", it fits
-    # ask_before_every_search as well ("asking before every web search"), and
-    # an either-way test would refuse a question with one obvious answer.
-    for rule in ("request_covers", "name_covers"):
-        found: set = set()
-        for b in BOOL_SETTINGS:
-            for name in b.names:
-                mine = set(_setting_words(name).split())
-                if not mine:
-                    continue
-                if (mine <= theirs) if rule == "request_covers" else (theirs <= mine):
-                    found.add(b.key)
-                    break
-        got = _one_setting(found)
-        if got is not None:
-            return got
-    return None
+    # ONE rule, in ONE direction, and the direction is the whole safety of it
+    # (2026-10-13). The request must CONTAIN a whole alias's words, so "stop
+    # showing me notifications on my watch" reaches "watch notifications": the
+    # request is MORE specific than the name, which is what a person restating a
+    # setting does.
+    #
+    # THE OTHER DIRECTION WAS TRIED AND REMOVED, and this is why. "Every word of
+    # the request fits inside one alias" also matched bare category nouns against
+    # longer names, and every one of these reads as a switch that has nothing to
+    # do with the words:
+    #     "graphics card" / "second card"  -> better_voice
+    #     "pc sounds"                      -> pc_alarm_sounds
+    #     "screen mode"                    -> screen_picture
+    #     "the big model"                  -> big_coder
+    # The exact spoken matcher above returns None for all four. Worse, those
+    # switches apply with NO card, so a phrase naming no setting at all would
+    # have flipped a switch the owner never named - the one outcome this whole
+    # function exists to prevent. A phrase that names no single setting must be
+    # refused, never guessed at; backend/test_settings_tool.py keeps all four as
+    # regression cases.
+    found: set = set()
+    for b in BOOL_SETTINGS:
+        for name in b.names:
+            mine = set(_setting_words(name).split())
+            if mine and mine <= theirs:
+                found.add(b.key)
+                break
+    return _one_setting(found)
 
 
 def cannot_change_setting_words(words: str = "") -> str:

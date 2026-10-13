@@ -234,7 +234,7 @@ def t_a_change_waiting_on_its_card_is_not_reported_as_done():
                                      "you approve the card, on your PC or phone.",
                                waiting=True))
     table = (rec.setting(key="background learning", names=("background learning",)),)
-    got, steps, _events, w = run_tool("background learning", "on", table=table)
+    got, steps, events, w = run_tool("background learning", "on", table=table)
     check("the setter was called exactly once", rec.calls == [True], repr(rec.calls))
     check("the answer says it is waiting", got.get("waiting") is True, repr(got))
     check("and it does NOT claim the setting changed",
@@ -243,6 +243,14 @@ def t_a_change_waiting_on_its_card_is_not_reported_as_done():
           "Waiting for your approval" in str(got.get("said", "")), repr(got))
     check("the step is not recorded as having run",
           steps and steps[0].get("ran") is False, repr(steps))
+    # BOTH apps render a "tool_finished" step as "<tool> done"
+    # (jarvis-desktop/src/step-words.js, .../net/Steps.kt), so emitting one here
+    # would show the owner "change_setting done" while the card is still up and
+    # nothing has changed - the looks-like-success failure this tool exists to
+    # end. Found by a second reader; this pins the fix.
+    finished = [e for e in events if e[0] and e[0][0] == "tool_finished"]
+    check("no step event tells the apps it finished",
+          finished == [], repr(events))
     check("a card this turn raised is counted against CARDS_PER_TURN",
           w.cards == 1, repr(w.cards))
 
@@ -380,24 +388,79 @@ def t_it_has_no_second_path():
           AG._execute_change_setting({}, None).get("ok") is False)
     check("a change is not recorded as reading anything",
           AG.SETTINGS_TOOL in AG._NOT_READING)
-    state, _text = AG._prepare_change_setting({})
-    check("its prepare() refuses in the result rather than raising", state is None)
+    state, text = AG._prepare_change_setting({})
+    check("its prepare() carries no state, so reaching execute() could not write "
+          "anything", state is None and isinstance(text, str) and bool(text),
+          repr((state, text)))
 
 
 def t_its_gate_action_already_exists():
-    lookup = AG.TOOLS[AG.SETTINGS_TOOL].gate_lookup_name({})
-    check("its lookup name is the settings-change action",
-          lookup == AG.SETTINGS_GATE_ACTION, repr(lookup))
-    check("it maps to an EXISTING action rather than its own name, which is what "
-          "keeps a new gate action (and a new [autonomy.tiers] line, and new card "
-          "wording) out of this work",
-          lookup != AG.SETTINGS_TOOL, repr(lookup))
-    gate = (REPO / "jarvis-backend" / "jarvis_gate.py").read_text(encoding="utf-8")
-    check(f"jarvis_gate._TOOL_ACTIONS already has {lookup!r}",
-          f'"{lookup}":' in gate)
+    """The project's OWN check for this is in test_agent.py: it asserts that
+    every tool's lookup name is a KEY of `jarvis_gate._TOOL_ACTIONS` - and it
+    SKIPS wherever jarvis_gate is not importable, which is every CI job here.
+
+    This suite has the repository's own `jarvis-backend/` on hand, so it runs
+    the real thing instead of a substring search. That distinction matters: an
+    earlier version of this check looked for `"change_own_config":` anywhere in
+    the file, which jarvis_gate's `_RISK` table also satisfies, so it printed ok
+    while `action_for_tool` really returned `unclassified_tool`. A second reader
+    caught it (2026-10-13); `backend/gate-entries.patch` and the base now carry
+    `"change_setting": "change_own_config"`."""
+    if str(REPO / "jarvis-backend") not in sys.path:
+        sys.path.append(str(REPO / "jarvis-backend"))
+    gate = importlib.import_module("jarvis_gate")
+    tool = AG.TOOLS[AG.SETTINGS_TOOL]
+    lookup = tool.gate_lookup_name({}) if tool.gate_lookup_name else AG.SETTINGS_TOOL
+    check("its lookup name is a KEY of jarvis_gate._TOOL_ACTIONS "
+          "(exactly what test_agent.py checks)", lookup in gate._TOOL_ACTIONS,
+          repr(lookup))
+    check("and it resolves to the action the Reach page shows",
+          gate.action_for_tool(lookup, {})[0] == AG.SETTINGS_GATE_ACTION,
+          repr(gate.action_for_tool(lookup, {})))
+    check("that action is not the tool's own name, so no new gate action, tier or "
+          "card wording is invented",
+          gate.action_for_tool(lookup, {})[0] != AG.SETTINGS_TOOL)
     toml = (REPO / "backend" / "rebuilt" / "jarvis-framework.toml").read_text(encoding="utf-8")
-    check(f"and [autonomy.tiers] already gives {lookup!r} the tier the Reach page shows",
-          re.search(rf"^{re.escape(lookup)}\s*=\s*\"ask\"", toml, re.M) is not None)
+    check(f"[autonomy.tiers] already gives {AG.SETTINGS_GATE_ACTION!r} the tier the "
+          f"Reach page shows",
+          re.search(rf"^{re.escape(AG.SETTINGS_GATE_ACTION)}\s*=\s*\"ask\"", toml, re.M)
+          is not None)
+
+
+def t_a_phrase_that_names_no_setting_is_refused():
+    """REGRESSION CASES for four REAL false positives that a second reader found
+    in the first version of the tolerant matcher (2026-10-13).
+
+    It accepted a request whose every word fitted INSIDE a longer alias name, so
+    a bare category noun resolved to a switch that has nothing to do with it - and
+    those switches apply with NO card, so the owner's words would have flipped a
+    switch they never named. The exact spoken matcher returns None for all of
+    them, and so must this. Each row records what it wrongly resolved to."""
+    for phrase, was in (("graphics card", "better_voice"),
+                        ("the graphics card", "better_voice"),
+                        ("second graphics card", "better_voice"),
+                        ("the second card", "better_voice"),
+                        ("second card", "better_voice"),
+                        ("pc sounds", "pc_alarm_sounds"),
+                        ("the pc sounds", "pc_alarm_sounds"),
+                        ("my pc sounds", "pc_alarm_sounds"),
+                        ("screen mode", "screen_picture"),
+                        ("the screen mode", "screen_picture"),
+                        ("the big model", "big_coder")):
+        got = R.find_bool_setting_words(phrase)
+        check(f"{phrase!r} names no single switch (it used to reach {was})",
+              got is None, repr(got and got.key))
+        check(f"{phrase!r} is refused by the spoken matcher too",
+              R.find_bool_setting(phrase) is None)
+    # The restatements this matcher exists for must still work.
+    for phrase, want in (("stop showing me notifications on my watch",
+                          "smartwatch_notifications"),
+                         ("search the web", "web_search"),
+                         ("the watch notifications thing", "smartwatch_notifications"),
+                         ("quiet hours", "pc_quiet_hours")):
+        got = R.find_bool_setting_words(phrase)
+        check(f"{phrase!r} still reaches {want}",
+              got is not None and got.key == want, repr(got and got.key))
 
 
 # --------------------------------------------------------------------------
@@ -592,6 +655,7 @@ if __name__ == "__main__":
                t_it_has_no_second_path,
                t_one_call_routes_it_without_the_generic_gate,
                t_its_gate_action_already_exists,
+               t_a_phrase_that_names_no_setting_is_refused,
                t_every_setter_calls_a_function_that_exists,
                t_a_pending_change_cannot_back_an_i_did_it_claim,
                t_every_one_of_the_21_switches_resolves_from_its_own_names):

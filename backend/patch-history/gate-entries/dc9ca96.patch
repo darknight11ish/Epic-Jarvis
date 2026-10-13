@@ -1,0 +1,68 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -826,9 +826,65 @@
+     "power_wake": "power_manage", "power_configure": "change_own_config",
+     # personality modes: switching how Jarvis TALKS is free. Note there is
+     # no tool here that could change what it may DO - jarvis_persona has no
+     # field for that, by construction.
+     "persona_status": "auto", "persona_list": "auto", "persona_set": "auto",
+     "persona_write": "change_own_config",
++    # ------------------------------------------------ the tool->action gaps
++    #
++    # 2026-10-03. Ten tools jarvis_agent.py has always offered the model had
++    # no entry in this table at all, so action_for_tool() fell through to
++    # "unclassified_tool" and every single call asked the owner. That name is
++    # in no [autonomy.tiers] line, so it takes this module's own
++    # UNKNOWN_TIER ("unknown_action_tier", "ask" in the shipped config): the
++    # fallback is fail-safe by design - nothing ran unattended, and this was
++    # never a safety hole. It was still wrong: the prompt was never what
++    # these tools were meant to do, and a card nobody can act on is how a
++    # real card gets ignored. Also here: browser_control, the same gap one
++    # tool over - its gate_lookup_name has named jarvis_browser_control_run
++    # since browser-control-wiring, and backend/README.md's own section for
++    # it says this line belongs in this table.
++    #
++    # The four keyless integrations (five tools; home is split in two).
++    # The four READS are "auto" on exactly the reasoning README.md's
++    # browser-control-wiring section records for them: reading the owner's
++    # own calendar, inbox, notes or Home Assistant entity state changes
++    # nothing, sends nothing to anyone, and reaches only infrastructure the
++    # owner runs for themselves - the same "nothing is sent, nothing acts"
++    # line every `_plan` entry above is "auto" on. NOT "notify": that is the
++    # tier for a write to the agent's own store, and none of these four
++    # writes anything. Each still taints the turn as outside text, but that
++    # is enforced inside jarvis_agent.py, not by this tier.
++    "jarvis_calendar_read_run": "calendar_read",
++    "jarvis_email_read_run": "email_read",
++    "jarvis_notes_search_run": "notes_search",
++    "jarvis_home_read_run": "home_read",
++    # home_control is the one of the five that acts on the real world, so it
++    # is "ask" and never "auto" - the same line control_browser and
++    # control_computer are held to. One entry covers lights, locks, doors,
++    # alarms and covers alike; jarvis_home.py's own _is_heavy_service marks
++    # the heavy ones heavy inside the plan. A light that should not ask at
++    # all is the off-by-default "Lights, plugs and fans without a card"
++    # setting, which this tier deliberately does not pre-empt.
++    "jarvis_home_control_run": "home_control",
++    # browser_control: every step either sends something to a real person or
++    # lands on a page nobody has read yet, so control_browser is "ask" and
++    # never "auto", exactly as README.md's section says.
++    "jarvis_browser_control_run": "control_browser",
++    # The scheduler tools (jarvis_schedule.py, reached through
++    # jarvis_agent._schedule_call). _one_call intercepts these by name
++    # BEFORE the gate, so these lines are never what decides whether a timer
++    # asks, and test_agent.py's own outbound loop skips them by name for
++    # that reason. They are here so the table is complete and
++    # t_every_tool_resolves_to_a_real_jarvis_gate_action stops reporting
++    # them; "auto" states what jarvis_agent.py's own SCHEDULE_TOOLS
++    # docstring already records as the owner's decision (2026-09-25, and
++    # 2026-09-26 for a plain repeating one): a timer, alarm or reminder
++    # needs no card, and coming_up only reads the owner's own list back.
++    # The stricter case stays where it already lives - _schedule_call
++    # refuses to set or change anything in a turn shaped by outside text,
++    # whatever this table says.
++    "set_timer": "auto", "set_reminder": "auto", "todo_add": "auto",
++    "todo_done": "auto", "coming_up": "auto",
+ }
+ 
+ # Arguments that ESCALATE a shell-class tool. Regex on model-written text is

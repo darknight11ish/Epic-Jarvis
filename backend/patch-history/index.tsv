@@ -51,6 +51,7 @@ focus.patch	focus/3f467d9.patch	3f467d91283363030b92b0399a8f46354fb61406	2026-09
 forget-range.patch	forget-range/53863a2.patch	53863a253a7034e31809a4ff4e5bec677da8049f	2026-09-28T08:28:43Z	Forget a time frame, backend: a checked list, ONE card, 10 minutes to undo
 games-temporary.patch	games-temporary/5c7124b.patch	5c7124b19b248a28fc65797044f0ea352b9ce81f	2026-09-28T20:37:36Z	Games stay out of chat history; Live's mark never reaches a model
 games-temporary.patch	games-temporary/6ecb640.patch	6ecb6403b4174da1c363ea7561d4160271467c7f	2026-09-26T10:23:51Z	Games and role-play run in a temporary chat automatically
+gate-entries.patch	gate-entries/dc9ca96.patch	dc9ca96d7c337e42e05d2a89b4b052ccc6c60792	2026-10-04T13:48:46-07:00	﻿2026-10-04 audit pass: erase hole, dropped correction, CI and fixture fixes
 gate-outcome.patch	gate-outcome/18174af.patch	18174af03f94ad2d7c0755e8bafba7364a2b722c	2026-10-05T21:52:12-07:00	Jarvis told the owner chat was on a card it had never checked, so "leave it to Ollama" was not true in words or in behaviour
 gate-outcome.patch	gate-outcome/5cc47a9.patch	5cc47a9c42b1ff1c3f7e5656ff53ca038e71d683	2026-09-28T04:50:33Z	Third graphics card: its own lane, an assign switch, and UI on both apps
 gate-outcome.patch	gate-outcome/8f672ce.patch	8f672cef4d26b1b88abd13cf156202706c5b0fac	2026-09-27T00:39:10Z	Add "One bigger model on both cards": a third, off-by-default second-card mode
