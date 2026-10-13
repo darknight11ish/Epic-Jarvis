@@ -34,6 +34,32 @@ services:
     # The name backend/README.md uses and the name Jarvis's own message shows.
     container_name: searxng
     restart: unless-stopped
+    # DO NOT SET `dns:` HERE. It was tried on 2026-10-13 and it made things
+    # WORSE, so the reason is written down instead of the mistake.
+    #
+    # The symptom looked like a DNS fault: SearXNG was up, its front page
+    # answered 200, and every search returned an empty result list. Docker
+    # Desktop's own DNS was not answering at the time, which is the real fault.
+    # But this PC also cannot reach an outside resolver on port 53 from inside a
+    # container AT ALL, so naming one here can only make it worse:
+    #
+    #   (inside a container)  nc 1.1.1.1 53   -> refused in 0.1s
+    #                         nc 1.1.1.1 443  -> OPEN
+    #                         nc 1.1.1.1 853  -> OPEN
+    #   (inside the Docker VM) nc 1.1.1.1 53  -> OPEN, and nslookup answers
+    #
+    # Setting `dns: [1.1.1.1, 8.8.8.8]` therefore REPLACED the one resolver that
+    # does work - Docker Desktop's own host proxy - with two that cannot be
+    # reached, and the container still resolved nothing:
+    #
+    #   nameserver 127.0.0.11
+    #   # ExtServers: [1.1.1.1 8.8.8.8]      <- set by that key: dead end
+    #   # ExtServers: [host(192.168.65.7)]   <- Docker Desktop's default: works
+    #
+    # The default is right. If a search returns nothing, check Docker Desktop is
+    # running and restart it when its DNS is not answering - do not point the
+    # container at an outside resolver. backend/README.md, "Web search",
+    # step 3a, has the checks.
     environment:
       # Says out loud which address this instance answers on, so the links
       # SearXNG builds for itself point at this PC's own loopback and nowhere

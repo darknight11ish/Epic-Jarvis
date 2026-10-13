@@ -2069,3 +2069,23 @@ adds no new copy), and `image` (0.25.10), `serde` (1.0.229), `xcap` (0.9.8),
 **Still blocked, unchanged by this:** the `sonora` crate needs Rust **1.91**, so
 it stays out either way. This move takes the floor to 1.90, not to 1.91.
 
+Decided 2026-10-13: **deleting a reminder that has already gone off must work.**
+His answer to the parked question in `docs/defect-register.tsv`'s DEF-008 row -
+"if the owner wants a way to clear a fired entry, that is a product decision" -
+was to **make `delete` work on a fired entry**, rather than leaving it (the
+entry ages out of "Just went off" an hour later on its own) or shortening the
+hour it is shown for. The defect it closes: the READ route put a job that went
+off under `went_off` for `WENT_OFF_SHOWN` (an hour) while the WRITE route refused
+the very same id with 404 `no_such_job`, "That is not on the list any more." -
+so the PC listed an entry it would not let anyone clear, and the phone showed
+the two answers contradicting each other. `snooze` was already routed before
+that state gate; `delete` now is too, and **it is the only verb that gained
+this**: `pause`, `resume`, `done` and `add_time` on a job that has already gone
+off still refuse, and their answer is now the true one, 409 "It has already gone
+off.", instead of a 404 saying it is not on the list while both apps are showing
+it. Nothing about the two time windows themselves changed - a fired job is still
+shown for an hour and kept for a day (`FIRED_KEEP`) - and snoozing one is
+untouched. The change is in `backend/jarvis_schedule.py` and its byte-identical
+twin `jarvis-backend/jarvis_schedule.py`, on the branch
+`fix/def008-delete-a-fired-reminder`.
+

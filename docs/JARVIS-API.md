@@ -4742,7 +4742,7 @@ repeating job then moves to its next time - never once per missed time.
 | `GET /api/schedule` | - | 200 `{"available": true, "now", "tz", "jobs": [job], "todo": [job], "went_off": [job], "lists": [{"name", "title", "open"}], "running", "limits"}`; 503 `{"available": false, "error": <exception name>}` without `jarvis_schedule.py` | Token + origin. `jobs`: timers, alarms, reminders and repeating jobs that are active, paused or waiting for a card, soonest first. `todo`: the open to-do items of every list, oldest first (each with its `list`). Since 2026-09-25 (21.9): `went_off` - timers, alarms and reminders that went off in the last hour and are not snoozed, newest first, at most five; `lists` - the named lists with open items. An older PC sends neither. |
 | `GET /api/schedule?id=<id>` | - | 200 `{"available": true, "job": job}`; 404 `{"reason": "no_such_job"}` | ONE job - also one that went off in the last day (kept 24 hours). How an app reads a notification's words. |
 | `POST /api/schedule/add` | `{"kind": "todo", "text", "list"?}` (`list`: a named list, 21.9) · `{"kind": "timer", "seconds", "text"?}` · `{"kind": "alarm" \| "reminder", "at": <epoch seconds>, "text"?}` · `{"kind": "alarm" \| "reminder", "date": "YYYY-MM-DD", "time": "HH:MM", "text"?}` (since 2026-09-28, section 83: read on THIS PC's clock; 200 adds `"said"`, "Reminder set for 14:00 on Monday 12 October."; 400 for a time that has passed or a date not on the calendar) · `{"kind": "alarm" \| "reminder", "repeat": rule, "text"?}` | 200 `{"ok": true, "job"}` - since 2026-09-26 also for a plain repeating alarm or reminder and the standby schedule, with `"waiting": false` and `"said"` naming the next times; **202** `{"ok": true, "waiting": true, "job", "said"}` for a repeat that waits for its card (a briefing); 400 `{"ok": false, "error": <sentence>}`; 409 a list is full | No card for anything that goes off once, and (2026-09-26) none for a plain repeating alarm, reminder or standby schedule. A repeating briefing or "tell me when" raises ONE card and is set up only on its yes. Both apps add a to-do item here, a one-off reminder from "Photo to reminder" (section 83, the owner's tap),, and (since 2026-09-25) a morning briefing that repeats - `{"kind": "briefing", "repeat": rule}`, section 22; timers and reminders are said or typed to Jarvis. |
-| `POST /api/schedule/act` | `{"id", "do": "pause" \| "resume" \| "delete" \| "done" \| "add_time" \| "snooze", "seconds"?}` · `{"do": "clear_list", "list", "count"}` | 200 `{"ok": true, "id", "said"}` (`snooze` adds `"job"`: the copy, and `"already": true` when it was snoozed already); 404 `{"reason": "no_such_job"}`; 409 not possible for that job (`done` on a timer, pause on a to-do, time below nothing, snooze on something that has not gone off); 400 anything else | ONE job, at once, no card - it only makes things quieter, or (snooze) sets the same thing to go off once more. **No "delete all"**: `id` must be one job id (`s` and ten hex digits). The one other form is `clear_list` (21.9): every item on ONE named list, only with the `count` the app showed, never the to-do list. Both apps hold every one on a stale link. Deleting a repeat whose card is still up withdraws it: approving that card then sets nothing up. |
+| `POST /api/schedule/act` | `{"id", "do": "pause" \| "resume" \| "delete" \| "done" \| "add_time" \| "snooze", "seconds"?}` · `{"do": "clear_list", "list", "count"}` | 200 `{"ok": true, "id", "said"}` (`snooze` adds `"job"`: the copy, and `"already": true` when it was snoozed already); 404 `{"reason": "no_such_job"}`; 409 not possible for that job (`done` on a timer, pause on a to-do, time below nothing, snooze on something that has not gone off, and since 2026-10-13 every verb but `snooze` and `delete` on a job that has already gone off - "It has already gone off."); 400 anything else | ONE job, at once, no card - it only makes things quieter, or (snooze) sets the same thing to go off once more. **No "delete all"**: `id` must be one job id (`s` and ten hex digits). The one other form is `clear_list` (21.9): every item on ONE named list, only with the `count` the app showed, never the to-do list. Both apps hold every one on a stale link. Deleting a repeat whose card is still up withdraws it: approving that card then sets nothing up. Since 2026-10-13 (DEF-008, the owner's decision) **`delete` also acts on a job that has gone off**: it is one the apps SHOW under "Just went off", and it is kept for `FIRED_KEEP` (a day), so the route reaches back the same day `snooze` does. `snooze` and `delete` are the two verbs routed before the scheduler's state gate; nothing else changed. |
 
 A `job`:
 
@@ -5062,7 +5062,14 @@ minutes when not said; 1 minute to 24 hours). **The route reaches back a day**
 was out of reach can still act on it - while **the "Just went off" list and
 the spoken phrase reach back one hour** (`WENT_OFF_SHOWN`, 3600, and
 `jarvis_quick.py`'s own words are "Nothing went off in the last hour, so there
-is nothing to snooze."). It makes a **new one-off copy**
+is nothing to snooze."). **`delete` uses that same day-long reach-back** (the
+owner's decision of 2026-10-13, DEF-008): a job that has gone off is one the
+"Just went off" list SHOWS, so it must be one the apps can clear, and `delete`
+is routed before the scheduler's own state gate exactly as `snooze` is. It is
+the only other verb that acts on such a job - `pause`, `resume`, `done` and
+`add_time` on one answer 409 "It has already gone off.", where they used to
+answer 404 "That is not on the list any more." about an entry both apps were
+still showing. Snooze makes a **new one-off copy**
 of the job (same kind, same words, `"snoozed": true`, `source` `"snooze"`),
 due after the snooze. A repeating job's own rule and next time are not
 touched, so only that one occurrence moves. Snoozing the same one again
@@ -13161,6 +13168,16 @@ mode's number without the SDK to check it against is a guess this project
 does not ship. Revisit when the app moves to compileSdk 37 - the same move
 that brings Android 17's background-sound limits
 (`docs/RESEARCH-AUDIT-2026-09-28.md` section 10).
+
+**One thing that move must not miss** (the hard prerequisite in
+`docs/GRAPHENEOS.md`): Android 17's local-network block is keyed to
+**`targetSdk` 37, not `compileSdk`**, and Android counts the CGNAT range
+`100.64.0.0/10` - exactly Tailscale's and NordVPN Meshnet's range - as a local
+network. A `targetSdk` bump without `ACCESS_LOCAL_NETWORK` would install, start
+and pair and then never reach the PC, reporting *"Your PC isn't answering"* with
+nothing pointing at the cause. The permission and its request flow are already
+built (PR #348, 2026-10-13); only the test on a real GrapheneOS phone is left
+(`docs/GRAPHENEOS-PIXEL9-EVAL-2026-10-12.md` §6).
 
 ### 81.4 Android 17 app bubbles
 
