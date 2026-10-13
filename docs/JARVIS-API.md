@@ -19685,10 +19685,11 @@ version of this work, and both are fixed with regression cases:
 **Where it lives.** `jarvis_agent.py` (`SETTINGS_TOOL`, `_settings_call`, the branch in
 `_one_call`, `_PLAN_EXCLUDED_STEPS` so a plan can never name it), `jarvis_settings_registry.py`
 (`find_bool_setting_words`, `cannot_change_setting_words`), `jarvis_reach.py` (its plain
-name). It ships OFF, like every tool but `web_search`: add `"change_setting"` to
-`[tools].enabled` in `jarvis-framework.toml`, and see `backend/README.md`. Its
-description is 285 tokens, so it has its own `more_tools` group rather than a place in
-the core.
+name). **It ships ON**, by the owner's decision of 2026-10-13 ("yes turn it on for my
+pc. it should also be enabled by default") - the second tool after `web_search` to be
+switched on out of the box, and `[tools].enabled` in `jarvis-framework.toml` says so.
+(Turning it back off is dropping that one name from that list.) Its description is 285
+tokens, so it has its own `more_tools` group rather than a place in the core.
 
 Desktop and phone: **both, with nothing app-specific** - the tool is reached through the
 same `/api/chat` turn both apps already use, so `docs/ARCHITECTURE.md` §8 needs no entry.

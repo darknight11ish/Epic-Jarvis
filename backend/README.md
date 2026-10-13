@@ -498,9 +498,11 @@ is `$SHIPPED` near the top of the script, and the same list is `SHIPPED` in
   turns on something that reads or reaches more raises that setting's own
   approval card, with its own risk text and its own Windows Hello rule. A
   name with no setter at all is answered in words, with nothing changed and
-  no card raised. **It ships OFF, like every tool here but `web_search`:** to
-  turn it on, add `"change_setting"` to `[tools].enabled` in your
-  `jarvis-framework.toml` and restart Jarvis. `backend/test_settings_tool.py`
+  no card raised. **It ships ON**, by the owner's decision of 2026-10-13 ("yes
+  turn it on for my pc. it should also be enabled by default"): it is named in
+  `[tools].enabled` in the shipped `jarvis-framework.toml`, the second tool after
+  `web_search` to be on out of the box. To take it back off, drop that one name
+  from that list. `backend/test_settings_tool.py`
   is the suite that proves the two entrances reach one setter. Its tool name is
   mapped to the existing `change_own_config` action in `jarvis_gate.py` by
   `gate-entries.patch` (the row `test_agent.py` requires, since it insists every

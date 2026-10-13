@@ -1744,11 +1744,22 @@ star_floor = 25        # ...but never fewer than this many
 # with a choice of providers", reconfirmed 2026-09-27, "Web search ships
 # switched on"): SearXNG was already the chosen default provider, so a
 # fresh install that could not search the web despite that was this file,
-# not the owner, still saying no. Nothing else here is on by that decision
-# - send_email, browser_control, my_files and the rest stay opt-in, each
-# for the reasons its own row of backend/README.md gives.
+# not the owner, still saying no.
+#
+# `change_setting` ALSO ships ON, by the owner's own decision of 2026-10-13:
+# "yes turn it on for my pc. it should also be enabled by default". It is the
+# second exception to the rule that everything here is opt-in, and a narrow
+# one: it reaches Jarvis's OWN switches and nothing else - never a file, a
+# folder or a key - and every change still goes through that setting's own
+# approval card, so a cosmetic switch applies at once while anything that
+# loosens a rule or reads more waits for a person's yes. Without it, a request
+# that missed the fixed phrase grammar was answered by a model that could not
+# change anything and never said so.
+#
+# Everything else here stays opt-in - send_email, browser_control, my_files
+# and the rest - each for the reasons its own row of backend/README.md gives.
 [tools]
-enabled = ["web_search"]
+enabled = ["web_search", "change_setting"]
 
 # ------------------------------------------------------------------------
 # ENERGY - what one answer cost the graphics card (jarvis_energy.py)
