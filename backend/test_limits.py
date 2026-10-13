@@ -65,7 +65,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 sys.path.insert(0, str(HERE))
-from _where import require_shipped  # noqa: E402
+from _where import BACKEND, require_shipped  # noqa: E402
 import _where  # noqa: E402
 require_shipped("jarvis_limits.py", "jarvis_framework.py", "jarvis_owner_check.py",
                 "jarvis_voice.py")
@@ -689,18 +689,32 @@ def t_the_voice_bar_loosening_is_wired_like_the_other_ones():
     check("... which the existing loosening is on too", L.RAISE_ACTION in page)
     check("... and the two are different names",
           L.LOWER_ACTION and L.LOWER_ACTION != L.RAISE_ACTION)
-    # WHICH TREE THIS ASKS, said plainly: this checkout reads its OWN gate -
-    # `jarvis-backend/jarvis_gate.py` is the post-patch file, the same copy
-    # `test_gate_raise_rows.py` drives - and a run that NAMES a backend
-    # (`JARVIS_BACKEND`, the owner's live folder) asks THAT one, because it is
-    # the file whose answer the card on the owner's screen really carries.
-    if os.environ.get("JARVIS_BACKEND"):
-        gate_file, where = BACKEND / "jarvis_gate.py", str(BACKEND / "jarvis_gate.py")
+    # WHICH TREE THIS ASKS, said plainly. `jarvis_gate.py` is one of the four
+    # files that live ONLY on the owner's PC and never in this repository
+    # (`run_suites.py`'s OWNER_FILES), so a CI run - which sets JARVIS_BACKEND
+    # to its own staged backend - has no copy of it there, and asking that path
+    # alone would read no table at all. So the candidates are tried in order and
+    # the FIRST one that is really there is the one that answers, with `where`
+    # naming it:
+    #
+    #   1. `JARVIS_BACKEND`'s own `jarvis_gate.py` when a run NAMES a backend
+    #      that has one - the owner's live file, whose answer the card on their
+    #      screen really carries;
+    #   2. `jarvis-backend/jarvis_gate.py` - THIS repository's copy, the
+    #      post-patch file `test_gate_raise_rows.py` drives and the copy the
+    #      patch is proved to produce byte for byte. CI has this one.
+    #
+    # Whatever is still missing after both is a plain failure, not a pass.
+    named = BACKEND / "jarvis_gate.py"
+    candidates = ([(named, str(named))] if os.environ.get("JARVIS_BACKEND") else [])
+    candidates.append((REPO / "jarvis-backend" / "jarvis_gate.py",
+                       "jarvis-backend/jarvis_gate.py (this repository's copy)"))
+    for gate_file, where in candidates:
+        if gate_file.is_file():
+            break
     else:
-        gate_file, where = (REPO / "jarvis-backend" / "jarvis_gate.py",
-                            "jarvis-backend/jarvis_gate.py")
-    if not gate_file.is_file():
-        check(f"the gate file this run reads ({where}) is there", False, where)
+        check("the gate file this run reads is somewhere it can be read",
+              False, " | ".join(f"{w} is not there" for _p, w in candidates))
         return
     risk_for = _the_gates_own_risk_table(
         gate_file.read_text(encoding="utf-8", errors="replace"), where)
