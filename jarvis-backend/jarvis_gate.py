@@ -27,6 +27,12 @@ Every path that is not an explicit approval denies:
   - the database cannot be opened at all         -> denied
 That last one matters. A gate that opens when it breaks is not a gate, so if
 this module cannot do its job it refuses rather than waving things through.
+
+The timeout is per action, and a few deliberate cards have NONE - see
+APPROVAL_NEVER_EXPIRES. Waiting is not approving: such a card still runs
+nothing until a person answers it, it is still answerable only while it is
+the live card, and a denial is still a denial. What changes is only that
+silence stops being an answer.
 """
 
 from __future__ import annotations
@@ -66,6 +72,75 @@ APPROVAL_TIMEOUT = float(os.environ.get(
     "JARVIS_APPROVAL_TIMEOUT",
     _cfg("autonomy", "approval_timeout_seconds", 180)))
 POLL_SECONDS = 0.25
+
+# Cards that do NOT expire: the deliberate, hard-to-repeat ones. Waiting a
+# person out and refusing is the wrong answer for these. Pairing a phone,
+# restoring a backup and "forget a time frame" each need the owner there and
+# are started by them, so a card that lapsed while they were away is a card
+# they must raise again from scratch; and a settings change that LOOSENS a
+# rule - "What asks first", a reading tool, the smartwatch, web search, a
+# topic, a voice check's bar, an attention or money limit - is the one kind of
+# card where refusing on a timer is worse than waiting, because the features
+# it turns on are the features the owner asked for and each one has to be
+# asked for again by hand.
+#
+# What is NOT here, on purpose: everything routine and reversible - one email,
+# one web page, one command, one draft, one tidy, one plan step. Re-raising
+# one of those is cheap, and a card that waits for ever stops being a question
+# about one action and starts behaving like a standing permission, which rule
+# 4 does not allow. The test names the routine cards and holds them to
+# APPROVAL_TIMEOUT.
+#
+# The names are the gate's OWN action ids - the ones jarvis-framework.toml
+# lists and the modules pass to check() - not tool names:
+#   pair_device, unretire_shared_key, register_approval_key  jarvis_devices.py
+#   restore_backup                                           jarvis_backup.py
+#   memory_forget_range                                      jarvis_forget_range.py
+#   loosen_what_asks_first, enable_reading_tool              jarvis_asks_first.py
+#   watch_notifications_enable                               jarvis_watch_notify.py
+#   web_search_enable, stop_asking_before_every_web_search   jarvis_search.py
+#   topic_loosen                                             jarvis_topics.py
+#   learning_enable                                          jarvis_learning_switch.py
+#   learning_auto_enable, learning_sensitive_enable           jarvis_auto_learn.py
+#   history_enable                                           jarvis_chat_log.py
+#   screen_picture_enable                                    jarvis_screen_picture.py
+#   obscura_enable                                           jarvis_browser_engine.py
+#   raise_api_limit                                          jarvis_chatbot_limits.py
+#   raise_attention_budget                                   jarvis_arbiter.py
+#   raise_a_limit, lower_the_voice_check_bar                 jarvis_limits.py
+#   handoff_keep_offering                                    jarvis_handoff_mode.py
+#   handoff_bring_to_front                                   jarvis_handoff_front.py
+# Every direction here is the loosening one. Each of these has a stricter
+# counterpart that is instant and raises no card at all (turning the same
+# setting off, lowering the same limit, raising the voice bar), so there is no
+# matching entry to make and no pair to keep in step.
+APPROVAL_NEVER_EXPIRES = frozenset({
+    "pair_device", "unretire_shared_key", "register_approval_key",
+    "restore_backup", "memory_forget_range",
+    "loosen_what_asks_first", "enable_reading_tool", "watch_notifications_enable",
+    "web_search_enable", "stop_asking_before_every_web_search", "topic_loosen",
+    "learning_enable", "learning_auto_enable", "learning_sensitive_enable",
+    "history_enable", "screen_picture_enable", "obscura_enable",
+    "raise_api_limit", "raise_attention_budget", "raise_a_limit",
+    "lower_the_voice_check_bar", "handoff_keep_offering",
+    "handoff_bring_to_front",
+})
+
+
+def timeout_for(action: str) -> Optional[float]:
+    """How long `action`'s card waits for a person, or None: no deadline.
+
+    None is not a very long time - it is the absence of one. A caller must
+    treat it as "wait", never as "wait for a while": there is no number here
+    to round, and adding one (an hour, a day) would only move the refusal to a
+    moment nobody chose. `check()` is the caller that matters; `pending()`
+    reads it too, so a card with no deadline carries no `expires_in` and the
+    apps show no countdown rather than one that never ends.
+
+    A parameter on `check` still wins over this: a caller that passes `timeout`
+    is deciding for itself, which is what the suites do.
+    """
+    return None if action in APPROVAL_NEVER_EXPIRES else APPROVAL_TIMEOUT
 
 # An action nobody thought to classify is not thereby safe. Configurable, but
 # only downward-unsafe by explicit choice - the default stays "ask".
@@ -122,9 +197,22 @@ def _init() -> None:
             # A process that died mid-wait leaves its row 'pending' forever,
             # and the HUD keeps offering it. Anything older than the timeout
             # plus a grace period cannot still have a waiter.
-            c.execute("UPDATE approvals SET state='expired', decided=? "
-                      "WHERE state='pending' AND created < ?",
-                      (time.time(), time.time() - APPROVAL_TIMEOUT - 60))
+            #
+            # Not for a card with NO deadline: such a card is supposed to sit
+            # there until the owner answers it, and sweeping it on age would
+            # expire by the back door the very cards this change exists to
+            # leave waiting. The cost is said plainly: a deliberate card whose
+            # waiting thread died stays pending, and stays on screen, until the
+            # owner withdraws it or starts the pairing/restore again - both of
+            # which cancel the old card. The placeholders are built from the
+            # set itself, so a name added there cannot be forgotten here - and
+            # its order is sorted, so the same set always builds the same SQL.
+            _forever = sorted(APPROVAL_NEVER_EXPIRES)
+            _marks = ",".join("?" * len(_forever))
+            c.execute(f"UPDATE approvals SET state='expired', decided=? "
+                      f"WHERE state='pending' AND created < ? "
+                      f"AND action NOT IN ({_marks})",
+                      (time.time(), time.time() - APPROVAL_TIMEOUT - 60, *_forever))
             c.execute("""
                 CREATE TABLE IF NOT EXISTS taint (
                     key   TEXT PRIMARY KEY,
@@ -1327,6 +1415,33 @@ def filter_tool_result(name: str, content: Any) -> Any:
     return out.get("text", content)
 
 
+def _watch(rid: str):
+    """The connection `check()` watches its own row through, or None.
+
+    Opened lazily, and this is not tidiness. It used to be opened ONCE, just
+    before the wait loop - and a read connection opened against an
+    approvals.db that does not exist yet can keep seeing an empty database
+    for ever: this process creates the file itself (the row is inserted just
+    above), and on a build whose SQLite does not pick up another connection's
+    creation of it, `SELECT ... WHERE id=?` answers None on every poll. A None
+    row is read as "the card is gone", so a card nobody had answered ended
+    its own wait instantly and was refused as timed_out. Two ways to see it:
+    on the owner's PC it is a card that refuses itself the moment it is
+    raised, and in test_gate_no_expiry.py it is a wait that never ends,
+    because that suite's clock is simulated and the loop it spins never
+    reaches a deadline. Neither is a thing to leave to a SQLite version, so
+    the first connection is opened after the insert has really made the file,
+    and a failed open is retried on the next poll rather than cached.
+
+    Failure is None, never an exception: the caller already knows what to do
+    with a connection it does not have (try again next time round).
+    """
+    try:
+        return _connect()
+    except Exception:
+        return None
+
+
 def check(action: str,
           detail: Optional[dict] = None,
           prompt: str = "",
@@ -1440,33 +1555,47 @@ def check(action: str,
     _push(_note["title"],
           _note["body"] + f"\n(id {rid}) - open Jarvis to decide")
 
-    deadline = time.time() + (APPROVAL_TIMEOUT if timeout is None else timeout)
+    # How long this card waits. `timeout` is the caller deciding for itself
+    # (the suites do); otherwise the action decides, and None means the owner
+    # has as long as they need - see APPROVAL_NEVER_EXPIRES. There is no
+    # stand-in number for "no deadline": a deadline of a day is still a
+    # deadline, and it would refuse the pairing card of somebody who came back
+    # to it tomorrow.
+    waited = timeout_for(action) if timeout is None else timeout
+    deadline = None if waited is None else time.time() + waited
     # One connection for the whole wait rather than one per poll.
-    watch = None
+    watched = _watch(rid)
     try:
-        try:
-            watch = _connect()
-        except Exception:
-            watch = None
-        while time.time() < deadline:
+        # None is the no-deadline case, and it must not be read as "already
+        # past" (`time.time() < None` raises in Python 3): with no deadline the
+        # wait ends when the row does - answered, withdrawn, or replaced.
+        while deadline is None or time.time() < deadline:
             time.sleep(POLL_SECONDS)
             try:
-                if watch is None:
-                    watch = _connect()
-                row = watch.execute(
+                if watched is None:
+                    watched = _watch(rid)
+                row = watched.execute(
                     "SELECT state,decided_by FROM approvals WHERE id=?",
                     (rid,)).fetchone()
             except Exception:
                 # Drop a connection that has gone bad and try a fresh one next
                 # time round, rather than spinning on a dead handle.
                 try:
-                    if watch is not None:
-                        watch.close()
+                    if watched is not None:
+                        watched.close()
                 except Exception:
                     pass
-                watch = None
+                watched = None
                 continue
             if row is None:
+                break
+            if row["state"] not in ("pending", "approved", "denied"):
+                # Answered, withdrawn, or swept by another process's start-up:
+                # the card is not waiting any more, so neither is this. Only
+                # `expired` lands here (`withdraw` writes it; the sweep writes
+                # it), and without this line the loop would keep polling a row
+                # that exists and can never change again - refusing the caller
+                # no sooner than a deadline it may not even have.
                 break
             if row["state"] == "approved":
                 # owner-check.patch: only an approval this process stamped.
@@ -1484,9 +1613,9 @@ def check(action: str,
                 return Verdict(False, tier, action, "denied by a human", rid,
                                outcome="denied")
     finally:
-        if watch is not None:
+        if watched is not None:
             try:
-                watch.close()
+                watched.close()
             except Exception:
                 pass
 
@@ -1495,6 +1624,12 @@ def check(action: str,
     # then returned "expired" anyway, so the DB said approved, the HUD said
     # approved, the audit said expired, and the action did not run. Honour a
     # decision that landed late rather than pretending it did not.
+    #
+    # This branch is also where a card with NO deadline ends up when its row
+    # is gone: the loop above stops on a missing row, nothing is waiting, and
+    # the answer below is the truthful one - nobody decided, so it did not
+    # run. Withdrawing a card must keep working exactly as it did, so nothing
+    # here tests `deadline`.
     try:
         with closing(_connect()) as c:
             cur = c.execute("UPDATE approvals SET state='expired', decided=?"
@@ -1737,16 +1872,22 @@ def pending() -> list[dict]:
         # there is one place to audit what a notification may contain.
         d["notice"] = notice_for(d)
         # approval-expiry.patch: how many seconds this card has left before
-        # check() stops waiting and refuses it. check() waits APPROVAL_TIMEOUT
-        # from just after the row is written, so `created` plus that is the
-        # deadline. Sent as seconds LEFT, not a clock time, so a phone whose
-        # clock disagrees with this PC still counts down correctly. A row
+        # check() stops waiting and refuses it. check() waits this action's own
+        # timeout from just after the row is written, so `created` plus that is
+        # the deadline. Sent as seconds LEFT, not a clock time, so a phone
+        # whose clock disagrees with this PC still counts down correctly. A row
         # whose `created` is not a number gets no field, and the clients then
-        # show no countdown rather than a wrong one.
+        # show no countdown rather than a wrong one - and so does a card whose
+        # action never expires (no-expiry-cards.patch, timeout_for returning
+        # None), which is a card that waits for the owner rather than one that
+        # runs out. `None` is never written as 0: 0 means "expired now" to both
+        # apps, and they would refuse a card that is still answerable.
         try:
-            d["expires_in"] = max(0, int(float(d.get("created"))
-                                         + float(APPROVAL_TIMEOUT)
-                                         - time.time()))
+            left = timeout_for(d.get("action"))
+            if left is not None:
+                d["expires_in"] = max(0, int(float(d.get("created"))
+                                             + float(left)
+                                             - time.time()))
         except (TypeError, ValueError):
             pass
         # Why this is being asked about at all, when the table said otherwise.
@@ -1778,6 +1919,33 @@ def decide(request_id: str, approved: bool, by: str = "hud") -> bool:
             ("approved" if approved else "denied", time.time(),
              str(by or "hud")[:64], request_id))
         return cur.rowcount > 0
+
+
+def withdraw(request_id: str, why: str = "") -> bool:
+    """Take a card off the list because the work it asked about is gone.
+
+    Not a decision - nobody said yes or no - so the row is recorded exactly as
+    a lapse is (state 'expired', and the waiter it wakes reports timed_out,
+    "nobody answered"), never as a denial: a denial is an answer, it proposes
+    a memory rule, and inventing one would be putting words in the owner's
+    mouth. What this adds is the one thing a card with NO deadline cannot do
+    for itself: with no clock to run out, a card whose session was cancelled -
+    a pairing abandoned from the PC, or replaced by a newer one - would sit in
+    the list for ever, answerable but never answerable-to-anything.
+
+    The waiting thread polls the row, so the UPDATE below ends its wait on the
+    next tick, exactly as a lapse does. Returns False for an unknown id or one
+    already decided, so a cancel after the fact changes nothing.
+    """
+    _init()
+    with closing(_connect()) as c:
+        cur = c.execute("UPDATE approvals SET state='expired', decided=?"
+                        " WHERE id=? AND state='pending'",
+                        (time.time(), request_id))
+        gone = cur.rowcount > 0
+    if gone:
+        _audit("gate.withdrawn", {"id": request_id, "why": why})
+    return gone
 
 
 def history(limit: int = 50) -> list[dict]:

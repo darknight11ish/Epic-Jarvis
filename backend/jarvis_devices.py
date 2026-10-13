@@ -1318,6 +1318,21 @@ def _spawn(fn: Callable[[], None]) -> None:
     threading.Thread(target=fn, name="jarvis-devices-card", daemon=True).start()
 
 
+def _gate_module():
+    """The gate module itself, or None.
+
+    `_gate` below is the FUNCTION the card is raised through; taking a card
+    off the list again is a second entry point of the same module
+    (`jarvis_gate.withdraw`), and tests stand the function in without standing
+    the module in. So this asks for the module, tolerates its absence, and the
+    one caller checks whether the name it wants is really there."""
+    try:
+        import jarvis_gate
+        return jarvis_gate
+    except Exception:
+        return None
+
+
 def _owner_check_armed() -> bool:
     try:
         import jarvis_owner_check
@@ -1663,6 +1678,7 @@ def claim(body, *, peer, local=None, own=None, gate: Optional[Callable] = None,
 def _decide(s: Session, gate: Callable, tier_of: Callable) -> None:
     """Raise the pair_device card and wait for it (its own thread)."""
     text = card_text(s.name or "", s.words or [])
+    v = None
     try:
         if tier_of(ACTION) != "ask":
             raise LookupError("tier")
@@ -1677,6 +1693,25 @@ def _decide(s: Session, gate: Callable, tier_of: Callable) -> None:
         if _S["session"] is not s or s.state != "waiting_for_card":
             # Cancelled, replaced, burnt or expired while the card waited:
             # withdrawn - approving it makes no key.
+            #
+            # Take the card off the list too (no-expiry-cards.patch). It used
+            # to clear itself up: every card lapsed after approval_timeout_
+            # seconds, so a card nobody could answer any more was refused by
+            # the clock within three minutes. A card that asks for a pairing
+            # no longer has a clock - that is the whole point of the change -
+            # so without this it would wait on the owner's screen for ever,
+            # offering a decision that can no longer do anything. getattr,
+            # not a plain call: a backend without that patch has no withdraw,
+            # and this must leave such a backend exactly as it was (its card
+            # lapses on its own).
+            rid = getattr(v, "request_id", None)
+            module = _gate_module()
+            take_off = getattr(module, "withdraw", None)
+            if rid and callable(take_off):
+                try:
+                    take_off(rid, "the pairing it asked about was cancelled or replaced")
+                except Exception:
+                    pass
             _audit("devices.pair", {"state": "withdrawn", "card": outcome})
             return
         if outcome == "approved":

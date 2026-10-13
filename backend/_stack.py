@@ -210,7 +210,32 @@ RATCHET = {
     #: This was never a missing-line problem of the owner's PC's, which is what
     #: the note above assumed - it was a patch anchored one entry too early. A
     #: ratchet: it may still only go down.
-    "jarvis_gate.py": 23,
+    #:
+    #: RAISED 2026-10-10, 23 -> 29, for `no-expiry-cards.patch`, and all six
+    #: extra hunks are honest rather than drift - the patch is in `by_patch` at
+    #: 6, and the walk reads exactly 23 without it (measured both ways with
+    #: `materialised('jarvis_gate.py', patches)`).
+    #:
+    #: That patch has to change four separate places in the gate - the module
+    #: docstring's "nobody answers before the timeout" line, the
+    #: APPROVAL_TIMEOUT block where the set and `timeout_for` are defined,
+    #: check()'s deadline line and its post-loop comment, and the stale-row
+    #: sweep inside `_init()` - and every one of them is the OWNER's own text,
+    #: which this walk does not hold. Its sixth hunk is in `pending()`, and
+    #: that one is honest for the opposite reason: its context IS
+    #: approval-expiry.patch's output (the comment above the `expires_in`
+    #: assignment), and it applies there rather than being materialised.
+    #:
+    #: Not fixable by editing the patch. There is no earlier patch to anchor
+    #: to: the gate's docstring, its timeout definition and its startup sweep
+    #: are the owner's lines, and `_init()` in particular is touched by no
+    #: patch at all. The three `jarvis_owner_check.py` hunks cost the walk
+    #: nothing that shows here - that file is shipped whole, never patched, so
+    #: it is not a target this walk builds. The pin may come back down the day
+    #: the walk seeds a target from `jarvis-backend/`, which is the base these
+    #: patches are published against and the text every one of the six
+    #: pre-images is actually taken from.
+    "jarvis_gate.py": 29,
     "jarvis_extract.py": 9,
     "jarvis_models.py": 5,
     "jarvis_skills.py": 2,

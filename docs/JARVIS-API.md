@@ -336,6 +336,42 @@ Without the patch the field is absent and no countdown is shown.
 `jarvis-client/app/src/test/resources/contract/pending-rows.json`, which the
 phone's and the desktop's tests decode.
 
+**Some cards have no deadline at all - and then there is no `expires_in`
+(2026-10-10, the owner's decision; `backend/no-expiry-cards.patch`).** A
+deliberate, hard-to-repeat card waits for the owner instead of lapsing:
+pairing a device (`pair_device`, `unretire_shared_key`,
+`register_approval_key`), restoring a backup (`restore_backup`), forgetting a
+time frame (`memory_forget_range`), and every setting that LOOSENS a rule
+(`loosen_what_asks_first`, `enable_reading_tool`,
+`watch_notifications_enable`, `web_search_enable`,
+`stop_asking_before_every_web_search`, `topic_loosen`, `learning_enable`,
+`learning_auto_enable`, `learning_sensitive_enable`, `history_enable`,
+`screen_picture_enable`, `obscura_enable`, `raise_api_limit`,
+`raise_attention_budget`, `raise_a_limit`, `lower_the_voice_check_bar`,
+`handoff_keep_offering`, `handoff_bring_to_front`). Everything else keeps its
+180 seconds, exactly as before. A client tells the two apart **by the field
+being absent** - this is the state both already read as "no countdown", so
+neither needed a new branch:
+
+- the phone (`PendingRows.kt`) computes `expires_at_ms` only from a real
+  number, and `ApprovalCard` draws the deadline bar and the "EXPIRES IN"
+  readout only when there is one, so a card with no deadline shows its title,
+  its words and its buttons and **no countdown**;
+- the desktop is the same shape (`stream.rs`'s `stamp_expiry` stamps nothing
+  without a number; `jarvis-link.js`'s `expiryWords` returns `""`),
+- and a missing deadline is never an expired one: `0` would mean "expired now"
+  to both and they would refuse a card that is still answerable, which is why
+  the field is left off rather than set to a number.
+
+A card with no deadline is still answerable only while it is the live card:
+answering, denying, withdrawing it (a cancelled pairing calls
+`jarvis_gate.withdraw`, so the card leaves the list) and a newer card
+replacing it all behave exactly as they did. On the PC,
+`jarvis_owner_check._time_left` reads the absence as "no deadline" rather than
+as the shipped 180 seconds, so Windows Hello does not refuse these cards at
+the prompt; the re-read after the prompt is unchanged and is what still
+catches a card that stopped being live while Hello was open.
+
 ### The PC's own check before an approval - `backend/owner-check.patch` (2026-09-25)
 
 The approval gap's step 1 (`docs/APPROVAL-GAP-DESIGN.md`, the owner's

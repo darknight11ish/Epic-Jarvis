@@ -147,8 +147,11 @@ PC_ONLY_ACTIONS = frozenset({"loosen_what_asks_first", "enable_reading_tool", "r
 PC_ONLY = ("This card can only be approved on the PC, with Windows Hello, so nothing was "
            "approved")
 
-#: The shipped approval_timeout_seconds, used when a row carries no
-#: `expires_in` (a backend without approval-expiry.patch).
+#: The shipped approval_timeout_seconds. Used when a row carries no `expires_in`
+#: and has no deadline of its own - a backend too old to send the field (no
+#: approval-expiry.patch) - so such a card still behaves exactly as it did
+#: rather than becoming answerable for ever. A row the gate left the field off
+#: ON PURPOSE is `_time_left`'s None case, not this one.
 DEFAULT_TIME_LEFT = 180.0
 
 # ---------------------------------------------------------------------------
@@ -602,9 +605,28 @@ def _hello_child(message: str, timeout: float) -> str:  # pragma: no cover - Win
 # ---------------------------------------------------------------------------
 
 
-def _time_left(row: dict) -> float:
+def _time_left(row: dict) -> Optional[float]:
+    """Seconds the card still has, or None when it has no deadline at all.
+
+    None is not a very large number. The gate leaves `expires_in` off a
+    deliberate card on purpose (jarvis_gate.APPROVAL_NEVER_EXPIRES): pairing a
+    phone, restoring a backup, forgetting a time frame and every setting that
+    loosens a rule wait for the owner rather than lapsing. A caller that
+    treated None as "0 seconds left" would refuse exactly those cards, and one
+    that treated it as a number of seconds would invent a deadline the gate
+    does not have - so both branches below test it explicitly.
+
+    A row that never had the field at all (a backend without
+    approval-expiry.patch) is NOT this case: its card does expire, and for it
+    the shipped timeout is the honest answer.
+    """
+    if "expires_in" not in row:
+        return DEFAULT_TIME_LEFT
+    left = row.get("expires_in")
+    if left is None:
+        return None
     try:
-        left = float(row.get("expires_in"))
+        left = float(left)
     except (TypeError, ValueError):
         return DEFAULT_TIME_LEFT
     return left if left == left else DEFAULT_TIME_LEFT   # NaN
@@ -685,12 +707,27 @@ def approve_check(body, *, peer, local=None, pending: Callable[[], list] = None,
             return refused
     if (is_risky(row) or action in PC_ONLY_ACTIONS) and here:
         left = _time_left(row)
-        if left <= 0:
+        # `left` is None for a card with no deadline at all (a deliberate one -
+        # jarvis_gate.APPROVAL_NEVER_EXPIRES). Such a card has no moment to be
+        # late for, so the two checks below do not apply to it; what still
+        # applies is the re-read after Windows Hello, further down, because
+        # that is the one that says this is still the live card.
+        if left is not None and left <= 0:
             return 409, {"ok": False, "error": GONE, "owner_check": "gone"}
-        if not _PROMPT.acquire(timeout=left):
+        # -1 is "block until it is free" (`threading.Lock.acquire`'s own
+        # spelling); None would mean the same here but reads like "no wait".
+        if not _PROMPT.acquire(timeout=left if left is not None else -1):
             return 409, {"ok": False, "error": GONE, "owner_check": "gone"}
         try:
-            outcome = verify(approval_message(row), max(1.0, _time_left(row)))
+            # The prompt gets a concrete number of seconds either way. For a
+            # card with no deadline there is nothing to pass but the shipped
+            # timeout, so the prompt is bounded (a Windows Hello dialog left
+            # open for ever is a dialog nobody can answer) while the DECISION
+            # is not: the card is still waiting afterwards, and the owner can
+            # try again as many times as they like.
+            outcome = verify(approval_message(row),
+                             max(1.0, _time_left(row) if left is not None
+                                 else DEFAULT_TIME_LEFT))
         finally:
             _PROMPT.release()
         if outcome == UNAVAILABLE:
@@ -701,11 +738,19 @@ def approve_check(body, *, peer, local=None, pending: Callable[[], list] = None,
             return 403, {"ok": False, "error": FAILED, "owner_check": "failed"}
         # The prompt can stay up for a while. A card that stopped waiting
         # meanwhile is not approved - the backend's own stale-link rule.
+        #
+        # For a card with NO deadline, `expires_in <= 0` cannot happen: the
+        # gate never sends the field, so there is no moment it could have
+        # passed. What still holds here, and must, is the re-read itself - the
+        # card has to still be THE live card. Answered elsewhere, withdrawn, or
+        # replaced by a newer card of the same kind (a second /api/pair/start
+        # cancels the first card): each of those takes the row out of pending
+        # while the Hello prompt was up, and this is what catches it.
         try:
             again = _find(pending(), request_id)
         except Exception:
             return 503, {"ok": False, "error": QUEUE_UNREADABLE, "owner_check": "unreadable"}
-        if again is None or ("expires_in" in again and _time_left(again) <= 0):
+        if again is None or ("expires_in" in again and (_time_left(again) or 0) <= 0):
             return 409, {"ok": False, "error": GONE, "owner_check": "gone"}
     stamp(request_id, action)
     return None

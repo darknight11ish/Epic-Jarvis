@@ -629,6 +629,50 @@ places between screens. Presentation only - no approval logic changed.
   so a spoken "yes" answers nothing. For the same reason no sentence says
   "until you say yes" any more ("until you approve the card").
 
+### How long a card waits — and the one loosening in it (2026-10-10)
+
+Every card used to die after `approval_timeout_seconds` (180 s shipped) and be
+refused on its own. The owner's decision of 2026-10-10 keeps that for
+everything routine and **removes it for a few deliberate cards**, which now
+wait for him: pairing a device, restoring a backup, forgetting a time frame,
+and every setting change that **loosens** a rule. He chose exactly that split
+over "every card" and over writing it up first.
+
+**This is a loosening and is recorded as one**: a card that would have been
+refused now stays answerable. It is worth being precise about what it does
+*not* loosen, because "no expiry" sounds larger than it is:
+
+- Waiting is not approving. A card with no deadline runs nothing until a
+  person answers it, exactly as before.
+- A denial is still a denial, and the approval stamp and the Windows Hello
+  prompt for risky cards are untouched (`jarvis_owner_check`).
+- A card is still answerable only while it is the live card: answered,
+  denied, withdrawn, or replaced by a newer one of the same kind. Withdrawal
+  needed one new thing, `jarvis_gate.withdraw`, because a card with no clock
+  to run out would otherwise have stayed on screen for ever after a cancelled
+  pairing.
+- The gate's caution is unchanged: the set is of named actions, an action
+  nobody classified still gets the ordinary timeout, and
+  `backend/test_gate_no_expiry.py` checks every exempted name against
+  `jarvis-framework.toml` so a typo cannot quietly exempt nothing.
+
+**The split is one function**, `jarvis_gate.timeout_for(action)`: `None` for
+the deliberate set, `APPROVAL_TIMEOUT` otherwise. There is deliberately no
+long stand-in number - an hour or a day is an expiry with extra steps and
+would still bite somebody. `backend/no-expiry-cards.patch` and
+`backend/README.md`'s "`no-expiry-cards.patch`" carry the list, the reasons
+and the one cost (a deliberate card whose waiting thread died is no longer
+swept up by age; it leaves the list when the owner answers it or withdraws
+it).
+
+**On the wire**, a card with no deadline carries **no `expires_in`** - absent,
+never `0` (which both clients read as "expired now" and would use to refuse a
+card that is still answerable). Both apps already treated a missing field as
+"no countdown", so neither needed a new branch; see JARVIS-API §3's pending-row
+section. The desktop is asked to show a waiting line where the countdown would
+be - the one piece of the owner's decision that is not built here, because
+`jarvis-desktop/` and `src-tauri/` belong to another session.
+
 ---
 
 ## 4. The egress boundary

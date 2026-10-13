@@ -39,6 +39,7 @@ import textwrap
 import traceback
 import types
 from pathlib import Path
+from typing import Optional
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -46,6 +47,12 @@ from _where import REPO  # noqa: E402
 
 NOTICE_PATCH = HERE / "approval-notice.patch"
 EXPIRY_PATCH = HERE / "approval-expiry.patch"
+#: The second half of the same contract: WHICH cards expire at all
+#: (no-expiry-cards.patch, the owner's decision of 2026-10-10). Run after
+#: approval-expiry, and it rewrites the lines that patch added - so the
+#: fixture below is built from both, in that order, exactly as the stack
+#: leaves them.
+NO_EXPIRY_PATCH = HERE / "no-expiry-cards.patch"
 FIXTURE = (REPO / "jarvis-client" / "app" / "src" / "test" / "resources" / "contract"
            / "pending-rows.json")
 APPLY = REPO / "scripts" / "apply-patches.ps1"
@@ -143,16 +150,50 @@ def load_notice_for():
     return ns["notice_for"]
 
 
+def timeout_for(action):
+    """The REAL `timeout_for`, from the module the whole stack builds."""
+    m, why = _gate()
+    if m is None:
+        raise SystemExit(f"the patched gate could not be built: {why}")
+    return m.timeout_for(action)
+
+
 def expiry_lines() -> str:
-    body = [l[1:] for l in EXPIRY_PATCH.read_text(encoding="utf-8").splitlines()
-            if l.startswith("+") and not l.startswith("+++")]
-    return textwrap.dedent("\n".join(body))
+    """The lines that decide `expires_in`, quoted from the patched module.
+
+    What this file used to do - run approval-expiry.patch's `+` lines through
+    `exec` - cannot survive a second patch rewriting them. Pasting the two
+    versions together is a SyntaxError (`try:` twice), and running only the
+    first would build the fixture from superseded code, so a deliberate card
+    would come out with a countdown and every check below would pass for the
+    wrong reason. The patched module IS the merged text, so it is read from
+    there - and `t_the_fixture_is_what_the_producer_makes_today` re-parses
+    what comes back, so a drift between the two is a failure rather than a
+    quiet wrong fixture.
+    """
+    m, why = _gate()
+    if m is None:
+        raise SystemExit(f"the patched gate could not be built: {why}")
+    src = Path(m.__file__).read_text(encoding="utf-8")
+    start = src.index("        # approval-expiry.patch: how many seconds")
+    end = src.index("        # Why this is being asked about at all", start)
+    body = textwrap.dedent(src[start:end])
+    if "timeout_for" not in body:
+        raise SystemExit("the quoted block does not mention timeout_for - wrong slice")
+    return body
+
+
+def _expiry_namespace(d: dict, now: float = NOW) -> dict:
+    """The namespace `pending()`'s expiry lines run in, with the same names
+    that module has: the row, the shipped timeout, the real `timeout_for`, and
+    a clock that does not move."""
+    return {"d": d, "APPROVAL_TIMEOUT": APPROVAL_TIMEOUT, "timeout_for": timeout_for,
+            "time": types.SimpleNamespace(time=lambda: now)}
 
 
 def stamp_expiry(d: dict, now: float = NOW) -> dict:
-    ns = {"d": d, "APPROVAL_TIMEOUT": APPROVAL_TIMEOUT,
-          "time": types.SimpleNamespace(time=lambda: now)}
-    exec(compile(expiry_lines(), "approval-expiry.patch", "exec"), ns)
+    ns = _expiry_namespace(d, now)
+    exec(compile(expiry_lines(), "jarvis_gate.pending()", "exec"), ns)
     return d
 
 
@@ -163,6 +204,27 @@ def pending_row(base: dict) -> dict:
     d["risk"] = risk_for(d.get("action", ""))
     d["notice"] = notice_for(d)
     return stamp_expiry(d)
+
+
+#: The real producer, built by the suite that owns it: the published base with
+#: no-expiry-cards.patch applied by `git apply`, imported as a module (see
+#: test_gate_no_expiry.py). Imported rather than restated, because the point
+#: of this file is that the fixture comes from the code the owner runs - and a
+#: second copy of "how the patched gate is built" is a second thing to drift.
+_GATE: dict = {}
+
+
+def _gate():
+    """(the patched jarvis_gate module, why it could not be built)."""
+    if "m" in _GATE:
+        return _GATE["m"], ""
+    import test_gate_no_expiry as suite
+    folder, why = suite.built()
+    if folder is None:
+        return None, why
+    m = suite.load_module("jarvis_gate", folder)
+    _GATE["m"] = m
+    return m, ""
 
 
 PLAN = ("Jarvis would like to do this in the window \"Outlook - Compose\": send the draft\n\n"
@@ -219,15 +281,25 @@ BASE_ROWS = [
      "prompt": "submit a form on clinic.example", "raised": None},
     # No id at all: a client must skip it and SAY so, not fail the list.
     {"action": "send_email", "tier": "ask", "created": NOW, "detail": "{}", "raised": None},
+    # A DELIBERATE card - pair a phone - which has no deadline at all since
+    # no-expiry-cards.patch (the owner's decision of 2026-10-10). It is the
+    # row both apps must show a WAITING state for, with no countdown: the
+    # field is absent, never 0 (which means "expired now" to both) and never a
+    # very large number (which would draw a countdown that never ends).
+    {"id": "p7", "action": "pair_device", "tier": "ask", "created": NOW - 4000,
+     "detail": {"text": "connect the phone showing these four words",
+                "what": "connect a new device"},
+     "prompt": "connect a new device", "raised": None},
 ]
 
 
 def build_fixture() -> dict:
     return {
         "_comment": ("Generated by backend/test_approval_contract.py from the real "
-                     "notice_for (approval-notice.patch) and expires_in "
-                     "(approval-expiry.patch); risk is a stand-in. Do not edit by "
-                     "hand - run it with --write."),
+                     "notice_for (approval-notice.patch) and the real expires_in lines "
+                     "(approval-expiry.patch, rewritten by no-expiry-cards.patch, which "
+                     "is what makes one row carry no countdown at all); risk is a "
+                     "stand-in. Do not edit by hand - run it with --write."),
         "now": NOW,
         "approval_timeout_seconds": APPROVAL_TIMEOUT,
         "rows": [pending_row(b) for b in BASE_ROWS],
@@ -264,13 +336,54 @@ def t_the_expiry_patch_applies_on_top_of_approval_notice():
 
 
 def t_expires_in_counts_down_from_created_and_never_guesses():
-    d = stamp_expiry({"created": NOW - 30})
+    d = stamp_expiry({"created": NOW - 30, "action": "send_email"})
     check("30 s after a 180 s card was raised, 150 s are left", d.get("expires_in") == 150, d)
-    d = stamp_expiry({"created": NOW - 500})
+    d = stamp_expiry({"created": NOW - 500, "action": "send_email"})
     check("a card past its deadline says 0, not a negative", d.get("expires_in") == 0, d)
     for bad in ("yesterday", None, "", [1]):
-        d = stamp_expiry({"created": bad})
+        d = stamp_expiry({"created": bad, "action": "send_email"})
         check(f"created={bad!r}: no expires_in at all", "expires_in" not in d, d)
+
+
+def t_a_deliberate_card_gets_no_expires_in_at_all():
+    """The other half of the contract (no-expiry-cards.patch).
+
+    Three ways to be wrong here and only one way to be right. `0` means
+    "expired now" to the phone (PendingRows.kt keeps a 0 and computes a
+    deadline in the past) and to the desktop (stream.rs stamps it and
+    expiryWords says "Timed out") - both would refuse a card that is still
+    answerable. A very large number would draw a countdown that never ends,
+    which is what the owner asked NOT to have. Absent is what both clients
+    already treat as "no countdown", which is why the field is left off.
+    """
+    deliberate = ("pair_device", "restore_backup", "memory_forget_range",
+                  "loosen_what_asks_first", "raise_api_limit")
+    for action in deliberate:
+        # Old enough that a routine card would have said 0 long ago.
+        d = stamp_expiry({"created": NOW - 4000, "action": action})
+        check(f"{action}: no expires_in, however old the card is",
+              "expires_in" not in d, d)
+        check(f"{action}: no deadline of its own", timeout_for(action) is None,
+              timeout_for(action))
+    for action in ("send_email", "run_shell_on_host", "read_web_page"):
+        d = stamp_expiry({"created": NOW - 30, "action": action})
+        check(f"CONTROL: {action} still counts down (150 s)", d.get("expires_in") == 150, d)
+
+
+def t_the_fixture_carries_one_row_of_each_kind():
+    """The fixture the phone's and the desktop's own tests decode has to hold
+    BOTH shapes, or neither client's suite can see the difference."""
+    rows = {str(r["id"]): r for r in build_fixture()["rows"] if "id" in r}
+    check("a deliberate card is in the fixture", "p7" in rows, sorted(rows))
+    check("...with no expires_in", "expires_in" not in rows.get("p7", {}),
+          rows.get("p7"))
+    check("...and it is old enough that a routine card would have expired",
+          rows["p7"]["created"] < NOW - APPROVAL_TIMEOUT, rows["p7"]["created"])
+    check("a routine card is in the fixture with its countdown",
+          rows["a1"].get("expires_in") == 150, rows["a1"].get("expires_in"))
+    check("...and its own name is what no-expiry-cards.patch exempts, read from "
+          "the patch, not restated here",
+          timeout_for("pair_device") is None and timeout_for("send_email") == APPROVAL_TIMEOUT)
 
 
 def t_the_fixture_is_what_the_producer_makes_today():
@@ -407,6 +520,8 @@ if __name__ == "__main__":
     for fn in (t_the_risk_table_reads_the_newest_wording_of_every_entry,
                t_the_expiry_patch_applies_on_top_of_approval_notice,
                t_expires_in_counts_down_from_created_and_never_guesses,
+               t_a_deliberate_card_gets_no_expires_in_at_all,
+               t_the_fixture_carries_one_row_of_each_kind,
                t_the_fixture_is_what_the_producer_makes_today,
                t_notice_is_built_from_the_action_and_never_the_payload,
                t_the_phone_reads_every_field_the_row_has,
