@@ -13169,6 +13169,16 @@ does not ship. Revisit when the app moves to compileSdk 37 - the same move
 that brings Android 17's background-sound limits
 (`docs/RESEARCH-AUDIT-2026-09-28.md` section 10).
 
+**One thing that move must not miss** (the hard prerequisite in
+`docs/GRAPHENEOS.md`): Android 17's local-network block is keyed to
+**`targetSdk` 37, not `compileSdk`**, and Android counts the CGNAT range
+`100.64.0.0/10` - exactly Tailscale's and NordVPN Meshnet's range - as a local
+network. A `targetSdk` bump without `ACCESS_LOCAL_NETWORK` would install, start
+and pair and then never reach the PC, reporting *"Your PC isn't answering"* with
+nothing pointing at the cause. The permission and its request flow are already
+built (PR #348, 2026-10-13); only the test on a real GrapheneOS phone is left
+(`docs/GRAPHENEOS-PIXEL9-EVAL-2026-10-12.md` §6).
+
 ### 81.4 Android 17 app bubbles
 
 Android 17 lets any app open as a bubble: touch and hold the app icon, then
