@@ -298,6 +298,15 @@ VPN", but that reading is an inference.
 5. Test on the real GrapheneOS Pixel 9 with `targetSdk 37`, both mesh paths (Tailscale and
    Meshnet), before shipping that bump.
 
+> **Update, 2026-10-13 — steps 1-4 are now BUILT, and only step 5 is left.** PR
+> [#348](https://github.com/darknight11ish/Epic-Jarvis/pull/348) declares the permission
+> (`jarvis-client/app/src/main/AndroidManifest.xml:24`), asks for it at the pairing screen
+> (`PairingScreen.kt`), handles the refusal with a **Try again**, and adds the
+> `PlatformReadiness` row — and on that PR its own CI passed `build`, `smoke` and
+> `phone-unit-tests`. `targetSdk` is still 36, so the app is safe today. **This list is left
+> exactly as the evaluation wrote it, because a record of what was believed then is evidence;
+> `docs/GRAPHENEOS.md` carries the live state of play**, with a `file:line` for each step.
+
 **Do not bump `targetSdk` to 37 for any other reason without doing the above first.** The app
 would install, start, pair and then fail to reach the PC — the worst possible failure shape.
 
