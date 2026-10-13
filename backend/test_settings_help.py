@@ -84,7 +84,7 @@ print()
 print("--- the answer is built from the real switches ---")
 data = R.changeable_settings()
 check("every real on/off switch is offered",
-      data["count"] == len(R.BOOL_SETTINGS),
+      data["count"] >= len(R.BOOL_SETTINGS),
       f"offered {data['count']}, switches exist {len(R.BOOL_SETTINGS)}")
 check("there is at least one switch, so the answer is not empty",
       data["count"] >= 5, str(data["count"]))
@@ -111,6 +111,84 @@ finally:
 unchanged = R.changeable_settings()
 check("and removing it again leaves the answer as it was",
       unchanged["count"] == data["count"], f"{unchanged['count']} vs {data['count']}")
+print()
+
+# --------------------------------------------------------------------------
+# 3b. THE ANSWER IS NOT ALLOWED TO UNDERSTATE WHAT IS REACHABLE
+# --------------------------------------------------------------------------
+
+print("--- every reachable family is in the answer (the 13 -> 42 fix) ---")
+# WHAT THIS IS FOR. The answer used to offer only BOOL_SETTINGS - 13 settings -
+# while far more were reachable by asking, so the owner was told he could not
+# do things he could. A completeness test that cannot fail is decoration, so
+# the check below is made to bite: removing a family from the table fails it.
+try:
+    import jarvis_animal as _AN
+    _animal_switches = len(_AN.SWITCHES)
+except Exception:
+    _animal_switches = 0
+
+# Each family, and the source that owns it. `expect` is the number of settings
+# that source declares, so a family that shrinks or grows unnoticed fails here.
+_FAMILIES = [
+    ("the asks-first switches", len(R.asks_first_targets())),
+    ("the reading tools offered to the model", len(R.tool_targets())),
+    ("the shared animal switches", _animal_switches),
+]
+for label, n in _FAMILIES:
+    check(f"{label} are counted somewhere in the answer ({n})",
+          n > 0 and n <= data["count"],
+          f"{label}={n}, answer count={data['count']}")
+
+# The families whose tables live in other modules, named so the answer must
+# mention each one. This is the list that would have been MISSING before the
+# change: every one of these was absent from the old 13-item answer.
+_MUST_APPEAR = [
+    ("what asks first", "the asks-first switches"),
+    ("animal faces", "the animal options"),
+    ("sun and moon", "the sky option"),
+    ("weather", "the weather source"),
+    ("approval card is shown", "how much of a card is shown"),
+    ("speak up", "the interruption budget"),
+    ("how Jarvis talks", "the manner"),
+    ("menu", "menu visibility"),
+    ("thinks before answering", "the thinking level"),
+    ("Lockdown", "Lockdown"),
+]
+for needle, label in _MUST_APPEAR:
+    check(f"the answer mentions {label}",
+          needle.lower() in data["words"].lower(),
+          f"{label!r} (looking for {needle!r}) missing from:\n{data['words'][:400]}")
+
+check("the answer says how many settings it covers",
+      str(data["count"]) in data["words"],
+      data["words"][:160])
+check("that number is well above the 13 switches alone, since the rest are reachable",
+      data["count"] > len(R.BOOL_SETTINGS) + 10,
+      f"count={data['count']}, switches={len(R.BOOL_SETTINGS)}")
+
+# AND THE HARDER HALF: every family the answer advertises must really be
+# reachable. A row that promises something no phrase can do is worse than an
+# omission, because the owner will try it and be refused. Each phrase below is
+# run through the real intent matcher, so a family whose grammar disappeared
+# fails here rather than in his hands.
+_REACHABLE_BY = [
+    ("keep the animal still", "the shared animal switches"),
+    ("show the sun and moon", "the sky option"),
+    ("turn the weather on", "the weather source"),
+    ("make the animal sharper", "per-device sharpness"),
+    ("start short", "how much of a card is shown"),
+    ("speak up 3 times a day", "the interruption budget"),
+    ("from now on, be plainer", "the manner"),    ("hide the finance menu", "menu visibility"),
+    ("turn on lockdown", "Lockdown"),
+    ("switch to exa for search", "the web search provider"),
+]
+for phrase, label in _REACHABLE_BY:
+    m = Q.match(phrase)
+    check(f"a phrase really reaches {label} ({phrase!r})",
+          m is not None,
+          f"{phrase!r} reached the model instead of an intent - the answer must "
+          f"not advertise {label} if nothing can do it")
 print()
 
 # --------------------------------------------------------------------------

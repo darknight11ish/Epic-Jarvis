@@ -48,19 +48,30 @@ loosening still shows a card. That is the gap this slice closes.
 Added by `feat/models-on-d-and-storage-tiers` (PR #229):
 
 - **`jarvis_settings_registry.changeable_settings()` / `changeable_words()`** —
-  the answer to "what can I change", **derived from `BOOL_SETTINGS`**, so it
-  cannot promise a setting that is not there and cannot miss one that is. A
-  switch added to the table appears by itself.
+  the answer to "what can I change", derived from the real tables so it cannot
+  promise a setting that is not there. A switch added to `BOOL_SETTINGS` (or the
+  asks-first or tool tables) appears by itself.
+  **Widened 2026-10-13:** it used to offer only `BOOL_SETTINGS` — 13 settings —
+  while about 42 were reachable by asking, so most of what worked looked like it
+  did not. It now also counts the asks-first switches, the reading tools offered
+  to the model, and the families whose tables live in other modules (the shared
+  animal switches, the sun and moon, the weather source, per-device sharpness
+  and frame rate, how much of an approval card is shown, the interruption
+  budget, the manner, menu visibility, the thinking level, and Lockdown). The
+  count is the number of **settings**, not rows: a family row states how many it
+  covers, and the answer leads with the total.
 - **A `settings_help` intent** in `jarvis_quick` for "what can I change",
   "what settings can I change", "what can I change by talking to you", "which
   settings can I change", "what settings do you have", "list my settings", and
   "what can I change in settings".
-- **The answer says three things plainly:** these can be changed by asking;
-  anything that loosens a rule still shows a card first; and `undo` takes a
-  change back in the same chat.
-- **`backend/test_settings_help.py`** (43 checks) — every phrase routes to
+- **The answer says three things plainly:** how many settings can be changed by
+  asking; anything that loosens a rule still shows a card first; and `undo`
+  takes a change back in the same chat.
+- **`backend/test_settings_help.py`** (60 checks) — every phrase routes to
   `settings_help`; a loosening still routes to its own intent; the added-switch
-  test proves the list is derived rather than typed out.
+  test proves the list is derived rather than typed out; and a completeness
+  check names each reachable family, which **fails if one is dropped** (shown
+  biting by removing Lockdown's row: 59 passed, 1 failed).
 
 ## 3. The rules this must keep — none of them move
 
