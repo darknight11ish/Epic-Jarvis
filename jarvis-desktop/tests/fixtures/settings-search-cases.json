@@ -1,0 +1,386 @@
+{
+  "_comment": [
+    "SHARED cross-app fixture for Settings search. Generated from the desktop",
+    "engine (jarvis-desktop/src/settings-search.js) by tools/gen-settings-search-cases.mjs.",
+    "BOTH apps must satisfy every case: the desktop suite and the Kotlin",
+    "SettingsSearchTest each read this file. Regenerate with that script rather",
+    "than editing by hand, so the two engines cannot drift on the fuzzy rules.",
+    "",
+    "`hits` lists the part keys the query must match, in sorted order.",
+    "`ranks` is the desktop tier per part. The tier NUMBERS are desktop-only:",
+    "the phone returns 2 for a heading-only match and 1 for a body match, and",
+    "that is fine because neither app orders results by the number - both only",
+    "ask whether it is above zero. Match `hits`; do not match `ranks` exactly."
+  ],
+  "parts": {
+    "voice": {
+      "label": "Voice",
+      "text": "Whether Jarvis knows your voice, how strict that check is, and the voice Jarvis answers in."
+    },
+    "idleNew": {
+      "label": "A new conversation starts after",
+      "text": "How long a chat can sit idle before the next message starts a new one."
+    },
+    "notifications": {
+      "label": "Notifications from Jarvis",
+      "text": "Android decides whether this phone shows what Jarvis sends from your PC."
+    },
+    "folders": {
+      "label": "Folders Jarvis may look in",
+      "text": "Which folders Jarvis may read. Obsidian, Logseq and Joplin notes."
+    },
+    "mail": {
+      "label": "Sending email",
+      "text": "Send an email, drafts, recipients and replies."
+    },
+    "appearance": {
+      "label": "Appearance",
+      "text": "Theme, colours, the face and how it all looks."
+    },
+    "search": {
+      "label": "Search settings",
+      "text": "Type a word to show only the settings that match."
+    }
+  },
+  "budget": {
+    "3": 0,
+    "4": 1,
+    "7": 1,
+    "8": 2
+  },
+  "cases": [
+    {
+      "query": "voice",
+      "hits": [
+        "voice"
+      ],
+      "ranks": {
+        "voice": 4,
+        "idleNew": 0,
+        "notifications": 0,
+        "folders": 0,
+        "mail": 0,
+        "appearance": 0,
+        "search": 0
+      }
+    },
+    {
+      "query": "voise",
+      "hits": [
+        "voice"
+      ],
+      "ranks": {
+        "voice": 2,
+        "idleNew": 0,
+        "notifications": 0,
+        "folders": 0,
+        "mail": 0,
+        "appearance": 0,
+        "search": 0
+      }
+    },
+    {
+      "query": "notifcation",
+      "hits": [
+        "notifications"
+      ],
+      "ranks": {
+        "voice": 0,
+        "idleNew": 0,
+        "notifications": 2,
+        "folders": 0,
+        "mail": 0,
+        "appearance": 0,
+        "search": 0
+      }
+    },
+    {
+      "query": "notification",
+      "hits": [
+        "notifications"
+      ],
+      "ranks": {
+        "voice": 0,
+        "idleNew": 0,
+        "notifications": 3,
+        "folders": 0,
+        "mail": 0,
+        "appearance": 0,
+        "search": 0
+      }
+    },
+    {
+      "query": "folders",
+      "hits": [
+        "folders"
+      ],
+      "ranks": {
+        "voice": 0,
+        "idleNew": 0,
+        "notifications": 0,
+        "folders": 4,
+        "mail": 0,
+        "appearance": 0,
+        "search": 0
+      }
+    },
+    {
+      "query": "folder",
+      "hits": [
+        "folders"
+      ],
+      "ranks": {
+        "voice": 0,
+        "idleNew": 0,
+        "notifications": 0,
+        "folders": 3,
+        "mail": 0,
+        "appearance": 0,
+        "search": 0
+      }
+    },
+    {
+      "query": "email",
+      "hits": [
+        "mail"
+      ],
+      "ranks": {
+        "voice": 0,
+        "idleNew": 0,
+        "notifications": 0,
+        "folders": 0,
+        "mail": 4,
+        "appearance": 0,
+        "search": 0
+      }
+    },
+    {
+      "query": "emial",
+      "hits": [
+        "mail"
+      ],
+      "ranks": {
+        "voice": 0,
+        "idleNew": 0,
+        "notifications": 0,
+        "folders": 0,
+        "mail": 2,
+        "appearance": 0,
+        "search": 0
+      }
+    },
+    {
+      "query": "appearance",
+      "hits": [
+        "appearance"
+      ],
+      "ranks": {
+        "voice": 0,
+        "idleNew": 0,
+        "notifications": 0,
+        "folders": 0,
+        "mail": 0,
+        "appearance": 4,
+        "search": 0
+      }
+    },
+    {
+      "query": "apearance",
+      "hits": [
+        "appearance"
+      ],
+      "ranks": {
+        "voice": 0,
+        "idleNew": 0,
+        "notifications": 0,
+        "folders": 0,
+        "mail": 0,
+        "appearance": 2,
+        "search": 0
+      }
+    },
+    {
+      "query": "search",
+      "hits": [
+        "search"
+      ],
+      "ranks": {
+        "voice": 0,
+        "idleNew": 0,
+        "notifications": 0,
+        "folders": 0,
+        "mail": 0,
+        "appearance": 0,
+        "search": 4
+      }
+    },
+    {
+      "query": "settings",
+      "hits": [
+        "search"
+      ],
+      "ranks": {
+        "voice": 0,
+        "idleNew": 0,
+        "notifications": 0,
+        "folders": 0,
+        "mail": 0,
+        "appearance": 0,
+        "search": 4
+      }
+    },
+    {
+      "query": "voice strict",
+      "hits": [
+        "voice"
+      ],
+      "ranks": {
+        "voice": 1,
+        "idleNew": 0,
+        "notifications": 0,
+        "folders": 0,
+        "mail": 0,
+        "appearance": 0,
+        "search": 0
+      }
+    },
+    {
+      "query": "voice backup",
+      "hits": [],
+      "ranks": {
+        "voice": 0,
+        "idleNew": 0,
+        "notifications": 0,
+        "folders": 0,
+        "mail": 0,
+        "appearance": 0,
+        "search": 0
+      }
+    },
+    {
+      "query": "wi fi",
+      "hits": [],
+      "ranks": {
+        "voice": 0,
+        "idleNew": 0,
+        "notifications": 0,
+        "folders": 0,
+        "mail": 0,
+        "appearance": 0,
+        "search": 0
+      }
+    },
+    {
+      "query": "cat",
+      "hits": [],
+      "ranks": {
+        "voice": 0,
+        "idleNew": 0,
+        "notifications": 0,
+        "folders": 0,
+        "mail": 0,
+        "appearance": 0,
+        "search": 0
+      }
+    },
+    {
+      "query": "chat",
+      "hits": [
+        "idleNew"
+      ],
+      "ranks": {
+        "voice": 0,
+        "idleNew": 1,
+        "notifications": 0,
+        "folders": 0,
+        "mail": 0,
+        "appearance": 0,
+        "search": 0
+      }
+    },
+    {
+      "query": "conversation",
+      "hits": [
+        "idleNew"
+      ],
+      "ranks": {
+        "voice": 0,
+        "idleNew": 4,
+        "notifications": 0,
+        "folders": 0,
+        "mail": 0,
+        "appearance": 0,
+        "search": 0
+      }
+    },
+    {
+      "query": "obsidian",
+      "hits": [
+        "folders"
+      ],
+      "ranks": {
+        "voice": 0,
+        "idleNew": 0,
+        "notifications": 0,
+        "folders": 1,
+        "mail": 0,
+        "appearance": 0,
+        "search": 0
+      }
+    },
+    {
+      "query": "theme",
+      "hits": [
+        "appearance"
+      ],
+      "ranks": {
+        "voice": 0,
+        "idleNew": 0,
+        "notifications": 0,
+        "folders": 0,
+        "mail": 0,
+        "appearance": 1,
+        "search": 0
+      }
+    },
+    {
+      "query": "zzzz",
+      "hits": [],
+      "ranks": {
+        "voice": 0,
+        "idleNew": 0,
+        "notifications": 0,
+        "folders": 0,
+        "mail": 0,
+        "appearance": 0,
+        "search": 0
+      }
+    },
+    {
+      "query": "docket",
+      "hits": [],
+      "ranks": {
+        "voice": 0,
+        "idleNew": 0,
+        "notifications": 0,
+        "folders": 0,
+        "mail": 0,
+        "appearance": 0,
+        "search": 0
+      }
+    },
+    {
+      "query": "rocket",
+      "hits": [],
+      "ranks": {
+        "voice": 0,
+        "idleNew": 0,
+        "notifications": 0,
+        "folders": 0,
+        "mail": 0,
+        "appearance": 0,
+        "search": 0
+      }
+    }
+  ]
+}

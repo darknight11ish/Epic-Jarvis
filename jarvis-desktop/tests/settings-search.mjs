@@ -350,6 +350,45 @@ await check("the tiers still run exact, prefix, near miss, then the detail text"
   await page.close();
 });
 
+await check("every case in the SHARED cross-app fixture matches the desktop engine", async () => {
+  // The fixture is the contract BETWEEN THE APPS, and this suite is the
+  // desktop's side of it. `SettingsSearchTest.kt` runs the same file against
+  // the Kotlin engine, so a rule that quietly changes here and not there
+  // fails on one side or the other.
+  //
+  // It exists because the test that does compare the two apps (`SettingsSearchTest`'s
+  // "the two apps say the same words about the same box") only compares the
+  // eight WORD CONSTANTS - never the matching rules. That gap is how the
+  // phone's `word.contains(token)` floor came to match "voice" inside
+  // "conversation" while this engine correctly refused to, with every test on
+  // both sides still green.
+  //
+  // Measured, not hand-written: the cases are generated from THIS engine by
+  // tools/gen-settings-search-cases.mjs, so the file cannot flatter either side.
+  const { rank } = await import("../src/settings-search.js");
+  const fixture = JSON.parse(
+    readFileSync(join(HERE, "fixtures", "settings-search-cases.json"), "utf8"),
+  );
+  const wrong = [];
+  for (const c of fixture.cases) {
+    const parts = Object.entries(fixture.parts).map(([key, p]) => [
+      key, rank(p.label, p.text, c.query),
+    ]);
+    const hits = parts.filter(([, r]) => r > 0).map(([k]) => k).sort();
+    if (hits.join(",") !== c.hits.join(",")) {
+      wrong.push(`"${c.query}": expected [${c.hits.join(", ")}] but got [${hits.join(", ")}]`);
+    }
+  }
+  assert.equal(wrong.length, 0, `the desktop engine drifted from the shared fixture:\n      ${wrong.join("\n      ")}`);
+  // And the fixture pins the budget table itself, so a change to it is a change
+  // to both apps at once rather than one.
+  for (const [len, want] of Object.entries(fixture.budget)) {
+    const { fuzzyBudget } = await import("../src/settings-search.js");
+    assert.equal(fuzzyBudget("x".repeat(Number(len))), want,
+      `fuzzyBudget for ${len} letters is no longer ${want}`);
+  }
+});
+
 await browser.close(); close();
 console.log(fails.length ? `\n${fails.length} FAILED` : "\nsettings search filters, explains and restores");
 process.exit(fails.length ? 1 : 0);
