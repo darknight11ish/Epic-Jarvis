@@ -10,29 +10,47 @@
 //! Change power mode ▸ Active / Quiet / Standby
 //! ─────────────────────────────
 //! 2 approvals waiting                      (opens the queue)
-//! 3 things waiting to be told · standby    (opens the brief)
 //! Mute spoken interruptions until tomorrow
+//! Stop everything
 //! ─────────────────────────────
-//! Show or hide Spotlight          Alt+Space
-//! Show or hide the widget         Alt+Shift+W
-//! Show or hide the floating face  Alt+Shift+F
+//! Start Jarvis Live
+//! ─────────────────────────────
+//! Show or hide the Jarvis bar              Alt+Space
 //! Show the HUD window
 //! Open the Brain
-//! Faces…
-//! ─────────────────────────────
-//! Backend: not supervised                  (status or action)
-//! Reconnect the event stream
-//! Run a status check
-//! Settings…
-//! Jarvis Desktop 0.1.0                     (status, or "Update available")
+//! Settings and help…
+//! More… ▸ Start Watch with me · Show or hide the widget · Show or hide the
+//!         floating face · Chat history… · Faces… · Everything Jarvis can do…
+//!         Backend: not supervised · Reconnect the event stream · Run a status
+//!         check · Jarvis Desktop 0.1.0 (or "Update available")
 //! ─────────────────────────────
 //! Quit Jarvis
 //! ```
 //!
-//! Four groups, in the order the questions get asked: what is Jarvis, what
-//! wants me, where do I look, and what is under the hood. The two hotkeyed
-//! rows lead their group because a hotkey printed beside a row is the only way
-//! most people ever learn it exists.
+//! Five groups and four separators, in the order the questions get asked: what
+//! is Jarvis, what wants me, Jarvis Live, where do I look, and the one row that
+//! ends the session. `ia.mjs` counts the separators, so a row added without
+//! thinking about the groups is caught rather than silently making the menu
+//! longer again.
+//!
+//! Jarvis Live keeps a group of its own: it sat right under "Stop everything",
+//! and a click one row off started or ended it (the Live review, 2026-09-28).
+//! Quit keeps the separator above it for the same kind of reason - it is the one
+//! row that ends the session.
+//!
+//! ## The "More…" submenu
+//!
+//! The owner asked for this menu to be about half its length - "only put the
+//! most important ones" - and chose to move the rest one click in rather than
+//! delete them, so nothing became unreachable. The brief row, Watch with me,
+//! the windows group's tail and the whole machinery group now live in one
+//! submenu built in `create_tray`. Every one of them is the SAME `MenuItem` it
+//! always was, still held by [`Rows`]: rebuilding one with the same id would
+//! show the same words on screen and then silently stop updating as the state
+//! changed.
+//!
+//! A hotkeyed row leads its group because a hotkey printed beside a row is the
+//! only way most people ever learn it exists.
 //!
 //! ## The power switch
 //!
@@ -123,6 +141,13 @@ const ID_QUIT: &str = "quit";
 /// Handles to the menu rows whose text is state, so they can be re-labelled in
 /// place. Rebuilding the whole menu on every event would close it under the
 /// user's cursor.
+///
+/// A row's home in the menu is not recorded here, and does not need to be: a
+/// `MenuItem` keeps working wherever it is parented. That is what makes the
+/// "More…" submenu safe - `waiting`, `watch`, `backend` and `update` moved
+/// into it and kept the SAME handle, so they still re-label themselves. A new
+/// `MenuItem` built for the submenu would have looked identical and then
+/// quietly stopped updating, with nothing to report it.
 #[derive(Default)]
 pub struct TrayHandles {
     inner: Mutex<Option<Rows>>,
@@ -302,9 +327,10 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let chat_history =
         MenuItem::with_id(app, ID_CHAT_HISTORY, "Chat history…", true, None::<&str>)?;
     let show_faces = MenuItem::with_id(app, ID_SHOW_FACES, "Faces…", true, None::<&str>)?;
-    // The whole feature set in one window (2026-10-08). In the windows group,
-    // beside Faces, and needing no new separator: `ia.mjs` counts five
-    // separators for six groups, and a seventh group is not wanted for this.
+    // The whole feature set in one window (2026-10-08). It used to sit in the
+    // windows group beside Faces, needing no separator of its own; the tray
+    // trim moved it into the "More…" submenu, which is why `ia.mjs` now counts
+    // four separators for the five top-level groups rather than five for six.
     let show_features = MenuItem::with_id(
         app,
         ID_SHOW_FEATURES,
@@ -366,6 +392,42 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     )?;
     let quit = MenuItem::with_id(app, ID_QUIT, "Quit Jarvis", true, None::<&str>)?;
 
+    // The one submenu the tray trim added (the owner: the menu had "way too
+    // many options ... only put the most important ones, it should be half this
+    // size at most"). Everything still reachable but not wanted every day moved
+    // one click in here, so nothing became unreachable.
+    //
+    // These are the SAME `MenuItem`s built above, moved - never rebuilt. Each
+    // one is still held by `Rows` and still re-labelled in place as the state
+    // moves (`waiting`'s count and enabled state, `watch`'s Start/Stop wording,
+    // `backend`'s pid and supervision line, `update`'s version, and the hotkey
+    // rebinds for `toggle_widget`/`toggle_floating`/`watch`). A second item
+    // with the same id would look right on screen and then go stale, and no
+    // test could see it. `rows.*` is the only other reference to them, so
+    // moving a row into here costs nothing.
+    let more = Submenu::with_items(
+        app,
+        "More…",
+        true,
+        &[
+            &waiting,
+            &watch,
+            &toggle_widget,
+            &toggle_floating,
+            &chat_history,
+            &show_faces,
+            &show_features,
+            &backend,
+            &reconnect,
+            &status_check,
+            &update,
+        ],
+    )?;
+
+    // Five groups, four separators. `ia.mjs` counts the separators in this
+    // slice and would fail if a row were added back at the top level, so the
+    // menu cannot quietly grow past the owner's "half this size" without a
+    // deliberate edit to the test's own expectation.
     let menu = Menu::with_items(
         app,
         &[
@@ -379,36 +441,27 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             // `mute` belongs here rather than among the machinery: it is the
             // answer to the two rows above it.
             &approvals,
-            &waiting,
             &mute,
             &stop_everything,
             &PredefinedMenuItem::separator(app)?,
             // Jarvis Live on its own line, away from "Stop everything" (the
             // review of 2026-09-28: a click one row off started or ended it).
             &live,
-            &watch,
             &PredefinedMenuItem::separator(app)?,
-            // Windows, everyday ones first — the two with hotkeys are the two
-            // reached most often, and a hotkey printed beside a row is how the
-            // owner learns it exists.
+            // Windows and the two ways on from them, everyday ones first - the
+            // row with a hotkey is the one reached most often, and a hotkey
+            // printed beside a row is how the owner learns it exists. Settings
+            // ends the block, and "More…" is the submenu holding every
+            // destination and every under-the-hood row that is not wanted
+            // every day.
             &toggle_spotlight,
-            &toggle_widget,
-            &toggle_floating,
             &show_hud,
             &show_brain,
-            &chat_history,
-            &show_faces,
-            &show_features,
-            &PredefinedMenuItem::separator(app)?,
-            // The machinery. `backend` and `reconnect` were three groups apart
-            // while being the same subject: is the thing on the other end of
-            // the socket alive, and can I do something about it.
-            &backend,
-            &reconnect,
-            &status_check,
             &settings,
-            &update,
+            &more,
             &PredefinedMenuItem::separator(app)?,
+            // Quit last, on its own, as it always was: it is the one row that
+            // ends the session, so it stays visibly apart from its neighbours.
             &quit,
         ],
     )?;

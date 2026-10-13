@@ -225,12 +225,38 @@ await check("the menu is sentence case and grouped", async () => {
   for (const gone of ['"Show HUD Window"', '"Toggle Spotlight"', '"Toggle Widget"', '"Status Check"']) {
     assert.ok(!tray.includes(gone), `${gone} is still Title Case`);
   }
-  // Six groups: status / waiting / Jarvis Live / windows / machinery / quit.
-  // Live got its own group in the Live review of 2026-09-28: it sat right
-  // under "Stop everything", and a click one row off started or ended it.
+  // Five groups: status / what is waiting on you / Jarvis Live / windows and
+  // the way on from them (Settings, More…) / Quit. Live got its own group in
+  // the Live review of 2026-09-28: it sat right under "Stop everything", and a
+  // click one row off started or ended it. Quit keeps the rule above it.
+  //
+  // This count is FOUR, not the five it was before the tray trim. The menu
+  // stopped being six groups when the owner asked for it to be about half its
+  // length ("only put the most important ones, it should be half this size at
+  // most") and chose to keep every row reachable under one "More…" submenu.
+  // The separators inside that submenu are its own business and are built
+  // before this slice; the four counted here are the top level's.
   const menu = tray.slice(tray.indexOf("let menu = Menu::with_items"), tray.indexOf("app.state::<TrayHandles>"));
   const seps = (menu.match(/PredefinedMenuItem::separator/g) || []).length;
-  assert.equal(seps, 5, `the menu has ${seps} separators; six groups need five`);
+  assert.equal(seps, 4, `the menu has ${seps} separators; five groups need four`);
+
+  // And it got shorter by MOVING rows, not deleting them: the eleven that left
+  // the top level are in the one "More…" submenu, each still the same handle
+  // `Rows` re-labels. A row that quietly vanished would otherwise look exactly
+  // like a tidy menu.
+  const more = tray.slice(tray.indexOf("let more = Submenu::with_items"));
+  const moreItems = more.slice(more.indexOf('"More…"'), more.indexOf(")?;"));
+  for (const row of ["waiting", "watch", "toggle_widget", "toggle_floating", "chat_history",
+    "show_faces", "show_features", "backend", "reconnect", "status_check", "update"]) {
+    assert.match(moreItems, new RegExp(`&${row},`), `${row} left the menu instead of moving into More…`);
+  }
+  // The top level itself is the trimmed shape, in order. Every row here is
+  // rebuilt only by editing this list on purpose - which is what stops the
+  // menu quietly growing back.
+  assert.deepEqual(menu.match(/&[a-z_]+/g) || [],
+    ["&activity", "&power", "&power_modes", "&approvals", "&mute", "&stop_everything", "&live",
+      "&toggle_spotlight", "&show_hud", "&show_brain", "&settings", "&more", "&quit"],
+    "the top level is not the trimmed shape");
 });
 
 /* ── The widget can be used without a mouse ──────────────────────────────── */
