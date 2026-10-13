@@ -391,8 +391,12 @@ from a commit message:
   `docs/AUDIT-2026-10-11-IS-MAIN-COHERENT.md` section 1), so this one is on the
   person pushing, not on CI.
 - The same day's owner decision - **the phone may raise a spending limit with its
-  own fingerprint** - is recorded above under "Amended by the owner on 2026-10-11"
-  and is deliberately not repeated here.
+  own fingerprint** - is recorded in `docs/DECISIONS.md` (search it for "the phone
+  may raise the limit too"), not in this file, and is deliberately not repeated here.
+  **This pointer used to read "recorded above under 'Amended by the owner on
+  2026-10-11'" - a heading that has never existed in this file.** The dated decisions
+  were moved out to `docs/DECISIONS.md` on 2026-10-12, and this one moved with them
+  without the pointer being corrected; fixed 2026-10-13.
 
 **`audit` and `python-advisories` are informational. Six required checks are what
 gate a merge** - `rust`, `frontend`, `backend`, `backend-windows`,

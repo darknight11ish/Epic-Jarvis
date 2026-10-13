@@ -906,6 +906,17 @@ _TOOL_ACTIONS: dict[str, str] = {
     # whatever this table says.
     "set_timer": "auto", "set_reminder": "auto", "todo_add": "auto",
     "todo_done": "auto", "coming_up": "auto",
+    # change_setting (jarvis_agent.SETTINGS_TOOL, 2026-10-13): the model-facing
+    # settings tool. _one_call intercepts it by name BEFORE the gate too, for
+    # the same kind of reason - the setting's OWN rule is its gate, and this
+    # entry only says what the Reach page shows. It maps to an EXISTING action
+    # rather than a new one: change_own_config already carries the "ask" tier in
+    # [autonomy.tiers] and the card wording ("change one of its settings") that
+    # the lights, briefing-senders and big-coder switches use, so no new tier
+    # and no new card words are invented. "ask" here is deliberately the
+    # CONSERVATIVE answer for the page - the true answer depends on which
+    # setting is named, which jarvis_reach's own plain name for the tool says.
+    "change_setting": "change_own_config",
 }
 
 # Arguments that ESCALATE a shell-class tool. Regex on model-written text is

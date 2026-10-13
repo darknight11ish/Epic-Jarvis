@@ -707,7 +707,10 @@ def set_briefing_senders(on: bool, *, peer=None, local=None) -> Outcome:
 #       quiet window or a switch turned on only changes when this PC shows its
 #       owner a toast, so nothing here raises a card - and an alarm must never
 #       fail to ring because a card about it was not answered.
-#     * humour is jarvis_manner.handle_post(), at once either way, like manner.
+#     * humour is jarvis_manner.handle_set(), at once either way, like manner.
+#       (`handle_set`, not `handle_post`: this header named a function that has
+#       never existed until 2026-10-13, which is one of the places the wrong name
+#       was copied from - see set_humor below.)
 #     * "Voice follows the face" is jarvis_voices.set_face_voice(), at once.
 #     * the better voice is jarvis_voices.set_better(), OFF at once and ON
 #       through its OWN card (better_voice_enable) - unchanged here.
@@ -768,13 +771,27 @@ def set_pc_quiet_hours(on: bool, *, peer=None, local=None) -> Outcome:
 
 
 def set_humor(on: bool, *, peer=None, local=None) -> Outcome:
-    """The humour switch: `jarvis_manner.handle_post({"humor": ...})`, the same
-    function Settings calls. At once either way - it changes wording only."""
+    """The humour switch: `jarvis_manner.handle_set({"humor": ...})`, the same
+    function Settings calls. At once either way - it changes wording only.
+
+    `handle_set`, NOT `handle_post` (fixed 2026-10-13). This called
+    `MN.handle_post(...)`, and jarvis_manner.py has never defined a function of
+    that name - it has `handle_get` and `handle_set`. So the phrase this file
+    exists to add ("turn on humour") raised AttributeError out of `set`, while
+    the Settings page's own route, POST /api/manner, went through handle_set and
+    worked. `manner.patch` and `thinking.patch` and this file's own set_manner
+    (below) all call handle_set; set_humor was the only caller in the tree
+    naming handle_post. backend/test_settings_tool.py now walks every setter's
+    own imports with `ast` and fails on any module attribute that does not
+    exist, which is the check that catches this whole class of mistake. (It does
+    NOT call the real setters - they would write the owner's live settings; all
+    21 are recording stand-ins in that suite. Said plainly because an earlier
+    version of this line claimed it "calls every setter", which it does not.)"""
     try:
         import jarvis_manner as MN
     except Exception:
         return _missing("the humour switch")
-    code, out = MN.handle_post({"humor": bool(on)})
+    code, out = MN.handle_set({"humor": bool(on)})
     return _say(code, out, on_ok=("Done." if on else "Done - no jokes."))
 
 
@@ -1664,6 +1681,121 @@ _BOOL_BY_NAME = {_bare(name): b for b in BOOL_SETTINGS for name in b.names}
 
 def find_bool_setting(words: str):
     return _BOOL_BY_NAME.get(_bare(words))
+
+
+# --------------------------------------------------------------------------
+#   The same table, read by the AI MODEL's own wording (2026-10-13).
+# --------------------------------------------------------------------------
+
+#: Filler a MODEL puts around a setting's real name. ONLY
+#: `find_bool_setting_words` below strips these. The spoken grammar must keep
+#: using `find_bool_setting` above, which is an exact alias match on purpose:
+#: a half-heard or half-typed sentence must fall through rather than change a
+#: switch the owner did not name.
+_SETTING_NOISE = frozenset({
+    "a", "an", "the", "my", "our", "your", "please", "jarvis", "setting",
+    "settings", "option", "feature", "control", "switch", "toggle", "thing",
+    "for", "to", "of", "in", "is", "it", "and", "or", "current", "currently",
+})
+
+
+def _setting_words(words: str) -> str:
+    """`words` lower-cased, punctuation dropped, filler removed - the one form
+    the alias table and the model's own wording are both compared in."""
+    text = re.sub(r"[^a-z0-9 ]+", " ", str(words or "").lower())
+    return " ".join(w for w in text.split() if w and w not in _SETTING_NOISE)
+
+
+def _one_setting(keys) -> Optional["BoolSetting"]:
+    """The single BoolSetting `keys` names, or None when that is not exactly
+    one. An ambiguous name is REFUSED, never guessed at: changing a switch the
+    owner did not name is worse than changing nothing."""
+    if len(keys) != 1:
+        return None
+    key = next(iter(keys))
+    return next((b for b in BOOL_SETTINGS if b.key == key), None)
+
+
+def find_bool_setting_words(words: str) -> Optional["BoolSetting"]:
+    """The ONE plain on/off setting `words` names, or None.
+
+    FOR THE AI MODEL'S OWN WORDING, and never for the spoken grammar - see
+    `_SETTING_NOISE` above. `find_bool_setting` is an exact alias match on
+    purpose: it runs on a sentence a person spoke or typed, and a near miss
+    there must fall through rather than change a switch nobody named. A model
+    has no such excuse - it is told which settings exist and restates one in
+    its own words ("stop showing me notifications on my watch") - so this
+    ignores case, punctuation and that filler, and then accepts an answer ONLY
+    while it stays unambiguous:
+
+      1. the stripped words ARE a stripped alias, exactly; else
+      2. the request CONTAINS every word of one alias - one direction only, and
+         see the comment on the rule itself for the false positives that the
+         other direction produced and why they were unacceptable.
+
+    `None` means "no single setting is named", which the caller answers in
+    words (see `cannot_change_setting_words`). Deliberately NOT a fuzzy score:
+    a near miss must refuse, because the one thing this must never do is change
+    a switch the owner did not ask for (2026-10-13)."""
+    text = _setting_words(words)
+    if not text:
+        return None
+    exact: dict = {}
+    for b in BOOL_SETTINGS:
+        for name in b.names:
+            exact.setdefault(_setting_words(name), set()).add(b.key)
+    if text in exact:
+        return _one_setting(exact[text])
+    if len(text.split()) < 2:
+        # One bare word ("notifications", "sounds") names no ONE switch among
+        # these, and guessing which is exactly the failure to avoid.
+        return None
+    theirs = set(text.split())
+    # ONE rule, in ONE direction, and the direction is the whole safety of it
+    # (2026-10-13). The request must CONTAIN a whole alias's words, so "stop
+    # showing me notifications on my watch" reaches "watch notifications": the
+    # request is MORE specific than the name, which is what a person restating a
+    # setting does.
+    #
+    # THE OTHER DIRECTION WAS TRIED AND REMOVED, and this is why. "Every word of
+    # the request fits inside one alias" also matched bare category nouns against
+    # longer names, and every one of these reads as a switch that has nothing to
+    # do with the words:
+    #     "graphics card" / "second card"  -> better_voice
+    #     "pc sounds"                      -> pc_alarm_sounds
+    #     "screen mode"                    -> screen_picture
+    #     "the big model"                  -> big_coder
+    # The exact spoken matcher above returns None for all four. Worse, those
+    # switches apply with NO card, so a phrase naming no setting at all would
+    # have flipped a switch the owner never named - the one outcome this whole
+    # function exists to prevent. A phrase that names no single setting must be
+    # refused, never guessed at; backend/test_settings_tool.py keeps all four as
+    # regression cases.
+    found: set = set()
+    for b in BOOL_SETTINGS:
+        for name in b.names:
+            mine = set(_setting_words(name).split())
+            if mine and mine <= theirs:
+                found.add(b.key)
+                break
+    return _one_setting(found)
+
+
+def cannot_change_setting_words(words: str = "") -> str:
+    """What Jarvis says when a setting it cannot change is named - never a
+    claim that it was changed.
+
+    Two shapes, because there are two kinds of "cannot": a switch that IS on
+    the Settings page but has no route at all (`NOT_BY_ASKING`, which names the
+    screen and the row), and everything else, which gets the list of what can
+    be changed. The model is meant to pass this answer on as it stands."""
+    asked = " ".join(str(words or "").split())[:80]
+    lead = (f'I cannot change "{asked}" by asking.' if asked
+            else "I cannot change that by asking.")
+    dom_id = find_not_by_asking(words or "")
+    if dom_id is not None:
+        return f"{lead} {not_by_asking_sentence(dom_id)}"
+    return f"{lead} {changeable_words()}"
 
 
 # --------------------------------------------------------------------------

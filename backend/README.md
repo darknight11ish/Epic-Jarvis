@@ -487,6 +487,27 @@ is `$SHIPPED` near the top of the script, and the same list is `SHIPPED` in
   `jarvis_notes.py`, `jarvis_home.py`. Copying one does not switch it on:
   the model is only offered a tool that `[tools].enabled` in
   `jarvis-framework.toml` names.
+- **`change_setting`** (added 2026-10-13) - the one tool that changes a
+  setting, so that asking in ANY wording works instead of only a sentence
+  that fits the fixed phrase grammar in `jarvis_quick.py`. Before it,
+  a request that missed that grammar was answered by the model, which had no
+  settings tool and was never told so: the failure looked like success.
+  **It decides no tier of its own.** It calls the setting's own `set` in
+  `jarvis_settings_registry.py` - the same function a spoken sentence calls -
+  so a cosmetic switch changes at once, and anything that loosens a rule or
+  turns on something that reads or reaches more raises that setting's own
+  approval card, with its own risk text and its own Windows Hello rule. A
+  name with no setter at all is answered in words, with nothing changed and
+  no card raised. **It ships ON**, by the owner's decision of 2026-10-13 ("yes
+  turn it on for my pc. it should also be enabled by default"): it is named in
+  `[tools].enabled` in the shipped `jarvis-framework.toml`, the second tool after
+  `web_search` to be on out of the box. To take it back off, drop that one name
+  from that list. `backend/test_settings_tool.py`
+  is the suite that proves the two entrances reach one setter. Its tool name is
+  mapped to the existing `change_own_config` action in `jarvis_gate.py` by
+  `gate-entries.patch` (the row `test_agent.py` requires, since it insists every
+  tool's lookup name is a key of that table) - and that patch's previous version
+  is recorded in `backend/patch-history/` as usual.
 
 Every import of these is wrapped, so a missing one never stops anything - it
 just switches a feature off without a word. Until 2026-09-24 the script

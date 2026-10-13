@@ -726,11 +726,29 @@ def t_the_api_document_has_the_section_and_it_matches_this_code():
     # This branch's section moved 124 -> 126 on 2026-10-11 (main's 124 is the
     # picture-CARD module and 125 the uncensored opt-ins), so a check on
     # "the last 124" would now read MAIN's section and prove nothing about this
-    # feature. It asserts this feature's own heading, and that nothing at all is
-    # written after it.
-    check("the section is the newest one: nothing is written after it",
+    # feature. It asserts this feature's own heading, exactly once.
+    #
+    # It used to ALSO require that nothing at all was written after it, as a
+    # proxy for "129 is the newest section". That proxy expired on 2026-10-13,
+    # when section 130 (the model-facing change_setting tool) was added after it -
+    # a fact about the document, not about this feature. What the guard is really
+    # for is that this heading identifies THIS feature and no other feature's
+    # section was spliced in above it, so it now requires: the heading exactly
+    # once, nothing numbered BELOW 129 appearing after it, and the sections after
+    # it in ascending order.
+    #
+    # NOT the whole document in ascending order: it is not, and never was - the
+    # run reads ... 101, 102, 110, 103, 104 ... on main already (section 110 sits
+    # before 103), which is pre-existing and nothing to do with this feature. A
+    # global ordering check would fail on main, so it is not what this asserts.
+    numbered = [int(m.group(1)) for m in re.finditer(r"\n## (\d+)\.", api)]
+    tail = numbered[numbered.index(129):] if 129 in numbered else []
+    check("the section is present once, and nothing numbered below it follows it",
           api.count("\n## 129.") == 1
-          and api.rindex("\n## 129.") == api.rindex("\n## "))
+          and len(tail) >= 1
+          and all(n > 129 for n in tail[1:])
+          and tail == sorted(tail),
+          repr(tail))
 
 
 def t_the_settings_route_changes_one_named_thing_and_only_on_the_pc():

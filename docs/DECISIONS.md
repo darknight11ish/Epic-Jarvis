@@ -2017,3 +2017,41 @@ untouched. The change is in `backend/jarvis_schedule.py` and its byte-identical
 twin `jarvis-backend/jarvis_schedule.py`, on the branch
 `fix/def008-delete-a-fired-reminder`.
 
+## 2026-10-13 - the settings tool ships ON, on the PC and for a fresh install
+
+Asked directly, with the choice in front of him, the owner said: **"yes turn it
+on for my pc. it should also be enabled by default."**
+
+What that decided, in plain words:
+
+* **A tool the AI model can call to change a setting** (`change_setting`,
+  JARVIS-API section 130) is now named in `[tools].enabled` in the shipped
+  `jarvis-framework.toml`, so a fresh install has it from the start. It is the
+  **second** tool ever to ship switched on; `web_search` was the first (his
+  decision of 2026-09-25, reconfirmed 2026-09-27), and until today the file
+  said plainly that nothing else was on.
+* The reason it is narrow enough to ship on: it reaches **Jarvis's own
+  switches and nothing else** - never a file, a folder, a key, an email or
+  anything outside the PC - and it decides no tier of its own. It calls the
+  same per-setting function a spoken sentence calls, so a cosmetic setting
+  applies at once and anything that **loosens a rule, reads or reaches more, or
+  touches privacy or how Jarvis works still raises that setting's own approval
+  card**, with its own risk text and its own Windows Hello rule. Turning it on
+  cannot weaken rule 4, because the cards it raises are the cards that were
+  always there.
+* **On his own PC** the name was added to the list actually in force, which is
+  `~/.openjarvis/config.toml`'s `[tools] enabled` - not `jarvis-framework.toml`,
+  which on his machine has no `[tools]` section at all and so never overrode the
+  inherited template's list. His file was backed up first
+  (`config.toml.before-change_setting-2026-10-13`) and the result validated as
+  TOML.
+* **It takes effect only when that PC's backend has the code**, which is an
+  `apply-patches.ps1` run. Until then the name is silently ignored - the same
+  silent filtering `offered_tools()` has always done for a name that is not a
+  tool here. This is recorded because it is the difference between "switched on"
+  and "working".
+
+This replaces the earlier position in the same day's work that the tool "ships
+OFF, like every tool but `web_search`". That was the safe default while the
+choice was still open; it is no longer what the project does.
+

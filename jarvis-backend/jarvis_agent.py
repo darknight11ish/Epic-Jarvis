@@ -1248,7 +1248,17 @@ def _plain_prepare(label: str) -> Callable[[dict], tuple]:
 # guessing at a smaller version of a check this file is most careful about
 # getting right.
 _PLAN_EXCLUDED_STEPS = frozenset({"send_email", "draft_email", "tidy_inbox", "propose_plan",
-                                  "my_spending", "retirement_whatif"})
+                                  "my_spending", "retirement_whatif",
+                                  # "change_setting" (SETTINGS_TOOL, 2026-10-13), written
+                                  # as the literal the way SPENDING_TOOL and
+                                  # RETIREMENT_TOOL are above: a plan step goes through the
+                                  # generic prepare()/gate/execute() contract, and this
+                                  # tool's gate is the setting's own setter, which is
+                                  # reached only by _settings_call. Run as a step it would
+                                  # ask a generic card and then find execute() refusing -
+                                  # so a plan cannot name it, and the owner is told to ask
+                                  # for it directly.
+                                  "change_setting"})
 
 #: The gate action a plan step is put to when it must be asked about on its
 #: own card (marked risky, or filled in from an earlier step's result) but
@@ -1509,6 +1519,116 @@ def _propose_plan_refusal(watch: "_TurnWatch") -> str:
     if watch.tainted or watch.read or watch.provenance or watch.app_context:
         return jarvis_plan.refusal_for_taint(True)
     return ""
+
+
+# --------------------------------------------------------------------------
+#   Changing a setting by asking, in ANY wording (2026-10-13)
+# --------------------------------------------------------------------------
+#
+# THE DEFECT THIS CLOSES. A settings request reached a setting only when the
+# sentence fitted the fixed phrase grammar in jarvis_quick.py, checked BEFORE
+# the model ran. A sentence that missed it was answered by the model, which had
+# no settings tool and was never told it could not change anything - so the
+# failure looked like success (".dsh-scratch/settings-reachability-audit.md":
+# "an answer that sounds like it did something"). #360 made the refusal honest
+# and reached eight more switches; this is the other half - a tool the model can
+# call, so any wording works.
+#
+# WHY THIS DOES NOT WEAKEN THE GATE. Every setting's own rule already lives in
+# ONE function - `BoolSetting.set` in jarvis_settings_registry.py - and that is
+# what a spoken sentence runs. This tool CALLS THAT SAME FUNCTION. It decides no
+# tier of its own, raises no card of its own, and applies no change behind the
+# rule:
+#   * a cosmetic setting (the prompt coach, humour, voice-follows-the-face,
+#     making pictures, and the five PC-notification switches) is applied at
+#     once, exactly as "turn on the prompt coach" is;
+#   * a change that loosens a rule, turns on something that reads more, or
+#     touches privacy or how Jarvis works (background learning, the sensitive-
+#     topics switch, lights without a card, web search, the watch and phone
+#     notification switches, picture mode, the headless browser, senders in the
+#     briefing, the big coder, the better voice) raises that setting's OWN
+#     approval card - its own risk text, its own Windows Hello rule, its own PC
+#     rule - and changes nothing until a person answers it;
+#   * "stop asking before every web search" is the reversed pair and keeps the
+#     reversal: ON is instant, OFF is the one that raises the card.
+# So this adds a SECOND ENTRANCE TO ONE GUARDED DOOR, never a second door. What
+# it cannot do is reach anything with no setter: a name in no table is answered
+# in words (cannot_change_setting_words) with nothing changed and nothing
+# guessed at, and _PLAN_EXCLUDED_STEPS keeps a plan from naming it at all.
+#
+# WHY IT IS NOT PUT TO THE GATE IN _one_call, like SCHEDULE_TOOLS and
+# web_search. Its gate IS the setting's own setter. Putting it in front of
+# jarvis_gate.check() as well would raise a SECOND card for one change, and a
+# generic action name cannot carry the setting's own risk text - which is the
+# whole reason those setters exist. `SETTINGS_GATE_ACTION` below is what the
+# Reach page shows for it; it is deliberately the EXISTING action name for
+# changing the owner's own configuration, so no new gate action, no new tier
+# and no new card wording is invented here.
+SETTINGS_TOOL = "change_setting"
+
+#: The gate action SETTINGS_TOOL resolves to, through jarvis_gate's own
+#: `_TOOL_ACTIONS` table: `"change_setting": "change_own_config"`, added there
+#: on 2026-10-13 by backend/gate-entries.patch. An EXISTING action, already
+#: used for exactly this class of change by jarvis_asks_first's lights,
+#: jarvis_briefing's senders and jarvis_big_coder - so no new
+#: [autonomy.tiers] line and no new card wording is invented. It is the
+#: CONSERVATIVE answer for the Reach page (tier "ask"): the true answer depends
+#: on the setting, which the page's plain name for the tool says.
+#:
+#: The tool does NOT carry a `gate_lookup_name` OF ITS OWN, and that matters:
+#: `test_agent.py`'s own check requires the lookup name to be a KEY of
+#: `_TOOL_ACTIONS`, so naming the action here instead of the tool would read as
+#: an unclassified tool and fail that check on the owner's PC, where
+#: jarvis_gate is importable.
+SETTINGS_GATE_ACTION = "change_own_config"
+
+
+def _settings_tool_text() -> str:
+    """The change_setting description.
+
+    KEPT SHORT ON PURPOSE, and the full list of settings is deliberately NOT in
+    it: every tool's text is sent to the model on every round, and the per-tool
+    budget backend/test_tool_text.py pins is 300 tokens. Listing all 21
+    switches came to 416. So the model gets a few examples here, and the WHOLE
+    list is read from the registry (jarvis_settings_registry.changeable_words)
+    in the answer it gets when it names one that cannot be changed - which is
+    the moment it needs the list, at no cost on every other turn. The owner can
+    also ask "what can I change?" and get the same list, through the phrase
+    grammar that already answers it."""
+    head = ("Change one of Jarvis's own on/off settings, named the way the owner said it - "
+            "any wording; you match it, this is not a fixed phrase. For example "
+            "\"prompt coach\", \"quiet hours\", \"web search\", \"humour\". ")
+    tail = (" \"value\" is on or off. A change that loosens a rule, or turns on something "
+            "that reads or reaches more, raises ONE approval card and changes nothing until "
+            "it is answered; a cosmetic one happens at once. If Jarvis cannot change that "
+            "setting, say so plainly - never claim it was changed.")
+    return head + tail
+
+
+def _prepare_change_setting(args: dict):
+    """Present because every Tool needs a prepare; NEVER REACHED by a real turn.
+    _one_call hands SETTINGS_TOOL to _settings_call before the generic
+    prepare()/gate/execute() path, because the setting's own setter is the gate
+    (see SETTINGS_TOOL), and _PLAN_EXCLUDED_STEPS keeps a plan step from naming
+    it at all.
+
+    IT DOES NOT REFUSE, and it does not need to: the plan path is closed before
+    prepare() runs, and a real turn never arrives here. What makes the closure
+    safe is the other end - `_execute_change_setting` below refuses - so any
+    path that somehow reached execute() would change nothing. (An earlier
+    version of this docstring claimed this function refused in its result; a
+    second reader caught that it returns a normal prepare. Corrected
+    2026-10-13.)"""
+    return None, ("Change one of Jarvis's own settings by name, through the settings "
+                  "tool - that is where the setting's own rule is applied.")
+
+
+def _execute_change_setting(args: dict, state):
+    """NEVER REACHED - see _prepare_change_setting. Refuses rather than applies,
+    so no path that skips _settings_call can change a setting."""
+    return {"ok": False, "changed": False,
+            "error": "refused: a setting is changed through the settings tool's own "
+                     "path, not this one, so nothing was changed."}
 
 
 TOOLS: dict = {
@@ -1975,6 +2095,22 @@ TOOLS: dict = {
         "coming_up", "List the owner's timers, alarms, reminders and to-do list on this PC.",
         {"type": "object", "properties": {}},
         _plain_prepare("Coming up"), lambda args, state, **_: {"ok": False}),
+    # Changing one of Jarvis's own settings by name - see SETTINGS_TOOL above
+    # for why this is not put to the gate here, and why that is not a weakening.
+    # Its prepare/execute are deliberately unreachable: _one_call hands it to
+    # _settings_call before the generic path, so nothing can apply a setting
+    # change through this object. They refuse rather than guess if some future
+    # path ever reaches them.
+    SETTINGS_TOOL: Tool(
+        SETTINGS_TOOL, _settings_tool_text(),
+        {"type": "object", "properties": {
+            "setting": {"type": "string",
+                        "description": "the setting, in the owner's own words"},
+            "value": {"type": "string", "enum": ["on", "off"],
+                      "description": "on to switch it on, off to switch it off"}},
+         "required": ["setting", "value"]},
+        _prepare_change_setting,
+        lambda args, state, **_: _execute_change_setting(args, state)),
 }
 
 
@@ -1999,6 +2135,43 @@ SCHEDULE_TOOLS = frozenset({"set_timer", "set_reminder", "todo_add", "todo_done"
 SCHEDULE_AFTER_OUTSIDE = ("refused: outside text shaped this turn, so Jarvis does not set or "
                           "change timers, reminders or the to-do list from it. Nothing was "
                           "changed. Tell the owner they can type or say it themselves.")
+
+SETTINGS_AFTER_OUTSIDE = ("refused: outside text shaped this turn, so Jarvis does not change a "
+                          "setting from it. Nothing was changed. Tell the owner plainly that "
+                          "you cannot change settings in a turn shaped by a page, an email, a "
+                          "file or something they did not write themselves, and that saying it "
+                          "in their own words works.")
+
+SETTINGS_VALUE_WORDS = ("refused: the value has to be \"on\" or \"off\". Nothing was changed. "
+                        "Say which of those the owner asked for.")
+
+
+def _settings_turn_is_shaped(watch: "_TurnWatch") -> bool:
+    """Is THIS turn's request shaped by anything that is not the owner's own
+    words right now? The four PER-TURN signals `_TurnWatch.shaped_by` uses - a
+    reading tool that ran, the newest message not the owner's own, text the app
+    sent, planted-instruction flags - WITHOUT the conversation's own taint.
+    (Deliberately not all of shaped_by: `secrets`, `opened_after_outside` and
+    `_came_from_outside(args)` are the other three, and each needs a `read` or a
+    tool result to be set, which `read` already catches. Said precisely because
+    a second reader caught the earlier claim that this WAS the per-turn half.)
+
+    WHY THAT HALF AND NOT THE WHOLE THING (2026-10-13). SCHEDULE_TOOLS refuse on
+    the whole test, conversation taint included - and `tainted` is
+    CONVERSATION-level and sticky (jarvis_chat_log.conversation_tainted: once
+    any earlier turn of a chat read outside text, every later turn of it is
+    tainted until the app starts a new chat). For a timer that is affordable.
+    For a setting it would mean the owner could not change a setting by asking
+    for the rest of any chat in which Jarvis had once read an email or a page -
+    and the SPOKEN path applies a setting in exactly that chat with no check at
+    all, so refusing here would not be stricter than the app, only than the
+    tool, and the tool would be useless where the owner actually uses it.
+    What IS caught: a page, an email or a file read in the SAME turn as the
+    request (the live injection vector - the plant is in front of the model as
+    it chooses the call), a newest message that is not the owner's own words,
+    and text the app sent of its own. Anything planted earlier is still in the
+    context, and for that the setting's own rule still stands, unchanged."""
+    return bool(watch.read or watch.provenance or watch.app_context or watch.flags)
 
 
 def _newest_user_text(convo: list) -> str:
@@ -4001,7 +4174,14 @@ def _provenance(m: dict) -> str:
 #: outside text just because the first one was sent or saved.
 #: tidy_inbox's own answer ("Archived 3 emails.") is counts and words of
 #: ours, never a subject or a sender - so it is not outside text either.
-_NOT_READING = {"calculator", "send_email", "draft_email", "tidy_inbox", "retirement_whatif"}
+_NOT_READING = {"calculator", "send_email", "draft_email", "tidy_inbox", "retirement_whatif",
+                # SETTINGS_TOOL (2026-10-13): changing a setting takes nothing IN
+                # from outside - it reads no page, no file, no mail - so it must
+                # not be recorded as a read. Were it recorded as one, the turn
+                # would count as shaped and a later note write in the same turn
+                # would wait for a person for no reason, and shaped_by would say
+                # Jarvis had read something it had not.
+                SETTINGS_TOOL}
 
 
 def strip_chat_markers(text: str) -> str:
@@ -4809,6 +4989,15 @@ TOOL_GROUPS = (
     # already offered by default costs nothing while it stays off.
     ("control", "click or type in a program, tap on the phone, drive a web page",
      ("control_computer", "control_phone", "browser_control", "propose_plan")),
+    # Changing one of Jarvis's own settings by name (SETTINGS_TOOL,
+    # 2026-10-13). Its own group rather than the core, for exactly the reason
+    # the read_web_page note above gives: its description is 285 tokens, the
+    # core is sent on EVERY turn, and a group costs only its own name and its
+    # one line (about 23 tokens, measured - test_short_tool_list.py pins it).
+    # It fits the same pattern read_web_page set: one deliberate act, which
+    # raises its own approval card whenever the setting's own rule says so.
+    # Reached only with `[tools] short_list = true`, which ships OFF.
+    ("settings", "change one of Jarvis's own settings", (SETTINGS_TOOL,)),
     # The plug-in programs (jarvis_mcp.py). Their tools are reached ONLY
     # through here - never in the core, whether or not the short list is on.
     ("plugins", "read-only tools from plug-in programs on this PC", ()),
@@ -7719,6 +7908,143 @@ def _nothing_done_line(text: str, steps: list, *, spoken: bool = False) -> str:
     return ""
 
 
+def _settings_call(args: dict, call: dict, convo: list, steps: list, say_step,
+                   *, watch: "_TurnWatch") -> None:
+    """One change_setting call - the whole of the model-facing settings tool.
+    See SETTINGS_TOOL for why this is not put to the gate here, and why that is
+    not a weakening of it.
+
+    WHAT HAPPENS, IN ORDER, AND WHY EACH STEP IS HERE:
+      1. a turn shaped by outside text changes nothing (SETTINGS_AFTER_OUTSIDE) -
+         STRICTER than the spoken path, never looser;
+      2. the name is resolved against the registry's own table. Unresolved or
+         ambiguous: answered in words, nothing changed and NO card (there is
+         nothing to approve, and offering a card for a setting that cannot be
+         changed would be a lie in card form);
+      3. the value must be exactly on or off;
+      4. THE SETTING'S OWN `set()` RUNS, and it is the gate: a cosmetic change
+         is applied at once, and anything that loosens a rule, turns on
+         something that reads or reaches more, or touches privacy or how Jarvis
+         works raises its own card - its own risk text, its own Windows Hello
+         and PC rules. This function decides no tier and raises no card of its
+         own, so one change can never produce two cards;
+      5. what is handed back is the SETTER'S OWN sentence, so the answer cannot
+         claim more than happened. A change still waiting on a card says so and
+         is never reported as done - `changed` is False, because nothing has
+         changed yet.
+
+    SETTINGS_TOOL is in _NOT_READING: a settings change takes nothing in from
+    outside, so it must not taint the turn or make a later note write wait for a
+    person."""
+    name = SETTINGS_TOOL
+
+    def reply(result: dict) -> None:
+        convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                      "content": _tool_content(result)})
+
+    def stop(why: str, outcome: str = "refused") -> None:
+        steps.append({"tool": name, "ran": False, "ok": False, "outcome": outcome})
+        say_step("tool_refused", name)
+        reply({"ok": False, "changed": False, "error": why})
+
+    if _settings_turn_is_shaped(watch):
+        return stop(SETTINGS_AFTER_OUTSIDE)
+    if watch.cards >= CARDS_PER_TURN:
+        # WHY THIS IS CHECKED BEFORE THE SETTING IS EVEN NAMED, and why a
+        # cosmetic change is refused by it too. Every other tool is refused at
+        # the limit only when its call WOULD ask (_would_ask in the generic
+        # path), which this tool cannot know: whether a setting asks is decided
+        # by the setting's own setter, and by the time it has decided, its card
+        # is already up. Without this, one answer could raise one card per
+        # carded setting - twelve of them - while CARDS_PER_TURN says one answer
+        # may ask five times. The limit protects the owner from being buried in
+        # cards, so it wins: a cosmetic change in an answer that has already
+        # asked five times is refused with the same sentence every other tool
+        # gets, which tells the owner to ask again in a new message.
+        return stop(CARD_LIMIT_ERROR.format(n=CARDS_PER_TURN))
+    value = str(args.get("value") or "").strip().lower()
+    if value not in ("on", "off"):
+        return stop(SETTINGS_VALUE_WORDS)
+    asked = str(args.get("setting") or "").strip()
+    try:
+        import jarvis_settings_registry as R
+    except Exception as exc:
+        return stop(f"the settings list is not available here ({type(exc).__name__}), so "
+                    f"nothing was changed.", "unknown")
+    setting = R.find_bool_setting_words(asked)
+    if setting is None:
+        steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+        say_step("tool_refused", name)
+        return reply({"ok": False, "changed": False,
+                      "error": R.cannot_change_setting_words(asked)})
+    on = value == "on"
+    # `peer`/`local` are deliberately NOT passed here, and that is a CHECKED
+    # claim rather than an oversight (2026-10-13, raised by a second reader).
+    # The spoken path passes them (jarvis_quick._run_settings_bool ->
+    # `setting.set(f["on"], peer=peer, local=local)`), so this is a real
+    # difference - and exactly one place in these 21 chains reads them:
+    # jarvis_limits.change refuses a `pc_only` row when the caller is not the
+    # PC. The five PC-notification switches this tool can reach are built with
+    # pc_only=False on purpose (jarvis_limits._notify_rows), so there is nothing
+    # in this table for them to refuse, and the answer cannot differ today.
+    #
+    # What WOULD differ, and the reason this is written down: a future setter
+    # that gains a pc_only rule needs them threaded from the turn - run_local_turn
+    # does not carry peer/local at all - and until then, passing None is not a
+    # safe no-op. `jarvis_owner_check.from_this_pc(None, ...)` returns True, so
+    # None reads as "the PC" and a change asked for from the phone would be
+    # treated as though it came from the PC. Whoever adds such a rule must thread
+    # them; this comment is here so that is found, not rediscovered.
+    try:
+        got = setting.set(on)
+    except Exception as exc:
+        return stop(f"{name} could not change {setting.key} ({type(exc).__name__}), so "
+                    f"nothing was changed.", "unknown")
+    ok = bool(getattr(got, "ok", False))
+    waiting = bool(getattr(got, "waiting", False))
+    said = str(getattr(got, "said", "") or "")
+    if waiting:
+        # The setting's own card is up, raised from the setter. It IS a card
+        # this turn raised, so it counts against CARDS_PER_TURN like any other:
+        # that limit exists to stop one answer asking the owner twenty times.
+        # Nothing is done to the stream's status here on purpose: the card is
+        # drawn by the setter's own machinery, which is exactly how the SPOKEN
+        # path raises the same card, and the model's own answer says it is
+        # waiting (step 5 above).
+        watch.cards += 1
+        # NOT "ran": nothing has changed yet, and the setting's own module owns
+        # both the card and its answer - this turn genuinely does not know the
+        # outcome. "unknown" is the honest word, and the only other option would
+        # be a new word: jarvis_skill_discovery.KNOWN_OUTCOMES stores anything
+        # outside its own list as "unknown" anyway, so a new one here would be
+        # silently rewritten rather than kept.
+        #
+        # AND NO STEP EVENT IS EMITTED, which is a fix (2026-10-13, found by a
+        # second reader). This used to emit say_step("tool_finished", name,
+        # ok=True), and BOTH apps render that as "<tool> done"
+        # (jarvis-desktop/src/step-words.js:34-35,
+        # jarvis-client .../net/Steps.kt:46-47) - so the owner would have seen
+        # "change_setting done" while the card was still up and nothing had
+        # changed. That is precisely the looks-like-success failure this whole
+        # feature exists to end, so it must not be reintroduced by the progress
+        # line. The card is drawn by the setter's own machinery - exactly how
+        # the SPOKEN path raises it, which emits no step at all either - and the
+        # answer the model is handed says it is waiting (step 5 above).
+        steps.append({"tool": name, "ran": False, "ok": False, "outcome": "unknown"})
+    elif ok:
+        # "auto" is exactly what the gate reports for a change that needed no
+        # card, and it is in jarvis_skill_discovery.RAN_OUTCOMES, so a setting
+        # that really changed is counted as having happened.
+        steps.append({"tool": name, "ran": True, "ok": True, "outcome": "auto"})
+        say_step("tool_finished", name, ok=True)
+    else:
+        steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+        say_step("tool_refused", name)
+    reply({"ok": ok, "changed": bool(ok and not waiting), "waiting": waiting,
+           "setting": setting.key, "value": value, "said": said,
+           "error": "" if ok else (said or "that setting could not be changed.")})
+
+
 def _one_call(call: dict, names: list, convo: list, steps: list, checker,
               announce, out: "_Out", say_step, *, watch: Optional[_TurnWatch] = None,
               tell_owner: Optional[Callable[[str], None]] = None,
@@ -7770,6 +8096,19 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # Timers, alarms, reminders and the to-do list - not put to the gate
         # here. See SCHEDULE_TOOLS for why.
         _schedule_call(name, args, call, convo, steps, say_step, watch)
+        return
+    if name == SETTINGS_TOOL and not outside_program:
+        # Not put to the gate here either, and for the same kind of reason: the
+        # setting's OWN rule is the gate, and it is the only thing that can
+        # carry that setting's risk text, its Windows Hello rule and its PC
+        # rule. See SETTINGS_TOOL above for the argument in full.
+        #
+        # `and not outside_program` is belt: a plug-in tool is named
+        # "mcp__<server>__<tool>" (jarvis_mcp.py), so it can never equal this
+        # bare name today - but if one ever did, this branch would swallow it and
+        # it would never run. With the guard it falls through to the generic
+        # path, where a plug-in tool always needs a person's yes.
+        _settings_call(args, call, convo, steps, say_step, watch=watch)
         return
     if name == "send_email":
         # Refused before anything is planned or anyone asked - see SEND_EMAIL_*.

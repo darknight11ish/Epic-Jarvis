@@ -877,5 +877,33 @@
     "properties": {}
    }
   }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "change_setting",
+   "description": "Change one of Jarvis's own on/off settings, named the way the owner said it - any wording; you match it, this is not a fixed phrase. For example \"prompt coach\", \"quiet hours\", \"web search\", \"humour\".  \"value\" is on or off. A change that loosens a rule, or turns on something that reads or reaches more, raises ONE approval card and changes nothing until it is answered; a cosmetic one happens at once. If Jarvis cannot change that setting, say so plainly - never claim it was changed.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "setting": {
+      "type": "string",
+      "description": "the setting, in the owner's own words"
+     },
+     "value": {
+      "type": "string",
+      "enum": [
+       "on",
+       "off"
+      ],
+      "description": "on to switch it on, off to switch it off"
+     }
+    },
+    "required": [
+     "setting",
+     "value"
+    ]
+   }
+  }
  }
 ]

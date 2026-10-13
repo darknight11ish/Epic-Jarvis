@@ -19592,3 +19592,113 @@ are tested without a Tauri app or a network
 `jarvis-client/app/src/test/java/com/jarvis/client/PicturesTest.kt`.
 
 `tools/check_parity.py` carries all three routes.
+
+## 130. Changing a setting by asking, in any words: the `change_setting` tool (added 2026-10-13)
+
+**The defect this closes.** "Jarvis can change all settings if I ask" was false. A
+settings request reached a setting only when the sentence fitted the fixed phrase
+grammar in `jarvis_quick.py`, which runs BEFORE the model on every `/api/chat` turn. A
+sentence that missed it was answered by the model, and the model had no settings tool at
+all and was never told it could not change anything - so the failure did not look like a
+refusal, it looked like success (`.dsh-scratch/settings-reachability-audit.md`). #360
+made the refusal honest and reached eight more switches; this is the other half.
+
+**What it is.** One tool, `change_setting`, with two arguments: `setting` (the owner's
+own words for the switch - any wording; the model does the matching, not a fixed phrase)
+and `value` (`"on"` or `"off"`). It reaches every switch in
+`jarvis_settings_registry.BOOL_SETTINGS` - 21 of them - and nothing else.
+
+**Which tree / which tier.** It is deliberately NOT put to `jarvis_gate.check()` in
+`jarvis_agent._one_call`, for the same reason `SCHEDULE_TOOLS` and `web_search` are not:
+its gate already exists, and it is better placed. Every setting's rule lives in ONE
+function, `BoolSetting.set`, and that function is what a spoken sentence runs.
+`change_setting` CALLS THAT SAME FUNCTION. So:
+
+| setting | ON | OFF |
+|---|---|---|
+| background learning, the sensitive-topics switch, lights without asking, web search, the watch switch, the phone-notification switch, picture mode, the headless browser, senders in the briefing, the big coder, the better voice | one card | at once |
+| asking before every web search (the REVERSED pair) | at once | one card |
+| the prompt coach, making pictures, the five PC-notification switches, humour, voice-follows-the-face | at once | at once |
+
+Because the card is the setting's OWN, it carries that setting's own risk text, its own
+Windows Hello rule and its own PC rule: no second card is ever raised for one change, and
+no generic action name has to stand in for 21 different risk texts. The tool's own name
+maps to `change_own_config` in `jarvis_gate._TOOL_ACTIONS` - a row added on 2026-10-13 by
+`backend/gate-entries.patch` (with its previous version recorded in
+`backend/patch-history/`), because `test_agent.py` requires every tool's lookup name to be
+a KEY of that table, and the action name alone is not one. That action already carries the
+tier (`[autonomy.tiers]`, `ask`) and the card wording ("change one of its settings") that
+the lights, briefing-senders and big-coder switches use, so no new tier and no new card
+words are invented. `jarvis_reach`'s own row for the tool says in words that what asks
+depends on the setting.
+
+**What it refuses.** A name it cannot resolve against the table is answered in words
+(`jarvis_settings_registry.cannot_change_setting_words`), listing what CAN be changed:
+nothing is changed and NO card is raised, because a card for something that cannot
+happen is a lie in card form. It never guesses - changing a switch the owner did not name
+is worse than changing nothing. A switch that is on the Settings page but has no route at
+all (`NOT_BY_ASKING`) gets a sentence naming the screen and the row.
+
+**Stricter than the spoken path, in one place.** A turn shaped by outside text - a
+reading tool ran in THAT turn, the newest message is not the owner's own words, the app
+sent text of its own, or planted instructions were seen - changes nothing at all. The
+spoken path has no such check; this does. It is deliberately NOT refused on the
+conversation's own `tainted` flag alone: that flag is conversation-wide and sticky, so
+refusing on it would mean a setting could not be changed by asking for the rest of any
+chat in which Jarvis had once read an email or a page - while the spoken path changes a
+setting in exactly that chat with no check at all. Both halves are pinned by
+`backend/test_settings_tool.py`.
+
+**Honesty, tied to what already exists.** A change still waiting on its card is recorded
+as NOT run, so it cannot back an "I have done it" claim
+(`jarvis_claims.action_succeeded`): the answer gets the "Nothing was actually done" line
+instead of standing as a claim. The model is handed the setter's own sentence, so it
+cannot report "done" while a card is waiting.
+
+**A defect found and fixed in the same pass.** `jarvis_settings_registry.set_humor`
+called `jarvis_manner.handle_post(...)`, and `jarvis_manner.py` has only `handle_get` and
+`handle_set`. So "turn on humour", added by #360, raised AttributeError and could not
+work, while the Settings page's own route (`POST /api/manner`) went through `handle_set`
+and did. `backend/test_settings_tool.py` now walks every setter's own imports with `ast`
+and fails on any module attribute that does not exist.
+
+**What a second reader changed (2026-10-13).** Two weak spots were found in the first
+version of this work, and both are fixed with regression cases:
+
+* The tolerant word matcher accepted a request whose every word fitted INSIDE a longer
+  alias name, so bare category nouns resolved to switches that had nothing to do with
+  them: "second graphics card" reached `better_voice`, "pc sounds" reached
+  `pc_alarm_sounds`, "screen mode" reached `screen_picture`, "the big model" reached
+  `big_coder`. Every one of those switches applies with NO card, so the owner's own words
+  would have flipped a switch they never named - the one outcome the matcher exists to
+  prevent. It now runs in ONE direction only: the request must CONTAIN a whole alias's
+  words, so a restatement like "stop showing me notifications on my watch" still reaches
+  `watch notifications` while a phrase that names no single setting is refused. Eleven of
+  the wrong matches are kept as regression cases in `backend/test_settings_tool.py`.
+* A change still waiting on its card emitted a `tool_finished` step event, and BOTH apps
+  draw that as "<tool> done" (`jarvis-desktop/src/step-words.js`,
+  `jarvis-client/.../net/Steps.kt`). The owner would have read "change_setting done" while
+  the card was still up and nothing had changed - the looks-like-success failure this
+  feature exists to end. No step event is emitted for a waiting change now; the card and
+  the answer carry it, exactly as on the spoken path.
+
+**Where it lives.** `jarvis_agent.py` (`SETTINGS_TOOL`, `_settings_call`, the branch in
+`_one_call`, `_PLAN_EXCLUDED_STEPS` so a plan can never name it), `jarvis_settings_registry.py`
+(`find_bool_setting_words`, `cannot_change_setting_words`), `jarvis_reach.py` (its plain
+name). **It ships ON**, by the owner's decision of 2026-10-13 ("yes turn it on for my
+pc. it should also be enabled by default") - the second tool after `web_search` to be
+switched on out of the box, and `[tools].enabled` in `jarvis-framework.toml` says so.
+(Turning it back off is dropping that one name from that list.) Its description is 285
+tokens, so it has its own `more_tools` group rather than a place in the core.
+
+Desktop and phone: **both, with nothing app-specific** - the tool is reached through the
+same `/api/chat` turn both apps already use, so `docs/ARCHITECTURE.md` §8 needs no entry.
+`tools/check_parity.py` is clean, and the new tool is carried in `features.json` (all
+three copies) as "Change a setting by asking, in any words".
+
+**Tests.** `backend/test_settings_tool.py` is the suite: both entrances share one setter,
+a pending change is not a done claim, an unknown name changes nothing and raises no card,
+outside text stops it, and the `ast` check that every setter calls a function that
+exists. `backend/test_tool_text.py`, `test_short_tool_list.py`,
+`test_agent_retirement_wiring.py`, `test_reach.py`, `test_private_aloud.py` and
+`test_tool_eval.py` carry the new tool in their own lists and generated fixtures.
