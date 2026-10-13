@@ -1997,6 +1997,78 @@ This entry is the RECORD of his decision. The behaviour - Jarvis changing
 settings when asked, and `PC_ONLY_ACTIONS` yielding to the phone's own lock - is
 a separate piece of work.
 
+Decided 2026-10-13: **the desktop's whole Tauri stack moves up one generation,
+and `rust-version` moves with it.** Every crate of the Tauri 2.12 generation
+declares MSRV 1.90 - read from crates.io's own per-version metadata on
+2026-10-13, not assumed - so the single line `rust-version = "1.89"` in
+`jarvis-desktop/src-tauri/Cargo.toml` was what held the entire stack one
+generation back. Raising it to `"1.90"` is the change that lets the rest move;
+it is not a separate errand.
+
+**What moved, as ONE coordinated change** (`Cargo.toml`, versions as resolved in
+`Cargo.lock`): `tauri` 2.11.6 -> 2.12.3, `tauri-build` 2.6.3 -> 2.7.2,
+`tauri-plugin-updater` 2.11.0 -> 2.13.3 (three minors behind on a security
+surface, so this one did not wait), `notification` 2.4.0 -> 2.6.0,
+`store` 2.4.4 -> 2.5.0, `single-instance` 2.4.4 -> 2.5.3,
+`clipboard-manager` 2.3.3 -> 2.4.2, `global-shortcut` 2.3.2 -> 2.4.1,
+`window-state` 2.4.1 -> 2.5.0 (the `=` exact pin dropped),
+`window-vibrancy` 0.6.0 -> 0.8.1, plus `wry` 0.55.1 -> 0.57.0 and
+`tao` 0.35.3 -> 0.37.1 transitively. On the JS side `@tauri-apps/cli`
+`^2.1.0` -> `^2.12.0` (2.12.2 in `package-lock.json`), so the CLI and the crate
+name the same generation.
+
+**The two pins the file used to call "deliberate" were the same blocker, and
+each had a second half that survives.** Both are now resolved, and neither
+surviving half was touched:
+
+- **`window-state`.** The `=2.4.1` pin had exactly one reason: 2.5.0 needs Rust
+  1.90. That reason is gone with `rust-version`. The OTHER half of the decision
+  did not depend on the pin and still stands: the plugin's default restores
+  whether a window was VISIBLE, which would put the HUD on screen before Windows
+  Hello while App lock is on. Re-checked in 2.5.0's own `src/lib.rs` rather than
+  assumed - `StateFlags::VISIBLE` is still `1 << 3`, `Default for StateFlags` is
+  still `all()`, and `WindowState::default()` still has `visible: true`.
+  `window_memory.rs` still restricts the restore to size, position and
+  maximised, and `visibility_is_never_remembered` and
+  `only_size_place_and_maximised_are_remembered` are unchanged and still hold.
+- **`window-vibrancy`.** The old comment said 0.6 because `tauri 2.11.6` itself
+  depends on `^0.6`, so anything else compiles a SECOND copy of the crate. That
+  reasoning was right and inverts with the bump: `tauri 2.12.3` depends on
+  `window-vibrancy ^0.8.1` (read from its published dependency list, not
+  guessed), so after moving Tauri, **staying on 0.6 is what would duplicate it**.
+  The two had to move together, and they did: `Cargo.lock` now holds exactly one
+  `window-vibrancy`, 0.8.1.
+
+**One coupling nobody had written down, found by the compiler.** Adding
+`Win32_System_LibraryLoader` to our own `windows-sys` feature list. Our
+`lock.rs` test uses `GetModuleHandleW`, which that feature gates, but this file
+never asked for it: it arrived by **feature unification** from
+`window-vibrancy 0.6.0`, which depends on `windows-sys 0.59` with
+`Win32_System_LibraryLoader` in its list. `window-vibrancy 0.8.1` is on
+`windows-sys >= 0.60, <= 0.61` instead, so the feature stopped arriving and the
+test target stopped compiling while the library target still did. It is now
+declared where it is used, which is the right place for it: a feature of a crate
+already in the graph, not a new dependency, and `windows-sys` itself did not
+move.
+
+**What deliberately did NOT move, and why** - each has a recorded reason that a
+version number alone would violate: `reqwest` stays `0.12` (`native-tls` /
+schannel on purpose, to avoid a second TLS stack; re-checking the newer major's
+TLS feature story was explicitly left undone), `windows-sys` stays `0.59`,
+`windows` stays `0.61` and `windows-future` stays `0.2` (chosen so Tauri's own
+copies are not duplicated - still true after the bump: `windows 0.61.3` is still
+required by `tauri-winrt-notification 0.7.3` through `notify-rust`, so the pin
+adds no new copy), and `image` (0.25.10), `serde` (1.0.229), `xcap` (0.9.8),
+`hound` (3.5.1) and `qrcodegen` (`=1.8.0`, exact) are untouched in
+`Cargo.lock`. One duplicate DID appear and could not be avoided:
+`keyboard-types` is now both 0.7.0 (`global-hotkey 0.8.0`, via
+`tauri-plugin-global-shortcut` 2.4.1, the newest release) and 0.8.3
+(`muda 0.20.0`, via `tauri` 2.12.3). `reqwest` 0.12 + 0.13 and the four
+`windows` / five `windows-sys` copies were already there before this change.
+
+**Still blocked, unchanged by this:** the `sonora` crate needs Rust **1.91**, so
+it stays out either way. This move takes the floor to 1.90, not to 1.91.
+
 Decided 2026-10-13: **deleting a reminder that has already gone off must work.**
 His answer to the parked question in `docs/defect-register.tsv`'s DEF-008 row -
 "if the owner wants a way to clear a fired entry, that is a product decision" -
