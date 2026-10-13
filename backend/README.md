@@ -5956,8 +5956,9 @@ Checks shows the new switch on the wake word card.
 
 # `approval-expiry.patch` — how long each approval card has left
 
-**What it fixes.** An approval waits `approval_timeout_seconds` (180 in the
-shipped `jarvis-framework.toml`) and is then refused on its own. Nothing on
+**What it fixes.** An approval waits `approval_timeout_seconds` (600 in the
+shipped `jarvis-framework.toml` since 2026-10-13 — ten minutes; it was 180)
+and is then refused on its own. Nothing on
 any screen said so: the phone had a countdown, but it read a field only the
 old WebSocket server ever sent, so it never showed. Cards simply vanished.
 

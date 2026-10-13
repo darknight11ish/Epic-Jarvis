@@ -754,9 +754,9 @@ def _wake_gate(action: str, detail: dict, prompt: str):
 def _wake_timeout() -> float:
     try:
         return float(fw.load_framework().get("autonomy", {})
-                     .get("approval_timeout_seconds", 180))
+                     .get("approval_timeout_seconds", 600))
     except Exception:
-        return 180.0
+        return 600.0
 
 
 def _audit(event: str, detail: dict) -> None:

@@ -160,7 +160,7 @@ PC_ONLY = ("This card can only be approved on the PC, with Windows Hello, so not
 
 #: The shipped approval_timeout_seconds, used when a row carries no
 #: `expires_in` (a backend without approval-expiry.patch).
-DEFAULT_TIME_LEFT = 180.0
+DEFAULT_TIME_LEFT = 600.0
 
 # ---------------------------------------------------------------------------
 # Which approvals are risky - ONE rule, three places
@@ -288,8 +288,8 @@ _SECRET = secrets.token_bytes(32)
 _STAMPS: dict = {}
 _STAMPS_LOCK = threading.Lock()
 _MAX_STAMPS = 256
-#: Longer than any card waits (180 s shipped), so a stamp never outlives the
-#: card it was made for by much.
+#: Longer than any card waits (600 s shipped since 2026-10-13), so a stamp
+#: never outlives the card it was made for by much.
 _STAMP_TTL = 15 * 60.0
 
 

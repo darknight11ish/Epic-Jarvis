@@ -74,9 +74,13 @@ wired_into_approval_endpoint = false
 # What happens to an action that is not listed in [autonomy.tiers] at all, or
 # to a confirmation prompt the gate cannot map onto one of these names. "ask"
 # is the only defensible answer: an action nobody classified is not thereby
-# safe. Seconds to wait for that answer before refusing.
+# safe. Seconds to wait for that answer before refusing. Ten minutes by
+# default (owner, 2026-10-13: "every card should be 10 minutes unless there is
+# a reason to be shorter (which is okay in that case)") - three minutes was
+# too short to find a surface to approve from. A caller may still pass a
+# shorter `timeout=` where it has a reason.
 unknown_action_tier = "ask"
-approval_timeout_seconds = 180
+approval_timeout_seconds = 600
 
 [autonomy.tiers]
 # Docker (jarvis_docker.py): starting a service gives Jarvis more, so it asks;

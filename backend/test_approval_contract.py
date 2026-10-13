@@ -57,8 +57,8 @@ HUD = REPO / "jarvis-desktop" / "src" / "jarvis_hud.html"
 
 #: Frozen clock for the fixture, so it is byte-stable.
 NOW = 1_800_000_000.0
-#: The shipped `approval_timeout_seconds`.
-APPROVAL_TIMEOUT = 180
+#: The shipped `approval_timeout_seconds` (2026-10-13: 180 -> 600, ten minutes).
+APPROVAL_TIMEOUT = 600
 
 FAILED, PASSED = [], []
 
@@ -265,8 +265,8 @@ def t_the_expiry_patch_applies_on_top_of_approval_notice():
 
 def t_expires_in_counts_down_from_created_and_never_guesses():
     d = stamp_expiry({"created": NOW - 30})
-    check("30 s after a 180 s card was raised, 150 s are left", d.get("expires_in") == 150, d)
-    d = stamp_expiry({"created": NOW - 500})
+    check("30 s after a 600 s card was raised, 570 s are left", d.get("expires_in") == 570, d)
+    d = stamp_expiry({"created": NOW - 700})
     check("a card past its deadline says 0, not a negative", d.get("expires_in") == 0, d)
     for bad in ("yesterday", None, "", [1]):
         d = stamp_expiry({"created": bad})
