@@ -1930,3 +1930,70 @@ applied until the owner says so. Written down as entry **003** of
 first" page (`fixed:playbook_rejection`, "Writes a guessed rule for you to Keep
 or Discard").
 
+Decided 2026-10-13, the owner's two answers about changing settings by asking:
+**Jarvis may change any setting when the owner asks in chat or in Live, and ONE
+approval card - decided from either app - is what authorises it.** His words:
+*"jarvis should be able to change all settings if i ask it to in chat or in the
+live mode, if its a big settings change that would impact privacy, security, or
+significantly change functioning it should send me an approval card"*. Asked
+the follow-up that rule implies, he chose: **"Let a card alone authorise it,
+from either app"**. Asked what should take the place of the PC-only Windows
+Hello step he had required for exactly these changes, he answered: *"yes, i
+should be able authorize any card on my phone with my fingerprint on my phone,
+just like using windows hello on my desktop"* - so the phone's own fingerprint
+or PIN is his intended equal of Windows Hello, for EVERY card, not only the
+ones the risk table calls risky.
+
+**What this replaces**, quoted word for word from the 2026-09-26 entry above:
+*"On the PC only, the owner may also loosen a short safe list (note writes, the
+wiki, reading their own calendar, email, notes and home status) - one card plus
+Windows Hello per change. **Nothing outside that list can be loosened from an
+app.**"* Both sentences are gone: there is no short safe list any more, and a
+change to something privacy- or security-related no longer has to be made at
+the PC. That is a WEAKENING and it is written here as one - the extra step that
+guarded exactly these changes is removed, and a card, decided from the phone as
+readily as from the PC, is now the gate.
+
+**What still protects it, so the whole trade is visible:**
+- **The card is the gate, and it must not weaken.** Every one of these changes
+  still raises an approval card naming what will change, and nothing happens
+  until the owner decides it. With the PC-only step gone the card is the only
+  thing between a request and the change, so its wording, what it lists and the
+  "What asks first" page matter more than before, not less.
+- **A lock is still required to approve, and this half is BUILT** - verified in
+  the source on 2026-10-13, not planned: the phone holds a Keystore signing key
+  that needs a fresh fingerprint or device credential for every single use
+  (`platform/ApprovalKey.kt`: `PURPOSE_SIGN`, `setUserAuthenticationRequired(true)`,
+  `setUserAuthenticationParameters(0, AUTH_BIOMETRIC_STRONG or
+  AUTH_DEVICE_CREDENTIAL)`, `setInvalidatedByBiometricEnrollment(true)`), the
+  real `BiometricPrompt` runs with that signature as its `CryptoObject`
+  (`ui/approval/BiometricGate.kt`), and the signature travels with the approval
+  to `POST /api/approve` (`net/SignedApproval.kt`, `JarvisApi.approve`). A phone
+  with no such key is refused and told so (`SignedApproval.OFFER_WORDS`). On the
+  PC, Windows Hello, as before.
+- **"No lock, no risky approval"** (2026-09-25) is UNCHANGED: on a PC without
+  Windows Hello set up, or a phone without a screen lock, a risky approval is
+  refused until one is set up, with a plain message saying how.
+
+**What is in the way, precisely - the remaining work.** The server does not
+honour the phone's signature for the actions this decision is about:
+`jarvis_owner_check.PC_ONLY_ACTIONS` (its own list: `loosen_what_asks_first`,
+`enable_reading_tool`, `restore_backup`, `pair_device`, `unretire_shared_key`,
+`register_approval_key`, `handoff_keep_offering`, `handoff_bring_to_front`)
+refuses such a card from any peer but the PC - `if action in PC_ONLY_ACTIONS and
+not here: 403, "This card can only be approved on the PC, with Windows Hello,
+so nothing was approved"` - and `jarvis_asks_first.py` says the same in words:
+*"jarvis_owner_check.PC_ONLY_ACTIONS makes its approval need Windows Hello and
+refuses it from any other device, so a phone (or anything pretending to be one)
+cannot approve it."* So a perfectly valid fingerprint-signed approval from the
+phone is still refused for `loosen_what_asks_first` - exactly the change this
+entry is about - and until that list is narrowed, **the phone still cannot
+loosen anything**: the decision above is not the shipped behaviour for it. That
+module is a protected one (`backend/<file>` and `jarvis-backend/<file>` are kept
+equal, and it is carried by `backend/asks-first.patch` with its own patch
+history), so this is a deliberate, reviewed change rather than a one-line edit.
+
+This entry is the RECORD of his decision. The behaviour - Jarvis changing
+settings when asked, and `PC_ONLY_ACTIONS` yielding to the phone's own lock - is
+a separate piece of work.
+
