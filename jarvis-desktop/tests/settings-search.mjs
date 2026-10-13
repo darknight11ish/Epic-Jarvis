@@ -15,6 +15,11 @@
  *
  * The last one is the bug this feature could plausibly introduce: two reasons
  * for the same `hidden` attribute, and the search must only own one of them.
+ *
+ * The suite's second half checks the typo tolerance added 2026-10-10 (one
+ * search word may be a little misspelt - NOT a licence to match anything
+ * roughly the same shape). Those checks run `rank` in the page, so they
+ * measure the shipped module rather than a copy of it.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -54,6 +59,22 @@ const type = async (page, text) => {
   await page.locator("#settings-search-input").fill(text);
   await page.waitForTimeout(250);
 };
+
+/**
+ * `rank` as the PAGE loads it - the shipped module, in the browser - so the
+ * matching checks measure the code the search box really runs. A copy of the
+ * rules written into this file could pass while the module did something else.
+ */
+const rankOf = (page, label, text, query) => page.evaluate(
+  async ([l, t, q]) => (await import("./settings-search.js")).rank(l, t, q),
+  [label, text, query]);
+
+/** The four tiers, named as the module and `SettingsSearch.kt` name them. */
+const EXACT = 4;   // the token IS a word of the heading
+const PREFIX = 3;  // the token starts a word of the heading
+const FUZZY = 2;   // the token is a near miss of a word of the heading
+const DETAIL = 1;  // the token is somewhere in the part's text
+const NONE = 0;
 
 /* ── The box is there, and it is first ──────────────────────────────────── */
 
@@ -213,6 +234,119 @@ await check("a card the owner hid stays hidden through a search and after it", a
   await type(page, "");
   assert.equal(await page.locator("#backup").isVisible(), false,
     "clearing the search un-hid a card the owner had hidden");
+  await page.close();
+});
+
+/* ── One typo must not hide a setting (2026-10-10) ──────────────────────── */
+
+await check("a single typo still finds the card", async () => {
+  const page = await open();
+  // "notifcation" is one letter dropped and one added from "notifications" -
+  // the exact miss the field reported, where the card used to vanish.
+  await type(page, "notifcation");
+  const left = await showing(page);
+  assert.ok(left.includes("notifications"),
+    `one typed typo hid the card: ${left.join(", ") || "nothing was left showing"}`);
+  assert.equal(await rankOf(page, "Notifications", "", "notifcation"), FUZZY,
+    "a miss of a heading's own word is not ranked as a near miss");
+  // One edit, at a length where one is the whole budget (4-7 letters is 1)...
+  assert.equal(await rankOf(page, "Setting", "", "setzing"), FUZZY,
+    "one substitution in a seven-letter word was not tolerated");
+  // ...and two edits at that length is one too many, or "settings" would be
+  // reachable from anything of the same shape.
+  assert.equal(await rankOf(page, "Setting", "", "setzinx"), NONE,
+    "a seven-letter word tolerated two edits");
+  // A long word gets two: "notifcation" -> "notifications" is two.
+  assert.equal(await rankOf(page, "Notifications", "", "notifcation"), FUZZY);
+  await page.close();
+});
+
+await check("a swapped pair of letters still finds the card", async () => {
+  const page = await open();
+  // Swapping two neighbours is ONE mistake, not two - "voise" for "voice".
+  await type(page, "voise");
+  const left = await showing(page);
+  assert.ok(left.includes("voice"),
+    `a transposition hid the card: ${left.join(", ") || "nothing was left showing"}`);
+  assert.equal(await rankOf(page, "Your voice", "", "voise"), FUZZY,
+    "a swapped pair counted as two edits, or as no match at all");
+  await page.close();
+});
+
+await check("a short word matches its own word, never a longer one an edit away", async () => {
+  const page = await open();
+  // A word of three letters or fewer gets NO edit tolerance at all: with one,
+  // "cat" would reach "chat", "bat", "cot" and "cut".
+  assert.equal(await rankOf(page, "Chat", "", "cat"), NONE,
+    `a three-letter search reached a longer word (cat -> chat)`);
+  assert.equal(await rankOf(page, "", "a chat about it", "cat"), NONE,
+    "a three-letter search reached a longer word in the detail text");
+  // ...and it must still match the word it IS, even when another word in the
+  // same heading begins with it - "cat" is a word, not only a prefix.
+  assert.equal(await rankOf(page, "Cat", "", "cat"), EXACT,
+    "a word that equals the heading was not an exact match");
+  assert.equal(await rankOf(page, "Cat catalogue", "", "cat"), EXACT,
+    "a short word was demoted to a prefix match because a longer word begins with it");
+  await page.close();
+});
+
+await check("a word typed in full does not reach a different word with a different opening", async () => {
+  const page = await open();
+  // One edit apart, but they do not open with the same two letters. The
+  // prefix guard is what keeps a whole word from landing on its neighbour.
+  assert.equal(await rankOf(page, "Rocket", "", "docket"), NONE,
+    "a word typed in full reached a different word one letter away");
+  assert.equal(await rankOf(page, "Deck", "", "dock"), NONE,
+    "a four-letter word reached a different word one letter away");
+  // The other half of the same rule: same opening, one edit out, it matches.
+  assert.equal(await rankOf(page, "Rocket", "", "rockit"), FUZZY,
+    "a near miss with the same opening was not tolerated");
+  // And words with nothing in common find nothing on the page at all.
+  await type(page, "zebra");
+  assert.equal((await showing(page)).length, 0,
+    `unrelated words found cards: ${(await showing(page)).join(", ")}`);
+  assert.equal(await page.locator("#settings-search-none").isVisible(), true,
+    "an unrelated word did not reach the 'nothing matches' answer");
+  await page.close();
+});
+
+await check("two words must BOTH be in the same part (AND, not OR)", async () => {
+  const page = await open();
+  await type(page, "voice");
+  const one = await showing(page);
+  await type(page, "voice strict");
+  const both = await showing(page);
+  assert.ok(both.includes("voice"),
+    `"voice strict" did not find the Voice card: ${both.join(", ") || "nothing was left showing"}`);
+  assert.ok(both.length < one.length,
+    `adding a second word did not narrow the page (${both.length} then ${one.length})`);
+  // A card holding only ONE of the words must not be drawn: that is OR, and
+  // it is what the query used to do when it was compared as one string.
+  await type(page, "voice backup");
+  assert.ok(!(await showing(page)).includes("voice"),
+    "a card with only one of the two words was drawn anyway");
+  assert.equal(await rankOf(page, "Your voice", "", "voice backup"), NONE,
+    "a word matching once counted for two words of the query");
+  assert.equal(await rankOf(page, "Your voice", "a backup of your voice", "voice backup"), DETAIL,
+    "both words in the same part did not match");
+  await page.close();
+});
+
+await check("the tiers still run exact, prefix, near miss, then the detail text", async () => {
+  const page = await open();
+  const label = "Your voice", body = "a paragraph about the voice print";
+  assert.equal(await rankOf(page, label, body, "voice"), EXACT,
+    "a word of the heading is not the top tier");
+  assert.equal(await rankOf(page, label, body, "voic"), PREFIX,
+    "a prefix of a heading word is not the second tier");
+  assert.equal(await rankOf(page, label, body, "voise"), FUZZY,
+    "a near miss of a heading word is not the third tier");
+  assert.equal(await rankOf(page, "", body, "voice"), DETAIL,
+    "the detail text is not the floor");
+  assert.equal(await rankOf(page, "", body, "voise"), DETAIL,
+    "a near miss inside the detail text fell out of the match entirely");
+  assert.ok(await rankOf(page, label, body, "voice") > await rankOf(page, "", body, "voice"),
+    "a heading match no longer beats a body match");
   await page.close();
 });
 

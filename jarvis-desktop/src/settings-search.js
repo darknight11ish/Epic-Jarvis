@@ -43,7 +43,18 @@
  *
  * The matching itself is pure and lives in `rank`, because that is the part
  * worth testing on its own; the phone's `SettingsSearch.kt` implements the
- * same three rules in Kotlin.
+ * same rules in Kotlin - the tiers, the edit budgets and the prefix guard
+ * below are a contract between the two apps, not a local choice, so a change
+ * here is a change there.
+ *
+ * ONE TYPO MUST NOT HIDE A SETTING (2026-10-10). Strict "does the text
+ * contain the query" matching meant `notifcation` found nothing at all and
+ * the page said the setting did not exist - the worst possible answer for a
+ * search box whose whole job is finding a card whose name you half-remember.
+ * So the words typed are compared word by word, and each word may be a
+ * little misspelt; see `rankWords` for the tiers and `fuzzyBudget` for how
+ * misspelt is allowed to be. What did NOT change: search still only shows
+ * and hides what is already on the page, and `data-menu-hidden` still wins.
  *
  * @module settings-search
  */
@@ -92,41 +103,154 @@ export function normalise(text) {
 }
 
 /**
+ * How well one part matched, for the caller that may want to order results.
+ * 0 means no match. `SettingsSearch.kt` uses the same four numbers.
+ */
+const EXACT = 4;   // the token IS a word of the label ("voice" -> "Your voice")
+const PREFIX = 3;  // the token starts a word of the label ("voic" -> "Voice")
+const FUZZY = 2;   // the token is a near miss of a word of the label
+const DETAIL = 1;  // the token is somewhere in the part's own text
+
+/** How many letters a fuzzy match must keep, and they are the first ones. */
+const GUARD = 2;
+
+/**
  * Does one part match, and how well? Pure - no DOM.
  *
- * Three rules, in order, and the first two are deliberately stricter than a
- * plain "contains":
+ * The query is split into words and EVERY word must be found in this one part
+ * (AND, not OR): "voice strict" needs both words in the SAME part, because
+ * "it is somewhere in the card" is exactly the vagueness the box exists to
+ * remove. The part's rank is the weakest word's rank, so one exact word and
+ * one near miss still ranks as a near miss.
  *
- *   1. an empty query matches nothing (the caller shows everything instead,
- *      so it is never reached with one);
- *   2. the label equals the query, or starts with it, or a word in the label
- *      does - "voice" finds "Your voice", and "check" finds "Voice check:
- *      how strict";
- *   3. otherwise the whole part's text merely contains the query - "who can
- *      see my chats" finding a paragraph that mentions it in passing.
+ * Within a part, one query word is looked for in this order:
  *
- * A rank is returned rather than a boolean so a caller can order results if
- * it ever wants to; 0 means no match. Rules 2 and 3 are also why "wi fi"
- * finds "Wi-Fi": both sides went through `normalise` first.
+ *   1. EXACT, against the label's own words - "voice" finds "Your voice";
+ *   2. PREFIX, against the label's own words - "voic" finds "Voice";
+ *   3. FUZZY, against the label's own words - "voise" finds "Voice";
+ *   4. DETAIL, anywhere in the part's text - a paragraph mentioning it in
+ *      passing still shows the card (the old rule 3, kept as the floor).
+ *
+ * Steps 1-3 run against the label's words rather than the whole label, which
+ * is what makes a heading match beat a body match: a word of the heading is
+ * worth more than the same word buried in a paragraph. A token that equals a
+ * word counts as EXACT even when another word in the label begins with it -
+ * "cat" is the word "cat" in "Cat chat", not merely a prefix of "catalogue".
+ *
+ * A rank is returned rather than a boolean so the four tiers stay named and
+ * ordered (the phone ranks the same way); 0 means no match. Both sides went
+ * through `normalise` first, which is also why "wi fi" finds "Wi-Fi".
  */
 export function rank(label, text, query) {
   return rankWords(normalise(label), normalise(text), normalise(query));
 }
 
 /**
- * `rank` on words that have ALREADY been through `normalise`: the same three
- * rules, and the only place they are written down. The page keeps both sides
+ * `rank` on words that have ALREADY been through `normalise`: the rules
+ * above, and the only place they are written down. The page keeps both sides
  * normalised (see `partsFor` and `apply`), so a keystroke compares strings
  * instead of re-folding 38 cards' worth of text.
  */
 function rankWords(labelWords, textWords, queryWords) {
   if (!queryWords) return 0;
-  if (labelWords) {
-    if (labelWords === queryWords) return 3;
-    if (labelWords.startsWith(queryWords)) return 2;
-    if (labelWords.split(" ").some((w) => w.startsWith(queryWords))) return 2;
+  const tokens = queryWords.split(" ").filter(Boolean);
+  if (!tokens.length) return 0;
+  let weakest = EXACT;
+  for (const token of tokens) {
+    const tier = tokenTier(token, labelWords, textWords);
+    // One word of the query finding nothing is the whole query finding
+    // nothing: typing more words narrows, never widens.
+    if (!tier) return 0;
+    if (tier < weakest) weakest = tier;
   }
-  return textWords.includes(queryWords) ? 1 : 0;
+  return weakest;
+}
+
+/** The best one query word can do inside one part: a tier, or 0. */
+function tokenTier(token, labelWords, textWords) {
+  const words = labelWords ? labelWords.split(" ") : [];
+  if (words.includes(token)) return EXACT;
+  if (words.some((w) => w.startsWith(token))) return PREFIX;
+  if (words.some((w) => nearMiss(token, w))) return FUZZY;
+  // The floor: the part's text at large, the old "merely contains" rule.
+  if (textWords.includes(token)) return DETAIL;
+  if (textWords.split(" ").some((w) => nearMiss(token, w))) return DETAIL;
+  return 0;
+}
+
+/**
+ * How many edits a word may be away from the word typed and still count as
+ * the same word.
+ *
+ * 0 for one to three letters is the important one. With a budget of one,
+ * "cat" would reach "chat", "bat", "cot" and "cut", and a three-letter search
+ * would light up half the page; a short word has to be typed right, or be a
+ * genuine prefix of what is on the page (which still finds "cats").
+ *
+ * Four to seven letters may be one edit out: "voise" for "voice" is one swap,
+ * "setzing" for "setting" is one wrong letter. Eight or more may be two,
+ * because a long word typed quickly collects more than one slip and two edits
+ * in ten letters still names one word rather than several - "notifcation" for
+ * "notifications" is a letter dropped and a letter added, and it is the miss
+ * this whole rule exists for.
+ *
+ * The phone's `SettingsSearch.fuzzyBudget` is this same rule.
+ */
+export function fuzzyBudget(token) {
+  const n = String(token == null ? "" : token).length;
+  if (n <= 3) return 0;
+  if (n <= 7) return 1;
+  return 2;
+}
+
+/**
+ * Is `word` a plausible typo of `token`? Two gates, and both must open:
+ *
+ *   - the edit budget above (`fuzzyBudget`);
+ *   - `GUARD` letters at the front must agree. The first letters are the
+ *     part of a word a slip almost never destroys - fingers land on a middle
+ *     letter, not on the whole opening - so requiring them removes the class
+ *     of false match where the search locks onto a different word entirely:
+ *     "cat" cannot reach "chat", and a word typed in full cannot leap to an
+ *     unrelated word that happens to share its shape further in. It is why
+ *     "notifcation" still reaches "notifications": both open "no".
+ */
+function nearMiss(token, word) {
+  const budget = fuzzyBudget(token);
+  if (!budget) return false;
+  if (word.length < GUARD || token.slice(0, GUARD) !== word.slice(0, GUARD)) return false;
+  // Cheap gate before the table: two strings further apart in LENGTH than
+  // the budget cannot be within it.
+  if (Math.abs(token.length - word.length) > budget) return false;
+  return editsApart(token, word) <= budget;
+}
+
+/**
+ * How many changes turn `a` into `b`, where a change is one insertion, one
+ * deletion, one substitution, or ONE SWAP of two neighbouring letters - the
+ * last is why "voise" finds "voice", the single most common way a typed word
+ * goes wrong. Short strings only, so the whole table is cheap.
+ */
+function editsApart(a, b) {
+  const m = a.length;
+  const n = b.length;
+  let twoBack = null;
+  let back = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i += 1) {
+    const row = new Array(n + 1);
+    row[0] = i;
+    for (let j = 1; j <= n; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      let best = Math.min(back[j] + 1, row[j - 1] + 1, back[j - 1] + cost);
+      if (twoBack && i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        best = Math.min(best, twoBack[j - 2] + 1);
+      }
+      row[j] = best;
+    }
+    twoBack = back;
+    back = row;
+  }
+  return back[n];
 }
 
 /** The text a part is matched on: what a person can read inside it. */
