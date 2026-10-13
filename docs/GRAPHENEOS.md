@@ -1,11 +1,88 @@
 # Running the phone app on GrapheneOS
 
-The owner is considering moving their Pixel 9 to GrapheneOS at some point.
-GrapheneOS is a more locked-down version of Android, built by a different
-team than Google's, with extra privacy and security protections switched on
-by default. This page is what to check first, written down now (2026-09-27)
-so it is not forgotten when the actual switch happens - no code changes,
-because none look necessary.
+The owner is moving their Pixel 9 to GrapheneOS. GrapheneOS is a more
+locked-down version of Android, built by a different team than Google's, with
+extra privacy and security protections switched on by default. This page is
+what to check first, written down on 2026-09-27 so it was not forgotten when
+the switch happened.
+
+> **The full evaluation has now been done** (2026-10-12), against the app as it
+> stands today and against GrapheneOS's current Android 17 release for the
+> Pixel 9. **The answer is yes: the app works on a GrapheneOS Pixel 9 and needs
+> no code change to do so** — it uses no Google services at all, on purpose.
+>
+> That evaluation is
+> [`GRAPHENEOS-PIXEL9-EVAL-2026-10-12.md`](GRAPHENEOS-PIXEL9-EVAL-2026-10-12.md).
+> Read it for the evidence; read this page for the two things that matter most:
+>
+> - the **hard prerequisite** below, which must be met before anyone raises
+>   `targetSdk` to 37 (the app is safe at 36 today);
+> - the **three accepted differences**, below that, so none of them is
+>   diagnosed as a bug on the first run.
+>
+> The original five first-run checks further down are still correct; they are
+> just not the whole list any more.
+
+## HARD PREREQUISITE for any targetSdk 37 bump
+
+**Do not raise `jarvis-client`'s `targetSdk` above 36 until the
+`ACCESS_LOCAL_NETWORK` flow below exists and has been tested on a real
+GrapheneOS phone.** This is the one item in this whole page that can break the
+app silently, and it is written here as a standing rule rather than as advice,
+because the failure it causes looks like something else entirely.
+
+**What changed in Android.** From Android 17, "local network protections" are
+mandatory for apps that target API 37 or higher: local-network access is
+blocked by default. Jarvis talks to the PC over Tailscale or NordVPN Meshnet,
+and Android's definition of a local network **includes the CGNAT range
+`100.64.0.0/10`** — which is exactly what those two mesh networks use.
+
+**Where the app stands today.** `targetSdk = 36` (checked in
+`jarvis-client/app/build.gradle.kts`), and enforcement is keyed to `targetSdk
+37+`. **So the app is safe today and nothing needs doing now.** This section
+exists so that the day someone bumps that number, they already know.
+
+**What the failure would look like** (and why it must not be allowed to
+happen): a fixed `targetSdk 37` build would install, start and pair normally,
+and then **never reach the PC** — reporting *"Your PC isn't answering"*
+forever, with nothing anywhere mentioning a permission. There is no
+workaround: the app-compat override cannot be disabled for a non-debuggable
+app on a user build. A real report of exactly this is Kodi on GrapheneOS with
+Android 17.
+
+**What the fix is, when it is built** (five changes, no design work — full
+detail in §6 of
+[`GRAPHENEOS-PIXEL9-EVAL-2026-10-12.md`](GRAPHENEOS-PIXEL9-EVAL-2026-10-12.md)):
+
+1. Declare `<uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />`
+   in `jarvis-client/app/src/main/AndroidManifest.xml`.
+2. Request it at runtime from the **pairing screen** — when the owner types a
+   desktop address — not at app start, so the prompt has context.
+3. On denial, show the existing plain-language message plus a **Try again**,
+   rather than letting it become a silent timeout.
+4. Add a row to `PlatformReadiness.kt` beside "Desktop address", so the Checks
+   screen explains it the way it explains cleartext.
+5. Test both mesh paths (Tailscale and Meshnet) on the real GrapheneOS phone
+   with `targetSdk 37`, before that bump ships.
+
+**A genuine ambiguity, to be settled by that test rather than assumed:**
+Android's guidance also says a local network "excludes cellular and **VPN**
+connections", and this app's traffic to the PC goes out over the VPN interface.
+If the rule follows the interface, Jarvis is exempt even at 37; if it follows
+the address range, it is not. Both statements are in the official material, so
+step 5 is what decides it.
+
+## Three things that work differently on GrapheneOS, accepted
+
+None of these is a defect in the app, and none needs a code change. They are
+written down so they are not diagnosed as bugs later — each one already has a
+plain-language message or a safe fallback built in.
+
+| What | What happens | Why it is accepted |
+|---|---|---|
+| **No text-to-speech engine.** GrapheneOS ships without one. | If the PC has no voice pack, the phone cannot speak the reply. It says so: *"No offline voice on this phone, so it was not spoken aloud. The reply is on screen."* | The app deliberately refuses network voices (rule 1), so silence plus the reply on screen is the **correct** outcome, not a fault. The normal voice is the PC's own and is unaffected. **Do not change the voice behaviour to make it speak here.** |
+| **No calendar app.** GrapheneOS bundles none. | The reminder half of "Also on my phone" has nothing to hand an event to. The app says so: *"This phone has no calendar app that takes events from other apps."* The alarm half still works. | A missing feature, correctly reported. Install a calendar app if the reminder half is wanted — noting that a third-party one may sync to a cloud account, which is the owner's own choice. |
+| **No face unlock.** | Risky approvals rest on the fingerprint or the PIN instead. | **Harmless.** The app already asks for `BIOMETRIC_STRONG or DEVICE_CREDENTIAL` and explicitly refuses weak biometrics, so GrapheneOS removes an option the app never wanted. |
 
 ## The short answer
 
