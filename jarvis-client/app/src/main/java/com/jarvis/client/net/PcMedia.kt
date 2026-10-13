@@ -29,6 +29,15 @@ object PcMedia {
     const val CONTROL_PATH = "/api/media/control"
 
     const val TITLE = "Playing on your PC"
+    /**
+     * The line that used to stand in for the read before it landed.
+     *
+     * No longer drawn by Home: the plate is hidden entirely unless the PC says
+     * a track is really playing (the owner, 2026-10-13), so there is no such
+     * thing as "the plate is up but there is nothing to say yet". Kept because
+     * it is the plate's own description of itself and any future surface that
+     * shows these controls while idle needs the same sentence.
+     */
     const val HINT =
         "Play, pause or skip whatever is playing on your PC. No approval card - it only " +
             "controls music and video there."
@@ -62,6 +71,90 @@ object PcMedia {
     fun said(o: JsonObject?): String? =
         (o?.get("said") as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull?.trim()
             ?.takeIf { it.isNotEmpty() }
+
+    /**
+     * What the PC says a track is doing. `GET /api/media` answers only
+     * `{"ok", "said"}` - `jarvis_media.handle_get` drops everything else,
+     * including the playback flag - so the PC's own sentence is the only
+     * signal the phone is given, and these are the two shapes that sentence
+     * has when something is loaded (jarvis_media.now_playing):
+     * `"Playing: “title” by artist."` and `"Paused: “title”."`.
+     */
+    enum class State { PLAYING, PAUSED, NONE }
+
+    /** What the PC writes in front of a track that is playing. */
+    const val PLAYING_PREFIX = "Playing:"
+
+    /** What the PC writes in front of a track that is loaded but paused. */
+    const val PAUSED_PREFIX = "Paused:"
+
+    /**
+     * Which state the PC's sentence describes.
+     *
+     * The plate is drawn while a track is PLAYING OR PAUSED (the owner's
+     * answer of 2026-10-13, choosing "Also show it while paused" over hiding
+     * on pause). [State.NONE] covers everything else and the plate hides for
+     * all of it: the empty answer ("Nothing seems to be playing right now."),
+     * a failed or unreachable read (null), an empty sentence, and any wording
+     * this phone does not recognise. Hiding is the direction to be wrong in -
+     * a control that may not mean anything must not be on screen.
+     */
+    fun state(said: String?): State {
+        val text = said?.trim().orEmpty()
+        return when {
+            text.startsWith(PLAYING_PREFIX) -> State.PLAYING
+            text.startsWith(PAUSED_PREFIX) -> State.PAUSED
+            else -> State.NONE
+        }
+    }
+
+    /** The states the plate is drawn in. Kept as a function so the rule has one home. */
+    fun shown(state: State): Boolean = state == State.PLAYING || state == State.PAUSED
+
+    /**
+     * The buttons for a state - the transport, reflecting which it is. A
+     * paused track offers [PLAY] and no [PAUSE]; a playing one offers [PAUSE]
+     * and no [PLAY]. [PREVIOUS] and [NEXT] belong to both.
+     */
+    fun transport(state: State): List<String> = when (state) {
+        State.PLAYING -> listOf(PREVIOUS, PAUSE, NEXT)
+        State.PAUSED -> listOf(PREVIOUS, PLAY, NEXT)
+        State.NONE -> emptyList()
+    }
+
+    /**
+     * What the PC answers a BUTTON with - short acknowledgements that name no
+     * track and carry no state (`jarvis_media._SAID`): "Playing.", "Paused.",
+     * "Skipped to the next.", "Back to the previous.".
+     *
+     * The plate never reads a STATE out of one of these: only the descriptive
+     * `GET` sentence is written as "Playing: …" or "Paused: …", and the
+     * gate is built on that. After a button the plate reads the PC again for
+     * the descriptive sentence and the new state, and shows the button's own
+     * answer only when it is NOT one of these - a refusal or a notice, which
+     * is the honest thing to put on screen.
+     */
+    val ACKS: Set<String> = setOf(
+        "Playing.", "Paused.", "Skipped to the next.", "Back to the previous.",
+    )
+
+    /** Whether the PC's answer to a button is a plain acknowledgement. */
+    fun ack(said: String?): Boolean = said?.trim() in ACKS
+
+    /** The PC's own words for "nothing is playing" (`jarvis_media._REASON_WORDS["nothing"]`). */
+    const val NOTHING = "Nothing seems to be playing right now."
+
+    /**
+     * How often Home re-reads what is playing.
+     *
+     * The plate is hidden whenever no track is loaded, and a hidden control
+     * that never asked again could never appear when the owner starts a track
+     * - so the read has to keep going while Home is on screen. The same shape
+     * and the same order of cost as Home's other small reads
+     * (`SkySettings.POLL_MS`, `InboxTidy.POLL_MS`): one small local request
+     * every fifteen seconds, never while the link is down.
+     */
+    const val POLL_MS = 15_000L
 
     /** A PC without the routes. */
     fun missing(e: ApiError): Boolean =

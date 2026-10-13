@@ -138,6 +138,7 @@ import com.jarvis.client.ui.parts.TextInput
 import com.jarvis.client.ui.parts.VoiceButton
 import com.jarvis.client.ui.parts.VoiceStrip
 import com.jarvis.client.voice.VoiceSession
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.State
 import com.jarvis.client.ui.parts.pressable
@@ -154,6 +155,23 @@ import kotlin.math.sin
 
 /** The face's starting share of the space below the status line. */
 private const val DEFAULT_FACE_FRACTION = 0.75f
+
+/**
+ * What the face pane holds besides the face itself: the lane chip, the
+ * "Open the Brain" caption with its gaps, and the Galaxy row under it. Used to
+ * grow the pane so a CHOSEN size is really drawn at that size - see the
+ * measure block below - and deliberately a little generous: too small and the
+ * face is capped by the leftover height again, which is the fault this
+ * exists to fix.
+ */
+private val FACE_PANE_CHROME = 104.dp
+
+/**
+ * The conversation keeps at least this much, however large the face is asked
+ * to be. A card that needs deciding is always reachable, and a screen that
+ * cannot hold both simply gives the face less than it asked for.
+ */
+private val MIN_LIST_HEIGHT = 132.dp
 
 /** Neither pane may be dragged away entirely - each keeps at least this much. */
 private const val MIN_FACE_FRACTION = 0.20f
@@ -248,6 +266,17 @@ data class HomeState(
      * §2's rule is that a capability reporting false means hide the UI for it.
      */
     val voiceOffered: Boolean,
+    /**
+     * This phone holds RECORD_AUDIO.
+     *
+     * The talk button is greyed for a reason the link does not cover when the
+     * permission is missing, and a tap then does nothing at all once the
+     * owner has denied it (or Android no longer shows the dialog). MainActivity
+     * reads it from the recorder, so the one reader of the permission is the
+     * thing that needs it. Defaults to true: an unknown state must never
+     * invent a fault on a phone that is working.
+     */
+    val micAllowed: Boolean = true,
     /** What the desktop heard, so a mis-hearing is visible rather than silent. */
     val transcript: String?,
     val voiceNotice: String?,
@@ -1245,7 +1274,34 @@ fun HomeScreen(
                     paneHeight.px = room
                     // The one read of `live`, here in measure: a drag frame re-runs
                     // this block and nothing above it.
-                    val faceHeight = (room * live.floatValue).roundToInt().coerceIn(0, room)
+                    var faceHeight = (room * live.floatValue).roundToInt().coerceIn(0, room)
+                    // THE CHOSEN SIZE IS WHAT THE FACE GETS (the owner,
+                    // 2026-10-13: "Full screen is large enough, the other sizes
+                    // causes jarvis face to be way too small no matter what size
+                    // i select"). A fixed size used to be only a MAXIMUM - the
+                    // pane's own share of the screen was taken first, and the
+                    // face was drawn at whatever height was left over, so Large
+                    // (260dp) and Medium (200dp) both came out at the same
+                    // leftover and choosing between them changed nothing.
+                    //
+                    // So the pane is grown to hold the size he picked, and the
+                    // conversation takes what is left. Two things still win over
+                    // it: a folded face (an approval waiting, a tap on the
+                    // handle, the keyboard - `shrunk`) keeps its small pane, and
+                    // the conversation keeps MIN_LIST_HEIGHT, so a card that
+                    // needs deciding is never pushed off the screen. The two
+                    // `fill` sizes are left alone: they are meant to grow with
+                    // the pane, and their size is the split, not a fixed box.
+                    val wanted = if (shrunk || state.faceSize.fill || state.faceSize.hidden) {
+                        0
+                    } else {
+                        with(density) {
+                            (state.faceSize.sizeDp.dp + FACE_PANE_CHROME).toPx().roundToInt()
+                        }
+                    }
+                    val listFloor = with(density) { MIN_LIST_HEIGHT.toPx().roundToInt() }
+                    val most = (room - listFloor).coerceAtLeast(0)
+                    faceHeight = maxOf(faceHeight, wanted).coerceIn(0, most)
                     val face = measurables.first { it.layoutId == PANE_FACE }
                         .measure(Constraints.fixed(width, faceHeight))
                     val list = measurables.first { it.layoutId == PANE_LIST }
@@ -2067,15 +2123,18 @@ private fun FaceBlock(
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                // The chosen size, but never more than the room left once the
-                // chip and caption below have theirs: weight(fill = false)
-                // caps the height, so a pane dragged small shrinks the face
-                // instead of pushing the caption out of the pane. FaceView
-                // draws from its smaller side, so a short box stays round.
+                // The chosen size, and the pane's measure block above grows the
+                // pane to hold it (the owner, 2026-10-13), so this is the size
+                // the face is really drawn at rather than a maximum the
+                // leftover height quietly undercut. weight(fill = false) is
+                // still the last word on a screen too short for both panes: the
+                // conversation keeps MIN_LIST_HEIGHT, and the face takes what is
+                // left. FaceView draws from its smaller side, so a short box
+                // stays round.
                 //
-                // Extra large and Full screen take ALL of that room instead
-                // (weight with fill), so the face grows with the pane rather
-                // than stopping at 260dp. Still round for the same reason.
+                // The two `fill` sizes take ALL of that room instead (weight
+                // with fill), so they grow with the pane rather than stopping at
+                // 260dp. Still round for the same reason.
                 Box(
                     Modifier
                         .then(
@@ -2468,29 +2527,66 @@ private fun PhoneWatchStartPlate(state: HomeState, actions: HomeActions) {
 
 /**
  * "Playing on your PC" (2026-09-28; [com.jarvis.client.net.PcMedia]): what is
- * playing, in the PC's own sentence - read when Home shows it, and again
- * after each button - and four buttons, ONE action per tap. Greyed while the
- * link is stale (rule 4); the runtime refuses then too. No card.
+ * playing, in the PC's own sentence, and the transport for it, ONE action per
+ * tap. Greyed while the link is stale (rule 4); the runtime refuses then too.
+ * No card.
+ *
+ * IT IS DRAWN ONLY WHILE A TRACK IS LOADED (the owner, 2026-10-13: "playing on
+ * pc shouldnt show up unless there is something actively playing on the pc",
+ * then, asked which he wanted, "Also show it while paused"). It used to be
+ * drawn always: with the PC's "Nothing seems to be playing right now." as its
+ * body when the PC had nothing, and with its own hint sentence before the first
+ * read even landed - so the plate was on screen whenever Home was. All of that
+ * is gone: [com.jarvis.client.net.PcMedia.state] decides, and an idle, empty,
+ * failed or unrecognised answer hides it rather than showing a control that may
+ * not mean anything.
+ *
+ * THE TRANSPORT REFLECTS WHICH IT IS: a paused track offers Play and not Pause,
+ * a playing one the other way round
+ * ([com.jarvis.client.net.PcMedia.transport]).
+ *
+ * The read repeats while Home is on screen ([com.jarvis.client.net.PcMedia.POLL_MS])
+ * because a hidden plate that never asked again could never appear when the
+ * owner starts a track.
  */
 @Composable
 private fun PcMediaPlate(canAct: Boolean, actions: HomeActions) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
+    // The PC's DESCRIPTIVE sentence ("Playing: “X” by Y."), and the state the
+    // transport is built from. Kept apart on purpose: the PC's answer to a
+    // BUTTON is a short acknowledgement ("Paused.", "Skipped to the next.")
+    // that names no track and carries no state, so a state read out of that
+    // would be a guess.
     var said by remember { mutableStateOf<String?>(null) }
+    var state by remember { mutableStateOf(com.jarvis.client.net.PcMedia.State.NONE) }
     var busy by remember { mutableStateOf(false) }
     LaunchedEffect(canAct) {
-        if (canAct) said = actions.onPcMedia()
+        while (canAct) {
+            val read = actions.onPcMedia()
+            said = read
+            state = com.jarvis.client.net.PcMedia.state(read)
+            delay(com.jarvis.client.net.PcMedia.POLL_MS)
+        }
+        // The link went down: nothing is known, so nothing is claimed.
+        said = null
+        state = com.jarvis.client.net.PcMedia.State.NONE
     }
+    // Idle, not readable, or anything unrecognised: no plate.
+    if (!com.jarvis.client.net.PcMedia.shown(state)) return
     Plate {
         Kicker(com.jarvis.client.net.PcMedia.TITLE)
         Gap(4)
         Text(
-            said ?: com.jarvis.client.net.PcMedia.HINT,
+            // The PC's OWN sentence, never one written here: "Playing: “X” by
+            // Y." or "Paused: “X”.". It is also the only place the track is
+            // named.
+            said.orEmpty(),
             style = MaterialTheme.typography.labelSmall,
             color = chrome.textLo,
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
-            com.jarvis.client.net.PcMedia.ACTIONS.forEach { action ->
+            com.jarvis.client.net.PcMedia.transport(state).forEach { action ->
                 Quiet(
                     com.jarvis.client.net.PcMedia.label(action),
                     enabled = canAct && !busy,
@@ -2499,7 +2595,29 @@ private fun PcMediaPlate(canAct: Boolean, actions: HomeActions) {
                             busy = true
                             scope.launch {
                                 try {
-                                    said = actions.onPcMediaControl(action)
+                                    val answer = actions.onPcMediaControl(action)
+                                    if (com.jarvis.client.net.PcMedia.ack(answer)) {
+                                        // It worked. Read the PC again rather
+                                        // than putting "Paused." on screen:
+                                        // the description names the track and
+                                        // is what the transport is built from,
+                                        // so pressing Pause flips the buttons.
+                                        val read = actions.onPcMedia()
+                                        if (read != null) {
+                                            said = read
+                                            state = com.jarvis.client.net.PcMedia.state(read)
+                                        } else {
+                                            // The re-read failed. The button's
+                                            // own words are all there is; the
+                                            // 15 s read corrects the state.
+                                            said = answer
+                                        }
+                                    } else {
+                                        // A refusal or a notice from the PC.
+                                        // The state is deliberately left alone:
+                                        // the button did not do anything.
+                                        said = answer
+                                    }
                                 } finally {
                                     busy = false
                                 }
@@ -3588,6 +3706,31 @@ private fun Composer(
             modifier = Modifier.padding(top = 6.dp).liveStatus(),
         )
     }
+    // Why the MICROPHONE cannot start a clip, said in the same place and for
+    // the same reason (the owner's report of 2026-10-13: "the mic button ...
+    // doesnt work if i tap it or hold it down"). The talk button is greyed on
+    // the link or while an answer streams, and on a phone that has not allowed
+    // the microphone; a greyed button never reaches the runtime's blocker, so
+    // without this line every one of those is silence.
+    //
+    // Shown only when the link line above is not already the answer: the two
+    // lines would otherwise say the same thing twice under one row, and the
+    // link is the reason the owner sees most often.
+    if (com.jarvis.client.LinkWords.composerHeldLine(state.link) == null) {
+        com.jarvis.client.MicWords.heldLine(
+            link = state.link,
+            streaming = state.streaming,
+            micAllowed = state.micAllowed,
+            voiceOffered = state.voiceOffered,
+        )?.let { why ->
+            Text(
+                why,
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textLo,
+                modifier = Modifier.padding(top = 6.dp).liveStatus(),
+            )
+        }
+    }
     }
 }
 
@@ -3679,6 +3822,23 @@ private fun VoiceBar(
                     onClick = actions.onInterrupt,
                 )
             }
+        }
+        // The same reason line the composer shows under the same button. Full
+        // screen has no composer, so the link's own sentence is shown here too
+        // rather than left to the row the owner cannot see from this one.
+        com.jarvis.client.MicWords.heldLine(
+            link = state.link,
+            streaming = state.streaming,
+            micAllowed = state.micAllowed,
+            voiceOffered = state.voiceOffered,
+        )?.let { why ->
+            Gap(6)
+            Text(
+                why,
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textLo,
+                modifier = Modifier.liveStatus(),
+            )
         }
     }
 }
