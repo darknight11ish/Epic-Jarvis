@@ -188,6 +188,19 @@ def t_the_tool_exists_and_is_offered_only_when_enabled():
 # --------------------------------------------------------------------------
 
 def t_asking_and_speaking_run_the_same_function():
+    """The claim the whole safety argument rests on: both entrances reach the
+    SAME setter. Proven with a recording setter installed in `R.BOOL_SETTINGS` -
+    the table BOTH resolve through - so neither path can quietly grow its own
+    copy of one.
+
+    WHAT THIS DOES NOT PROVE, said plainly because a second reader asked: it
+    shows the tool calls the TABLE's setter function, not that the two entrances
+    choose the same setting from the same words. They resolve differently on
+    purpose - the spoken grammar matches an exact alias, while
+    `find_bool_setting_words` is the tolerant matcher the model needs, and the
+    tool is handed a setting name by the model rather than a sentence. The
+    resolver is covered by `t_the_two_entrances_resolve_through_the_one_table`
+    and `t_a_phrase_that_names_no_setting_is_refused`."""
     rec = _Recording(R.Outcome(True, "Done."))
     fake = rec.setting(key="quiet hours", names=("quiet hours",))
     # The table is patched across BOTH calls on purpose: run_tool() restores it
@@ -467,9 +480,9 @@ def t_a_phrase_that_names_no_setting_is_refused():
 #   7. every function a setting's setter calls must exist (the humour bug)
 # --------------------------------------------------------------------------
 
-def missing_module_calls(source: str) -> list:
-    """(function, alias.attribute) for every `import x as alias` inside a
-    function whose `alias.attribute` the imported module does not have.
+def missing_module_calls(source: str) -> tuple:
+    """((function, alias.attribute) pairs whose attribute does NOT exist,
+    (function, module) pairs that could not be imported here).
 
     THE SHAPE OF THE BUG THIS EXISTS FOR: `set_humor` called
     `MN.handle_post({"humor": ...})`, and jarvis_manner.py has only
@@ -477,9 +490,14 @@ def missing_module_calls(source: str) -> list:
     AttributeError and could not work, while the Settings page's own route went
     through handle_set and did. The module is imported FOR REAL here, so this
     proves the attribute exists rather than that it is spelled the same
-    somewhere else."""
+    somewhere else.
+
+    THE SECOND LIST IS THE POINT OF RETURNING TWO (a second reader asked): a
+    module this environment cannot import is NOT evidence that its attributes are
+    right. The caller reports each one as a SKIP, never folds it into a pass - a
+    check that could not run is not a pass (CLAUDE.md)."""
     tree = ast.parse(source)
-    out = []
+    bad, skipped = [], []
     for fn in [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]:
         aliases = {}
         for node in ast.walk(fn):
@@ -492,20 +510,28 @@ def missing_module_calls(source: str) -> list:
             if not (isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)
                     and node.value.id in aliases):
                 continue
+            module = aliases[node.value.id]
             try:
-                mod = importlib.import_module(aliases[node.value.id])
+                mod = importlib.import_module(module)
             except Exception:
-                continue      # a module this suite cannot import is not its business
+                if (fn.name, module) not in skipped:
+                    skipped.append((fn.name, module))
+                continue
             if not hasattr(mod, node.attr):
-                out.append((fn.name, f"{node.value.id}.{node.attr}"))
-    return out
+                bad.append((fn.name, f"{node.value.id}.{node.attr}"))
+    return bad, skipped
 
 
 def t_every_setter_calls_a_function_that_exists():
     src = (HERE / "jarvis_settings_registry.py").read_text(encoding="utf-8")
     wanted = {b.set.__name__ for b in R.BOOL_SETTINGS}
-    bad = [(fn, call) for fn, call in missing_module_calls(src) if fn in wanted]
-    check(f"all {len(wanted)} switches' setters call functions that exist",
+    bad, skipped = missing_module_calls(src)
+    bad = [row for row in bad if row[0] in wanted]
+    mine_skipped = sorted({m for f, m in skipped if f in wanted})
+    for module in mine_skipped:
+        skipped(f"a switch's setter imports {module}", "not importable in this environment")
+    check(f"all {len(wanted)} switches' setters call functions that exist "
+          f"({len(mine_skipped)} module(s) reported as SKIP above, never as a pass)",
           not bad, repr(bad))
     # The instrument proves itself on the bug it was written from: the same
     # checker, run over the shape the registry really used - the import INSIDE
@@ -513,9 +539,10 @@ def t_every_setter_calls_a_function_that_exists():
     control = ("def set_humor_before_the_fix(on):\n"
                "    import jarvis_manner as MN\n"
                "    return MN.handle_post({'humor': on})\n")
-    found = missing_module_calls(control)
+    control_bad, control_skipped = missing_module_calls(control)
     check("the checker finds that same bug if it comes back",
-          found == [("set_humor_before_the_fix", "MN.handle_post")], repr(found))
+          control_bad == [("set_humor_before_the_fix", "MN.handle_post")],
+          repr(control_bad))
     check("and the fixed call is real", hasattr(importlib.import_module("jarvis_manner"),
                                                 "handle_set"))
 
