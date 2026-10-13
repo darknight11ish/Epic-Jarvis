@@ -7978,6 +7978,23 @@ def _settings_call(args: dict, call: dict, convo: list, steps: list, say_step,
         return reply({"ok": False, "changed": False,
                       "error": R.cannot_change_setting_words(asked)})
     on = value == "on"
+    # `peer`/`local` are deliberately NOT passed here, and that is a CHECKED
+    # claim rather than an oversight (2026-10-13, raised by a second reader).
+    # The spoken path passes them (jarvis_quick._run_settings_bool ->
+    # `setting.set(f["on"], peer=peer, local=local)`), so this is a real
+    # difference - and exactly one place in these 21 chains reads them:
+    # jarvis_limits.change refuses a `pc_only` row when the caller is not the
+    # PC. The five PC-notification switches this tool can reach are built with
+    # pc_only=False on purpose (jarvis_limits._notify_rows), so there is nothing
+    # in this table for them to refuse, and the answer cannot differ today.
+    #
+    # What WOULD differ, and the reason this is written down: a future setter
+    # that gains a pc_only rule needs them threaded from the turn - run_local_turn
+    # does not carry peer/local at all - and until then, passing None is not a
+    # safe no-op. `jarvis_owner_check.from_this_pc(None, ...)` returns True, so
+    # None reads as "the PC" and a change asked for from the phone would be
+    # treated as though it came from the PC. Whoever adds such a rule must thread
+    # them; this comment is here so that is found, not rediscovered.
     try:
         got = setting.set(on)
     except Exception as exc:
