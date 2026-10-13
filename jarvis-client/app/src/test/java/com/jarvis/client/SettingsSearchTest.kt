@@ -369,9 +369,12 @@ class SettingsSearchTest {
      * a contract, and asserting them here would pin this app to a detail of
      * the desktop that nothing depends on.
      *
-     * The fixture lives on the desktop branch (PR #350) until that lands, so
-     * on a tree without it this test SKIPS WITH A REASON rather than passing
-     * quietly - a check that cannot run must say so, never read as green.
+     * The fixture is CARRIED WITH THIS BRANCH as well as the desktop's - PR #350
+     * adds the same bytes - so on this tree the test ASSERTS all 28 cases
+     * instead of skipping, which is the point: one answer key, two engines. The
+     * absent-file branch is kept as a guard for a tree holding one half and not
+     * the other, and it SKIPS WITH A REASON rather than passing quietly - a
+     * check that cannot run must say so, never read as green.
      */
     @Test
     fun `the shared cross-app fixture matches this engine`() {
