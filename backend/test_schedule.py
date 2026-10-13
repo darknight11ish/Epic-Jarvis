@@ -23,7 +23,9 @@ a temporary folder:
   - the `schedule` event and the audit log carry ids and kinds, never the
     words;
   - one job per change: pause, resume, add time, delete, done - no list
-    form, no "delete all";
+    form, no "delete all"; a job that has GONE OFF can be deleted (DEF-008,
+    the owner's decision of 2026-10-13), which is the one verb that accepts
+    a 'fired' job, while pausing one still refuses;
   - the fast path: many phrasings, and near-misses that must go to the model;
     only the owner's own typed or said words act;
   - the model is never called on a match: every socket and the model's own
@@ -313,6 +315,22 @@ def t_one_job_at_a_time():
     code, _ = w.s.act(t["id"], "delete")
     check("delete is immediate", code == 200 and w.s.job(t["id"]) is None)
     check("a second delete says it is gone", w.s.act(t["id"], "delete")[0] == 404)
+    # DEF-008, closed on the owner's decision of 2026-10-13: a job that has
+    # gone off is SHOWN under "Just went off" for an hour, so it must be one
+    # the apps can clear. `delete` is the one verb routed before act()'s own
+    # list gate, exactly as `snooze` is; pausing one still refuses.
+    f = w.s.add_at("reminder", w.clock.t + 60, "call the bank")
+    w.clock.t += 60
+    w.s.tick()
+    check("a job that has gone off can be deleted (DEF-008)",
+          w.s.job(f["id"]) is not None and w.s.job(f["id"])["state"] == "fired"
+          and w.s.act(f["id"], "delete")[0] == 200 and w.s.job(f["id"]) is None)
+    g = w.s.add_at("reminder", w.clock.t + 60, "call Dad")
+    w.clock.t += 60
+    w.s.tick()
+    check("... while pausing one that has gone off still refuses, with a true sentence",
+          w.s.act(g["id"], "pause")[0] == 409
+          and w.s.act(g["id"], "pause")[1]["error"] == "It has already gone off.")
     d = w.s.add_todo("buy milk")
     check("the same to-do twice is one item", w.s.add_todo("Buy milk").get("already") is True
           and len(w.s.todos()) == 1)

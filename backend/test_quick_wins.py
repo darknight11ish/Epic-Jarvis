@@ -12,6 +12,15 @@ a temporary folder, and every socket made to fail:
     move; snoozing twice while the copy waits changes nothing; the copy goes
     off; "Just went off" lists the last hour and leaves out one already
     snoozed; the events carry ids and kinds only; the limits say why;
+  - DELETE on a job that has gone off (DEF-008, the owner's decision of
+    2026-10-13): an entry the apps SHOW under "Just went off" is one they can
+    clear - `delete` is the one verb that accepts a 'fired' job, routed before
+    act()'s own list gate exactly as `snooze` is. It disappears from
+    `went_off` AND from `status()`, and by id. Pause, resume, done and
+    add_time on a fired job still refuse (409, "It has already gone off.")
+    rather than the old, misleading 404 "not on the list any more"; deleting
+    an active job, a second delete, and deleting a to-do that is done are
+    unchanged;
   - the fast path: "snooze", "snooze 5 minutes", "snooze the alarm",
     "remind me again in 5 minutes" - and near-misses go to the model;
   - "CANCEL THAT": takes back only the last thing the fast path set, in this
@@ -221,6 +230,67 @@ def t_snoozing_a_repeat_moves_only_that_one_time():
     w.s.tick()
     check("when the repeat goes off again, it can be snoozed afresh",
           w.s.act(j["id"], "snooze")[0] == 200 and w.s.act(j["id"], "snooze")[1].get("already"))
+
+
+def t_a_fired_entry_can_be_deleted():
+    """DEF-008, closed on the owner's decision of 2026-10-13: "make delete
+    work on a fired reminder". Before this, the READ route put a fired job
+    under `went_off` for an hour while the WRITE route refused the very same
+    id - 404 `no_such_job`, "That is not on the list any more." - so the PC
+    listed an entry it would not let anyone clear. `snooze` was already
+    routed before that gate; `delete` now is too, and it is the ONLY verb
+    that gained this."""
+    use_tz("Europe/London")
+    now = local(2026, 10, 13, 12, 0)
+    w = World(now, name="fired-delete")
+    a = w.s.add_at("reminder", now + 600, "call Mum")
+    w.clock.t = now + 600
+    w.s.tick()
+    check("a one-off reminder that went off is 'fired' and is shown under 'just went off'",
+          w.s.job(a["id"])["state"] == "fired"
+          and [j["id"] for j in w.s.status()["went_off"]] == [a["id"]], w.s.status())
+    code, out = w.s.act(a["id"], "delete")
+    check("... and it can be DELETED (the owner's decision, 2026-10-13)",
+          code == 200 and out.get("ok") is True and out.get("said") == "Deleted.", out)
+    st = w.s.status()
+    check("... gone from `went_off` AND from `jobs` and `todo`",
+          st["went_off"] == [] and st["jobs"] == [] and st["todo"] == [], st)
+    check("... and gone by id as well", w.s.job(a["id"]) is None)
+    check("... and a second delete says it is gone", w.s.act(a["id"], "delete")[0] == 404)
+    check("... and no card was raised", w.cards == [])
+
+    # The verbs that did NOT change. Pausing, resuming, ticking off or adding
+    # time to something that has already gone off still refuses - with a
+    # sentence that is true, instead of "not on the list any more" about a
+    # job both apps are showing.
+    b = w.s.add_at("reminder", w.clock.t + 600, "call Dad")
+    w.clock.t += 600
+    w.s.tick()
+    code, out = w.s.act(b["id"], "pause")
+    check("pause on a fired entry still refuses, and says why",
+          code == 409 and out.get("error") == "It has already gone off."
+          and "reason" not in out, out)
+    for do, secs in (("resume", None), ("add_time", 60)):
+        code, out = w.s.act(b["id"], do, secs)
+        check(f"{do} on a fired entry still refuses too",
+              code == 409 and out.get("error") == "It has already gone off.", out)
+    check("... and it is still under 'just went off' after those refusals",
+          [j["id"] for j in w.s.went_off()] == [b["id"]])
+    check("... and snoozing a fired entry is unchanged (200; the fired job stays, "
+          "only its copy is on the live list)",
+          w.s.act(b["id"], "snooze", 300)[0] == 200 and w.s.job(b["id"]) is not None
+          and len(w.s.listed()) == 1)
+
+    # Everything that worked before still works.
+    c = w.s.add_timer(600)
+    check("delete on an ACTIVE job is unchanged", w.s.act(c["id"], "delete")[0] == 200
+          and w.s.job(c["id"]) is None)
+    check("... and a second delete of that one still says it is gone",
+          w.s.act(c["id"], "delete")[0] == 404)
+    d = w.s.add_todo("buy milk")
+    w.s.act(d["id"], "done")
+    check("a to-do that is done is on no list at all, so deleting it is still refused (404)",
+          w.s.act(d["id"], "delete")[0] == 404)
 
 
 def t_snooze_by_voice_or_typing():
