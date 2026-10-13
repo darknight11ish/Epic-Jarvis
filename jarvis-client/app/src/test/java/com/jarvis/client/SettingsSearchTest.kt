@@ -197,6 +197,102 @@ class SettingsSearchTest {
         assertEquals(emptyList<String>(), SettingsSearch.matching("zzzz"))
     }
 
+    // ---- The typo contract (2026-10-13) --------------------------------
+    //
+    // The box used to be one strict substring test, so ONE typo found
+    // nothing. These six hold the replacement rule, and each one was watched
+    // failing against the strict matcher before it was kept: a test that
+    // cannot fail is not a test. The desktop's `rank`
+    // (`jarvis-desktop/src/settings-search.js`) is being changed to the same
+    // rule in a separate PR, so the two apps cannot drift.
+
+    @Test
+    fun `one typo still finds the section`() {
+        // "notifcation" is one deleted letter from "notifications", which is
+        // the word the notification sections are about - all three of them,
+        // so the row that must be found is asserted by name rather than by
+        // count. Four to seven letters buys one edit.
+        assertTrue(SettingsSearch.matching("notifcation").contains("jarvis-notify"))
+        // "securty" is one deleted letter from the heading "Security".
+        assertTrue(SettingsSearch.matching("securty").contains("security"))
+        // The word typed right still finds exactly its own section, so the
+        // fuzzy step has not loosened an exact search.
+        assertEquals(listOf("security"), SettingsSearch.matching("security"))
+    }
+
+    @Test
+    fun `a transposition still finds the section`() {
+        // "securtiy" is "security" with the "ti" the wrong way round. A
+        // swapped pair is ONE edit, not two, or this would need a tolerance
+        // the length table does not give an eight-letter word.
+        assertTrue(SettingsSearch.matching("securtiy").contains("security"))
+        assertTrue(
+            "a swapped pair is one mistake",
+            SettingsSearch.wordMatches("vocie", "voice"),
+        )
+    }
+
+    @Test
+    fun `a too-short token does not fuzzy-match a longer word`() {
+        // "cat" must never find "chat": one edit in a three-letter word turns
+        // it into a different word. No setting says "chat", so this asks the
+        // rule about the two words directly (the same rule `rank` runs).
+        assertTrue("an exact word still matches", SettingsSearch.wordMatches("cat", "cat"))
+        assertTrue(
+            "a word merely started still matches",
+            SettingsSearch.wordMatches("cat", "category"),
+        )
+        assertFalse(
+            "a 3-letter token must not lose a letter to match a 4-letter word",
+            SettingsSearch.wordMatches("cat", "chat"),
+        )
+    }
+
+    @Test
+    fun `a mistyped word does not match unrelated ones`() {
+        // The two-character prefix guard, seen on the real screen: "packup"
+        // is one substitution away from the heading "Backups", but the first
+        // letters are wrong, so the fuzzy step must not take it. The same
+        // word with the right first two letters IS found (the "one typo"
+        // test above proves that side).
+        assertFalse(
+            "a word must not fuzzy-match one that starts with different letters",
+            SettingsSearch.matching("packup").contains("backup"),
+        )
+        // ...and a real word keeps matching exactly, once more, so this test
+        // cannot pass by the matcher simply refusing everything.
+        assertEquals(listOf("backup"), SettingsSearch.matching("backup"))
+    }
+
+    @Test
+    fun `two words must both match - AND, not OR`() {
+        // "strict" lives only in the Voice section's words, "voice" in its
+        // heading - together they need the row whose words carry BOTH.
+        assertEquals(listOf("voice"), SettingsSearch.matching("voice strict"))
+        // One real word plus one nobody typed right matches nothing: OR would
+        // have answered with every "voice" section on the screen.
+        assertEquals(emptyList<String>(), SettingsSearch.matching("voice zzzz"))
+        // ...and the same two words in the other order agree.
+        assertEquals(listOf("voice"), SettingsSearch.matching("strict voice"))
+    }
+
+    @Test
+    fun `a title match still beats a body-only match`() {
+        // "security" is in the Security row's HEADING; "strict" is not in that
+        // heading at all, it is in the Voice row's own words. Every word must
+        // be found, so the Security row is not a match: its body may not stand
+        // in for its heading, which is what makes a heading hit stronger than
+        // a body hit.
+        assertTrue(SettingsSearch.matching("security").contains("security"))
+        assertFalse(
+            "the Security row must not match on its body when its heading is " +
+                "missing one of the words typed",
+            SettingsSearch.matching("security strict").contains("security"),
+        )
+        // "strict" alone is a body-only word, and it does find the Voice row.
+        assertTrue(SettingsSearch.matching("strict").contains("voice"))
+    }
+
     @Test
     fun `normalise folds the way the desktop folds`() {
         assertEquals("wi fi", SettingsSearch.normalise("Wi-Fi"))
@@ -240,6 +336,9 @@ class SettingsSearchTest {
         )
     }
 
+    /**
+     * The index map counts the search box as the first row.
+     */
     @Test
     fun `the index map counts the search box as the first row`() {
         val screen = repoFile(
@@ -253,6 +352,171 @@ class SettingsSearchTest {
                 "every other number to the screen)",
             map.contains("\"search\" to SettingsJump.SEARCH_KEY_INDEX"),
         )
+    }
+
+    /**
+     * THE SHARED CROSS-APP FIXTURE. `jarvis-desktop/tests/fixtures/settings-search-cases.json`
+     * is generated from the desktop engine (`jarvis-desktop/src/settings-search.js`) by
+     * `tools/gen-settings-search-cases.mjs`, and BOTH apps read it - so this is
+     * the check that the two matching RULES agree, not just the eight words
+     * they print.
+     *
+     * Only `hits` is asserted. `ranks` is deliberately ignored: those numbers
+     * are the desktop's tiers (exact 4 / prefix 3 / fuzzy 2 / detail 1), and
+     * this app's own `rank` returns the same numbers today, but neither app
+     * ORDERS results by the number - both only ask whether it is above zero
+     * (the desktop's `apply()` uses `rank > 0`). The numbers are therefore not
+     * a contract, and asserting them here would pin this app to a detail of
+     * the desktop that nothing depends on.
+     *
+     * The fixture is CARRIED WITH THIS BRANCH as well as the desktop's - PR #350
+     * adds the same bytes - so on this tree the test ASSERTS all 28 cases
+     * instead of skipping, which is the point: one answer key, two engines. The
+     * absent-file branch is kept as a guard for a tree holding one half and not
+     * the other, and it SKIPS WITH A REASON rather than passing quietly - a
+     * check that cannot run must say so, never read as green.
+     */
+    @Test
+    fun `the shared cross-app fixture matches this engine`() {
+        val fixture = File(
+            repoRoot(),
+            "jarvis-desktop/tests/fixtures/settings-search-cases.json",
+        )
+        if (!fixture.isFile) {
+            System.out.println(
+                "SKIPPED: ${fixture.path} is not on this branch yet (it arrives with the " +
+                    "desktop half, PR #350) - the cross-app rule check will assert once both " +
+                    "halves have merged.",
+            )
+            return
+        }
+        val root = parseJson(fixture.readText()) as? Map<*, *>
+            ?: error("the fixture is not a JSON object")
+        val partEntries = (root["parts"] as? Map<*, *>)?.entries
+            ?.map { entry ->
+                val part = entry.value as Map<*, *>
+                entry.key.toString() to (part["label"].toString() to part["text"].toString())
+            }
+            ?: error("the fixture has no `parts`")
+        val cases = root["cases"] as? List<*>
+            ?: error("the fixture has no `cases`")
+        val mismatches = mutableListOf<String>()
+        for (case in cases) {
+            val entry = case as Map<*, *>
+            val query = entry["query"].toString()
+            val want = (entry["hits"] as? List<*>)
+                ?.map { it.toString() }?.sorted() ?: emptyList<String>()
+            val got = partEntries
+                .filter { (_, words) ->
+                    SettingsSearch.rankPart(words.first, words.second, query) > 0
+                }
+                .map { it.first }
+                .sorted()
+            if (got != want) mismatches += "  \"$query\": expected $want, got $got"
+        }
+        assertTrue(
+            "the phone's engine disagrees with the shared fixture on ${mismatches.size} of " +
+                "${cases.size} cases:\n" + mismatches.joinToString("\n"),
+            mismatches.isEmpty(),
+        )
+    }
+
+    /** Walks up from Gradle's working folder (`jarvis-client/app`) to the repository. */
+    private fun repoRoot(): File {
+        var dir: File? = File(System.getProperty("user.dir") ?: ".").absoluteFile
+        while (dir != null) {
+            if (File(dir, "jarvis-desktop").isDirectory) return dir
+            dir = dir.parentFile
+        }
+        error("the repository root is not above ${System.getProperty("user.dir")}")
+    }
+
+    /**
+     * A small reader for the fixture's JSON - objects, arrays, strings and
+     * numbers, which is all the generator writes (no escapes, no nested
+     * surprises). Written here rather than pulled in as a dependency because
+     * the only thing it has to read is one generated file, and the test fails
+     * loudly instead of quietly if that file ever grows a shape it cannot
+     * read.
+     */
+    private fun parseJson(text: String): Any? {
+        var at = 0
+        fun skip() {
+            while (at < text.length && text[at].isWhitespace()) at += 1
+        }
+        fun parseString(): String {
+            require(text[at] == '"') { "expected a string at $at" }
+            at += 1
+            val out = StringBuilder()
+            while (at < text.length && text[at] != '"') {
+                val ch = text[at]
+                if (ch == '\\') {
+                    at += 1
+                    when (val esc = text[at]) {
+                        'n' -> out.append('\n')
+                        't' -> out.append('\t')
+                        'r' -> out.append('\r')
+                        else -> out.append(esc)
+                    }
+                } else {
+                    out.append(ch)
+                }
+                at += 1
+            }
+            at += 1
+            return out.toString()
+        }
+        fun parseValue(): Any? {
+            skip()
+            return when (text[at]) {
+                '{' -> {
+                    at += 1
+                    val map = LinkedHashMap<String, Any?>()
+                    skip()
+                    if (text[at] == '}') { at += 1; return map }
+                    while (true) {
+                        skip()
+                        val key = parseString()
+                        skip()
+                        require(text[at] == ':') { "expected ':' at $at" }
+                        at += 1
+                        map[key] = parseValue()
+                        skip()
+                        when (text[at]) {
+                            ',' -> at += 1
+                            '}' -> { at += 1; return map }
+                            else -> error("expected ',' or '}' at $at")
+                        }
+                    }
+                }
+                '[' -> {
+                    at += 1
+                    val list = mutableListOf<Any?>()
+                    skip()
+                    if (text[at] == ']') { at += 1; return list }
+                    while (true) {
+                        list += parseValue()
+                        skip()
+                        when (text[at]) {
+                            ',' -> at += 1
+                            ']' -> { at += 1; return list }
+                            else -> error("expected ',' or ']' at $at")
+                        }
+                    }
+                }
+                '"' -> parseString()
+                't' -> { at += 4; true }
+                'f' -> { at += 5; false }
+                'n' -> { at += 4; null }
+                else -> {
+                    val start = at
+                    while (at < text.length && (text[at].isDigit() || text[at] == '-' ||
+                            text[at] == '.' || text[at] == 'e' || text[at] == 'E')) at += 1
+                    text.substring(start, at).toLongOrNull() ?: text.substring(start, at).toDouble()
+                }
+            }
+        }
+        return parseValue()
     }
 
     /** Walks up from Gradle's working folder (`jarvis-client/app`) to the repository. */
