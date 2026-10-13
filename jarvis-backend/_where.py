@@ -581,6 +581,13 @@ SHIPPED = (
     # "Activity heatmap and balance chart" (2026-09-30; progress.patch): the
     # heatmap and the owner's balance chart. Not reachable from any model.
     "jarvis_progress.py",
+    # "Which card draws the pictures" (2026-10-10; picture-card.patch): the
+    # three ways of running a picture-maker beside the everyday chat, each its
+    # own switch, all off until the owner turns one on. It draws nothing
+    # itself - asking for a picture is jarvis_pictures.py's route - and it is
+    # not reachable from any model. Not a tool, no card: it only moves which
+    # card a local program runs on and unloads/reloads the owner's own chat.
+    "jarvis_picture_card.py",
     # "Topic controls" (2026-09-30; topics.patch): a mode per topic (learn /
     # use), the sorting, the one card. The search filter is in the rebuilt
     # jarvis_memory.py; test_topics_leaks.py lists every reader of facts.

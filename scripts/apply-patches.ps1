@@ -1305,14 +1305,49 @@ $PATCHES = @(
     # own picture and input routes are untouched, and the desktop still names
     # none of them (tests/handoff.mjs and tests/handoff-front.mjs).
     'handoff-front.patch'
+    # --- the owner's uncensored opt-ins, BOTH halves -------------------------
+    # jarvis_optin_models.py, the owner's OWN decision of 2026-10-10 (Decision
+    # 5): (a) one clearly-labelled opt-in for fiction and role-play, never the
+    # everyday assistant and never a default, and (b) the abliterated models
+    # already on disk offered as opt-in choices with no new download. TWO hunks
+    # in jarvis_gate.py - each switch's action joins the "acts only on tier
+    # ask" list and gets its _RISK line, both right after handoff-front.patch's
+    # own last entry in those two tables, so it goes after that patch - and ONE
+    # hunk in jarvis_hud.py, whose context is screen-attach.patch's own last
+    # printed line, calling jarvis_optin_models.install().
+    #
+    # It sits HERE, immediately BEFORE plugin-loader.patch, and that position
+    # is load-bearing in both directions: plugin-loader.patch must stay the
+    # LAST entry in this list (the repository's own rule for the loader -
+    # everything after it must be a drop-in folder, never another core patch,
+    # and tools/check_plugins.py fails if it is not last), so a new CORE patch
+    # goes in front of it and the loader's own hunk is re-anchored onto this
+    # block's last two printed lines. That re-anchor is exactly what
+    # tools/check_plugins.py derives and checks.
+    #
+    # Why it is a patch and not a drop-in folder: it needs a line in the core
+    # it does not own - the gate's tier tables, where "turning it on raises an
+    # approval card" is actually expressed. Its two [autonomy.tiers] lines are
+    # in backend/rebuilt/jarvis-framework.toml, which this script merges into
+    # the owner's own file ONLY when the line is missing, so a value they set
+    # themselves is never overwritten.
+    #
+    # Nothing here leaves the PC. Nothing is downloaded: the import names a
+    # local .gguf PATH through the EXISTING models_create route, and the module
+    # itself refuses to offer - or to import anything into - a model store that
+    # is not on this PC (rule 1). OFF, for either switch, is instant and needs
+    # no card, and the everyday assistant is never changed by either one.
+    'uncensored-optins.patch'
     # --- drop-in modules (feat/plug-and-play-modules) ------------------------
-    # Last, like every new patch, and its context is tutorials.patch's own
-    # install block - the last one in the file. It adds ONE more block of the
-    # same shape, calling jarvis_plugins.install(), which loads every folder
-    # in jarvis_plugins\ beside jarvis_hud.py and calls that folder's module's
-    # own install(). Nothing else about the core changes, and nothing about
-    # the 18 features it can carry changes: each still ships its own module
-    # and each module still wraps the Handler itself.
+    # Last, like every new patch, and its context is uncensored-optins.patch's
+    # own last two printed lines - the last install block before
+    # `_loopback_companion` (it was screen-attach.patch's printed lines until
+    # that block landed in front of it, in the same change). It adds ONE more
+    # block of the same shape, calling jarvis_plugins.install(), which loads
+    # every folder in jarvis_plugins\ beside jarvis_hud.py and calls that
+    # folder's module's own install(). Nothing else about the core changes, and
+    # nothing about the 18 features it can carry changes: each still ships its
+    # own module and each module still wraps the Handler itself.
     #
     # This patch is applied ONCE, and it is the only core change the whole
     # plug-in system needs. After it, adding or removing one of those features
@@ -1343,6 +1378,27 @@ $PATCHES = @(
     # object inside the prompt). Card prose is not a target. ONE hunk pair,
     # in jarvis_gate.py alone; see backend/README.md's own section.
     'gate-touches.patch'
+    # "Which card draws the pictures" (the owner's decision of 2026-10-10; docs/PICTURE-CARDS-DESIGN.md,
+    # JARVIS-API section 124): GET and POST /api/picture-card. ONE hunk in jarvis_hud.py, an install block
+    # on the OWNER's own lines just before the main socket is built, NOT inside the chain of install
+    # blocks above it. That chain ends at the owner's `# Before the main socket` line and every block in
+    # it anchors on the block the patch before wrote, so a block inserted in the middle of the chain
+    # leaves the next patch's hunk without its context. This one was first written between progress.patch
+    # and topics.patch, on progress.patch's block with topics.patch's OWN banner as its trailing context -
+    # a patch that runs AFTER it - so it applied to the finished file and not to the file as it stands at
+    # its own turn (measured 2026-10-11: the stack's walk had to invent its pre-image, 51 hunks against a
+    # pin of 50, and this script's own strip-and-re-apply rehearsal would have refused the whole run with
+    # "will not apply"). It sits immediately before plugin-loader.patch, which MUST be last of all (see
+    # backend/test_gate_touches.py), as well as after devices.patch.
+    # The three ways of running a picture-maker
+    # beside the everyday chat (pictures on the 12 GB card with the chat stepping aside; on the 12 GB card
+    # with the chat moved to the 8 GB card; small pictures on the 8 GB card with the chat untouched), each
+    # its own switch, ALL OFF until the owner turns one on. It draws nothing (asking for a picture is
+    # jarvis_pictures.py's route, section 123), starts nothing (D:\Jarvis\ImageGen\Start-Pictures.ps1 does
+    # that, reading these settings) and needs no gate line and no card: it only chooses a card for a local
+    # program and unloads/reloads the owner's own chat. Needs jarvis_picture_card.py copied in; without it,
+    # or on any error, the banner says so and the routes are simply not there.
+    'picture-card.patch'
     'plugin-loader.patch'
 )
 
@@ -1591,6 +1647,8 @@ $SHIPPED = @(
     'jarvis_retirement.py'       # retirement.patch: a simplified what-if from numbers the owner typed - 10,000 made-up futures with a fixed seed, answered only as ranges, the disclaimer added by code; plain Python, no numpy; screen-only money
     # --- "Activity heatmap and balance chart" (2026-09-30, progress.patch) ---
     'jarvis_progress.py'         # progress.patch: 12 weeks of days shaded by steps ticked and numbers logged, and a 3-to-8 area balance chart the owner picks; every number from code, no streak, no total score; NOT a model tool (a test fails if anything imports it)
+    # --- "Which card draws the pictures" (2026-10-10, picture-card.patch) ---
+    'jarvis_picture_card.py'     # picture-card.patch: the three ways of running a picture-maker beside the everyday chat (pictures on the 12 GB card with the chat stepping aside; on the 12 GB card with the chat moved to the 8 GB card; small pictures on the 8 GB card with the chat untouched) - each its own switch, ALL OFF until the owner turns one on; it draws nothing, starts nothing and is not a model tool; the card is pinned by UUID from nvidia-smi and never by index
     # --- "Topic controls" (2026-09-30, topics.patch) ---
     'jarvis_topics.py'           # topics.patch: per-topic mode (Learn and use / Use but don't learn / Learn but don't use / Off) - tables in memory.db, sorting by fixed rules with the local model only as an opt-in suggestion, one card (topic_loosen) for turning a private topic back on; the filter itself lives in the rebuilt jarvis_memory.py
     'jarvis_referee.py'          # referee.patch: "This looks done - tick it?" - one card per goal step whose number reached its target, at most three a day, no model, only the owner's tap ticks; a second-card switch (id referee)

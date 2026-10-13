@@ -115,6 +115,20 @@ links**, only a list, so the "memory graph" rule stays true in spirit:
 
 **Standing rule changed (owner, 2026-09-30):** option B was chosen, so the phone reads `/api/memory/entities` for a plain "People and things" list (built: `net/Entities.kt`, `ui/screens/EntitiesPlate.kt`, `EntitiesTest.kt`); the phone still has no map, picture or links.
 
+**Widened 2026-10-11 (owner): the phone gets the Galaxy's connections, in words.** The owner asked
+"can i see the galaxy on the android phone? I should be able to see it", and, offered a choice,
+picked a light, read-only version built for the phone. The part a plain list was missing is the
+map's *edges* - who appears alongside whom - so the list now says them: tapping a name shows
+"Shares facts with", the other names in the same saved facts, as "Priya, 4 shared facts"
+(`Entities.connections`, `PhoneGalaxyTest.kt`). It is the same rule the desktop's
+`buildEntityGraph` uses (one fact naming both names, a fact naming more than
+`MAX_NAMES_PER_FACT` = 12 joins nothing), worked out from the `/api/memory/entities` read already
+in hand by intersecting `fact_ids`. **No new route, no `/api/graph`, no canvas and no write** -
+still no picture, no force layout, no dragging, no merge and no Forget/Erase/Pin from this screen.
+What stays the desktop's: the drawing itself, the search-by-name box, the names under each fact in
+the Memory tab, "About <name>", the "are these the same?" merge card, and the fact-words panel's
+paging that hangs off a dot. The map's information reaches the phone; the map does not.
+
 ## 5. Gate, routes, parity summary
 
 | Item | Desktop | Phone (option A) | Phone (option B) |
