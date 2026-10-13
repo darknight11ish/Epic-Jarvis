@@ -69,9 +69,10 @@ pub fn setup_windows(app: &AppHandle) -> Result<(), String> {
     let mut problems: Vec<String> = Vec::new();
 
     if let Some(quickbar) = app.get_webview_window(QUICKBAR_LABEL) {
-        if let Err(err) = apply_quickbar_effects(&quickbar) {
-            problems.push(err);
-        }
+        // No Acrylic here: the bar is created hidden (`visible: false` in
+        // tauri.conf.json) and gets its material the moment it is shown, in
+        // `reveal_quickbar`. A backdrop on a window that is not on screen is
+        // the grey rectangle that function documents.
         attach_quickbar_listeners(app, &quickbar);
         // The bar is created hidden; park it at the spotlight position now so
         // the very first Alt+Space paints in the right place.
@@ -209,6 +210,113 @@ pub fn apply_hud_effects(_window: &WebviewWindow) -> Result<(), String> {
     Ok(())
 }
 
+/// Takes the quickbar's Acrylic off. The pair to [`apply_quickbar_effects`],
+/// and the other half of the rule [`reveal_quickbar`] states.
+#[cfg(target_os = "windows")]
+pub fn clear_quickbar_effects(window: &WebviewWindow) -> Result<(), String> {
+    use window_vibrancy::clear_acrylic;
+
+    clear_acrylic(window).map_err(|e| format!("unable to clear the quickbar's Acrylic: {e}"))
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn clear_quickbar_effects(_window: &WebviewWindow) -> Result<(), String> {
+    Ok(())
+}
+
+/// Takes the widget's Acrylic off. The pair to [`apply_widget_effects`].
+#[cfg(target_os = "windows")]
+pub fn clear_widget_effects(window: &WebviewWindow) -> Result<(), String> {
+    use window_vibrancy::clear_acrylic;
+
+    clear_acrylic(window).map_err(|e| format!("unable to clear the widget's Acrylic: {e}"))
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn clear_widget_effects(_window: &WebviewWindow) -> Result<(), String> {
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Show and hide: a window that is not on screen carries no backdrop
+// ---------------------------------------------------------------------------
+
+/// Shows the quickbar, putting its Acrylic on at that moment and never before.
+///
+/// A HIDDEN WINDOW MUST NOT HOLD A DWM BACKDROP (2026-10-13).
+///
+/// The owner's desktop carried two flat `rgb(84,84,84)` rectangles that vanish
+/// when Jarvis exits and return when it starts. They are these two windows: the
+/// bar, 1125x120 at (398,259), and the widget, 472x66 at (1440,480), both
+/// `transparent(true)`, both `alwaysOnTop(true)`, both carrying an Acrylic
+/// backdrop, and both reported not visible. The floating face - the one window
+/// here with NO backdrop - leaves nothing behind, and the HUD's page paints
+/// over its own (its window is not transparent either).
+///
+/// Two things that are NOT the cause, both read in the sources this build
+/// compiles rather than guessed:
+///
+/// * `backgroundColor` in `tauri.conf.json` is not being ignored. It reaches
+///   the window AND the webview (`tauri-runtime-wry-2.11.4/src/lib.rs:969`,
+///   `tauri-runtime-2.11.3/src/webview.rs:447-494`), which is exactly what
+///   `WebviewWindowBuilder::background_color` sets
+///   (`tauri-2.11.6/src/webview/webview_window.rs:1183-1185`). Both windows
+///   already carry `[0, 0, 0, 0]`, so adding the floating face's Rust call
+///   would change nothing. #324 already made that edit to the config, and the
+///   owner's 0.2.150 build has it.
+/// * It could not make them transparent if it did anything: on Windows tao
+///   turns `background_color` into an OPAQUE erase brush - `WM_ERASEBKGND`
+///   fills the client rect with `CreateSolidBrush(RGB(r, g, b))` and the alpha
+///   is dropped (`tao-0.35.3/src/platform_impl/windows/event_loop.rs:1104-1114`).
+///   `tauri-utils`' own field doc says the same: "Windows: alpha channel is
+///   ignored for the window layer".
+///
+/// What is left is the material. It is put on when the window goes on screen
+/// and taken off when it leaves, so a window that is not on screen has no
+/// backdrop for Windows to composite. Nothing else changes: same size, same
+/// place, same transparency, same always-on-top, and still nothing opaque.
+fn reveal_quickbar(window: &WebviewWindow) -> Result<(), String> {
+    // The material's own error is not this function's to report: a machine that
+    // refuses Acrylic - an older Windows 10 build, a remote session, a policy
+    // that disables transparency - must still get a fully working bar, which is
+    // the rule `setup_windows` states for itself. `show` is the part that can
+    // fail meaningfully.
+    let _ = apply_quickbar_effects(window);
+    window
+        .show()
+        .map_err(|e| format!("unable to show the quickbar: {e}"))
+}
+
+/// Hides the quickbar, taking its Acrylic off first.
+///
+/// The order matters: Windows must never composite a frame of a window that is
+/// leaving the screen with a backdrop still on it. That is the whole point of
+/// this pair - see [`reveal_quickbar`].
+fn conceal_quickbar(window: &WebviewWindow) -> Result<(), String> {
+    let _ = clear_quickbar_effects(window);
+    window
+        .hide()
+        .map_err(|e| format!("unable to hide the quickbar: {e}"))
+}
+
+/// Shows the desktop widget, putting its Acrylic on at that moment. The widget
+/// half of the rule [`reveal_quickbar`] states and explains.
+fn reveal_widget(window: &WebviewWindow) -> Result<(), String> {
+    let _ = apply_widget_effects(window);
+    window
+        .show()
+        .map_err(|e| format!("unable to show the widget: {e}"))
+}
+
+/// Hides the desktop widget, taking its Acrylic off first. `pub(crate)` because
+/// `commands.rs`'s `hide_widget` is the page's own way out (Escape).
+pub(crate) fn conceal_widget(window: &WebviewWindow) -> Result<(), String> {
+    let _ = clear_widget_effects(window);
+    window
+        .hide()
+        .map_err(|e| format!("unable to hide the widget: {e}"))
+}
+
 // ---------------------------------------------------------------------------
 // Listeners
 // ---------------------------------------------------------------------------
@@ -227,7 +335,7 @@ fn attach_quickbar_listeners(app: &AppHandle, window: &WebviewWindow) {
                 return;
             }
             if let Some(quickbar) = handle.get_webview_window(QUICKBAR_LABEL) {
-                let _ = quickbar.hide();
+                let _ = conceal_quickbar(&quickbar);
                 // The bar closed: a look held for follow-ups is thrown away.
                 crate::look::bar_closed(&handle);
             }
@@ -235,7 +343,7 @@ fn attach_quickbar_listeners(app: &AppHandle, window: &WebviewWindow) {
         WindowEvent::CloseRequested { api, .. } => {
             api.prevent_close();
             if let Some(quickbar) = handle.get_webview_window(QUICKBAR_LABEL) {
-                let _ = quickbar.hide();
+                let _ = conceal_quickbar(&quickbar);
                 crate::look::bar_closed(&handle);
             }
         }
@@ -320,9 +428,7 @@ pub(crate) fn show_quickbar_unlocked(app: &AppHandle) -> Result<(), String> {
         center_quickbar(&window)?;
     }
 
-    window
-        .show()
-        .map_err(|e| format!("unable to show the quickbar: {e}"))?;
+    reveal_quickbar(&window)?;
     window
         .set_always_on_top(true)
         .map_err(|e| format!("unable to raise the quickbar: {e}"))?;
@@ -355,9 +461,7 @@ pub(crate) fn show_quickbar_quietly(app: &AppHandle) -> Result<(), String> {
     }
     let _ = window.set_size(LogicalSize::new(QUICKBAR_WIDTH, QUICKBAR_BASE_HEIGHT));
     center_quickbar(&window)?;
-    window
-        .show()
-        .map_err(|e| format!("unable to show the quickbar: {e}"))?;
+    reveal_quickbar(&window)?;
     window
         .set_always_on_top(true)
         .map_err(|e| format!("unable to raise the quickbar: {e}"))?;
@@ -426,9 +530,9 @@ pub fn hide_quickbar(app: &AppHandle) -> Result<(), String> {
         .get_webview_window(QUICKBAR_LABEL)
         .ok_or_else(|| format!("window `{QUICKBAR_LABEL}` was not found"))?;
 
-    let hidden = window
-        .hide()
-        .map_err(|e| format!("unable to hide the quickbar: {e}"));
+    // Clears the Acrylic before hiding: a window on its way off the screen must
+    // not carry a backdrop. See `reveal_quickbar`.
+    let hidden = conceal_quickbar(&window);
     // The HUD's own button is labelled from this (windows.rs
     // `publish_bar_state`): it said "Open the Jarvis bar" whether the bar was
     // on screen or not.
@@ -1022,7 +1126,10 @@ pub fn setup_widget(app: &AppHandle, prefs: &WidgetPrefs) -> Result<(), String> 
         .get_webview_window(WIDGET_LABEL)
         .ok_or_else(|| format!("window `{WIDGET_LABEL}` was not found"))?;
 
-    apply_widget_effects(&window)?;
+    // No Acrylic here: the widget may be starting hidden (and is, unless the
+    // owner left it on screen), and the material goes on only with the window -
+    // `reveal_widget` below, and `reveal_quickbar` for why a hidden window must
+    // not hold one.
 
     if let (Some(x), Some(y)) = (prefs.x, prefs.y) {
         if position_is_visible(&window, x, y) {
@@ -1045,9 +1152,9 @@ pub fn setup_widget(app: &AppHandle, prefs: &WidgetPrefs) -> Result<(), String> 
     let _ = window.set_size(LogicalSize::new(WIDGET_WIDTH, height));
     let _ = window.set_always_on_top(prefs.always_on_top);
     if prefs.visible {
-        let _ = window.show();
+        let _ = reveal_widget(&window);
     } else {
-        let _ = window.hide();
+        let _ = conceal_widget(&window);
     }
 
     // Track drags in memory; the telemetry tick flushes them to disk.
@@ -1069,7 +1176,7 @@ pub fn setup_widget(app: &AppHandle, prefs: &WidgetPrefs) -> Result<(), String> 
             // choice is remembered.
             api.prevent_close();
             if let Some(widget) = handle.get_webview_window(WIDGET_LABEL) {
-                let _ = widget.hide();
+                let _ = conceal_widget(&widget);
             }
             handle
                 .state::<WidgetState>()
@@ -1201,13 +1308,9 @@ pub fn toggle_widget(app: &AppHandle) -> Result<bool, String> {
         .map_err(|e| format!("unable to query widget visibility: {e}"))?;
 
     if visible {
-        window
-            .hide()
-            .map_err(|e| format!("unable to hide the widget: {e}"))?;
+        conceal_widget(&window)?;
     } else {
-        window
-            .show()
-            .map_err(|e| format!("unable to show the widget: {e}"))?;
+        reveal_widget(&window)?;
         // The widget is configured `focus: false` and `skipTaskbar: true`, so
         // it is not in the Alt+Tab order and nothing ever gave it the keyboard.
         // Every control in it — pin, expand, the two note buttons, Approve and
