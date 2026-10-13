@@ -49,9 +49,11 @@ What it proves, and the check that would fail without the change:
 """
 from __future__ import annotations
 
+import atexit
 import json
 import os
 import re
+import shutil
 import sys
 import tempfile
 import types
@@ -67,6 +69,26 @@ sys.path.insert(0, str(HERE))
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-optin-"))
 os.environ["OPENJARVIS_CONFIG_DIR"] = str(_TMP / "config")
 (_TMP / "config").mkdir(parents=True, exist_ok=True)
+
+
+def _remove_tmp() -> None:
+    """Remove this suite's own scratch folder when the run ends (2026-10-13).
+
+    `_fake()` below makes REAL 0.6 GB model files in here, and one run of this
+    suite was measured leaving **3,082.2 MB** behind: the folder is made at
+    import time and nothing ever removed it. An `atexit` handler and not a
+    `finally`, because the root is module-level - it is made before any test
+    runs, and a `finally` inside one test would not cover the others or a run
+    that fails at import. `atexit` runs on sys.exit (including this file's own
+    `sys.exit(1)` for a failed check) and on an uncaught exception, so the
+    folder goes on every path a Python process can take. A hard kill still
+    leaves it - nothing in this file can run then, which is what the runner's
+    own `jarvis-direct-<rand>` root and reaper are for.
+    """
+    shutil.rmtree(_TMP, ignore_errors=True)
+
+
+atexit.register(_remove_tmp)
 os.environ.pop("JARVIS_OPTIN_MODEL_ROOTS", None)
 os.environ.pop("JARVIS_OPTIN_MODEL_NAME", None)
 
