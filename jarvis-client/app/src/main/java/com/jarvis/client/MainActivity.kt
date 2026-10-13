@@ -1524,7 +1524,13 @@ class MainActivity : FragmentActivity() {
         // still change on its own: THINKING drops the high rate after its
         // first seconds, and battery saver or heat can arrive at any time.
         // In every other state the loop exits after one pass.
-        val faceOnScreen = paired && !repairing && nav.current == Screen.HOME
+        // Live now draws the same face, as the largest thing on its screen (the
+        // owner, 2026-10-13), so it counts as "the face is on screen" too.
+        // Without this, the Live screen's THINKING and SPEAKING reactor - the
+        // two states that ask for every frame the display gives - would run at
+        // IDLE's 30 while a 120 Hz panel was sitting there.
+        val faceOnScreen = paired && !repairing &&
+            (nav.current == Screen.HOME || nav.current == Screen.LIVE)
         // The face editor's Frame rate choice (and Battery saver) decide how
         // hard the panel is asked: see FaceBudget.smoothFor.
         val smooth = FaceBudget.smoothFor(faceTuning, phoneSaver)
@@ -2825,6 +2831,26 @@ class MainActivity : FragmentActivity() {
                         // "Jarvis Live didn't start: it needs your voice
                         // trained first - Settings, then Train my voice."
                         onTrainVoice = { nav.go(Screen.VOICE) },
+                        // The face the owner asked for on 2026-10-13 ("when i
+                        // start jarvis live, i dont see the face of jarvis ...
+                        // should be the largest part of my phone screen").
+                        // Every value is the one Home hands FaceView, so the
+                        // two screens draw the same face.
+                        face = com.jarvis.client.ui.screens.LiveFace(
+                            state = faceState,
+                            face = face,
+                            bindings = bindings,
+                            offline = faceOffline,
+                            focusQuiet = faceFocusQuiet,
+                            serious = faceSerious,
+                            notches = attention.pending,
+                            glow = chrome.postScale * look.glow,
+                            calmMotion = calmMotion,
+                            stillAnimal = stillAnimal,
+                            micLevel = micLevel,
+                            speechLevel = speechLevel,
+                            speechMouth = speechMouth,
+                        ),
                         // "Talk about this in Live": held here until Send.
                         shared = liveSharedHeld,
                         onDropShared = { liveSharedHeld = null },

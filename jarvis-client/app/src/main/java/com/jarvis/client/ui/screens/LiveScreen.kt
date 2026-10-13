@@ -2,6 +2,7 @@ package com.jarvis.client.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -17,36 +18,121 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.jarvis.client.FaceState
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.data.LiveEnd
+import com.jarvis.client.face.Bindings
+import com.jarvis.client.face.Face
+import com.jarvis.client.face.FaceView
 import com.jarvis.client.net.Provenance
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Primary
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Secondary
-import com.jarvis.client.ui.parts.TextInput
 import com.jarvis.client.ui.theme.LocalChrome
+import com.jarvis.client.ui.theme.LocalRadii
 import com.jarvis.client.voice.BargeIn
 import com.jarvis.client.voice.LiveExtras
 import com.jarvis.client.voice.LiveRules
 import com.jarvis.client.voice.VoiceSession
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+/**
+ * Jarvis's own face on the Live screen, and the state it is in.
+ *
+ * Built by MainActivity from exactly the values Home hands `FaceView` - the
+ * same `JarvisRuntime.face`/`faceOffline`/`faceFocusQuiet`/`faceSerious` and
+ * the same microphone and speaker levels - so the two screens cannot drift
+ * into two different faces. This is a holder for those values, never a second
+ * face implementation: one source for the faces (docs/CRITTERS.md).
+ *
+ * App lock changes nothing here. The owner's decision of 2026-09-27 is that
+ * neither face is hidden or blanked while locked, and that it shows the same
+ * connectivity and listening state as always; [offline] is the same
+ * `JarvisRuntime.faceOffline` Home reads, and `FaceShellRules` turns it into
+ * the hollow ring and the words. Nothing in this file reads the lock.
+ */
+data class LiveFace(
+    val state: FaceState,
+    val face: Face,
+    val bindings: Bindings,
+    val offline: Boolean,
+    val focusQuiet: Boolean,
+    val serious: Boolean,
+    /** Cards waiting: the still ring's marks, the same as Home's. */
+    val notches: Int,
+    val glow: Float,
+    val calmMotion: Boolean,
+    val stillAnimal: Boolean,
+    val micLevel: State<Float>,
+    val speechLevel: State<Float?>,
+    val speechMouth: (FloatArray) -> Boolean,
+)
+
+/**
+ * The face's share of the room below the status line, against the scrolling
+ * remainder's 1: about three fifths of what is left, so it is clearly the
+ * largest thing on the screen without pushing the talk button off a short one.
+ */
+private const val LIVE_FACE_WEIGHT = 1.6f
+
+/**
+ * The face, filling whatever the caller's [modifier] gives it.
+ *
+ * No tick ring and no tap-to-open-Brain here: Live is not Home, and a stray
+ * tap on the face must not walk out of a live session. The face's own press
+ * ring and petting still work, because FaceView answers its own touches.
+ */
+@Composable
+private fun LiveFacePane(face: LiveFace, modifier: Modifier = Modifier) {
+    val chrome = LocalChrome.current
+    Box(
+        modifier
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .clip(LocalRadii.current.shellShape)
+            .background(chrome.well),
+        contentAlignment = Alignment.Center,
+    ) {
+        FaceView(
+            state = face.state,
+            notches = face.notches,
+            face = face.face,
+            bindings = face.bindings,
+            offline = face.offline,
+            focusQuiet = face.focusQuiet,
+            serious = face.serious,
+            glow = face.glow,
+            calmMotion = face.calmMotion,
+            stillMotion = face.stillAnimal,
+            // Read from the frame loop, never in composition: the microphone
+            // delivers about fifty levels a second (the same reason Home
+            // passes lambdas).
+            micLevel = { face.micLevel.value },
+            speechLevel = { face.speechLevel.value },
+            speechMouth = face.speechMouth,
+            background = chrome.well,
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
+}
 
 /**
  * Jarvis Live on this phone (the owner's decision and answers of
@@ -61,10 +147,23 @@ import kotlinx.coroutines.launch
  * - Mic off closes the microphone; the session and its time carry on.
  * - "Heard you - thinking" at once when a sentence passed the voice check;
  *   "Didn't catch that - say a bit more" for a clip too short to check.
+ * - JARVIS'S FACE IS THE SCREEN'S CENTRE OF GRAVITY (the owner, 2026-10-13:
+ *   "when i start jarvis live, i dont see the face of jarvis, that is
+ *   incredibly important and should be the largest part of my phone
+ *   screen"). This screen drew no face at all before that. The face is the
+ *   SAME `FaceView` Home draws, built from the same values MainActivity hands
+ *   it ([LiveFace]) - one source for the faces, never a second implementation
+ *   (docs/CRITTERS.md) - and it takes the larger share of the screen, with
+ *   the sign, the captions and the buttons scrolling in what is left.
  * - This Live session's question and answer as captions (side talk shows
- *   "(not for Jarvis)"), the tap buttons after a spoken question (sent as
- *   TYPED words), and a text box: typed questions get typed answers, on
- *   screen, and keep Live open.
+ *   "(not for Jarvis)"), and the tap buttons after a spoken question, which
+ *   send those words as TYPED ones - answered on screen, keeping Live open.
+ * - THERE IS NO TYPING BOX (the owner, 2026-10-13: "if im in jarvis live i
+ *   probably dont need the type to jarvis typed answers stay on screen").
+ *   Live is the face, the talk button and captions. The one way words that
+ *   are not speech reach a Live turn is the "Shared text" chip below, handed
+ *   over by "Talk about this in Live" in the Share sheet, which the owner
+ *   taps Send on.
  * - A card of this session waiting: speech pauses and the microphone closes
  *   until it is decided - by tapping, on Home ("Show the card").
  * - Live on the PC: "Jarvis Live is on your PC" and "Move it here".
@@ -84,6 +183,8 @@ fun LiveScreen(
     onBack: () -> Unit,
     onOpenCards: () -> Unit,
     onTrainVoice: () -> Unit,
+    /** Jarvis's own face, and the state it is in. Built by MainActivity. */
+    face: LiveFace,
     /** Text shared with "Talk about this in Live", held until Send; or null. */
     shared: String? = null,
     onDropShared: () -> Unit = {},
@@ -110,7 +211,6 @@ fun LiveScreen(
     val temporary by JarvisRuntime.chat.temporary.collectAsState()
     var busy by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<String?>(null) }
-    var typed by rememberSaveable { mutableStateOf("") }
     // Ticks while a flash or an ended sign is up, so each goes away on time.
     var nowMs by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
 
@@ -168,8 +268,18 @@ fun LiveScreen(
 
     Column(modifier.fillMaxSize().background(chrome.surface0).navigationBarsPadding().imePadding()) {
         TopBar(LiveRules.TITLE, onBack = onBack, subtitle = "Talk back and forth - no \"Hey Jarvis\" needed")
+        // The face first, and the larger share of everything below the status
+        // line: the sign, the captions and the buttons scroll in what is left.
+        // Weighted rather than a fixed size, so a tall phone gives it more room
+        // and a short one still keeps a whole face; FaceView draws from its
+        // smaller side, so the box stays round.
+        LiveFacePane(
+            face = face,
+            modifier = Modifier.fillMaxWidth().weight(LIVE_FACE_WEIGHT),
+        )
         Column(
-            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+            Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Plate {
@@ -309,41 +419,37 @@ fun LiveScreen(
                 }
             }
 
-            // Typing in Live: a typed question, answered on screen. Text
-            // shared with "Talk about this in Live" waits here as a chip and
-            // goes with the next Send, tagged "shared" (outside text).
-            if (on || shared != null) {
+            // Text shared with "Talk about this in Live" (the owner's decision
+            // of 2026-09-28; the Share sheet). It waits here as a chip and goes
+            // to Jarvis only when the owner taps Send, tagged "shared" (outside
+            // text, so the PC treats the chat as having read it).
+            //
+            // This is now the ONE way words that are not speech reach a Live
+            // turn: the typing box that used to sit here was removed on the
+            // owner's answer of 2026-10-13 ("if im in jarvis live i probably
+            // dont need the type to jarvis typed answers stay on screen").
+            // `liveType("")` with text held is the same call the box made.
+            if (shared != null) {
                 Plate {
-                    if (shared != null) {
-                        Text(
-                            Provenance.sharedLine(shared),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = chrome.textHi,
-                        )
-                        Gap(4)
-                        Text(
-                            "Shared from another app: outside text. It goes to Jarvis when you tap " +
-                                "Send, then you can talk about it.",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = chrome.textMid,
-                        )
-                        Quiet("Remove", onClick = onDropShared)
-                        Gap(6)
-                    }
-                    TextInput(
-                        value = typed,
-                        onValueChange = { typed = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = "Type to Jarvis - typed answers stay on screen",
-                        singleLine = false,
-                        maxLines = 4,
+                    Text(
+                        Provenance.sharedLine(shared),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = chrome.textHi,
+                    )
+                    Gap(4)
+                    Text(
+                        "Shared from another app: outside text. It goes to Jarvis when you tap " +
+                            "Send, then you can talk about it.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textMid,
                     )
                     Gap(6)
-                    Secondary("Send", enabled = on && (typed.isNotBlank() || shared != null), onClick = {
-                        JarvisRuntime.liveType(typed, shared)
-                        typed = ""
+                    Secondary("Send", enabled = on, onClick = {
+                        JarvisRuntime.liveType("", shared)
                         onDropShared()
                     })
+                    Gap(6)
+                    Quiet("Remove", onClick = onDropShared)
                 }
             }
 
