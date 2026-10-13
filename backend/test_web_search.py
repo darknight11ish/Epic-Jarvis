@@ -414,6 +414,61 @@ def t_searxng_down_says_so_and_never_falls_back():
         WS._DDGS_MODULE = None
 
 
+def t_searxng_answering_with_nothing_is_never_a_silent_empty_answer():
+    """SearXNG up, every engine behind it failed: that must be SAID, not handed
+    back as an empty result list.
+
+    2026-10-13, on the owner's own PC: DNS inside the Docker container was dead,
+    all five engines were timing out, SearXNG answered HTTP 200 with
+    "results": [], and Jarvis answered every research question with nothing at
+    all - and readiness("searxng") still said nothing stood in the way."""
+    ddg_calls = []
+    WS._DDGS_MODULE = fake_ddgs(ddg_calls)
+
+    body = json.dumps({"query": "q", "results": [],
+                       "unresponsive_engines": [["wikipedia", "timeout"],
+                                                ["brave", "too many requests"]]}).encode()
+    srv = StandIn({"/search": (200, {"Content-Type": "application/json"}, body)})
+    reset(searxng_url=srv.url)
+    try:
+        out = WS.run(WS.plan("iceland population"), approved=True)
+        check("zero results WITH failed engines is an error, not a silent empty answer",
+              out.get("state") == "engines_down", out)
+        said = out.get("error") or ""
+        check("... it names the engines and what each of them said",
+              "wikipedia (timeout)" in said and "brave (too many requests)" in said, said)
+        check("... and it says this is the container's own network, not the search words",
+              "DNS" in said and "Nothing was sent to another provider" in said, said)
+        check("... and nothing was sent to DuckDuckGo instead (no silent fallback)",
+              not ddg_calls, ddg_calls)
+    finally:
+        srv.close()
+
+    # CONTROL 1 - the same empty list with every engine fine is a real
+    # "nothing matched those words", and must stay a normal answer.
+    srv = StandIn({"/search": (200, {"Content-Type": "application/json"},
+                                json.dumps({"query": "q", "results": [],
+                                            "unresponsive_engines": []}).encode())})
+    reset(searxng_url=srv.url)
+    try:
+        out = WS.run(WS.plan("zzqqxx"), approved=True)
+        check("zero results with every engine fine is still a normal empty answer",
+              out.get("state") != "engines_down", out)
+    finally:
+        srv.close()
+
+    # CONTROL 2 - results present: unchanged success.
+    srv = StandIn({"/search": (200, {"Content-Type": "application/json"}, searxng_json(3))})
+    reset(searxng_url=srv.url)
+    try:
+        out = WS.run(WS.plan("walking boots"), approved=True)
+        check("results present is still a success",
+              bool(out.get("results")) and out.get("state") != "engines_down", out)
+    finally:
+        srv.close()
+        WS._DDGS_MODULE = None
+
+
 def t_the_searxng_address_is_the_owners_own():
     ok = ["http://127.0.0.1:8888", "http://localhost:8080", "http://192.168.1.20:8888",
           "http://nas.local:8888/searxng", "http://100.101.102.103:8888",
@@ -1412,6 +1467,7 @@ if __name__ == "__main__":
     for fn in (t_the_why_lines, t_both_apps_say_the_same_words,
                t_plan_opens_no_socket_and_refuses_a_secret,
                t_searxng_results_no_proxy_no_redirect, t_searxng_down_says_so_and_never_falls_back,
+               t_searxng_answering_with_nothing_is_never_a_silent_empty_answer,
                t_the_searxng_address_is_the_owners_own, t_tavily_key_goes_only_to_tavily,
                t_exa_key_goes_only_to_exa, t_brave_key_goes_only_to_brave,
                t_the_keys_stay_on_the_pc,

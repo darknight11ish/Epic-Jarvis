@@ -1006,6 +1006,35 @@ def _connection_failed(provider: str, exc: BaseException, where: str) -> SearchE
         f"PC's internet connection."))
 
 
+def _engines_that_failed(doc: dict) -> list:
+    """SearXNG's own report of the engines that did not answer.
+
+    It sends `unresponsive_engines` as [["wikipedia", "timeout"],
+    ["brave", "too many requests"], ...]. Returns [] when it sent none -
+    which is what makes a genuinely empty result distinguishable from a
+    broken one (see _searxng)."""
+    out = []
+    rows = doc.get("unresponsive_engines")
+    for row in rows if isinstance(rows, list) else []:
+        if isinstance(row, (list, tuple)) and len(row) >= 2:
+            out.append(f"{row[0]} ({row[1]})")
+        elif row:
+            out.append(str(row))
+    return out
+
+
+def _engines_down_said(failed: list) -> str:
+    """The words for "SearXNG answered, but its engines did not"."""
+    shown = ", ".join(failed[:4])
+    if len(failed) > 4:
+        shown += f", and {len(failed) - 4} more"
+    return (f"SearXNG is running on this PC, but every search engine behind it failed, so "
+            f"this search found nothing. SearXNG's own report: {shown}. That is almost "
+            f"always the container's own network access giving out - most often its DNS - "
+            f"not the search words. backend/README.md, \"Web search\", step 3a, has the "
+            f"checks. Nothing was sent to another provider.")
+
+
 def _searxng(p: Plan) -> list:
     base = (p.searxng_url or DEFAULT_SEARXNG_URL).rstrip("/")
     url = f"{base}/search?" + urllib.parse.urlencode({"q": p.query, "format": "json"})
@@ -1034,7 +1063,18 @@ def _searxng(p: Plan) -> list:
     doc = _json(body, "SearXNG")
     if not isinstance(doc, dict):
         raise SearchError("failed", "SearXNG answered, but not with search results.")
-    return normalise(doc.get("results"))
+    results = normalise(doc.get("results"))
+    if not results:
+        failed = _engines_that_failed(doc)
+        if failed:
+            # SearXNG ITSELF answered - and every search engine behind it failed.
+            # Returning the empty list here is the silent failure the owner
+            # actually hits: the answer reads as "nothing was found", when the
+            # truth is that nothing was successfully asked. Say which engines
+            # failed, so "the engines are configured" is never mistaken for
+            # "a search returns results".
+            raise SearchError("engines_down", _engines_down_said(failed))
+    return results
 
 
 def _tavily(p: Plan) -> list:
