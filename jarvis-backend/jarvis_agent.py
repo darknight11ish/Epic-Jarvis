@@ -7934,6 +7934,19 @@ def _settings_call(args: dict, call: dict, convo: list, steps: list, say_step,
 
     if _settings_turn_is_shaped(watch):
         return stop(SETTINGS_AFTER_OUTSIDE)
+    if watch.cards >= CARDS_PER_TURN:
+        # WHY THIS IS CHECKED BEFORE THE SETTING IS EVEN NAMED, and why a
+        # cosmetic change is refused by it too. Every other tool is refused at
+        # the limit only when its call WOULD ask (_would_ask in the generic
+        # path), which this tool cannot know: whether a setting asks is decided
+        # by the setting's own setter, and by the time it has decided, its card
+        # is already up. Without this, one answer could raise one card per
+        # carded setting - twelve of them - while CARDS_PER_TURN says one answer
+        # may ask five times. The limit protects the owner from being buried in
+        # cards, so it wins: a cosmetic change in an answer that has already
+        # asked five times is refused with the same sentence every other tool
+        # gets, which tells the owner to ask again in a new message.
+        return stop(CARD_LIMIT_ERROR.format(n=CARDS_PER_TURN))
     value = str(args.get("value") or "").strip().lower()
     if value not in ("on", "off"):
         return stop(SETTINGS_VALUE_WORDS)

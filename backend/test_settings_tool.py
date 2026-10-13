@@ -478,6 +478,31 @@ def t_a_pending_change_cannot_back_an_i_did_it_claim():
           CL.action_succeeded(steps2) is True, repr(steps2))
 
 
+def t_an_answer_that_has_asked_too_often_changes_nothing():
+    """CARDS_PER_TURN is checked BEFORE the setting is named, because this tool
+    cannot know in advance whether the setting's own rule will ask - and by the
+    time it has decided, its card is already up. So the turn's card limit holds
+    for this tool too, including for a change that would have needed no card."""
+    rec = _Recording(R.Outcome(True, "Done."))
+    table = (rec.setting(key="humour", names=("humour",)),)
+    w = _watch()
+    w.cards = AG.CARDS_PER_TURN
+    got, steps, _events, _w = run_tool("humour", "off", watch=w, table=table)
+    check("no setter is reached once the answer has asked its fill",
+          rec.calls == [], repr(rec.calls))
+    check("nothing is reported as changed", got.get("changed") is False, repr(got))
+    check("the owner is told to ask again in a new message",
+          "new message" in str(got.get("error", "")), repr(got))
+    check("the step reads as refused", steps and steps[0].get("outcome") == "refused",
+          repr(steps))
+    one_under = _watch()
+    one_under.cards = AG.CARDS_PER_TURN - 1
+    rec2 = _Recording(R.Outcome(True, "Done - no jokes."))
+    table2 = (rec2.setting(key="humour", names=("humour",)),)
+    got2, _s2, _e2, _w2 = run_tool("humour", "off", watch=one_under, table=table2)
+    check("one under the limit still works", got2.get("changed") is True, repr(got2))
+
+
 def t_every_one_of_the_21_switches_resolves_from_its_own_names():
     """The tool's resolver must reach every switch the spoken grammar reaches -
     a name that resolves for the phrase path but not for the tool would leave
@@ -505,6 +530,7 @@ if __name__ == "__main__":
                t_an_unknown_name_changes_nothing_and_raises_no_card,
                t_a_setting_that_lives_on_the_page_names_the_page,
                t_a_bad_value_changes_nothing,
+               t_an_answer_that_has_asked_too_often_changes_nothing,
                t_outside_text_stops_a_setting_change,
                t_conversation_taint_alone_does_not_stop_it,
                t_it_has_no_second_path,
