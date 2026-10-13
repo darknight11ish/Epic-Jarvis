@@ -18,7 +18,9 @@
  * Since 2026-09-25 (the creativity audit's everyday quick wins):
  *  - "Just went off": a timer, alarm or reminder that went off in the last
  *    hour, with Snooze (brain_schedule_act "snooze" - a one-off copy ten
- *    minutes later; a repeating one keeps its usual times; no card);
+ *    minutes later; a repeating one keeps its usual times; no card) and,
+ *    since 2026-10-13, Delete (DEF-008: brain_schedule_act "delete" now
+ *    reaches a job that has already gone off - see WENT_OFF_ACTIONS);
  *  - named lists ("shopping"), each under its own heading with its items,
  *    an Add box, and "Clear list" - which asks "are you sure?" first, like
  *    Forget, and sends how many items it showed (brain_schedule_clear_list),
@@ -432,8 +434,26 @@ export function standbyTimes(start, end) {
   return { at, until };
 }
 
-/** Under "Just went off", one button: Snooze - ONE job per tap. */
-export const WENT_OFF_ACTIONS = Object.freeze(["snooze"]);
+/**
+ * Under "Just went off", two buttons: Snooze and Delete - ONE job per tap.
+ *
+ * Delete is the same word and the same `delete` the live rows offer, and it
+ * is here because a fired entry is one the owner can SEE: until 2026-10-13
+ * the route refused it (DEF-008, `act()`'s own state gate), so the only way
+ * off that row was to wait an hour. The fix for DEF-008 routes
+ * `do == "delete"` before that gate, exactly as `snooze` already was, so the
+ * one verb that could reach a fired job now reaches it. Nothing else about
+ * the row moved: it still ages out after an hour, Snooze is still 24 hours,
+ * and neither asks anything first - there is no card and no "are you sure?",
+ * because clearing an entry that has ALREADY gone off changes nothing about
+ * the future (the owner's 2026-09-25 decision: a plain timer or a one-time
+ * reminder needs no approval card).
+ *
+ * The label is "Delete" rather than the register's own phrase "Clear this":
+ * every other row in this module names this action "Delete" (`labelOf`), and
+ * "Clear" is already taken here by "Clear list", which means a whole list.
+ */
+export const WENT_OFF_ACTIONS = Object.freeze(["snooze", "delete"]);
 
 /** The buttons one row offers, as action names, in order. Never "all". */
 export function actionsOf(job) {

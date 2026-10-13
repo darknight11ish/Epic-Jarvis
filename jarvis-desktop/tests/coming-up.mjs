@@ -25,8 +25,10 @@
  *   says how the last end went; no toast for a kind the PC says notifies
  *   nobody; the phone says the same words.
  * - the everyday quick wins (2026-09-25): "Just went off" with Snooze - ONE
- *   brain_schedule_act "snooze" for that id, ten minutes, asking nothing;
- *   named lists under their own headings with their own Add box; "Clear
+ *   brain_schedule_act "snooze" for that id, ten minutes, asking nothing -
+ *   and (2026-10-13, DEF-008) Delete beside it, the same one action every
+ *   other row offers, which clears an entry that has already gone off; named
+ *   lists under their own headings with their own Add box; "Clear
  *   list" asks "are you sure?" first and sends the list and the count it
  *   showed - nothing on a "no"; all of it greyed on a stale link; list names
  *   hidden with the private lists; the to-do list itself has no Clear; the
@@ -53,14 +55,17 @@ import {
   COMING_UP_DETAIL,
   COMING_UP_TITLE,
   countdown,
+  DELETE_LABEL,
   DONE_LINE,
   HIDDEN_LIST_TITLE,
+  labelOf,
   LISTS_NOTE,
   namedLists,
   SNOOZE_LABEL,
   SNOOZE_SECONDS,
   tagOf,
   todoItems,
+  WENT_OFF_ACTIONS,
   WENT_OFF_DETAIL,
   WENT_OFF_TITLE,
   wentOffMeta,
@@ -241,6 +246,28 @@ await check("snooze and named lists: both apps' words, and the PC's", async () =
     "Clear the packing list? This deletes all 1 item on it, and cannot be undone.");
   assert.equal(addPlaceholder("Shopping list"), "Add to the shopping list");
   assert.equal(addPlaceholder("To-do list"), "Add to the to-do list");
+  // A fired entry can be CLEARED as well as snoozed (DEF-008, the owner's
+  // decision of 2026-10-13). The second button is the same one action every
+  // other row offers - "Delete", never a second word for it, and never
+  // "clear", which in this module means a whole list (CLEAR_LIST_LABEL).
+  assert.deepEqual([...WENT_OFF_ACTIONS], ["snooze", "delete"]);
+  // ONE action name, ONE label, wherever it is drawn: the went-off row and
+  // every live row go through the same labelOf, so Delete reads "Delete"
+  // here too - and nothing on this row is worded "Clear", which in this
+  // module means a whole named list (CLEAR_LIST_LABEL).
+  assert.equal(labelOf("snooze"), SNOOZE_LABEL);
+  assert.equal(labelOf("delete"), DELETE_LABEL);
+  assert.notEqual(labelOf("delete"), CLEAR_LIST_LABEL);
+  for (const action of WENT_OFF_ACTIONS) {
+    assert.ok(labelOf(action) && labelOf(action) !== action, `no label for ${action}`);
+  }
+  // The phone's list is this list, word for word: one action name, one set of
+  // buttons, in the same order, on both sides (Schedule.kt).
+  const phoneList = /val WENT_OFF_ACTIONS = listOf\(([^)]*)\)/.exec(
+    readRepo("jarvis-client/app/src/main/java/com/jarvis/client/net/Schedule.kt"));
+  assert.ok(phoneList, "the phone has no WENT_OFF_ACTIONS");
+  assert.deepEqual(phoneList[1].split(",").map((s) => s.trim().replace(/^"|"$/g, "")),
+    [...WENT_OFF_ACTIONS], "the phone's went-off buttons are not the desktop's");
 });
 
 await check("reading: what went off, the lists, and which items are on which", async () => {
@@ -553,9 +580,15 @@ await check("Just went off: Snooze is ONE change for that id, ten minutes, askin
   const shown = await page.locator("#went-off-part").isVisible();
   const title = await page.locator("#went-off-part h3").innerText();
   const text = await page.locator("#went-off").innerText();
+  const first = page.locator("#went-off .row-item").first();
+  // Two buttons, in the same order and with the same words as every other
+  // row's: Snooze, then Delete. Delete is the danger one and is NOT a
+  // "clear" - this module's Clear list means a whole named list.
+  const buttons = (await first.locator("button").allInnerTexts()).map((b) => b.trim());
+  const danger = await first.locator("button.danger").allInnerTexts();
   let asked = false;
   page.on("dialog", (d) => { asked = true; d.dismiss(); });
-  await page.locator("#went-off .row-item").first().getByRole("button", { name: SNOOZE_LABEL }).click();
+  await first.getByRole("button", { name: SNOOZE_LABEL }).click();
   await page.waitForTimeout(500);
   const sent = await page.evaluate(() => window.__scheduleCalls);
   const after = await page.locator("#went-off-part").isHidden();
@@ -564,12 +597,36 @@ await check("Just went off: Snooze is ONE change for that id, ten minutes, askin
   assert.equal(shown, true, "Just went off was not shown");
   assert.equal(title.trim().toLowerCase(), WENT_OFF_TITLE.toLowerCase());
   assert.match(text, /Went off at 07:00/);
+  assert.deepEqual(buttons, [SNOOZE_LABEL, DELETE_LABEL]);
+  assert.deepEqual(danger.map((b) => b.trim()), [DELETE_LABEL]);
   assert.equal(asked, false, "Snooze asked a question");
   assert.deepEqual(sent, [{ cmd: "brain_schedule_act", id: "s00000000c1", action: "snooze",
     seconds: SNOOZE_SECONDS }]);
   assert.equal(after, true, "it stayed under Just went off");
   assert.equal(rows.length, 1);
   assert.match(rows[0], /snoozed/i);
+});
+
+await check("Just went off: Delete clears a fired entry, ONE change for that id, asking nothing", async () => {
+  // DEF-008, the owner's decision of 2026-10-13: before this the row's only
+  // way out was to wait an hour for it to age out. The button sends the same
+  // `delete` every other row sends - no card and no "are you sure?" - and the
+  // PC takes the entry out of "Just went off" with it.
+  const page = await workTab({ schedule: { jobs: [], todo: [], went_off: WENT } });
+  const shown = await page.locator("#went-off-part").isVisible();
+  let asked = false;
+  page.on("dialog", (d) => { asked = true; d.dismiss(); });
+  await page.locator("#went-off .row-item").first().getByRole("button", { name: DELETE_LABEL }).click();
+  await page.waitForTimeout(600);
+  const sent = await page.evaluate(() => window.__scheduleCalls);
+  const rows = await page.locator("#coming-up .row-item").count();
+  const part = await page.locator("#went-off-part").isHidden();
+  await page.close();
+  assert.equal(shown, true, "Just went off was not shown");
+  assert.equal(asked, false, "Delete asked a question");
+  assert.deepEqual(sent, [{ cmd: "brain_schedule_act", id: "s00000000c1", action: "delete" }]);
+  assert.equal(rows, 0, "the fired entry was still listed");
+  assert.equal(part, true, "Just went off was left up with nothing in it");
 });
 
 await check("nothing went off: the part is not shown", async () => {
@@ -617,13 +674,15 @@ await check("a named list: its heading, its items, its own Add, and Clear list a
   assert.equal(left, 0);
 });
 
-await check("on a stale link Snooze, a list's Add and Clear list are greyed", async () => {
+await check("on a stale link Snooze, Delete on a fired entry, a list's Add and Clear list are greyed", async () => {
   const page = await workTab({ schedule: { jobs: [], todo: LISTED, lists: LISTS, went_off: WENT },
     link: { stale: true } });
-  const snooze = await page.locator("#went-off button").evaluateAll((bs) => bs.map((b) => b.disabled));
+  const wentOff = await page.locator("#went-off button").evaluateAll((bs) => bs.map((b) => b.disabled));
+  const labels = (await page.locator("#went-off button").allInnerTexts()).map((b) => b.trim());
   const lists = await page.locator("#named-lists button").evaluateAll((bs) => bs.map((b) => b.disabled));
   await page.close();
-  assert.ok(snooze.length === 1 && snooze.every(Boolean), `${snooze}`);
+  assert.deepEqual(labels, [SNOOZE_LABEL, DELETE_LABEL]);
+  assert.ok(wentOff.length === 2 && wentOff.every(Boolean), `${wentOff}`);
   assert.ok(lists.length >= 2 && lists.every(Boolean), `${lists}`);
 });
 

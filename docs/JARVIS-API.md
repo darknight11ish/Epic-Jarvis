@@ -5073,9 +5073,18 @@ item, a briefing and the standby schedule cannot be snoozed (409).
 - **Both apps**, "Just went off" at the top of Coming up, in the same words
   ("In the last hour. Snooze sets it to go off again in 10 minutes - a
   repeating one keeps its usual times."): each thing that went off in the
-  last hour and is not snoozed, "Went off at 07:00", and **Snooze 10
-  minutes** - ONE job per tap, no question, held on a stale link. A snoozed
-  copy's tag reads "alarm, snoozed".
+  last hour and is not snoozed, "Went off at 07:00", and two buttons -
+  **Snooze 10 minutes** and **Delete** (the same word and the same `delete`
+  every other row offers) - ONE job per tap, no question, held on a stale
+  link. A snoozed copy's tag reads "alarm, snoozed". Delete works on an
+  entry that has ALREADY gone off since 2026-10-13 (DEF-008, the owner's
+  decision: `delete` is routed before the scheduler's state gate, the same
+  way `snooze` is - see the `/api/schedule/act` row above). Nothing else
+  about the row moved: it still ages out of "Just went off" after an hour on
+  its own. **This button reaches the route only once the `delete`-before-the-gate
+  half has reached the PC**: on a PC whose `jarvis_schedule.py` predates
+  it, tapping Delete answers 404 "That is not on the list any more.", exactly
+  as `delete` on a fired entry did before.
 - **The phone's notification** for a timer, alarm or reminder carries a
   "Snooze 10 minutes" action (never Approve, never "all"). It goes to the
   link service, which waits for the link like a notification's Deny and

@@ -66,8 +66,10 @@ import kotlinx.coroutines.launch
  *
  * Since 2026-09-25: "Just went off" at the top - a timer, alarm or reminder
  * that went off in the last hour, with Snooze ([Schedule.SNOOZE], ONE job,
- * no card, held on a stale link); and under the to-do list the NAMED lists
- * ("shopping"), each with its items, an Add box, and "Clear list", which
+ * no card, held on a stale link) and, since 2026-10-13, Delete (the same
+ * word and the same route every other row's Delete uses, which reaches a job
+ * that has already gone off; DEF-008); and under the to-do list the NAMED
+ * lists ("shopping"), each with its items, an Add box, and "Clear list", which
  * asks "are you sure?" right there first ([Schedule.clearListQuestion]) and
  * sends how many items it showed ([JarvisRuntime.clearList], held on a stale
  * link). The to-do list itself has no Clear. The desktop does the same.
@@ -408,7 +410,13 @@ internal fun ComingUpSection(
     }
 }
 
-/** Something that went off in the last hour: its words, when, and Snooze - ONE job per tap. */
+/**
+ * Something that went off in the last hour: its words, when, Snooze and
+ * Delete - ONE job per tap. Delete is coloured like every other row's
+ * ([ScheduleRow] below, `chrome.badInk`) and reaches a fired job since
+ * 2026-10-13 (DEF-008; net/Schedule.kt's [Schedule.WENT_OFF_ACTIONS] says why
+ * it is worded "Delete" and not "Clear this"). Neither asks anything first.
+ */
 @Composable
 private fun WentOffRow(job: Schedule.Job, enabled: Boolean, onAct: (String) -> Unit) {
     val chrome = LocalChrome.current
@@ -421,7 +429,12 @@ private fun WentOffRow(job: Schedule.Job, enabled: Boolean, onAct: (String) -> U
         }
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Schedule.WENT_OFF_ACTIONS.forEach { action ->
-                Quiet(Schedule.labelOf(action), enabled = enabled, onClick = { onAct(action) })
+                Quiet(
+                    Schedule.labelOf(action),
+                    color = if (action == "delete") chrome.badInk else null,
+                    enabled = enabled,
+                    onClick = { onAct(action) },
+                )
             }
         }
     }

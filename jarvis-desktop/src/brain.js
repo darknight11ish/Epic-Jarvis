@@ -8386,7 +8386,13 @@ async function clearList(l) {
   await loadComingUp();
 }
 
-/** Something that went off in the last hour: its words, when, and Snooze. */
+/**
+ * Something that went off in the last hour: its words, when, Snooze, and
+ * Delete - the same delete every other row offers, which reaches a fired job
+ * since 2026-10-13 (DEF-008; coming-up.js WENT_OFF_ACTIONS says why it is
+ * worded "Delete" and not "Clear this"). `danger` marks it like the other
+ * Delete buttons; neither button asks anything first.
+ */
 function wentOffRow(job) {
   const item = row({
     tag: tagOf(job),
@@ -8394,7 +8400,7 @@ function wentOffRow(job) {
     title: titleOf(job),
     meta: wentOffMeta(job),
     actions: WENT_OFF_ACTIONS.map((a) =>
-      button(labelOf(a), () => scheduleAct(job, a), { live: true })),
+      button(labelOf(a), () => scheduleAct(job, a), { live: true, danger: a === "delete" })),
   });
   item.dataset.id = job.id;
   return item;
@@ -8542,7 +8548,8 @@ function paintComingUp() {
   if (dom.standbyIsSet) dom.standbyIsSet.hidden = !hasStandby;
   rows(box, v.jobs, scheduleRow, EMPTY_JOBS);
   if (upL.error) box.prepend(el("p", "empty failed", `Could not read it again: ${upL.error}`));
-  // Just went off (the last hour): Snooze, ONE job per tap.
+  // Just went off (the last hour): Snooze and Delete (WENT_OFF_ACTIONS),
+  // ONE job per tap.
   if (dom.wentOffPart) dom.wentOffPart.hidden = !v.wentOff.length;
   if (dom.wentOff) rows(dom.wentOff, v.wentOff, wentOffRow, "");
   if (dom.todoList) rows(dom.todoList, todoItems(v), scheduleRow, EMPTY_TODO);
