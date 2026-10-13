@@ -2517,18 +2517,23 @@ private fun PhoneWatchStartPlate(state: HomeState, actions: HomeActions) {
 
 /**
  * "Playing on your PC" (2026-09-28; [com.jarvis.client.net.PcMedia]): what is
- * playing, in the PC's own sentence, and four buttons, ONE action per tap.
- * Greyed while the link is stale (rule 4); the runtime refuses then too. No
- * card.
+ * playing, in the PC's own sentence, and the transport for it, ONE action per
+ * tap. Greyed while the link is stale (rule 4); the runtime refuses then too.
+ * No card.
  *
- * IT IS DRAWN ONLY WHILE SOMETHING IS ACTUALLY PLAYING (the owner,
- * 2026-10-13: "playing on pc shouldnt show up unless there is something
- * actively playing on the pc"). It used to be drawn always: with the PC's
- * "Nothing seems to be playing right now." as its body when the PC had
- * nothing, and with its own hint sentence before the first read even landed -
- * so the plate was on screen whenever Home was. Both are gone:
- * [com.jarvis.client.net.PcMedia.playing] decides, and an unrecognised answer
- * hides it rather than showing a control that may not mean anything.
+ * IT IS DRAWN ONLY WHILE A TRACK IS LOADED (the owner, 2026-10-13: "playing on
+ * pc shouldnt show up unless there is something actively playing on the pc",
+ * then, asked which he wanted, "Also show it while paused"). It used to be
+ * drawn always: with the PC's "Nothing seems to be playing right now." as its
+ * body when the PC had nothing, and with its own hint sentence before the first
+ * read even landed - so the plate was on screen whenever Home was. All of that
+ * is gone: [com.jarvis.client.net.PcMedia.state] decides, and an idle, empty,
+ * failed or unrecognised answer hides it rather than showing a control that may
+ * not mean anything.
+ *
+ * THE TRANSPORT REFLECTS WHICH IT IS: a paused track offers Play and not Pause,
+ * a playing one the other way round
+ * ([com.jarvis.client.net.PcMedia.transport]).
  *
  * The read repeats while Home is on screen ([com.jarvis.client.net.PcMedia.POLL_MS])
  * because a hidden plate that never asked again could never appear when the
@@ -2538,31 +2543,40 @@ private fun PhoneWatchStartPlate(state: HomeState, actions: HomeActions) {
 private fun PcMediaPlate(canAct: Boolean, actions: HomeActions) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
+    // The PC's DESCRIPTIVE sentence ("Playing: “X” by Y."), and the state the
+    // transport is built from. Kept apart on purpose: the PC's answer to a
+    // BUTTON is a short acknowledgement ("Paused.", "Skipped to the next.")
+    // that names no track and carries no state, so a state read out of that
+    // would be a guess.
     var said by remember { mutableStateOf<String?>(null) }
+    var state by remember { mutableStateOf(com.jarvis.client.net.PcMedia.State.NONE) }
     var busy by remember { mutableStateOf(false) }
     LaunchedEffect(canAct) {
         while (canAct) {
-            said = actions.onPcMedia()
+            val read = actions.onPcMedia()
+            said = read
+            state = com.jarvis.client.net.PcMedia.state(read)
             delay(com.jarvis.client.net.PcMedia.POLL_MS)
         }
         // The link went down: nothing is known, so nothing is claimed.
         said = null
+        state = com.jarvis.client.net.PcMedia.State.NONE
     }
-    // Nothing playing, nothing readable, or anything unrecognised: no plate.
-    if (!com.jarvis.client.net.PcMedia.playing(said)) return
+    // Idle, not readable, or anything unrecognised: no plate.
+    if (!com.jarvis.client.net.PcMedia.shown(state)) return
     Plate {
         Kicker(com.jarvis.client.net.PcMedia.TITLE)
         Gap(4)
         Text(
-            // Never the hint and never "Nothing seems to be playing right
-            // now.": this plate is only composed when the PC said a track is
-            // really playing, so the sentence is always a real one.
+            // The PC's OWN sentence, never one written here: "Playing: “X” by
+            // Y." or "Paused: “X”.". It is also the only place the track is
+            // named.
             said.orEmpty(),
             style = MaterialTheme.typography.labelSmall,
             color = chrome.textLo,
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
-            com.jarvis.client.net.PcMedia.ACTIONS.forEach { action ->
+            com.jarvis.client.net.PcMedia.transport(state).forEach { action ->
                 Quiet(
                     com.jarvis.client.net.PcMedia.label(action),
                     enabled = canAct && !busy,
@@ -2571,7 +2585,29 @@ private fun PcMediaPlate(canAct: Boolean, actions: HomeActions) {
                             busy = true
                             scope.launch {
                                 try {
-                                    said = actions.onPcMediaControl(action)
+                                    val answer = actions.onPcMediaControl(action)
+                                    if (com.jarvis.client.net.PcMedia.ack(answer)) {
+                                        // It worked. Read the PC again rather
+                                        // than putting "Paused." on screen:
+                                        // the description names the track and
+                                        // is what the transport is built from,
+                                        // so pressing Pause flips the buttons.
+                                        val read = actions.onPcMedia()
+                                        if (read != null) {
+                                            said = read
+                                            state = com.jarvis.client.net.PcMedia.state(read)
+                                        } else {
+                                            // The re-read failed. The button's
+                                            // own words are all there is; the
+                                            // 15 s read corrects the state.
+                                            said = answer
+                                        }
+                                    } else {
+                                        // A refusal or a notice from the PC.
+                                        // The state is deliberately left alone:
+                                        // the button did not do anything.
+                                        said = answer
+                                    }
                                 } finally {
                                     busy = false
                                 }
