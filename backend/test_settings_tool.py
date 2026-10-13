@@ -319,14 +319,34 @@ def t_a_setter_that_raises_is_contained():
 def t_an_unknown_name_changes_nothing_and_raises_no_card():
     rec = _Recording(R.Outcome(True, "Done."))
     table = (rec.setting(key="quiet hours", names=("quiet hours",)),)
-    got, steps, _events, w = run_tool("turn off the turbo setting", "off", table=table)
+    # The table is patched ACROSS the read as well as the call, so the sentence
+    # the tool embeds and the sentence this test expects come from the SAME
+    # table. Doing it the obvious way - call run_tool(), then read
+    # changeable_words() - compares two different lists, because run_tool()
+    # restores the real table before it returns: the tool's answer listed the one
+    # patched switch and the expectation listed all 21.
+    #
+    # WHY NOT A LITERAL, which is what was here first. It read "You can change
+    # these by asking", and that went stale the moment this branch met main -
+    # main's own 2026-10-13 change rewrote the sentence to "You can change 51
+    # settings by asking. Here is what they cover: ...". Running this suite on a
+    # REAL merge of origin/main is the only place either side's CI could have
+    # seen that, and it is why the check now reads the registry instead of
+    # quoting it.
+    real = R.BOOL_SETTINGS
+    R.BOOL_SETTINGS = table
+    try:
+        got, steps, _events, w = run_tool("turn off the turbo setting", "off")
+        expected = R.changeable_words()
+    finally:
+        R.BOOL_SETTINGS = real
     check("NO setter was reached", rec.calls == [], repr(rec.calls))
     check("no card was raised", w.cards == 0, repr(w.cards))
     check("it is reported as not changed", got.get("changed") is False, repr(got))
     check("it says it cannot change it",
           "cannot change" in str(got.get("error", "")), repr(got))
     check("and it lists what CAN be changed, from the registry itself",
-          "You can change these by asking" in str(got.get("error", "")), repr(got))
+          expected in str(got.get("error", "")), repr(got))
     check("the step reads as refused with nothing run",
           steps and steps[0].get("ran") is False and steps[0].get("outcome") == "refused",
           repr(steps))
