@@ -3456,6 +3456,35 @@ class MainActivity : FragmentActivity() {
                                 onOpenChecks = { nav.go(Screen.CHECKS) },
                                 onOpenInbox = { nav.go(Screen.INBOX) },
                                 onOpenBrain = { nav.go(Screen.BRAIN) },
+                                // "Choose a model" (PlainErrors.MODELS). The
+                                // notice is right: the model Jarvis uses is not
+                                // installed. The button was not: it opened the
+                                // Brain at its first section, and the Models
+                                // plate - which already holds both allowed
+                                // halves, the models the PC HAS ("Use", which
+                                // raises a switch card) and a box to TYPE the
+                                // name of one it has not got ("Install", which
+                                // raises an install card, and no download until
+                                // it is approved) - sits at the bottom of the
+                                // "Jarvis on your PC" heading, behind its own
+                                // menu. So it lands on the plate, the same way
+                                // "open the galaxy" lands on the Galaxy: the
+                                // section is named for this screen only, and the
+                                // menu is shown for this visit if the owner had
+                                // hidden it.
+                                //
+                                // Browsing stays OFF (the owner's standing
+                                // decision of 2026-09-20): there is no list of
+                                // what could be installed and no search - only
+                                // the PC's own models, and a name typed by hand.
+                                onOpenModelChoices = {
+                                    com.jarvis.client.ui.MenuPlaces
+                                        .menuFor(Screen.BRAIN.name, "models")
+                                        ?.let { JarvisRuntime.menus.showForVisit(it) }
+                                    pendingSection = "models"
+                                    pendingSectionScreen = Screen.BRAIN.name
+                                    nav.go(Screen.BRAIN)
+                                },
                                 // The Galaxy, one tap from Home (the owner's
                                 // request of 2026-10-11). It opens the Brain's
                                 // own "people-and-things" plate - the phone's
