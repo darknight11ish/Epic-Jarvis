@@ -17,6 +17,8 @@ The owner asked: *"are there any features that haven't been field tested on the 
 | **total** | **127** |
 
 > **Overtaken 2026-10-11, later the same day.** The counts below are what this document measured that night; the **second pass** (section after "Build freshness") drove **43 of these 45** on real hardware and **could not drive 2** - the phone on **real CI builds and locally-built branches of #294**, the desktop on **0.2.140** - and its verdicts stand beside these. The rows below are left exactly as they were measured, and the marker here is the document's own convention for being overtaken.
+>
+> **Again 2026-10-12/13.** The **third pass** (below the second, section "Third pass - 2026-10-12/13") records **five things driven on the live PC tonight and ten that were not**, every row with its evidence **and the person who can settle it**. Those rows are conversation- and fix-level, so the 127-feature counts below are unchanged by them; what changed is that the testing queue is now written down instead of living in agent reports.
 
 ## What each verdict means here, exactly
 
@@ -143,6 +145,67 @@ Three more could only be driven in part, and their reasons are in their own rows
 and `faces` (90, PARTIAL - the picker is **drawn, not text**, and there is **no vision provider here**).
 
 The pass's own summary of the pattern, kept because it is what the counts do not show: across four batches, **the features that drew a screen when asked passed almost every time, and the ones that failed were almost all features with no screen of their own** (actions and behaviours) **or features whose menu the owner's privacy setting hides**. **Twenty-nine of the 45 now read PARTIAL or BLOCKED** (19 PARTIAL + 10 BLOCKED), and most of those are "there is nothing to point at", not "it is broken". (The record's batch note said twenty of the 45 at the time it was written; the last four were driven after it, so this line carries today's number.)
+
+## Third pass - 2026-10-12/13: what was driven tonight, and who can settle the rest
+
+**Written 2026-10-13. Checkout `.dsh-scratch/wt-fieldmatrix` (branch `docs/field-test-matrix-2026-10-13`) off `origin/main` `94da2d61`.** The owner asked: *"did you or the new conversation finish field testing everything that could be that hasn't been already?"* This section is the honest answer: **five things were driven on the live PC tonight, and nine were not** - each with the reason and the person who can settle it.
+
+Every evidence path below was read from disk (the shared `.dsh-scratch/` reports); nothing here was re-measured except the Ollama lanes, which are marked as measured by this pass. **`BLOCKED` and `NOT-TESTABLE` are never counted as passes** (`CLAUDE.md`, 2026-10-11).
+
+**One column is new in this pass: `who can settle it`.** The earlier passes had no such column, and a row without a "who" is a row nobody can finish.
+
+### The counts (tonight's rows only)
+
+| verdict | rows |
+|---|---|
+| **PASS** | **5** |
+| NOT TESTED | 7 |
+| NOT-TESTABLE | 2 |
+| **total** | **14** |
+
+### PASS (5) - driven on the owner's own machine tonight
+
+| # | what ran | verdict | build / when | the evidence, in the record's own words | who settled it |
+|---|---|---|---|---|---|
+| T1 | **Voice gate, refusal direction** | **PASS** | live backend `127.0.0.1:4719`, 2026-10-12 | a synthetic clip was **refused**: `{"is_owner": false, "text": "", "score": -0.0414, "threshold": 0.5, "voice_print": "phone", "too_short": false}` - no transcript and no turn. The **first attempt proved nothing** (`score: 0.0`, `threshold: 0.0`, `voice_print: ""`, `too_short: true` - the comparison never ran), which is exactly why the second run is the evidence. Report: `.dsh-scratch/voice-field-test-report.md` §3, §3c | an agent, on the live build; needs no owner |
+| T2 | **Settings by typing, BOTH directions** | **PASS** | live backend, 2026-10-12 | cosmetic: typed *"keep the animal still"* → `still` went **`false → true`** in the live store, `X-Jarvis-Route: {"lane": "no AI model", "quick": "animal_switch"}`, answer *"Done - the animal keeps still now…"*; typed *"let the animal move again"* → **`true → false`**. Loosening: typed *"turn on remembering sensitive topics automatically"* → **a card was raised** (`"expires_in": 599`), `auto_sensitive` stayed **`false`**; **DENIED** → `{"ok": true, "id": "9749ddd28b2b", "state": "denied"}`, 0 waiting, setting still `false`. Approve was never called. Report: `.dsh-scratch/settings-turn-test-report.md` §1-§2 | an agent; needs no owner |
+| T3 | **The 10-minute card window** | **PASS** | live build, 2026-10-12 | a real card reported **`"expires_in": 599`** - the ten-minute window is what the live build actually offers. Report: `.dsh-scratch/settings-turn-test-report.md` §2.1 | an agent; needs no owner |
+| T4 | **Voice enrolment saved** | **PASS** | live PC, 2026-10-12 20:58:12 | `owner-phone.json` 59,128 bytes = **3 sub-prints (`close`, `far`, `room`) × 12 samples = 36**, **phone microphone only**, scored by two embedders (512-dim and 192-dim). A second repeat **ADDS** a sub-print rather than replacing. Report: `.dsh-scratch/voice-field-test-report.md` §1 | an agent read the file; the training itself was the owner's |
+| T5 | **The grey rectangles are gone** | **PASS** | installed desktop build, 2026-10-12 | **two independent instruments**: exact `rgb(84,84,84)` was **355,327 px in exactly two regions** before (220,320 px at `(1440,480)` 480x459; 135,000 px at `(398,259)` 1125x120) and **24 px / 18 px / 0 px** after, with **no region ≥ 2,000 px**; the untouched HUD rail is **pixel-identical** across the pair (0 of 270,750 px differing), so it is a like-for-like comparison. Report: `.dsh-scratch/grey-recheck-report.md` | an agent, on the installed build. The owner's own before/after screenshots remain the human record |
+
+### NOT TESTED (7) and NOT-TESTABLE (2) - each with the reason and the person who can settle it
+
+| # | what | verdict | why not tonight | who can settle it |
+|---|---|---|---|---|
+| T6 | **Voice gate, ACCEPT half - does it recognise HIM** | **NOT-TESTABLE here** | a stand-in voice would only test the stand-in; the print holds his voice only (a synthetic clip scores −0.04 against the 0.50 bar, which is the *refusal* working) | **the owner**, in about two minutes: (1) on the phone open **Checks → Your voice**; (2) hold the **talk button** and say a normal command in his ordinary voice and distance, e.g. *"Hey Jarvis, what is the weather like tomorrow?"*; (3) **watch for** the answer being spoken and **no** "does not match the enrolled voice" line (that line naming a negative score is the refusal seen in T1); (4) if it refuses, repeat once from the same distance - more than two refusals means the print is wrong for that microphone. **Record:** whether the turn ran, and if it refused, the score and threshold. Source: `.dsh-scratch/voice-field-test-report.md` §5 |
+| T7 | **Desktop-microphone voice** | **NOT-TESTABLE** | there is **no `owner-desktop.json`**; the module's fallback resolves a desktop clip to the **phone** print, and the module's own docstring says *"a print trained on one scores the other lower"* - so a PC-mic test may refuse **legitimately** and would not tell us anything new. Measured in `.dsh-scratch/voice-field-test-report.md` §6 | **the owner** trains the PC microphone (Settings → Voice), then an agent re-runs the synthetic refusal with `mic=desktop` |
+| T8 | **#355 - Jarvis's face on the phone's Live screen** (merged 2026-10-13 05:30) | **NOT TESTED on a device** | the phone is **disconnected**; the change cannot be seen or driven from this machine | **the owner**, on the phone: start Jarvis Live and look for the face as the largest element |
+| T9 | **#356 - the silent mic, the face-size options, and the idle "Playing on your PC" plate** (merged 05:54) | **NOT TESTED on a device** | same - phone disconnected. **Three separate defects, one row each is owed when it is driven** | **the owner**, on the phone: tap and hold the mic; change the face size; check the PC plate when nothing is playing |
+| T10 | **#357 - "Choose a model" lands on the Models plate** (merged 05:50) | **NOT TESTED on a device** | same - phone disconnected | **the owner**, on the phone: when the plate says a model is missing, tap **Choose a model** |
+| T11 | **#361 - the approval toast's where-to-approve line stays visible** (merged 06:37; the brief called this "the notification's fixed wording") | **NOT TESTED** | it must be **seen on his desktop with a card actually raised**; no card was raised to look at | **the owner**, at the PC: raise any approval card and look at the toast; or an agent at the machine |
+| T12 | **Settings through the MODEL path** | **NOT TESTED** | every settings turn tonight was answered by the **fixed phrase grammar** - `X-Jarvis-Route: {"lane": "no AI model", "quick": "settings_bool"}` - so no model was ever asked to change a setting. **The reported "both Ollama lanes down" is now MEASURED, not reported:** this pass ran `tools/check_lanes.py` (read-only: *"starts nothing, stops nothing … writes no file"*) and it printed **`LANE DOWN everyday port 11436`** and **`LANE DOWN coding port 11435`** (both `WinError 10061`), **`NOT HEALTHY - 2 lane(s) DOWN`**, **exit code 1**. So an unmatched sentence could not have been answered by a local model tonight at all | **an agent**, once the lanes are back: the tool prints the exact command for each (`Start-ScheduledTask -TaskName 'Jarvis Ollama - Everyday model (RTX 2060)'` and `… 'Jarvis Ollama - Coding model (RTX 2080 Super)'`) - starting them is the **owner's** machine, so the owner or an agent at the PC. Then send an unmatched sentence and read `X-Jarvis-Route` |
+| T13 | **The two apps refreshing live after a setting changes by asking** | **NOT TESTED** | **neither UI was driven**: the settings test changed the value on the backend and read the store, and its own report says the live app was *"NOT TESTED"* (§4). The backend applied the change; whether the open window redrew is unmeasured | **the owner** (or an agent with the desktop app open): type a cosmetic change, then watch the Settings screen and the animal without touching anything |
+| T14 | **The tray menu's trimmed rows (#353, merged 05:08)** | **NOT TESTED on his desktop** | the earlier pass could not read the tray at all - *"the tray icon is inside the 'Show Hidden Icons' overflow and a right-click produced no readable menu"* - and nothing tonight opened it | **the owner**, at the PC: open the tray and check that ~12 rows show and the rest are under **More…**; or an agent sitting at the machine |
+
+### The one existing table this pass had to touch - checked, not assumed
+
+In **Conversation-driven features - preflight coverage and real turns** (the table at the end), the row
+`"what asks first"` reads *"read and switched, not driven by a turn"*. **That row is unchanged** - tonight
+did not move an asks-first tier, and claiming otherwise would be exactly the kind of overstatement this
+document exists to prevent. What **is** new is that **a settings change has now been driven by a real
+typed turn**, which that table had no row for at all, so a row was added for it, carrying the model-path
+caveat from T12. No other existing row's verdict changes tonight: the five PASS rows above are new
+measurements, and the merges they belong to (#353-#357, #361) postdate every build the 127-feature table
+was measured against.
+
+### The one-sentence answer to the owner's question
+
+**What is left, and who can do it: five things passed tonight on the live PC; of the ten that did not, one
+needs his voice and one needs the PC microphone trained (both his, minutes of work), three are the merged
+phone changes waiting for the phone to be plugged back in, one needs a card seen on his desktop, one needs
+the two local Ollama lanes started (verified down tonight, exit 1) before a model-path settings test is
+even possible, one needs the apps left open while a setting changes, and one needs the tray opened at the
+machine.**
 
 ## The headline: features that have NEVER run on a real device
 
@@ -338,6 +401,7 @@ See the table at the end: every entry there says whether the **preflight** cover
 | timers, alarms, reminders (spoken/typed) | yes, a chain check | **no spoken or typed turn found** | no transcript drives a timer; selftest chain only |
 | memory saving ("remember that...") | partly | yes - the phone pass drove the Brain's learning plates | phone-pass README, Brain/Memory rows |
 | "what asks first" | yes | read and switched, not driven by a turn | settings-audit/INVENTORY.md; desktop-pass sweep |
+| **a setting changed by asking (any switch)** | yes - `settings_bool` / `settings_open` / the on-off phrases | **yes - 2026-10-12, a real typed turn** - *"keep the animal still"* applied and was reversed, and a loosening (*"turn on remembering sensitive topics automatically"*) raised a card and did **not** apply | .dsh-scratch/settings-turn-test-report.md §1-§2. **Through the MODEL path: NOT TESTED** - every settings turn was answered by the fixed grammar (`lane: "no AI model"`), and both Ollama lanes were verified DOWN (Third pass T12) |
 | focus sessions | unknown | **no** | no artifact drives one |
 | "Coach this" | yes | **no** - only its setting is checked | desktop-pass gap-table.md (the setting route answered 404) |
 | "Look at this" / "Watch with me" | partly | the screen feature was built and shown, but no artifact records a real look on the PC | docs/SCREEN-DESIGN.md; phone XML dumps |
