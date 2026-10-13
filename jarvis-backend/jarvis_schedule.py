@@ -1266,19 +1266,31 @@ class Scheduler:
         do = str(do or "").strip().lower()
         if do == "snooze":
             return self.snooze(jid, seconds)
+        if do == "delete":
+            # Routed before this method's own list gate, exactly as snooze is
+            # (2026-10-13). A job that went off is no longer on the live list
+            # but is still SHOWN under "Just went off", and the owner decided
+            # that an entry the apps list must be one they can clear. Every
+            # other verb still refuses a fired job - see delete()'s docstring.
+            return self.delete(jid)
         now = self.now()
         with self._lock, self._db() as c:
             row = self._row(c, jid)
-            if row is None or row["state"] not in ("active", "paused", "waiting"):
+            if row is None:
+                return 404, {"ok": False, "reason": "no_such_job",
+                             "error": "That is not on the list any more."}
+            if row["state"] == "fired":
+                # It has already gone off. Saying "not on the list any more"
+                # would be false - both apps show it under "Just went off" -
+                # and pausing, resuming, ticking off or adding time to
+                # something that has already gone off means nothing. Snooze
+                # and Delete are routed above and do act on one.
+                return 409, {"ok": False, "error": "It has already gone off."}
+            if row["state"] not in ("active", "paused", "waiting"):
                 return 404, {"ok": False, "reason": "no_such_job",
                              "error": "That is not on the list any more."}
             kind, state = row["kind"], row["state"]
-            if do == "delete":
-                c.execute("DELETE FROM jobs WHERE id = ?", (jid,))
-                said = "Deleted."
-                if state == "waiting":
-                    said = "Deleted. The card for it will set nothing up."
-            elif do == "done":
+            if do == "done":
                 if kind != "todo":
                     return 409, {"ok": False, "error": "Only a to-do item can be marked done."}
                 c.execute("UPDATE jobs SET state = 'done', changed = ?, fired_at = ? "
@@ -1349,6 +1361,33 @@ class Scheduler:
                 return 400, {"ok": False, "error": "do is one of: pause, resume, delete, done, "
                                                    "add_time, snooze"}
         _audit("schedule.act", {"id": jid, "kind": kind, "do": do})
+        self._changed(jid, kind)
+        return 200, {"ok": True, "id": jid, "said": said}
+
+    # ---- delete -----------------------------------------------------------------------
+
+    def delete(self, jid: str) -> tuple:
+        """ONE job, gone - no card (stopping only makes things quieter).
+
+        Routed before act()'s own list gate, the same way snooze() is. A job
+        that WENT OFF is not on the live list any more, but it is still
+        SHOWN under "Just went off" for WENT_OFF_SHOWN (an hour) and stays
+        readable by id for FIRED_KEEP (a day), and the owner decided on
+        2026-10-13 that an entry the apps list must be one they can clear.
+        So 'fired' is the one extra state this accepts; the rest of the set
+        (active, paused, waiting) is exactly act()'s, and a 'waiting' job
+        still says its card will set nothing up. 'done' is still refused: a
+        to-do ticked off is on no list at all, so "not on the list any more"
+        is the honest answer for it."""
+        with self._lock, self._db() as c:
+            row = self._row(c, jid)
+            if row is None or row["state"] not in ("active", "paused", "waiting", "fired"):
+                return 404, {"ok": False, "reason": "no_such_job",
+                             "error": "That is not on the list any more."}
+            kind, state = row["kind"], row["state"]
+            c.execute("DELETE FROM jobs WHERE id = ?", (jid,))
+        said = "Deleted. The card for it will set nothing up." if state == "waiting" else "Deleted."
+        _audit("schedule.act", {"id": jid, "kind": kind, "do": "delete"})
         self._changed(jid, kind)
         return 200, {"ok": True, "id": jid, "said": said}
 
