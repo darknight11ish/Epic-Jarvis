@@ -2,6 +2,10 @@
 
 **Audited:** clean `main` worktree at `.dsh-scratch/audit-main`, commit `fa2b379f`.
 **Date of every upstream lookup: 2026-10-07.**
+**F3 re-read 2026-10-13:** the four hardware claims, and the two version numbers they
+rest on, were read again from today's upstream; the F3 block at the end of this report and
+the two F3 rows in Table 5 carry today's numbers beside the 2026-10-07 ones. **Every other
+lookup on this page is still the 2026-10-07 reading.**
 **Read-only on product code.** Nothing in the worktree was modified.
 
 **What this answers:** the owner asked whether the GitHub repos Jarvis was built
@@ -217,8 +221,8 @@ records it.
 
 | Program / model | Used for | Pinned in the repo | Current upstream | Behind | Matters? | Action |
 |---|---|---|---|---|---|---|
-| **Ollama** | runs the everyday model | research read at commit `b2da9e4` (2026-09-23) = ~v0.34.4 — `docs/HARDWARE-PROFILES.md:103` | **v0.40.0** (tag list + `/releases/latest`) | ~6 releases | **Yes — see F3** | Re-read the four source claims before trusting the VRAM numbers |
-| **llama.cpp** | the engine inside Ollama | `b11081` (2026-09-21) = `161755f` — `docs/HARDWARE-PROFILES.md:104` | build **`b11460`** (2026-10-07); also now has semver tags up to `v0.6.0` | ~379 builds | **Yes — see F3** | Same |
+| **Ollama** | runs the everyday model | research read at commit `b2da9e4` (2026-09-23) = ~v0.34.4 — `docs/HARDWARE-PROFILES.md:103` | **v0.40.3** (2026-10-11), read 2026-10-13; it was **v0.40.0** at this report's own reading | 6 releases past v0.34.4 (3 at this report's reading) | **Yes — see F3** | Re-read the four source claims before trusting the VRAM numbers — **re-read 2026-10-13: all four still hold and no figure changes; the correction is at the end of F3** |
+| **llama.cpp** | the engine inside Ollama | `b11081` (2026-09-21) = `161755f` — `docs/HARDWARE-PROFILES.md:104` | build **`b11588`** (2026-10-13), read 2026-10-13; it was **`b11460`** at this report's own reading. **Ollama's own pin is `b11521`, not master.** Also has semver tags up to `v0.6.0`, which is *not* the current build | 507 builds (379 at this report's reading) | **Yes — see F3** | Same |
 | **colibri** (`JustVugg/colibri`) | the very large model engine | none — `docs/BIG-MODEL.md:71` tells the owner to download "the newest release" | **v2.0.0** (2026-10-06), repo active | n/a by design | Medium: the docs' model table and RAM figures were written against an older release | Re-read `BIG-MODEL.md`'s numbers against the v2.0.0 notes |
 | **Obscura** (`h4ckf0r0day/obscura`) | the headless "windowless" browser | **`RELEASE_TAG = "v0.2.3"`** — `backend/jarvis_obscura.py:137` | **v0.2.4** (2026-10-04) | 1 minor, **212 commits** | **Yes — see F2** | Bump the tag + hash, or at minimum fix the stale "newest release" comment |
 | **SearXNG** (`searxng/searxng`) | the **default** web-search provider | `docker.io/searxng/searxng:latest` — `backend/README.md:10057` | no GitHub releases; continuous rolling | unbounded | **Yes — see F4** | Pin a digest or a dated tag |
@@ -384,6 +388,62 @@ the release cadence.
 **Suggested action:** re-read `common/common.h` (`LLAMA_ARG_FIT_TARGET` default),
 `src/llama-context.cpp` (the fit path) and Ollama's `LLAMA_CPP_VERSION` /
 `vram-estimate.patch` at today's commits, and stamp a new date on the doc.
+
+**Correction, 2026-10-13 — the re-reading was done, and nothing in this project
+changes.** Every number above is left as it was measured on 2026-10-07; this is what
+today's upstream says beside it. The pins that matter are
+[Ollama `v0.40.3`](https://api.github.com/repos/ollama/ollama/releases/latest) and
+llama.cpp at **Ollama's own pin `b11521`**, not master.
+
+- **Ollama's latest release is `v0.40.3`** (published 2026-10-11) — **6 releases** past
+  `v0.34.4` (`v0.35.0`, `v0.35.1`, `v0.40.0`, `v0.40.1`, `v0.40.2`, `v0.40.3`), plus the
+  `v0.40.4-rc1` pre-release (2026-10-12), which `/releases/latest` does not return. (The
+  report above says "~6 releases" and names three — `v0.40.0`, `v0.35.1`, `v0.35.0` — and
+  three is what the publication dates show for 2026-10-07.)
+- **The latest llama.cpp build is `b11588`** (2026-10-13, commit `7f51953d`). From `b11081`
+  that is **507 builds**. **Ollama's own `LLAMA_CPP_VERSION` is `b11521`** — so anyone
+  re-reading "llama.cpp today" must read **Ollama's pinned commit, not master**: the
+  runtime does what `b11521` does, whatever master has moved on to.
+  ([the release list](https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=5))
+- **A trap, recorded so it is not repeated:** GitHub's `/releases/latest` for
+  `ggml-org/llama.cpp` returns **`v0.6.0`** (2026-10-05), their new semantic-version tag
+  line — *not* the current build. Anyone quoting that as "latest llama.cpp" is quoting the
+  wrong thing. (`b11589`–`b11592` are already tagged but carry no release yet, so the
+  release list — not the tag list — is the thing to read.)
+
+**The four claims, re-read at those pins — all four still hold:**
+
+1. **llama.cpp's 1 GB per-card gap is still exactly 1 GiB.** `common/common.h:486` at
+   `b11521`: `fit_params_target = std::vector<size_t>(llama_max_devices(), 1024 * 1024*1024)`
+   — the `-fitt` / `--fit-target` flag, `common/arg.cpp:2909`, env `LLAMA_ARG_FIT_TARGET`
+   (`:2932`). Ollama passes it through untouched: `startLlamaServer` builds a fixed flag list
+   (`llm/llama_server.go:372-423` at `v0.40.3`) that never names a fit flag, so llama.cpp's
+   own default is what runs.
+2. **`q8_0` KV cache still forces flash attention on — and the coupling is stronger than
+   this report says.** At `b11521` an *auto* flash-attention setting is turned on with
+   `enabling flash_attn since it is required for quantized V cache`
+   (`src/llama-context.cpp:3951-3955`); with flash attention explicitly **off**, the same
+   file now **fails the load**: `quantized V cache was requested, but this requires Flash
+   Attention` (`:474-476`). Ollama passes the KV type straight through as
+   `--cache-type-k` / `--cache-type-v` (`llm/llama_server.go:396-399`). The line numbers this
+   report gives for that code (`src/llama-context.cpp` around `:4063-4072`) no longer point
+   at it — which is the drift the report was about.
+3. **Ollama's VRAM estimator still answers the way the ~1.88× over-count was measured.**
+   `PredictServerVRAM` (`llm/llama_server.go:2791` at `v0.40.3`) still takes no KV-type
+   argument and still hard-codes two bytes per element:
+   `// KV cache: 2 (K+V) * layers * kv_heads * head_dim * context * 2 bytes (f16)` (`:2794`),
+   `kvCache := 2 * layers * kvHeads * headDim * uint64(numCtx) * 2` (`:2804`). It cannot see
+   `OLLAMA_KV_CACHE_TYPE`, so it still prices a `q8_0` cache at f16. The arithmetic behind
+   the 1.88× was **not** re-run here — what was re-read is the code that produced it, and it
+   is unchanged. This repository's own estimator is the one that reads the setting
+   (`backend/vram-estimate.patch:38-39`), so the over-count is Ollama's, not this project's.
+4. **One process per model is still true.** `startLlamaServer` (`llm/llama_server.go:351`)
+   builds one flag list and spawns `cmd = exec.Command(exe, params...)` (`:426`) for it — a
+   child process per launch, exactly as the reading above says.
+
+**What this does not change:** any figure in `docs/HARDWARE-PROFILES.md` or
+`docs/MODEL-TOPOLOGY.md`. The re-reading F3 asked for is done, and the answer is that the
+sources moved and the four claims did not.
 
 ### F4. SearXNG — the **default** search provider — is pulled as an unpinned `:latest`
 

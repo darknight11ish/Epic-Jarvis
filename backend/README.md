@@ -4897,7 +4897,7 @@ tap: the card says "If you did not just do this on your phone, say no".
 |---|---|
 | `POST /api/voice/enroll` | Body `{"clips": ["<base64 WAV>", ...]}`. Checks the clips, keeps them **in memory only**, raises **one** card, answers `202` at once. Enrols nothing. |
 | approve the card | `jarvis_voice.enroll()` builds the voice print from the clips, then the clips are deleted. |
-| deny, or nobody answers in 3 minutes | Nothing changes. The clips are deleted. |
+| deny, or nobody answers in 10 minutes | Nothing changes. The clips are deleted. |
 | a second training while a card waits | `409` - "approve or deny that card first", with the seconds left. It does not replace the first: that card would still be on screen, and approving it would then enrol the wrong clips or nothing. |
 | `change_own_config` not `"ask"` | `409` before any card, saying to set it back to `"ask"`. A card that no person answers must not replace your voice. |
 | limits | 3 to 12 clips (8 before 2026-09-24), each 1 to 10 seconds and 80 seconds in all, 16 kHz 16-bit mono WAV, not silent. Anything else is a `400` naming the clip: "clip 3 is too short (0.6 s) - read the whole sentence". 80 seconds of clips fit inside the backend's 4 MB request limit. |
