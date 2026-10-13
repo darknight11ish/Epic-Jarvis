@@ -56,13 +56,26 @@ object LocalNetworkPermission {
     const val FIRST_API = 37
 
     /**
+     * The gate as a plain function of an API level, so the boundary can be
+     * tested BEHAVIOURALLY rather than read.
+     *
+     * `Build.VERSION.SDK_INT` is a `static final int` in the mockable jar, so a
+     * JVM unit test cannot set it (measured: reflection throws
+     * `IllegalAccessException`), and this repo deliberately has no Robolectric
+     * dependency. Without this seam the API-36/37 boundary could only be pinned
+     * by reading the source - which proves the text, not the behaviour. With it,
+     * 36, 37 and 38 are ordinary assertions.
+     */
+    internal fun requiredAt(api: Int): Boolean = api >= FIRST_API
+
+    /**
      * True when the running Android actually gates local network access, so
      * this permission is real and worth asking for.
      *
      * Read from the DEVICE's own version, not from `targetSdk`: a phone on
      * API 36 has no such permission and never will, whatever this app targets.
      */
-    fun required(): Boolean = Build.VERSION.SDK_INT >= FIRST_API
+    fun required(): Boolean = requiredAt(Build.VERSION.SDK_INT)
 
     /**
      * Whether local network access is allowed.

@@ -227,9 +227,13 @@ class LocalNetworkPermissionTest {
      * The at/above-37 side, pinned where a JVM test can still reach it. A
      * hardcoded `false` (never ask, so the transport dies silently on Android
      * 17), an off-by-one, an inverted comparison or a gate on what the app
-     * TARGETS instead of what the device RUNS all fail here. When the seam
-     * named in this file's header exists, this test should be replaced by one
-     * that calls `requiredAt(36)`, `requiredAt(37)` and `requiredAt(38)`.
+     * TARGETS instead of what the device RUNS all fail here.
+     *
+     * The BEHAVIOURAL half of this lives in
+     * `requiredAt is the gate at the API 37 boundary`, which uses the
+     * `requiredAt(api)` seam for 36, 37 and 38. This source pin is kept as well
+     * because it is the only thing that catches `required()` ceasing to read the
+     * device at all - `requiredAt` would stay correct while nothing called it.
      */
     @Test
     fun `the gate reads the device's version, not what the app targets`() {
@@ -243,28 +247,66 @@ class LocalNetworkPermissionTest {
             flat.contains("Build.VERSION.SDK_INT"),
         )
         assertTrue(
-            "required() must use >= - API 37 is the first version that enforces it. " +
-                "It reads: $flat",
-            flat.contains(">="),
+            "required() must read the DEVICE's own version, through the one gate " +
+                "function, so the boundary stays testable. It reads: $flat",
+            flat.contains("requiredAt(Build.VERSION.SDK_INT)"),
         )
+        // The comparison lives in requiredAt(api) since the seam was added, so it
+        // is read from THAT function's body - checking for it in required()'s
+        // would assert something that is no longer there and call a passing
+        // delegation a failure.
+        val gate = source.substringAfter("fun requiredAt", "")
+            .substringBefore("\n    }")
+            .replace(Regex("\\s+"), " ")
+            .trim()
         assertTrue(
-            "required() must compare against FIRST_API itself, spelled exactly, so the number " +
-                "lives in one place. It reads: $flat",
-            flat.contains("Build.VERSION.SDK_INT >= FIRST_API"),
+            "requiredAt must spell the comparison as `api >= FIRST_API`, so the number " +
+                "lives in exactly one place and is not adjusted. It reads: $gate",
+            gate.contains("api >= FIRST_API"),
         )
         assertFalse(
             "FIRST_API must not be adjusted in the comparison: `FIRST_API + 1` hides the gate " +
-                "one Android version up, which no JVM test can see because the test platform's " +
-                "API level cannot be varied. It reads: $flat",
-            Regex("FIRST_API\\s*[+\\-*/]").containsMatchIn(flat),
+                "one Android version up. It reads: $gate",
+            Regex("FIRST_API\\s*[+\\-*/]").containsMatchIn(gate),
         )
         assertFalse(
             "the gate must not be keyed to what the app targets: a phone on API 36 has no such " +
                 "permission and never will, whatever this app's targetSdk says (build.gradle.kts " +
                 "targets 36 today, so a targetSdk key would report 'nothing to do' on the " +
                 "Android version that enforces it)",
-            body.contains("targetSdk") || body.contains("TARGET_SDK"),
+            body.contains("targetSdk") || body.contains("TARGET_SDK") ||
+                gate.contains("targetSdk") || gate.contains("TARGET_SDK"),
         )
+    }
+
+    /**
+     * The boundary itself, BEHAVIOURALLY - 36 is not gated, 37 and 38 are.
+     *
+     * This is the half the source pin cannot prove. `Build.VERSION.SDK_INT` is
+     * a `static final int` in the mockable jar, so a JVM test cannot set it
+     * (measured: reflection throws `IllegalAccessException`) and this repo
+     * deliberately carries no Robolectric. `requiredAt(api)` exists purely so
+     * these three assertions can be ordinary ones.
+     */
+    @Test
+    fun `requiredAt is the gate at the API 37 boundary`() {
+        assertFalse(
+            "API 36 must NOT be gated - that is every phone this app has run on, and " +
+                "gating it would put an unfixable warning on all of them",
+            LocalNetworkPermission.requiredAt(36),
+        )
+        assertTrue(
+            "API 37 is the first version that enforces it; an off-by-one here loses the " +
+                "whole transport on the version that matters",
+            LocalNetworkPermission.requiredAt(37),
+        )
+        assertTrue(
+            "and every version above it stays gated",
+            LocalNetworkPermission.requiredAt(38),
+        )
+        // The boundary is exactly FIRST_API, not a number written twice.
+        assertFalse(LocalNetworkPermission.requiredAt(LocalNetworkPermission.FIRST_API - 1))
+        assertTrue(LocalNetworkPermission.requiredAt(LocalNetworkPermission.FIRST_API))
     }
 
     // ---------------------------------------------------------------- (5)
