@@ -1189,8 +1189,8 @@
       "notice": {
         "title": "Jarvis wants to let Jarvis do more, for longer, or more often",
         "summary": "Jarvis wants to do more, for longer, or more often.",
-        "full": "not classified, so treated as the worst case. nothing has happened yet.",
-        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "full": "lets Jarvis keep your Undo history longer, or lets a model read what you save to find the people and things in it; the new number is written into your own settings file and takes effect at once, nothing is sent anywhere, and lowering it again is instant - but what the raise allowed may already have happened by then. nothing has happened yet.",
+        "body": "lets Jarvis keep your Undo history longer, or lets a model read what you save to find the people and things in it; the new number is written into your own settings file and takes effect at once, nothing is sent anywhere, and lowering it again is instant - but what the raise allowed may already have happened by then. nothing has happened yet.",
         "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false
@@ -1213,8 +1213,8 @@
       "notice": {
         "title": "Jarvis wants to let Jarvis interrupt you more often",
         "summary": "Jarvis wants to interrupt you more often.",
-        "full": "not classified, so treated as the worst case. nothing has happened yet.",
-        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "full": "lets Jarvis speak up more times a day than your budget allows; the new number is written into your own settings file and takes effect at once, nothing is sent anywhere, and lowering it again is instant - but an interruption the raise allowed may already have happened by then. nothing has happened yet.",
+        "body": "lets Jarvis speak up more times a day than your budget allows; the new number is written into your own settings file and takes effect at once, nothing is sent anywhere, and lowering it again is instant - but an interruption the raise allowed may already have happened by then. nothing has happened yet.",
         "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false
