@@ -1,0 +1,5651 @@
+[
+ {
+  "id": "typing",
+  "group": "Talking",
+  "title": "Type a message and read the answer",
+  "surface": "both",
+  "terms": [
+   "message",
+   "type a question",
+   "the jarvis bar",
+   "alt+space"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 139,
+    "term": "message"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 25,
+    "term": "message"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify-404.tsv",
+    "line": 48,
+    "term": "message"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify404.py",
+    "line": 11,
+    "term": "message"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/one-chat-turn.py",
+    "line": 5,
+    "term": "message"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/read-back.py",
+    "line": 41,
+    "term": "message"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "prompt-coach",
+  "group": "Talking",
+  "title": "Check a prompt before you send it",
+  "surface": "both",
+  "terms": [
+   "prompt coach",
+   "prompt_coach",
+   "prompt"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/README.md",
+    "line": 80,
+    "term": "prompt"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 23,
+    "term": "prompt"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 160,
+    "term": "prompt"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify-404.tsv",
+    "line": 19,
+    "term": "prompt"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract2.log",
+    "line": 46,
+    "term": "prompt"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 179,
+    "term": "prompt"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes.tsv",
+    "line": 160,
+    "term": "prompt"
+   }
+  ],
+  "suite": [
+   "jarvis_prompt_coach.py",
+   "test_prompt_coach.py"
+  ],
+  "xml": [
+   "j-promptcoach-post.xml",
+   "j-promptcoach-pre.xml"
+  ]
+ },
+ {
+  "id": "talk-button",
+  "group": "Talking",
+  "title": "The talk button",
+  "surface": "both",
+  "terms": [
+   "talk button",
+   "talk_button",
+   "button"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/README.md",
+    "line": 31,
+    "term": "button"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 32,
+    "term": "button"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 163,
+    "term": "button"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.py",
+    "line": 151,
+    "term": "button"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/uia.txt",
+    "line": 9,
+    "term": "button"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 17,
+    "term": "button"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 19,
+    "term": "button"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "wake-word",
+  "group": "Talking",
+  "title": "Say \"Hey Jarvis\"",
+  "surface": "both",
+  "terms": [
+   "wake word",
+   "wake_word"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 783,
+    "term": "wake word"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/.evidence/transcript-1.txt",
+    "line": 92,
+    "term": "wake word"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/.evidence/transcript-C.txt",
+    "line": 115,
+    "term": "wake word"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_auto_learn.py",
+    "line": 758,
+    "term": "wake_word"
+   }
+  ],
+  "suite": [
+   "jarvis_wakeword.py",
+   "test_wakeword.py",
+   "train_wakeword.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "read-aloud",
+  "group": "Talking",
+  "title": "Jarvis reads its answers aloud",
+  "surface": "both",
+  "terms": [
+   "read aloud",
+   "read_aloud",
+   "answers"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 19,
+    "term": "answers"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 20,
+    "term": "answers"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-routes.py",
+    "line": 15,
+    "term": "answers"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 453,
+    "term": "read aloud"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 156,
+    "term": "read aloud"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/README.md",
+    "line": 34,
+    "term": "answers"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "spoken-style",
+  "group": "Talking",
+  "title": "Short answers to spoken questions",
+  "surface": "both",
+  "terms": [
+   "spoken style",
+   "spoken_style",
+   "answers",
+   "spoken",
+   "questions"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 19,
+    "term": "answers"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 20,
+    "term": "answers"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 60,
+    "term": "questions"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-routes.py",
+    "line": 15,
+    "term": "answers"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep.log",
+    "line": 37,
+    "term": "questions"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 9,
+    "term": "questions"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 15,
+    "term": "questions"
+   }
+  ],
+  "suite": [
+   "test_spoken_style.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "voice-training",
+  "group": "Talking",
+  "title": "Teach Jarvis your voice",
+  "surface": "both",
+  "terms": [
+   "voice training",
+   "voice_training"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 42,
+    "term": "voice_training"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 226,
+    "term": "voice_training"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify-404.tsv",
+    "line": 37,
+    "term": "voice_training"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract2.log",
+    "line": 70,
+    "term": "voice_training"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 248,
+    "term": "voice_training"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes.tsv",
+    "line": 226,
+    "term": "voice_training"
+   }
+  ],
+  "suite": [
+   "gen_voice_training_cases.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "voice-check",
+  "group": "Talking",
+  "title": "How strict the voice check is",
+  "surface": "both",
+  "terms": [
+   "voice check",
+   "voice_check",
+   "strict"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 647,
+    "term": "voice check"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 175,
+    "term": "strict"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/README.md",
+    "line": 79,
+    "term": "strict"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/THIRD-PARTY-NOTICES.txt",
+    "line": 63,
+    "term": "strict"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "custom-voices",
+  "group": "Talking",
+  "title": "The voice Jarvis speaks with",
+  "surface": "both",
+  "terms": [
+   "custom voices",
+   "custom_voices",
+   "speaks"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 160,
+    "term": "speaks"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep.log",
+    "line": 104,
+    "term": "speaks"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 355,
+    "term": "speaks"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 91,
+    "term": "speaks"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/README.md",
+    "line": 173,
+    "term": "speaks"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "manner",
+  "group": "Talking",
+  "title": "How Jarvis talks",
+  "surface": "both",
+  "terms": [
+   "manner"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 97,
+    "term": "manner"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 106,
+    "term": "manner"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes.tsv",
+    "line": 97,
+    "term": "manner"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep.log",
+    "line": 57,
+    "term": "manner"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 1256,
+    "term": "manner"
+   }
+  ],
+  "suite": [
+   "jarvis_manner.py",
+   "test_manner.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "interrupt",
+  "group": "Talking",
+  "title": "Interrupt Jarvis while it talks",
+  "surface": "both",
+  "terms": [
+   "interrupt"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 13,
+    "term": "interrupt"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 783,
+    "term": "interrupt"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/README.md",
+    "line": 36,
+    "term": "interrupt"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/THIRD-PARTY-NOTICES.txt",
+    "line": 2071,
+    "term": "interrupt"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "live",
+  "group": "Talking",
+  "title": "Jarvis Live",
+  "surface": "both",
+  "terms": [
+   "jarvis live",
+   "live session"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 442,
+    "term": "jarvis live"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 529,
+    "term": "jarvis live"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_agent.py",
+    "line": 2822,
+    "term": "jarvis live"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_android_control.py",
+    "line": 8,
+    "term": "live session"
+   }
+  ],
+  "suite": [
+   "jarvis_live.py",
+   "jarvis_live_photo_test.py",
+   "test_browser_control_live.py",
+   "test_live.py"
+  ],
+  "xml": [
+   "41-galaxy-live.xml",
+   "d-keeplinkalive-after.xml",
+   "d-keeplinkalive-find0.xml",
+   "d-keeplinkalive-find1.xml"
+  ]
+ },
+ {
+  "id": "live-extras",
+  "group": "Talking",
+  "title": "The extras around Live",
+  "surface": "both",
+  "terms": [
+   "live extras",
+   "live_extras",
+   "extras",
+   "around"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 33,
+    "term": "around"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 27,
+    "term": "around"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/README.md",
+    "line": 12,
+    "term": "around"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/.evidence/run9.ps1",
+    "line": 49,
+    "term": "around"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "talk-to-type",
+  "group": "Talking",
+  "title": "Talk-to-type",
+  "surface": "desktop",
+  "terms": [
+   "talk to type",
+   "talk_to_type"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_speech.py",
+    "line": 48,
+    "term": "talk_to_type"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_voice_enroll.py",
+    "line": 93,
+    "term": "talk_to_type"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/test_talk_type.py",
+    "line": 43,
+    "term": "talk_to_type"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/docs/ARCHITECTURE.md",
+    "line": 2091,
+    "term": "talk_to_type"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "chat-thread",
+  "group": "Talking",
+  "title": "The whole conversation, and carrying it on",
+  "surface": "both",
+  "terms": [
+   "chat thread",
+   "chat_thread",
+   "conversation",
+   "carrying"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 174,
+    "term": "conversation"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 10,
+    "term": "conversation"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 80,
+    "term": "conversation"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/one-chat-turn.py",
+    "line": 6,
+    "term": "conversation"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/probe-suspects.py",
+    "line": 23,
+    "term": "conversation"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/read-back.py",
+    "line": 4,
+    "term": "conversation"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 77,
+    "term": "conversation"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "temporary-chat",
+  "group": "Talking",
+  "title": "Temporary chat",
+  "surface": "both",
+  "terms": [
+   "temporary chat",
+   "temporary_chat",
+   "temporary"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 63,
+    "term": "temporary chat"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 448,
+    "term": "temporary chat"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/eval_learner.py",
+    "line": 94,
+    "term": "temporary"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/eval_memory.py",
+    "line": 26,
+    "term": "temporary"
+   }
+  ],
+  "suite": [
+   "test_temporary_chat.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "history-search",
+  "group": "Talking",
+  "title": "Search what was said",
+  "surface": "both",
+  "terms": [
+   "history search",
+   "history_search"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_chat_log.py",
+    "line": 100,
+    "term": "history search"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/docs/ARCHITECTURE.md",
+    "line": 1549,
+    "term": "history search"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/docs/CHAT-TAGS-DESIGN.md",
+    "line": 95,
+    "term": "history search"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/docs/CHATBOT-DRIVER-DESIGN.md",
+    "line": 593,
+    "term": "history search"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "briefing",
+  "group": "Talking",
+  "title": "The morning briefing",
+  "surface": "both",
+  "terms": [
+   "briefing",
+   "morning"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 9,
+    "term": "briefing"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 21,
+    "term": "briefing"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify-404.tsv",
+    "line": 8,
+    "term": "briefing"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract2.log",
+    "line": 12,
+    "term": "briefing"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.py",
+    "line": 142,
+    "term": "briefing"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/probe-suspects.py",
+    "line": 26,
+    "term": "briefing"
+   }
+  ],
+  "suite": [
+   "jarvis_briefing.py",
+   "test_briefing.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "coming-up",
+  "group": "Talking",
+  "title": "Timers, alarms, reminders and lists",
+  "surface": "both",
+  "terms": [
+   "coming up",
+   "coming_up",
+   "timers",
+   "alarms",
+   "reminders"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 1014,
+    "term": "reminders"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 195,
+    "term": "timers"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/README.md",
+    "line": 48,
+    "term": "timers"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/.evidence/transcript-G.txt",
+    "line": 1070,
+    "term": "timers"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "today",
+  "group": "Talking",
+  "title": "Today",
+  "surface": "both",
+  "terms": [
+   "today"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 142,
+    "term": "today"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 192,
+    "term": "today"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 450,
+    "term": "today"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 245,
+    "term": "today"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/README.md",
+    "line": 49,
+    "term": "today"
+   }
+  ],
+  "suite": [
+   "jarvis_today.py",
+   "test_today.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "widgets",
+  "group": "Talking",
+  "title": "Widgets you describe",
+  "surface": "both",
+  "terms": [
+   "widgets",
+   "describe"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 149,
+    "term": "widgets"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 16,
+    "term": "widgets"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 98,
+    "term": "widgets"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify-404.tsv",
+    "line": 15,
+    "term": "widgets"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract2.log",
+    "line": 82,
+    "term": "widgets"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 107,
+    "term": "widgets"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes.tsv",
+    "line": 65,
+    "term": "widgets"
+   }
+  ],
+  "suite": [
+   "jarvis_widgets.py",
+   "test_widgets.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "jobs",
+  "group": "Talking",
+  "title": "Background jobs",
+  "surface": "both",
+  "terms": [
+   "jobs",
+   "background"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 49,
+    "term": "jobs"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract2.log",
+    "line": 37,
+    "term": "jobs"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 101,
+    "term": "jobs"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes.tsv",
+    "line": 92,
+    "term": "jobs"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep.log",
+    "line": 31,
+    "term": "jobs"
+   }
+  ],
+  "suite": [
+   "jarvis_jobs.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "now",
+  "group": "Talking",
+  "title": "What Jarvis is doing right now",
+  "surface": "both",
+  "terms": [],
+  "device": [],
+  "report": [],
+  "suite": [
+   "gen_own_network_cases.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "attention-budget",
+  "group": "Talking",
+  "title": "How much Jarvis may interrupt you",
+  "surface": "both",
+  "terms": [
+   "attention budget",
+   "attention_budget",
+   "interrupt"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 13,
+    "term": "interrupt"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 783,
+    "term": "interrupt"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/README.md",
+    "line": 36,
+    "term": "interrupt"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/THIRD-PARTY-NOTICES.txt",
+    "line": 2071,
+    "term": "interrupt"
+   }
+  ],
+  "suite": [
+   "test_attention_budget.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "focus",
+  "group": "Talking",
+  "title": "Focus session",
+  "surface": "both",
+  "terms": [
+   "session",
+   "focus session",
+   "focus buddy"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 34,
+    "term": "session"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 150,
+    "term": "session"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes.tsv",
+    "line": 135,
+    "term": "session"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep.log",
+    "line": 24,
+    "term": "session"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 307,
+    "term": "focus session"
+   }
+  ],
+  "suite": [
+   "jarvis_focus.py",
+   "test_focus.py",
+   "test_focus_brief.py",
+   "gen_focus_cases.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "memory-tab",
+  "group": "Memory",
+  "title": "The Memory tab",
+  "surface": "desktop",
+  "terms": [
+   "memory tab",
+   "memory_tab"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 1006,
+    "term": "memory tab"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_settings_registry.py",
+    "line": 637,
+    "term": "memory tab"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/test_gate_denial_rule.py",
+    "line": 9,
+    "term": "memory tab"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/test_gate_outcome.py",
+    "line": 210,
+    "term": "memory tab"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "memory-saved",
+  "group": "Memory",
+  "title": "Facts Jarvis saved by itself",
+  "surface": "both",
+  "terms": [
+   "memory saved",
+   "memory_saved",
+   "itself"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/chat-turn.log",
+    "line": 4,
+    "term": "itself"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 105,
+    "term": "itself"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 37,
+    "term": "itself"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/capture-dpi.ps1",
+    "line": 3,
+    "term": "itself"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify404.py",
+    "line": 31,
+    "term": "itself"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract-routes2.py",
+    "line": 10,
+    "term": "itself"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract-routes3.py",
+    "line": 15,
+    "term": "itself"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "memory-waiting",
+  "group": "Memory",
+  "title": "Facts waiting for your yes",
+  "surface": "both",
+  "terms": [
+   "memory waiting",
+   "memory_waiting",
+   "waiting"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/README.md",
+    "line": 59,
+    "term": "waiting"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 303,
+    "term": "waiting"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 21,
+    "term": "waiting"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 5,
+    "term": "waiting"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify-404.tsv",
+    "line": 50,
+    "term": "waiting"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.py",
+    "line": 148,
+    "term": "waiting"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep.log",
+    "line": 18,
+    "term": "waiting"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 13,
+    "term": "waiting"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "memory-known",
+  "group": "Memory",
+  "title": "What Jarvis knows about you",
+  "surface": "desktop",
+  "terms": [
+   "memory known",
+   "memory_known"
+  ],
+  "device": [],
+  "report": [],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "memory-people",
+  "group": "Memory",
+  "title": "People and things",
+  "surface": "phone",
+  "terms": [
+   "memory people",
+   "memory_people",
+   "people",
+   "things"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/README.md",
+    "line": 32,
+    "term": "things"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 10,
+    "term": "things"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 40,
+    "term": "things"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/README.md",
+    "line": 19,
+    "term": "things"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/THIRD-PARTY-NOTICES.txt",
+    "line": 5,
+    "term": "people"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "pinned-facts",
+  "group": "Memory",
+  "title": "Always keep in mind",
+  "surface": "both",
+  "terms": [
+   "pinned facts",
+   "pinned_facts",
+   "always"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 11,
+    "term": "always"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 167,
+    "term": "always"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/README.md",
+    "line": 68,
+    "term": "always"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/.evidence/tour2.ps1",
+    "line": 1,
+    "term": "always"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "between-us",
+  "group": "Memory",
+  "title": "Between us",
+  "surface": "both",
+  "terms": [
+   "between us",
+   "between_us"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 449,
+    "term": "between us"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/.evidence/transcript-G.txt",
+    "line": 612,
+    "term": "between us"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_agent.py",
+    "line": 194,
+    "term": "between us"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_chat_log.py",
+    "line": 3019,
+    "term": "between us"
+   }
+  ],
+  "suite": [
+   "test_between_us.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "topics",
+  "group": "Memory",
+  "title": "Topics",
+  "surface": "both",
+  "terms": [
+   "topics"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/README.md",
+    "line": 44,
+    "term": "topics"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/chat-turn.log",
+    "line": 4,
+    "term": "topics"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 148,
+    "term": "topics"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 19,
+    "term": "topics"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify-404.tsv",
+    "line": 33,
+    "term": "topics"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract2.log",
+    "line": 65,
+    "term": "topics"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.py",
+    "line": 147,
+    "term": "topics"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 235,
+    "term": "topics"
+   }
+  ],
+  "suite": [
+   "eval_topics.py",
+   "jarvis_topics.py",
+   "test_topics.py",
+   "test_topics_leaks.py"
+  ],
+  "xml": [
+   "58-find-private-topics.xml"
+  ]
+ },
+ {
+  "id": "memory-learning",
+  "group": "Memory",
+  "title": "The learning switches",
+  "surface": "both",
+  "terms": [
+   "memory learning",
+   "memory_learning",
+   "learning",
+   "switches"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/README.md",
+    "line": 58,
+    "term": "learning"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 18,
+    "term": "learning"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 3,
+    "term": "switches"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify-404.tsv",
+    "line": 16,
+    "term": "learning"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.py",
+    "line": 146,
+    "term": "learning"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 134,
+    "term": "learning"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes.tsv",
+    "line": 118,
+    "term": "learning"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "wiki",
+  "group": "Memory",
+  "title": "The wiki Jarvis builds",
+  "surface": "both",
+  "terms": [
+   "wiki",
+   "builds"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/README.md",
+    "line": 54,
+    "term": "wiki"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 134,
+    "term": "wiki"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 258,
+    "term": "wiki"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/commit-msg.txt",
+    "line": 10,
+    "term": "wiki"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract-routes3.py",
+    "line": 31,
+    "term": "wiki"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.py",
+    "line": 19,
+    "term": "wiki"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/probe-suspects.py",
+    "line": 22,
+    "term": "wiki"
+   }
+  ],
+  "suite": [
+   "jarvis_wiki.py",
+   "test_wiki.py",
+   "gen_wiki_cases.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "deep-questions",
+  "group": "Memory",
+  "title": "Deep questions",
+  "surface": "both",
+  "terms": [
+   "deep questions",
+   "deep_questions",
+   "questions"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 24,
+    "term": "questions"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 60,
+    "term": "questions"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep.log",
+    "line": 37,
+    "term": "questions"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 9,
+    "term": "questions"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 15,
+    "term": "questions"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/README.md",
+    "line": 36,
+    "term": "questions"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "memory-as-of",
+  "group": "Memory",
+  "title": "What did I believe on this date?",
+  "surface": "phone",
+  "terms": [
+   "memory as of",
+   "memory_as_of",
+   "believe"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/THIRD-PARTY-NOTICES.txt",
+    "line": 2279,
+    "term": "believe"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/.evidence/transcript-G.txt",
+    "line": 654,
+    "term": "believe"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/eval_memory.py",
+    "line": 46,
+    "term": "believe"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_focus.py",
+    "line": 107,
+    "term": "believe"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "import-chats",
+  "group": "Memory",
+  "title": "Bring in old chats",
+  "surface": "desktop",
+  "terms": [
+   "import chats",
+   "import_chats"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 114,
+    "term": "import_chats"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 130,
+    "term": "import_chats"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes.tsv",
+    "line": 114,
+    "term": "import_chats"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep.log",
+    "line": 69,
+    "term": "import_chats"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_history_import.py",
+    "line": 10,
+    "term": "import_chats"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "history",
+  "group": "Memory",
+  "title": "Your past chats",
+  "surface": "both",
+  "terms": [
+   "history"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/README.md",
+    "line": 40,
+    "term": "history"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 172,
+    "term": "history"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 14,
+    "term": "history"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 80,
+    "term": "history"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify-404.tsv",
+    "line": 13,
+    "term": "history"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract-routes.py",
+    "line": 9,
+    "term": "history"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/one-chat-turn.py",
+    "line": 7,
+    "term": "history"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/read-back.py",
+    "line": 2,
+    "term": "history"
+   }
+  ],
+  "suite": [
+   "import_history.py",
+   "jarvis_history_import.py",
+   "test_history_import.py",
+   "test_import_history.py"
+  ],
+  "xml": [
+   "57-find-private-history.xml"
+  ]
+ },
+ {
+  "id": "chat-tags",
+  "group": "Memory",
+  "title": "Chat tags",
+  "surface": "both",
+  "terms": [
+   "chat tags",
+   "chat_tags"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 1696,
+    "term": "chat tags"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_asks_first.py",
+    "line": 380,
+    "term": "chat_tags"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_card_words.py",
+    "line": 172,
+    "term": "chat_tags"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_chat_log.py",
+    "line": 482,
+    "term": "chat tags"
+   }
+  ],
+  "suite": [
+   "test_chat_tags.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "forget-range",
+  "group": "Memory",
+  "title": "Forget a time frame",
+  "surface": "both",
+  "terms": [
+   "forget range",
+   "forget_range"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 175,
+    "term": "forget_range"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 111,
+    "term": "forget_range"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract2.log",
+    "line": 42,
+    "term": "forget_range"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 125,
+    "term": "forget_range"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes.tsv",
+    "line": 111,
+    "term": "forget_range"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep.log",
+    "line": 67,
+    "term": "forget_range"
+   }
+  ],
+  "suite": [
+   "jarvis_forget_range.py",
+   "test_forget_range.py",
+   "gen_forget_range_cases.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "galaxy",
+  "group": "Memory",
+  "title": "Galaxy",
+  "surface": "desktop",
+  "terms": [
+   "galaxy"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/README.md",
+    "line": 48,
+    "term": "galaxy"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 209,
+    "term": "galaxy"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 1008,
+    "term": "galaxy"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 1712,
+    "term": "galaxy"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/THIRD-PARTY-NOTICES.txt",
+    "line": 560,
+    "term": "galaxy"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_menus.py",
+    "line": 303,
+    "term": "galaxy"
+   }
+  ],
+  "suite": [
+   "gen_galaxy_cases.py"
+  ],
+  "xml": [
+   "19-galaxy-unreachable.xml",
+   "20-galaxy-try1.xml",
+   "20-galaxy-try2.xml",
+   "20-galaxy-try3.xml"
+  ]
+ },
+ {
+  "id": "look-at-this",
+  "group": "Screen and pictures",
+  "title": "Look at this",
+  "surface": "both",
+  "terms": [
+   "look at this",
+   "look_at_this"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 17,
+    "term": "look at this"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 712,
+    "term": "look at this"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/.evidence/run9.ps1",
+    "line": 32,
+    "term": "look at this"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/.evidence/transcript-D.txt",
+    "line": 44,
+    "term": "look at this"
+   }
+  ],
+  "suite": [],
+  "xml": [
+   "j-lookatthisandwatchwithme-post.xml",
+   "j-lookatthisandwatchwithme-pre.xml"
+  ]
+ },
+ {
+  "id": "watch-with-me",
+  "group": "Screen and pictures",
+  "title": "Watch with me",
+  "surface": "both",
+  "terms": [
+   "watch with me",
+   "watch_with_me"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 229,
+    "term": "watch with me"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 712,
+    "term": "watch with me"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/.evidence/run9.ps1",
+    "line": 32,
+    "term": "watch with me"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/.evidence/transcript-D.txt",
+    "line": 44,
+    "term": "watch with me"
+   }
+  ],
+  "suite": [],
+  "xml": [
+   "j-lookatthisandwatchwithme-post.xml",
+   "j-lookatthisandwatchwithme-pre.xml"
+  ]
+ },
+ {
+  "id": "picture-mode",
+  "group": "Screen and pictures",
+  "title": "Picture mode",
+  "surface": "both",
+  "terms": [
+   "picture mode",
+   "picture_mode",
+   "picture"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 164,
+    "term": "picture"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 70,
+    "term": "picture"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify-404.tsv",
+    "line": 51,
+    "term": "picture"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 66,
+    "term": "picture"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes.tsv",
+    "line": 70,
+    "term": "picture"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep.log",
+    "line": 42,
+    "term": "picture"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "photo-reminder",
+  "group": "Screen and pictures",
+  "title": "Photo to reminder",
+  "surface": "both",
+  "terms": [
+   "photo reminder",
+   "photo_reminder",
+   "reminder"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 140,
+    "term": "photo_reminder"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract2.log",
+    "line": 45,
+    "term": "photo_reminder"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 155,
+    "term": "photo_reminder"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes.tsv",
+    "line": 140,
+    "term": "photo_reminder"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 241,
+    "term": "reminder"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "live-camera",
+  "group": "Screen and pictures",
+  "title": "Show Jarvis the camera in Live",
+  "surface": "phone",
+  "terms": [
+   "live camera",
+   "live_camera",
+   "camera"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 617,
+    "term": "camera"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 781,
+    "term": "camera"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/THIRD-PARTY-NOTICES.txt",
+    "line": 952,
+    "term": "camera"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/.evidence/transcript-D.txt",
+    "line": 85,
+    "term": "camera"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "quiz",
+  "group": "Screen and pictures",
+  "title": "Quiz me on a text",
+  "surface": "both",
+  "terms": [
+   "quiz"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/README.md",
+    "line": 33,
+    "term": "quiz"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 102,
+    "term": "quiz"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 24,
+    "term": "quiz"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 162,
+    "term": "quiz"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/commit-msg.txt",
+    "line": 7,
+    "term": "quiz"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify-404.tsv",
+    "line": 20,
+    "term": "quiz"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract2.log",
+    "line": 47,
+    "term": "quiz"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.py",
+    "line": 125,
+    "term": "quiz"
+   }
+  ],
+  "suite": [
+   "eval_quiz_grader.py",
+   "jarvis_quiz.py",
+   "jarvis_quiz_cloud.py",
+   "test_quiz.py"
+  ],
+  "xml": [
+   "03-find-quiz.xml",
+   "04-find-quiz-target.xml"
+  ]
+ },
+ {
+  "id": "decks",
+  "group": "Notes and files",
+  "title": "My study decks",
+  "surface": "both",
+  "terms": [
+   "decks"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 146,
+    "term": "decks"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 44,
+    "term": "decks"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify-404.tsv",
+    "line": 49,
+    "term": "decks"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract2.log",
+    "line": 22,
+    "term": "decks"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 43,
+    "term": "decks"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes.tsv",
+    "line": 44,
+    "term": "decks"
+   }
+  ],
+  "suite": [
+   "jarvis_decks.py",
+   "test_decks.py",
+   "gen_decks_cases.py",
+   "gen_decks_golden.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "notes-write",
+  "group": "Notes and files",
+  "title": "Write a note for you",
+  "surface": "both",
+  "terms": [
+   "notes write",
+   "notes_write"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_reach.py",
+    "line": 804,
+    "term": "notes_write"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/test_reach.py",
+    "line": 172,
+    "term": "notes_write"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/jarvis-backend/jarvis_reach.py",
+    "line": 804,
+    "term": "notes_write"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/tools/gen_tasks_cases.py",
+    "line": 58,
+    "term": "notes_write"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "folders",
+  "group": "Notes and files",
+  "title": "Folders Jarvis may look in",
+  "surface": "both",
+  "terms": [
+   "folders"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 13,
+    "term": "folders"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 66,
+    "term": "folders"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify-404.tsv",
+    "line": 12,
+    "term": "folders"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract2.log",
+    "line": 28,
+    "term": "folders"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.py",
+    "line": 126,
+    "term": "folders"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 62,
+    "term": "folders"
+   }
+  ],
+  "suite": [
+   "gen_folders_cases.py"
+  ],
+  "xml": [
+   "j-foldersjarvismaylookin-post.xml",
+   "j-foldersjarvismaylookin-pre.xml"
+  ]
+ },
+ {
+  "id": "documents",
+  "group": "Notes and files",
+  "title": "Ask about a PDF, a Word file or a Notion page",
+  "surface": "both",
+  "terms": [
+   "documents",
+   "notion"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 40,
+    "term": "documents"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 13,
+    "term": "notion"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 67,
+    "term": "documents"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/dev.ps1",
+    "line": 22,
+    "term": "documents"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify.log",
+    "line": 1,
+    "term": "documents"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify404.py",
+    "line": 29,
+    "term": "documents"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract2.log",
+    "line": 2,
+    "term": "documents"
+   }
+  ],
+  "suite": [
+   "jarvis_documents.py",
+   "test_documents.py",
+   "test_documents_honesty.py",
+   "test_documents_owned.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "tutorials",
+  "group": "Notes and files",
+  "title": "Tutorials and the FAQ",
+  "surface": "both",
+  "terms": [
+   "tutorials"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 40,
+    "term": "tutorials"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 60,
+    "term": "tutorials"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify-404.tsv",
+    "line": 35,
+    "term": "tutorials"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract2.log",
+    "line": 68,
+    "term": "tutorials"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.py",
+    "line": 129,
+    "term": "tutorials"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 59,
+    "term": "tutorials"
+   }
+  ],
+  "suite": [
+   "jarvis_tutorials.py",
+   "test_tutorials.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "pc-help",
+  "group": "Notes and files",
+  "title": "PC help",
+  "surface": "phone",
+  "terms": [
+   "pc help",
+   "pc_help"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 1087,
+    "term": "pc help"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/.evidence/transcript-G.txt",
+    "line": 704,
+    "term": "pc help"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_brain_reads.py",
+    "line": 35,
+    "term": "pc help"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_menus.py",
+    "line": 366,
+    "term": "pc help"
+   }
+  ],
+  "suite": [
+   "jarvis_pc_help.py",
+   "test_pc_help.py",
+   "gen_pc_help_cases.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "web-search",
+  "group": "Notes and files",
+  "title": "Web search",
+  "surface": "both",
+  "terms": [
+   "web search",
+   "web_search",
+   "searxng"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 26,
+    "term": "web search"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 186,
+    "term": "searxng"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify-404.tsv",
+    "line": 22,
+    "term": "web_search"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract2.log",
+    "line": 55,
+    "term": "web_search"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.py",
+    "line": 149,
+    "term": "web search"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 205,
+    "term": "web_search"
+   }
+  ],
+  "suite": [
+   "test_web_search.py",
+   "gen_web_search_cases.py"
+  ],
+  "xml": [
+   "j-websearch-post.xml",
+   "j-websearch-pre.xml"
+  ]
+ },
+ {
+  "id": "browser-engine",
+  "group": "Notes and files",
+  "title": "A browser without a window",
+  "surface": "both",
+  "terms": [
+   "browser engine",
+   "browser_engine",
+   "browser",
+   "without",
+   "window"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 187,
+    "term": "window"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 3,
+    "term": "without"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 24,
+    "term": "browser"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/dev.ps1",
+    "line": 27,
+    "term": "window"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/capture-dpi.ps1",
+    "line": 1,
+    "term": "window"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify404.py",
+    "line": 79,
+    "term": "window"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract-routes.py",
+    "line": 51,
+    "term": "window"
+   }
+  ],
+  "suite": [
+   "jarvis_browser_engine.py",
+   "test_browser_engine.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "github-watchlist",
+  "group": "Notes and files",
+  "title": "What's new on GitHub",
+  "surface": "both",
+  "terms": [
+   "github watchlist",
+   "github_watchlist",
+   "github"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/dev.ps1",
+    "line": 22,
+    "term": "github"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify.log",
+    "line": 1,
+    "term": "github"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract2.log",
+    "line": 2,
+    "term": "github"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep.log",
+    "line": 174,
+    "term": "github"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "chatbot",
+  "group": "Notes and files",
+  "title": "Talk to a chatbot for me",
+  "surface": "both",
+  "terms": [
+   "chatbot"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 10,
+    "term": "chatbot"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 28,
+    "term": "chatbot"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify-404.tsv",
+    "line": 9,
+    "term": "chatbot"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract2.log",
+    "line": 13,
+    "term": "chatbot"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.py",
+    "line": 131,
+    "term": "chatbot"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/probe-suspects.py",
+    "line": 31,
+    "term": "chatbot"
+   }
+  ],
+  "suite": [
+   "jarvis_chatbot.py",
+   "jarvis_chatbot_api.py",
+   "jarvis_chatbot_chatgpt.py",
+   "jarvis_chatbot_claude.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "support",
+  "group": "Notes and files",
+  "title": "Deal with customer support for me",
+  "surface": "both",
+  "terms": [
+   "support",
+   "customer"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 34,
+    "term": "support"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract2.log",
+    "line": 18,
+    "term": "support"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 36,
+    "term": "support"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes.tsv",
+    "line": 34,
+    "term": "support"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep.log",
+    "line": 25,
+    "term": "support"
+   }
+  ],
+  "suite": [
+   "jarvis_support.py",
+   "jarvis_support_widget.py",
+   "test_support_chat.py",
+   "test_support_widget.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "projects",
+  "group": "Notes and files",
+  "title": "Projects",
+  "surface": "both",
+  "terms": [
+   "projects"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 150,
+    "term": "projects"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 145,
+    "term": "projects"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify-404.tsv",
+    "line": 52,
+    "term": "projects"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 158,
+    "term": "projects"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes.tsv",
+    "line": 145,
+    "term": "projects"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep.log",
+    "line": 92,
+    "term": "projects"
+   }
+  ],
+  "suite": [
+   "jarvis_projects.py",
+   "test_projects.py",
+   "gen_projects_cases.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "goals",
+  "group": "Notes and files",
+  "title": "Goals",
+  "surface": "both",
+  "terms": [
+   "goals"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 71,
+    "term": "goals"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract2.log",
+    "line": 30,
+    "term": "goals"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 67,
+    "term": "goals"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes.tsv",
+    "line": 71,
+    "term": "goals"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep.log",
+    "line": 43,
+    "term": "goals"
+   }
+  ],
+  "suite": [
+   "jarvis_goals.py",
+   "test_goals.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "progress",
+  "group": "Notes and files",
+  "title": "Progress",
+  "surface": "both",
+  "terms": [
+   "progress"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 40,
+    "term": "progress"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 142,
+    "term": "progress"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify-404.tsv",
+    "line": 35,
+    "term": "progress"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract2.log",
+    "line": 68,
+    "term": "progress"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.py",
+    "line": 129,
+    "term": "progress"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 157,
+    "term": "progress"
+   }
+  ],
+  "suite": [
+   "jarvis_progress.py",
+   "test_progress.py",
+   "gen_progress_cases.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "spending",
+  "group": "Money and health",
+  "title": "Spending summaries",
+  "surface": "both",
+  "terms": [
+   "spending",
+   "summaries"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 109,
+    "term": "spending"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 30,
+    "term": "spending"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 27,
+    "term": "spending"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify-404.tsv",
+    "line": 25,
+    "term": "spending"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract2.log",
+    "line": 58,
+    "term": "spending"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.py",
+    "line": 127,
+    "term": "spending"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 28,
+    "term": "spending"
+   }
+  ],
+  "suite": [
+   "jarvis_spending.py",
+   "test_spending.py",
+   "gen_spending_cases.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "retirement",
+  "group": "Money and health",
+  "title": "Retirement what-if",
+  "surface": "both",
+  "terms": [
+   "retirement"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 172,
+    "term": "retirement"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes.tsv",
+    "line": 172,
+    "term": "retirement"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep.log",
+    "line": 111,
+    "term": "retirement"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 1709,
+    "term": "retirement"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/.evidence/transcript-G.txt",
+    "line": 388,
+    "term": "retirement"
+   }
+  ],
+  "suite": [
+   "jarvis_retirement.py",
+   "test_agent_retirement_wiring.py",
+   "test_retirement.py",
+   "gen_retirement_cases.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "chatbot-money",
+  "group": "Money and health",
+  "title": "Chatbot keys and a monthly money limit",
+  "surface": "desktop",
+  "terms": [
+   "chatbot money",
+   "chatbot_money",
+   "chatbot",
+   "monthly"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 10,
+    "term": "chatbot"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 28,
+    "term": "chatbot"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify-404.tsv",
+    "line": 9,
+    "term": "chatbot"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract2.log",
+    "line": 13,
+    "term": "chatbot"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.py",
+    "line": 131,
+    "term": "chatbot"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/probe-suspects.py",
+    "line": 31,
+    "term": "chatbot"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "sensitive-facts",
+  "group": "Money and health",
+  "title": "Health and money facts wait for your yes",
+  "surface": "both",
+  "terms": [
+   "sensitive facts",
+   "sensitive_facts",
+   "health"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 43,
+    "term": "health"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 147,
+    "term": "health"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/README.md",
+    "line": 42,
+    "term": "health"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/eval_learner.py",
+    "line": 71,
+    "term": "health"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "crisis-help",
+  "group": "Money and health",
+  "title": "Crisis help",
+  "surface": "both",
+  "terms": [
+   "crisis help",
+   "crisis_help",
+   "crisis"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 63,
+    "term": "crisis"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 429,
+    "term": "crisis help"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/import_history.py",
+    "line": 23,
+    "term": "crisis"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_agent.py",
+    "line": 4114,
+    "term": "crisis help"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "home-status",
+  "group": "Home",
+  "title": "Ask how the house is",
+  "surface": "both",
+  "terms": [
+   "home status",
+   "home_status"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 824,
+    "term": "home status"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 322,
+    "term": "home status"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_asks_first.py",
+    "line": 25,
+    "term": "home status"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_reach.py",
+    "line": 512,
+    "term": "home status"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "lights",
+  "group": "Home",
+  "title": "Lights, plugs and fans",
+  "surface": "both",
+  "terms": [
+   "lights"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 3,
+    "term": "lights"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 6,
+    "term": "lights"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify-404.tsv",
+    "line": 2,
+    "term": "lights"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify.log",
+    "line": 5,
+    "term": "lights"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract2.log",
+    "line": 4,
+    "term": "lights"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 10,
+    "term": "lights"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "locks",
+  "group": "Home",
+  "title": "Locks, doors, alarms and covers",
+  "surface": "both",
+  "terms": [
+   "locks",
+   "alarms",
+   "covers"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 37,
+    "term": "locks"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 3,
+    "term": "covers"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 112,
+    "term": "locks"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/README.md",
+    "line": 48,
+    "term": "alarms"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/THIRD-PARTY-NOTICES.txt",
+    "line": 46,
+    "term": "covers"
+   }
+  ],
+  "suite": [],
+  "xml": [
+   "48-lock-settings.xml"
+  ]
+ },
+ {
+  "id": "calendar",
+  "group": "Home",
+  "title": "Read your own calendar",
+  "surface": "desktop",
+  "terms": [
+   "ical"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 191,
+    "term": "ical"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 18,
+    "term": "ical"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/capture-dpi.ps1",
+    "line": 4,
+    "term": "ical"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.py",
+    "line": 146,
+    "term": "ical"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 263,
+    "term": "ical"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 55,
+    "term": "ical"
+   }
+  ],
+  "suite": [
+   "jarvis_calendar.py",
+   "test_calendar.py",
+   "test_calendar_link.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "weather-sky",
+  "group": "Home",
+  "title": "Weather and the sky behind the animals",
+  "surface": "both",
+  "terms": [
+   "weather sky",
+   "weather_sky",
+   "weather",
+   "behind",
+   "animals"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 104,
+    "term": "behind"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-routes.py",
+    "line": 24,
+    "term": "behind"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 43,
+    "term": "behind"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 362,
+    "term": "weather"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/THIRD-PARTY-NOTICES.txt",
+    "line": 508,
+    "term": "animals"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "email-read",
+  "group": "Home",
+  "title": "Jarvis reads your email",
+  "surface": "both",
+  "terms": [
+   "email read",
+   "email_read",
+   "read my email",
+   "morning briefing"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 9,
+    "term": "morning briefing"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.py",
+    "line": 142,
+    "term": "morning briefing"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 807,
+    "term": "morning briefing"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 217,
+    "term": "morning briefing"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/README.md",
+    "line": 49,
+    "term": "morning briefing"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "email-send",
+  "group": "Home",
+  "title": "Send an email for you",
+  "surface": "both",
+  "terms": [
+   "email send",
+   "email_send"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 56,
+    "term": "email_send"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 56,
+    "term": "email_send"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes.tsv",
+    "line": 56,
+    "term": "email_send"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_accounts.py",
+    "line": 109,
+    "term": "email_send"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_agent.py",
+    "line": 39,
+    "term": "email_send"
+   }
+  ],
+  "suite": [
+   "jarvis_email_send.py",
+   "test_email_send.py",
+   "gen_email_sending_cases.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "email-drafts",
+  "group": "Home",
+  "title": "Save a draft to your Drafts folder",
+  "surface": "desktop",
+  "terms": [
+   "email drafts",
+   "email_drafts",
+   "drafts",
+   "folder"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 170,
+    "term": "folder"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 7,
+    "term": "folder"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 13,
+    "term": "folder"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify-404.tsv",
+    "line": 6,
+    "term": "folder"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.py",
+    "line": 121,
+    "term": "folder"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 19,
+    "term": "folder"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes.tsv",
+    "line": 15,
+    "term": "folder"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "inbox-tidy",
+  "group": "Home",
+  "title": "Tidy the inbox by voice",
+  "surface": "both",
+  "terms": [
+   "inbox tidy",
+   "inbox_tidy",
+   "archive",
+   "mark read"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 57,
+    "term": "inbox_tidy"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract2.log",
+    "line": 26,
+    "term": "inbox_tidy"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 57,
+    "term": "inbox_tidy"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes.tsv",
+    "line": 57,
+    "term": "inbox_tidy"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 561,
+    "term": "inbox tidy"
+   }
+  ],
+  "suite": [
+   "jarvis_inbox_tidy.py",
+   "test_inbox_tidy.py",
+   "gen_inbox_tidy_cases.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "news-and-page-watches",
+  "group": "Home",
+  "title": "News headlines, and pages that change",
+  "surface": "both",
+  "terms": [
+   "news and page watches",
+   "news_and_page_watches",
+   "headlines",
+   "change"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/README.md",
+    "line": 22,
+    "term": "change"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 29,
+    "term": "change"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 8,
+    "term": "change"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 32,
+    "term": "change"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify404.py",
+    "line": 17,
+    "term": "change"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.py",
+    "line": 141,
+    "term": "change"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/one-chat-turn.py",
+    "line": 9,
+    "term": "change"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep.log",
+    "line": 23,
+    "term": "change"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "connection",
+  "group": "Phone",
+  "title": "Pairing and the connection",
+  "surface": "both",
+  "terms": [
+   "connection",
+   "pairing"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/README.md",
+    "line": 23,
+    "term": "pairing"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 20,
+    "term": "connection"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 51,
+    "term": "pairing"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-routes.py",
+    "line": 31,
+    "term": "pairing"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep.log",
+    "line": 1,
+    "term": "pairing"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 774,
+    "term": "connection"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 109,
+    "term": "pairing"
+   }
+  ],
+  "suite": [
+   "test_connection_contract.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "devices",
+  "group": "Phone",
+  "title": "Devices",
+  "surface": "both",
+  "terms": [
+   "devices"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 12,
+    "term": "devices"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 41,
+    "term": "devices"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify-404.tsv",
+    "line": 11,
+    "term": "devices"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract2.log",
+    "line": 24,
+    "term": "devices"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 51,
+    "term": "devices"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes.tsv",
+    "line": 51,
+    "term": "devices"
+   }
+  ],
+  "suite": [
+   "jarvis_devices.py",
+   "test_devices.py"
+  ],
+  "xml": [
+   "j-devices-post.xml",
+   "j-devices-pre.xml"
+  ]
+ },
+ {
+  "id": "phone-notifications",
+  "group": "Phone",
+  "title": "Let Jarvis read phone notifications",
+  "surface": "phone",
+  "terms": [
+   "phone notifications",
+   "phone_notifications",
+   "notifications"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 1208,
+    "term": "notifications"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 377,
+    "term": "phone notifications"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/.evidence/run10.ps1",
+    "line": 16,
+    "term": "notifications"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/.evidence/run2.ps1",
+    "line": 85,
+    "term": "notifications"
+   }
+  ],
+  "suite": [
+   "jarvis_phone_notifications.py",
+   "test_phone_notifications.py"
+  ],
+  "xml": [
+   "j-phonenotifications-post.xml",
+   "j-phonenotifications-pre.xml"
+  ]
+ },
+ {
+  "id": "phone-watch",
+  "group": "Phone",
+  "title": "Smartwatch notifications",
+  "surface": "phone",
+  "terms": [
+   "phone watch",
+   "phone_watch",
+   "smartwatch",
+   "notifications"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 1207,
+    "term": "smartwatch"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 441,
+    "term": "smartwatch"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/.evidence/run10.ps1",
+    "line": 16,
+    "term": "notifications"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/.evidence/run2.ps1",
+    "line": 85,
+    "term": "notifications"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "phone-floating",
+  "group": "Phone",
+  "title": "Floating Jarvis",
+  "surface": "phone",
+  "terms": [
+   "phone floating",
+   "phone_floating",
+   "floating"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 329,
+    "term": "floating"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 463,
+    "term": "floating"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/.evidence/run9.ps1",
+    "line": 30,
+    "term": "floating"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/.evidence/transcript-D.txt",
+    "line": 22,
+    "term": "floating"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "phone-tiles",
+  "group": "Phone",
+  "title": "Quick Settings tiles",
+  "surface": "phone",
+  "terms": [
+   "phone tiles",
+   "phone_tiles"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/docs/RESEARCH-AUDIT-2026-09-28.md",
+    "line": 320,
+    "term": "phone tiles"
+   },
+   {
+    "file": "/.dsh-scratch/device-audit/docs/RESEARCH-AUDIT-2026-09-28.md",
+    "line": 320,
+    "term": "phone tiles"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "phone-screen-rate",
+  "group": "Phone",
+  "title": "Screen refresh rate",
+  "surface": "phone",
+  "terms": [
+   "phone screen rate",
+   "phone_screen_rate",
+   "screen",
+   "refresh"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/README.md",
+    "line": 35,
+    "term": "screen"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 171,
+    "term": "screen"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 21,
+    "term": "screen"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/commit-msg.txt",
+    "line": 6,
+    "term": "screen"
+   },
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/dev.ps1",
+    "line": 2,
+    "term": "screen"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/capture-dpi.ps1",
+    "line": 1,
+    "term": "screen"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 202,
+    "term": "screen"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "also-on-phone",
+  "group": "Phone",
+  "title": "Also on my phone",
+  "surface": "both",
+  "terms": [
+   "also on phone",
+   "also_on_phone"
+  ],
+  "device": [],
+  "report": [],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "find-phone",
+  "group": "Phone",
+  "title": "Ring my phone",
+  "surface": "both",
+  "terms": [
+   "find phone",
+   "find_phone"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_find_phone.py",
+    "line": 1,
+    "term": "find_phone"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_quick.py",
+    "line": 115,
+    "term": "find_phone"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_schedule.py",
+    "line": 1898,
+    "term": "find_phone"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/test_find_phone.py",
+    "line": 1,
+    "term": "find_phone"
+   }
+  ],
+  "suite": [
+   "jarvis_find_phone.py",
+   "test_find_phone.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "phone-limits",
+  "group": "Phone",
+  "title": "What the phone deliberately does not do",
+  "surface": "phone",
+  "terms": [
+   "phone limits",
+   "phone_limits",
+   "deliberately"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 78,
+    "term": "deliberately"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/one-chat-turn.py",
+    "line": 10,
+    "term": "deliberately"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 15,
+    "term": "deliberately"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 96,
+    "term": "deliberately"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/fake_mcp_server.py",
+    "line": 1,
+    "term": "deliberately"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "appearance",
+  "group": "The PC itself",
+  "title": "Appearance",
+  "surface": "both",
+  "terms": [
+   "appearance"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 4,
+    "term": "appearance"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 7,
+    "term": "appearance"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes.tsv",
+    "line": 4,
+    "term": "appearance"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep.log",
+    "line": 4,
+    "term": "appearance"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 402,
+    "term": "appearance"
+   }
+  ],
+  "suite": [
+   "test_appearance.py"
+  ],
+  "xml": [
+   "j-appearance-post.xml",
+   "j-appearance-pre.xml"
+  ]
+ },
+ {
+  "id": "crash-notes",
+  "group": "The PC itself",
+  "title": "Hang and crash notes",
+  "surface": "desktop",
+  "terms": [
+   "crash notes",
+   "crash_notes"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_menus.py",
+    "line": 228,
+    "term": "crash notes"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_paste_guard.py",
+    "line": 31,
+    "term": "crash_notes"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_settings_registry.py",
+    "line": 224,
+    "term": "crash notes"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/test_settings_switches.py",
+    "line": 336,
+    "term": "crash_notes"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "faces",
+  "group": "The PC itself",
+  "title": "Choose Jarvis's face",
+  "surface": "both",
+  "terms": [
+   "faces",
+   "choose"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/uia.txt",
+    "line": 15,
+    "term": "choose"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 63,
+    "term": "faces"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 380,
+    "term": "choose"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/README.md",
+    "line": 63,
+    "term": "choose"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "animal-options",
+  "group": "The PC itself",
+  "title": "Animal options",
+  "surface": "both",
+  "terms": [
+   "animal options",
+   "animal_options",
+   "animal",
+   "options"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 195,
+    "term": "options"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 45,
+    "term": "animal"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 3,
+    "term": "animal"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify-404.tsv",
+    "line": 40,
+    "term": "animal"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract2.log",
+    "line": 75,
+    "term": "animal"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.py",
+    "line": 157,
+    "term": "animal"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 6,
+    "term": "animal"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "first-run",
+  "group": "The PC itself",
+  "title": "Set up Jarvis",
+  "surface": "desktop",
+  "terms": [
+   "first run",
+   "first_run"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/backend/import_history.py",
+    "line": 171,
+    "term": "first run"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_agent.py",
+    "line": 6015,
+    "term": "first run"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_f5_worker.py",
+    "line": 40,
+    "term": "first run"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_next_time.py",
+    "line": 6,
+    "term": "first run"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "menu-visibility",
+  "group": "The PC itself",
+  "title": "Show or hide menus",
+  "surface": "both",
+  "terms": [
+   "menu visibility",
+   "menu_visibility"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/commit-msg.txt",
+    "line": 38,
+    "term": "menu_visibility"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_menus.py",
+    "line": 15,
+    "term": "menu_visibility"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_quick.py",
+    "line": 841,
+    "term": "menu visibility"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_settings_registry.py",
+    "line": 269,
+    "term": "menu visibility"
+   }
+  ],
+  "suite": [
+   "test_menu_visibility.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "shortcuts",
+  "group": "The PC itself",
+  "title": "Keyboard shortcuts",
+  "surface": "desktop",
+  "terms": [
+   "shortcuts",
+   "keyboard"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/README.md",
+    "line": 36,
+    "term": "keyboard"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 489,
+    "term": "shortcuts"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 486,
+    "term": "keyboard"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/THIRD-PARTY-NOTICES.txt",
+    "line": 1000,
+    "term": "keyboard"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_bakeoff.py",
+    "line": 388,
+    "term": "keyboard"
+   }
+  ],
+  "suite": [],
+  "xml": [
+   "shortcuts.xml"
+  ]
+ },
+ {
+  "id": "models",
+  "group": "The PC itself",
+  "title": "Models",
+  "surface": "both",
+  "terms": [
+   "model list",
+   "ollama"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/chat-turn.log",
+    "line": 19,
+    "term": "ollama"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 64,
+    "term": "ollama"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 28,
+    "term": "ollama"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 76,
+    "term": "ollama"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract-routes3.py",
+    "line": 33,
+    "term": "ollama"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/one-chat-turn.py",
+    "line": 22,
+    "term": "ollama"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 70,
+    "term": "ollama"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 33,
+    "term": "ollama"
+   }
+  ],
+  "suite": [
+   "test_memory_models.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "compute",
+  "group": "The PC itself",
+  "title": "Compute",
+  "surface": "both",
+  "terms": [
+   "compute"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 41,
+    "term": "compute"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 40,
+    "term": "compute"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes.tsv",
+    "line": 41,
+    "term": "compute"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep.log",
+    "line": 26,
+    "term": "compute"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 19,
+    "term": "compute"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "skills",
+  "group": "The PC itself",
+  "title": "Skills",
+  "surface": "both",
+  "terms": [
+   "skills"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 192,
+    "term": "skills"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract2.log",
+    "line": 57,
+    "term": "skills"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 211,
+    "term": "skills"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes.tsv",
+    "line": 192,
+    "term": "skills"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep.log",
+    "line": 123,
+    "term": "skills"
+   }
+  ],
+  "suite": [
+   "test_skill_suggest.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "model-memory",
+  "group": "The PC itself",
+  "title": "Memory on the Model page",
+  "surface": "desktop",
+  "terms": [
+   "model memory",
+   "model_memory"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_menus.py",
+    "line": 365,
+    "term": "model memory"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/jarvis-backend/jarvis_menus.py",
+    "line": 365,
+    "term": "model memory"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/docs/audit-2026-09-28/03-effectiveness.md",
+    "line": 44,
+    "term": "model memory"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/jarvis-client/app/src/test/resources/contract/menu-cases.json",
+    "line": 1531,
+    "term": "model memory"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "notifications",
+  "group": "The PC itself",
+  "title": "Notifications",
+  "surface": "desktop",
+  "terms": [
+   "notifications",
+   "notification"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/dev.ps1",
+    "line": 104,
+    "term": "notification"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 492,
+    "term": "notification"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 286,
+    "term": "notification"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/THIRD-PARTY-NOTICES.txt",
+    "line": 1000,
+    "term": "notification"
+   }
+  ],
+  "suite": [
+   "jarvis_phone_notifications.py",
+   "test_phone_notifications.py"
+  ],
+  "xml": [
+   "d-allownotifications-after.xml",
+   "d-allownotifications-find0.xml",
+   "j-phonenotifications-post.xml",
+   "j-phonenotifications-pre.xml"
+  ]
+ },
+ {
+  "id": "start-jarvis",
+  "group": "The PC itself",
+  "title": "Starting Jarvis for you",
+  "surface": "desktop",
+  "terms": [
+   "start jarvis",
+   "start_jarvis",
+   "starting"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 22,
+    "term": "start jarvis"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 79,
+    "term": "start jarvis"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 1600,
+    "term": "starting"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/README.md",
+    "line": 143,
+    "term": "start jarvis"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/.evidence/transcript-1.txt",
+    "line": 146,
+    "term": "starting"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "work-tab",
+  "group": "The PC itself",
+  "title": "The Work tab",
+  "surface": "desktop",
+  "terms": [
+   "work tab",
+   "work_tab"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/docs/ARCHITECTURE.md",
+    "line": 2178,
+    "term": "work tab"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/docs/CONTINUITY-AUDIT-2026-09-26.md",
+    "line": 39,
+    "term": "work tab"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/docs/UI-AUDIT-2026-10-05.md",
+    "line": 425,
+    "term": "work tab"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/features/features.json",
+    "line": 1198,
+    "term": "work tab"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "job-list",
+  "group": "The PC itself",
+  "title": "Jobs that keep going after the chat ends",
+  "surface": "both",
+  "terms": [
+   "job list",
+   "job_list"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 36,
+    "term": "job list"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.py",
+    "line": 153,
+    "term": "job list"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 13,
+    "term": "job list"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 1948,
+    "term": "job list"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_backup.py",
+    "line": 49,
+    "term": "job list"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "hardware",
+  "group": "The PC itself",
+  "title": "Hardware and models",
+  "surface": "both",
+  "terms": [
+   "hardware",
+   "graphics card"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/README.md",
+    "line": 38,
+    "term": "hardware"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 76,
+    "term": "hardware"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract2.log",
+    "line": 34,
+    "term": "hardware"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 73,
+    "term": "hardware"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes.tsv",
+    "line": 76,
+    "term": "hardware"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep.log",
+    "line": 45,
+    "term": "hardware"
+   }
+  ],
+  "suite": [
+   "jarvis_hardware.py",
+   "test_hardware.py",
+   "gen_hardware_cases.py"
+  ],
+  "xml": [
+   "35-find-hardware.xml",
+   "36-find-hardware2.xml",
+   "38-brain-hardware.xml"
+  ]
+ },
+ {
+  "id": "second-card",
+  "group": "The PC itself",
+  "title": "The second graphics card",
+  "surface": "both",
+  "terms": [
+   "second card",
+   "second_card",
+   "second",
+   "graphics",
+   "second graphics"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/chat-turn.log",
+    "line": 5,
+    "term": "second"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 15,
+    "term": "second"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 27,
+    "term": "second"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 189,
+    "term": "second"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/dev.ps1",
+    "line": 32,
+    "term": "second"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/capture-dpi.ps1",
+    "line": 63,
+    "term": "graphics"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify-404.tsv",
+    "line": 23,
+    "term": "second"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/one-chat-turn.py",
+    "line": 55,
+    "term": "second"
+   }
+  ],
+  "suite": [
+   "jarvis_second_card.py",
+   "test_phone_second_card_contract.py",
+   "test_second_card.py",
+   "test_second_card_suggest.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "big-model",
+  "group": "The PC itself",
+  "title": "The big model (slow)",
+  "surface": "both",
+  "terms": [
+   "big model",
+   "big_model"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/.evidence/transcript-G.txt",
+    "line": 345,
+    "term": "big model"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_asks_first.py",
+    "line": 373,
+    "term": "big_model"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_big_model.py",
+    "line": 1,
+    "term": "big_model"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_card_words.py",
+    "line": 149,
+    "term": "big_model"
+   }
+  ],
+  "suite": [
+   "jarvis_big_model.py",
+   "test_big_model.py",
+   "gen_big_model_cases.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "updates",
+  "group": "The PC itself",
+  "title": "Updates",
+  "surface": "both",
+  "terms": [
+   "updates"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/README.md",
+    "line": 71,
+    "term": "updates"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 67,
+    "term": "updates"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/README.md",
+    "line": 122,
+    "term": "updates"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/.evidence/transcript-J.txt",
+    "line": 28,
+    "term": "updates"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/agentdojo_injections.json",
+    "line": 303,
+    "term": "updates"
+   }
+  ],
+  "suite": [
+   "jarvis_tool_updates.py",
+   "test_tool_updates.py"
+  ],
+  "xml": [
+   "26-checks-updates.xml"
+  ]
+ },
+ {
+  "id": "tool-updates",
+  "group": "The PC itself",
+  "title": "Check for tool updates",
+  "surface": "desktop",
+  "terms": [
+   "tool updates",
+   "tool_updates",
+   "updates"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/README.md",
+    "line": 71,
+    "term": "updates"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 37,
+    "term": "tool_updates"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 211,
+    "term": "tool_updates"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify-404.tsv",
+    "line": 32,
+    "term": "tool_updates"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.py",
+    "line": 130,
+    "term": "tool_updates"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 233,
+    "term": "tool_updates"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes.tsv",
+    "line": 211,
+    "term": "tool_updates"
+   }
+  ],
+  "suite": [
+   "jarvis_tool_updates.py",
+   "test_tool_updates.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "settings-file",
+  "group": "The PC itself",
+  "title": "The settings file, the logs and starting with Windows",
+  "surface": "desktop",
+  "terms": [
+   "settings file",
+   "settings_file",
+   "starting",
+   "windows"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/README.md",
+    "line": 97,
+    "term": "windows"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/chat-turn.log",
+    "line": 1,
+    "term": "windows"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 7,
+    "term": "windows"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/capture-dpi.ps1",
+    "line": 2,
+    "term": "windows"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep.log",
+    "line": 1,
+    "term": "windows"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 11,
+    "term": "windows"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 68,
+    "term": "windows"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "backend-supports",
+  "group": "The PC itself",
+  "title": "What this backend supports",
+  "surface": "both",
+  "terms": [
+   "backend supports",
+   "backend_supports",
+   "backend",
+   "supports"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/README.md",
+    "line": 50,
+    "term": "backend"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/chat-turn.log",
+    "line": 1,
+    "term": "backend"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 1,
+    "term": "backend"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 1,
+    "term": "backend"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/commit-msg.txt",
+    "line": 37,
+    "term": "backend"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify-404.tsv",
+    "line": 1,
+    "term": "backend"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify404.py",
+    "line": 6,
+    "term": "backend"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract-routes.py",
+    "line": 1,
+    "term": "backend"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "about",
+  "group": "The PC itself",
+  "title": "About Jarvis",
+  "surface": "both",
+  "terms": [],
+  "device": [],
+  "report": [],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "hud-window",
+  "group": "The PC itself",
+  "title": "The big HUD window",
+  "surface": "desktop",
+  "terms": [
+   "hud window",
+   "hud_window",
+   "window"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 187,
+    "term": "window"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/dev.ps1",
+    "line": 27,
+    "term": "window"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/capture-dpi.ps1",
+    "line": 1,
+    "term": "window"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify404.py",
+    "line": 79,
+    "term": "window"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract-routes.py",
+    "line": 51,
+    "term": "window"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "backup",
+  "group": "The PC itself",
+  "title": "Backups",
+  "surface": "both",
+  "terms": [
+   "backup",
+   "backups"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 59,
+    "term": "backup"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 6,
+    "term": "backup"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 13,
+    "term": "backup"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify-404.tsv",
+    "line": 5,
+    "term": "backup"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify.log",
+    "line": 8,
+    "term": "backup"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract2.log",
+    "line": 10,
+    "term": "backup"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.py",
+    "line": 121,
+    "term": "backup"
+   }
+  ],
+  "suite": [
+   "jarvis_backup.py",
+   "test_backup.py"
+  ],
+  "xml": [
+   "j-backups-post.xml",
+   "j-backups-pre.xml"
+  ]
+ },
+ {
+  "id": "accounts",
+  "group": "The PC itself",
+  "title": "Accounts and keys",
+  "surface": "desktop",
+  "terms": [
+   "accounts"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 2,
+    "term": "accounts"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 5,
+    "term": "accounts"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes.tsv",
+    "line": 2,
+    "term": "accounts"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep.log",
+    "line": 2,
+    "term": "accounts"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 21,
+    "term": "accounts"
+   }
+  ],
+  "suite": [
+   "jarvis_accounts.py",
+   "test_account_secrets.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "reach",
+  "group": "The PC itself",
+  "title": "What Jarvis can reach",
+  "surface": "both",
+  "terms": [
+   "reach"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/README.md",
+    "line": 50,
+    "term": "reach"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 5,
+    "term": "reach"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 171,
+    "term": "reach"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/dev.ps1",
+    "line": 68,
+    "term": "reach"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/capture-dpi.ps1",
+    "line": 56,
+    "term": "reach"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract-routes2.py",
+    "line": 42,
+    "term": "reach"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract-routes3.py",
+    "line": 33,
+    "term": "reach"
+   }
+  ],
+  "suite": [
+   "jarvis_reach.py",
+   "test_reach.py",
+   "gen_reach_cases.py"
+  ],
+  "xml": [
+   "19-galaxy-unreachable.xml",
+   "j-whatjarviscanreach-post.xml",
+   "j-whatjarviscanreach-pre.xml"
+  ]
+ },
+ {
+  "id": "undo",
+  "group": "The PC itself",
+  "title": "Undo",
+  "surface": "both",
+  "terms": [
+   "undo"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/README.md",
+    "line": 76,
+    "term": "undo"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 81,
+    "term": "undo"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 58,
+    "term": "undo"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract2.log",
+    "line": 26,
+    "term": "undo"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 58,
+    "term": "undo"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes.tsv",
+    "line": 58,
+    "term": "undo"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-routes.py",
+    "line": 54,
+    "term": "undo"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "past-approvals",
+  "group": "The PC itself",
+  "title": "Activity: cards you already decided",
+  "surface": "both",
+  "terms": [
+   "past approvals",
+   "past_approvals",
+   "activity",
+   "already",
+   "decided"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/README.md",
+    "line": 21,
+    "term": "already"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 13,
+    "term": "already"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 142,
+    "term": "activity"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/commit-msg.txt",
+    "line": 4,
+    "term": "already"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify404.py",
+    "line": 17,
+    "term": "already"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.py",
+    "line": 5,
+    "term": "already"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 157,
+    "term": "activity"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "limits",
+  "group": "The PC itself",
+  "title": "Limits and frequency",
+  "surface": "both",
+  "terms": [
+   "limits",
+   "frequency"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 10,
+    "term": "limits"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 31,
+    "term": "limits"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify-404.tsv",
+    "line": 9,
+    "term": "limits"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract2.log",
+    "line": 15,
+    "term": "limits"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.py",
+    "line": 131,
+    "term": "limits"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 32,
+    "term": "limits"
+   }
+  ],
+  "suite": [
+   "jarvis_chatbot_limits.py",
+   "jarvis_limits.py",
+   "test_chatbot_limits.py",
+   "test_limits.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "approvals",
+  "group": "Safety",
+  "title": "Approval cards",
+  "surface": "both",
+  "terms": [
+   "approvals",
+   "approval",
+   "approval card",
+   "approve"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 28,
+    "term": "approve"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 6,
+    "term": "approval card"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract-routes2.py",
+    "line": 41,
+    "term": "approve"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.py",
+    "line": 139,
+    "term": "approval card"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/one-chat-turn.py",
+    "line": 10,
+    "term": "approve"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 4,
+    "term": "approve"
+   }
+  ],
+  "suite": [
+   "test_approval_sign.py",
+   "gen_approval_sign_cases.py"
+  ],
+  "xml": []
+ },
+ {
+  "id": "what-asks-first",
+  "group": "Safety",
+  "title": "What asks first",
+  "surface": "both",
+  "terms": [
+   "what asks first",
+   "what_asks_first"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 595,
+    "term": "what asks first"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 319,
+    "term": "what asks first"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/README.md",
+    "line": 78,
+    "term": "what asks first"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/.evidence/run9.ps1",
+    "line": 31,
+    "term": "what asks first"
+   }
+  ],
+  "suite": [],
+  "xml": [
+   "j-whatasksfirst-post.xml",
+   "j-whatasksfirst-pre.xml"
+  ]
+ },
+ {
+  "id": "app-lock",
+  "group": "Safety",
+  "title": "Lock Jarvis, and hide what it remembers",
+  "surface": "both",
+  "terms": [
+   "app lock",
+   "app_lock",
+   "remembers"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 21,
+    "term": "app lock"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.py",
+    "line": 148,
+    "term": "app lock"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 359,
+    "term": "app lock"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 204,
+    "term": "app lock"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/README.md",
+    "line": 45,
+    "term": "remembers"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "captcha-handoff",
+  "group": "Safety",
+  "title": "Hand a captcha to your phone (\"Solve it here\")",
+  "surface": "both",
+  "terms": [
+   "captcha handoff",
+   "captcha_handoff",
+   "captcha"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 188,
+    "term": "captcha"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 549,
+    "term": "captcha"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/THIRD-PARTY-NOTICES.txt",
+    "line": 331,
+    "term": "captcha"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/.evidence/transcript-G.txt",
+    "line": 483,
+    "term": "captcha"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "stale-link",
+  "group": "Safety",
+  "title": "When the connection is catching up",
+  "surface": "both",
+  "terms": [
+   "stale link",
+   "stale_link",
+   "connection",
+   "catching"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/README.md",
+    "line": 97,
+    "term": "connection"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 20,
+    "term": "connection"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 7,
+    "term": "stale link"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 200,
+    "term": "connection"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.py",
+    "line": 139,
+    "term": "stale link"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep.log",
+    "line": 129,
+    "term": "connection"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 774,
+    "term": "connection"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 1115,
+    "term": "catching"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "stop-everything",
+  "group": "Safety",
+  "title": "Stop everything",
+  "surface": "both",
+  "terms": [
+   "stop everything",
+   "stop_everything",
+   "everything"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/README.md",
+    "line": 94,
+    "term": "everything"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 54,
+    "term": "everything"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 32,
+    "term": "stop everything"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 171,
+    "term": "everything"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract-routes2.py",
+    "line": 38,
+    "term": "everything"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract-routes3.py",
+    "line": 12,
+    "term": "everything"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.py",
+    "line": 151,
+    "term": "stop everything"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 184,
+    "term": "everything"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "trust",
+  "group": "Safety",
+  "title": "Trust: content risk and the audit chain",
+  "surface": "both",
+  "terms": [
+   "trust",
+   "content"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/chat-turn.log",
+    "line": 6,
+    "term": "content"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 198,
+    "term": "content"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv",
+    "line": 43,
+    "term": "content"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/phone-pass-2026-10-11/dev.ps1",
+    "line": 38,
+    "term": "content"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/one-chat-turn.py",
+    "line": 5,
+    "term": "content"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/read-back.py",
+    "line": 46,
+    "term": "content"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/routes-raw.txt",
+    "line": 42,
+    "term": "content"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "rush-latch",
+  "group": "Safety",
+  "title": "A warning when text tried to rush you",
+  "surface": "phone",
+  "terms": [
+   "rush latch",
+   "rush_latch",
+   "warning"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 180,
+    "term": "rush latch"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 124,
+    "term": "rush latch"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_agent.py",
+    "line": 3756,
+    "term": "warning"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/jarvis_backoff.py",
+    "line": 229,
+    "term": "warning"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "outside-text",
+  "group": "Safety",
+  "title": "Jarvis marks what it read from outside",
+  "surface": "both",
+  "terms": [
+   "outside text",
+   "outside_text",
+   "outside"
+  ],
+  "device": [],
+  "report": [
+   {
+    "file": "/.dsh-scratch/device-tour/CHANGELOG.md",
+    "line": 115,
+    "term": "outside"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/CLAUDE.md",
+    "line": 86,
+    "term": "outside"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/.evidence/transcript-G.txt",
+    "line": 1001,
+    "term": "outside"
+   },
+   {
+    "file": "/.dsh-scratch/device-tour/backend/eval_learner.py",
+    "line": 50,
+    "term": "outside text"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ },
+ {
+  "id": "settings-entry",
+  "group": "Safety",
+  "title": "Settings itself",
+  "surface": "both",
+  "terms": [
+   "settings entry",
+   "settings_entry",
+   "itself"
+  ],
+  "device": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/chat-turn.log",
+    "line": 4,
+    "term": "itself"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md",
+    "line": 105,
+    "term": "itself"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md",
+    "line": 37,
+    "term": "itself"
+   }
+  ],
+  "report": [
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/capture-dpi.ps1",
+    "line": 3,
+    "term": "itself"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/classify404.py",
+    "line": 31,
+    "term": "itself"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract-routes2.py",
+    "line": 10,
+    "term": "itself"
+   },
+   {
+    "file": "/.dsh-scratch/desktop-pass-2026-10-11/extract-routes3.py",
+    "line": 15,
+    "term": "itself"
+   }
+  ],
+  "suite": [],
+  "xml": []
+ }
+]
