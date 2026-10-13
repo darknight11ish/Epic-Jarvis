@@ -210,20 +210,40 @@ pub fn notify_approval(app: &AppHandle, title: &str, body: &str, id: &str, silen
 const APPROVE_WHERE_TOAST: &str =
     "Deny here, or open Jarvis to approve - approving needs your Windows Hello.";
 
+/// How many lines the card's own words may take in the toast. A compact toast
+/// shows only a few lines, so an unbounded paragraph pushes everything after it
+/// off the bottom - which is how the where-to-approve line went missing even
+/// though it was in the XML. Two lines is enough to recognise the card; the
+/// full words are on the card itself.
+const BODY_MAX_LINES: u8 = 2;
+
 /// The toast's XML. Deny is the ONLY action, whatever the arguments: Approve
 /// never goes on a notification (docs/ARCHITECTURE.md §3, rule 2). An empty
 /// body (App lock: the title only) leaves out its line - and the
 /// where-to-approve line with it, because that case says nothing else.
+///
+/// ORDER MATTERS, and the where-to-approve line goes SECOND (2026-10-13). It
+/// used to be emitted after the card's own words, which meant a card with a
+/// long body - most of them - consumed the toast's few visible lines and the
+/// explanation was never seen. The owner saw exactly that: a body clipped
+/// mid-word, one Deny button, and no sentence saying where the other half of
+/// the decision was. Both defences are load-bearing: the line is second, and
+/// the body is capped at [`BODY_MAX_LINES`].
 fn approval_toast_xml(title: &str, body: &str, id: &str, silent: bool) -> String {
-    let body_line = if body.trim().is_empty() {
-        String::new()
-    } else {
-        format!("\n      <text>{}</text>", escape_xml(body))
-    };
+    // The where-to-approve line first, so it cannot be crowded out by a long
+    // body; the body then takes what is left, bounded by BODY_MAX_LINES.
     let where_line = if body.trim().is_empty() {
         String::new()
     } else {
         format!("\n      <text>{APPROVE_WHERE_TOAST}</text>")
+    };
+    let body_line = if body.trim().is_empty() {
+        String::new()
+    } else {
+        format!(
+            "\n      <text hint-maxLines=\"{BODY_MAX_LINES}\">{}</text>",
+            escape_xml(body)
+        )
     };
     let audio = if silent {
         "\n  <audio silent=\"true\"/>"
@@ -234,7 +254,7 @@ fn approval_toast_xml(title: &str, body: &str, id: &str, silent: bool) -> String
         r#"<toast activationType="foreground" launch="jarvis-open">
   <visual>
     <binding template="ToastGeneric">
-      <text>{title}</text>{body_line}{where_line}
+      <text>{title}</text>{where_line}{body_line}
     </binding>
   </visual>{audio}
   <actions>
@@ -1033,6 +1053,71 @@ mod tests {
         assert_eq!(xml.matches("<text>").count(), 1);
         assert!(xml.contains("<text>Jarvis wants to send an email</text>"));
         assert!(!xml.contains(APPROVE_WHERE_TOAST));
+    }
+
+    #[test]
+    fn a_long_body_cannot_crowd_the_where_to_approve_line_out_of_the_toast() {
+        // THE TEST THAT WAS MISSING, and the reason the 2026-10-11 fix shipped
+        // broken. `every_approval_toast_says_where_to_approve_and_never_offers_it`
+        // only asserts the sentence is IN the XML - which stays true while the
+        // sentence is invisible, because a compact toast shows only its first
+        // few lines. That is exactly what the owner's screenshot showed: a body
+        // clipped mid-word, one Deny button, and no explanation.
+        //
+        // So this one asserts the two things that decide whether the sentence is
+        // SEEN, not whether it is present:
+        //   1. the explanation is emitted before the card's own words, so the
+        //      body is the element that gets clipped; and
+        //   2. the body's lines are capped, so it cannot take the whole toast
+        //      even when the ordering is right.
+        // Break either one and this test goes red - see the PR body for the
+        // deliberately-broken run.
+        let long_body = "Jarvis wants to turn on automatic learning. This changes \
+                         how Jarvis remembers things across every conversation, and \
+                         it takes effect immediately. Nothing has happened yet: your \
+                         approval is what makes it happen.";
+        let xml = approval_toast_xml(
+            "Jarvis wants to turn on automatic learning",
+            long_body,
+            "a1",
+            false,
+        );
+
+        assert!(
+            xml.contains(APPROVE_WHERE_TOAST),
+            "the toast must carry the where-to-approve sentence:\n{xml}"
+        );
+        let where_at = xml
+            .find(APPROVE_WHERE_TOAST)
+            .expect("the sentence is asserted present just above");
+        let body_at = xml
+            .find(long_body)
+            .expect("the card's own words must be in the toast");
+        assert!(
+            where_at < body_at,
+            "the where-to-approve sentence must come BEFORE the card's own words, or a \
+             long body pushes it out of the visible lines - which is the bug this test \
+             exists for:\n{xml}"
+        );
+        assert!(
+            xml.contains(&format!("hint-maxLines=\"{BODY_MAX_LINES}\"")),
+            "the card's own words must be bounded to {BODY_MAX_LINES} lines so they cannot \
+             take the whole toast:\n{xml}"
+        );
+        assert!(
+            xml.contains(&format!(
+                "hint-maxLines=\"{BODY_MAX_LINES}\">{long_body}</text>"
+            )),
+            "the bound must be on the card's words themselves:\n{xml}"
+        );
+        // ...and the rule this module exists to keep still holds.
+        assert_eq!(xml.matches("<action ").count(), 1, "{xml}");
+        assert!(!xml
+            .split("<actions>")
+            .nth(1)
+            .unwrap_or_default()
+            .to_lowercase()
+            .contains("approve"));
     }
 
     #[test]
