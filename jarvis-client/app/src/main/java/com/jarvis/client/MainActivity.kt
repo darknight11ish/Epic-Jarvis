@@ -3131,6 +3131,11 @@ class MainActivity : FragmentActivity() {
                             bindings = bindings,
                             voicePhase = voicePhase,
                             voiceOffered = voiceStatus.canPushToTalk,
+                            // Read here rather than in HomeScreen so the one
+                            // reader of the permission is the recorder itself.
+                            // `tick` (permissionTick, above) already recomposes
+                            // this whole block when a grant or a refusal lands.
+                            micAllowed = JarvisRuntime.voice.recorder.hasPermission(),
                             transcript = transcript,
                             voiceNotice = voiceNotice,
                             approvalsOff = "approvals" in absent,

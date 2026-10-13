@@ -248,6 +248,17 @@ data class HomeState(
      * §2's rule is that a capability reporting false means hide the UI for it.
      */
     val voiceOffered: Boolean,
+    /**
+     * This phone holds RECORD_AUDIO.
+     *
+     * The talk button is greyed for a reason the link does not cover when the
+     * permission is missing, and a tap then does nothing at all once the
+     * owner has denied it (or Android no longer shows the dialog). MainActivity
+     * reads it from the recorder, so the one reader of the permission is the
+     * thing that needs it. Defaults to true: an unknown state must never
+     * invent a fault on a phone that is working.
+     */
+    val micAllowed: Boolean = true,
     /** What the desktop heard, so a mis-hearing is visible rather than silent. */
     val transcript: String?,
     val voiceNotice: String?,
@@ -3578,6 +3589,31 @@ private fun Composer(
             modifier = Modifier.padding(top = 6.dp).liveStatus(),
         )
     }
+    // Why the MICROPHONE cannot start a clip, said in the same place and for
+    // the same reason (the owner's report of 2026-10-13: "the mic button ...
+    // doesnt work if i tap it or hold it down"). The talk button is greyed on
+    // the link or while an answer streams, and on a phone that has not allowed
+    // the microphone; a greyed button never reaches the runtime's blocker, so
+    // without this line every one of those is silence.
+    //
+    // Shown only when the link line above is not already the answer: the two
+    // lines would otherwise say the same thing twice under one row, and the
+    // link is the reason the owner sees most often.
+    if (com.jarvis.client.LinkWords.composerHeldLine(state.link) == null) {
+        com.jarvis.client.MicWords.heldLine(
+            link = state.link,
+            streaming = state.streaming,
+            micAllowed = state.micAllowed,
+            voiceOffered = state.voiceOffered,
+        )?.let { why ->
+            Text(
+                why,
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textLo,
+                modifier = Modifier.padding(top = 6.dp).liveStatus(),
+            )
+        }
+    }
     }
 }
 
@@ -3669,6 +3705,23 @@ private fun VoiceBar(
                     onClick = actions.onInterrupt,
                 )
             }
+        }
+        // The same reason line the composer shows under the same button. Full
+        // screen has no composer, so the link's own sentence is shown here too
+        // rather than left to the row the owner cannot see from this one.
+        com.jarvis.client.MicWords.heldLine(
+            link = state.link,
+            streaming = state.streaming,
+            micAllowed = state.micAllowed,
+            voiceOffered = state.voiceOffered,
+        )?.let { why ->
+            Gap(6)
+            Text(
+                why,
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textLo,
+                modifier = Modifier.liveStatus(),
+            )
         }
     }
 }
