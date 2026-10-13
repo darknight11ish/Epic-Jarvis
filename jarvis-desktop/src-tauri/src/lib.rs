@@ -690,7 +690,34 @@ fn build_hud_window(app: &AppHandle) -> Result<(), String> {
     .min_inner_size(960.0, 640.0)
     .center()
     .decorations(true)
-    .transparent(false)
+    // THE HUD IS THE SURFACE #324 MISSED (2026-10-12).
+    //
+    // The owner's screenshot (build 0.2.150, so #324 IS in it) shows TWO flat
+    // grey rectangles over this window: one band across the central display
+    // over the particle orb, and one over the lower half of the right-hand
+    // telemetry panel. `rgb(84,84,84)` appears nowhere in this repository - it
+    // is the platform/WebView2 default for a region that has not painted, and
+    // the same colour #324 chased on three other surfaces.
+    //
+    // THIS WINDOW IS DIFFERENT FROM THE OTHER THREE, and that is why it was
+    // missed. It is the only one built with `decorations(true)`, it is not
+    // click-through, and it gets Mica/Acrylic (`apply_hud_effects`). It was
+    // `.transparent(false)`, so the window had an opaque backing and a frame
+    // that had not painted showed the platform default instead of the desktop
+    // behind it.
+    //
+    // Making it transparent here does NOT make the HUD see-through, and that
+    // was checked before changing it: `jarvis_hud.html` paints an opaque body
+    // (`body{background:var(--void)}`, and `--void` is `--bg-window`), so the
+    // full window is covered by the page. What changes is only the unpainted
+    // sliver, which now falls through to Mica - the effect the HUD already asks
+    // for - instead of to grey.
+    //
+    // `Color(0,0,0,0)` and not a theme colour, for the reason windows.rs:1426
+    // records: an opaque value here would trade a grey rectangle for a solid
+    // one, which is worse than the bug.
+    .transparent(true)
+    .background_color(tauri::window::Color(0, 0, 0, 0))
     .always_on_top(false)
     .skip_taskbar(false)
     .resizable(true)
