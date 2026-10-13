@@ -6,7 +6,11 @@ authors = ["darknight11ish"]
 license = "MIT"
 repository = "https://github.com/darknight11ish/Epic-Jarvis"
 edition = "2021"
-rust-version = "1.89"
+# 1.90, raised from 1.89 on 2026-10-13 (docs/DECISIONS.md). Every crate of the
+# Tauri 2.12 generation declares MSRV 1.90, so this one line was what held the
+# whole stack one generation back: tauri, tauri-build and every Tauri plugin
+# below move together or not at all.
+rust-version = "1.90"
 build = "build.rs"
 
 # `main.rs` is a two-line shim over this library so the same orchestration code
@@ -16,31 +20,46 @@ name = "jarvis_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "2.7", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon", "image-ico", "image-png"] }
-tauri-plugin-global-shortcut = "2"
-tauri-plugin-clipboard-manager = "2"
-tauri-plugin-notification = "2"
+# The 2.12 generation (2026-10-13). Every crate in this group declares MSRV
+# 1.90, which is why `rust-version` above had to come with them; they are one
+# generation and are bumped as one thing.
+tauri = { version = "2.12", features = ["tray-icon", "image-ico", "image-png"] }
+tauri-plugin-global-shortcut = "2.4"
+tauri-plugin-clipboard-manager = "2.4"
+tauri-plugin-notification = "2.6"
 # §3.1/§4: the API base URL and the pairing token persist here, not in the
 # page's localStorage. Read from Rust so the token reaches the webview only as
 # a JARVIS.set() call at page load.
-tauri-plugin-store = "2"
+tauri-plugin-store = "2.5"
 # Build order step 3: starting the app twice focuses the running window.
-tauri-plugin-single-instance = "2"
+tauri-plugin-single-instance = "2.5"
 # Brain, Settings, Faces and the HUD open where the owner last left them, at
-# the size they left them (window_memory.rs). Pinned exactly: 2.5.0 needs
-# Rust 1.90 and this crate's rust-version is 1.89. Its default also restores
-# whether a window was VISIBLE, which would put the HUD on screen before
-# Windows Hello while App lock is on - window_memory.rs restricts it to size,
-# position and maximised, and a test holds that line.
-tauri-plugin-window-state = "=2.4.1"
-# 0.6, not 0.5 and not 0.8. Tauri 2.11.5 itself depends on 0.6.0, so 0.5.3
-# compiled a second copy of the crate; 0.8 would compile a second copy again in
-# the other direction. 0.5 -> 0.6 is an objc2 bump and an MSRV raise; the
-# Windows apply_acrylic/apply_mica surface this file uses is unchanged.
-window-vibrancy = "0.6"
+# the size they left them (window_memory.rs). No exact pin any more: the
+# `=2.4.1` pin had exactly one reason - 2.5.0 needs Rust 1.90 and this crate's
+# rust-version was 1.89 - and rust-version moved to 1.90 with the rest of this
+# generation on 2026-10-13, so the reason is gone.
+#
+# The OTHER half of that decision did not depend on the pin and is UNCHANGED:
+# the plugin's default still restores whether a window was VISIBLE (2.5.0 has
+# `StateFlags::VISIBLE` and `Default for StateFlags` is still `all()` - read
+# from its own src/lib.rs, not assumed), which would put the HUD on screen
+# before Windows Hello while App lock is on. window_memory.rs restricts the
+# restore to size, position and maximised, and a test holds that line.
+tauri-plugin-window-state = "2.5"
+# 0.8, because that is what tauri 2.12.3 ITSELF depends on - `window-vibrancy
+# ^0.8.1`, read from its published dependency list on 2026-10-13, not guessed.
+# Tauri and this crate must name the same one or Cargo compiles a SECOND copy
+# of the crate: under tauri 2.11.6 that copy-free choice was 0.6 (tauri 2.11.6
+# depends on `^0.6`), and after the 2.12 bump staying on 0.6 is what would
+# duplicate it. So this line and the Tauri bump move together, as one change.
+# 0.8.1's own MSRV is 1.77, and the Windows surface this file uses -
+# `apply_acrylic` on the HUD and the bar, `apply_mica`-then-`apply_acrylic` on
+# Settings, `clear_acrylic` on teardown - is unchanged in it (checked against
+# its own src/windows.rs).
+window-vibrancy = "0.8"
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
 reqwest = { version = "0.12", features = ["json"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -61,7 +80,14 @@ xcap = "0.9"
 # rustls pulls `ring`, which needs a C compiler for the target and so cannot be
 # cross-checked from the Linux container this is developed in. On Windows
 # native-tls is schannel, which is the OS's own verifier.
-tauri-plugin-updater = { version = "2", default-features = false, features = ["native-tls"] }
+#
+# 2.13 since 2026-10-13 (was 2.11.0 - three minors behind on a security
+# surface, so this one moved with the generation rather than waiting). The
+# feature choice still means the same thing in 2.13.3: its own Cargo.toml maps
+# `native-tls` to `reqwest/native-tls`, and its `default` is still
+# `rustls-tls` + `system-proxy` + `zip`, so `default-features = false` with
+# `native-tls` is still schannel and no rustls.
+tauri-plugin-updater = { version = "2.13", default-features = false, features = ["native-tls"] }
 # Real microphone capture for the push-to-talk voice loop. WASAPI on Windows -
 # no system audio library needed there, unlike cpal's Linux (ALSA) backend,
 # which is why `cargo check --target x86_64-pc-windows-msvc` (this project's
@@ -95,6 +121,14 @@ windows-sys = { version = "0.59", features = [
   "Win32_Security_Credentials",
   "Win32_System_JobObjects",
   "Win32_System_Threading",
+  # GetModuleHandleW, in lock.rs's `capture_probe` test (the red window the
+  # screenshot-exclusion probe is measured against). Declared here on purpose
+  # as of 2026-10-13: it used to arrive by feature unification from
+  # `window-vibrancy 0.6`, which is on windows-sys 0.59 and turns this feature
+  # on, and `window-vibrancy 0.8` is on windows-sys >= 0.60 instead - so the
+  # test target stopped compiling and nothing else in the graph enables it.
+  # A feature of a crate already here, not a new dependency.
+  "Win32_System_LibraryLoader",
   "Win32_System_Diagnostics_ToolHelp",
   # GetLocalTime and SYSTEMTIME, for the quiet-hours window (notifications.rs):
   # quiet hours are the owner's wall clock, so the choice must be judged
