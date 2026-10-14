@@ -238,13 +238,17 @@ await check("several dates: each can be picked", async () => {
 });
 
 await check("a scan the PC could not read: its sentence, nothing else", async () => {
-  const page = await bar({}, { scanFails: "Windows could not read the words in the picture." });
+  // The sentence is a stand-in for whatever the PC said; it no longer names
+  // Windows, because since 2026-10-13 the reader that answered may be
+  // RapidOCR and a message naming the wrong one would be a lie (jarvis_ocr
+  // FAILED / TOO_BIG / TOO_SLOW).
+  const page = await bar({}, { scanFails: "Jarvis could not read the words in the picture." });
   await page.locator("#capture-find-date").click();
   await page.waitForTimeout(200);
   const text = await page.locator("#photo-proposal").innerText();
   const adds = await page.locator("#photo-proposal .photo-add").count();
   await page.close();
-  assert.match(text, /Windows could not read the words/);
+  assert.match(text, /could not read the words in the picture/);
   assert.equal(adds, 0);
 });
 

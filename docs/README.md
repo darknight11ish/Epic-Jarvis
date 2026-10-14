@@ -1,15 +1,15 @@
 # The documents, and which ones are current
 
-There are **377 markdown documents** here, adding up to about **9.2 MB**. Neither
+There are **378 markdown documents** here, adding up to about **9.2 MB**. Neither
 number is a guess, and neither is asked to stay still: the documents are written
 to all day, so the count and the size both move. Both were measured on 2026-10-13
 with the two lines below, run from the top of the repository - so run them again
 whenever you want today's numbers rather than this page's:
 
 ```powershell
-(Get-ChildItem docs -Recurse -Filter *.md).Count                        # 377 documents
+(Get-ChildItem docs -Recurse -Filter *.md).Count                        # 378 documents
 "{0:N0}" -f (Get-ChildItem docs -Recurse -Filter *.md |
-  Measure-Object -Property Length -Sum).Sum                             # about 9,236,040 bytes
+  Measure-Object -Property Length -Sum).Sum                             # about 9,245,041 bytes
 ```
 
 Both lines count the documents in the subfolders too, not only the ones sitting
@@ -83,6 +83,7 @@ Also current, for one area each:
 | [AUDIT-PASS-2026-10-05.md](AUDIT-PASS-2026-10-05.md) | **Start here for the 2026-10-05 audit pass.** The timestamped record: what was run, what is still running, the headline results, and a link to each of the five documents. |
 | [WORK-ORDER-2026-10-05.md](WORK-ORDER-2026-10-05.md) | What the owner decided after that pass (2026-10-05): the fourteen choices, what gets fixed and in what order, what only the owner can do, and what is deliberately left out. |
 | [MEASURED-2026-10-05-owner-pc.md](MEASURED-2026-10-05-owner-pc.md) | **The first real measurement of the owner's own PC.** Both cards are in and working and the model runs entirely on the 12 GB card, so nothing spills onto the processor - and 16,384 tokens of context fits with room to spare. Also records the honest correction about the Ollama log: it does exist, and a search that returns nothing is not proof that a file is absent. |
+| [MEASURED-2026-10-13-ocr-two-readers.md](MEASURED-2026-10-13-ocr-two-readers.md) | **The two picture readers, side by side**, on four pictures the repository draws itself: Windows' own text recognition (the default) against RapidOCR 3.10.0 on onnxruntime. Both read all four and gave a box for every word, and the boxes agreed on all 35 shared words; RapidOCR read three hard words Windows got wrong and is about ten times slower. It says plainly that this is **not** the owner's screen text, that neither reader is checked against a hand-typed answer, and that the fallback the second reader exists for was never reached - so the reader ships **off**, not "better". |
 | [MEASURE-CARDS.md](MEASURE-CARDS.md) | The one-line check to run on the PC (reads only, changes nothing) and how to read what it prints: is the model on a card or partly on the processor, how much room is left, why 16,384 fits, and why the earlier advice to drop to 8,192 was wrong for this machine. |
 | [ADAPTIVE-MEMORY-DESIGN.md](ADAPTIVE-MEMORY-DESIGN.md) | Keeping recent conversation exact and compressing older turns in words instead of squeezing the whole window at the bit level (**design only, not built, not approved to build**). Its own answer is "do not build it yet": at 16K the ten turns the apps send already fit, and at 4,096 the tool list is what fills the window, not the conversation. |
 | [SETTINGS-MERGE-FINDINGS-2026-10-05.md](SETTINGS-MERGE-FINDINGS-2026-10-05.md) | Why the plan to merge the desktop Settings page from 33 cards to about 20 was **parked**, and what a correct retry must satisfy - read from the test suites, not guessed. The page on disk is the unchanged one, so the owner sees no difference. |
