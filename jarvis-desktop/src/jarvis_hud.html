@@ -440,6 +440,21 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
 #banner.on{display:flex;}
 #banner b{color:var(--gold); font-weight:500;}
 
+/* ---------- the local model is not running --------------------------- *
+   A standing line, not an error: calm gold, the same family as the demo
+   banner above it, and it clears itself when the lane answers again. It
+   says nothing at all when the PC has not said (see lane-warning.js) - a
+   warning drawn on every failed read is one the owner learns to ignore. */
+#model-warn{
+  flex-shrink:0; display:flex; flex-wrap:wrap; gap:4px 8px; align-items:baseline;
+  padding:8px 18px; background:rgb(var(--warn-rgb) / .06);
+  border-bottom:1px solid rgb(var(--warn-rgb) / .18); color:var(--dim);
+  font-family:var(--f-mono); font-size:11px;
+}
+#model-warn[hidden]{display:none;}
+#model-warn b{color:var(--gold); font-weight:500;}
+#model-warn #model-warn-host{color:var(--dim); opacity:.85;}
+
 /* ---------- responsive ---------------------------------------------- */
 .rail-toggle{display:none;}
 @media (max-width:1080px){
@@ -589,7 +604,18 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
 
     <div id="banner">
       <b>Demo data.</b>
-      <span id="banner-text">Jarvis is not answering yet — start Ollama and <span class="mono">py -3 jarvis_hud.py</span>, then reload.</span>
+      Jarvis is not answering yet — start <span class="mono">py -3 jarvis_hud.py</span> on your desktop, then reload.
+    </div>
+
+    <!-- The PC is answering and its own model is not. Standing, before any
+         question, and its own state: this is NOT "Jarvis isn't connected" -
+         the PC is fine, only answers are. Filled in by lane-warning.js, from
+         `/api/status`'s own `ollama` field on every beat, so it clears itself
+         when the lane comes back and never acts on anything. -->
+    <div id="model-warn" hidden>
+      <b id="model-warn-text"></b>
+      <span id="model-warn-fix"></span>
+      <span id="model-warn-host" hidden></span>
     </div>
 
     <div class="stage-bar">
@@ -798,6 +824,13 @@ function jfetch(path, opts){
 const S = {
   view: "talk",
   online: false,
+  // /api/status's own `ollama` field, as the PC reported it: true, false, or
+  // null for "the PC has not said" (a read that did not land, or an older
+  // backend with no such field). Re-read on the page's beat; see `paintHost`.
+  ollama: null,
+  // The shell's live stream verdict - is the PC answering at all - or null
+  // before it has said. The second half of the model warning's own words.
+  linkUp: null,
   lane: "auto",
   lanes: [],
   state: "idle",              // idle | listening | thinking | speaking
@@ -2132,6 +2165,13 @@ async function boot(){
     // docs/LEARNING-RESEARCH-2026-09-23.md). The backend's /api/status still
     // probes :8000 itself - that check lives in jarvis_hud.py on the owner's
     // machine, whose code is not in this repository.
+    //
+    // `status.ollama` is false when the PC's OWN model server is not
+    // answering - the PC is up and only answers are not - which is a
+    // different state from this page having no HUD server at all (`!status`,
+    // the else branch below). Both used to land on the one "demo data"
+    // banner, whose first word then lied about a live PC.
+    S.ollama = status.ollama;
     S.online = !!status.ollama;
     // A string or {mode}, as stream.rs's power_mode reads it.
     const pm = status.power && (typeof status.power === "string" ? status.power : status.power.mode);
@@ -2148,26 +2188,33 @@ async function boot(){
         Math.round(100*status.budget.day_used/status.budget.day_limit) + "%";
     }
     S.jarvisMemory = !!status.jarvis_injects_memory;
-    $("brand-sub").textContent = S.online ? "online · local first" : "offline · start ollama";
+    $("brand-sub").textContent = S.online ? "online · local first" : "online · model not running";
   } else {
     led("led-ollama", false, "—");
     led("led-proxy",  false, "—");
     S.lanes = ["jarvis-escalate","jarvis-critic","jarvis-bulk"];
     S.defaultModel = "qwen3:8b";
+    // The page's own fallback, and the shell's own marker: `recheckBrand`
+    // (hud_bootstrap.js) recognises this exact prefix and reloads the window
+    // once the backend is answering again. `hostWarn` deliberately leaves it
+    // standing while the model state is still unknown - which is here.
     $("brand-sub").textContent = "demo · not connected";
   }
 
   renderLanes();
   $("chip-model").textContent = S.defaultModel;
   reactor.set("idle");
+  paintHost();
 
   if(!S.online){
     $("banner").classList.add("on");
-    $("banner-text").innerHTML = status
-      ? 'The local model is not answering — open the Ollama app (or run <span class="mono">ollama serve</span>), then reload.'
-      : 'Serving without the HUD server — run <span class="mono">py -3 jarvis_hud.py</span> on your desktop for live data.';
+    $("banner").innerHTML = status
+      ? '<b>Model not running.</b> The HUD server is answering; the local model is not. '
+        + 'Replies below are sample data.'
+      : '<b>Demo data.</b> Jarvis is not answering yet — start '
+        + '<span class="mono">py -3 jarvis_hud.py</span> on your desktop, then reload.';
     addMessage("system", status
-      ? "HUD server is up, but Ollama (the local model) is not answering yet. Everything below is sample data."
+      ? "The PC is up, but its local model is not running yet. Everything below is sample data until it is."
       : "Running as a preview. On your desktop, start it with py -3 jarvis_hud.py to connect to the real Jarvis.");
   } else {
     addMessage("jarvis", "Systems online, sir. Local model loaded and the brain map is current. What are we working on?");
@@ -2214,6 +2261,97 @@ async function boot(){
 boot();
 
 /* ---------------------------------------------------------------------- *
+ *  Is the local model running? - a standing line, and its own state
+ *
+ *  `boot()` reads /api/status once, so before this every word about the
+ *  model - the line, the banner, the Ollama light, `S.online` - was that one
+ *  read's answer for the rest of the session. Both of the owner's lanes were
+ *  dead for five hours on 2026-10-13 and this window said nothing, because
+ *  nothing asked again. `apprPoll` (the page's own 30 s beat) now carries a
+ *  second read of one field.
+ *
+ *  It is its own state, not "Jarvis isn't connected". "Jarvis isn't
+ *  connected" is this window unable to reach the PC at all; this is the PC
+ *  answering perfectly and its own model server being down. The two are
+ *  written differently on purpose (`lane-warning.js`).
+ *
+ *  Nothing here acts. It does not start, restart or change anything: the
+ *  owner starts his lanes, and this says whether they answered.
+ *
+ *  `S.ollama` is the field as the PC reported it - true, false, or null for
+ *  "the PC has not said" - and `S.linkUp` is the shell's live stream verdict,
+ *  null until it says. Kept apart from `S.online`, this page's older, coarser
+ *  boolean that decides sample replies.
+ * ---------------------------------------------------------------------- */
+async function paintHost(){
+  try{
+    const r = await jfetch("/api/status", {cache:"no-store", headers:{"X-Jarvis-Client":"hud"}});
+    if(r && r.ok){
+      const st = await r.json();
+      // Only a read that landed changes anything. A failed read says nothing
+      // about the model, so what was last known stands.
+      if(st) S.ollama = st.ollama;
+    }
+  }catch(e){ /* keep what was last known; never guess "down" from a failure */ }
+  hostWarn();
+}
+
+/* Draws the standing model line, and the host's own line under it.
+ *
+ * The brand is only written once the page actually knows: `S.ollama` is null
+ * until a read lands, and NULL means "the PC has not said", which is not a
+ * verdict to put beside a title. Writing "demo · not connected" over a live PC
+ * is the exact wrong word the shell's own `recheckBrand` beat exists to remove
+ * (hud_bootstrap.js, 2026-10-09).
+ *
+ * And it is not written at all while the owner has unsent words in the box.
+ * The shell will not reload over them - that is its whole guard - and it uses
+ * "demo · not connected" in #brand-sub to know a window is still waiting to be
+ * put right. Correcting the title here, without reloading, would leave that
+ * window claiming everything is fine with the owner's question still sitting
+ * unsent in the box; leaving the word standing keeps the shell's own promise
+ * that the window puts itself right the moment the box is clear (and this is
+ * the check that caught it: "a window in its no-server state waits for the
+ * owner's words, then puts itself right", tests/hud.mjs). */
+function hostWarn(){
+  if(typeof paintLaneWarning === "function"){
+    // The standing line itself follows the PC's own word, always: it is the
+    // one thing that has to be true before anything is typed.
+    paintLaneWarning(document, S.ollama, S.linkUp);
+  }
+  const sub = document.getElementById("brand-sub");
+  if(!sub) return;
+  const modelUp = S.ollama !== false;
+  const box = document.getElementById("input");
+  if(box && String(box.value || "").trim()) return;
+  if(modelUp && isBrandFallback()) return;
+  sub.textContent = S.ollama === true ? "online · local first"
+    : S.ollama === false ? "online · model not running"
+    : "demo · not connected";
+}
+
+/** Whether #brand-sub still holds the page's own fallback, which the shell's
+ *  `recheckBrand` beat reads to decide a window is waiting to be put right.
+ *  The same test `hud_bootstrap.js` makes, from this side of it. */
+function isBrandFallback(){
+  const sub = document.getElementById("brand-sub");
+  return !!sub && /^\s*demo\b/i.test(sub.textContent || "");
+}
+
+/* The shell's own verdict, pushed on every change and on its beat
+ * (`hud_bootstrap.js` `recheckBrand`): the PC answering again after a spell
+ * of not answering means this window's boot read is stale, so the one field
+ * is read again - never a reload, which would throw away whatever the owner
+ * has typed. A PC that has gone quiet needs no read: the host line under the
+ * warning says so from the verdict itself. */
+window.addEventListener("jarvis-lane", (event) => {
+  const detail = (event && event.detail) || {};
+  S.linkUp = detail.linkUp === true ? true
+    : detail.linkUp === false ? false : null;
+  if(S.linkUp === true) paintHost(); else hostWarn();
+});
+
+/* ---------------------------------------------------------------------- *
  *  Approval queue
  *  Anything in [autonomy.tiers] set to "ask" now stops inside OpenJarvis
  *  and waits here. The tool call is genuinely blocked while this is on
@@ -2229,6 +2367,10 @@ function apprEscape(t){
 async function apprPoll(){
   if(APPR.inflight || document.hidden) return;
   APPR.inflight = true;
+  // The same beat carries the model warning's own read: one more field from
+  // a route this beat already asks, so a lane that dies or comes back is
+  // drawn within 30 s of it happening rather than never (`paintHost`).
+  paintHost();
   let data;
   try{
     const r = await jfetch("/api/pending", {
@@ -2590,4 +2732,15 @@ const onPower = (e) => { const d = e.detail || {}; reactor.setPower(d.power, d.s
 window.addEventListener("jarvis-power", onPower);
 if (window.__jarvisPower) onPower({ detail: window.__jarvisPower });
 subscribe();
+</script>
+<!-- The one shared rule: what a not-running model is called, and the DOM
+     half that draws it (`lane-warning.js`, held to these words by
+     tests/lane-warning.mjs). An inline module, because this page is served
+     under a CSP whose script-src allows 'self' and this exact inline text
+     (Tauri hashes every inline script); the same rule is imported by the
+     quickbar's main.js, so the two windows cannot come to different wording
+     for the same fact. -->
+<script type="module">
+import { paintLaneWarning } from "./lane-warning.js";
+window.paintLaneWarning = paintLaneWarning;
 </script>

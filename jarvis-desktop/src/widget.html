@@ -176,6 +176,27 @@
           <button class="btn btn-quiet" type="button" id="widget-offline-retry">Reconnect</button>
         </div>
 
+        <!-- The PC is answering and its own model is not (2026-10-13: both of
+             the owner's Ollama lanes were dead for about five hours and this
+             window said nothing - the health dot was green, because the probe
+             it used asked the wrong port and this row did not exist).
+
+             Its own state, NOT the offline row above: that one means this
+             window cannot reach the PC at all, this one means the PC is
+             answering perfectly and cannot think. Same words as the HUD
+             window, from the one file both import (lane-warning.js), and
+             NOTHING here acts: no button, no card, no restart. The owner
+             starts his lanes; this says whether they answered.
+
+             Filled by widget.js applyHealth from `check_server_health`, whose
+             Ollama row is the backend's own /api/status verdict - the same
+             field the chat itself uses, so a lane on another port is judged
+             where it really is. -->
+        <p class="widget-model" id="widget-model" hidden>
+          <b id="widget-model-text"></b>
+          <span id="widget-model-fix"></span>
+        </p>
+
         <!-- What Jarvis is doing right now, one bounded step at a time -
              docs/AUTONOMY-PROPOSALS.md §3c. `announce()` already fires this
              text on the backend today; this is the first place on the

@@ -918,6 +918,22 @@ object JarvisRuntime {
             }
         }
 
+        // Is the PC's own local model running? (2026-10-13.) One small read of
+        // `/api/status` every POLL_MS while connected, so the line Home draws
+        // from it appears within a minute and a half of a lane dying and clears
+        // itself as quickly when it comes back - without the owner asking
+        // anything. It used to be read only when something else happened to
+        // call refreshStatus(), which on a quiet PC is nothing at all: both of
+        // his lanes were dead for about five hours that way.
+        // Skipped while the link is down - a PC that cannot be reached has no
+        // opinion on its own model, and the link line is already saying so.
+        scope.launch {
+            while (true) {
+                runCatching { refreshModelState() }
+                delay(com.jarvis.client.ModelWords.POLL_MS)
+            }
+        }
+
         faceJob = scope.launch {
             // `_stale` is in the combine: a stale link is as cut as a dropped
             // one (rule 4 blocks acting on it), and the face has to hear
@@ -1759,6 +1775,29 @@ object JarvisRuntime {
             // Idle means no step is running, whatever the last event said.
             if (_activity.value == Activity.IDLE) _activityDetail.value = null
         }
+    }
+
+    /**
+     * Re-reads one thing from `/api/status`: whether the PC's local model is
+     * running. Called on the quiet [com.jarvis.client.ModelWords.POLL_MS]
+     * beat, and never while the link is down - a PC that cannot be reached has
+     * no opinion on its own model, and the link line is already saying so.
+     *
+     * This is the whole of the phone's half of the 2026-10-13 fix. Both of the
+     * owner's lanes were dead for about five hours with the app looking
+     * normally connected, because nothing ever asked again; the fact was in
+     * `/api/status` the whole time. A read that failed changes nothing -
+     * `onOk` does not fire - so the warning can only ever come from the PC's
+     * own word, never from this phone failing to reach it.
+     *
+     * Only the one field is taken. The rest of this answer is the old
+     * OpenJarvis agent's (`lane`, `model`, `activity`), which this PC never
+     * runs, and overwriting what [refreshStatus] has with those blanks would
+     * lose the state word the face is driven by for nothing.
+     */
+    suspend fun refreshModelState() {
+        if (_link.value != LinkState.CONNECTED) return
+        api.status().onOk { s -> _status.value = _status.value?.copy(ollama = s.ollama) ?: s }
     }
 
     /**

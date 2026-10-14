@@ -113,6 +113,7 @@ CONSUMED_WITHOUT_A_PAGE = {
     "screen_watch": "look.rs's `on_event`, which emits screen-status to the badges and the bar.",
     "handoff": "stream.rs itself: shows a Windows toast naming the site that needs the owner.",
     "persona": "no reader in this tree; fanned out because the backend publishes it. The HUD's galaxy draws a `persona` node, and its stream handler is this script's first finding.",
+    "jarvis-lane": "hud_bootstrap.js's own `tellLane()`: it hands the page the SHELL's live-stream verdict - is the PC answering at all - on every change and on the page's beat. `jarvis_hud.html` listens for it (window.addEventListener(\"jarvis-lane\", ...), which this script's page regex does not read: a name with a hyphen is not a bus KIND, and the check beside this one is about kinds). The page needs it because its own /api/status read cannot tell 'the PC is answering, its model is not' from 'nothing is answering', and the standing model line says which of the two it is (2026-10-13).",
 }
 
 # ---------------------------------------------------------------------------
@@ -142,38 +143,40 @@ KNOWN_BREAKS = {
     # the same line, or the whole handler moved down the page is a finding with
     # no entry - and an entry that stops matching is reported as stale.
     #
-    # THE FIVE HUD LINES BELOW ARE +80 FROM WHAT THEY WERE (2447/2448/2455/2456/
-    # 2457 -> the numbers here). That is this rule firing correctly, not a
-    # workaround: the 2026-10-07 bug audit added 80 lines to `jarvis_hud.html`
-    # (the prompt window that used to slide one exchange every turn), the whole
-    # page below the insertion moved down, and these entries were moved with it.
-    # A branch was fixed or removed? Then fix or delete its entry - the shift is
-    # not a reason for any of them to stay.
-    ("1 a read that can never arrive", "jarvis_hud.html", 2547, "message", "hello"):
+    # THE FIVE HUD LINES BELOW MOVED +142 IN ONE JUMP (2447/2448/2455/2456/2457
+    # -> 2589/2590/2597/2598/2599) and +100 IN ANOTHER (-> the numbers here).
+    # That is this rule firing correctly, not a workaround, and the same rule
+    # the 2026-10-07 audit note below records: `jarvis_hud.html` grew, the whole
+    # page below the insertion moved down, and these entries moved with it. The
+    # 2026-10-13 additions - the standing "the local model isn't running" line,
+    # its CSS, its re-read on the page's beat and the two functions that draw it
+    # - are the second jump. A branch was fixed or removed? Then fix or delete
+    # its entry - the shift is not a reason for any of them to stay.
+    ("1 a read that can never arrive", "jarvis_hud.html", 2689, "message", "hello"):
         _KnownBreak(
             "the file is vendored byte for byte from the owner's backend folder, so a "
             "branch and a listener cannot be added here",
             "the backend's own copy of jarvis_hud.html: register a listener per kind "
             "the page reads - es.addEventListener(\"hello\", ...) - where that page lives"),
-    ("1 a read that can never arrive", "jarvis_hud.html", 2548, "message", "approval"):
+    ("1 a read that can never arrive", "jarvis_hud.html", 2690, "message", "approval"):
         _KnownBreak(
             "the file is vendored byte for byte from the owner's backend folder, so a "
             "branch and a listener cannot be added here",
             "the backend's own copy of jarvis_hud.html: register a listener per kind "
             "the page reads - es.addEventListener(\"approval\", ...) - where that page lives"),
-    ("1 a read that can never arrive", "jarvis_hud.html", 2555, "message", "proposal"):
+    ("1 a read that can never arrive", "jarvis_hud.html", 2697, "message", "proposal"):
         _KnownBreak(
             "the file is vendored byte for byte from the owner's backend folder, so a "
             "branch and a listener cannot be added here",
             "the backend's own copy of jarvis_hud.html: register a listener per kind "
             "the page reads - es.addEventListener(\"proposal\", ...) - where that page lives"),
-    ("1 a read that can never arrive", "jarvis_hud.html", 2556, "message", "finding"):
+    ("1 a read that can never arrive", "jarvis_hud.html", 2698, "message", "finding"):
         _KnownBreak(
             "the file is vendored byte for byte from the owner's backend folder, so a "
             "branch and a listener cannot be added here",
             "the backend's own copy of jarvis_hud.html: register a listener per kind "
             "the page reads - es.addEventListener(\"finding\", ...) - where that page lives"),
-    ("1 a read that can never arrive", "jarvis_hud.html", 2557, "message", "activity"):
+    ("1 a read that can never arrive", "jarvis_hud.html", 2699, "message", "activity"):
         _KnownBreak(
             "the file is vendored byte for byte from the owner's backend folder, so a "
             "branch and a listener cannot be added here",

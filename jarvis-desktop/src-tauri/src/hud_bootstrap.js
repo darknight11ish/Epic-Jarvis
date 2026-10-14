@@ -305,6 +305,10 @@
     // reload lands before the page's own read has finished, so it is a later
     // one that finds a fallback left standing by a read that failed.
     recheckBrand(link);
+    // And the same verdict, for the page's own standing model line. A change
+    // is said at once; a verdict that has not changed is said again on the
+    // beat, because the page may not have been listening yet (see tellLane).
+    tellLane();
     var up = !!(link && link.connected);
     if (up === linkUp) return;
     linkUp = up;
@@ -402,11 +406,42 @@
     var beat = function () {
       var result = pagePoll.apply(this, arguments);
       recheckBrand(lastLink);
+      tellLane();
       return result;
     };
     beat.__jarvisBrandBeat = true;
     window.apprPoll = beat;
+    // And once now: a verdict that changed while the page was loading is
+    // older than the page's listener, so the first beat is 30 s too late.
+    tellLane();
   }
+
+  /* Is the PC answering, said to the page on every change and on the beat.
+   *
+   * The page's standing "the local model isn't running" line needs two
+   * facts: the PC's own /api/status verdict (which the page reads itself, on
+   * this same beat) and this shell's live-stream verdict, which the page
+   * cannot work out. That second one is only knowable here, and it is what
+   * separates "the PC is answering, its model is not" from "Jarvis is not
+   * answering at all" - two different things to tell the owner.
+   *
+   * The page reads the model field itself and never reloads on this: the
+   * shell's own recheckBrand above reloads a page whose read failed, which
+   * would throw away whatever is in the box, so this only ever hands over a
+   * verdict. One event, no payload beyond it. */
+  function tellLane() {
+    var up = !!(lastLink && lastLink.connected);
+    if (up === laneUp) return;
+    laneUp = up;
+    try {
+      window.dispatchEvent(new CustomEvent("jarvis-lane", {
+        detail: { linkUp: up },
+      }));
+    } catch (err) {
+      console.error("[jarvis] lane verdict failed", err);
+    }
+  }
+  var laneUp = null;
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", watchPageBeat, { once: true });
   } else {
