@@ -27,6 +27,10 @@ WHAT IT CHECKS
      list, plus `backend/rebuilt/`) is in the base, and the base's copy is the
      same text. Line endings are ignored, the same rule `_where._same_text()`
      uses: `.gitattributes` is `eol=lf`, and a Windows clone may hold CRLF.
+     `twin_pairs()` below is the same rule extended over the BESIDE-files
+     `tools/gen_base_from_backend.py` re-takes from this repository, which are
+     not modules and so are not in SHIPPED - `requirements.lock` is the one
+     that got past everyone on 2026-10-13 (PR #390).
   3. The base is complete on its own: the import walk
      `scripts/check-backend.ps1` performs finds nothing missing, and nothing
      that only `apply-patches.ps1` could supply.
@@ -40,7 +44,10 @@ WHAT IT CHECKS
      runs before pushing, so drift is named in a second instead of a CI round
      trip later - names exactly the files this suite names. It is checked the
      only way that means anything: on a copy of the two folders holding a
-     deliberately drifted twin, where the functions above are the judge.
+     deliberately drifted twin, where the functions above are the judge. Since
+     2026-10-13 the list it is judged against is `twin_pairs()`, which is the
+     modules **and** the beside-files, so the fast check can no longer report
+     green while the beside-file half of the rule is broken.
 
 WHAT IT DOES NOT CHECK, PLAINLY
 
@@ -126,6 +133,86 @@ def shipped_pairs() -> list:
     return out
 
 
+def _beside_twins_from_the_rule() -> tuple:
+    """(leaf in the base, where this repository keeps its copy) for the
+    BESIDE-files this repository owns.
+
+    Read out of `tools/gen_base_from_backend.py`'s own `BESIDE` table - the
+    table the re-take rule is - rather than restated, so a file added there is
+    checked here with no edit to this file. Filtered to the entries whose
+    source is this repository: `jarvis-visual-spec.json` comes from the
+    owner's live backend folder (`{source}/`), which is not in this repository
+    and is not in CI, so there is no copy here to compare it with.
+
+    `_where.py` is deliberately NOT here. It lands under `DERIVED_FROM_REPO`,
+    not `BESIDE`, and the base's copy is this repository's copy PLUS
+    `BASE_WHERE_TRAILER` - so it is a different text by design, and
+    `same_text()` would report the rule working as a difference.
+    `backend/test_base_regeneration.py` compares it with its own rule.
+
+    Paths are kept relative to the repository root, because `beside_pairs()`
+    resolves them from `BACKEND` at call time. A `tools/gen_base_from_backend.py`
+    that will not import is a hard failure on purpose: a check that cannot read
+    its rule must say so, never quietly check less.
+    """
+    sys.path.insert(0, str(REPO / "tools"))
+    try:
+        import gen_base_from_backend as gen        # noqa: PLC0415
+    finally:
+        sys.path.remove(str(REPO / "tools"))
+    out = []
+    for name, where, _why in gen.BESIDE:
+        if "{source}" in where:
+            continue
+        at = Path(where.format(repo=REPO.as_posix(), source=""))
+        out.append((name, at.relative_to(REPO).as_posix()))
+    return tuple(out)
+
+
+#: The beside-files this repository owns: (leaf in the base, its path here).
+BESIDE_TWINS = _beside_twins_from_the_rule()
+
+
+def beside_pairs() -> list:
+    """(leaf name in the base, this repository's copy) for BESIDE_TWINS.
+
+    Resolved from `BACKEND.parent` rather than `REPO` so that `rule_finds()`
+    below can point the whole rule - modules and beside-files together - at a
+    copy of the two folders in a temp folder.
+    """
+    root = BACKEND.parent
+    return [(leaf, root / rel) for leaf, rel in BESIDE_TWINS]
+
+
+def twin_pairs() -> list:
+    """Every file the base's copy must hold as this repository's copy: the
+    modules shipped whole, and the beside-files this repository owns.
+
+    This is the list `tools/check_stale_twins.py` checks, so the fast local
+    check answers the question a person actually has before pushing - "is the
+    base still this repository's copy?" - and not only the module half of it.
+    On 2026-10-13 the module half was green and `requirements.lock` was stale;
+    see `BESIDE_TWINS` for the two beside-files that are deliberately not here.
+
+    The modules come first and a leaf seen twice is dropped, so the two files
+    that are in both lists - `jarvis-framework.toml` and `jarvis_hud.html` -
+    keep the copy `shipped_pairs()` names and nothing that was covered before
+    stops being covered. `jarvis_hud.html` is worth knowing about: `_where.SHIPPED`
+    lists it (the page served at "/", added 2026-10-07 because the patcher never
+    copied it), which is why there is also a `backend/jarvis_hud.html` for
+    `test_shipped_modules.py` to find, while `tools/gen_base_from_backend.py`
+    re-takes that page from `jarvis-desktop/src/`. All three copies are the same
+    text today, and the suite checks the `jarvis-desktop/src/` one against the
+    base separately, in `t_the_files_beside_the_code_are_there`.
+    """
+    seen, out = set(), []
+    for leaf, ours in shipped_pairs() + beside_pairs():
+        if leaf not in seen:
+            seen.add(leaf)
+            out.append((leaf, ours))
+    return out
+
+
 def t_the_base_is_there_and_is_a_backend():
     check("jarvis-backend/ is in this repository", BASE.is_dir(), str(BASE))
     check("... and holds the entry point, jarvis_hud.py", (BASE / "jarvis_hud.py").is_file())
@@ -199,10 +286,12 @@ def named_by_checker(out: str) -> set:
 def rule_finds(backend: Path, base: Path, shipped: tuple) -> tuple:
     """What THIS suite says about another pair of folders: (differ, missing).
 
-    `shipped_pairs()` reads the module global BACKEND, and reads the file list
-    from `_where.SHIPPED`, so both are swapped for the length of the call. The
-    rule's own code is not copied: that is what makes the comparison an
-    agreement rather than two independent guesses that happen to match today.
+    `twin_pairs()` reads the module globals BACKEND and `_where.SHIPPED` - and
+    `beside_pairs()` reads BACKEND too, keeping its paths relative to the
+    repository root - so all of them are swapped for the length of the call and
+    the beside-files follow the copy. The rule's own code is not copied: that
+    is what makes the comparison an agreement rather than two independent
+    guesses that happen to match today.
     """
     global BACKEND, BASE
     saved = (BACKEND, BASE, _where.SHIPPED)
@@ -210,7 +299,7 @@ def rule_finds(backend: Path, base: Path, shipped: tuple) -> tuple:
         BACKEND, BASE = backend, base
         _where.SHIPPED = shipped
         differ, missing = set(), set()
-        for leaf, ours in shipped_pairs():
+        for leaf, ours in twin_pairs():
             theirs = BASE / leaf
             if not theirs.is_file() or not ours.is_file():
                 missing.add(leaf)
@@ -231,6 +320,13 @@ def twin_fixture(work: Path) -> tuple:
     `_where.py` carries a trimmed SHIPPED, which is how the fast check is told
     which files this copy is about, and its own `test_base_matches_repo.py` is
     the rule the fast check loads.
+
+    It carries `tools/gen_base_from_backend.py` too, because the rule now reads
+    `BESIDE_TWINS` out of it, and every BESIDE-file that file names as this
+    repository's - at the same path relative to the copy's root, which is where
+    the copy's own rule looks for it. A fixture that skipped them would make
+    the fast check report them missing and turn the agreement below into a red
+    run about the fixture.
     """
     top = next(n for n in _where.SHIPPED if "/" not in n)
     rebuilt = next(n for n in _where.SHIPPED if n.startswith("rebuilt/"))
@@ -238,8 +334,11 @@ def twin_fixture(work: Path) -> tuple:
     copy = work / "copy"
     (copy / "backend" / "rebuilt").mkdir(parents=True)
     (copy / "jarvis-backend").mkdir()
+    (copy / "tools").mkdir()
     for name in ("_where.py", "test_base_matches_repo.py"):
         shutil.copyfile(BACKEND / name, copy / "backend" / name)
+    shutil.copyfile(REPO / "tools" / "gen_base_from_backend.py",
+                    copy / "tools" / "gen_base_from_backend.py")
     with (copy / "backend" / "_where.py").open("a", encoding="utf-8",
                                                newline="\n") as handle:
         handle.write("\n\n# the agreement test's own list\nSHIPPED = (%r, %r)\n"
@@ -248,6 +347,11 @@ def twin_fixture(work: Path) -> tuple:
         leaf = name.rsplit("/", 1)[-1]
         shutil.copyfile(BACKEND / name, copy / "backend" / name)
         shutil.copyfile(BACKEND / name, copy / "jarvis-backend" / leaf)
+    for leaf, rel in BESIDE_TWINS:
+        here = copy / rel
+        here.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(REPO / rel, here)
+        shutil.copyfile(REPO / rel, copy / "jarvis-backend" / leaf)
     return copy, shipped, top.rsplit("/", 1)[-1], rebuilt.rsplit("/", 1)[-1]
 
 
@@ -309,6 +413,33 @@ def t_the_stale_twin_check_agrees_with_the_rule():
               f"{code}; this suite says differ={sorted(differ)}, "
               f"missing={sorted(missing)}")
         shutil.copyfile(backend / top_leaf, base / top_leaf)
+
+        # The beside-file half of the rule, one file at a time, because that is
+        # the half that was silently uncovered until 2026-10-13: PR #390 added
+        # rapidocr to `backend/requirements.lock`, left
+        # `jarvis-backend/requirements.lock` as it was, and the fast check
+        # reported 191 of 191 modules matching while CI went red. Every entry
+        # is proved, not only the one that bit, and the names come from the
+        # rule's own table rather than from this test.
+        for beside_leaf, _rel in BESIDE_TWINS:
+            theirs = base / beside_leaf
+            keep = theirs.read_bytes()
+            theirs.write_bytes(keep + b"# drifted by the agreement test\n")
+            code, out = run_checker(copy)
+            differ, missing = rule_finds(backend, base, shipped)
+            check(f"a drifted beside-file is red as well, and the tool names it "
+                  f"({beside_leaf}) - this is the half of the rule that let "
+                  f"requirements.lock through on 2026-10-13",
+                  code == 1 and differ == {beside_leaf}
+                  and named_by_checker(out) == differ | missing,
+                  f"the tool named {sorted(named_by_checker(out))} and exited "
+                  f"{code}; this suite says differ={sorted(differ)}, "
+                  f"missing={sorted(missing)}")
+            theirs.write_bytes(keep)
+            code, out = run_checker(copy)
+            check(f"... and green again once {beside_leaf} is put back",
+                  code == 0 and not named_by_checker(out),
+                  f"the tool exited {code}: {out}")
 
         empty = work / "no-rule-here"
         empty.mkdir()
