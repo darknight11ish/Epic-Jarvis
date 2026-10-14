@@ -144,11 +144,19 @@ Banks export "last 90 days", so March appears in two files. When the owner asks
 about a *set* of files (a folder or "all files for this account"), rows are
 combined like this:
 
-- The key of a row is (date, amount in cents, cleaned description).
-- **Within one file, identical keys are kept** (two 2.50 coffees the same day
-  are real). Across files, for each key **the larger count of any single file is
-  used, not the sum.** So a row that is in both files counts once, and the two
-  coffees still count twice.
+- The key of a row is its **fingerprint**: (date, amount in whole cents, the
+  normalised description, and which identical row of that day it is). The
+  normalisation is documented in `normalise_description`: control characters and
+  runs of whitespace, letter case, full/half-width forms, accents and
+  punctuation are all folded, and after that the only comparison is equality -
+  no edit distance, no stemming, so "COSTA" can never be read as "COSTCO".
+- **Within one file, identical rows are kept** (two 2.50 coffees the same day
+  are real: they are occurrence 0 and 1 of that day's row). Across files a row
+  whose fingerprint was already counted is a duplicate and adds nothing, so a
+  row that is in both files counts once - while two coffees in each of the two
+  exports are still occurrence 0 and 1 in both, and still count twice. Ingesting
+  the same file twice is a no-op the second time. `RowLedger` is where this is
+  remembered, one fingerprint per row and never a row's own words.
 - The answer says how many rows were counted once because they were in more
   than one file. It is a visible line, not a silent fix.
 - **Known weak spot:** a bank that rewrites a description between a "pending"
