@@ -28,10 +28,13 @@ import com.jarvis.client.net.MenuView
  *  - WHERE each one opens is [MenuPlaces]' own answer (`item(key = ...)` on
  *    the phone), so a menu whose place moves moves here too, and
  *    `MenuVisibilityTest` already fails if a phone menu has no place at all.
- *  - A Settings row is also searched by [SettingsSearch]'s own words for it
- *    (its controls' names, like "SearXNG" or "Obsidian"), because that is the
- *    phone's existing vocabulary for Settings - there is deliberately no
- *    second one here.
+ *  - A Settings row is also searched by [SettingsSearch]'s own words for it:
+ *    its controls' names and sentences (like "SearXNG" or "Obsidian"), and -
+ *    since 2026-10-13 - the names of the switches that section prints
+ *    (`SettingsSearch.Row.titles`, e.g. "Hide memory lists and chat history").
+ *    That is the phone's existing vocabulary for Settings, so there is
+ *    deliberately no second one here; a name typed into this box and into
+ *    Settings' own box finds the same section, or the two would disagree.
  *  - A feature group ("Study", "Chatbots") is [MenuCatalog.GROUPS]' own title
  *    and one-line description, and its row opens the first member this phone
  *    has ([GROUPS]).
@@ -89,8 +92,9 @@ object FindAnything {
      *   passes ([OpenPlace]).
      * @param words extra words a search may find it by, always the app's own:
      *   the names Jarvis already answers to (the catalogue's `names`, e.g.
-     *   "app lock" for Security), and for a Settings row the control names and
-     *   detail sentences [SettingsSearch] already holds for it.
+     *   "app lock" for Security), and for a Settings row the control names,
+     *   the switch titles printed on it and the detail sentences
+     *   [SettingsSearch] already holds for it.
      * @param menu true when "Show or hide menus" can hide this row.
      * @param kind the catalogue's own `kind` (`card`, `row`, `tab`, `entry`),
      *   or `screen` for a phone screen with no menu, or `group` for a feature

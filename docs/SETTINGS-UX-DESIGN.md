@@ -40,6 +40,42 @@ owner can choose, so those are questions at the end, not decisions taken here.
 - **Cases are folded and accents are ignored** (`text-transform`-ish
   behaviour): "Wi Fi", "wifi" and "wi-fi" all find the same rows.
 
+## The words on the screen find the thing, in both apps (2026-10-13)
+
+The row above - "it matches the label and the detail text of every switch" -
+was true of the desktop from the start and **was not true of the phone** until
+2026-10-13. The owner found it on his own phone: the switch titled exactly
+**"Hide memory lists and chat history"** (Security -> "Lock and fingerprint
+settings") returned **"Nothing here matches that."** for its own words.
+
+The cause, and the two halves of it:
+
+- The **desktop matches the page's own text** at the moment of the search
+  (`settings-search.js` reads each card's parts out of the DOM), so a switch is
+  found by whatever it currently says. It never had this defect.
+- The **phone matched a hand-kept index** (`SettingsSearch.kt`), and that index
+  held each section's heading, its prose and the names Jarvis answers to - and
+  none of the names printed on the switches. `FindAnything.kt` reads the same
+  index, so both of the phone's boxes were blind in the same way.
+
+The fix is `SettingsSearch.Row.titles`: the names of the controls a section
+prints, each one checked by `SettingsSearchTest` against the file that draws it
+and against every `SwitchRow(title = ...)` in that file, so the index cannot
+promise a switch the screen does not have and cannot forget one it does.
+
+**The two apps name the same setting differently, and that is not a defect.**
+
+| | The switch that hides the memory lists and the chat history |
+| --- | --- |
+| Desktop (`settings.html#sec-private`) | "Windows Hello for memory lists and chat history" |
+| Phone (`SecurityScreen.kt`) | "Hide memory lists and chat history" |
+
+The desktop's name says what it asks for (Windows Hello); the phone's says what
+it does (hide), because the phone's check is its fingerprint or PIN. Each app is
+searched by the words **it** prints, so this is one setting with two honest
+names rather than a gap: typing "chat history" finds it on both. Neither name
+may be changed to match the other without changing what that app really does.
+
 ## What deliberately does not change
 
 - **No setting is added, removed, renamed, moved or hidden permanently.**
@@ -81,7 +117,11 @@ owner can choose, so those are questions at the end, not decisions taken here.
 - **Search is client-side and text-based only.** It finds what is written in
   the index (the phone) or on the page (the desktop). A setting whose words do
   not contain what the owner typed will not be found - that is what a
-  keywords/hidden-synonyms list would fix, and it is question 3.
+  keywords/hidden-synonyms list would fix, and it is question 3. **Since
+  2026-10-13 the phone's index carries the words printed on each switch**
+  (`titles`, above), so "what is written in the index" now includes what the
+  owner can read on the screen - which it did not before, and that was the
+  defect.
 - **Risk: low.** Nothing can be lost by typing in the box, and clearing it
   restores the page. The two real risks are a generated row losing its id
   (which the existing tests already catch) and the two `hidden` owners
