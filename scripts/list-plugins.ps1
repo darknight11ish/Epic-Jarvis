@@ -38,7 +38,37 @@ if (-not (Test-Path $Registry)) {
 }
 $data = Get-Content $Registry -Raw | ConvertFrom-Json
 $dropIns = @($data.entries | Where-Object { $_.bucket -eq 'plug-in' } | Sort-Object stack_order)
-$core = @($data.entries | Where-Object { $_.bucket -ne 'plug-in' })
+# NOT `$core`: `-Core` is a [switch] parameter, and PowerShell keeps a
+# parameter's type, so assigning this array to it failed every run of this
+# script - in 5.1 and in 7 alike - with "Cannot convert value
+# "System.Object[]" to type "System.Management.Automation.SwitchParameter"".
+# The powershell-5 CI job only PARSES the scripts, so nothing caught it. Found
+# and fixed 2026-10-14 while adding the patch-less folder below; recorded as
+# DEF-013 in docs/defect-register.tsv.
+$coreRows = @($data.entries | Where-Object { $_.bucket -ne 'plug-in' })
+
+# A drop-in folder that replaces NO patch is not in the registry at all - the
+# catalogue is generated from the patch stack, and there is no patch for it.
+# Its own plugin.json is the manifest, so it is read from the folder here.
+# (plugins\ready\receipts was the first one, 2026-10-14.)
+$handAdded = @()
+$readyRoot = Join-Path $RepoRoot 'plugins\ready'
+if (Test-Path $readyRoot) {
+    foreach ($dir in @(Get-ChildItem -Directory -Path $readyRoot)) {
+        if (@($dropIns | Where-Object { $_.name -eq $dir.Name }).Count -gt 0) { continue }
+        $manifest = Join-Path $dir.FullName 'plugin.json'
+        if (-not (Test-Path $manifest)) { continue }
+        try { $m = Get-Content $manifest -Raw | ConvertFrom-Json } catch { continue }
+        if ($null -ne $m.replaces_patch -or -not $m.module -or $null -eq $m.stack_order) { continue }
+        $handAdded += [pscustomobject]@{
+            name        = $dir.Name
+            module      = [string]$m.module
+            summary     = [string]$m.summary
+            stack_order = [int]$m.stack_order
+        }
+    }
+}
+$dropIns = @($dropIns) + @($handAdded) | Sort-Object stack_order
 
 $pluginsDir = Join-Path $BackendPath 'jarvis_plugins'
 $loader = Join-Path $BackendPath 'jarvis_plugins.py'
@@ -70,7 +100,7 @@ foreach ($entry in $dropIns) {
 }
 
 Write-Host ""
-Write-Host ("  {0} drop-in modules, {1} core patches." -f $dropIns.Count, $core.Count)
+Write-Host ("  {0} drop-in modules, {1} core patches." -f $dropIns.Count, $coreRows.Count)
 Write-Host "  Add one:    scripts\add-plugin.ps1 -Name <module>"
 Write-Host "  Add all:    scripts\add-plugin.ps1 -All"
 Write-Host "  Switch off: scripts\add-plugin.ps1 -Name <module> -Disable"
@@ -79,7 +109,7 @@ Write-Host ""
 if ($Core) {
     Write-Host "Core patches - not optional, and why"
     Write-Host ("  " + ("-" * 76))
-    foreach ($entry in ($core | Sort-Object stack_order)) {
+    foreach ($entry in ($coreRows | Sort-Object stack_order)) {
         Write-Host ("  {0,-34} {1}" -f $entry.patch, $entry.why)
     }
     Write-Host ""
