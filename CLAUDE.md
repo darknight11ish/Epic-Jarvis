@@ -292,10 +292,88 @@ can lag behind it: on 2026-09-29 the container's 1.94 passed clippy while CI's
 Run `rustup toolchain install stable --profile minimal -c clippy -c rustfmt
 --no-self-update` first, then the three commands above.
 
-The third, `cargo test`, still needs a Windows host. Write the Rust tests
-anyway; they are compiled by `--all-targets` above, so at least they are known
-to build. A "GNU compiler is not supported for this target" warning in the
-output is expected and harmless.
+The third, `cargo test`, used to need a Windows host and nothing else was said
+about it. Write the Rust tests anyway; they are compiled by `--all-targets`
+above, so at least they are known to build. A "GNU compiler is not supported
+for this target" warning in the output is expected and harmless.
+
+### Running the tests — the fourth command
+
+**Clippy never runs a test, and that is not a small thing.** PR #394's `rust`
+job failed on a test that asserted `"Not installed"` against a fixture saying
+`"not installed"` — **deterministically impossible, it had never once passed.**
+It hid because clippy *compiles* tests without running them, so a test that
+cannot pass is invisible locally and shows up in CI forty minutes later. One
+test here also opens a window and screenshots the screen, which is why nobody
+ran the suite at a desk they did not want disturbed. Now there is a way to run
+the rest of it.
+
+```
+cargo test --target x86_64-pc-windows-msvc
+```
+
+That is the third thing CI runs, on the same Windows target as the checks
+above. It is happy with the owner sitting in front of his own PC: **the one
+test that opens a window and reads the screen is `lock.rs`'s capture probe**
+(`lock::capture_probe::the_exclusion_is_real_and_reversible_on_this_pc`, the
+red window the screenshot-exclusion probe is measured against). Nothing else
+in the suite opens a window, drives a webview or looks at the screen — every
+other test in a file that *builds* windows is a pure one: geometry, JSON
+fixtures and source-text pins.
+
+**The documented opt-out.** When the owner would rather nothing appear on his
+screen at all, set `JARVIS_SKIP_WINDOW_TESTS=1` and the probe does not run:
+
+```
+$env:JARVIS_SKIP_WINDOW_TESTS="1"; cargo test --target x86_64-pc-windows-msvc
+```
+
+A skipped test is **never** a pass here (the BLOCKED-is-never-a-pass rule), so
+the skip says so out loud, on the process's own stderr — which libtest does not
+capture, so the line shows in a plain run with no `--nocapture`. It reads:
+
+```
+SKIPPED  the_exclusion_is_real_and_reversible_on_this_pc - this test opens a window or reads the screen, and JARVIS_SKIP_WINDOW_TESTS=1 is set. It did NOT run, and it did NOT pass. Unset that variable to run it.
+```
+
+The harness still prints `ok` for it, and it always will: Rust has no skipped
+state, and `assert!`-ing the skip would fail the suite, which is the opposite
+of an opt-out. So the printed SKIPPED line is the honest report, and it is the
+thing to look for. `#[ignore]` was the alternative and was turned down — it
+inverts the default so every ordinary run loses the probe, it cannot be driven
+by an environment variable, and it prints `ignored`, which this project does
+not accept in place of "did not run". A second test,
+`lock::capture_probe::the_window_probe_is_the_only_test_the_opt_out_guards`,
+stops the gate from being quietly renamed away: it reads the source and checks
+the variable name and the guard are both still there.
+
+**`CARGO_PROFILE_DEV_DEBUG="0"` on this PC.** Its `cl.exe` intermittently fails
+`D8050` on an unrelated C++ helper crate (`vswhom-sys`). The flag avoids that
+and changes nothing about the code compiled; the toolset is complete and the
+error does not always reproduce, so it is not a code problem.
+
+**Three tests fail here and are not this suite being broken.** On 2026-10-13,
+`crash_notes::tests::a_successful_write_really_lands_on_disk`,
+`crash_notes::tests::record_and_read_round_trip_and_keep_only_the_newest` and
+`commands::wiki_tests::only_a_real_jarvis_wiki_folder_is_opened` all failed on
+unmodified `main` too: they are `%TEMP%`-folder operations and `%TEMP%` here
+refuses the write (`Access is denied`). Everything else passed — 775 of 778.
+
+**The whole thing as ONE line, ready to paste.** Run it from the repository
+root (`$log` is resolved before the folder changes, so the log lands in the
+repository root and not in `src-tauri`). It sets the opt-out, changes into
+`jarvis-desktop/src-tauri`, runs the four commands in order, and writes the
+full output — all four commands, including the failures — to
+`rust-check-<date>.log` **in the repository root**. It ends by saying where
+that file is:
+
+```powershell
+$env:CARGO_PROFILE_DEV_DEBUG="0"; $env:JARVIS_SKIP_WINDOW_TESTS="1"; $log="$PWD\rust-check-$(Get-Date -f yyyy-MM-dd).log"; Push-Location jarvis-desktop\src-tauri; cargo fmt --check; cargo check --target x86_64-pc-windows-msvc --all-targets; cargo clippy --target x86_64-pc-windows-msvc --all-targets -- -D warnings; cargo test --target x86_64-pc-windows-msvc *>&1 | Tee-Object -FilePath $log; Pop-Location; "Full output: $log"
+```
+
+Drop `$env:JARVIS_SKIP_WINDOW_TESTS="1";` from that line to run the probe too.
+`*>&1` merges stderr as well, so the SKIPPED lines are in the log as well as on
+the screen.
 
 ## PowerShell: ONE line, ready to copy
 
