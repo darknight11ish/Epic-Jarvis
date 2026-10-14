@@ -683,6 +683,56 @@ def label_ok(text) -> bool:
     return name_ok(text)
 
 
+#: What a PAIRED device may say it is (docs/MULTI-DEVICE-DESIGN.md, the laptop
+#: client). "pc" is deliberately NOT here: this PC's own row is the host, and a
+#: paired device claiming to be one would put a second "PC" on the list. Nothing
+#: in this module authorises on `kind` - it is display only - so this is narrower
+#: than it strictly needs to be, on purpose.
+DEVICE_KINDS = ("phone", "laptop", "tablet")
+
+#: Said when a client claims a kind that is not one of DEVICE_KINDS.
+KIND_BAD = ('A paired device can say it is a "phone", a "laptop" or a "tablet". '
+            "Nothing was paired.")
+#: This PC's own row in the device list, and the name a label may not take.
+HOST_SHOWN = "This PC"
+#: Said when a label would leave two rows reading the same thing.
+LABEL_TAKEN = ('Another device on this list is already called "{name}". Pick a '
+               "different name so you can tell them apart - or remove that device "
+               "first.")
+
+
+def kind_ok(text) -> bool:
+    """True for a kind a paired device may claim. A client that says nothing is
+    a phone, so every app written before this reads exactly as it did."""
+    return isinstance(text, str) and text in DEVICE_KINDS
+
+
+def _label_key(text: str) -> str:
+    """How two names are compared for the collision rule: case and spacing are
+    forgiven, because two rows that differ only in case read the same on
+    screen."""
+    return " ".join(str(text or "").split()).casefold()
+
+
+def _label_taken(doc, device_id: str, text: str) -> str:
+    """The row already showing `text`, or "" when the label is free.
+
+    Compared against what each OTHER row would SHOW (`row_shown`: its label,
+    else the name it gave itself), and against this PC's own row - a label that
+    repeats any of those leaves two rows reading the same thing, which is a trap
+    for the person reading the list to decide what to remove."""
+    key = _label_key(text)
+    if key == _label_key(HOST_SHOWN):
+        return HOST_SHOWN
+    for r in list(doc.get("devices") or []):
+        if r.get("id") == device_id or r.get("removed") or not r.get("token_sha256"):
+            continue
+        shown = row_shown(r)
+        if _label_key(shown) == key:
+            return shown
+    return ""
+
+
 # ---------------------------------------------------------------------------
 # What a device is called (docs/MULTI-DEVICE-DESIGN.md, first slice)
 # ---------------------------------------------------------------------------
@@ -1634,6 +1684,14 @@ def claim(body, *, peer, local=None, own=None, gate: Optional[Callable] = None,
             return _bad()
         if not name_ok(name):
             return _bad("name")
+        # What the client says it is (docs/MULTI-DEVICE-DESIGN.md, the laptop
+        # client). A client that sends nothing is a phone, exactly as before.
+        # `kind` cannot be part of the signed proof - the transcript is built and
+        # signed before this is read - so it is display only, and "pc" is refused
+        # so a paired device cannot put a second "PC" on the list.
+        kind = body.get("kind", "phone")
+        if not kind_ok(kind):
+            return 400, {"ok": False, "reason": "bad_kind", "error": KIND_BAD}
         if s.state != "waiting_for_phone":
             # Already claimed: a second claim counts as a wrong try, and says
             # plainly that another device got there first.
@@ -1642,7 +1700,7 @@ def claim(body, *, peer, local=None, own=None, gate: Optional[Callable] = None,
         t = transcript(method, s.ref(method), phone_nonce, name)
         if not _same(proof, claim_proof(k, t)):
             return _wrong(s, peer)
-        s.method, s.phone_nonce, s.name = method, phone_nonce, name
+        s.method, s.phone_nonce, s.name, s.kind = method, phone_nonce, name, kind
         s.words = words_for(word_numbers(k, t, s.pc_nonce))
         s.state = "waiting_for_card"
         answer = {"state": "waiting_for_card", "pair_id": s.pair_id, "pc_nonce": s.pc_nonce,
@@ -1714,7 +1772,7 @@ def collect(body, *, peer, local=None, own=None) -> tuple:
             return 202, {"state": "waiting_for_card", "expires_in": s.expires_in()}
         # approved: the key is made now, written as its hash, handed over once.
         try:
-            device_id, token = _mint(s.name or "Phone")
+            device_id, token = _mint(s.name or "Phone", getattr(s, "kind", None) or "phone")
         except Exception as exc:
             return 503, {"ok": False, "state": "approved",
                          "error": f"The device list could not be written ({type(exc).__name__}). "
@@ -1726,8 +1784,11 @@ def collect(body, *, peer, local=None, own=None) -> tuple:
     return 200, {"state": "approved", "device_id": device_id, "token": token}
 
 
-def _mint(name: str) -> tuple:
-    """A new device row and its key. Only the key's SHA-256 is written."""
+def _mint(name: str, kind: str = "phone") -> tuple:
+    """A new device row and its key. Only the key's SHA-256 is written.
+
+    `kind` is what the client said it is (validated by `claim`; "phone" when it
+    said nothing). It is display only - see DEVICE_KINDS."""
     holder = {}
 
     def change(doc):
@@ -1737,7 +1798,8 @@ def _mint(name: str) -> tuple:
             device_id = "d" + secrets.token_hex(4)
         token = f"{KEY_PREFIX}{device_id}.{secrets.token_urlsafe(32)}"
         _hide(token)
-        doc["devices"].append({"id": device_id, "name": name, "kind": "phone",
+        doc["devices"].append({"id": device_id, "name": name,
+                               "kind": kind if kind_ok(kind) else "phone",
                                "token_sha256": _hash(token), "created": int(_wall()),
                                "last_seen": None, "removed": None, "approval_key": None})
         holder.update(id=device_id, token=token)
@@ -1765,7 +1827,7 @@ def devices_view(*, you: str, here: bool, tier_of=None, armed=None) -> dict:
     the owner change a label shows `name` as well, so he can see what he is
     going back to by leaving the box empty."""
     doc, why = load()
-    rows = [{"id": "pc", "name": "This PC", "shown": "This PC", "label": None,
+    rows = [{"id": "pc", "name": HOST_SHOWN, "shown": HOST_SHOWN, "label": None,
              "kind": "pc", "removable": False, "this_device": you == "pc"}]
     with _SEEN_LOCK:
         seen = dict(_SEEN)
@@ -1900,6 +1962,10 @@ def label(body, *, you: str) -> tuple:
         row = _live_row(doc, device_id)
         if row is None:
             return
+        taken = _label_taken(doc, device_id, text) if text else ""
+        if taken:
+            holder.update(taken=taken)
+            return
         row["label"] = text or None
         holder.update(name=row.get("name", ""), shown=row_shown(row))
 
@@ -1910,6 +1976,9 @@ def label(body, *, you: str) -> tuple:
     except OSError as exc:
         return 503, {"ok": False, "error": f"The device list could not be written "
                                            f"({type(exc).__name__})."}
+    if holder.get("taken"):
+        return 400, {"ok": False, "reason": "label_taken",
+                     "error": LABEL_TAKEN.format(name=holder["taken"])}
     if "shown" not in holder:
         return 404, {"ok": False, "reason": "no_such_device", "error": "No such device."}
     # An id and whether a label is set - never the label itself. The audit log

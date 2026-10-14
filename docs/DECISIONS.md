@@ -2168,3 +2168,30 @@ open on 2026-09-25 - **idea I-1**, question 1 of
   words refused outright, which is never a card. Every card still shows the exact
   search words and says why in plain words.
 
+Decided 2026-10-13, the owner's three answers after being asked the multi-device
+questions as short multiple choice (`docs/MULTI-DEVICE-DESIGN.md` section 4, and
+`.dsh-scratch/multi-device-questions.md`; the worked questions were task-51):
+
+- **The laptop / other-PC client: START IT NOW** as the main piece of the
+  multi-device work. It is the largest item in that design - a client mode in the
+  desktop app, a second credential store on the other machine, its own pairing
+  screen - and a client cannot approve risky cards, because Windows Hello on that
+  machine proves nothing to this PC. **The client mode itself is NOT built yet**;
+  what this change lands is the backend half it needs (below), so a non-phone
+  client is no longer recorded as a phone.
+- **Who may approve a new device - a LOOSENING, with his explicit yes:** a phone
+  that already signs approvals may also approve a *new* device. It is recorded as
+  a loosening because it is one: until now `pair_device` is in
+  `jarvis_owner_check.PC_ONLY_ACTIONS` and a device can never approve a device.
+  **It is NOT built, and must not be built before the phone signing half is
+  proved on a real phone** (a fresh fingerprint per risky approval, and the four
+  words matched against the card - `docs/MULTI-DEVICE-DESIGN.md` section 1 says
+  that last mile has never been proved on hardware). Nothing in this change
+  touches that gate; the PC-only rule stands until that proof exists, and the
+  proof is a later, separate piece of work.
+- **Nothing else per-device, for now** - no per-device notifications and no
+  "quiet this device" switch. Only the animal's sharpness and frame rate are
+  per-device (`jarvis_animal.py`), and that stays. **Written down for whenever it
+  is revisited: quieting one device must never hide an approval card.** A card is
+  how Jarvis asks, and a device the owner has quieted is still a device he must
+  be able to answer on.
