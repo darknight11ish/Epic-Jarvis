@@ -301,10 +301,6 @@ def using_rapidocr() -> bool:
         return False
 
 
-class _NoRapid(Exception):
-    """The rapidocr package is not installed (or would not load)."""
-
-
 # --------------------------------------------------------------------------
 #   The in-process reader (pywinrt) - the idea of the `winocr` package (MIT),
 #   its few lines of Windows calls, without its server. NOT RUN in the
@@ -442,7 +438,7 @@ _RAPID: dict = {}
 
 #: The first read that failed, in this process: a wheel whose models will not
 #: load is said to be broken until Jarvis restarts, rather than retried (and
-#: made to load 20 MB of ONNX) for every picture.
+#: made to load 31 MB of ONNX) for every picture.
 _RAPID_LAST: dict = {"why": ""}
 
 #: One picture at a time. onnxruntime is already thread-safe; this keeps a
