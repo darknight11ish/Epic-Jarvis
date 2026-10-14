@@ -842,6 +842,55 @@ def record_spend(pid: str, model: str, prompt_tokens: int, completion_tokens: in
         return used
 
 
+def note_answer_spend(row: dict) -> Optional[float]:
+    """Write down what one answer cost, when that answer was a PAID cloud lane.
+
+    WHY THIS EXISTS. `docs/audit-2026-10-07/E-open-pull-requests.md`, finding
+    E3: the cloud-lane transport never recorded what it spent, so the monthly
+    limit `money_check()` enforces could never advance. `jarvis_hud.py`'s own
+    cloud send is a second transport - it resolves the service, the model and
+    the key through `lane_state()` and posts to that service directly - and
+    nothing on that path called `record_spend`. So the cap both apps advertise
+    was checked against a total that could only ever begin at zero. (The
+    chatbot-routes client is NOT affected: `ApiChatbot._count_money` has
+    recorded its own answers all along.)
+
+    WHY IT IS CALLED FROM jarvis_speed AND NOT FROM THE HUD. Every line the
+    answer streams through in `jarvis_hud.py` sits inside a hunk of the patch
+    stack - `chat-stream.patch` and four neighbours - so a line added there
+    makes those patches unappliable. That is measured, not assumed: with the
+    recording in the streaming loop, the 143-patch rehearsal failed on 29
+    patches. `jarvis_speed.Meter.finish()` is the hook `jarvis_speed.py`
+    already documents as existing so that file can be measured WITHOUT being
+    edited; it runs once per turn, on the request thread, and it has just
+    measured the answer. So the measurement is taken there and the money is
+    accounted here, where the money already lives.
+
+    `row` is `Meter.row()`'s own dictionary. `token_source` says where the
+    completion count came from: "usage" or "ollama" is the SERVICE's own figure
+    and is recorded as exact; "deltas" is this PC counting content pieces, and
+    an answer with no prompt count is a floor rather than a full account. Both
+    of those are recorded as an estimate (`guessed=True`), the same flag
+    `_count_money` sets for the chatbot-routes path.
+
+    Returns the dollars counted, or None when this was not a paid cloud lane.
+    Never raises: a money record must not be the reason an answered turn
+    reports an error.
+    """
+    try:
+        state = last_lane_state()
+        pid, model = state.get("pid") or "", state.get("model") or ""
+        if not pid or not state.get("url"):
+            return None                 # local, or a lane this PC cannot pay for
+        ct, pt = row.get("tokens"), row.get("prompt_tokens")
+        if ct is None and pt is None:
+            return None                 # nothing was measured, so nothing to write
+        exact = row.get("token_source") in ("usage", "ollama") and pt is not None
+        return record_spend(pid, model, int(pt or 0), int(ct or 0), guessed=not exact)
+    except Exception:
+        return None
+
+
 def _file_words(why: str) -> str:
     """Said in both apps too, so the folder is named, not the full path
     (which holds the Windows user name); `spent` on the PC prints the path."""
