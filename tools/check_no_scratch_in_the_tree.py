@@ -14,6 +14,17 @@ neither was ignored and five files were TRACKED in them:
     scratchpad/admem/budget_measure.py              a token-budget measurement
     scratchpad/brain-sections/brain-0{1,2,3}-*.png  three screenshots
 
+TWO OF THE FIVE WERE NOT SCRATCH, and they were MOVED rather than ignored:
+`tools/gen_picture_card_patch.py` (was `.dsh-scratch-tools/
+make_picture_card_patch.py`) and `tools/measure_admem_budget.py` (was
+`scratchpad/admem/budget_measure.py`). Both are named from elsewhere and
+untracking them in place would have broken a promise a document makes, so they
+went to `tools/`, where this project's other patch writers and measurement
+tools already live (`tools/gen_ollama_direct_patch.py`,
+`tools/gen_tasks_patch.py`). The move is path-neutral for the patch writer: it
+reads `HERE = Path(__file__).resolve().parent.parent`, which is the repository
+root from either folder.
+
 None of it is read by code, a test or a workflow. This is the THIRD time this
 repository has found the same failure, and the first two are why it is a check
 and not a habit: `.gitignore`'s own history records `dshwork/` (about 88 MB of
@@ -23,24 +34,19 @@ files, a credential store in a folder a `git add -A` would have swept into a
 public repository). Both notes fixed the one folder they named. This one was
 not covered, and five small files is how the next 75 GB starts.
 
-WHAT IT COSTS, AND THE TWO POINTERS THAT HAVE TO MOVE WITH IT. Untracking is
-not deleting - every file above is still on this machine's disk - but no clone
-carries them any more, and two of the five are named from somewhere else:
+WHAT IT COSTS. Untracking is not deleting - every file above is still on this
+machine's disk - but a clone no longer carries the scratch. What that leaves
+behind is three screenshots under `scratchpad/brain-sections/`: pictures taken
+from the running app, which using the app again produces.
 
-  * `scratchpad/admem/budget_measure.py` is the script behind the numbers in
-    `docs/ADAPTIVE-MEMORY-DESIGN.md` section 8, which says so in as many words
-    ("The script is kept ... so the numbers can be re-run rather than taken on
-    trust"). A clone no longer has it.
-  * `.dsh-scratch-tools/make_picture_card_patch.py` is the only in-tree writer
-    of the TRACKED `backend/picture-card.patch` (it writes it at its own line
-    51). The patch itself is still tracked, pinned by the stack and applied by
-    the suites; only its generator is now outside the repository.
-
-If either promise should survive a clone, the script belongs somewhere tracked
-- `tools/` is where this project's other patch writers live
-(`tools/gen_ollama_direct_patch.py`, `tools/gen_tasks_patch.py`) - with the
-pointer in the document moved to match. That is a decision, not a check, so
-this check does not make it: it fails only if the scratch comes back.
+Neither of the two scripts that are named from elsewhere is affected, because
+they were MOVED into `tools/` rather than ignored in place. So
+`docs/ADAPTIVE-MEMORY-DESIGN.md` section 8 still points at a file a clone has
+(`tools/measure_admem_budget.py`), and the only in-tree writer of the tracked
+`backend/picture-card.patch` is still in the tree
+(`tools/gen_picture_card_patch.py`, which writes it at its own line 51). That
+is the whole reason for moving them: a promise in a document outranks the tidy
+satisfaction of ignoring a whole folder.
 
 WHAT TO DO IF THIS FAILS. Do not "fix" it by editing this check. Either the
 file is scratch and the tree should not carry it

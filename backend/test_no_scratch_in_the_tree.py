@@ -81,9 +81,16 @@ def t_the_checker_is_green_on_this_tree():
 def t_a_tracked_scratch_file_takes_it_red():
     """The bite. Both folders, because a rule covering one of them is how this
     started: `.dsh-scratch/` was ignored and `.dsh-scratch-tools/` was not.
+
+    The two paths below are stand-ins, deliberately not the files that were
+    found: those two were NOT scratch and now live under `tools/`, tracked on
+    purpose (`tools/gen_picture_card_patch.py`,
+    `tools/measure_admem_budget.py`; the reasoning is at the top of
+    `tools/check_no_scratch_in_the_tree.py`). What this tests is the FOLDER
+    rule, so anything a `git add -A` sweeps in under either folder must fail.
     """
-    for folder, path in ((".dsh-scratch-tools/", ".dsh-scratch-tools/make_picture_card_patch.py"),
-                         ("scratchpad/", "scratchpad/admem/budget_measure.py")):
+    for folder, path in ((".dsh-scratch-tools/", ".dsh-scratch-tools/scratch-notes.md"),
+                         ("scratchpad/", "scratchpad/scratch-notes.md")):
         code, out = run_checker(tracked=lambda *patterns, p=path: [p])
         check(f"a tracked file under {folder} exits 1", code == 1, out[-800:])
         check(f"... and the message names it: {path}", path in out, out[-800:])
