@@ -190,7 +190,37 @@ RATCHET = {
     # case and not in the second, and `backend/test_picture_card.py` now checks
     # exactly that, so the drift cannot come back silently. The pin stays 50. A
     # ratchet: it may still only go down.
-    "jarvis_hud.py": 50,
+    # RAISED 2026-10-13, 50 -> 51, for `attention-settings.patch`'s SECOND hunk,
+    # and it is honest rather than drift - the patch is in `by_patch` at 2:
+    #
+    #   * The interruption budget's route, POST /api/attention/settings, was in
+    #     `_desktop_action` and in NO dispatch tuple, so both apps' requests fell
+    #     through to 404 (the same half-wiring `limits-settings.patch` had, fixed
+    #     2026-10-10). The new hunk writes the tuple's own entry, and the tuple -
+    #     `/api/models/install` .. `/api/voice/wake` - is text only the owner's
+    #     PC holds: no patch in this walk writes a line of it, and limits-read.patch
+    #     reads it only through its own materialised pre-image. So the walk
+    #     invents those seven lines, exactly as the patch's first hunk already
+    #     did for the `_desktop_action` block.
+    #   * The entry is written after the `/api/watch/remove` line and not beside
+    #     `/api/attention/mute`, where it reads best, and that PLACE was measured
+    #     rather than chosen: `limits-settings.patch` runs next and its own tuple
+    #     hunk's context ends at `/api/watch/remove`, so an entry written before
+    #     that line sits inside the remaining context and the limits hunk can no
+    #     longer match - `apply-patches.ps1` then refuses the whole run with
+    #     NOTHING HAS BEEN CHANGED. Measured: the entry after the
+    #     `/api/attention/unmute` line gives materialised 51 with
+    #     `limits-settings.patch: 1` in `by_patch` and the limits patch failing;
+    #     after `/api/watch/remove` the limits patch applies to real context and
+    #     leaves `by_patch` entirely.
+    #   * Which is the one part of this that went DOWN: `limits-settings.patch`
+    #     used to invent its tuple pre-image (1 hunk) and now anchors on the line
+    #     THIS patch writes. Measured, not argued: 50 before this change
+    #     (`attention-settings.patch` 1, `limits-settings.patch` 1) and 51 after
+    #     (`attention-settings.patch` 2, `limits-settings.patch` absent) - the new
+    #     hunk costs one and the limits patch gives one back. A ratchet: it may
+    #     still only go down.
+    "jarvis_hud.py": 51,
     #: 23, raised from 22 on 2026-10-06. PR #80's `gate-risk-rows.patch` is the
     #: one new patch this walk adds for this file, and its single hunk's context
     #: is text only the owner's PC holds: the short `"delete it and it is gone"`

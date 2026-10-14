@@ -10,6 +10,7 @@ approval-notice.patch	approval-notice/d2db37e.patch	d2db37e80b413ab3f2e7911b410b
 apps-in-projects.patch	apps-in-projects/6769786.patch	6769786fc7f27ea2d379c8d3d417589e39e7d12f	2026-09-29T03:03:54Z	Apps in Projects: the gate patch, tier and tables, tests for the new pieces
 asks-first.patch	asks-first/0088dd5.patch	0088dd526f1f34b64638a14d5281e8a08f6ddec5	2026-09-26T03:47:42Z	Gate notice for schedule_repeat: say that each run reads the owner's own servers
 asks-first.patch	asks-first/b8a2145.patch	b8a214597e0f2a6e71a6256dd3b8e2a3f61ca554	2026-09-26T02:38:37Z	Backend: repeats without a card, lights setting, "What asks first"
+attention-settings.patch	attention-settings/e572cf8.patch	e572cf8fe152b88903569f193d5cbbaf4ed82475	2026-10-09T00:29:50-07:00	the route that makes the budget changeable, and the patch that exposes it
 auto-learn.patch	auto-learn/5a32e3a.patch	5a32e3abb26e30582e729295c455be850cb7e241	2026-09-29T00:11:03Z	Backend: continued chats re-register their own words, games stay games, hand-accepted facts keep their chat
 auto-learn.patch	auto-learn/f3b3652.patch	f3b36529eb06a32c17a51a62d1993ca02863fd56	2026-09-26T07:10:08Z	Memory review, backend half: bugs B1-B15 and B17, improvements measured
 auto-learn.patch	auto-learn/1f2f70f.patch	1f2f70f6654c9f70f2851848f65b3791868a9f7c	2026-09-24T23:00:16Z	Say what always waits for a yes: birthdays, phone numbers and email addresses too
