@@ -715,17 +715,33 @@ def t_config_toml_holds_no_secret():
     into an archive. Measured: every token, password, app_secret and api_key
     line in it is COMMENTED OUT and empty, the one mention of a real key says it
     comes from an environment variable, `[server]` is bound to loopback with the
-    "works without API authentication" line in the file itself, and the only
-    non-comment matches are `max_tokens = 1024` and `secret_scanner = true`.
+    "works without API authentication" line in the file itself, and the only two
+    non-comment settings whose names contain one of those words - `max_tokens =
+    1024` and `secret_scanner = true` - are not matches at all, because the
+    pattern is word-bounded: `\btoken\b` does not match `max_tokens` and
+    `\bsecret\b` does not match `secret_scanner`. So the check finds no live
+    secret-shaped line in the file.
 
     This test exists so that stops being a fact somebody remembers. If a real
     token is ever pasted into that file, this fails and says which line - the
     day the change matters, rather than years later in a backup file.
     """
     if not _CONFIG_PATH.is_file():
+        # The live line here is `api_key`, not the bare `key` it was until
+        # 2026-10-14. `_SECRET_NAME_RE` is word-bounded and its vocabulary is
+        # token / secret / password / api_key / passphrase / private_key, so
+        # `key` was never a match: this assertion could not pass on any machine
+        # WITHOUT ~/.openjarvis/config.toml - which is every CI runner - and
+        # passed on the owner's PC only because his file is there and this branch
+        # does not run at all. The regex was NOT widened to suit it: a bare `key`
+        # is an ordinary settings name (a sort key, a cache key, a map key) and a
+        # scanner that cries wolf on those is worse than one that does not know
+        # the word. Measured on the owner's own file: it has no `key =` line, and
+        # `max_tokens = 1024` and `secret_scanner = true` are not matches either
+        # for the same word-boundary reason, so widening would catch nothing real.
         check("the settings file TOML round-trips (no real install here to read)",
-              _live_secret_lines('[a]\ntoken = ""\n# token = "x"\nkey = "REAL"\n')
-              == [(4, 'key = "REAL"')])
+              _live_secret_lines('[a]\ntoken = ""\n# token = "x"\napi_key = "REAL"\n')
+              == [(4, 'api_key = "REAL"')])
         print("        NOTE: ~/.openjarvis/config.toml is not on this machine, so the two "
               "checks below\n        about the owner's real file did NOT run. They are not "
               "passes.")
