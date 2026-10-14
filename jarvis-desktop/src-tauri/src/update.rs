@@ -334,6 +334,20 @@ pub const STEP_BACKEND: &str = "backend";
 /// The id of the desktop half in a [`Step`].
 pub const STEP_DESKTOP: &str = "desktop";
 
+/// The words the desktop half shows when the backend half did not finish, so
+/// nothing was put on top of it.
+///
+/// Written once, here, rather than at the call site — and the test below reads
+/// this same constant. The sentence exists to say "Not installed" about a half
+/// that was not installed, and nothing can check that against a *copy* of the
+/// words: a copy drifts, and the first version of that test drifted on the
+/// first letter, asserting `"Not installed"` against its own lowercase fixture
+/// and so failing every run from the day it was written.
+const DESKTOP_SKIPPED_DETAIL: &str =
+    "Not installed. The backend step did not finish, so nothing was put on top of \
+     it. Fix what the log above says, then run this again - and Install on its own \
+     below still works if you only want the desktop half.";
+
 /// One half of a two-half update, as it ended.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -487,12 +501,7 @@ pub async fn update_both(app: AppHandle) -> Result<BothOutcome, String> {
         // STOP. The desktop half is not attempted, and the card is told so in
         // as many words rather than being left to infer it from a green line
         // that is not there.
-        let skipped = Step::skipped(
-            STEP_DESKTOP,
-            "Not installed. The backend step did not finish, so nothing was put on top of \
-             it. Fix what the log above says, then run this again - and Install on its own \
-             below still works if you only want the desktop half.",
-        );
+        let skipped = Step::skipped(STEP_DESKTOP, DESKTOP_SKIPPED_DETAIL);
         let _ = app.emit(crate::events::UPDATE_STEP, skipped.clone());
         steps.push(skipped);
         return Ok(BothOutcome {
@@ -599,7 +608,10 @@ pub fn spawn_startup_check(app: &AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    use super::{both_updated, friendly, step_starting, Step, STEP_BACKEND, STEP_DESKTOP};
+    use super::{
+        both_updated, friendly, step_starting, Step, DESKTOP_SKIPPED_DETAIL, STEP_BACKEND,
+        STEP_DESKTOP,
+    };
 
     #[test]
     fn a_missing_release_is_explained_rather_than_numbered() {
@@ -654,10 +666,23 @@ mod tests {
 
     #[test]
     fn a_skipped_half_is_reported_rather_than_dropped() {
-        let skipped = Step::skipped(STEP_DESKTOP, "not installed");
+        // The sentence the card is actually handed, not a copy of it: this test
+        // used to assert "Not installed" against a fixture it had typed as
+        // "not installed" itself, so it failed every run without ever looking at
+        // the words the owner sees.
+        let skipped = Step::skipped(STEP_DESKTOP, DESKTOP_SKIPPED_DETAIL);
         assert_eq!(skipped.state, "skipped");
         // ...and it says it was NOT installed, not that it was.
-        assert!(skipped.detail.contains("Not installed"));
+        assert!(
+            skipped.detail.contains("Not installed"),
+            "{}",
+            skipped.detail
+        );
+        assert!(
+            !skipped.detail.contains("is installed"),
+            "the skipped half reads as if it had been installed: {}",
+            skipped.detail
+        );
         assert_ne!(skipped.state, "ok");
     }
 
