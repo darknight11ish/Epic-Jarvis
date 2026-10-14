@@ -242,7 +242,7 @@ Each line is the reason the pass could not get there, not an excuse invented for
 
 **Nothing was approved, no setting was changed, no card was answered, nothing was sent anywhere.**
 
-**Two things were created and removed, and the record says so:**
+**Four things were created and removed, and the record says so:**
 
 1. **A 5-minute timer**, created by the typed turn in §4.1 and **deleted** afterwards:
    `POST /api/schedule/act {"id":"se2077d0d3f","do":"delete"}` → `{"ok": true, "id": "se2077d0d3f", "said": "Deleted."}`.
@@ -265,9 +265,13 @@ and it was told not to touch his data again without a decision, so nothing was r
 
 **Other state, verified as left:** the Settings window this pass opened was **closed** with its own
 Close control, and the window inventory afterwards is the HUD alone
-(`window 'Jarvis' descendants=115`), which is what was there at the start except that the HUD was left
-on the **TALK** tab after §4.3 put it on GALAXY. No file was edited outside this worktree. No service
-was restarted.
+(`window 'Jarvis' descendants=115`). No file was edited outside this worktree. No service was
+restarted.
+
+**One tab differs, and it is named rather than glossed:** at the start the HUD was on its **TALK**
+tab; §4.3 selected **GALAXY**, and the last action of the pass selected **TALK** again before the
+final reading above. `GALAXY` and `TALK` are two views of one window and selecting a tab changes
+nothing that is stored, so nothing was restored beyond putting the view back.
 
 **Nothing private is written down here:** no message text of his, no memory, no token, no address, no
 password. The only words quoted from him are the reminder's own short label, named because identifying
