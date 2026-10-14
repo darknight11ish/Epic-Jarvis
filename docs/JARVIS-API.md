@@ -328,8 +328,9 @@ came from that text rather than from the owner (§4, "Tool calls and outside
 text"). It is part of the text; show it the way the rest is shown.
 
 `expires_in` is seconds left before the gate stops waiting and refuses the
-card (`approval_timeout_seconds`, 600 in the shipped config since 2026-10-13 -
-ten minutes; it was 180). Seconds left,
+card (`approval_timeout_seconds`, 900 in the shipped config since 2026-10-13 -
+fifteen minutes, and changeable in Settings on either app, 5 minutes to an hour;
+it was 600, and 180 before that). Seconds left,
 not a clock time, so the phone's clock does not have to agree with the PC's.
 Without the patch the field is absent and no countdown is shown.
 `backend/test_approval_contract.py` builds these rows from the real
@@ -18804,17 +18805,18 @@ The limits are not a module each: they are **rows in one table**
 (`jarvis_limits.LIMITS`), because a new patch costs this repository real work and
 the next limit is a line in that table. Each row says where its value lives,
 whether a bigger number is the direction that asks, which app may change it, and
-the owner's own words for it. Eight of them (`jarvis_limits.LIMITS` holds these
-eight written by hand, and `_notify_rows()` appends **seven more** notification
+the owner's own words for it. Nine of them (`jarvis_limits.LIMITS` holds these
+nine written by hand, and `_notify_rows()` appends **seven more** notification
 rows - `notif_alarms`, `notif_reminders`, `notif_briefing`, `notif_handoff` and
-the three Quiet-hours rows - so the table a client receives is fifteen rows
-long. Only the eight are listed here; the seven are built from
+the three Quiet-hours rows - so the table a client receives is sixteen rows
+long. Only the nine are listed here; the seven are built from
 `_NOTIFY_ROWS` and are not copied into this document, for the same
 no-second-copy reason as the numbers below):
 
 | `key` | what it is | the loosening | app |
 |---|---|---|---|
 | `undo_window` | how long an Undo stays possible | a BIGGER number (it keeps more of the owner's files recoverable on disk) | both |
+| `approval_wait` | how long an approval card waits before it refuses | a BIGGER number (the owner gets longer to decide before the card gives up) | both |
 | `jobs_per_tick` | how much Jarvis gets on with at once | neither direction asks | desktop, and the route itself refuses another device |
 | `watch_star_jump` | what counts as news from a watched project | neither direction asks | desktop |
 | `watch_star_floor` | ...but never below this many stars | neither direction asks | desktop |

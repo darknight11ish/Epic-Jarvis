@@ -80,7 +80,7 @@ wired_into_approval_endpoint = false
 # too short to find a surface to approve from. A caller may still pass a
 # shorter `timeout=` where it has a reason.
 unknown_action_tier = "ask"
-approval_timeout_seconds = 600
+approval_timeout_seconds = 900
 
 [autonomy.tiers]
 # Docker (jarvis_docker.py): starting a service gives Jarvis more, so it asks;
