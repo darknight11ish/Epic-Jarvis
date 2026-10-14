@@ -13,10 +13,25 @@
 //!   makes of the CURRENT state before it changes anything). A read, never
 //!   held.
 //! * [`set_backup_folder`] - the Windows folder picker
-//!   ([`crate::folders::picker`], not a second copy of it), then `POST
+//!   ([`crate::folders::picker`], not a second copy of it), the PC's own checks
+//!   on the folder ([`destination_problem`]), and then `POST
 //!   /api/backup/folder {"path"}`: the PC raises ONE approval card. Held on
 //!   a stale link (before the picker even opens): it lets Jarvis write
 //!   somewhere new.
+//!
+//!   **The folder is checked here, before the card**, in the words the owner
+//!   reads on the panel: it must be a folder that is there, Jarvis must be able
+//!   to write into it, and it must be outside Jarvis's own data folder and
+//!   outside the program folders. A folder on a drive that is not the one
+//!   Windows is on is allowed and comes back as a question rather than a
+//!   refusal. The backend's own `check_folder` still runs and is still the
+//!   authority - this is the half that can say *why* in the window he is
+//!   looking at, before an approval card is ever raised.
+//!
+//!   The one destination is `~/.openjarvis/backup.json`'s `folder` key (the
+//!   owner's decision of 2026-10-14): the weekly personal-data snapshot tool
+//!   (`tools/jarvis_data_backup.py`) reads the same key at run time, so both
+//!   backups land in the folder chosen here.
 //! * [`backup_now`] - `POST /api/backup/now {}`: no card - the folder was
 //!   already approved. Not held on a stale link: nothing here depends on a
 //!   live event stream, only on the folder already being set.
@@ -35,6 +50,7 @@
 //! Rust, and only the path the owner chose is sent - to this PC's Jarvis,
 //! nowhere else.
 
+use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 
 use tauri::{AppHandle, Manager};
@@ -161,6 +177,184 @@ async fn post(
     change_answer(status, &text)
 }
 
+/// The folder the picker returned while the window asks about the drive it is
+/// on. Kept in Rust on purpose: "yes" can only ever mean the folder the picker
+/// produced, never a path the page made up - the window has no file system of
+/// its own, and that is the whole reason the picker runs here.
+static AWAITING_DRIVE_ANSWER: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// A path that can be compared with another one: resolved when it is there,
+/// lower-cased (Windows does not care about case) and with no trailing slash.
+///
+/// `canonicalize` answers a path that EXISTS in Windows' verbatim form
+/// (`\\?\C:\...`) and one that does not in the plain form, so the prefix is
+/// stripped before comparing: without that, a chosen folder that exists would
+/// never look like it was inside a settings folder that does not exist yet, and
+/// the check would pass in silence.
+fn real(path: &Path) -> PathBuf {
+    let full = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let text = full.to_string_lossy().to_lowercase();
+    let text = text.strip_prefix(r"\\?\").unwrap_or(&text).to_string();
+    PathBuf::from(text.trim_end_matches(['\\', '/']).to_string())
+}
+
+/// Whether `child` is `parent` itself or inside it. Component-wise, so
+/// `C:\a\bc` is not inside `C:\a\b`.
+pub(crate) fn inside(child: &Path, parent: &Path) -> bool {
+    let (c, p) = (real(child), real(parent));
+    c == p || c.starts_with(&p)
+}
+
+/// The drive a path names (`"C:"`), or `None` when it names none.
+pub(crate) fn drive_of(path: &Path) -> Option<String> {
+    match path.components().next() {
+        Some(Component::Prefix(prefix)) => Some(
+            prefix
+                .as_os_str()
+                .to_string_lossy()
+                .trim_end_matches(['\\', '/'])
+                .to_uppercase(),
+        ),
+        _ => None,
+    }
+}
+
+/// Why this folder cannot be the backup folder, in the owner's own words;
+/// `None` when it can.
+///
+/// Pure on purpose - whether the folder is there and whether it can be written
+/// into are passed in - so every branch is a test, and no test has to make an
+/// unwritable folder on Windows to reach one. The rules are the same three the
+/// snapshot tool applies (`tools/jarvis_data_backup.py`, check_chosen_folder),
+/// written once in `docs/DATA-BACKUP.md`; this is the half that says so in the
+/// window, before a card is raised.
+pub(crate) fn destination_problem(
+    folder: &Path,
+    settings_dir: Option<&Path>,
+    program_dirs: &[PathBuf],
+    exists: bool,
+    writable: bool,
+) -> Option<String> {
+    if !exists {
+        return Some(format!(
+            "{} is not there any more. Choose the folder again.",
+            folder.display()
+        ));
+    }
+    if !writable {
+        return Some(format!(
+            "Jarvis cannot write into {}. Pick another folder, or check that the disk is \
+             not full.",
+            folder.display()
+        ));
+    }
+    if let Some(settings) = settings_dir {
+        if inside(folder, settings) {
+            return Some(format!(
+                "{} is inside Jarvis's own data folder - the very thing being backed up. A \
+                 backup kept inside what it is backing up is not a backup, so pick a folder \
+                 outside it.",
+                folder.display()
+            ));
+        }
+    }
+    for program in program_dirs {
+        if inside(folder, program) {
+            return Some(format!(
+                "{} is inside {}, where Jarvis's own program lives. A backup kept there is \
+                 lost with the program - pick a folder outside it.",
+                folder.display(),
+                program.display()
+            ));
+        }
+    }
+    None
+}
+
+/// A sentence to put in front of the owner when the folder is not on the drive
+/// Windows is on; `None` when it is.
+///
+/// A question, not a refusal: another disk is a perfectly good place for a
+/// backup, and only he knows whether it stays plugged in.
+pub(crate) fn other_drive_note(folder: &Path, system_drive: &str) -> Option<String> {
+    let here = drive_of(folder)?;
+    let system = system_drive.trim_end_matches(['\\', '/']).to_uppercase();
+    if system.is_empty() || here == system {
+        return None;
+    }
+    Some(format!(
+        "{} is on drive {}, and Windows itself is on {}.",
+        folder.display(),
+        here,
+        system
+    ))
+}
+
+/// Whether a file can actually be created in `dir`.
+///
+/// One empty file with this process's id in its name, removed at once: Windows
+/// has no useful "is this folder writable" flag (a folder's *read-only*
+/// attribute means something else entirely), so trying it is the only honest
+/// test. Nothing else in the folder is touched.
+fn writable_dir(dir: &Path) -> bool {
+    let probe = dir.join(format!(".jarvis-write-test-{}", std::process::id()));
+    match std::fs::write(&probe, b"") {
+        Ok(()) => {
+            let _ = std::fs::remove_file(&probe);
+            true
+        }
+        Err(_) => false,
+    }
+}
+
+/// The folder Jarvis keeps its own data in - `OPENJARVIS_CONFIG_DIR`, then
+/// `JARVIS_CONFIG_DIR`, then `~/.openjarvis`: the same order, and the same two
+/// variables, that the backend (`jarvis_framework._config_dir`) and the
+/// snapshot tool use, so this check is about the folder the data is really in.
+fn settings_dir(app: &AppHandle) -> Option<PathBuf> {
+    for name in ["OPENJARVIS_CONFIG_DIR", "JARVIS_CONFIG_DIR"] {
+        if let Some(explicit) = std::env::var_os(name) {
+            return Some(PathBuf::from(explicit));
+        }
+    }
+    app.path().home_dir().ok().map(|h| h.join(".openjarvis"))
+}
+
+/// The program folders a backup must never be kept in: this app's own, and the
+/// folder holding `jarvis_hud.py` when the app can see where it is.
+fn program_dirs(app: &AppHandle) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            out.push(dir.to_path_buf());
+        }
+    }
+    if let Some(backend) = crate::backend_update::locate(app).backend {
+        out.push(PathBuf::from(backend));
+    }
+    out
+}
+
+/// `Err(refusal)` when the folder cannot be used, `Ok(Some(question))` when it
+/// can but is on another drive, `Ok(None)` when there is nothing to say.
+fn check_chosen_folder(app: &AppHandle, path: &str) -> Result<Option<String>, String> {
+    let folder = PathBuf::from(path);
+    let exists = folder.is_dir();
+    match destination_problem(
+        &folder,
+        settings_dir(app).as_deref(),
+        &program_dirs(app),
+        exists,
+        exists && writable_dir(&folder),
+    ) {
+        Some(refusal) => Err(refusal),
+        None => Ok(other_drive_note(
+            &folder,
+            &std::env::var("SystemDrive").unwrap_or_else(|_| "C:".to_string()),
+        )),
+    }
+}
+
 /// The folder, whether a card is waiting, the last backup and the last
 /// restore's outcome (with a one-time recovery code, exactly once). A read.
 #[tauri::command]
@@ -177,21 +371,67 @@ pub async fn list_backups(app: AppHandle) -> Result<serde_json::Value, String> {
 /// Runs the Windows folder picker on its own thread (the same reason as
 /// "Folders Jarvis may look in": the dialog needs a single-threaded COM
 /// apartment). Held on a stale link before the picker even opens.
+///
+/// The folder is then checked (`check_chosen_folder`) before the backend is
+/// asked for anything: a refusal comes back as plain words and no card is
+/// raised, and a folder on another drive comes back as a question. Answering
+/// that question - a second call with `confirm: true` - uses the folder the
+/// picker returned, held in [`AWAITING_DRIVE_ANSWER`], so the window can never
+/// name a folder the owner did not pick.
 #[tauri::command]
-pub async fn set_backup_folder(app: AppHandle) -> Result<serde_json::Value, String> {
+pub async fn set_backup_folder(
+    app: AppHandle,
+    confirm: Option<bool>,
+) -> Result<serde_json::Value, String> {
     if stale(&app) {
         return Err(STALE.to_string());
     }
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    std::thread::spawn(move || {
-        let _ = tx.send(picker::pick(picker::What::Folder));
-    });
-    let path = rx
-        .await
-        .map_err(|_| "the dialog closed unexpectedly".to_string())??;
-    let Some(path) = path else {
-        return Ok(serde_json::json!({ "cancelled": true }));
+    let path = if confirm == Some(true) {
+        let remembered = AWAITING_DRIVE_ANSWER
+            .lock()
+            .ok()
+            .and_then(|mut held| held.take());
+        match remembered {
+            Some(path) => path,
+            None => {
+                return Err(
+                    "That folder is not waiting to be confirmed any more - choose \
+                            it again."
+                        .to_string(),
+                )
+            }
+        }
+    } else {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(picker::pick(picker::What::Folder));
+        });
+        let path = rx
+            .await
+            .map_err(|_| "the dialog closed unexpectedly".to_string())??;
+        match path {
+            Some(path) => path,
+            None => return Ok(serde_json::json!({ "cancelled": true })),
+        }
     };
+    match check_chosen_folder(&app, &path) {
+        Err(refusal) => {
+            // Shown on the panel, before any approval card: nothing was sent to
+            // the backend, so nothing has changed.
+            return Ok(serde_json::json!({
+                "ok": false, "refused": true, "path": path, "error": refusal,
+            }));
+        }
+        Ok(Some(question)) if confirm != Some(true) => {
+            if let Ok(mut held) = AWAITING_DRIVE_ANSWER.lock() {
+                *held = Some(path.clone());
+            }
+            return Ok(serde_json::json!({
+                "confirm": true, "path": path, "message": question,
+            }));
+        }
+        Ok(_) => {}
+    }
     post(
         &app,
         FOLDER_PATH,
@@ -259,9 +499,10 @@ pub async fn delete_older_backups(app: AppHandle) -> Result<serde_json::Value, S
 #[cfg(test)]
 mod tests {
     use super::{
-        change_answer, held_on_stale, read_answer, BACKUP_MISSING, DELETE_OLDER_PATH, FOLDER_PATH,
-        NOW_PATH, RESTORE_PATH,
+        change_answer, destination_problem, drive_of, held_on_stale, inside, other_drive_note,
+        read_answer, BACKUP_MISSING, DELETE_OLDER_PATH, FOLDER_PATH, NOW_PATH, RESTORE_PATH,
     };
+    use std::path::{Path, PathBuf};
 
     #[test]
     fn a_pc_without_it_says_so() {
@@ -309,5 +550,155 @@ mod tests {
         assert!(!held_on_stale(NOW_PATH));
         assert!(!held_on_stale(super::LIST_PATH));
         assert!(!held_on_stale(super::PREVIEW_PATH));
+    }
+
+    /// The folders the two refusals below are about. What is *in* them does not
+    /// matter to the rules - only whether one path is inside another - so no
+    /// test makes a folder, and none touches a real one.
+    fn settings() -> PathBuf {
+        PathBuf::from(r"C:\Users\owner\.openjarvis")
+    }
+
+    fn programs() -> Vec<PathBuf> {
+        vec![
+            PathBuf::from(r"C:\Users\owner\Documents\Claude\Open jarvis files\Desktop program"),
+            PathBuf::from(r"C:\Program Files\Jarvis"),
+        ]
+    }
+
+    #[test]
+    fn a_folder_that_is_gone_or_unwritable_is_refused_in_plain_words() {
+        let gone = destination_problem(
+            Path::new(r"D:\Backups"),
+            Some(&settings()),
+            &programs(),
+            false,
+            false,
+        );
+        assert!(
+            gone.as_deref().is_some_and(|w| w.contains("not there")),
+            "{gone:?}"
+        );
+
+        let locked = destination_problem(
+            Path::new(r"C:\Users\owner\Backups"),
+            Some(&settings()),
+            &programs(),
+            true,
+            false,
+        );
+        assert!(
+            locked
+                .as_deref()
+                .is_some_and(|w| w.contains("cannot write")),
+            "{locked:?}"
+        );
+    }
+
+    #[test]
+    fn a_backup_inside_the_thing_being_backed_up_is_refused() {
+        for folder in [
+            r"C:\Users\owner\.openjarvis",
+            r"C:\Users\owner\.openjarvis\backups",
+        ] {
+            let why = destination_problem(
+                Path::new(folder),
+                Some(&settings()),
+                &programs(),
+                true,
+                true,
+            );
+            assert!(
+                why.as_deref().is_some_and(|w| w.contains("not a backup")),
+                "{folder}: {why:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_backup_in_a_program_folder_is_refused_and_the_neighbour_is_not() {
+        let in_backend = destination_problem(
+            Path::new(r"C:\Users\owner\Documents\Claude\Open jarvis files\Desktop program\snaps"),
+            Some(&settings()),
+            &programs(),
+            true,
+            true,
+        );
+        assert!(
+            in_backend
+                .as_deref()
+                .is_some_and(|w| w.contains("lost with the program")),
+            "{in_backend:?}"
+        );
+
+        // One letter out is a different folder and is allowed: the check is
+        // component-wise, not a string prefix.
+        let beside = destination_problem(
+            Path::new(r"C:\Users\owner\Documents\Claude\Open jarvis files\Desktop programs"),
+            Some(&settings()),
+            &programs(),
+            true,
+            true,
+        );
+        assert_eq!(beside, None);
+
+        // A folder OUTSIDE every protected one is fine - the normal case.
+        let outside = destination_problem(
+            Path::new(r"C:\Users\owner\Documents\Jarvis Backups"),
+            Some(&settings()),
+            &programs(),
+            true,
+            true,
+        );
+        assert_eq!(outside, None);
+    }
+
+    #[test]
+    fn another_drive_is_a_question_and_the_system_drive_is_silent() {
+        let other = other_drive_note(Path::new(r"D:\Backups"), "C:");
+        assert!(
+            other.as_deref().is_some_and(|w| w.contains("drive D:")),
+            "{other:?}"
+        );
+        assert!(
+            other.as_deref().is_some_and(|w| w.contains("unplugged")),
+            "{other:?}"
+        );
+        assert_eq!(other_drive_note(Path::new(r"c:\Backups"), "C:"), None);
+        assert_eq!(other_drive_note(Path::new(r"C:\Backups"), "C:"), None);
+        assert_eq!(drive_of(Path::new(r"D:\Backups")).as_deref(), Some("D:"));
+    }
+
+    #[test]
+    fn a_verbatim_path_is_the_same_place_as_a_plain_one() {
+        // `canonicalize` answers `\\?\C:\...` for a path that exists and the
+        // plain form for one that does not, so the two spellings must compare
+        // equal - otherwise a folder inside a settings folder that does not
+        // exist yet would pass the check in silence.
+        assert!(inside(
+            Path::new(r"\\?\C:\Users\owner\.openjarvis\backups"),
+            Path::new(r"C:\Users\owner\.openjarvis")
+        ));
+        assert!(inside(
+            Path::new(r"C:\Users\owner\.openjarvis\backups"),
+            Path::new(r"\\?\C:\Users\owner\.openjarvis")
+        ));
+    }
+
+    #[test]
+    fn inside_is_component_wise_and_ignores_case() {
+        assert!(inside(
+            Path::new(r"C:\Users\owner\.openjarvis\x"),
+            Path::new(r"c:\users\owner\.openjarvis")
+        ));
+        assert!(inside(
+            Path::new(r"C:\Users\owner\.openjarvis"),
+            Path::new(r"C:\Users\owner\.openjarvis")
+        ));
+        assert!(!inside(
+            Path::new(r"C:\Users\owner\.openjarvisx"),
+            Path::new(r"C:\Users\owner\.openjarvis")
+        ));
+        assert!(!inside(Path::new(r"C:\Backups"), Path::new(r"C:\Backup")));
     }
 }
