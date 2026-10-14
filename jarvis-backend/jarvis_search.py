@@ -942,8 +942,90 @@ def _http(req: urllib.request.Request, *, local: bool) -> tuple:
 #: Tests replace this: (Request, local) -> (status, body bytes).
 _HTTP: Optional[Callable] = None
 
+#: The vault handle for each keyed provider (jarvis_vault.py, the owner's brief
+#: feat/blind-credential-vault). The header is BUILT with this handle - one
+#: fixed name per provider, mapped to the ONE host that provider's key
+#: authenticates against - and `_send` puts the real value in exactly once, at
+#: the moment of use, for that host only. So the key is not in the header dict
+#: while the request is being assembled, not in the plan, not in the card, not
+#: in the audit line and not in an error: the name is.
+VAULT_HANDLES = {
+    "exa": ("exa", "api.exa.ai"),
+    "tavily": ("tavily", "api.tavily.com"),
+    "brave": ("brave", "api.search.brave.com"),
+}
 
-def _send(req, *, local: bool):
+
+def _host_of(req) -> str:
+    try:
+        return (urllib.parse.urlsplit(req.full_url).hostname or "").lower()
+    except Exception:
+        return ""
+
+
+def _vault():
+    """The vault module, or None - an older backend without it searches exactly
+    as it did before."""
+    try:
+        import jarvis_vault
+        return jarvis_vault
+    except Exception:
+        return None
+
+
+def _vault_handle(provider: str, key: str) -> str:
+    """What goes in the header: the vault's handle when the vault holds a value
+    for this provider, else the key itself, unchanged.
+
+    Falling back to the plain key is deliberate. A vault that is empty (every
+    installation today) must not break web search, and the key is still read
+    from the same Credential Manager entry it always was. What changes is only
+    the case where the owner put the key in the vault: then the header carries
+    a name and `_send` substitutes the value at the point of use."""
+    pair = VAULT_HANDLES.get(provider)
+    if not pair or not key:
+        return key
+    name, _host = pair
+    try:
+        import jarvis_vault
+        if jarvis_vault.get(name):
+            return jarvis_vault.handle(name)
+    except Exception:
+        pass
+    return key
+
+
+def _send(req, *, local: bool, service_host: str = ""):
+    """The ONE line that sends. The real value of any vault handle in the
+    request's headers is put in here and nowhere else, and only for the host
+    the request is going to (jarvis_vault.resolve's own rule).
+
+    `service_host` is the host the PROVIDER's key belongs to, and it is what a
+    request is checked against. For all three keyed providers it is the same as
+    the address actually dialled - the test suite is the only caller that
+    points those addresses at a local server on 127.0.0.1, and passing the
+    provider's own host there keeps the check about the provider rather than
+    about where the suite put its server.
+
+    Read and written through jarvis_vault's own header view, because urllib
+    keeps its headers in TWO dicts and `Request.add_unredirected_header` writes
+    to the one `Request.headers` does not show - so a substitution done any
+    other way can read back the handle and look as if it worked."""
+    v = _vault()
+    if v is not None:
+        try:
+            host = service_host or _host_of(req)
+            view = v.headers_of(req)
+            for field, value in list(view.items()):
+                if isinstance(value, str) and "{{vault:" in value:
+                    real = v.resolve(value, host=host)
+                    if real != value:
+                        view.set(field, real)
+        except Exception:
+            # Nothing substituted is better than a half-substituted request: the
+            # handle travels and the service refuses it, which the caller already
+            # reports as a key problem.
+            pass
     return (_HTTP or _http)(req, local=local)
 
 
@@ -956,6 +1038,38 @@ def _json(body: bytes, who: str):
 
 
 _TAG = re.compile(r"<[^>]{0,200}>")
+
+#: The most of one provider's answer the scrubber is run over. A key echoed
+#: back is near the start of a document, not at the end of a 20 MB one, and
+#: `jarvis_scrub` reads its pattern table once per call - so the cost stays
+#: bounded on the path in front of the owner. What is scrubbed is only the
+#: SEARCH for a leak; the reply itself is parsed from the whole body.
+_SCRUB_CHARS = 100_000
+
+
+def _clean_return(body) -> bytes:
+    """Bytes on the way back from a provider that was sent a key.
+
+    A service that echoes the credential it was given - an error page, a
+    debug dump, a "your key is ..." line - must not have that credential
+    travel on into a tool result, an event payload or a log line. Two layers,
+    in this order: jarvis_vault.redact puts the values THIS turn handed out
+    back behind their handles, then the project's own scrubber
+    (jarvis_scrub, ARCHITECTURE.md section 3's one log-scrubber) catches
+    anything else that looks like a credential. Falls back to the body
+    unchanged when the vault is not here, which is the state every
+    installation was in before it."""
+    if not body:
+        return body
+    v = _vault()
+    if v is None:
+        return body
+    try:
+        text = body if isinstance(body, str) else body.decode("utf-8", "replace")
+        cleaned = v.redact(text[:_SCRUB_CHARS])
+        return cleaned.encode("utf-8") if isinstance(body, bytes) else cleaned
+    except Exception:
+        return body
 
 
 def _clean(text, limit: int) -> str:
@@ -1041,7 +1155,7 @@ def _searxng(p: Plan) -> list:
     req = urllib.request.Request(url, headers={"Accept": "application/json",
                                                "User-Agent": "jarvis-search"})
     try:
-        status, body = _send(req, local=True)
+        status, body = _send(req, local=True)      # no key: nothing to substitute
     except SearchError:
         raise
     except Exception as exc:
@@ -1086,13 +1200,15 @@ def _tavily(p: Plan) -> list:
                        "include_images": False}).encode("utf-8")
     req = urllib.request.Request(TAVILY_URL, data=data, method="POST", headers={
         "Content-Type": "application/json", "Accept": "application/json",
-        "User-Agent": "jarvis-search", "Authorization": f"Bearer {key}"})
+        "User-Agent": "jarvis-search",
+        "Authorization": f"Bearer {_vault_handle('tavily', key)}"})
     try:
-        status, body = _send(req, local=False)
+        status, body = _send(req, local=False, service_host="api.tavily.com")
     except SearchError:
         raise
     except Exception as exc:
         raise _connection_failed("tavily", exc, TAVILY_URL) from None
+    body = _clean_return(body)
     if status in (401, 403):
         raise SearchError("key_refused", (
             "Tavily refused your key (it may be wrong or cancelled). Check it at "
@@ -1128,13 +1244,14 @@ def _exa(p: Plan) -> list:
                        "contents": {"highlights": True}}).encode("utf-8")
     req = urllib.request.Request(EXA_URL, data=data, method="POST", headers={
         "Content-Type": "application/json", "Accept": "application/json",
-        "User-Agent": "jarvis-search", "x-api-key": key})
+        "User-Agent": "jarvis-search", "x-api-key": _vault_handle("exa", key)})
     try:
-        status, body = _send(req, local=False)
+        status, body = _send(req, local=False, service_host="api.exa.ai")
     except SearchError:
         raise
     except Exception as exc:
         raise _connection_failed("exa", exc, EXA_URL) from None
+    body = _clean_return(body)
     if status in (401, 403):
         raise SearchError("key_refused", (
             "Exa refused your key (it may be wrong or cancelled). Check it at "
@@ -1165,13 +1282,14 @@ def _brave(p: Plan) -> list:
     url = BRAVE_URL + "?" + urllib.parse.urlencode({"q": p.query, "count": MAX_RESULTS})
     req = urllib.request.Request(url, headers={
         "Accept": "application/json", "User-Agent": "jarvis-search",
-        "X-Subscription-Token": key})
+        "X-Subscription-Token": _vault_handle("brave", key)})
     try:
-        status, body = _send(req, local=False)
+        status, body = _send(req, local=False, service_host="api.search.brave.com")
     except SearchError:
         raise
     except Exception as exc:
         raise _connection_failed("brave", exc, BRAVE_URL) from None
+    body = _clean_return(body)
     if status in (401, 403, 422):
         raise SearchError("key_refused", (
             "Brave Search refused your key (it may be wrong or cancelled). Check it at "
