@@ -197,6 +197,173 @@ class SettingsSearchTest {
         assertEquals(emptyList<String>(), SettingsSearch.matching("zzzz"))
     }
 
+    // ---- The words printed on the screen (2026-10-13) -------------------
+    //
+    // THE DEFECT THIS HOLDS SHUT, measured on the owner's phone. The switch at
+    // SecurityScreen.kt:206 is titled exactly "Hide memory lists and chat
+    // history": Settings -> Security -> "Lock and fingerprint settings", four
+    // steps down. Typing that sentence into either phone box answered
+    // "Nothing here matches that." on BOTH halves of the same feature -
+    // measured before the fix, on this branch, with a throwaway probe:
+    //
+    //     PROBE [Hide memory lists and chat history] settings=[] find=[] rankSecurity=0
+    //     PROBE [hide memory lists]                 settings=[] find=[] rankSecurity=0
+    //     PROBE [chat history]                      settings=[] find=[] rankSecurity=0
+    //     PROBE [memory lists]                      settings=[] find=[] rankSecurity=0
+    //
+    // The index carried the section's heading ("Security"), its prose ("Lock
+    // and fingerprint settings") and the names Jarvis answers to ("app lock",
+    // "windows hello") - and not one word printed on the screen itself. It is
+    // the class of defect `d1531105` fixed one instance of (an index quoting a
+    // sentence the app no longer says); here the index held sentences that were
+    // never on the switch at all.
+
+    @Test
+    fun `a switch is found by the words printed on it`() {
+        // The owner's exact sentence, word for word, as the screen prints it.
+        assertEquals(
+            "the switch's own title must find the section it is drawn in",
+            listOf("security"),
+            SettingsSearch.matching("Hide memory lists and chat history"),
+        )
+        // ...case-blind, like every other search.
+        assertEquals(listOf("security"), SettingsSearch.matching("hide memory lists"))
+        // A phrase from the middle of the title: every word of the query must
+        // be found, so this is the half a person types when they half-remember
+        // the switch - and it must not need the first word.
+        assertEquals(listOf("security"), SettingsSearch.matching("memory lists"))
+        assertEquals(listOf("security"), SettingsSearch.matching("chat history"))
+        // The sub-heading the switch sits under, which is what the owner
+        // called the place when he described it.
+        assertEquals(listOf("security"), SettingsSearch.matching("private lists"))
+        assertEquals(
+            listOf("security"),
+            SettingsSearch.matching("Fingerprint for private lists"),
+        )
+        // The other switch on the same screen, so this is not one special case.
+        // Asserted by CONTAINMENT, not equality, and the difference is measured
+        // rather than assumed: on its own "Lock Jarvis" also matches Folders,
+        // because that section is literally titled "Folders Jarvis may look in"
+        // and the word "jarvis" belongs to it. Two real matches for two typed
+        // words is the AND rule working, not a defect - the defect this file
+        // covers is the case that returned NOTHING. What must hold is that the
+        // section drawing the switch is among the answers.
+        assertTrue(
+            "\"Lock Jarvis\" must find the section that draws that switch",
+            SettingsSearch.matching("Lock Jarvis").contains("security"),
+        )
+        // ...and switches in ANOTHER section, to prove the field is searched
+        // rather than one row being hand-fed. Containment again, for the same
+        // reason as above: "Shrink the face while typing" also reaches the
+        // Screen refresh rate row, whose own words mention the face and typing,
+        // and both answers are real matches.
+        assertTrue(
+            "\"Shrink the face while typing\" must find Appearance",
+            SettingsSearch.matching("Shrink the face while typing").contains("appearance"),
+        )
+        assertTrue(
+            "\"Follow the system\" must find Appearance",
+            SettingsSearch.matching("Follow the system").contains("appearance"),
+        )
+    }
+
+    /**
+     * The index's `titles` are the app's own words, and a section's switches
+     * cannot be left out of it.
+     *
+     * Two halves, failing in opposite directions:
+     *
+     *  - **nothing invented**: every name in `titles` appears in the section's
+     *    own declared source, so the index cannot promise a switch the screen
+     *    does not draw. This is the `quotes` rule, applied to control names.
+     *  - **nothing forgotten**: every `SwitchRow(title = "...")` literal in
+     *    those same files is a name the index carries, so a switch added to a
+     *    section the index knows about cannot become unfindable again. The
+     *    count is asserted too: a regex that stopped matching would otherwise
+     *    let this half pass by finding nothing, which is the project's own rule
+     *    about a check that cannot fail.
+     *
+     * Only the rows that name `titles` are walked. The index's other rows have
+     * not been audited switch by switch yet, and this test says so rather than
+     * implying a coverage it does not have.
+     */
+    @Test
+    fun `the indexed switch names are the app's own, and no switch of theirs is missing`() {
+        val client = "jarvis-client/app/src/main/java/com/jarvis/client/"
+        var switchesFound = 0
+        var rowsWalked = 0
+        for (row in SettingsSearch.ROWS) {
+            if (row.titles.isEmpty()) continue
+            rowsWalked += 1
+            val sources = row.source.joinToString("\n") { file ->
+                wordsOf(repoFile(client + file).readText())
+            }
+            for (title in row.titles) {
+                assertTrue(
+                    "${row.key}: nothing in ${row.source} draws \"$title\" - the index is " +
+                        "offering a control the screen does not have",
+                    sources.contains(title),
+                )
+            }
+            // The switches those files really draw, read the way the app writes
+            // them: `SwitchRow(` and its `title = "..."`, which may sit on the
+            // next line.
+            for (file in row.source) {
+                val src = repoFile(client + file).readText()
+                for (m in Regex(
+                    "SwitchRow\\([^)]*?title\\s*=\\s*\"([^\"]+)\"",
+                    RegexOption.DOT_MATCHES_ALL,
+                ).findAll(src)) {
+                    val drawn = m.groupValues[1]
+                    switchesFound += 1
+                    assertTrue(
+                        "${row.key}: $file draws a switch titled \"$drawn\" and no index " +
+                            "entry carries it, so typing the words on that switch finds " +
+                            "nothing - the defect of 2026-10-13",
+                        row.titles.contains(drawn),
+                    )
+                }
+            }
+        }
+        assertEquals(
+            "this test walked no row that names switch titles, so it checks nothing",
+            2,
+            rowsWalked,
+        )
+        assertTrue(
+            "the SwitchRow reader found too few switches to be reading the screens: it " +
+                "found $switchesFound, and the two rows it walks draw nine between them",
+            switchesFound >= 9,
+        )
+    }
+
+    /**
+     * WHY `label` HAS NO SOURCE CHECK, said here rather than left to be
+     * rediscovered as an oversight.
+     *
+     * `quotes` is held to its source (d1531105, 2026-10-09) and `titles` is held
+     * to its source (above, 2026-10-13). `label` is not, and it deliberately
+     * cannot be: it is the field that holds the words a person might type which
+     * the app words differently - "SearXNG", "Obsidian", "the bubble",
+     * "hotkeys". A first attempt at this check (2026-10-13, the sweep that
+     * followed the switch-title defect) required every four-word `label` phrase
+     * to appear in the section's own files, and it failed on "what needs your
+     * OK" and "the three hidden - Show line": both are honest paraphrases of
+     * controls that are really there, which is exactly what the field is for.
+     * Requiring every WORD of a phrase to appear somewhere in the client was
+     * tried too, and measured vacuous - "the", "a" and "your" carry almost
+     * every phrase, so it flagged nothing.
+     *
+     * So the drift that WAS found in `label` - the Limits row offering
+     * "turning something up asks you on the PC", the old `LOOSEN_NOTE` - is
+     * fixed in `SettingsSearch.kt` and written down there, and the three
+     * sentence-shaped rows are pinned by the tests around this one instead:
+     * `quotes` by "the index quotes the app's own words", the two hand-off
+     * choice lines by "a search finds a section by its heading and by its own
+     * words". A guard for the rest would need to know which `label` phrases are
+     * quotes and which are paraphrases, and nothing in the index says which.
+     */
+
     // ---- The typo contract (2026-10-13) --------------------------------
     //
     // The box used to be one strict substring test, so ONE typo found
