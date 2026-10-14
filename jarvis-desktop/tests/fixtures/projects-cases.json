@@ -2753,6 +2753,7 @@
        "waiting_on": []
       }
      ],
+     "receipt_id": null,
      "status": "draft",
      "text": "Run a race"
     },
@@ -3032,6 +3033,7 @@
        "waiting_on": []
       }
      ],
+     "receipt_id": null,
      "status": "draft",
      "text": "Run a race"
     },
@@ -3107,6 +3109,7 @@
        ]
       }
      ],
+     "receipt_id": "rc000000000000",
      "status": "draft",
      "text": "Run a race"
     },

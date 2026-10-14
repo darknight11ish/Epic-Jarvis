@@ -2097,6 +2097,26 @@ with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
 
+**Not on either app yet, and that is the scope of this slice rather than a
+one-sided decision** (2026-10-14): **action receipts with one-click undo**
+(`backend/jarvis_receipts.py`, `plugins/ready/receipts/`, JARVIS-API §132).
+The store and its two routes are built: `GET /api/receipts` (the recent list)
+and `POST /api/receipts/<receipt_id>/undo`, which raises ONE `undo_action`
+card - the shipped `jarvis-framework.toml` gives that action no tier, so it
+takes `unknown_action_tier`, which is "ask" - and the reversal runs only on
+the gate's own answer. What neither app has yet is a screen - no receipts list
+and no Undo button on the desktop's Jarvis bar or Brain, none on the phone.
+That is one decision, not two: this slice is the backend half, and the change
+the owner can already see is a tick on a goal's plan, which both apps' Goal
+screens show. **When the screen is built it goes on BOTH apps, on the same
+store and the same card**, and nothing about either app's permission model
+changes - so nothing here is kept off one app on purpose. It is written in
+this section because `CLAUDE.md` asks where a feature that is in no app is
+recorded, and "not built yet" is not the same sentence as "kept off the
+phone". `tools/check_parity.py` cannot see it at all - it scans the two apps'
+own source, so a backend route no app calls is outside what it decides -,
+which is said plainly here rather than read as a clean pass it did not earn.
+
 **On the desktop, kept off the phone:**
 
 | what | why |
