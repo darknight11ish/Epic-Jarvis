@@ -314,4 +314,197 @@ class ModelLaneTest {
         // And only while the standing line is drawn.
         assertTrue(text.contains("if (modelDown)"))
     }
+
+    // ------------------------------------- Jarvis restarts it by itself -----
+
+    /**
+     * The owner's decision of 2026-10-14: *"Also restart the lane automatically
+     * when it dies."* The BACKEND does that - on its own thread, through the
+     * same one action as the button - and this phone's job is to BE TOLD, in the
+     * PC's own words.
+     *
+     * A silent automatic restart would be a change to his machine that he did
+     * not make, so the failure this half exists to make impossible is a phone
+     * that either says nothing about it, or makes up a sentence of its own.
+     */
+
+    /** A lane reading with the automatic half filled in, as the PC sends it. */
+    private fun autoLane(
+        on: Boolean? = true,
+        note: String = "",
+        capped: Boolean = false,
+        attempts: Int = 0,
+        state: String = ModelLane.UP,
+    ) = ModelLaneInfo(
+        lane = "everyday",
+        state = state,
+        autoNote = note,
+        auto = on,
+        autoAttempts = attempts,
+        autoLimit = 3,
+        autoCapped = capped,
+    )
+
+    @Test
+    fun `the PC's own sentence is drawn verbatim, and nothing is composed here`() {
+        val sentence = "Jarvis started the local model again at 08:19, because it was " +
+            "not running. It is waiting for it to answer."
+        assertEquals(sentence, ModelLane.notice(autoLane(note = sentence)))
+        // A lane with nothing to say draws nothing - and never a sentence of the
+        // phone's own making.
+        assertEquals("", ModelLane.notice(autoLane(note = "")))
+        assertEquals("", ModelLane.notice(null))
+        assertEquals("", ModelLane.notice(autoLane(note = "   ")))
+    }
+
+    @Test
+    fun `the capped fallback is the PC's sentence, and the warning stays standing`() {
+        val gaveUp = "Jarvis started the local model 3 times and it did not come up, so " +
+            "it has stopped trying. You can still start it yourself."
+        val info = autoLane(note = gaveUp, capped = true, attempts = 3,
+            state = ModelLane.DOWN)
+        assertEquals(gaveUp, ModelLane.notice(info))
+        assertTrue(info.autoCapped)
+        assertEquals(3, info.autoAttempts)
+        assertEquals(3, info.autoLimit)
+        // The phone never clears the standing line from it: only the lane
+        // answering does, or the PC's own `ollama` field.
+        assertFalse(ModelLane.clearsWarning(info, ollamaUp = false))
+    }
+
+    @Test
+    fun `the switch is offered only when the PC reports it, and asks for the opposite`() {
+        assertEquals(ModelLane.AUTO_SWITCH_OFF, ModelLane.switchWords(autoLane(on = true)))
+        assertEquals(false, ModelLane.switchAsks(autoLane(on = true)))
+        assertEquals(ModelLane.AUTO_SWITCH_ON, ModelLane.switchWords(autoLane(on = false)))
+        assertEquals(true, ModelLane.switchAsks(autoLane(on = false)))
+        // The words themselves, so a change to them is a change this test sees.
+        assertEquals("Don't restart it for me", ModelLane.AUTO_SWITCH_OFF)
+        assertEquals("Restart it automatically again", ModelLane.AUTO_SWITCH_ON)
+    }
+
+    @Test
+    fun `an older backend offers no switch at all`() {
+        fun decode(text: String) =
+            JarvisJson.decodeFromString(ModelLaneInfo.serializer(), text)
+        val old = decode("""{"ok":true,"lane":"everyday","state":"down","can_start":true}""")
+        assertNull("an absent field became a switch", old.auto)
+        assertEquals("", ModelLane.switchWords(old))
+        assertNull(ModelLane.switchAsks(old))
+        // And a real `false` is not an absent one: the field decodes as a
+        // boolean, and that is what draws the "turn it back on" press.
+        val off = decode("""{"ok":true,"state":"up","auto":false}""")
+        assertEquals(false, off.auto)
+        assertEquals(ModelLane.AUTO_SWITCH_ON, ModelLane.switchWords(off))
+    }
+
+    @Test
+    fun `the automatic half decodes through the real decoder`() {
+        fun decode(text: String) =
+            JarvisJson.decodeFromString(ModelLaneInfo.serializer(), text)
+        val info = decode(
+            "{\"ok\":true,\"state\":\"up\",\"auto_note\":\"Jarvis restarted the local " +
+                "model by itself at 08:19, and it is answering now.\",\"auto\":true," +
+                "\"auto_attempts\":2,\"auto_limit\":3,\"auto_capped\":true}"
+        )
+        assertEquals(
+            "Jarvis restarted the local model by itself at 08:19, and it is answering now.",
+            ModelLane.notice(info),
+        )
+        assertEquals(true, info.auto)
+        assertEquals(2, info.autoAttempts)
+        assertEquals(3, info.autoLimit)
+        assertTrue(info.autoCapped)
+    }
+
+    @Test
+    fun `the body says the one fact and nothing else`() {
+        // One fact about this PC's one lane: no lane name, no "all", so no tap
+        // can aim the switch at another lane or at both.
+        assertEquals("{\"on\": true}", ModelLane.autoBody(true))
+        assertEquals("{\"on\": false}", ModelLane.autoBody(false))
+        assertFalse(ModelLane.autoBody(true).contains("lane"))
+        assertFalse(ModelLane.autoBody(true).contains("all"))
+        assertFalse(ModelLane.autoBody(false).contains("lane"))
+        assertEquals(ModelLane.AUTO_PATH, "/api/model-lanes/auto")
+    }
+
+    @Test
+    fun `a press that never landed says so and claims no change`() {
+        assertEquals(ModelLane.AUTO_UNREACHED, ModelLane.autoFailureWords(""))
+        assertEquals(ModelLane.AUTO_UNREACHED, ModelLane.autoFailureWords("   "))
+        // The PC's own sentence when it sent one - a refusal names what went
+        // wrong - and never a softened success.
+        val said = "This PC could not write its own setting file, so nothing changed."
+        assertEquals(said, ModelLane.autoFailureWords(said))
+        assertFalse(ModelLane.AUTO_UNREACHED.contains("is on"))
+    }
+
+    @Test
+    fun `the two apps say the same two things about the switch`() {
+        // The desktop's copy of these words lives in
+        // `jarvis-desktop/src/lane-auto.js`, and both apps offer one action on
+        // one fact: a phone and a PC disagreeing about what a button does is how
+        // the owner presses the wrong thing.
+        val js = repoFile("jarvis-desktop/src/lane-auto.js").readText()
+        assertTrue(
+            "the desktop's AUTO_SWITCH_OFF_WORDS is not this sentence",
+            js.contains("export const AUTO_SWITCH_OFF_WORDS = \"${ModelLane.AUTO_SWITCH_OFF}\";"),
+        )
+        assertTrue(
+            "the desktop's AUTO_SWITCH_ON_WORDS is not this sentence",
+            js.contains("export const AUTO_SWITCH_ON_WORDS = \"${ModelLane.AUTO_SWITCH_ON}\";"),
+        )
+        // And the desktop draws the backend's own sentence rather than composing
+        // one, exactly as this phone does.
+        assertTrue(js.contains("auto_note"))
+    }
+
+    /** Walks up from Gradle's working folder (`jarvis-client/app`) to the repository. */
+    private fun repoFile(rel: String): java.io.File {
+        var dir: java.io.File? = java.io.File(System.getProperty("user.dir") ?: ".").absoluteFile
+        while (dir != null) {
+            val f = java.io.File(dir, rel)
+            if (f.isFile) return f
+            dir = dir.parentFile
+        }
+        error("$rel not found above ${System.getProperty("user.dir")}")
+    }
+
+    // ------------------------------------------------------- who draws it ---
+
+    @Test
+    fun `Home draws the automatic line and its switch from this one rule`() {
+        val home = java.io.File("src/main/java/com/jarvis/client/ui/screens/HomeScreen.kt")
+        assertTrue("HomeScreen.kt is not where the test expects it", home.isFile)
+        val text = home.readText()
+        assertTrue("Home does not draw the PC's sentence", text.contains("ModelLane.notice("))
+        assertTrue("Home does not read the shared switch words", text.contains("switchWords("))
+        assertTrue("Home does not use the shared switch rule", text.contains("switchAsks("))
+        assertTrue("Home does not wire the switch", text.contains("onSetLaneAuto"))
+        // Its own state, apart from the Start button's failure: one press
+        // failing must never be shown as the other's.
+        assertTrue(text.contains("laneAutoFailure"))
+        assertTrue(text.contains("laneAutoBusy"))
+    }
+
+    @Test
+    fun `the runtime reads the lane on the beat whether or not the warning is drawn`() {
+        // It used to be read only while the standing line was drawn, which is
+        // exactly when "the model went down and Jarvis started it again" can
+        // never be said: that is news about a lane that has come BACK.
+        val runtime = java.io.File("src/main/java/com/jarvis/client/JarvisRuntime.kt")
+        assertTrue("JarvisRuntime.kt is not where the test expects it", runtime.isFile)
+        val text = runtime.readText()
+        assertTrue(
+            "the runtime never reads the lane on its beat",
+            text.contains("refreshModelLane()"),
+        )
+        assertFalse(
+            "the runtime still reads the lane only while the model is down",
+            text.contains("ModelWords.isDown(_status.value?.ollama)"),
+        )
+        assertTrue("the runtime has no switch action", text.contains("suspend fun setLaneAuto("))
+        assertTrue("the switch action does not ask the API", text.contains("api.setModelLaneAuto("))
+    }
 }

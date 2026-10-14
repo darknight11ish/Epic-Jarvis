@@ -342,11 +342,13 @@ object JarvisRuntime {
      * ([com.jarvis.client.net.ModelLane], backend/model-lanes.patch), or null
      * when this phone has not asked or could not ask.
      *
-     * Read only while the standing "the local model isn't running" line is
-     * drawn, so a PC that is fine is not asked about its lanes at all. Null is
-     * "we did not ask", which is NOT a lane that is down: the button is drawn
-     * from [com.jarvis.client.net.ModelLane.offers], and the warning itself
-     * still comes only from the PC's own `ollama` field
+     * Read on the same beat as `/api/status`, whether or not the standing "the
+     * local model isn't running" line is drawn: the PC's own `auto_note` - what
+     * JARVIS did about a dead lane by itself - is news about a lane that has
+     * come BACK, which is exactly when that line has cleared. Null is "we did
+     * not ask", which is NOT a lane that is down: the button is drawn from
+     * [com.jarvis.client.net.ModelLane.offers], and the warning itself still
+     * comes only from the PC's own `ollama` field
      * ([com.jarvis.client.ModelWords]).
      */
     private val _modelLane = MutableStateFlow<com.jarvis.client.net.ModelLaneInfo?>(null)
@@ -365,6 +367,18 @@ object JarvisRuntime {
      */
     private val _laneFailure = MutableStateFlow<String?>(null)
     val laneFailure: StateFlow<String?> = _laneFailure.asStateFlow()
+
+    /** True while the automatic-restart switch's own press is in flight. */
+    private val _laneAutoBusy = MutableStateFlow(false)
+    val laneAutoBusy: StateFlow<Boolean> = _laneAutoBusy.asStateFlow()
+
+    /**
+     * What to say when the switch's press was refused or never landed, or null
+     * when it went through. Kept apart from [laneFailure], which belongs to the
+     * Start button: one press failing must never be shown as the other's.
+     */
+    private val _laneAutoFailure = MutableStateFlow<String?>(null)
+    val laneAutoFailure: StateFlow<String?> = _laneAutoFailure.asStateFlow()
 
     private val _activity = MutableStateFlow(Activity.IDLE)
     val activity: StateFlow<Activity> = _activity.asStateFlow()
@@ -959,19 +973,19 @@ object JarvisRuntime {
         scope.launch {
             while (true) {
                 runCatching { refreshModelState() }
-                // And, only while that line is actually drawn, the lane the
-                // PC's chat uses - so the ONE action beside it can be offered
-                // (the owner's decision of 2026-10-13). A healthy PC is never
-                // asked about its lanes, and this is the same beat that already
-                // reads `/api/status`, not a second timer.
-                if (com.jarvis.client.ModelWords.isDown(_status.value?.ollama)) {
-                    runCatching { refreshModelLane() }
-                } else {
-                    // The lane came back: nothing to offer, and no stale answer
-                    // left standing behind a line that is no longer drawn.
-                    _modelLane.value = null
-                    _laneFailure.value = null
-                }
+                // And the lane the PC's chat uses, on the SAME beat - so the one
+                // action beside that line can be offered (the owner's decision of
+                // 2026-10-13), and so the phone can say what Jarvis did about a
+                // dead lane by itself (the owner's decision of 2026-10-14:
+                // "Also restart the lane automatically when it dies").
+                //
+                // Read whether or not the line is drawn. It used to be read only
+                // while the line was up, which is exactly when "the model went
+                // down and Jarvis started it again" can never be said: that is
+                // news about a lane that has just come BACK. It is one more small
+                // read of one route on a beat that already exists, not a second
+                // timer.
+                runCatching { refreshModelLane() }
                 delay(com.jarvis.client.ModelWords.POLL_MS)
             }
         }
@@ -1930,13 +1944,60 @@ object JarvisRuntime {
 
     /**
      * Reads the lane the PC's chat uses, for the standing model line's one
-     * action. Called only while that line is drawn, so a healthy PC is never
-     * asked about its lanes. A read that fails leaves what was last known: a
+     * action AND for what Jarvis did about a dead lane by itself. Called on the
+     * same beat as `/api/status`, whether or not that line is drawn: the PC's
+     * own `auto_note` is news about a lane that has come BACK, which is exactly
+     * when the line has cleared. A read that fails leaves what was last known: a
      * failure is not evidence about the lane.
      */
     suspend fun refreshModelLane() {
         if (_link.value != LinkState.CONNECTED) return
         api.modelLane().onOk { _modelLane.value = it }
+    }
+
+    /**
+     * Turns the PC's automatic restarting of a dead model lane off, or back on
+     * (the owner's decision of 2026-10-14: "Also restart the lane automatically
+     * when it dies" - and this is how he takes it back, because a dead process
+     * cannot say whether it crashed or was stopped on purpose).
+     *
+     * Both directions are immediate and neither raises a card: OFF only narrows
+     * what Jarvis does, and ON is the same action the Start button beside it
+     * takes in the same second. The phone never changes its own words to claim
+     * a change: only the PC's own answer is kept, and a refusal is said plainly
+     * in [laneAutoFailure] with the switch exactly as it was.
+     */
+    suspend fun setLaneAuto(on: Boolean) {
+        if (_laneAutoBusy.value) return
+        _laneAutoBusy.value = true
+        _laneAutoFailure.value = null
+        try {
+            when (val asked = api.setModelLaneAuto(on)) {
+                is ApiResult.Ok -> {
+                    // The PC's own answer is the new reading, so the row is
+                    // drawn from what really happened rather than from what was
+                    // asked for.
+                    _modelLane.value = asked.value
+                    if (asked.value.ok.not() || asked.value.error.isNotEmpty()) {
+                        // A refusal carries the PC's own plain sentence and the
+                        // switch is left exactly as it was.
+                        _laneAutoFailure.value = com.jarvis.client.net.ModelLane
+                            .failureWords(asked.value,
+                                com.jarvis.client.net.ModelLane.AUTO_UNREACHED)
+                    }
+                }
+                is ApiResult.Failed -> {
+                    _laneAutoFailure.value =
+                        if (asked.error == ApiError.NotFound) {
+                            com.jarvis.client.net.ModelLane.MISSING
+                        } else {
+                            com.jarvis.client.net.ModelLane.autoFailureWords("")
+                        }
+                }
+            }
+        } finally {
+            _laneAutoBusy.value = false
+        }
     }
 
     /**

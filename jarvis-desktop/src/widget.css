@@ -776,6 +776,19 @@ body {
   font-weight: 500;
 }
 
+/* What Jarvis did by itself (lane-auto.js): the model was down and Jarvis
+   started it again - or it is not doing that, because the owner turned it off.
+   The same calm row as the one above, with the accent edge instead of the warn
+   one, so "it came back" never reads as a problem. */
+.widget-auto {
+  border-left-color: var(--accent);
+  background: var(--accent-faint);
+}
+
+.widget-auto #widget-auto-switch {
+  margin-left: 6px;
+}
+
 .approval-actions {
   display: flex;
   gap: 6px;

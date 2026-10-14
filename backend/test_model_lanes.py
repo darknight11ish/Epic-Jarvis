@@ -46,8 +46,11 @@ from __future__ import annotations
 import ast
 import io
 import json
+import os
+import shutil
 import socket
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -397,8 +400,19 @@ def t_the_lane_that_is_up_is_the_only_thing_that_clears_the_warning():
     known = L.status(lane, probe_fn=Up(up=False), tasks_fn=lambda: REAL_TASKS)
     check("a real down lane can be started", known["can_start"] is True, known)
     # `target()` is what says "Jarvis is not pointed at a lane here", and that
-    # is a `down` with no press - never an invented lane.
-    none = L.status(None, probe_fn=Up(up=False), window=False)
+    # is a `down` with no press - never an invented lane. The three things
+    # `target()` reads are the route's own address, the environment and the
+    # fallback, so this reads it the way a PC with none of them set does: this
+    # PC HAS `OLLAMA_URL` set while the owner is using it, and a check that
+    # leans on that being absent is a check that fails on his own machine.
+    saved_url, saved_env = L._ROUTE_URL, os.environ.pop("OLLAMA_URL", None)
+    L._ROUTE_URL = ""
+    try:
+        none = L.status(None, probe_fn=Up(up=False), window=False)
+    finally:
+        L._ROUTE_URL = saved_url
+        if saved_env is not None:
+            os.environ["OLLAMA_URL"] = saved_env
     check("no target lane is 'down' with no press and a reason",
           none["state"] == "down" and none["can_start"] is False
           and "not pointed at" in none["why"], none)
@@ -632,6 +646,532 @@ def t_the_install_wires_both_routes_behind_the_same_checks():
         clean()
 
 
+# ---------------------------------------------------------------------------
+#   Direction 2: Jarvis starts the lane ITSELF when it finds it dead
+#
+#   The owner's decision of 2026-10-14: "Also restart the lane automatically
+#   when it dies." Nothing below starts a task or opens a socket to a real lane:
+#   every beat is driven with its own probe and its own stand-in for `start()`,
+#   and the switch is written to a throwaway folder rather than the owner's.
+# ---------------------------------------------------------------------------
+
+class Starts:
+    """A stand-in for `start()` itself - the ONE action `auto_tick` calls.
+
+    Records the lanes it was asked for, so "it restarted the lane" and "it
+    restarted it twice" are countable facts rather than a reading of the code.
+    """
+
+    def __init__(self, code=202, changed=True, message="stand-in: task started"):
+        self.calls = []
+        self.code = code
+        self.changed = changed
+        self.message = message
+
+    def __call__(self, lane, *a, **k):
+        self.calls.append(lane.key)
+        return self.code, {"ok": True, "changed": self.changed,
+                           "state": "starting" if self.code == 202 else "down",
+                           "message": self.message}
+
+
+class Setting:
+    """The module's one switch, in a throwaway folder.
+
+    `on=None` writes NO file at all, which is what a fresh install looks like
+    and is therefore the check that "on by default" is real.
+    """
+
+    def __init__(self, on=None):
+        self.dir = tempfile.mkdtemp(prefix="model-lanes-check-")
+        self.path = Path(self.dir) / L.SETTING_NAME
+        if on is not None:
+            self.path.write_text(json.dumps({"automatic": bool(on)}) + "\n",
+                                 encoding="utf-8")
+        self.real = L._AUTO_SETTING
+
+    def __enter__(self):
+        L._AUTO_SETTING = lambda: self.path
+        return self
+
+    def __exit__(self, *exc):
+        L._AUTO_SETTING = self.real
+        shutil.rmtree(self.dir, ignore_errors=True)
+        return False
+
+
+def t_a_lane_that_dies_is_started_again_by_itself():
+    """THE CHECK THIS HALF OF THE SUITE EXISTS FOR. A lane that stops answering
+    is started again with no press from anyone - through `start()`, the same one
+    action the button uses - and the apps are told, in the backend's words."""
+    clean()
+    lane = L.LANES[0]
+    probe, starts = Up(up=False), Starts()
+    # The REAL clock as the base, because `status()` reads the clock itself and
+    # the freshness of the sentence is part of what is checked here. The beats
+    # are still deterministic: they are offsets from now.
+    base = time.time()
+    with Setting():
+        first = L.auto_tick(base, lane=lane, probe_fn=probe, start_fn=starts)
+        check("the first beat a lane is down starts NOTHING - one missed probe "
+              "is not a dead lane",
+              first["action"] == "wait" and starts.calls == [], (first, starts.calls))
+        second = L.auto_tick(base + L.CHECK_S, lane=lane, probe_fn=probe,
+                             start_fn=starts)
+        check("a lane that is still down on the next beat IS started, once",
+              second["action"] == "restart" and starts.calls == ["everyday"],
+              (second, starts.calls))
+        check("... through the one action this module has (start()), so there is "
+              "no second way for anything to be launched",
+              second["action"] == "restart" and "changed" in second, second)
+        check("... and the sentence it leaves is the backend's own, naming what "
+              "Jarvis did and when",
+              "Jarvis started the local model again at" in second["note"]
+              and "not running" in second["note"], second["note"])
+        state = L.status(lane, probe_fn=probe, tasks_fn=lambda: REAL_TASKS)
+        check("... and both apps can read that sentence off the route they "
+              "already poll", state["auto_note"] == second["note"], state["auto_note"])
+        check("... with the count of automatic attempts beside it",
+              state["auto_attempts"] == 1
+              and state["auto_limit"] == L.AUTO_ATTEMPTS, state)
+        check("... and the switch itself is reported as ON",
+              state["auto"] is True, state["auto"])
+
+
+def t_a_lane_that_answers_is_never_started_by_itself():
+    """The first rule of the whole feature: nothing is started while the lane
+    answers, however long the watcher runs."""
+    clean()
+    lane = L.LANES[0]
+    probe, starts = Up(up=True), Starts()
+    with Setting():
+        actions = [L.auto_tick(2000.0 + i * L.CHECK_S, lane=lane, probe_fn=probe,
+                               start_fn=starts)["action"]
+                   for i in range(20)]
+        check("twenty beats of a lane that answers start NOTHING",
+              starts.calls == [], starts.calls)
+        check("... and every one of them says the lane is up",
+              set(actions) == {"up"}, sorted(set(actions)))
+        check("... and nothing claims a restart happened",
+              "restart" not in L.status(lane, probe_fn=probe,
+                                        tasks_fn=lambda: REAL_TASKS)["auto_note"],
+              L.status(lane, probe_fn=probe,
+                       tasks_fn=lambda: REAL_TASKS)["auto_note"])
+
+
+def t_nothing_is_started_a_second_time_while_one_is_starting():
+    """A start is watched for ninety seconds. The lane answers `False` for all
+    of them, so without this guard the watcher would see a dead lane and start a
+    SECOND instance on top of the one that is loading."""
+    clean()
+    lane = L.LANES[0]
+    probe, starts = Up(up=False), Starts()
+    with Setting():
+        L._begin(lane, REAL_TASKS[0], 3000.0, running=False)   # a start in flight
+        actions = [L.auto_tick(3000.0 + i * L.CHECK_S, lane=lane, probe_fn=probe,
+                               start_fn=starts)["action"]
+                   for i in range(5)]
+        check("while a start is being watched, a dead lane starts nothing at all",
+              starts.calls == [], starts.calls)
+        check("... and it says why: it is watching, not restarting",
+              set(actions) == {"watching"}, sorted(set(actions)))
+        # And once that start has settled as failed, a second one is not fired
+        # off immediately: the cooldown is what stops a tight loop.
+        L._finish(False, time.time(), "it did not come up")
+        after = L.auto_tick(time.time(), lane=lane, probe_fn=probe,
+                            start_fn=starts)
+        check("a start that has just settled as failed does not become a second "
+              "start in the same breath",
+              after["action"] in ("wait", "cooling") and starts.calls == [],
+              (after, starts.calls))
+
+
+def t_the_cooldown_and_the_attempt_cap_really_hold():
+    """The limits, as arithmetic first - every branch of `auto_step` is a
+    function of its arguments, so these need no thread and no waiting."""
+    check("inside the grace period nothing is started",
+          L.auto_step(False, 10.0, beats=1) == "wait")
+    check("... and once the lane has been down for the whole grace period it is",
+          L.auto_step(False, 10.0, beats=L.DOWN_BEATS) == "restart")
+    check("straight after an attempt it is the cooldown that holds",
+          L.auto_step(False, 100.0, beats=99, attempts=1,
+                      last_attempt_at=100.0) == "cooling")
+    check("... for the whole cooldown, and not one second less",
+          L.auto_step(False, 100.0 + L.COOLDOWN_S - 1, beats=99, attempts=1,
+                      last_attempt_at=100.0) == "cooling"
+          and L.auto_step(False, 100.0 + L.COOLDOWN_S, beats=99, attempts=1,
+                          last_attempt_at=100.0) == "restart")
+    check("... and after a second attempt the wait has DOUBLED",
+          L.auto_step(False, 100.0 + L.COOLDOWN_S, beats=99, attempts=2,
+                      last_attempt_at=100.0) == "cooling"
+          and L.auto_step(False, 100.0 + 2 * L.COOLDOWN_S, beats=99, attempts=2,
+                          last_attempt_at=100.0) == "restart", L.COOLDOWN_S)
+    check("the cap is a refusal, however long the lane stays dead",
+          L.auto_step(False, 100.0, beats=99, attempts=L.AUTO_ATTEMPTS,
+                      last_attempt_at=1.0) == "capped"
+          and L.auto_step(False, 1e9, beats=9999, attempts=L.AUTO_ATTEMPTS,
+                          capped=True) == "capped")
+    check("... and it is never a grant: the cap cannot say 'restart' at all",
+          L.auto_step(False, 1e9, beats=9999, attempts=L.AUTO_ATTEMPTS,
+                      last_attempt_at=0.0) == "capped")
+
+    # And the same limits through the real loop, over a hundred minutes of a
+    # lane that will not come up.
+    clean()
+    lane = L.LANES[0]
+    probe, starts = Up(up=False), Starts()
+    with Setting():
+        t, fired, last = 5000.0, [], 0
+        for _ in range(200):
+            L.auto_tick(t, lane=lane, probe_fn=probe, start_fn=starts)
+            if len(starts.calls) > last:
+                fired.append(t)
+                last = len(starts.calls)
+            t += L.CHECK_S
+        check("a hundred minutes of a lane that will not come up is "
+              "exactly the cap in attempts - never a loop",
+              len(starts.calls) == L.AUTO_ATTEMPTS, starts.calls)
+        check("... and the attempts are minutes apart, the gap doubling",
+              [round(b - a) for a, b in zip(fired, fired[1:])]
+              == [int(L.COOLDOWN_S), int(2 * L.COOLDOWN_S)], fired)
+        check("... and the owner's own press is never what is used to do it "
+              "(only the automatic path ran here)",
+              len(starts.calls) == L.AUTO_ATTEMPTS, starts.calls)
+
+
+def t_reaching_the_cap_falls_back_to_the_warning_and_stops():
+    """What happens at the cap, in the owner's terms: Jarvis stops, the standing
+    warning of PR #409 is what remains, and the button of #418 is still there."""
+    clean()
+    lane = L.LANES[0]
+    probe, starts = Up(up=False), Starts()
+    with Setting():
+        t = 7000.0
+        for _ in range(200):
+            last = L.auto_tick(t, lane=lane, probe_fn=probe, start_fn=starts)
+            t += L.CHECK_S
+        check("the cap ends the episode", last["action"] == "capped"
+              and len(starts.calls) == L.AUTO_ATTEMPTS, (last, starts.calls))
+        state = L.status(lane, probe_fn=probe, tasks_fn=lambda: REAL_TASKS)
+        check("... the state goes back to a plain 'down' - the warning is what "
+              "remains", state["state"] == "down", state["state"])
+        check("... the owner's own button is still offered to him",
+              state["can_start"] is True, state)
+        check("... and the sentence says in plain words that Jarvis has stopped "
+              "trying, and why",
+              "stopped trying" in state["auto_note"]
+              and str(L.AUTO_ATTEMPTS) in state["auto_note"], state["auto_note"])
+        check("... and the switch reports the episode as capped, so an app does "
+              "not have to parse that sentence",
+              state["auto_capped"] is True, state["auto_capped"])
+        # It stays stopped: another hour changes nothing.
+        calls = len(starts.calls)
+        for _ in range(120):
+            L.auto_tick(t, lane=lane, probe_fn=probe, start_fn=starts)
+            t += L.CHECK_S
+        check("... and an hour later it has still started nothing more",
+              len(starts.calls) == calls, starts.calls)
+
+
+def t_a_flap_is_not_a_recovery_and_ten_minutes_of_answering_is():
+    """The cap must not be undone by a lane that answers once and dies again -
+    that is a lane twitching, not a lane that is back."""
+    clean()
+    lane = L.LANES[0]
+    probe, starts = Up(up=False), Starts()
+    with Setting():
+        t = 9000.0
+        for _ in range(200):
+            L.auto_tick(t, lane=lane, probe_fn=probe, start_fn=starts)
+            t += L.CHECK_S
+        spent = len(starts.calls)
+        probe.up = True
+        L.auto_tick(t, lane=lane, probe_fn=probe, start_fn=starts)
+        probe.up = False
+        t += L.CHECK_S
+        L.auto_tick(t, lane=lane, probe_fn=probe, start_fn=starts)
+        t += L.CHECK_S
+        again = L.auto_tick(t, lane=lane, probe_fn=probe, start_fn=starts)
+        check("a lane that answers once and dies again has NOT recovered: it is "
+              "still capped and nothing more is started",
+              again["action"] == "capped" and len(starts.calls) == spent,
+              (again, starts.calls, spent))
+        check("... and the gave-up sentence stops claiming anything while the "
+              "lane is answering",
+              "stopped trying" not in L.status(lane, probe_fn=Up(up=True),
+                                               tasks_fn=lambda: REAL_TASKS)["auto_note"])
+        # A real recovery: answering for the whole settle window.
+        probe.up = True
+        L.auto_tick(t, lane=lane, probe_fn=probe, start_fn=starts)
+        t += L.SETTLED_S
+        L.auto_tick(t, lane=lane, probe_fn=probe, start_fn=starts)
+        probe.up = False
+        t += L.CHECK_S
+        first = L.auto_tick(t, lane=lane, probe_fn=probe, start_fn=starts)
+        t += L.CHECK_S
+        second = L.auto_tick(t, lane=lane, probe_fn=probe, start_fn=starts)
+        check("after ten minutes of really answering, the next death is a new "
+              "episode and gets its own grace period",
+              first["action"] == "wait" and second["action"] == "restart"
+              and len(starts.calls) == spent + 1, (first, second, starts.calls))
+
+
+def t_the_owner_can_turn_it_off_and_that_is_immediate():
+    """A deliberate stop cannot be read from a dead process, so the answer is
+    the owner's own switch - and OFF is one press, immediate, and never gated."""
+    clean()
+    lane = L.LANES[0]
+    probe, starts = Up(up=False), Starts()
+    with Setting(on=None):
+        check("with no file at all the switch is ON - the owner asked for this, "
+              "so a fresh install does what he decided",
+              L.automatic() is True)
+    with Setting(on=False):
+        check("a file saying off is read as off", L.automatic() is False)
+        out = L.auto_tick(11000.0, lane=lane, probe_fn=probe, start_fn=starts)
+        check("switched off, a lane that is down is left ALONE",
+              out["action"] == "off" and starts.calls == [], (out, starts.calls))
+        for i in range(60):
+            L.auto_tick(11000.0 + i * L.CHECK_S, lane=lane, probe_fn=probe,
+                        start_fn=starts)
+        check("... and half an hour later it has still started nothing",
+              starts.calls == [], starts.calls)
+        state = L.status(lane, probe_fn=probe, tasks_fn=lambda: REAL_TASKS)
+        check("... and the apps are told why, in plain words, so the switch is "
+              "not a silent one",
+              state["auto_note"] == L.OFF_NOTE, state["auto_note"])
+        check("... as a field as well as a sentence, so neither app has to read "
+              "the sentence to know", state["auto"] is False, state["auto"])
+        check("... and it is reported while the lane is UP too, so the one "
+              "press that turns it back on is always reachable",
+              L.status(lane, probe_fn=Up(up=True),
+                       tasks_fn=lambda: REAL_TASKS)["auto_note"] == L.OFF_NOTE)
+        check("... and his own button is untouched by any of this",
+              state["can_start"] is True, state)
+        check("turning it back on is written at once and read back",
+              L.set_automatic(True) is True and L.automatic() is True)
+        check("... and turning it off again is too - no card in either "
+              "direction", L.set_automatic(False) is True
+              and L.automatic() is False)
+
+
+def t_the_sentence_the_apps_show_comes_from_here_and_expires():
+    """One place writes the words, and a piece of news stops being news."""
+    now = 12000.0
+    fresh = {"note": "Jarvis started the local model again at 08:19.",
+             "note_kind": "start", "note_at": now}
+    check("a restart that has just happened is shown",
+          L._note_of(fresh, now) == fresh["note"], L._note_of(fresh, now))
+    check("... and half an hour later it is not - news is not a mark",
+          L._note_of(fresh, now + L.NOTE_S + 1) == "",
+          L._note_of(fresh, now + L.NOTE_S + 1))
+    gave_up = {"note": "Jarvis started the local model 3 times ...",
+               "note_kind": "gave-up", "note_at": now}
+    check("... but a sentence that is still TRUE does not expire: 'it has "
+          "stopped trying' stands while it is still so",
+          L._note_of(gave_up, now + 10 * L.NOTE_S) == gave_up["note"])
+    off = {"note": L.OFF_NOTE, "note_kind": "off", "note_at": now}
+    check("... and so does 'you turned this off'",
+          L._note_of(off, now + 10 * L.NOTE_S) == L.OFF_NOTE)
+
+
+def t_the_switch_has_its_own_route_and_it_takes_no_lane():
+    """`POST /api/model-lanes/auto` - one fact about this PC's one lane, behind
+    the same origin and token checks as everything else here, and with nothing
+    in it that could name another lane or both."""
+    clean()
+    real_probe = L._PROBE_FOR_ROUTES
+    L._PROBE_FOR_ROUTES = Up(up=False)
+    try:
+        return _the_switch_route_checks()
+    finally:
+        L._PROBE_FOR_ROUTES = real_probe
+        clean()
+
+
+def _the_switch_route_checks():
+    with Setting(on=None) as s:
+        code, out = L.handle_auto_post({"on": False})
+        check("turning it off answers 200 and really writes it",
+              code == 200 and out.get("changed") is True and L.automatic() is False,
+              (code, out))
+        check("... and says in plain words what will happen now",
+              "leave the local model alone" in str(out.get("message")),
+              out.get("message"))
+        code, out = L.handle_auto_post({"on": True})
+        check("... and turning it back on answers 200 and writes that",
+              code == 200 and L.automatic() is True, (code, out))
+        code, out = L.handle_auto_post({"lane": "coding"})
+        check("a body naming a lane is REFUSED (400), not obeyed",
+              code == 400 and out.get("ok") is False, (code, out))
+        code, out = L.handle_auto_post({"all": True})
+        check("... and so is 'do this to both'",
+              code == 400 and out.get("ok") is False, (code, out))
+        code, out = L.handle_auto_post({})
+        check("... and a body that says nothing is refused rather than guessed",
+              code == 400, (code, out))
+        code, out = L.handle_auto_post("not an object")
+        check("... and a body that is not an object", code == 400, (code, out))
+        check("... and the file it writes is the owner's own, not the toml",
+              s.path.exists() and s.path.name == L.SETTING_NAME, str(s.path))
+        check("... and the route is where the apps look for it",
+              L.AUTO_ROUTE == "/api/model-lanes/auto", L.AUTO_ROUTE)
+        clean()
+
+
+def t_the_wiring_installs_the_route_and_arms_nothing():
+    """The route is wired behind the same checks as the others - and installing
+    it does NOT arm the watcher. That is what keeps every test here, and every
+    other suite that wires the routes up, off the owner's PC."""
+    clean()
+    seen = []
+
+    def handler_class():
+        class FakeHandler:
+            def __init__(self):
+                self.answers = []
+                self.path = ""
+
+            def _send(self, code, payload):
+                self.answers.append((code, payload))
+                return code
+
+            def do_GET(self):
+                self.answers.append(("parent-get", None))
+
+            def do_POST(self):
+                self.answers.append(("parent-post", None))
+
+        return FakeHandler
+
+    def fake_probe(port, timeout=None):
+        seen.append(("probe", port))
+        return False
+
+    real_probe = L._PROBE_FOR_ROUTES
+    L._PROBE_FOR_ROUTES = fake_probe
+    with Setting(on=None):
+        try:
+            cls = handler_class()
+            L.install(cls, origin_ok=lambda h: True, token_ok=lambda h: True,
+                      read_body=lambda h: b'{"on": false}',
+                      url="http://127.0.0.1:11436")
+            fake = cls()
+            fake.path = L.AUTO_ROUTE
+            fake.do_POST()
+            check("the switch's own route answers through the same checks",
+                  fake.answers and fake.answers[-1][0] == 200, fake.answers)
+            check("... and install() alone ARM NOTHING: no watcher thread, so "
+                  "no test that wires the routes up can start a lane",
+                  L._WATCHER is None, L._WATCHER)
+            closed = handler_class()
+            L.install(closed, origin_ok=lambda h: True, token_ok=lambda h: False,
+                      read_body=lambda h: b"", url="http://127.0.0.1:11436")
+            unauth = closed()
+            unauth.path = L.AUTO_ROUTE
+            unauth.do_POST()
+            check("... and an unauthenticated press is refused (401) like the "
+                  "rest of the backend",
+                  unauth.answers and unauth.answers[-1][0] == 401, unauth.answers)
+            other = cls()
+            other.path = "/api/status"
+            other.do_POST()
+            check("... and any other route still falls through untouched",
+                  other.answers == [("parent-post", None)], other.answers)
+        finally:
+            L._PROBE_FOR_ROUTES = real_probe
+            L._ROUTE_URL = ""
+
+
+def t_the_watch_loop_beats_until_stopped_and_tolerates_a_bad_beat():
+    """The loop itself, with no thread and no host: a beat that throws must not
+    end the watcher, because a watcher that died would leave the lane down with
+    nothing trying and nobody told."""
+    stop = threading.Event()
+    seen = []
+
+    def tick():
+        seen.append(len(seen))
+        if len(seen) == 1:
+            raise RuntimeError("a beat that went wrong")
+        if len(seen) >= 3:
+            stop.set()
+
+    L._watch_loop(stop, tick, 0.01)
+    check("a beat that throws does not end the watcher", len(seen) >= 2, seen)
+    check("... and it keeps beating until it is told to stop", stop.is_set(), seen)
+
+
+def t_watch_start_arms_one_thread_and_stops_it():
+    """Arming the watcher: one banner line, one thread, never two, and it stops
+    when it is told to. The tick is a stand-in, so this check cannot ask a lane
+    or start a task even if it wanted to."""
+    clean()
+    ticks = []
+    beat = threading.Event()
+
+    def tick():
+        ticks.append(time.time())
+        beat.set()
+
+    line = L.watch_start(tick=tick, check_s=0.01)
+    if L._host_reason():
+        # Not Windows: there is no Task Scheduler to run, so the honest answer
+        # is words and nothing armed. Checked as such rather than skipped.
+        check("off Windows it says so in words and arms nothing at all",
+              "OFF here" in line and L._WATCHER is None, line)
+        return
+    try:
+        check("arming it says so in one banner line",
+              "started again by itself" in line, line)
+        check("... and the first beat really runs", beat.wait(2.0) and ticks,
+              ticks)
+        check("... and arming it twice does not make a second thread",
+              "already watching" in L.watch_start(tick=tick, check_s=0.01))
+        check("... and it can be stopped", L.watch_stop() is True)
+        count = len(ticks)
+        time.sleep(0.1)
+        check("... and a stopped watcher really stops", len(ticks) <= count + 1,
+              (count, len(ticks)))
+        check("... and stopping one that is not there is not an error",
+              L.watch_stop() is False)
+    finally:
+        L.watch_stop()
+
+
+def t_the_automatic_half_has_the_same_safety_properties():
+    """The rules the first half of this suite pins still hold for the new code,
+    and the two seams it needs are the real functions by default - so nothing
+    here can be reached around."""
+    text = (HERE / "jarvis_model_lanes.py").read_text(encoding="utf-8")
+    check("the automatic path calls the SAME one action as the button - there "
+          "is still exactly one way to start anything in this module",
+          text.count("_launch_task(") == 1, text.count("_launch_task("))
+    check("... and every action one beat can decide is one this module names",
+          set(L.AUTO_ACTIONS) == {"off", "up", "watching", "wait", "cooling",
+                                  "capped", "restart"}
+          and all(L.auto_step(False, 0.0, beats=0, attempts=a,
+                              last_attempt_at=0.0, capped=False,
+                              enabled=e, watching=w) in L.AUTO_ACTIONS
+                  for a in (0, 1, 3) for e in (True, False) for w in (True, False)),
+          L.AUTO_ACTIONS)
+    check("... and it goes through start(), not a command of its own",
+          "_AUTO_START: Callable = start" in text)
+    check("... and the probe it uses is the module's own, on loopback",
+          "_AUTO_PROBE: Callable = probe" in text)
+    check("nothing here raises a card, answers a card or approves anything - "
+          "rule 4 is untouched, because no card exists on this path",
+          "import jarvis_gate" not in text and "decide_approval" not in text
+          and "approvals.db" not in text, "jarvis_gate")
+    check("it still runs exactly one external program, as argv, and never a "
+          "shell", "shell=True" not in text and text.count("schtasks") >= 3,
+          text.count("schtasks"))
+    check("the switch's file is the owner's own config folder by default, never "
+          "the repository",
+          'SETTING_NAME = "model-lanes.json"' in text
+          and "OPENJARVIS_CONFIG_DIR" in text)
+
+
 if __name__ == "__main__":
     for fn in (t_the_lane_is_the_one_the_chat_uses,
                t_the_task_is_found_by_the_half_a_rename_does_not_touch,
@@ -650,7 +1190,20 @@ if __name__ == "__main__":
                t_the_routes_answer_what_they_promise,
                t_the_probe_is_strict_about_what_a_lane_is,
                t_nothing_real_is_ever_run_by_this_suite,
-               t_the_install_wires_both_routes_behind_the_same_checks):
+               t_the_install_wires_both_routes_behind_the_same_checks,
+               t_a_lane_that_dies_is_started_again_by_itself,
+               t_a_lane_that_answers_is_never_started_by_itself,
+               t_nothing_is_started_a_second_time_while_one_is_starting,
+               t_the_cooldown_and_the_attempt_cap_really_hold,
+               t_reaching_the_cap_falls_back_to_the_warning_and_stops,
+               t_a_flap_is_not_a_recovery_and_ten_minutes_of_answering_is,
+               t_the_owner_can_turn_it_off_and_that_is_immediate,
+               t_the_sentence_the_apps_show_comes_from_here_and_expires,
+               t_the_switch_has_its_own_route_and_it_takes_no_lane,
+               t_the_wiring_installs_the_route_and_arms_nothing,
+               t_the_watch_loop_beats_until_stopped_and_tolerates_a_bad_beat,
+               t_watch_start_arms_one_thread_and_stops_it,
+               t_the_automatic_half_has_the_same_safety_properties):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

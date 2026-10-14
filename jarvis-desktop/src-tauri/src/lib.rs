@@ -1243,6 +1243,7 @@ pub fn run() {
             // chat is really on and the name of this PC's own task.
             commands::read_model_lane,
             commands::start_model_lane,
+            commands::set_model_lane_auto,
             commands::hide_quickbar,
             commands::resize_quickbar,
             commands::set_quickbar_pinned,

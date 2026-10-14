@@ -1,6 +1,6 @@
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
-@@ -6828,3 +6828,23 @@
+@@ -6828,3 +6828,34 @@
          print(f"  pictures   NOT ON ({type(exc).__name__}) - asking for a picture is off")
          print("             until jarvis_pictures.py is back: run apply-patches.ps1 again")
 +    # model-lanes.patch ("Start the local model", the owner's decision of
@@ -11,15 +11,26 @@
 +    # from memory - and then watches the lane's own /api/tags until it
 +    # answers, so "starting" is never reported as "up". One lane, the one
 +    # Jarvis talks to (OLLAMA_URL's port, 11436 on his PC), and never both.
++    # POST /api/model-lanes/auto is the third route: his own switch for whether
++    # Jarvis starts a lane that dies by itself.
 +    #
 +    # It goes into the install CHAIN, appended to the block above, and sits
 +    # immediately BEFORE plugin-loader.patch - which must stay LAST OF ALL
 +    # (test_gate_touches.py, test_uncensored_optins.py, check_plugins.py):
-+    # plugin-loader.patch's own hunk anchors on THIS block's last two lines.
++    # plugin-loader.patch's own hunk anchors on THIS block's last two lines, so
++    # everything added here goes ABOVE those two prints.
 +    try:
 +        import jarvis_model_lanes
 +        print(jarvis_model_lanes.install(Handler, origin_ok=_origin_ok,
 +                                         token_ok=_token_ok, read_body=_read_body))
++        # And ARM the automatic restarter, one beat after start-up (the owner's
++        # decision of 2026-10-14: "Also restart the lane automatically when it
++        # dies"). Deliberately NOT inside install(): installing the routes must
++        # never start a lane as a side effect, so every test that wires the
++        # routes up stays off his PC. It prints its own banner line, and it
++        # says so in words - rather than starting anything - when this is not
++        # Windows.
++        print(jarvis_model_lanes.watch_start())
 +    except Exception as exc:
 +        print(f"  lanes      NOT ON ({type(exc).__name__}) - starting a model lane is off")
 +        print("             until jarvis_model_lanes.py is back: run apply-patches.ps1 again")

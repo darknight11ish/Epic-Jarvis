@@ -19790,7 +19790,13 @@ PC (`/api/tags` on loopback).
   "elapsed_s": null,
   "left_s": null,
   "waited_s": null,
-  "message": ""
+  "message": "",
+  "auto": true,
+  "auto_attempts": 0,
+  "auto_limit": 3,
+  "auto_capped": false,
+  "auto_note": "",
+  "auto_note_at": null
 }
 ```
 
@@ -19805,6 +19811,22 @@ PC (`/api/tags` on loopback).
 * `why` and `message` are the PC's own plain sentences, ready to show.
 * `lane` is `""` and `why` explains it when Jarvis is not pointed at a lane on
   this PC at all (a remote `OLLAMA_URL`, or an address with no lane behind it).
+* `auto` is whether **Jarvis itself** starts that lane again when it finds it
+  down (§132.3): `true`, or `false` when the owner has turned it off. Absent on
+  an older backend, and a client must then draw **no** switch at all rather than
+  offer to turn off something it cannot see.
+* `auto_attempts` / `auto_limit` are how many automatic starts this episode has
+  spent and the PC's own cap, and `auto_capped` is true once the PC has stopped
+  trying and fallen back to the standing warning.
+* **`auto_note` is the one sentence about what Jarvis did, written HERE and
+  nowhere else** - "Jarvis started the local model again at 08:19, because it was
+  not running." Both apps draw that string verbatim and compose nothing of their
+  own, so the bar, the widget and the phone cannot come to three ways of saying
+  one fact (the rule the approval notice already follows, `ARCHITECTURE.md` §3).
+  It is reported whenever there is something to say, **including while `state` is
+  `up`** - the news is about a lane that has come back, which is exactly when the
+  standing warning has cleared - and it is also reported whenever the switch is
+  off, up or down, so the one press that turns it back on is always reachable.
 
 ### 132.2 `POST /api/model-lanes/start` - the one action
 
@@ -19838,7 +19860,112 @@ A `model` event goes on the bus when a watch settles: `{"lane", "port", "up",
 dying publishes no event - which is what the standing line's own slow beat is
 for.
 
-### 132.3 The permission decision, and why there is no approval card
+### 132.3 `POST /api/model-lanes/auto` - the owner's switch, and why there is no card
+
+**The owner's decision of 2026-10-14: *"Also restart the lane automatically when
+it dies."*** The line of §132.1 said it and acted on nothing (PR #409); §132.2's
+button waits for a press, and the defect is that nobody is there to press it at
+08:19 - his lanes die silently, with the PC's own Task Scheduler still reporting
+`Result=0 State=Ready`.
+
+**So the BACKEND watches the lane itself**, on one daemon thread armed at
+start-up by the install block `model-lanes.patch` adds, and starts it again
+through **exactly the same `start()`** as the button: the same lookup of HIS OWN
+task by the stable half of its name, the same `["schtasks", "/run", "/tn",
+<name>]` as argv, the same 90-second watch of `/api/tags`. There is no second way
+to start a lane in the backend and no `ollama serve` anywhere in it. It lives in
+the backend rather than in a desktop window **because the phone must get the same
+lane back**, and the phone is often the only thing looking at the PC.
+
+**It is cheap when everything is fine**: one loopback `GET
+/api/model-lanes`-check of the lane's own `/api/tags` every **30 seconds** - no
+model call, no token, nothing generated. That is the whole standing cost.
+
+`POST /api/model-lanes/auto` is the owner's own switch for it:
+
+```json
+{"on": false}
+```
+
+* **200** - changed; the body is §132.1 again with `changed: true`, so the client
+  draws what really happened;
+* **400** - the body names a lane, says `"all"`, is missing `"on"`, or is not an
+  object. There is no `{"lane": ...}` and no `{"all": true}` here either: it is
+  one fact about the one lane the chat is on;
+* **500** - the PC could not write its own setting file. Nothing changed, and the
+  sentence says so.
+
+`on` is stored in the owner's own config folder (`model-lanes.json`, next to
+`tutorials.json`), **never in the toml** - no route may write the toml. A missing
+file means **on**, because that is what the owner asked for: the switch exists to
+turn it off. `off` is immediate in both directions and **neither direction raises
+a card**:
+
+* OFF only narrows what Jarvis does, and stopping is never gated
+  (`ARCHITECTURE.md` §3);
+* ON is the same action the button beside it takes in the same second, with no
+  card of its own - so a card here would be *stricter than the button it sits
+  next to*;
+* and a card could not be answered when it is needed anyway: at 08:19 there is
+  nobody at a screen, an `ask` card would sit for its 900-second timeout and
+  expire, the lane would stay dead, and the next attempt would raise another one.
+  That is the defect, plus a queue of expired cards - which is how a person
+  learns that cards are noise.
+
+**IT IS BOUNDED, AND IT STOPS RATHER THAN HAMMERING.** The numbers, and what each
+one is for:
+
+* **two beats (`DOWN_BEATS = 2`, about a minute)** of the lane being down before
+  the first automatic start. One missed probe is not a dead lane: a lane that is
+  loading a model, a task just launched, and a moment of paging all answer
+  `False` once and answer normally after;
+* **at most three automatic starts in one episode** (`AUTO_ATTEMPTS = 3`).
+  Enough that one failed launch or a slow first load is survivable, few enough
+  that a genuinely broken lane is not hammered;
+* **a cooldown of five minutes that doubles** (`COOLDOWN_S = 300`, so 5 then 10),
+  which puts the three attempts at about one minute, six minutes and sixteen
+  minutes after the lane died - a person's timescale, and far longer than the 90
+  seconds a lane is given to come up, so a second attempt can never overlap the
+  first;
+* **a real recovery is ten minutes of answering** (`SETTLED_S = 600`), not one
+  lucky probe. A lane that answers and dies again inside that window has flapped,
+  not recovered, and it does **not** get a fresh three attempts every time it
+  twitches.
+
+**AT THE CAP, WHAT REMAINS IS EXACTLY THE WARNING PR #409 BUILT.** Jarvis stops
+trying, `state` goes back to plain `down`, `auto_capped` is true, `can_start`
+stays true so §132.2's button is still there for the owner, and `auto_note`
+carries one plain sentence: *"Jarvis started the local model 3 times and it did
+not come up, so it has stopped trying. You can still start it yourself."* The
+episode ends there. It does not begin again until the lane has really been back
+(up for `SETTLED_S`) or the owner starts it himself.
+
+**A DELIBERATE STOP CANNOT BE TOLD FROM A CRASH, AND NOTHING HERE PRETENDS
+OTHERWISE.** A dead process carries no intent: `schtasks` reports the same
+"Ready" whether the lane crashed or was closed on purpose, and there is no second
+signal on that PC that means "I meant that". So the answer is not a cleverer
+test. It is this switch - off in one press, immediate, from either app - plus the
+fact that every automatic restart is **said**, in the owner's own apps, in the
+backend's own words. **THE RESIDUAL RISK IS REAL: with the switch on, Jarvis will
+start a lane that was stopped on purpose, and will tell him it did.** The same
+words are in `docs/ARCHITECTURE.md` §8 and in the module's own header.
+
+**The switch is deliberately NOT in Settings.** It lives on the line that says
+what Jarvis did, in both apps, and that is the point: the moment he learns an
+automatic restart happened is the only moment he can say "not that one", and a
+switch three screens away from the sentence that tells him it was used is a switch
+nobody finds. It is also why the OFF sentence is reported whether the lane is up
+or down - the press is always reachable, so turning it back on never depends on
+catching the app at the right moment.
+
+**A REAL TURN NEVER WAITS ON ANY OF THIS.** The watcher is its own daemon thread
+and the chat's path is untouched: an answer that needs the lane fails exactly as
+it did before, with the standing warning up, while the restart happens behind it.
+The apps read `state: "starting"` and the sentence that goes with it, and the
+lane is there for the *next* turn rather than making this one hang for ninety
+seconds.
+
+### 132.4 The permission decision, and why there is no approval card
 
 This is the project's one permission model (`docs/ARCHITECTURE.md` §3), and the
 decision is reasoned rather than inherited:
@@ -19858,12 +19985,47 @@ There is therefore **no new tier line** to loosen, on purpose. What is **not**
 built, because it is forbidden outright: no bulk action, no "start both lanes",
 nothing that approves in bulk and nothing that clears a rush latch.
 
-### 132.4 Both apps
+**The automatic restart (§132.3) is a materially different case, and it is argued
+rather than inherited.** The press above is gone, so "the owner's act is the
+consent" does not carry over on its own. The rule that governs it is the one
+`jarvis-framework.toml` already carries for Docker: *"starting a service gives
+Jarvis more, so it asks"* (`docker_service_start = "ask"`). Four reasons decide
+it the other way here, and the first two are the ones that matter:
+
+* **what is started is not a new grant.** A container is a capability Jarvis was
+  given and did not have; this lane is the capability Jarvis *is*, the one the
+  chat is pointed at, and the one this PC already starts by itself at every
+  logon, unattended, with nobody asked. A card here would be stricter than the
+  machine's own behaviour, and its only content would be "run the task that runs
+  anyway";
+* **a card could not be answered when it is needed.** The lane dies at 08:19 with
+  nobody at a screen; an `ask` card would sit for its 900-second timeout and
+  expire, the lane would stay dead, and the next attempt would raise another one.
+  That is the defect the owner asked to have fixed, plus a queue of expired
+  cards;
+* **it is bounded, reversible and said.** Three automatic attempts per episode and
+  then the plain warning; OFF in one immediate press from either app; and every
+  restart spoken about in the apps, in the backend's own words. It opens no
+  socket that was not already open, reaches nothing off this PC, carries no data
+  and needs no credential;
+* **nothing is auto-approved, and there is no second path.** The automatic
+  restart raises no card and answers no card - rule 4 forbids *answering* a card,
+  and no card exists on this path. It calls the same `start()` the button calls,
+  so it cannot reach an action the owner's own press could not, and it can never
+  start a lane the chat is not on. One lane, never both, and no latch is cleared
+  anywhere in this feature.
+
+So: no card and no new tier line, for the automatic path either. The owner's own
+instruction of 2026-10-14 is the grant, the switch is how he takes it back, and
+the sentence in the apps is how he finds out it was used.
+
+### 132.5 Both apps
 
 **Both, and genuinely useful on the phone**: starting a lane on the PC while
-away from the desk is exactly when the owner cannot reach the PC by hand. So
-`docs/ARCHITECTURE.md` §8 needs no entry for either route, and
-`tools/check_parity.py` carries both as `ported`.
+away from the desk is exactly when the owner cannot reach the PC by hand, and the
+lane coming back by itself when nobody is at the desk is the whole point of
+§132.3. So `docs/ARCHITECTURE.md` §8 carries no one-sided entry for any of the
+three routes, and `tools/check_parity.py` carries all three as `ported`.
 
 * **Desktop** - the Jarvis bar's standing model notice (`src/main.js`,
   `src/lane-start.js`) and the widget's compact model row (`src/widget.js`).
@@ -19873,43 +20035,81 @@ away from the desk is exactly when the owner cannot reach the PC by hand. So
   `startUntilSettled`, which reads 131.1 on a two-second beat for at most 100
   seconds - deliberately longer than the PC's own 90, so the PC's verdict is
   what the owner sees rather than the app giving up first.
+* **Desktop, the automatic half** - `src/lane-auto.js` (one shared rule, one DOM
+  half, imported by both windows) draws the PC's own `auto_note` verbatim and
+  offers the one switch, asking through `commands.rs set_model_lane_auto`. It is
+  its **own element, outside the standing warning**, because that warning is
+  hidden the moment the lane answers - and "it went down and Jarvis started it
+  again" is news about a lane that is now working. Both windows read the lane on
+  the **same 90-second beat** as `/api/status`, whether or not the warning is
+  drawn; that is one extra loopback read per beat and no second timer.
 * **Phone** - Home's own status line (`ui/screens/HomeScreen.kt` `StatusLine`,
-  `net/ModelLane.kt`, `JarvisRuntime.startModelLane`). The lane is read **only
-  while that line is drawn**, on the beat that already reads `/api/status`, so a
-  healthy PC is never asked about its lanes and no second timer exists. The
-  phone sends the same empty body and watches the same route.
+  `net/ModelLane.kt`, `JarvisRuntime.startModelLane`). The lane is read on the
+  beat that already reads `/api/status`, so no second timer exists; and since
+  §132.3 it is read whether or not the standing line is drawn, for the reason
+  above. The phone sends the same empty body to §132.2, the same one-key body to
+  §132.3, and never changes its own words to claim a change the PC did not
+  confirm.
+* **The HUD window (`jarvis_hud.html`) deliberately keeps only the standing
+  line**: no button, no automatic line, no switch. It is vendored from the
+  backend and runs under a strict proxy
+  (`jarvis-desktop/src-tauri/src/hud_proxy.rs`): it may make exactly five reads
+  and one `POST /api/chat`, and widening that allow-list for routes that start a
+  program on the PC or change a setting is a separate decision. It still draws
+  the warning that says the lane is down, and both windows that carry the action
+  are one keystroke away. This is the one-sided note `docs/ARCHITECTURE.md` §8
+  carries.
 
 Both apps offer the button for the same conditions: the lane is down AND the PC
 says a press would really do something (`can_start`). An up lane, a PC that did
 not say, and a PC with no such task all offer nothing - **"the PC did not say"
 is not "the lane is down"**, which is the rule the standing line itself already
-follows.
+follows. And both apps draw the automatic line (§132.3) whenever the PC has
+something to say about it, **up or down**, and with **no switch at all** when the
+PC does not report one - offering to turn off something that was never on would
+be inventing a control.
 
-The HUD window (`jarvis_hud.html`) deliberately does **not** carry the button.
-It is vendored from the backend and runs under a strict proxy
-(`jarvis-desktop/src-tauri/src/hud_proxy.rs`): it may make exactly five reads
-and one `POST /api/chat`, and widening that allow-list for a route that starts a
-program on the PC is a separate decision. The standing line there already names
-the PC's own task, and both windows with the button are one keystroke away.
+### 132.6 Tests
 
-### 132.5 Tests
-
-* `backend/test_model_lanes.py` (85 checks) - the one-action rules: only a
-  down lane is started, and it is started by the name this PC really has; a
-  renamed task is followed; a task that is not on this PC is refused with
-  **nothing run**; nothing is started twice (answering, already watched, or the
-  Task Scheduler saying it is running); **a start that never comes up settles as
-  `down` and leaves the warning standing**; the command really is `schtasks /run
-  /tn <name>` as argv, never a shell; the probe refuses an HTTP error, junk and
-  JSON that is not Ollama's; both routes are behind the same origin and token
-  checks as `/api/status`; and, by reading its own source, that nothing in the
-  suite can reach a real lane or start a real task.
+* `backend/test_model_lanes.py` (85 checks before this work, **159** with the
+  automatic half) - the one-action rules: only a down lane is started, and it is
+  started by the name this PC really has; a renamed task is followed; a task that
+  is not on this PC is refused with **nothing run**; nothing is started twice
+  (answering, already watched, or the Task Scheduler saying it is running); **a
+  start that never comes up settles as `down` and leaves the warning standing**;
+  the command really is `schtasks /run /tn <name>` as argv, never a shell; the
+  probe refuses an HTTP error, junk and JSON that is not Ollama's; all three
+  routes are behind the same origin and token checks as `/api/status`; and, by
+  reading its own source, that nothing in the suite can reach a real lane or
+  start a real task. The automatic half adds: **a lane that dies is started again
+  by itself**, and never while it answers; **nothing is started a second time
+  while one is starting**; the grace period, the cooldown, the doubling and the
+  cap held as arithmetic **and** through 200 real beats; **the cap falls back to
+  the plain warning** with the button still offered and no further attempt in the
+  next hour; a flap is not a recovery and ten minutes of answering is; the switch
+  defaults to on, off is immediate and leaves the lane alone for half an hour,
+  and its route refuses a body that names a lane or says "all"; `install()`
+  **arms no watcher**, which is what keeps every suite off the owner's PC; and
+  the switch's own file is the owner's config folder, never the repository.
 * `jarvis-desktop/tests/lane-start.mjs` (19 checks) - the button's conditions,
   the watch loop (`ask`, then read until it settles), the refusal and the
   never-reached paths, the DOM half, both windows, and a CONTROL that
   `lane-warning.js` still acts on nothing.
+* `jarvis-desktop/tests/lane-auto.mjs` (16 checks) - the automatic line: the
+  PC's sentence drawn verbatim, the cap's fallback, the switch's two words and
+  what each press asks for, a refusal that moves nothing, an older backend that
+  offers no switch, the lane being read on the beat whether or not the warning is
+  drawn, the Rust command's one-key body, and a CONTROL that this file never
+  composes a sentence out of fields (`elapsed_s`, `why`, `message`).
 * `jarvis-client/.../ModelLaneTest.kt` - the same rule on the phone: a down lane
   offers it, an up lane and an unknown one do not, a failed start does **not**
   clear the warning, only the lane answering does, the body is empty, the three
   states decode through the real decoder, and `HomeScreen.kt` draws the button
-  from that one rule.
+  from that one rule. The automatic half: the PC's sentence drawn verbatim, the
+  cap's fallback with the warning still standing, the switch's two words and
+  which way each press asks, **no switch at all on an older backend** (a real
+  `false` is not an absent field), the one-key body, a press that never landed
+  claiming nothing, the two apps' switch words read out of
+  `jarvis-desktop/src/lane-auto.js` so they cannot drift apart, and
+  `JarvisRuntime` reading the lane on the beat whether or not the warning is
+  drawn.

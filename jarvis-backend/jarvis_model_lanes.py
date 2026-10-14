@@ -46,6 +46,45 @@ NOTHING IS STARTED TWICE. The lane is not started if it is already answering,
 if this module started that task moments ago and is still watching it, or if
 the PC's own Task Scheduler says that task is already running.
 
+AND NOW IT DOES IT ITSELF. The owner's decision, 2026-10-14: *"Also restart the
+lane automatically when it dies."* PR #409 made both apps SAY it and act on
+nothing; the button above waits for the owner to press it, and the defect is
+that nobody is there to press it at 08:19. So the BACKEND watches the lane
+itself - one daemon thread, one loopback GET of the lane's own `/api/tags`
+every `CHECK_S`, no model call and no token spent - and restarts it through
+exactly the same `start()` as the button: the same lookup of HIS OWN task by
+the stable half of its name, the same `["schtasks", "/run", "/tn", <name>]` as
+argv, the same watch until the lane really answers. There is no second way to
+start a lane in this module, and no hand-rolled `ollama serve` anywhere in it.
+It lives in the backend rather than in a desktop window because the phone must
+get the same lane back, and the phone is often the only thing looking at the
+PC.
+
+THE LOOP MUST NOT FIGHT ITSELF. It does not start anything while the lane
+answers; it does not start a second instance while one is starting (`_WATCHING`
+is one of three independent guards - `start()`'s own refusals and the Task
+Scheduler's own "Running" are the other two); and it does not restart in a tight
+loop: `DOWN_BEATS` beats of being down before the first attempt, then
+`COOLDOWN_S` doubling between attempts, and at most `AUTO_ATTEMPTS` automatic
+starts in one episode. **What happens at the cap:** Jarvis stops trying, the
+state goes back to plain `down`, and what remains is exactly the standing
+warning PR #409 built - still drawing on both apps, with the button still
+there - plus one plain sentence saying it has stopped and why. The episode ends
+there. It does not begin again until the lane has really been back (`up` for
+`SETTLED_S` - a flap is not a recovery) or the owner starts it himself.
+
+A DELIBERATE STOP CANNOT BE TOLD FROM A CRASH, and this module does not pretend
+otherwise. A dead process carries no intent: `schtasks` reports the same
+"Ready" whether the lane crashed or was closed on purpose, and there is no
+second signal on this PC that means "I meant that". So the answer is not a
+cleverer test. It is the owner's own switch (`automatic()`, on by default
+because he asked for this, off in one press from either app and immediate), plus
+the fact that every automatic restart is SAID - in the apps, in the backend's
+own plain words, which is what `auto_note` carries. THE RESIDUAL RISK IS REAL
+AND IS NOT HIDDEN: with the switch on, Jarvis will start a lane the owner
+stopped deliberately, and will tell him it did. `docs/ARCHITECTURE.md` §8 and
+`docs/JARVIS-API.md` §132.3 say the same thing in the same words.
+
 PERMISSION - no approval card, and why. This project's one permission model
 lives in `docs/ARCHITECTURE.md` §3: plan / describe / the gate / run. The gate
 exists to make JARVIS ask before it acts. This runs in the opposite direction:
@@ -65,6 +104,40 @@ done, because it is forbidden outright: no bulk action, no "start both lanes",
 nothing that approves in bulk and nothing that clears a rush latch. One lane -
 the one Jarvis talks to - one press.
 
+THE AUTOMATIC RESTART IS A DIFFERENT CASE, and it is argued rather than
+assumed, because the press above is gone. The house rule that governs it is the
+one `jarvis-framework.toml` already carries for Docker: *"starting a service
+gives Jarvis more, so it asks"* (`docker_service_start = "ask"`). This module
+does not go through the gate as that action, and the difference is the thing to
+argue, not to wave away. Four reasons, in the order they decide it:
+
+  * WHAT IS STARTED IS NOT A NEW GRANT. A container is a capability Jarvis was
+    given and did not have; this lane is the capability Jarvis *is*, the one the
+    chat is pointed at, and the one this PC already starts by itself at every
+    logon, unattended, with no card and nobody asked. A card here would be
+    stricter than the machine's own behaviour, and it would be a card whose only
+    content is "run the task that runs anyway".
+  * A CARD COULD NOT BE ANSWERED WHEN IT IS NEEDED. The lane dies at 08:19 with
+    nobody at a screen. An `ask` card would sit for the 900-second timeout and
+    expire, the lane would stay dead, and the next attempt would raise another
+    one - which is the defect the owner asked to have fixed, plus a queue of
+    expired cards, which is how a person learns that cards are noise.
+  * IT IS BOUNDED, REVERSIBLE AND SAID. Three automatic attempts per episode and
+    then the plain warning; off in one immediate press from either app; and every
+    restart is spoken about in the apps, in this module's own words. It opens no
+    socket that was not already open, reaches nothing off this PC, carries no
+    data and needs no credential.
+  * NOTHING IS AUTO-APPROVED, AND THERE IS NO SECOND PATH. The automatic restart
+    raises no card and answers no card - rule 4 is untouched, because answering
+    a card is the only thing that rule forbids, and no card exists here. It calls
+    the same `start()` the button calls, so it cannot reach an action the owner's
+    own press could not, and it can never start a lane the chat is not on. One
+    lane, never both, and no latch is cleared anywhere in this file.
+
+So: no card, and no new tier line either. The owner's own instruction of
+2026-10-14 is the grant, the switch is how he takes it back, and the sentence in
+the apps is how he finds out it was used.
+
 WHERE IT RUNS. Windows only: `schtasks` and a Windows Task Scheduler. Off
 Windows every answer says so in words (`_host_reason`) rather than failing.
 
@@ -78,12 +151,14 @@ import json
 import os
 import socket
 import subprocess
+import tempfile
 import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from collections import namedtuple
+from pathlib import Path
 from typing import Callable, Optional
 
 try:  # beside this file on the PC
@@ -124,6 +199,56 @@ POLL_S = 3.0
 #: a restart of the backend loses.
 RECENT_S = WAIT_S + 30.0
 
+#: How often the backend asks whether the lane is answering, in seconds, once
+#: `watch_start()` has armed it. One loopback GET of the lane's own
+#: `/api/tags` - the same question the apps' 90-second beat asks, no model call,
+#: nothing generated and nothing spent. Thirty seconds rather than ninety
+#: because this one ACTS: a lane that has been down for a minute and a half is
+#: a minute and a half of the owner waiting, and the probe costs one refused
+#: connection while everything is fine.
+CHECK_S = 30.0
+
+#: How many beats in a row the lane must be down before the FIRST automatic
+#: start. Two, so about a minute: a single missed probe is not a dead lane - a
+#: lane that is loading a model, a task that has just been launched and a
+#: moment of paging all answer `False` once and then answer normally. It is a
+#: grace period, not a reading of the owner's intent (see the module header:
+#: intent is not readable from a dead process).
+DOWN_BEATS = 2
+
+#: How many automatic starts Jarvis will spend on ONE episode - the run of
+#: attempts between one real recovery and the next. Three: enough that a single
+#: failed launch, a stuck task or a slow first load is survivable, few enough
+#: that a lane which is genuinely broken is not hammered. At this number it
+#: stops and the warning stands.
+AUTO_ATTEMPTS = 3
+
+#: How long after an automatic start the next one is refused, in seconds. Five
+#: minutes, and it DOUBLES with each further attempt in the episode (5, then
+#: 10), so the three attempts land about a minute, six minutes and sixteen
+#: minutes after the lane died - which is a person's timescale, and far longer
+#: than the 90 seconds the lane is given to come up, so a second attempt can
+#: never overlap the first.
+COOLDOWN_S = 300.0
+
+#: How long the lane must be answering before the episode is over and the
+#: attempts are forgiven, in seconds. Ten minutes: a lane that answers and dies
+#: again inside this window has flapped, not recovered, and it must not be
+#: handed a fresh three attempts every time it twitches.
+SETTLED_S = 600.0
+
+#: How long an automatic restart is spoken about in the apps, in seconds. Half
+#: an hour, and it is the backend that decides - so the desktop and the phone
+#: cannot disagree about whether it is still worth mentioning, and neither has
+#: to keep a clock of its own. A note that is still TRUE does not expire: the
+#: gave-up sentence stands while Jarvis really has given up.
+NOTE_S = 1800.0
+
+#: This module's one switch, in the owner's own config folder - never in the
+#: repository, never in the toml (no route here may write the toml), the same
+#: shape as `jarvis_tutorials.py`'s own small file.
+SETTING_NAME = "model-lanes.json"
+
 #: How long one read of `schtasks` may take. It is a Task Scheduler query.
 TASK_TIMEOUT_S = 20.0
 
@@ -144,6 +269,26 @@ _STATE: Optional[dict] = None
 
 #: Set while a watch thread is running, so one press cannot become two tasks.
 _WATCHING = False
+
+#: What the automatic restarter knows, for the episode it is in. Replaced
+#: wholesale by `_forget_episode()`, so a reader never sees half of it. An
+#: EMPTY dict is "the lane has been fine": nothing has been tried and nothing
+#: has been said.
+_AUTO: dict = {}
+
+#: The armed watcher thread and the switch that stops it. Armed by
+#: `watch_start()` from the one place the backend wires this feature up - the
+#: install block `model-lanes.patch` adds - and NEVER by `install()` itself.
+#: That is deliberate and it is the safety property of this whole feature: a
+#: test, or any other caller, that installs the routes cannot possibly start a
+#: lane on the owner's PC as a side effect.
+_WATCHER: Optional[threading.Thread] = None
+_WATCHER_STOP: Optional[threading.Event] = None
+
+#: The file this module's one switch lives in. `watch_start()` and the routes
+#: never set it: the running backend always uses the owner's own config folder.
+#: It exists so a test writes a throwaway file rather than the owner's.
+_SETTING_FILE: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -349,11 +494,13 @@ def _snapshot() -> Optional[dict]:
 
 def reset() -> None:
     """Forget everything this process remembers. The tests use it; nothing in
-    the running backend calls it."""
-    global _STATE, _WATCHING
+    the running backend calls it. The armed watcher, if there is one, is left
+    running and is stopped with `watch_stop()`."""
+    global _STATE, _WATCHING, _AUTO
     with _STATE_LOCK:
         _STATE = None
         _WATCHING = False
+        _AUTO = {}
 
 
 def _host_reason() -> str:
@@ -414,7 +561,9 @@ def status(lane: Optional[Lane] = None, *, probe_fn: Optional[Callable] = None,
     now = time.time()
     lane = lane or target()
     known = _snapshot()
+    episode = _auto_snapshot()
     read_tasks = tasks_fn or scheduled_tasks
+    switched_on = automatic()
     out: dict = {
         "ok": True,
         "lane": lane.key if lane else "",
@@ -429,6 +578,20 @@ def status(lane: Optional[Lane] = None, *, probe_fn: Optional[Callable] = None,
         "left_s": None,
         "waited_s": None,
         "message": "",
+        # What the automatic restarter is doing, from the backend's own state,
+        # so both apps draw one decision rather than each forming its own.
+        "auto": switched_on,
+        "auto_attempts": int(episode.get("attempts") or 0),
+        "auto_limit": AUTO_ATTEMPTS,
+        "auto_capped": bool(episode.get("capped")),
+        # The switch's own sentence is reported whenever the switch is OFF,
+        # whether the lane is up or down, and never when this PC has no lane to
+        # restart: that is what gives the owner a press to turn it back on at
+        # any time, from either app, without a settings page of its own.
+        "auto_note": ("" if lane is None
+                      else OFF_NOTE if not switched_on
+                      else _note_of(episode, now)),
+        "auto_note_at": episode.get("note_at"),
     }
 
     if lane is None:
@@ -676,6 +839,399 @@ def _publish(lane: Lane, up: bool, waited: float) -> None:
 
 
 # ---------------------------------------------------------------------------
+#   The one switch: does Jarvis start it again by itself?
+# ---------------------------------------------------------------------------
+
+def _config_dir() -> Path:
+    """Where the owner's own state lives - never a repository folder."""
+    try:
+        import jarvis_framework as fw
+        where = getattr(fw, "CONFIG_DIR", None)
+        if where:
+            return Path(where)
+    except Exception:
+        pass
+    return Path(os.environ.get("OPENJARVIS_CONFIG_DIR")
+                or os.environ.get("JARVIS_CONFIG_DIR")
+                or (Path.home() / ".openjarvis"))
+
+
+def _setting_path() -> Path:
+    """This module's own small file, beside the rest of the owner's state."""
+    if _SETTING_FILE:
+        return Path(_SETTING_FILE)
+    return _config_dir() / SETTING_NAME
+
+
+def automatic() -> bool:
+    """Does Jarvis start the lane again by itself when it finds it down?
+
+    ON by default, because the owner decided it in those words on 2026-10-14 -
+    *"Also restart the lane automatically when it dies"* - and a feature that
+    ships off is not the feature he decided on. So a missing or unreadable file
+    is ON and not an error: this switch exists to turn it OFF.
+
+    Read on every call rather than cached, so the watcher thread and the two
+    apps can never disagree about it and a press takes effect on the next beat
+    at the latest. It is one small local file, read at most a few times a
+    minute, and nothing here is on the chat's path.
+    """
+    try:
+        raw = json.loads(_AUTO_SETTING().read_text(encoding="utf-8"))
+    except Exception:
+        return True
+    if not isinstance(raw, dict):
+        return True
+    value = raw.get("automatic")
+    return True if value is None else bool(value)
+
+
+def set_automatic(on: bool) -> bool:
+    """Turn it off, or back on. Immediate in both directions, and no card.
+
+    OFF only narrows what Jarvis does, so it is never gated ("stopping is never
+    gated", ARCHITECTURE §3). ON adds nothing the owner's own press does not do
+    in the same second - the button beside this switch runs the very same task,
+    with no card - so a card here would be stricter than the button it sits
+    next to. The module header carries the whole argument.
+
+    True when it is on disk. Written by replace, so a reader never sees half of
+    it, and keys this module does not know about are kept.
+    """
+    path = _AUTO_SETTING()
+    try:
+        try:
+            current = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            current = {}
+        if not isinstance(current, dict):
+            current = {}
+        current["automatic"] = bool(on)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".model-lanes-",
+                                   suffix=".json")
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(current, f, indent=1, sort_keys=True)
+            f.write("\n")
+        os.replace(tmp, path)
+    except Exception:
+        return False
+    return True
+
+
+# ---------------------------------------------------------------------------
+#   Restarting it by itself
+# ---------------------------------------------------------------------------
+
+def _auto_snapshot() -> dict:
+    with _STATE_LOCK:
+        return dict(_AUTO)
+
+
+def _auto_put(**fields) -> None:
+    with _STATE_LOCK:
+        _AUTO.update(fields)
+
+
+def _forget_episode() -> None:
+    """A real recovery: nothing has been tried, and nothing needs saying."""
+    global _AUTO
+    with _STATE_LOCK:
+        _AUTO = {}
+
+
+#: What one beat decided. `restart` is the only one that starts anything.
+AUTO_ACTIONS = ("off", "up", "watching", "wait", "cooling", "capped", "restart")
+
+
+def auto_step(up, now, *, enabled=True, watching=False, beats=0, attempts=0,
+              last_attempt_at=None, capped=False, down_beats=DOWN_BEATS,
+              limit=AUTO_ATTEMPTS, cooldown=COOLDOWN_S) -> str:
+    """What to do about the lane, given everything known about it. Pure.
+
+    Every argument is passed in, and nothing is read from the module or from
+    the clock - so `test_model_lanes.py` can hold every branch (the grace
+    period, the cooldown, the doubling, the cap) without a thread, a socket or
+    a second of waiting. The ORDER is the rule:
+
+      1. switched off         -> "off"      the owner's own switch
+      2. the lane answers     -> "up"       nothing is ever started
+      3. a start is in flight -> "watching" never a second instance
+      4. not down long enough -> "wait"     one missed probe is not a dead lane
+      5. already capped       -> "capped"   the standing warning is what remains
+      6. no attempts left     -> "capped"   and the caller marks the episode
+      7. inside the cooldown  -> "cooling"
+      8. otherwise            -> "restart"
+    """
+    if not enabled:
+        return "off"
+    if up:
+        return "up"
+    if watching:
+        return "watching"
+    if int(beats) < int(down_beats):
+        return "wait"
+    if capped:
+        return "capped"
+    if int(attempts) >= int(limit):
+        return "capped"
+    if last_attempt_at is not None:
+        # The gap grows with each attempt spent: 5 minutes, then 10.
+        gap = float(cooldown) * (2 ** max(0, int(attempts) - 1))
+        if (float(now) - float(last_attempt_at)) < gap:
+            return "cooling"
+    return "restart"
+
+
+def _clock(now: float) -> str:
+    """`08:19` - the time of day, in the owner's own timezone."""
+    try:
+        return time.strftime("%H:%M", time.localtime(float(now)))
+    except Exception:
+        return "just now"
+
+
+#: Said while the switch is off and the lane is down. The apps show it with the
+#: one press that turns it back on, so the reason and the remedy are one line.
+OFF_NOTE = ("Jarvis is not starting the local model by itself: automatic "
+            "restarting is off.")
+
+
+def _gave_up_note(attempts: int) -> str:
+    """What remains when the cap is reached: the warning, and this."""
+    return (f"Jarvis started the local model {int(attempts)} times and it did "
+            f"not come up, so it has stopped trying. You can still start it "
+            f"yourself.")
+
+
+def _note_of(state: dict, now: float) -> str:
+    """The sentence the apps should show, from the episode's own state.
+
+    HALF AN HOUR for anything that has happened and finished - a restart is
+    news, not a permanent mark, and a line nobody can get rid of is one the
+    owner learns to read past. A sentence that is still TRUE does not expire:
+    "it has stopped trying" and "you turned this off" stand while they are
+    still the case. The app draws whatever this returns and composes nothing of
+    its own, so the two apps cannot come to different words for one fact.
+    """
+    note = str(state.get("note") or "")
+    if not note:
+        return ""
+    if state.get("note_kind") in ("gave-up", "off"):
+        return note
+    at = state.get("note_at")
+    if at is None or (float(now) - float(at)) > NOTE_S:
+        return ""
+    return note
+
+
+def _note_for_start(now: float, code, out) -> tuple:
+    """What to say about an automatic start just asked for:
+    `(sentence, is_something_being_watched)`.
+
+    The sentence is built HERE and nowhere else. Both apps draw this string
+    verbatim - the same rule the approval notice follows (ARCHITECTURE §3): a
+    client that composes its own summary from fields has reopened the hole on
+    the surface where it is least recoverable, and it is how two apps come to
+    say two different things about one event.
+    """
+    said = str((out or {}).get("message") or (out or {}).get("error") or "").strip()
+    when = _clock(now)
+    if code in (200, 202):
+        if (out or {}).get("changed"):
+            return (f"Jarvis started the local model again at {when}, because "
+                    f"it was not running. It is waiting for it to answer.", True)
+        return (f"Jarvis found the task that starts the local model already "
+                f"running at {when}, so it started nothing and is waiting for "
+                f"the model to answer.", True)
+    return (f"Jarvis tried to start the local model at {when} and your PC "
+            f"would not run its own task"
+            + (f": {said}" if said else "."), False)
+
+
+def auto_tick(now: Optional[float] = None, *,
+              lane: Optional[Lane] = None,
+              probe_fn: Optional[Callable] = None,
+              start_fn: Optional[Callable] = None) -> dict:
+    """One beat of the automatic restarter. Returns what it decided.
+
+    It starts something only when the decision is `restart`, and then it goes
+    through `start()` - the same one action the button uses, with the same
+    refusals - so there is no second way to start a lane here. The probe is the
+    lane's own `/api/tags` on loopback: no model call, no token, nothing
+    generated.
+
+    `lane` is for the tests, exactly as it is on `start()` and `status()`: the
+    running backend passes none, and the lane is then the one the CHAT uses.
+    """
+    now = time.time() if now is None else float(now)
+    check = probe_fn or _AUTO_PROBE
+    launch = start_fn or _AUTO_START
+    lane = lane or target()
+    if lane is None:
+        # Not pointed at a lane on this PC: there is nothing here to watch.
+        return {"ok": True, "action": "off", "lane": "", "note": ""}
+
+    state = _auto_snapshot()
+    enabled = automatic()
+    with _STATE_LOCK:
+        watching = _WATCHING
+    up = bool(check(lane.port))
+    beats = int(state.get("beats") or 0)
+    attempts = int(state.get("attempts") or 0)
+    capped = bool(state.get("capped"))
+    change: dict = {}
+
+    if up:
+        # The lane is answering. A start that was in flight has arrived - and
+        # only a REAL recovery forgives the attempts: ten minutes of answering,
+        # not one lucky probe.
+        up_since = state.get("up_since") or now
+        change["up_since"] = up_since
+        change["beats"] = 0
+        if state.get("awaiting"):
+            change.update(
+                awaiting=False, note_kind="came-back", note_at=now,
+                note=(f"Jarvis restarted the local model by itself at "
+                      f"{_clock(state.get('attempt_at') or now)}, and it is "
+                      f"answering now."))
+        elif state.get("note_kind") == "gave-up":
+            # It came back without another attempt, so the gave-up sentence is
+            # no longer true.
+            change.update(note_kind="", note="", note_at=None)
+        if capped and (float(now) - float(up_since)) >= SETTLED_S:
+            change.update(capped=False, attempts=0, last_attempt_at=None)
+        _auto_put(**change)
+        return {"ok": True, "action": "up", "lane": lane.key,
+                "note": _note_of({**state, **change}, now)}
+
+    # Not answering. A beat only counts while nothing is being tried.
+    change["up_since"] = None
+    if watching:
+        action = "watching"
+    else:
+        beats += 1
+        change["beats"] = beats
+        action = auto_step(False, now, enabled=enabled, watching=False,
+                           beats=beats, attempts=attempts,
+                           last_attempt_at=state.get("last_attempt_at"),
+                           capped=capped)
+        if state.get("awaiting"):
+            # The watch this module armed has settled, and the lane is still
+            # not answering. Said exactly that way: "it came up and died again"
+            # is a fact a probe 30 seconds later cannot tell apart from "it
+            # never came up", so the sentence claims neither.
+            change.update(
+                awaiting=False, note_kind="failed", note_at=now,
+                note=(f"Jarvis started the local model at "
+                      f"{_clock(state.get('attempt_at') or now)}, and it is not "
+                      f"answering now, so it is still down."))
+
+    if action == "off":
+        change.update(note_kind="off", note_at=now, note=OFF_NOTE)
+        _auto_put(**change)
+        return {"ok": True, "action": "off", "lane": lane.key, "note": OFF_NOTE}
+
+    if action == "capped":
+        if not capped:
+            change.update(capped=True, note_kind="gave-up", note_at=now,
+                          note=_gave_up_note(attempts))
+        _auto_put(**change)
+        return {"ok": True, "action": "capped", "lane": lane.key,
+                "note": _note_of({**state, **change}, now)}
+
+    if action in ("watching", "wait", "cooling"):
+        _auto_put(**change)
+        return {"ok": True, "action": action, "lane": lane.key,
+                "note": _note_of({**state, **change}, now)}
+
+    # `restart`: spend one attempt, then the ONE action. The count is written
+    # BEFORE the call, so a start that throws still costs an attempt and cannot
+    # become a loop.
+    change.update(attempts=attempts + 1, last_attempt_at=now, attempt_at=now,
+                  awaiting=True, note_kind="starting", note_at=now,
+                  note=f"Jarvis is starting the local model again at "
+                       f"{_clock(now)}, because it was not running.")
+    _auto_put(**change)
+    try:
+        code, out = launch(lane)
+    except Exception as exc:
+        code, out = 502, {"error": f"{type(exc).__name__}: {exc}"}
+    text, watched = _note_for_start(now, code, out)
+    _auto_put(awaiting=bool(watched), note=text, note_kind="start", note_at=now)
+    return {"ok": True, "action": "restart", "lane": lane.key, "code": code,
+            "changed": bool((out or {}).get("changed")), "note": text}
+
+
+def _watch_loop(stop: threading.Event, tick: Callable, beat: float) -> None:
+    """One beat at a time until stopped. Never lets an exception end it: a
+    watcher that died would leave the lane down with nothing trying."""
+    while not stop.wait(beat):
+        try:
+            tick()
+        except Exception:
+            pass
+
+
+def watch_start(*, tick: Optional[Callable] = None,
+                check_s: Optional[float] = None) -> str:
+    """Arm the automatic restarter, and return the line the banner prints.
+
+    Called from the ONE place the backend wires this feature up - the install
+    block `model-lanes.patch` adds, one line after `install()` - and never from
+    `install()` itself. That is the safety property of this feature: a test, or
+    any other caller, that installs the routes cannot start a lane on the
+    owner's PC as a side effect of testing the wiring.
+
+    `tick` and `check_s` are the tests' seams. The running backend passes
+    neither, so one beat is `auto_tick()` - the real probe and the real
+    `start()` - and the beat is `CHECK_S`.
+    """
+    global _WATCHER, _WATCHER_STOP
+    if _WATCHER is not None and _WATCHER.is_alive():
+        return "  lanes      automatic restart is already watching"
+    host = _host_reason()
+    if host:
+        return "  lanes      automatic restart is OFF here: " + host
+    beat = CHECK_S if check_s is None else max(0.01, float(check_s))
+    stop = threading.Event()
+    _WATCHER_STOP = stop
+    _WATCHER = threading.Thread(target=_watch_loop,
+                                args=(stop, tick or auto_tick, beat),
+                                name="jarvis-model-lane-auto", daemon=True)
+    _WATCHER.start()
+    return (f"  lanes      a lane that dies is started again by itself, "
+            f"checked every {int(beat)}s")
+
+
+def watch_stop() -> bool:
+    """Stop the automatic restarter, if one is armed. True when one was.
+
+    Nothing in the running backend calls this. It is here for the tests, and
+    for anyone who wants the watcher off without stopping Jarvis.
+    """
+    global _WATCHER, _WATCHER_STOP
+    stop, _WATCHER_STOP = _WATCHER_STOP, None
+    thread, _WATCHER = _WATCHER, None
+    if stop is None:
+        return False
+    stop.set()
+    if thread is not None:
+        thread.join(timeout=2.0)
+    return True
+
+
+#: The two seams the AUTOMATIC tests replace, so exercising the loop cannot ask
+#: a real lane or start a real task. They are the module's own functions by
+#: default - the running backend always uses the real ones - and `auto_tick` is
+#: the only caller.
+_AUTO_PROBE: Callable = probe
+_AUTO_START: Callable = start
+#: And the one seam for the switch's own file, so a test writes a throwaway.
+_AUTO_SETTING: Callable = _setting_path
+
+
+# ---------------------------------------------------------------------------
 #   The routes
 # ---------------------------------------------------------------------------
 
@@ -722,17 +1278,56 @@ _START_FOR_ROUTES: Callable = start
 _ROUTE_URL: str = ""
 
 
+def handle_auto_post(body=None) -> tuple:
+    """`POST /api/model-lanes/auto` - whether Jarvis starts the lane itself.
+
+    `{"on": true}` or `{"on": false}`. Both are immediate and neither raises a
+    card - OFF only narrows what Jarvis does, and ON is the same action the
+    button beside it takes in the same second. It takes no lane name and no
+    "all": this is one fact about this PC's one lane, so there is nothing here
+    to aim at another lane or at both. `docs/JARVIS-API.md` §132.3 has the whole
+    argument, and the module header has the same one.
+    """
+    if not isinstance(body, dict):
+        return 400, _refused("the body must be a JSON object")
+    unknown = [k for k in body if k not in ("on", "why")]
+    if unknown:
+        return 400, _refused(
+            "that route takes one option, \"on\": true or false. Not "
+            f"understood: {', '.join(sorted(unknown))}")
+    if "on" not in body:
+        return 400, _refused("that route takes one option, \"on\": true or false")
+    on = bool(body.get("on"))
+    if not set_automatic(on):
+        return 500, _refused("This PC could not write its own setting file, so "
+                             "nothing changed.")
+    lane = target()
+    return 200, dict(status(lane, probe_fn=_PROBE_FOR_ROUTES), changed=True,
+                     message=("Jarvis will start the local model again by itself "
+                              "when it finds it is not running."
+                              if on else
+                              "Jarvis will leave the local model alone and say "
+                              "it is not running - you can still start it "
+                              "yourself."))
+
+
 GET_ROUTE = "/api/model-lanes"
 START_ROUTE = "/api/model-lanes/start"
+AUTO_ROUTE = "/api/model-lanes/auto"
 
 
 def install(handler_cls, *, origin_ok, token_ok, read_body, url: str = "") -> str:
-    """Wire the two routes into the backend's own Handler, the way every other
+    """Wire the three routes into the backend's own Handler, the way every other
     module here does, and return the line the start-up banner prints.
 
-    Both routes are behind the backend's own origin and token checks - the same
-    gate as `/api/status` - because this one can start a program, even though
-    the program is the owner's own task.
+    All three are behind the backend's own origin and token checks - the same
+    gate as `/api/status` - because one of them can start a program, even
+    though the program is the owner's own task, and another can decide that
+    Jarvis starts it by itself.
+
+    This does NOT arm the automatic restarter. That is `watch_start()`, called
+    one line later by the same install block - so nothing that merely installs
+    these routes can start a lane on this PC.
 
     `url` is for the tests only: the start-up call passes none, and `target()`
     then reads `jarvis_hud.OLLAMA_URL`, the address the chat itself uses.
@@ -770,7 +1365,7 @@ def install(handler_cls, *, origin_ok, token_ok, read_body, url: str = "") -> st
 
     def do_POST(self):
         route = str(getattr(self, "path", "") or "").split("?", 1)[0].rstrip("/")
-        if route != START_ROUTE:
+        if route not in (START_ROUTE, AUTO_ROUTE):
             return post0(self)
         if not allowed(self):
             return None
@@ -780,7 +1375,8 @@ def install(handler_cls, *, origin_ok, token_ok, read_body, url: str = "") -> st
         except (ValueError, json.JSONDecodeError) as exc:
             return self._send(400, {"error": str(exc)})
         try:
-            code, out = handle_post(body)
+            code, out = (handle_post(body) if route == START_ROUTE
+                         else handle_auto_post(body))
         except Exception as exc:
             return self._send(500, {"error": f"{type(exc).__name__}: {exc}"})
         return self._send(code, out)
@@ -789,4 +1385,4 @@ def install(handler_cls, *, origin_ok, token_ok, read_body, url: str = "") -> st
     do_POST._jarvis_model_lanes = True  # type: ignore[attr-defined]
     handler_cls.do_GET, handler_cls.do_POST = do_GET, do_POST
     return ("  model lanes ready - a lane that is down can be started from "
-            "either app")
+            "either app, and Jarvis starts it again by itself when you let it")

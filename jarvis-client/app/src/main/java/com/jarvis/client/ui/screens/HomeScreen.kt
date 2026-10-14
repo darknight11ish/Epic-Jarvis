@@ -255,10 +255,13 @@ data class HomeState(
      * The lane the PC's chat uses, as the PC reports it
      * ([com.jarvis.client.net.ModelLane]).
      *
-     * Read only while the standing model line is drawn, so a healthy PC is
-     * never asked. Null is "we did not ask", which is NOT a lane that is down:
-     * the button is drawn from [com.jarvis.client.net.ModelLane.offers], and the
-     * warning itself still comes only from the PC's own `ollama` field.
+     * Read on the same beat as `/api/status`, whether or not the standing model
+     * line is drawn: the PC's own `auto_note` - what JARVIS did about a dead
+     * lane by itself - is news about a lane that has come BACK, which is exactly
+     * when that line has cleared. Null is "we did not ask", which is NOT a lane
+     * that is down: the button is drawn from
+     * [com.jarvis.client.net.ModelLane.offers], and the warning itself still
+     * comes only from the PC's own `ollama` field.
      */
     val modelLane: com.jarvis.client.net.ModelLaneInfo? = null,
     /** True while a press is being watched, so it cannot be pressed twice. */
@@ -268,6 +271,14 @@ data class HomeState(
      * Shown under the button; the standing line stays standing either way.
      */
     val laneFailure: String? = null,
+    /** True while the automatic-restart switch's own press is in flight. */
+    val laneAutoBusy: Boolean = false,
+    /**
+     * What to say when that switch's press was refused or never landed, or null
+     * when it went through. Kept apart from [laneFailure]: one press failing
+     * must never be shown as the other's.
+     */
+    val laneAutoFailure: String? = null,
     val pending: List<PendingItem>,
     val attention: Attention,
     val notice: String?,
@@ -706,6 +717,14 @@ data class HomeActions(
      * uses, then watch until it answers. Nothing is cleared by the press.
      */
     val onStartModelLane: () -> Unit,
+    /**
+     * The switch beside it (the owner's decision of 2026-10-14: "Also restart
+     * the lane automatically when it dies"): turn the PC's automatic restarting
+     * of a dead lane off, or back on. `true` asks for it ON. Both directions are
+     * immediate and neither raises a card - a dead process cannot say whether it
+     * crashed or was stopped on purpose, so this is how the owner says it.
+     */
+    val onSetLaneAuto: (Boolean) -> Unit,
     val onOpenInbox: () -> Unit,
     val onOpenBrain: () -> Unit,
     /**
@@ -1792,6 +1811,47 @@ private fun StatusLine(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
+                }
+                // And what JARVIS did about it by itself (the owner's decision
+                // of 2026-10-14: "Also restart the lane automatically when it
+                // dies"). NOT gated on `modelDown`, which is the whole point:
+                // the PC sends this sentence while the lane is UP as well - "it
+                // went down and Jarvis started it again" is news about a lane
+                // that is working, and it is the one place the owner can turn
+                // the automatic restart off, or back on - because a dead process
+                // cannot say whether it crashed or was stopped on purpose.
+                //
+                // The sentence is the PC's own, drawn verbatim: this screen
+                // composes nothing, so the phone, the Jarvis bar and the widget
+                // cannot come to three ways of saying one fact.
+                val autoWords = state.laneAutoFailure
+                    ?: com.jarvis.client.net.ModelLane.notice(state.modelLane)
+                if (autoWords.isNotEmpty()) {
+                    Text(
+                        autoWords,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (state.laneAutoFailure != null) {
+                            chrome.warnInk
+                        } else {
+                            chrome.textMid
+                        },
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                val autoSwitch = com.jarvis.client.net.ModelLane
+                    .switchWords(state.modelLane)
+                if (autoSwitch.isNotEmpty()) {
+                    Quiet(
+                        text = autoSwitch,
+                        enabled = !state.laneAutoBusy && state.laneAutoFailure == null,
+                        color = chrome.textMid,
+                        onClick = {
+                            com.jarvis.client.net.ModelLane
+                                .switchAsks(state.modelLane)
+                                ?.let(actions.onSetLaneAuto)
+                        },
+                    )
                 }
             }
         }

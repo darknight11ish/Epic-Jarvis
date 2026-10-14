@@ -737,7 +737,14 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # big-coder.patch (2026-10-11) is appended after it,
                                 # before plugin-loader.patch: two ADDED route blocks in
                                 # jarvis_hud.py, no gate list, no tier row, no _RISK row.
-                                "big-coder.patch"}
+                                "big-coder.patch",
+                                # model-lanes.patch (2026-10-13, "Start the local model")
+                                # is appended after that, still before plugin-loader.patch:
+                                # ONE ADDED install block at the end of the install chain,
+                                # and no gate list, no tier row and no _RISK row - it adds
+                                # no action to the gate at all - so it cannot rewrite a
+                                # line devices.patch wrote either.
+                                "model-lanes.patch"}
           and not _stack.later_rewriting("devices.patch", "register_approval_key"), order[-3:])
     text, log = _stack.stand_in("jarvis_hud.py")
     check("the stacked jarvis_hud.py builds", text is not None, "\n".join(log[-3:]))

@@ -2168,3 +2168,73 @@ open on 2026-09-25 - **idea I-1**, question 1 of
   words refused outright, which is never a card. Every card still shows the exact
   search words and says why in plain words.
 
+
+---
+
+## 2026-10-14 - "Also restart the lane automatically when it dies"
+
+**His words, in full:** *"Also restart the lane automatically when it dies."*
+
+**What it replaces.** PR #409 (2026-10-13) made both apps SAY the local model is
+not running, on a standing line, and deliberately made that line **act on
+nothing**. PR #418 added one button to it - "Start the local model" - which runs
+his own Windows logon task. Neither answers the defect he has actually been
+living with: **the lanes die silently and repeatedly**, today at 08:19:11, with
+both scheduled tasks still reporting `Result=0 State=Ready` while nothing was
+listening. Nobody is at a screen at 08:19 to press a button.
+
+**What he gets.** The BACKEND now watches the lane itself - one daemon thread,
+one loopback `/api/tags` probe every 30 s, no model call - and restarts it
+through **the same one action as the button**: his own task, found on that PC by
+the stable half of its name, `["schtasks", "/run", "/tn", <name>]` as argv, never
+a shell. The limits are 2 down beats (about a minute) before the first try, at
+most 3 tries in one episode, a 5-minute cooldown that doubles to 10, and an
+episode ends only after **10 minutes of the lane really answering** - so a
+flapping lane cannot hand itself a fresh three attempts. **At the cap it stops**:
+the state goes back to plain `down` and what remains is exactly #409's warning,
+with #418's button still there. Both apps say what happened, in the backend's own
+words ("Jarvis started the local model again at 08:19, because it was not
+running."), and a chat turn never waits on a restart.
+
+**The decisions inside it, recorded because they are his kind of decision:**
+
+- **No approval card, in either direction.** The house rule is the Docker one -
+  *"starting a service gives Jarvis more, so it asks"*. This is deliberately not
+  that case: what is started is the lane the chat is pointed at, which this PC
+  already starts by itself at every logon with no card and nobody asked, and a
+  card could not be answered at 08:19 anyway - it would sit for its 900-second
+  timeout, expire, and be raised again on the next attempt. That is the defect
+  plus a queue of expired cards. It is bounded, reversible and said, it opens no
+  socket that was not already open, and **nothing is auto-approved**: this path
+  raises no card and answers no card, so rule 4 is untouched. Full argument in
+  `docs/ARCHITECTURE.md` §3 and `docs/JARVIS-API.md` §132.4.
+- **A deliberate stop cannot be told from a crash, and this does not pretend
+  otherwise.** `schtasks` reports the same "Ready" whether the lane crashed or
+  was closed on purpose. So there is one switch (`POST /api/model-lanes/auto`,
+  off in one immediate press from either app, on by default because that is what
+  he asked for), and every automatic restart is announced. **The residual risk is
+  stated plainly wherever this is written down: with the switch on, Jarvis will
+  start a lane he stopped on purpose, and will tell him it did.** Only he can say
+  which it was.
+- **Both apps, and nowhere one-sided.** One sentence, written by the backend, is
+  drawn verbatim by the Jarvis bar, the widget and the phone. The HUD window
+  keeps only the standing line for the reason it already had no button
+  (`hud_proxy.rs`'s five-read allow-list).
+
+**Verified at the desk** (nothing below touched his lanes; every check injects
+its own probe and its own stand-in for the start): `backend/test_model_lanes.py`
+159 passed, 0 failed; `jarvis-desktop/tests/lane-auto.mjs` 16 checks, wired into
+`npm run test:ui`; `./gradlew testDebugUnitTest --offline` 2,346 tests, 0
+failures; `tools/check_parity.py`, `check_feature_list.py` and
+`check_docs_map.py` clean. See the CHANGELOG entry for the full list.
+
+**Seven checks were red on the base branch before this work, and are fixed with
+it.** #418 put `model-lanes.patch` at the tail of the patch stack without
+carrying it through the checks that pin the tail: five backend suites
+(`test_devices.py`, `test_gate_risk_rows.py`, `test_gate_touches.py`,
+`test_referee.py`, `test_screen_attach.py`) keep an allow-list of the patches
+written after them, and `test_uncensored_optins.py` plus
+`jarvis-desktop/tests/pictures.mjs` named the loader's old neighbour and its old
+anchor line. Each was run on `feat/start-the-lane` **unmodified** first and
+failed there identically, so this is the branch's own state, not something this
+work broke. All seven are green now.

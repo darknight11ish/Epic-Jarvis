@@ -375,6 +375,23 @@ class JarvisApi(
     suspend fun startModelLane(): ApiResult<ModelLaneInfo> =
         postJsonFor(ModelLane.START_PATH)
 
+    /**
+     * Say whether the PC restarts a dead model lane by itself - the owner's own
+     * switch (`ModelLane.AUTO_PATH`, the owner's decision of 2026-10-14).
+     *
+     * The body is `{"on": true|false}` and NOTHING else ([ModelLane.autoBody]):
+     * it is one fact about the lane the chat is on, so no tap can aim it at
+     * another lane or at both. Both directions are immediate and neither raises
+     * a card - OFF only narrows what Jarvis does, and ON is the same action the
+     * Start button beside it takes in the same second.
+     *
+     * A 500 (the PC could not write the file) carries the PC's own plain
+     * sentence and is an answer, not a transport error: the switch is left
+     * exactly as it was, and [ModelLane.clearsWarning] is unaffected.
+     */
+    suspend fun setModelLaneAuto(on: Boolean): ApiResult<ModelLaneInfo> =
+        postJsonFor(ModelLane.AUTO_PATH, ModelLane.autoBody(on))
+
     suspend fun pending(): ApiResult<List<PendingItem>> = pendingRead().map { it.items }
 
     /**
@@ -1615,10 +1632,10 @@ class JarvisApi(
      * one would lose the sentence saying why, and the app would show a generic
      * failure over a perfectly good explanation.
      */
-    private suspend fun postJsonFor(path: String): ApiResult<ModelLaneInfo> =
+    private suspend fun postJsonFor(path: String, json: String = "{}"): ApiResult<ModelLaneInfo> =
         withContext(Dispatchers.IO) {
             val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
-            val body = "{}".toRequestBody("application/json".toMediaType())
+            val body = json.toRequestBody("application/json".toMediaType())
             val req = Request.Builder().url(target).post(body).authed().build()
             runCatching {
                 shortCall.newCall(req).execute().use { resp ->

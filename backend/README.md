@@ -19204,16 +19204,41 @@ nothing that clears a rush latch.
 
 **The two routes** (both behind the same origin and token checks as `/api/status`):
 
-* **`GET /api/model-lanes`** - the state, this PC's own `task` name, `can_start` and the
-  PC's own `why`/`message`. A read; it starts nothing and asks the lane one question.
+* **`GET /api/model-lanes`** - the state, this PC's own `task` name, `can_start`, the
+  PC's own `why`/`message`, and what Jarvis did about a dead lane by itself (`auto`,
+  `auto_attempts`, `auto_limit`, `auto_capped`, and the one sentence `auto_note`). A read;
+  it starts nothing and asks the lane one question.
 * **`POST /api/model-lanes/start`** - the action. An empty body is the whole contract.
   200 already answering, 202 starting, 409 refused, 502 the PC would not start its task.
+* **`POST /api/model-lanes/auto`** - the owner's switch for whether JARVIS restarts a
+  dead lane by itself (2026-10-14: "Also restart the lane automatically when it dies").
+  `{"on": true|false}`, one key and nothing else, both directions immediate and neither
+  raising a card; a 400 for a body that names a lane or says `"all"`, and a 500 when the
+  PC could not write its own setting file.
+
+**Jarvis restarts the lane itself** (the owner's decision of 2026-10-14). One daemon
+thread, armed by the same install block through `watch_start()` - deliberately NOT by
+`install()`, so no test that wires the routes up can start a lane as a side effect. It
+probes the lane's own `/api/tags` every 30 s (one loopback GET, no model call), and when
+the lane has been down for two beats in a row it restarts it through **exactly the same
+`start()`** as the button: the same task lookup, the same `["schtasks", "/run", "/tn",
+<name>]` as argv, the same 90-second watch. The limits: at most **3** automatic starts in
+one episode, a **5-minute cooldown that doubles to 10**, and an episode ends only when the
+lane has really been back - **10 minutes of answering**, not one lucky probe, so a
+flapping lane does not get a fresh three attempts every time it twitches. **At the cap it
+stops**: the state goes back to plain `down`, and what remains is the standing warning
+PR #409 built, with the button still there and one plain sentence saying it has stopped
+trying. A deliberate stop cannot be told from a crash - `schtasks` reports the same
+"Ready" either way - so the answer is the owner's own switch, off in one immediate press
+from either app, plus the fact that every automatic restart is said. The residual risk is
+stated in `docs/ARCHITECTURE.md` §3 and §8 and `docs/JARVIS-API.md` §132.3.
 
 `docs/JARVIS-API.md` section 132 has the fields, the status codes and the reasoning;
 `docs/ARCHITECTURE.md` section 8 has why the HUD window keeps the line and has no button.
 
 **Where it is wired in.** `model-lanes.patch` adds ONE `try: import
-jarvis_model_lanes; print(jarvis_model_lanes.install(...))` block to the install chain,
+jarvis_model_lanes; print(jarvis_model_lanes.install(...)); print(
+jarvis_model_lanes.watch_start())` block to the install chain,
 appended to the block `pictures.patch` writes and immediately **before**
 `plugin-loader.patch` - which must stay last of all (`tools/check_plugins.py` checks both
 halves of that, and requires the loader's own hunk to anchor on the block above it, which

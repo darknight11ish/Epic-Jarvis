@@ -88,6 +88,7 @@ memory-prefix.patch	memory-prefix/3040b3d.patch	3040b3dc0803600ff1ccd92e8ed6460c
 memory-safety.patch	memory-safety/3d8df73.patch	3d8df73437d50b3b98382c87bd41012e637e0cb4	2026-09-19T17:53:10Z	fix(backend): the audit's Python findings
 memory-safety.patch	memory-safety/fcdba5d.patch	fcdba5d698e7c6c0e21f224cb87734a9a0961058	2026-09-15T01:20:34Z	Master audit: the worst finding was a cloud lane nobody re-filtered
 memory-safety.patch	memory-safety/6ccc6e0.patch	6ccc6e015278a0ef2d9a1798426112d43fd288ad	2026-09-14T23:42:51Z	Memory: stop the destructive paths, and start the event pump
+model-lanes.patch	model-lanes/723780a.patch	723780a74b61bf5fd23a1f41c0bd6102440f6440	2026-10-14T01:35:16-07:00	feat(status): the dead-lane warning offers one button, and it runs his own task
 note-capture.patch	note-capture/92fa868.patch	92fa8686833d4ef1bf6240f51c8877f1ac0fdd4e	2026-09-24T01:51:49Z	Backend: Obsidian as a note target (#obs) and its vault searched as a folder
 note-capture.patch	note-capture/d37739c.patch	d37739c4ce0790869ce61aa3081983fed57908a2	2026-09-23T23:03:28Z	Logseq and Joplin notes that are really filed
 ollama-direct.patch	ollama-direct/b2c3a98.patch	b2c3a989bd85f94967c053e5140e94b301f5d7db	2026-10-06T23:24:11-07:00	the cloud lane's resolution leaves the HUD, and the six rehearsals find their text again

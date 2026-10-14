@@ -782,7 +782,14 @@ def t_the_patch_and_the_lists():
              # big-coder.patch (2026-10-11) is appended after it, before
              # plugin-loader.patch: two ADDED route blocks in jarvis_hud.py, no
              # gate list, no tier row and no _RISK row.
-             "big-coder.patch"}
+             "big-coder.patch",
+             # model-lanes.patch (2026-10-13, "Start the local model") is appended
+             # after that, still before plugin-loader.patch: ONE ADDED install
+             # block in jarvis_hud.py, and no gate list, no tier row and no _RISK
+             # row - the automatic lane restart raises no card and answers no
+             # card, so it adds no action to the gate - and it therefore rewrites
+             # nothing referee.patch wrote.
+             "model-lanes.patch"}
     check("referee.patch is the last patch in apply-patches.ps1's list, bar the ones written after it",
           [n for n in order if n not in later][-1] == "referee.patch", order[-3:])
     gate, log = _stack.stand_in("jarvis_gate.py")

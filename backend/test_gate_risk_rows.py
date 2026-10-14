@@ -192,7 +192,14 @@ def t_the_patch_is_registered_last():
              # big-coder.patch (2026-10-11) is appended after it, before
              # plugin-loader.patch: two ADDED route blocks in jarvis_hud.py, no
              # gate list, no tier row and no _RISK row.
-             "big-coder.patch"}
+             "big-coder.patch",
+             # model-lanes.patch (2026-10-13, "Start the local model") is appended
+             # after that, still before plugin-loader.patch: ONE ADDED install
+             # block at the end of the install chain in jarvis_hud.py, and no gate
+             # list, no tier row and no _RISK row - it adds no action to the gate
+             # at all - so it rewrites nothing the two stale rows this patch
+             # removes.
+             "model-lanes.patch"}
     check("it is LAST, like every new patch here, bar the ones written after it",
           [n for n in names if n not in later][-1] == "gate-risk-rows.patch",
           names[-3:] if names else names)

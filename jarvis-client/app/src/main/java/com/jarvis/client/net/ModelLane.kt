@@ -41,6 +41,9 @@ object ModelLane {
     /** The one action. Takes an empty body, and that is the whole point. */
     const val START_PATH = "/api/model-lanes/start"
 
+    /** The owner's own switch: does the PC restart a dead lane by itself? */
+    const val AUTO_PATH = "/api/model-lanes/auto"
+
     /** The three states the PC reports. Never invented here. */
     const val UP = "up"
     const val STARTING = "starting"
@@ -52,6 +55,29 @@ object ModelLane {
      * `START_WORDS`), because both apps are offering one action on one fact.
      */
     const val START = "Start the local model"
+
+    /**
+     * The switch's own words while the PC IS restarting a dead lane by itself:
+     * the press turns that off. The desktop's switch says the same thing
+     * (`jarvis-desktop/src/lane-auto.js` `AUTO_SWITCH_OFF_WORDS`).
+     */
+    const val AUTO_SWITCH_OFF = "Don't restart it for me"
+
+    /** And while it is off: the press turns it back on. Immediate, no card. */
+    const val AUTO_SWITCH_ON = "Restart it automatically again"
+
+    /**
+     * What a press on that switch did not manage to send. Plain, and never
+     * softened into a change: the switch stays where it was.
+     */
+    const val AUTO_UNREACHED =
+        "The PC did not answer, so automatic restarting was not changed."
+
+    /**
+     * The body the switch sends, and the only thing in it - one fact about the
+     * one lane the chat is on, so nothing here can name another.
+     */
+    fun autoBody(on: Boolean): String = if (on) "{\"on\": true}" else "{\"on\": false}"
 
     /** Mid-press, and until the lane answers or runs out of time. */
     const val STARTING_WORDS = "Starting\u2026"
@@ -170,6 +196,59 @@ object ModelLane {
     }
 
     /**
+     * The line the phone draws about what JARVIS did by itself, or "" when
+     * there is nothing to say (the owner's decision of 2026-10-14: "Also
+     * restart the lane automatically when it dies").
+     *
+     * IT IS THE PC'S OWN SENTENCE, VERBATIM - [ModelLaneInfo.autoNote]. This
+     * phone composes nothing: one place writes the words, so the phone, the
+     * Jarvis bar and the widget cannot come to three ways of saying one fact
+     * (the same rule the approval notice follows, ARCHITECTURE §3). The PC
+     * sends it whenever there is something to say, including while the lane is
+     * UP - "it went down and Jarvis started it again" is news about a lane that
+     * is now working, which is exactly when the standing warning has cleared.
+     */
+    fun notice(info: ModelLaneInfo?): String = info?.autoNote.orEmpty().trim()
+
+    /**
+     * Whether the switch is offered, and what it says. Empty when this PC does
+     * not report the switch at all ([ModelLaneInfo.auto] is null on an older
+     * backend), because a phone must not offer to turn off something that was
+     * never on.
+     */
+    fun switchWords(info: ModelLaneInfo?): String = when (info?.auto) {
+        true -> AUTO_SWITCH_OFF
+        false -> AUTO_SWITCH_ON
+        else -> ""
+    }
+
+    /**
+     * What a press on the switch asks the PC for: `false` to turn automatic
+     * restarting off, `true` to turn it back on, null when there is no switch
+     * to press. Never what this phone will claim happened.
+     */
+    fun switchAsks(info: ModelLaneInfo?): Boolean? = when (info?.auto) {
+        true -> false
+        false -> true
+        else -> null
+    }
+
+    /**
+     * Whether the PC reports the lane as down. Used to decide nothing here -
+     * the standing line keeps its own rule (`ModelWords.isDown`) - and read by
+     * the tests to hold that this file never invents a verdict of its own.
+     */
+    fun isDown(info: ModelLaneInfo?): Boolean = info?.state == DOWN
+
+    /**
+     * What to say when a press on the switch could not even be sent. The PC's
+     * own sentence when it sent one, and otherwise the plain one above: never a
+     * claim that something changed.
+     */
+    fun autoFailureWords(said: String): String =
+        said.trim().ifBlank { AUTO_UNREACHED }
+
+    /**
      * The one body this phone ever sends. Empty, so no tap can name a lane the
      * chat is not on and nothing can start both lanes at once.
      */
@@ -231,6 +310,27 @@ data class ModelLaneInfo(
     @SerialName("waited_s") val waitedS: Double? = null,
     /** A ready-made plain sentence, when the PC has one. */
     val message: String = "",
+    /**
+     * What JARVIS did about a dead lane by itself, in the PC's own words - the
+     * sentence the phone draws verbatim, and composes nothing of its own. Empty
+     * when there is nothing to say; it is reported while the lane is UP, too,
+     * because "it went down and Jarvis started it again" is news about a lane
+     * that is working again.
+     */
+    @SerialName("auto_note") val autoNote: String = "",
+    /**
+     * Whether the PC restarts a dead lane by itself - the owner's own switch.
+     * NULLABLE ON PURPOSE: null is "this PC did not say", which is an older
+     * backend, and then no switch is drawn at all. Only the PC's own `true` or
+     * `false` offers one.
+     */
+    val auto: Boolean? = null,
+    /** How many automatic starts this episode has spent. */
+    @SerialName("auto_attempts") val autoAttempts: Int = 0,
+    /** The PC's own cap on those. */
+    @SerialName("auto_limit") val autoLimit: Int = 0,
+    /** True once the PC has stopped trying and fallen back to the warning. */
+    @SerialName("auto_capped") val autoCapped: Boolean = false,
     /** The PC's own refusal sentence, when it refused. */
     val error: String = "",
     /** True when this answer is the press's own acknowledgement. */

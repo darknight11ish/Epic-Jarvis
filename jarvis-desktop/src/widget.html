@@ -204,6 +204,25 @@
           <span id="widget-model-start-note" hidden></span>
         </p>
 
+        <!-- What JARVIS did about it, by itself (lane-auto.js; the owner's
+             decision of 2026-10-14: "Also restart the lane automatically when
+             it dies").
+
+             Its own row, not a line in the one above: that row is hidden the
+             moment the lane answers, and "it went down and Jarvis started it
+             again" is news about a lane that is now WORKING. The words are the
+             backend's own sentence (`auto_note`), drawn here and composed
+             nowhere, so this window, the bar and the phone say one thing.
+
+             The button is what tells an automatic restart apart from a
+             deliberate stop - a dead process carries no intent, so only the
+             owner can say which it was. Off is immediate; turning it back on is
+             the same action the button above takes in the same second. -->
+        <p class="widget-model widget-auto" id="widget-auto" hidden>
+          <span id="widget-auto-text"></span>
+          <button class="btn btn-quiet" type="button" id="widget-auto-switch" hidden></button>
+        </p>
+
         <!-- What Jarvis is doing right now, one bounded step at a time -
              docs/AUTONOMY-PROPOSALS.md §3c. `announce()` already fires this
              text on the backend today; this is the first place on the

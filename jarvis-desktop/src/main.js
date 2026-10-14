@@ -287,6 +287,11 @@ import {
   refusalWords,
   startUntilSettled,
 } from "./lane-start.js";
+// ... and what JARVIS did about it by itself (`lane-auto.js`, the owner's
+// decision of 2026-10-14). The backend restarts a dead lane on its own thread
+// and writes the sentence; this draws it, with the one press that tells an
+// automatic restart apart from a deliberate stop.
+import { paintAutoNotice } from "./lane-auto.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -1855,17 +1860,19 @@ function applyHealth(report) {  if (!report || !Array.isArray(report.services)) 
   // ones (lane-warning.js), the same the widget and the HUD window show.
   const ollama = report.services.find((service) => service.id === "ollama");
   const core = report.services.find((service) => service.id === "jarvis");
-  const laneDown = paintLaneWarning(
+  paintLaneWarning(
     document,
     ollama ? ollama.online !== false : null,
     core ? core.online : null,
   );
-  // And the ONE action the owner decided that line should offer
-  // (2026-10-13): "Start the local model" asks the PC to run its OWN Windows
-  // logon task for the lane the chat uses, then watches that lane until it
-  // answers. Only while the line is really drawn - so this bar never invents a
-  // lane, and a press the PC would refuse is not offered.
-  if (laneDown) refreshLaneStart(); else clearLaneStart();
+  // Both halves of the lane row are drawn from ONE read of
+  // `/api/model-lanes` (`lane-start.js`'s button and `lane-auto.js`'s line about
+  // what Jarvis did by itself). It is read on every beat rather than only while
+  // the standing line is drawn, because "the model went down and Jarvis started
+  // it again" belongs to a lane that is UP - which is exactly when that line has
+  // cleared. The button hides itself when the lane answers, so one read serves
+  // both and nothing is drawn twice.
+  refreshLane();
 
   if (core && !core.online) {
     applyRoute({
@@ -1882,11 +1889,13 @@ function applyHealth(report) {  if (!report || !Array.isArray(report.services)) 
 }
 
 /* ==========================================================================
-   Starting the model lane that is down - the ONE action
+   The model lane's row - the ONE action, and what Jarvis did by itself
 
-   The owner's decision of 2026-10-13. The standing line above used to do
-   nothing; it now offers "Start the local model", which asks the PC to run ITS
-   OWN Windows logon task for the lane the chat uses, and then watches that lane
+   TWO owner decisions live here, on one read of one route.
+
+   "Start the local model" (2026-10-13): the standing line above used to do
+   nothing; it now offers the one action, which asks the PC to run ITS OWN
+   Windows logon task for the lane the chat uses, and then watches that lane
    until it answers. Nothing here builds a command line, and nothing here
    decides which lane: the backend looks the task up on the PC, by the half of
    its name a rename does not touch.
@@ -1896,74 +1905,98 @@ function applyHealth(report) {  if (!report || !Array.isArray(report.services)) 
    keeps reading `/api/model-lanes` until the lane answers or the PC says it did
    not come up, and only a real "up" clears anything. When it does not come up,
    the PC's own sentence is shown and the line stays standing.
+
+   And "Also restart the lane automatically when it dies" (2026-10-14): the
+   BACKEND does that now, on its own thread, and says so in `auto_note` - one
+   sentence written in one place. `lane-auto.js` draws it, with the one press
+   that tells an automatic restart apart from a deliberate stop, and this
+   window composes none of those words itself.
    ========================================================================== */
 
-/** The last read of the lane, as the button is drawn from it. */
+/** The last read of the lane, as both halves of the row are drawn from it. */
 let laneState = null;
 /** True while a press is being watched, so the button cannot be pressed twice. */
 let laneStarting = false;
+/** True while the switch's own press is in flight. */
+let laneAutoBusy = false;
+/** The PC's own refusal, or this app's plain sentence, for that switch. */
+let laneAutoFailure = "";
 
-/** Redraws the button from the last read, or from "starting" mid-press. */
-function paintLaneStart() {
+/** Redraws both halves of the row from the last read. */
+function paintLane() {
   if (laneStarting) {
+    // Mid-press, the last read is shown as "starting" so a slow press cannot
+    // look like a stalled one.
     paintStartButton(document, { ...(laneState || {}), state: "starting" },
       startTheLane);
-    return;
+  } else {
+    paintStartButton(document, laneState, startTheLane);
   }
-  paintStartButton(document, laneState, startTheLane);
+  paintAutoNotice(document, laneState, setLaneAuto, laneAutoFailure);
 }
 
-/** Reads the lane's state and draws the button from it. Never throws. */
+/** Reads the lane's state and draws the row from it. Never throws. */
 let laneAsking = false;
 
-async function refreshLaneStart() {
+async function refreshLane() {
   // One lane read at a time: the health beat can outlast a slow answer, and
   // stacked reads are how a window starts costing more than it looks.
   if (laneAsking) return laneState;
   laneAsking = true;
   try {
     // `invokeStrict`, because a refusal from the PC carries the sentence the
-    // owner is meant to read, and swallowing it would leave the button saying
+    // owner is meant to read, and swallowing it would leave the row saying
     // nothing about why.
     laneState = await invokeStrict("read_model_lane");
   } catch (err) {
     // No answer is not a lane that is down: keep what was last known. (An
-    // older backend has no route, so there is simply no button to offer.)
+    // older backend has no route, so there is simply no row to draw.)
     if (!laneState) {
       paintStartButton(document, null, null);
+      paintAutoNotice(document, null, null);
       return null;
     }
   } finally {
     laneAsking = false;
   }
-  paintLaneStart();
+  paintLane();
   return laneState;
 }
 
-/** Hides the button and its note, for a line that is no longer drawn. */
-function clearLaneStart() {
-  laneState = null;
-  laneStarting = false;
-  paintStartButton(document, null, null);
-  const note = document.getElementById("model-warn-start-note");
-  if (note) {
-    note.textContent = "";
-    note.hidden = true;
+/** The owner's press on the switch: off at once, on at once, no card. */
+async function setLaneAuto(on) {
+  if (laneAutoBusy) return;
+  laneAutoBusy = true;
+  laneAutoFailure = "";
+  paintLane();
+  try {
+    // The PC's own answer is the new reading, so the row is drawn from what
+    // really happened rather than from what was asked for.
+    const reply = await invokeStrict("set_model_lane_auto", { on: Boolean(on) });
+    if (reply) laneState = reply;
+  } catch (err) {
+    // The PC refused it or did not answer. Said plainly, and the switch is
+    // left exactly as it was - never a change this app claims but did not make.
+    laneAutoFailure = String((err && err.message) || err || "").trim()
+      || "The PC did not answer, so nothing changed.";
+  } finally {
+    laneAutoBusy = false;
   }
+  await refreshLane();
 }
 
 /** The press: ask the PC, then watch until the lane answers or the PC gives up. */
 async function startTheLane() {
   if (laneStarting) return;
   laneStarting = true;
-  paintLaneStart();
+  paintLane();
   const outcome = await startUntilSettled(
     () => invokeStrict("start_model_lane"),
     () => invokeStrict("read_model_lane"),
   );
   laneStarting = false;
   if (outcome && outcome.lane) laneState = outcome.lane;
-  await refreshLaneStart();
+  await refreshLane();
   const note = document.getElementById("model-warn-start-note");
   if (!note) return;
   if (outcome && !outcome.ok) {

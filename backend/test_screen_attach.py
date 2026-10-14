@@ -536,7 +536,14 @@ def t_hygiene():
              # big-coder.patch (2026-10-11) is appended after it, before
              # plugin-loader.patch: two ADDED route blocks in jarvis_hud.py, no
              # gate list, no tier row and no _RISK row.
-             "big-coder.patch"}
+             "big-coder.patch",
+             # model-lanes.patch (2026-10-13, "Start the local model") is appended
+             # after that, still before plugin-loader.patch: ONE ADDED install
+             # block at the end of jarvis_hud.py's chain - nowhere near the
+             # POST /api/screen route this patch's wrapper takes over - and no
+             # gate list, no tier row and no _RISK row, so the request body is
+             # still read once, and still by this wrapper.
+             "model-lanes.patch"}
     check("the patch that wires it is in the script's list, and last",
           "'screen-attach.patch'" in ps1 and "screen-attach.patch" in stack_order
           and [n for n in stack_order if n not in later][-1] == "screen-attach.patch")

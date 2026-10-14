@@ -377,8 +377,16 @@ check(
   "... and it sits immediately BEFORE plugin-loader.patch, which stays last of all",
   patchNames.length > 1
     && patchNames[patchNames.length - 1] === "plugin-loader.patch"
-    && patchNames[patchNames.indexOf("plugin-loader.patch") - 1] === "pictures.patch",
-  `the stack ends: ${patchNames.slice(-3).join(", ")}`,
+    // The entry immediately above the loader is the patch whose install block
+    // the loader's own hunk anchors on. That was pictures.patch until
+    // 2026-10-13, when "Start the local model" (model-lanes.patch) was inserted
+    // between the two: the rule and the position are unchanged, with a different
+    // patch in the slot, and pictures.patch is still above the loader. This
+    // check named pictures.patch alone, and so went red on `feat/start-the-lane`
+    // for a stack that is correct - fixed here, 2026-10-14.
+    && patchNames[patchNames.indexOf("plugin-loader.patch") - 1] === "model-lanes.patch"
+    && patchNames.indexOf("pictures.patch") < patchNames.indexOf("plugin-loader.patch"),
+  `the stack ends: ${patchNames.slice(-4).join(", ")}`,
 );
 // This branch's own section moved 124 -> 126 on 2026-10-11: main's 124 is the
 // picture-CARD module and 125 the uncensored opt-ins, so the next free number

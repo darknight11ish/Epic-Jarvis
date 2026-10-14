@@ -716,7 +716,16 @@ def t_the_patch_is_registered_and_carries_the_change():
              # plugin-loader.patch, and it touches jarvis_gate.py not at all
              # (ONE hunk, in jarvis_hud.py, ADDING one install block at the end
              # of the chain), so it rewrites nothing this patch wrote.
-             "pictures.patch"}
+             "pictures.patch",
+             # model-lanes.patch (2026-10-13, "Start the local model") is that
+             # same shape once more, and it now sits immediately BEFORE
+             # plugin-loader.patch (the loader's hunk was re-anchored onto ITS
+             # block): it touches jarvis_gate.py not at all - the automatic
+             # lane restart raises no card and answers no card, so it adds no
+             # action to the gate - and its ONE hunk in jarvis_hud.py ADDS an
+             # install block at the end of the chain, so it rewrites nothing
+             # this patch wrote.
+             "model-lanes.patch"}
     others = [n for n in names if n not in later]
     check("it is LAST in the stack, bar the ones written after it, and bar "
           "plugin-loader.patch (which must be last of all)",

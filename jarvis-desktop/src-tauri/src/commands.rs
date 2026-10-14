@@ -1898,6 +1898,57 @@ pub async fn start_model_lane(app: AppHandle) -> Result<serde_json::Value, Strin
     Err(server_sentence(status.as_u16(), PATH, &detail))
 }
 
+/// Whether Jarvis starts the model lane itself when it finds it down - `POST
+/// /api/model-lanes/auto`.
+///
+/// THIS IS THE OWNER'S OWN SWITCH, and it is the answer to the one thing an
+/// automatic restart cannot know: a dead process carries no intent, so "it
+/// crashed" and "I closed it on purpose" look exactly alike from here. OFF is
+/// immediate and only narrows what Jarvis does; ON is the same action the
+/// button beside it takes in the same second, so neither direction raises a
+/// card. The whole argument is in `backend/jarvis_model_lanes.py`'s header,
+/// `docs/ARCHITECTURE.md` §8 and `docs/JARVIS-API.md` §132.3.
+///
+/// One fact about this PC's one lane, and the body says nothing else: there is
+/// no lane name in it, so no client can aim this at another lane.
+#[tauri::command]
+pub async fn set_model_lane_auto(app: AppHandle, on: bool) -> Result<serde_json::Value, String> {
+    const PATH: &str = "/api/model-lanes/auto";
+    require_base_allowed(&app)?;
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(HEALTH_TIMEOUT))?
+        .post(format!("{base}{PATH}"))
+        .headers(jarvis_headers(&app)?)
+        .json(&serde_json::json!({ "on": on }))
+        .send()
+        .await
+        .map_err(|e| crate::plain_errors::unreachable_words(e.is_connect(), e.is_timeout()))?;
+    let status = response.status();
+    let detail = response.text().await.unwrap_or_default();
+    let body: serde_json::Value = serde_json::from_str(&detail).unwrap_or(serde_json::Value::Null);
+    if status.is_success() {
+        return Ok(body);
+    }
+    if status.as_u16() == 404 {
+        return Err(format!(
+            "this Jarvis backend has no `{PATH}` route - apply the backend \
+             patches (model-lanes.patch) to turn it on"
+        ));
+    }
+    // The backend's own sentence, when it sent one: it says what happened, and
+    // the switch is left exactly as it was.
+    if let Some(said) = body
+        .get("error")
+        .or_else(|| body.get("message"))
+        .and_then(|v| v.as_str())
+    {
+        if !said.trim().is_empty() {
+            return Err(said.to_string());
+        }
+    }
+    Err(server_sentence(status.as_u16(), PATH, &detail))
+}
+
 /// The counts and the one-line summary. An optional service (the cloud
 /// escalation lane) is counted only when it answers; when it does not, the
 /// summary says so in a separate, calm sentence instead of listing it as
