@@ -2299,3 +2299,27 @@ his thinking off.**
   shown, marked, because an empty card is not an answer either. The working-out
   is not saved as a fact and never reaches the event bus.
 
+Decided 2026-10-14, found while fixing the above and settled the same day:
+**`docs/DATA-BACKUP.md` stays ONE filename carrying BOTH backup pages, each
+under its own clear heading, and whoever merges second combines them.**
+
+* **The state this is about, checked rather than assumed.** The path is on no
+  branch of `main` (`git cat-file -e origin/main:docs/DATA-BACKUP.md` exits
+  128). **Four** open pull requests add it, and they are two different documents:
+  #403, #406 and #407 are three versions of ONE page, the weekly SQLite snapshot,
+  titled `# Your Jarvis data, and the copy that now exists`; **#414** is a
+  different page entirely, the app's own encrypted `.jbak` backup, titled
+  `# The app's own backup: what it covers now` (123 lines). Whichever family
+  merges second hits an add/add collision on that one path.
+* **The headings to use, so the combining is mechanical.** The page that merges
+  first keeps its own `# ` title as the page's title. The second one's `# ` title
+  becomes a `## ` section heading - `## The app's own backup: what it covers now`
+  - with its own `## ` subheadings demoted to `### `. Every fact from both
+  documents stays and nothing new is added. (Naming one top title for the pair
+  and demoting both halves to `## ` is equally acceptable; what is not is
+  dropping either half, or renaming the file.)
+* **Why not two filenames.** Both documents are about the same subject - the
+  copies of his data - and a reader looking for "the backup page" should find
+  both tools and what each one covers. It is also the smaller change: the four
+  PRs already carry links to this path.
+
