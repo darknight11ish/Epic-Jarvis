@@ -1594,14 +1594,55 @@ def _settings_tool_text() -> str:
     in the answer it gets when it names one that cannot be changed - which is
     the moment it needs the list, at no cost on every other turn. The owner can
     also ask "what can I change?" and get the same list, through the phrase
-    grammar that already answers it."""
-    head = ("Change one of Jarvis's own on/off settings, named the way the owner said it - "
-            "any wording; you match it, this is not a fixed phrase. For example "
-            "\"prompt coach\", \"quiet hours\", \"web search\", \"humour\". ")
-    tail = (" \"value\" is on or off. A change that loosens a rule, or turns on something "
-            "that reads or reaches more, raises ONE approval card and changes nothing until "
-            "it is answered; a cosmetic one happens at once. If Jarvis cannot change that "
-            "setting, say so plainly - never claim it was changed.")
+    grammar that already answers it.
+
+    AN INSTRUCTION, NOT A NOTE ABOUT THE FEATURE (2026-10-13, the field test).
+    It used to read as a description of the tool - third person throughout
+    ("named the way the owner said it", "If Jarvis cannot change that
+    setting"), its examples bare setting NAMES ("prompt coach", "quiet
+    hours"), and its last sentence offering an answer in words as a fine
+    outcome ("say so plainly"). Measured on the owner's own PC and model
+    (qwen3.5:9b, the everyday model): HEAD's whole module and this one, the
+    same seven owner-worded requests three times each, through the real turn
+    (`run_local_turn`, the owner's own `[tools].enabled` list, each question
+    tagged `provenance: "typed"` as both apps tag it, and a recording setter so
+    a call is visible and changes nothing), plus the calculator request as a
+    control:
+
+        old text (285 tokens)   0 of 21 calls, temperature pinned to 0
+                                3 of 21, the model's own temperature of 1.0
+                                calculator control called 3/3 and 2/3
+        this text (295 tokens) 18 of 21, temperature pinned to 0
+                               13 of 21, the model's own 1.0
+                                calculator control called 3/3 and 3/3
+
+    So the plumbing was never the problem and the text was: the same requests,
+    in the same harness, went from no calls at all to most of them, while the
+    control called its own tool in every run. Answers in those runs claimed
+    changes that had not happened ("Prompt coach is switched off. Done.", "I've
+    turned web search off for you.") - the looks-like-success failure this tool
+    exists to end, and the app's own "Nothing was actually done" backstop line
+    is what contradicted them.
+
+    WHAT THIS IS NOT, said plainly. It is not a promise of reliability: at the
+    model's own temperature one request in twenty still finds no call; "turn on
+    background learning" was never called in any run, because the model does not
+    believe that name is a setting; and a QUESTION about a setting ("is humour
+    on at the moment?") drew one call in six samples at that temperature, which
+    the tool's own result would report as a change attempt rather than a read
+    (the tool cannot read a setting). The phrase grammar in jarvis_quick.py is
+    still the door that answers every wording without the model, and the
+    "nothing was actually done" line is still the backstop. See `SETTINGS_TOOL`
+    above."""
+    head = ("Call this tool when the owner asks you to change one of Jarvis's own "
+            "settings, in any words - do not ask first, just call it. Examples: "
+            "\"turn on humour\", \"switch the prompt coach off\", \"enable web "
+            "search\", \"turn on quiet hours\". \"setting\" is the setting in "
+            "their words, e.g. \"humour\"; \"value\" is on or off. ")
+    tail = ("Its own result says what happened: a change that loosens a rule or "
+            "reads more waits for one approval card, a cosmetic one changes at "
+            "once. Repeat that result - never say a setting changed when it did "
+            "not.")
     return head + tail
 
 
@@ -4991,9 +5032,12 @@ TOOL_GROUPS = (
      ("control_computer", "control_phone", "browser_control", "propose_plan")),
     # Changing one of Jarvis's own settings by name (SETTINGS_TOOL,
     # 2026-10-13). Its own group rather than the core, for exactly the reason
-    # the read_web_page note above gives: its description is 285 tokens, the
+    # the read_web_page note above gives: its description is 295 tokens, the
     # core is sent on EVERY turn, and a group costs only its own name and its
     # one line (about 23 tokens, measured - test_short_tool_list.py pins it).
+    # (The description was rewritten from 285 to 295 tokens on 2026-10-13 for
+    # the reason _settings_tool_text's own docstring records: at 285 it was
+    # read as a note about the tool and the model did not call it.)
     # It fits the same pattern read_web_page set: one deliberate act, which
     # raises its own approval card whenever the setting's own rule says so.
     # Reached only with `[tools] short_list = true`, which ships OFF.

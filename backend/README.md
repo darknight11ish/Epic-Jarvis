@@ -539,7 +539,18 @@ is `$SHIPPED` near the top of the script, and the same list is `SHIPPED` in
   mapped to the existing `change_own_config` action in `jarvis_gate.py` by
   `gate-entries.patch` (the row `test_agent.py` requires, since it insists every
   tool's lookup name is a key of that table) - and that patch's previous version
-  is recorded in `backend/patch-history/` as usual.
+  is recorded in `backend/patch-history/` as usual. **Its description was
+  rewritten the same day (2026-10-13, 285 -> 295 tokens) because the field test
+  found the model would not call it:** the old text read as a note ABOUT the
+  tool, and an owner-worded request about `humour` was answered in words with
+  no call at all, sometimes claiming the change had happened. The new text is
+  an instruction in the second person whose examples are whole sentences the
+  owner says, and it names the tool's own result as what reports the change.
+  Nothing else moved: no tier, no card, no setter. The measurement, the
+  calculator control and both before/after figures are in
+  `_settings_tool_text`'s docstring in `jarvis_agent.py`, and
+  `backend/test_settings_tool.py` pins the offered-by-default half, the wording
+  and the tier behind it.
 
 Every import of these is wrapped, so a missing one never stops anything - it
 just switches a feature off without a word. Until 2026-09-24 the script

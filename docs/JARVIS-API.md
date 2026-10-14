@@ -19699,8 +19699,16 @@ version of this work, and both are fixed with regression cases:
 name). **It ships ON**, by the owner's decision of 2026-10-13 ("yes turn it on for my
 pc. it should also be enabled by default") - the second tool after `web_search` to be
 switched on out of the box, and `[tools].enabled` in `jarvis-framework.toml` says so.
-(Turning it back off is dropping that one name from that list.) Its description is 285
-tokens, so it has its own `more_tools` group rather than a place in the core.
+(Turning it back off is dropping that one name from that list.) Its description is 295
+tokens, so it has its own `more_tools` group rather than a place in the core. **The text
+of that description was rewritten on 2026-10-13**, from 285 tokens to 295, after the field
+test found the model would not call the tool: the old text read as a note ABOUT the tool
+(third person, bare setting names as its examples, and "say so plainly" offering an answer
+in words as a fine outcome), and the model answered all four of the owner's own requests
+about `humour` in words with no call at all. The measurement, the control that proves the
+plumbing was never the problem, and the exact sentences are in
+`_settings_tool_text`'s own docstring in `jarvis_agent.py`. **Nothing else about the tool
+changed**: no tier, no card, no setter, no route.
 
 Desktop and phone: **both, with nothing app-specific** - the tool is reached through the
 same `/api/chat` turn both apps already use, so `docs/ARCHITECTURE.md` §8 needs no entry.
