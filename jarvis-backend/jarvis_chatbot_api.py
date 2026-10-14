@@ -946,9 +946,21 @@ def set_price(pid: str, model: str, pin, pout) -> dict:
         data["prices"].setdefault(pid, {})[model] = {
             "in": a, "out": b, "set": time.strftime("%Y-%m-%d", time.localtime(_now()))}
         _save(data)
+    # A price of zero is allowed - a service can genuinely cost nothing - but it
+    # is the one price that makes the monthly money limit unenforceable: every
+    # answer is counted as free, so `money_check` can never reach the limit and
+    # never refuses the lane. Said out loud here rather than left for the owner
+    # to discover, because the command line is the only way in and the silence
+    # is what made this a finding (`E5` in the 2026-10-07 cloud-lane audit).
+    free = (a == 0 and b == 0)
     return {"ok": True, "said": f"{PRESETS[pid].company}, model {model}: ${a:g} per million "
                                 f"word-pieces in, ${b:g} out. Jarvis uses this price from the "
-                                f"next answer; what is already counted stays as it was."}
+                                f"next answer; what is already counted stays as it was."
+                                + ("" if not free else
+                                   " Both prices are zero, so every answer counts as free and the "
+                                   "monthly money limit cannot be reached for this model: it is "
+                                   "recorded, not enforced. Set a real price if you want it to "
+                                   "hold.")}
 
 
 def reset_price(pid: str, model: str) -> dict:
