@@ -1192,6 +1192,12 @@ class MainActivity : FragmentActivity() {
         }
         val status by JarvisRuntime.status.collectAsState()
         val version by JarvisRuntime.version.collectAsState()
+        // The lane the PC's chat uses, and the one action the standing model
+        // line offers (the owner's decision of 2026-10-13). Collected here and
+        // carried in HomeState, like every other value the screen draws.
+        val modelLane by JarvisRuntime.modelLane.collectAsState()
+        val laneStartingNow by JarvisRuntime.laneStarting.collectAsState()
+        val laneFailureNow by JarvisRuntime.laneFailure.collectAsState()
         val pending by JarvisRuntime.pending.collectAsState()
         // Collected here, and carried in HomeState below, for two reasons.
         //
@@ -3149,6 +3155,13 @@ class MainActivity : FragmentActivity() {
                             faceSerious = faceSerious,
                             power = power,
                             status = status,
+                            // The lane the PC's chat uses, and the one action
+                            // beside the standing model line (the owner's
+                            // decision of 2026-10-13). Read only while that
+                            // line is drawn; see JarvisRuntime.
+                            modelLane = modelLane,
+                            laneStarting = laneStartingNow,
+                            laneFailure = laneFailureNow,
                             pending = pending,
                             attention = attention,
                             notice = notice,
@@ -3288,6 +3301,15 @@ class MainActivity : FragmentActivity() {
                                     draft = it
                                 },
                                 onDropShared = { sharedHeld = null },
+                                // The standing model line's ONE action
+                                // (2026-10-13): ask the PC to run its own
+                                // Windows task for the lane the chat uses, then
+                                // watch that lane until it answers. Nothing is
+                                // cleared here - the warning goes only when the
+                                // lane really answers (JarvisRuntime).
+                                onStartModelLane = {
+                                    scope.launch { JarvisRuntime.startModelLane() }
+                                },
                                 onForgetLook = { com.jarvis.client.net.ScreenLook.drop() },
                                 onStopWatching = { JarvisRuntime.stopScreenWatch() },
                                 onStartPhoneWatch = { startPhoneWatch() },

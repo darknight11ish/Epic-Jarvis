@@ -347,6 +347,34 @@ class JarvisApi(
     suspend fun status(): ApiResult<StatusInfo> =
         get("/api/status", StatusInfo.serializer())
 
+    /**
+     * The lane the PC's chat uses, and whether "Start the local model" would
+     * really do anything (backend/model-lanes.patch; [ModelLane]). A read: it
+     * starts nothing, and it asks the lane one question on the PC.
+     *
+     * A PC whose backend is older than this answers 404, which is a failure
+     * here and NOT a lane that is down: the standing line keeps its own rule
+     * (only the PC's `ollama` field is a verdict - [com.jarvis.client
+     * .ModelWords]), and the button is simply not offered.
+     */
+    suspend fun modelLane(): ApiResult<ModelLaneInfo> =
+        get(ModelLane.PATH, ModelLaneInfo.serializer())
+
+    /**
+     * Ask the PC to start the lane that is down - the ONE action.
+     *
+     * The body is empty on purpose ([ModelLane.startBody]): the PC starts the
+     * lane it is pointed at, so no tap can name another lane and nothing can
+     * start both at once. The answer is an acknowledgement, never a claim the
+     * lane is up - a caller reads [modelLane] until it settles.
+     *
+     * A 409 (refused) and a 502 (the PC would not start its own task) both
+     * carry the PC's own plain sentence, and both are answers rather than
+     * transport errors: they are returned with that sentence intact.
+     */
+    suspend fun startModelLane(): ApiResult<ModelLaneInfo> =
+        postJsonFor(ModelLane.START_PATH)
+
     suspend fun pending(): ApiResult<List<PendingItem>> = pendingRead().map { it.items }
 
     /**
@@ -1573,6 +1601,44 @@ class JarvisApi(
                     val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
                         .getOrNull()
                     DesktopWrite.classify(resp.code, obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
+     * One POST whose answer is the PC's own record, whatever its status code -
+     * used by [startModelLane], where 202 ("starting"), 200 ("already
+     * answering"), 409 (refused) and 502 ("the PC would not start its task")
+     * all carry a body the owner is meant to read.
+     *
+     * An answered refusal is an ANSWER, not a transport error: turning it into
+     * one would lose the sentence saying why, and the app would show a generic
+     * failure over a perfectly good explanation.
+     */
+    private suspend fun postJsonFor(path: String): ApiResult<ModelLaneInfo> =
+        withContext(Dispatchers.IO) {
+            val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
+            val body = "{}".toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    val info = obj?.let {
+                        runCatching {
+                            JarvisJson.decodeFromJsonElement(ModelLaneInfo.serializer(), it)
+                        }.getOrNull()
+                    }
+                    when {
+                        // Any answered status with the route's own record: the
+                        // state and the sentence are both in it.
+                        info != null -> ApiResult.Ok(info)
+                        resp.code == 401 || resp.code == 403 -> ApiResult.Failed(ApiError.BadToken)
+                        resp.code == 404 -> ApiResult.Failed(ApiError.NotFound)
+                        resp.isSuccessful -> ApiResult.Failed(ApiError.Malformed("not a lane record"))
+                        else -> ApiResult.Failed(ApiError.Server(resp.code, text.take(200)))
+                    }
                 }
             }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }

@@ -52,6 +52,17 @@ import { faceWords } from "./face-words.js";
 // imports the same file, so the two cannot come to different wording for one
 // fact - and the phone's copy is read out of it by ModelWordsTest.
 import { laneWarning, paintLaneWarning, startHealthBeat } from "./lane-warning.js";
+// ... and the ONE action the owner decided that line should offer: start the
+// model lane that is down, by running HIS OWN Windows logon task on the PC
+// (`lane-start.js`). Kept in its own file so `lane-warning.js` still holds no
+// verb for starting anything - `tests/lane-warning.mjs` checks exactly that,
+// and it is the check that notices if acting creeps back into the words.
+import {
+  paintStartButton,
+  refusalWords,
+  startButton,
+  startUntilSettled,
+} from "./lane-start.js";
 import { relayFaceVoice } from "./face-voice.js";
 import { relayFaceMoments } from "./face-moments.js";
 import { startSkyFeed } from "./sky-feed.js";
@@ -153,6 +164,8 @@ const dom = {
   model: $("widget-model"),
   modelText: $("widget-model-text"),
   modelFix: $("widget-model-fix"),
+  modelStart: $("widget-model-start"),
+  modelStartNote: $("widget-model-start-note"),
   gpuTemp: $("gpu-temp-compact"),
   routePill: $("route-pill"),
 
@@ -284,6 +297,112 @@ const TEMP_CRITICAL = 87;
 
 /** One health probe at a time: a slow PC must not stack them up. */
 let healthBusy = false;
+
+/* ==========================================================================
+   Starting the model lane that is down - the ONE action
+
+   The owner's decision of 2026-10-13. The standing line above used to do
+   nothing; it now offers "Start the local model", which asks the PC to run
+   ITS OWN Windows logon task for the lane the chat uses, and then watches that
+   lane until it answers. Nothing here builds a command line, and nothing here
+   decides which lane: the backend looks the task up on the PC, by the half of
+   its name a rename does not touch.
+
+   Starting is not arriving. `start_model_lane` returns as soon as the PC has
+   launched the task, so the press does NOT clear the row: `startUntilSettled`
+   keeps reading `/api/model-lanes` until the lane answers or the PC says it did
+   not come up, and only a real "up" clears anything. When it does not come up,
+   the PC's own sentence is shown and the row stays standing.
+   ========================================================================== */
+
+/** The last read of the lane, as the button is drawn from it. */
+let laneState = null;
+/** True while a press is being watched, so the button cannot be pressed twice. */
+let laneStarting = false;
+
+/** Redraws the button from the last read, or from "starting" mid-press. */
+function paintLaneStart() {
+  if (!dom.modelStart) return;
+  if (laneStarting) {
+    // While a start is in flight the last read is shown as "starting", so a
+    // slow press cannot look like a stalled one.
+    paintStartButton(document, { ...(laneState || {}), state: "starting" },
+      startTheLane);
+    return;
+  }
+  paintStartButton(document, laneState, startTheLane);
+}
+
+/** Reads the lane's state and draws the button from it. Never throws. */
+let laneAsking = false;
+
+async function refreshLaneStart() {
+  // One lane read at a time: the health beat can outlast a slow answer, and
+  // stacked reads are how a widget starts costing more than it looks.
+  if (laneAsking) return laneState;
+  laneAsking = true;
+  try {
+    // `invokeStrict`, because a refusal from the PC carries the sentence the
+    // owner is meant to read, and swallowing it would leave the button saying
+    // nothing about why.
+    laneState = await invokeStrict("read_model_lane");
+  } catch (err) {
+    // No answer is not a lane that is down: keep what was last known. (An
+    // older backend has no route, so there is simply no button to offer.)
+    if (!laneState) {
+      if (dom.modelStart) dom.modelStart.hidden = true;
+      if (dom.modelStartNote) dom.modelStartNote.hidden = true;
+      return null;
+    }
+  } finally {
+    laneAsking = false;
+  }
+  paintLaneStart();
+  return laneState;
+}
+
+/** Hides the button and its note, for a row that is no longer down. */
+function clearLaneStart() {
+  laneState = null;
+  laneStarting = false;
+  if (dom.modelStart) {
+    dom.modelStart.hidden = true;
+    dom.modelStart.onclick = null;
+  }
+  if (dom.modelStartNote) {
+    dom.modelStartNote.textContent = "";
+    dom.modelStartNote.hidden = true;
+  }
+}
+
+/** The press: ask the PC, then watch until the lane answers or the PC gives up. */
+async function startTheLane() {
+  if (laneStarting) return;
+  laneStarting = true;
+  paintLaneStart();
+  const outcome = await startUntilSettled(
+    () => invokeStrict("start_model_lane"),
+    () => invokeStrict("read_model_lane"),
+  );
+  laneStarting = false;
+  if (outcome && outcome.lane) laneState = outcome.lane;
+  await refreshLaneStart();
+  if (outcome && !outcome.ok && dom.modelStartNote) {
+    // Did not come up, or the PC refused it. Said in the PC's own words (or
+    // this app's plain sentence when the press never landed), and the warning
+    // is left standing - which is the whole point.
+    dom.modelStartNote.textContent = outcome.words || refusalWords(null);
+    dom.modelStartNote.hidden = false;
+  } else if (outcome && outcome.ok && dom.modelStartNote) {
+    dom.modelStartNote.textContent = "";
+    dom.modelStartNote.hidden = true;
+  }
+  if (outcome && outcome.ok) {
+    // The lane really answered: ask again so the row clears from the PC's own
+    // verdict rather than from this window's opinion.
+    refreshHealth();
+  }
+}
 
 /* ==========================================================================
    Native window sizing
@@ -982,6 +1101,11 @@ function applyHealth(report) {
       "aria-label",
       warn.down ? `${warn.words} ${warn.fix}` : "",
     );
+    // And the one action the owner decided the line should offer
+    // (2026-10-13). Only while the row is really down: it is read from the
+    // PC's own `/api/model-lanes`, so this window never invents a lane, and a
+    // press it cannot honour is not drawn at all.
+    if (warn.down) refreshLaneStart(); else clearLaneStart();
   }
 
   const core = report.services.find((s) => s.id === "jarvis");

@@ -19744,3 +19744,172 @@ feature — the signed release check — added no route either; it is
 executable second, and the executable not at all when the first half did not
 finish), where the app reads the two paths from, what the owner configures once,
 and the three questions deliberately left for the owner.
+---
+
+## 132. Starting the local model when it is not running (added 2026-10-13)
+
+**The defect this answers.** On 2026-10-13 both of the owner's Ollama lanes died
+at about 16:30 and nothing said so for about five hours. `GET /api/status` had
+carried `"ollama": false` from the first minute, so a change was made that draws
+a standing, calm line on that fact in both apps - and it deliberately **did
+nothing**: the owner started his lanes, and the app said they were down. He has
+since decided the line should offer one action. This section is that action.
+
+**What the action is, and what it deliberately is not.** It runs **his own
+Windows logon task** - `Jarvis Ollama - Everyday model (RTX 2060)` on his PC -
+and nothing else. It never runs `ollama serve`, and it never builds a command
+line from a remembered task name: the name is looked up **on that PC** with
+`schtasks`, matched by the **stable half** of the name (`Jarvis Ollama -
+Everyday model`), because the card in brackets is the half that changed under
+the 2026-10-10 accident that made a restart a silent no-op. The whole action is
+`schtasks /run /tn <that name>` - exactly what his logon itself runs, with his
+own port, card and context, because the task holds them.
+
+**Which lane.** The lane the **chat** uses: `OLLAMA_URL`'s port. On this PC
+that is 11436 (the everyday model), never Ollama's own 11434 and never a
+guessed one. **One lane, never both.** There is no `{"lane": ...}` and no
+`{"all": true}` in this API at all, so no client can ask for another lane and
+nothing can start two at once.
+
+### 132.1 `GET /api/model-lanes` - the state, and whether a press would do anything
+
+A read. It starts nothing, and it asks that one lane a single question on the
+PC (`/api/tags` on loopback).
+
+```json
+{
+  "ok": true,
+  "lane": "everyday",
+  "words": "the everyday model (the main one chat uses)",
+  "port": 11436,
+  "task": "Jarvis Ollama - Everyday model (RTX 2060)",
+  "state": "down",
+  "can_start": true,
+  "why": "Nothing is answering on port 11436.",
+  "started_at": null,
+  "elapsed_s": null,
+  "left_s": null,
+  "waited_s": null,
+  "message": ""
+}
+```
+
+* `state` is `up`, `starting` or `down`. Only `up` means the lane is answering -
+  `starting` is the PC still watching it, which is **not** the same thing and
+  must never be drawn as one.
+* `task` is **this PC's own** task name, or `""` when this PC has no such task -
+  and then no button is offered, because a button that would be refused is worse
+  than none. `can_start` says the same thing in one field.
+* `elapsed_s` / `left_s` are the seconds so far and the seconds still allowed,
+  while `state` is `starting`; `waited_s` is how long it took, once it settled.
+* `why` and `message` are the PC's own plain sentences, ready to show.
+* `lane` is `""` and `why` explains it when Jarvis is not pointed at a lane on
+  this PC at all (a remote `OLLAMA_URL`, or an address with no lane behind it).
+
+### 132.2 `POST /api/model-lanes/start` - the one action
+
+An **empty body** is the whole contract. It answers immediately, and never
+blocks for the ninety seconds a model may take:
+
+* **200** - the lane is already answering; `changed: false`, nothing was
+  started;
+* **202** - `state: "starting"`; the PC launched the task (or found it already
+  running) and is watching the lane. Read 131.1 until it settles;
+* **409** - refused, in plain words: this PC has no such task, a start is
+  already being watched, or Jarvis is not pointed at a lane here;
+* **502** - the PC refused to start its own task (`schtasks` exited non-zero).
+  The lane is still down.
+
+**Starting a task is not the model arriving, and the API never pretends it is.**
+`schtasks /run` returns as soon as the task is launched. So the PC watches the
+lane's own `/api/tags` every three seconds for up to **90 seconds**, and:
+
+* the lane answering turns the state into **`up`**, with how long it took;
+* never answering turns it into **`down`**, with a plain sentence saying it did
+  not come up - and the standing line in both apps **stays standing**.
+
+**Nothing is started twice.** The start is refused while the lane answers, while
+a start is still being watched, and when the PC's own Task Scheduler says that
+task is already running (a 202 saying "already running", which then watches the
+lane instead - it may simply be loading the model).
+
+A `model` event goes on the bus when a watch settles: `{"lane", "port", "up",
+"waited_s"}`. Nothing else about this feature is on the bus, because a lane
+dying publishes no event - which is what the standing line's own slow beat is
+for.
+
+### 132.3 The permission decision, and why there is no approval card
+
+This is the project's one permission model (`docs/ARCHITECTURE.md` §3), and the
+decision is reasoned rather than inherited:
+
+* the gate exists to make **Jarvis** ask before it acts. This is a control the
+  **owner** presses, and the press is the explicit act the gate would be asking
+  for - the same shape as Pause, Stop and "Start a focus session";
+* **his own logon task already runs this exact command unattended**, at every
+  logon, with no card and no question. A card here would be stricter than the
+  thing it duplicates, and a card that only ever repeats a button is how a
+  person learns to approve without reading;
+* it adds no reach: the only socket it opens is `/api/tags` on loopback, which
+  the chat already opens, and it is refused outright when this PC has no such
+  task - so there is nothing to approve.
+
+There is therefore **no new tier line** to loosen, on purpose. What is **not**
+built, because it is forbidden outright: no bulk action, no "start both lanes",
+nothing that approves in bulk and nothing that clears a rush latch.
+
+### 132.4 Both apps
+
+**Both, and genuinely useful on the phone**: starting a lane on the PC while
+away from the desk is exactly when the owner cannot reach the PC by hand. So
+`docs/ARCHITECTURE.md` §8 needs no entry for either route, and
+`tools/check_parity.py` carries both as `ported`.
+
+* **Desktop** - the Jarvis bar's standing model notice (`src/main.js`,
+  `src/lane-start.js`) and the widget's compact model row (`src/widget.js`).
+  Both draw the button from the same one file, so the two windows cannot come to
+  different words for one fact, and both ask the PC through Rust
+  (`commands.rs` `read_model_lane` / `start_model_lane`). Starting is watched by
+  `startUntilSettled`, which reads 131.1 on a two-second beat for at most 100
+  seconds - deliberately longer than the PC's own 90, so the PC's verdict is
+  what the owner sees rather than the app giving up first.
+* **Phone** - Home's own status line (`ui/screens/HomeScreen.kt` `StatusLine`,
+  `net/ModelLane.kt`, `JarvisRuntime.startModelLane`). The lane is read **only
+  while that line is drawn**, on the beat that already reads `/api/status`, so a
+  healthy PC is never asked about its lanes and no second timer exists. The
+  phone sends the same empty body and watches the same route.
+
+Both apps offer the button for the same conditions: the lane is down AND the PC
+says a press would really do something (`can_start`). An up lane, a PC that did
+not say, and a PC with no such task all offer nothing - **"the PC did not say"
+is not "the lane is down"**, which is the rule the standing line itself already
+follows.
+
+The HUD window (`jarvis_hud.html`) deliberately does **not** carry the button.
+It is vendored from the backend and runs under a strict proxy
+(`jarvis-desktop/src-tauri/src/hud_proxy.rs`): it may make exactly five reads
+and one `POST /api/chat`, and widening that allow-list for a route that starts a
+program on the PC is a separate decision. The standing line there already names
+the PC's own task, and both windows with the button are one keystroke away.
+
+### 132.5 Tests
+
+* `backend/test_model_lanes.py` (85 checks) - the one-action rules: only a
+  down lane is started, and it is started by the name this PC really has; a
+  renamed task is followed; a task that is not on this PC is refused with
+  **nothing run**; nothing is started twice (answering, already watched, or the
+  Task Scheduler saying it is running); **a start that never comes up settles as
+  `down` and leaves the warning standing**; the command really is `schtasks /run
+  /tn <name>` as argv, never a shell; the probe refuses an HTTP error, junk and
+  JSON that is not Ollama's; both routes are behind the same origin and token
+  checks as `/api/status`; and, by reading its own source, that nothing in the
+  suite can reach a real lane or start a real task.
+* `jarvis-desktop/tests/lane-start.mjs` (19 checks) - the button's conditions,
+  the watch loop (`ask`, then read until it settles), the refusal and the
+  never-reached paths, the DOM half, both windows, and a CONTROL that
+  `lane-warning.js` still acts on nothing.
+* `jarvis-client/.../ModelLaneTest.kt` - the same rule on the phone: a down lane
+  offers it, an up lane and an unknown one do not, a failed start does **not**
+  clear the warning, only the lane answering does, the body is empty, the three
+  states decode through the real decoder, and `HomeScreen.kt` draws the button
+  from that one rule.

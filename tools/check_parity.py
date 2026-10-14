@@ -531,6 +531,30 @@ CLASSIFICATION = {
     "/api/pair/start": ("deliberate", "Starting a pairing is the PC's alone (docs/PAIRING-DESIGN.md 6.1 and section 12): the QR code and the typed code are shown on the PC and the pair_device card is approved there with Windows Hello; the backend refuses the route from any other device (403 pc_only). ARCHITECTURE section 8."),
     "/api/pair/session": ("deliberate", "Watching a pairing is the PC's alone: the Devices panel that shows the QR code reads it every 2 s; PC only on the backend (403 pc_only). ARCHITECTURE section 8."),
     "/api/pair/cancel": ("deliberate", "Cancelling a pairing is the PC's alone (the panel's Cancel); PC only on the backend. ARCHITECTURE section 8."),
+    # Start the local model (the owner's decision of 2026-10-13, after both of
+    # his Ollama lanes were dead for about five hours; backend/model-lanes.patch,
+    # backend/jarvis_model_lanes.py; JARVIS-API section 132). The button that
+    # sits on the standing "the local model isn't running" line both apps
+    # already draw (PR #409), and ONE action: run HIS OWN Windows logon task for
+    # the lane the chat uses - never `ollama serve`, never a task name typed
+    # from memory - and then watch that lane's `/api/tags` until it answers, so
+    # "starting" is never reported as "up". One lane, the one Jarvis talks to
+    # (OLLAMA_URL's port - 11436 on his PC), never both.
+    #
+    # On BOTH apps, and genuinely useful on the phone: starting a lane on the PC
+    # while away from the desk is exactly when the owner cannot reach the PC by
+    # hand. That is why neither side is one-sided, and why there is nothing to
+    # write in ARCHITECTURE section 8 for these two.
+    #
+    # NO approval card, on purpose, and it is the tier decision rather than an
+    # omission: his own logon task already runs this exact command unattended at
+    # every logon, so a card here would only be stricter than the thing it
+    # duplicates. The press itself is the owner's explicit act. There is also
+    # deliberately no `{"lane": ...}` and no `{"all": true}`: no client can start
+    # a lane the chat is not on, and nothing can start both at once. See
+    # jarvis_model_lanes.py's "PERMISSION" section.
+    "/api/model-lanes": ("ported", "The lane the PC's chat uses, and whether \"Start the local model\" would really do anything (backend/model-lanes.patch, jarvis_model_lanes.py; the owner's decision of 2026-10-13; docs/JARVIS-API.md section 132). A read: it starts nothing, and it asks that lane one question on the PC. It carries the state (up / starting / down), this PC's OWN Windows task name (looked up by the half a rename does not touch - empty when this PC has no such task, and then no button is offered), how long a start has been going and how long is left, and whether a press would do anything at all (`can_start`). Desktop: the Jarvis bar's standing model notice (src/main.js, src/lane-start.js, commands.rs read_model_lane) and the widget's compact model row (src/widget.js) - the same one file draws both, so the two windows cannot come to different words for one fact. Phone: Home's status line (ui/screens/HomeScreen.kt StatusLine, net/ModelLane.kt, JarvisRuntime.refreshModelLane), read only while the standing line is drawn, so a healthy PC is never asked about its lanes."),
+    "/api/model-lanes/start": ("ported", "The ONE action on that line: start the model lane that is down (backend/model-lanes.patch, jarvis_model_lanes.py; the owner's decision of 2026-10-13; docs/JARVIS-API.md section 132). It runs the PC's OWN scheduled task - found with `schtasks` on that PC and matched by the stable half of its name, so a lane on another port or a task renamed to a different card is still started correctly - and then watches the lane's own `/api/tags` every few seconds for up to 90 s. A 202 is NOT success: it means \"starting\", and only the lane really answering turns it into `up`. A start that does not come up settles as `down` with a plain sentence and LEAVES THE WARNING STANDING - a button that reports success and changes nothing is the failure this feature was written to avoid. Nothing is started twice: not while the lane answers, not while this module is still watching a start, and not while the PC's own Task Scheduler says that task is already running (202, \"already running\", and the lane is watched instead). An empty body is the whole contract, so no tap can name another lane and nothing can start both. Both apps: the desktop's bar and widget (commands.rs start_model_lane, src/lane-start.js) and the phone's Home (JarvisRuntime.startModelLane, net/ModelLane.kt), which sends the same empty body and watches the same route."),
 }
 STATUSES = {"ported", "deliberate", "todo", "not-backend", "planned"}
 

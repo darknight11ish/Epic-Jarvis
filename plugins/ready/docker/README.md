@@ -8,7 +8,7 @@ this folder into the backend's `jarvis_plugins\` folder (or run
 
 - Module the loader calls: `jarvis_docker.install()` (takes the core's Handler)
 - The patch this replaces: `backend/docker.patch`
-- Position in the old patch stack: 129 of 143
+- Position in the old patch stack: 129 of 144
 
 The module itself is one of the ones this repository already ships
 (`backend/jarvis_docker.py`), copied into the backend by

@@ -277,6 +277,16 @@ import { clockTimer, IDLE_MS } from "./clock-timer.js";
 // the HUD window import the same file, so the three cannot come to different
 // wording for one fact.
 import { paintLaneWarning, startHealthBeat } from "./lane-warning.js";
+// ... and the ONE action the owner decided that line should offer: start the
+// model lane that is down, by running HIS OWN Windows logon task on the PC
+// (`lane-start.js`). Kept in its own file so `lane-warning.js` still holds no
+// verb for starting anything - `tests/lane-warning.mjs` checks exactly that,
+// and it is the check that notices if acting creeps back into the words.
+import {
+  paintStartButton,
+  refusalWords,
+  startUntilSettled,
+} from "./lane-start.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -1845,11 +1855,17 @@ function applyHealth(report) {  if (!report || !Array.isArray(report.services)) 
   // ones (lane-warning.js), the same the widget and the HUD window show.
   const ollama = report.services.find((service) => service.id === "ollama");
   const core = report.services.find((service) => service.id === "jarvis");
-  paintLaneWarning(
+  const laneDown = paintLaneWarning(
     document,
     ollama ? ollama.online !== false : null,
     core ? core.online : null,
   );
+  // And the ONE action the owner decided that line should offer
+  // (2026-10-13): "Start the local model" asks the PC to run its OWN Windows
+  // logon task for the lane the chat uses, then watches that lane until it
+  // answers. Only while the line is really drawn - so this bar never invents a
+  // lane, and a press the PC would refuse is not offered.
+  if (laneDown) refreshLaneStart(); else clearLaneStart();
 
   if (core && !core.online) {
     applyRoute({
@@ -1862,6 +1878,108 @@ function applyHealth(report) {  if (!report || !Array.isArray(report.services)) 
     });
   } else if (state.route.tier === "offline") {
     applyRoute(DEFAULT_ROUTE);
+  }
+}
+
+/* ==========================================================================
+   Starting the model lane that is down - the ONE action
+
+   The owner's decision of 2026-10-13. The standing line above used to do
+   nothing; it now offers "Start the local model", which asks the PC to run ITS
+   OWN Windows logon task for the lane the chat uses, and then watches that lane
+   until it answers. Nothing here builds a command line, and nothing here
+   decides which lane: the backend looks the task up on the PC, by the half of
+   its name a rename does not touch.
+
+   Starting is not arriving. `start_model_lane` returns as soon as the PC has
+   launched the task, so the press does NOT clear the line: `startUntilSettled`
+   keeps reading `/api/model-lanes` until the lane answers or the PC says it did
+   not come up, and only a real "up" clears anything. When it does not come up,
+   the PC's own sentence is shown and the line stays standing.
+   ========================================================================== */
+
+/** The last read of the lane, as the button is drawn from it. */
+let laneState = null;
+/** True while a press is being watched, so the button cannot be pressed twice. */
+let laneStarting = false;
+
+/** Redraws the button from the last read, or from "starting" mid-press. */
+function paintLaneStart() {
+  if (laneStarting) {
+    paintStartButton(document, { ...(laneState || {}), state: "starting" },
+      startTheLane);
+    return;
+  }
+  paintStartButton(document, laneState, startTheLane);
+}
+
+/** Reads the lane's state and draws the button from it. Never throws. */
+let laneAsking = false;
+
+async function refreshLaneStart() {
+  // One lane read at a time: the health beat can outlast a slow answer, and
+  // stacked reads are how a window starts costing more than it looks.
+  if (laneAsking) return laneState;
+  laneAsking = true;
+  try {
+    // `invokeStrict`, because a refusal from the PC carries the sentence the
+    // owner is meant to read, and swallowing it would leave the button saying
+    // nothing about why.
+    laneState = await invokeStrict("read_model_lane");
+  } catch (err) {
+    // No answer is not a lane that is down: keep what was last known. (An
+    // older backend has no route, so there is simply no button to offer.)
+    if (!laneState) {
+      paintStartButton(document, null, null);
+      return null;
+    }
+  } finally {
+    laneAsking = false;
+  }
+  paintLaneStart();
+  return laneState;
+}
+
+/** Hides the button and its note, for a line that is no longer drawn. */
+function clearLaneStart() {
+  laneState = null;
+  laneStarting = false;
+  paintStartButton(document, null, null);
+  const note = document.getElementById("model-warn-start-note");
+  if (note) {
+    note.textContent = "";
+    note.hidden = true;
+  }
+}
+
+/** The press: ask the PC, then watch until the lane answers or the PC gives up. */
+async function startTheLane() {
+  if (laneStarting) return;
+  laneStarting = true;
+  paintLaneStart();
+  const outcome = await startUntilSettled(
+    () => invokeStrict("start_model_lane"),
+    () => invokeStrict("read_model_lane"),
+  );
+  laneStarting = false;
+  if (outcome && outcome.lane) laneState = outcome.lane;
+  await refreshLaneStart();
+  const note = document.getElementById("model-warn-start-note");
+  if (!note) return;
+  if (outcome && !outcome.ok) {
+    // Did not come up, or the PC refused it. Said in the PC's own words (or
+    // this app's plain sentence when the press never landed), and the warning
+    // is left standing - which is the whole point.
+    note.textContent = outcome.words || refusalWords(null);
+    note.hidden = false;
+  } else {
+    note.textContent = "";
+    note.hidden = true;
+  }
+  if (outcome && outcome.ok) {
+    // The lane really answered: ask again so the line clears from the PC's own
+    // verdict rather than from this window's opinion.
+    refreshHealth();
   }
 }
 

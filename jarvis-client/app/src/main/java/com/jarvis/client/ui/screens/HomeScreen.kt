@@ -251,6 +251,23 @@ data class HomeState(
     val faceFocusQuiet: Boolean = false,
     val power: String,
     val status: StatusInfo?,
+    /**
+     * The lane the PC's chat uses, as the PC reports it
+     * ([com.jarvis.client.net.ModelLane]).
+     *
+     * Read only while the standing model line is drawn, so a healthy PC is
+     * never asked. Null is "we did not ask", which is NOT a lane that is down:
+     * the button is drawn from [com.jarvis.client.net.ModelLane.offers], and the
+     * warning itself still comes only from the PC's own `ollama` field.
+     */
+    val modelLane: com.jarvis.client.net.ModelLaneInfo? = null,
+    /** True while a press is being watched, so it cannot be pressed twice. */
+    val laneStarting: Boolean = false,
+    /**
+     * What to say when the last press did not come up, or null when it did.
+     * Shown under the button; the standing line stays standing either way.
+     */
+    val laneFailure: String? = null,
     val pending: List<PendingItem>,
     val attention: Attention,
     val notice: String?,
@@ -683,6 +700,12 @@ data class HomeActions(
     val onReconnect: () -> Unit,
     val onDismissNotice: () -> Unit,
     val onOpenChecks: () -> Unit,
+    /**
+     * The standing model line's ONE action (the owner's decision of
+     * 2026-10-13): ask the PC to run its own Windows task for the lane the chat
+     * uses, then watch until it answers. Nothing is cleared by the press.
+     */
+    val onStartModelLane: () -> Unit,
     val onOpenInbox: () -> Unit,
     val onOpenBrain: () -> Unit,
     /**
@@ -1736,6 +1759,39 @@ private fun StatusLine(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                }
+                // The one action beside "Model not running" (the owner's
+                // decision of 2026-10-13). ONE button, offered only while the
+                // PC says a press would really start something - so a lane that
+                // is up, a PC with no such task, and "the PC did not say" all
+                // draw nothing. The words come from the shared rule
+                // (ModelLane), so this screen cannot invent its own.
+                if (modelDown) {
+                    val words = com.jarvis.client.net.ModelLane
+                        .buttonWords(state.modelLane)
+                    val canPress = com.jarvis.client.net.ModelLane
+                        .canPress(state.modelLane, state.laneStarting)
+                    // The PC's own line while it is starting (how long it has
+                    // been), and its own sentence when a start did not come up.
+                    val laneNote = state.laneFailure
+                        ?: com.jarvis.client.net.ModelLane.detail(state.modelLane)
+                    if (words.isNotEmpty()) {
+                        Quiet(
+                            text = words,
+                            enabled = canPress,
+                            color = chrome.warnInk,
+                            onClick = actions.onStartModelLane,
+                        )
+                    }
+                    if (laneNote.isNotEmpty()) {
+                        Text(
+                            laneNote,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (state.laneFailure != null) chrome.warnInk else chrome.textMid,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
         }

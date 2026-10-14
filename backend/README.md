@@ -166,6 +166,7 @@ on a throwaway copy instead.
 | `devices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Pairing a phone by QR code, with a key per device** (the owner's decisions of 2026-09-24 and 2026-09-28; `docs/PAIRING-DESIGN.md` phase 1, `docs/JARVIS-API.md` section 90). One block in `jarvis_hud.py`, right after `_refuse_every_interface(bind)` and BEFORE owner-check's block: it replaces `_token_ok` with `jarvis_devices.wrap_token_ok(_token_ok)` before any module is handed it, so a device key (`jdk1.<id>.<secret>`) is checked everywhere and never falls back to the old check, and adds `/api/pair/*` and `/api/devices*`. Three lines in `jarvis_gate.py`: the cards `pair_device`, `unretire_shared_key` and (phase 2, 2026-09-29, signed approvals from the phone) `register_approval_key` join `_NO_RULE_FROM_DENIAL` and `_RISK` (local, reversible; all three are also PC only with Windows Hello, `jarvis_owner_check.PC_ONLY_ACTIONS`). Last in the list but for `apps-in-projects.patch`, which builds on its lines: its context is other patches' lines. Needs `jarvis_devices.py`; without it, or on any error, nothing is replaced - only the shared key works, exactly as before - and the banner says so. See "Pairing a phone by QR code", at the very end. |
 | `apps-in-projects.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **An app inside a Jarvis project: its tasks and the merge card** (the owner's decisions of 2026-09-28 and 2026-09-29; `docs/APPS-IN-PROJECTS-DESIGN.md`, `docs/JARVIS-API.md` section 92). One block in `jarvis_hud.py` right after `projects.patch`'s own: `jarvis_apps.install(...)` adds `GET /api/projects/<id>/app/tasks/<task>` and `POST .../app/tasks`, `.../files` (a change pasted in - PC only), `.../merge` (ONE risky approval card) and `.../discard`. Two lines in `jarvis_gate.py`: `app_merge_change` joins `_NO_RULE_FROM_DENIAL` (a no is never a standing rule) and `_RISK` as `("no", "local", ...)` - it cannot be undone yet, so it is a RISKY card (Windows Hello on the PC, the screen lock on the phone), approved on either device. Last in the list: its context is `projects.patch`'s, `forget-range.patch`'s and `devices.patch`'s lines. Needs `jarvis_apps.py` (with `jarvis_projects.py` and `jarvis_app_workspace.py`); without it, or on any error, the banner says "apps NOT ON" and the app routes are simply not there. See "Apps in Projects", at the very end. |
 | `history-import.patch` | `jarvis_hud.py` | **Bring in chats from ChatGPT, Claude, Gemini or DeepSeek** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §85). One install()-shaped hunk at start-up - `jarvis_history_import.install(Handler, ...)` - whose context is `photo-reminder.patch`'s own install block, so it goes after it, last like every new patch. It answers `GET /api/memory/import_chats` and `POST .../start` (this PC only, no card) and `.../cancel`: the Brain's button runs `import_history.run()` in the background, and every possible fact waits in the review queue for its own yes. Needs `jarvis_history_import.py` and `import_history.py` (both shipped now); without them the banner says so and the routes are not there. See "`import_history.py`". |
+| `model-lanes.patch` | `jarvis_hud.py` | **"Start the local model"** (the owner's decision of 2026-10-13, after both of his Ollama lanes were dead for about five hours and the standing warning deliberately did nothing). `GET /api/model-lanes` and `POST /api/model-lanes/start`, behind the same origin and token checks as `/api/status`. The one action runs **HIS OWN Windows logon task**, found on that PC with `schtasks` and matched by the half of its name a rename does not touch - never `ollama serve`, never a name typed from memory - and then watches that lane's own `/api/tags` every 3 s for up to 90 s, so "starting" is never reported as "up": a lane that does not come up settles as `down` with a plain sentence and leaves the warning standing. One lane, the one Jarvis talks to (`OLLAMA_URL`'s port - 11436 on his PC), never both; nothing is started twice (answering, already watched, or the Task Scheduler says it is running). No gate file: the same task his own logon already runs unattended, so a card would only be stricter than the thing it duplicates. One `install()` block, appended to the chain `pictures.patch` writes and immediately before `plugin-loader.patch`, whose hunk was re-anchored onto this block's last two printed lines (`tools/check_plugins.py` checks that). Needs `jarvis_model_lanes.py`, in both shipped lists and in the base. See "Start the local model", at the very end. |
 
 | `inbox-tidy.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **"Inbox tidy by voice"** (the owner's decision of 2026-09-28; docs/JARVIS-API.md section 95): archive, star, mark as read or move to Trash a checked list of emails, ONE approval card listing every one, 10 minutes to Undo. Four hunks: in `jarvis_gate.py` `tidy_inbox` joins "a no proposes no memory rule", gets its `_RISK` line (`"yes", "outbound"` - it changes the mailbox on a server, so approving it is a risky approval; nothing is deleted for good, and Undo puts everything back) and its `_TOOL_ACTIONS` line; in `jarvis_hud.py` ONE install block after `sky.patch`'s (`GET /api/email/tidy`, `POST /api/email/tidy/undo`). Its context is other patches' lines: after `support-chat.patch`, before `devices.patch`, which stays last. Needs `jarvis_inbox_tidy.py` - see "Inbox tidy", at the very end. |
 | `screen.patch` | `jarvis_hud.py` | **"Look at this" and "Watch with me": the routes and the chat turn** (the owner's decision of 2026-09-28; `docs/SCREEN-DESIGN.md`, `docs/JARVIS-API.md` sections 62 and 96). Three hunks: a small `_screen_turn(body)` helper (does the newest message carry the owner's screen - the `screen` mark or a `screen_text` part), `has_screen=_screen_turn(body)` in the router call, so such a turn never leaves this PC, and one `jarvis_screen.install(Handler, ...)` block after inbox tidy's, which answers `GET/POST /api/screen` and `GET/POST /api/screen/never-look`. The router call is the owner's own text; the hunk anchors on the lines `cloud-say-yes.patch` already added there (checked against the real file by that patch) and was applied only to the stand-in. Its context is `inbox-tidy.patch`'s startup block, `games-temporary.patch`'s helper lines and `cloud-say-yes.patch`'s router call, so it goes last in the list, after `inbox-tidy.patch`. Needs `jarvis_screen.py` and `jarvis_screen_win.py` copied in (`jarvis_screen_win.py` first); without them, or on any error, the banner says "screen NOT ON", the routes answer 404 and nothing can look. `temporary-chat.patch` also gained one word: `screen` in `_CHAT_CLIENT_FIELDS`, so the mark never travels onward. See "Looking at the screen", below. |
@@ -19088,6 +19089,7 @@ own `optin-models.json` beside `hardware-choice.json` and `model-state.json`:
 | `{"on": true}` | `jarvis-uncensored-*`: the abliterated and uncensored `.gguf` files already on this PC, offered as choices, each labelled | `uncensored_models_enable` | `ask` |
 | `{"fiction": true}` | one model set aside for stories and role-play, with its own instructions | `fiction_roleplay_enable` | `ask` |
 
+
 **Turning either one ON is ONE approval card, and OFF is instant.** That is the
 project's standing rule for anything that loosens a limit, and it is expressed
 in `jarvis_gate.py`'s `_RISK` table and its "acts only on tier ask" set - which
@@ -19146,3 +19148,103 @@ and the patch applying, reversing and building the patch stack's own text.
 `backend/test_optin_models.py` (92 checks) keeps the naming, labelling and
 storage rules. Neither suite needs the owner's PC: the checks that would are
 printed as `skip` with the reason, never as a pass.
+
+# Start the local model when it is not running: `model-lanes.patch`, `jarvis_model_lanes.py` (2026-10-13)
+
+**The defect this answers.** On 2026-10-13 both of the owner's Ollama lanes died at
+about 16:30 and nothing said so for about five hours. `GET /api/status` carried
+`"ollama": false` from the first minute, so a change landed the same day that draws a
+standing, calm line on that fact in all four places it is drawn - and it deliberately
+**did nothing**: the owner started his lanes, and the app said they were down. The owner
+has since decided the line should offer one action. This is that action.
+
+**What it runs.** Not `ollama serve`, and not a command line built in an app. It runs
+**his own Windows logon task** - `Jarvis Ollama - Everyday model (RTX 2060)` on his PC.
+The name is looked up **on that PC** with `schtasks` and matched by the **stable half**
+of it (`Jarvis Ollama - Everyday model`), because the card in brackets is exactly the
+half that changed under the 2026-10-10 accident that made a restart a silent no-op
+(`tools/check_lanes.py` was written after that night, and this module and that tool
+carry the same two lanes - `backend/test_model_lanes.py` holds them together). The whole
+command is `["schtasks", "/run", "/tn", <that name>]`, as argv, never a shell. So his own
+port, card and context are used, because the task itself holds them.
+
+**Which lane, and how many.** The lane the **chat** uses - `jarvis_hud.OLLAMA_URL`'s
+port, which is 11436 on his PC, never Ollama's own 11434 and never a guessed one - and
+**never both**. There is no `{"lane": ...}` and no `{"all": true}` anywhere in this
+module: a body naming anything is refused with 400, and the one launcher is reached from
+one place.
+
+**Starting is not arriving, and nothing here pretends it is.** `schtasks /run` returns as
+soon as the task is launched, so:
+
+* the press answers **at once** ("starting") and a background thread watches that lane's
+  own `/api/tags` every three seconds for up to **90 seconds** (`WAIT_S`);
+* the lane answering turns the state into **`up`**, with how long it took (`waited_s`);
+* never answering turns it into **`down`** with a plain sentence saying it did not come
+  up - and the standing line in both apps **stays standing**;
+* the state is readable while that happens (`GET /api/model-lanes` carries `elapsed_s`
+  and `left_s`), so neither app has to hold one request open for a minute and a half.
+
+**Nothing is started twice**, and each rule is its own check in the suite: not while the
+lane answers (200, `changed: false`), not while this module is still watching a start
+(409), and not while the PC's own Task Scheduler says that task is already running (202
+saying "already running", which then watches the lane instead - it may simply be loading
+the model). A PC with no such task is refused in words with **nothing run**, and a
+`schtasks` that fails is a **502**, not a cheerful success.
+
+**The permission decision.** **No approval card**, and it is reasoned rather than
+inherited: the gate exists to make *Jarvis* ask before it acts, while this is a control
+the *owner* presses - and, decisively, **his own logon task already runs this exact
+command unattended at every logon**, so a card would only be stricter than the thing it
+duplicates. It adds no reach (the only socket is `/api/tags` on loopback, which the chat
+already opens) and is refused outright when this PC has no such task, so there is nothing
+to approve. There is therefore **no new tier line to loosen**, on purpose, and the module
+touches no gate file. Nothing bulk: no "start both", nothing that approves in bulk,
+nothing that clears a rush latch.
+
+**The two routes** (both behind the same origin and token checks as `/api/status`):
+
+* **`GET /api/model-lanes`** - the state, this PC's own `task` name, `can_start` and the
+  PC's own `why`/`message`. A read; it starts nothing and asks the lane one question.
+* **`POST /api/model-lanes/start`** - the action. An empty body is the whole contract.
+  200 already answering, 202 starting, 409 refused, 502 the PC would not start its task.
+
+`docs/JARVIS-API.md` section 132 has the fields, the status codes and the reasoning;
+`docs/ARCHITECTURE.md` section 8 has why the HUD window keeps the line and has no button.
+
+**Where it is wired in.** `model-lanes.patch` adds ONE `try: import
+jarvis_model_lanes; print(jarvis_model_lanes.install(...))` block to the install chain,
+appended to the block `pictures.patch` writes and immediately **before**
+`plugin-loader.patch` - which must stay last of all (`tools/check_plugins.py` checks both
+halves of that, and requires the loader's own hunk to anchor on the block above it, which
+is why `plugin-loader.patch` was re-anchored onto this block's last two printed lines).
+It touches no other line of `jarvis_hud.py` and no gate file. `jarvis_model_lanes.py` is
+in both shipped lists (`scripts/apply-patches.ps1`'s `$SHIPPED` and `backend/_where.py`'s
+`SHIPPED`), so it is copied beside `jarvis_hud.py` by the patcher; `test_shipped_modules.py`
+and `test_base_matches_repo.py` keep the two lists and the `jarvis-backend/` twin in step.
+`plugins/ready/model-lanes/` is generated for it, and its manifest says which patch it
+replaces - though this feature's startup call ships as the patch in the ordinary stack, so
+the folder is optional like every other `ready/` one.
+
+**Both apps.** Desktop: the Jarvis bar and the widget, drawn from one file
+(`jarvis-desktop/src/lane-start.js`) so the two windows cannot come to different words,
+asking through Rust (`commands.rs` `read_model_lane` / `start_model_lane`) and watching on
+a two-second beat for at most 100 s - deliberately longer than the PC's own 90, so the
+PC's verdict is what the owner sees. Phone: Home's status line (`net/ModelLane.kt`,
+`JarvisRuntime.startModelLane`), read **only while that line is drawn**, on the beat that
+already reads `/api/status`, so a healthy PC is never asked about its lanes and no second
+timer exists. Both offer the button only when the lane is down **and** the PC says a press
+would really do something (`can_start`). The HUD window keeps the line and has no button,
+for the reason in `docs/ARCHITECTURE.md` section 8. `tools/check_parity.py` carries both
+routes as `ported`.
+
+**Test it.** `backend/test_model_lanes.py` - 85 checks, and it never touches the owner's
+lanes: every check injects its own probe, runner, task list and task-state reader, and one
+check reads the module's own source to prove a test run cannot reach the real ones (his
+everyday lane is running while this is written, and he needs it). It covers the
+one-command shape as argv, a renamed task being followed, a task that is not on this PC
+being refused with nothing run, all three "do not start it twice" rules, a start that
+never comes up settling as `down` and leaving the warning standing, a start that does come
+up saying how long it took, and both routes' origin and token refusals. The other halves
+are `jarvis-desktop/tests/lane-start.mjs` (19 checks, wired into `npm run test:ui` along
+with `lane-warning.mjs`) and `jarvis-client/.../ModelLaneTest.kt`.

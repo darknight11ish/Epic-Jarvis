@@ -96,6 +96,7 @@ ollama-direct.patch	ollama-direct/0fbadf7.patch	0fbadf7f0a3918c9862eae9a563c2def
 picture-card.patch	picture-card/c16c2b1.patch	c16c2b14736b3d5c4938807688eb8d5b98a96650	2026-10-10T22:03:36-07:00	Give the picture-maker a card, and the chat a choice of three ways
 pictures.patch	pictures/a347e27.patch	a347e277aaff0914fd9094d95c56614306858598	2026-10-11T12:08:18-07:00	Merge main (f1d53b6a) into feat/ask-for-a-picture: the CI failures fixed, the section renumbered to 129, and two real defects the fix exposed
 pictures.patch	pictures/c94e180.patch	c94e180b71f69eddea088b7ecff56eaaa6385cc8	2026-10-10T22:01:24-07:00	Ask for a picture, and keep it (JARVIS-API section 124)
+plugin-loader.patch	plugin-loader/e8d837d.patch	e8d837d609c8bcb522dd83afd56d71551054c764	2026-10-11T14:40:50-07:00	#266: pictures.patch joins the install chain (#290's placement), so the loader stays the last block before the socket
 plugin-loader.patch	plugin-loader/ff4ee28.patch	ff4ee2880fa1880279aadfc4cd34f02f276ee8c2	2026-10-11T13:51:26-07:00	#266: re-anchor plugin-loader.patch on pictures.patch, and regenerate the plug-in catalogue
 plugin-loader.patch	plugin-loader/f2077b5.patch	f2077b51f724257747ab8d8b2f0aa1e9f345549a	2026-10-11T05:50:49-07:00	finish the uncensored opt-ins: off by default, on is one card, and a way in (#253)
 plugin-loader.patch	plugin-loader/d258b98.patch	d258b980ae95e1c19b121095cce7f5301a9823ae	2026-10-10T02:43:26-07:00	a feature whose only wiring was one start-up call is now a folder

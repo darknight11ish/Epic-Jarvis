@@ -337,6 +337,35 @@ object JarvisRuntime {
     private val _status = MutableStateFlow<StatusInfo?>(null)
     val status: StateFlow<StatusInfo?> = _status.asStateFlow()
 
+    /**
+     * The lane the PC's chat uses, as the PC reports it
+     * ([com.jarvis.client.net.ModelLane], backend/model-lanes.patch), or null
+     * when this phone has not asked or could not ask.
+     *
+     * Read only while the standing "the local model isn't running" line is
+     * drawn, so a PC that is fine is not asked about its lanes at all. Null is
+     * "we did not ask", which is NOT a lane that is down: the button is drawn
+     * from [com.jarvis.client.net.ModelLane.offers], and the warning itself
+     * still comes only from the PC's own `ollama` field
+     * ([com.jarvis.client.ModelWords]).
+     */
+    private val _modelLane = MutableStateFlow<com.jarvis.client.net.ModelLaneInfo?>(null)
+    val modelLane: StateFlow<com.jarvis.client.net.ModelLaneInfo?> =
+        _modelLane.asStateFlow()
+
+    /** True while "Start the local model" is being asked and watched. */
+    private val _laneStarting = MutableStateFlow(false)
+    val laneStarting: StateFlow<Boolean> = _laneStarting.asStateFlow()
+
+    /**
+     * What to say when the last press did not come up, or null when it did (or
+     * when nothing has been pressed). The standing line is cleared by the lane
+     * answering and by nothing else - see
+     * [com.jarvis.client.net.ModelLane.clearsWarning].
+     */
+    private val _laneFailure = MutableStateFlow<String?>(null)
+    val laneFailure: StateFlow<String?> = _laneFailure.asStateFlow()
+
     private val _activity = MutableStateFlow(Activity.IDLE)
     val activity: StateFlow<Activity> = _activity.asStateFlow()
 
@@ -930,6 +959,19 @@ object JarvisRuntime {
         scope.launch {
             while (true) {
                 runCatching { refreshModelState() }
+                // And, only while that line is actually drawn, the lane the
+                // PC's chat uses - so the ONE action beside it can be offered
+                // (the owner's decision of 2026-10-13). A healthy PC is never
+                // asked about its lanes, and this is the same beat that already
+                // reads `/api/status`, not a second timer.
+                if (com.jarvis.client.ModelWords.isDown(_status.value?.ollama)) {
+                    runCatching { refreshModelLane() }
+                } else {
+                    // The lane came back: nothing to offer, and no stale answer
+                    // left standing behind a line that is no longer drawn.
+                    _modelLane.value = null
+                    _laneFailure.value = null
+                }
                 delay(com.jarvis.client.ModelWords.POLL_MS)
             }
         }
@@ -1798,6 +1840,103 @@ object JarvisRuntime {
     suspend fun refreshModelState() {
         if (_link.value != LinkState.CONNECTED) return
         api.status().onOk { s -> _status.value = _status.value?.copy(ollama = s.ollama) ?: s }
+    }
+
+    /**
+     * Ask the PC to start the model lane that is down, then watch until it
+     * answers or the PC gives up - the phone's half of the owner's decision of
+     * 2026-10-13 ([com.jarvis.client.net.ModelLane]).
+     *
+     * THE ONE ACTION RUNS THE OWNER'S OWN WINDOWS TASK, and the PC is what runs
+     * it: this sends an empty body and nothing else. There is no command line
+     * here, no `ollama serve`, and no lane name - the backend looks the task up
+     * on that PC, by the half of its name a rename does not touch.
+     *
+     * A 202 IS NOT SUCCESS. The PC says "starting" and watches the lane; this
+     * then re-reads [com.jarvis.client.net.ModelLane.PATH] on
+     * [com.jarvis.client.net.ModelLane.WATCH_MS] until it settles, up to
+     * [com.jarvis.client.net.ModelLane.WATCH_LIMIT_MS]. Only the lane really
+     * answering turns it into "up", and only that (or the PC's own `ollama`
+     * field) clears the warning. **A button that reports success and changes
+     * nothing is the failure this exists to prevent**, so a start that does not
+     * come up leaves [laneFailure] set with the PC's own sentence and the
+     * standing line untouched.
+     *
+     * A lane that answers now is nothing to do: the PC starts nothing, and this
+     * says so rather than waiting ninety seconds for an answer already in hand.
+     */
+    suspend fun startModelLane() {
+        if (_laneStarting.value) return
+        _laneStarting.value = true
+        _laneFailure.value = null
+        try {
+            val first = when (val asked = api.startModelLane()) {
+                is ApiResult.Ok -> asked.value
+                is ApiResult.Failed -> {
+                    // The press itself did not land, or the PC refused it. The
+                    // refusal's own sentence is already in the failure path for
+                    // a 404/503; anything else gets the plain sentence.
+                    _laneFailure.value = com.jarvis.client.net.ModelLane
+                        .failureWords(null, com.jarvis.client.net.ModelLane.UNREACHED)
+                    _modelLane.value = null
+                    return
+                }
+            }
+            _modelLane.value = first
+            if (com.jarvis.client.net.ModelLane.isUp(first)) {
+                // Already answering: nothing was started, and there is nothing
+                // to wait for.
+                refreshStatus()
+                return
+            }
+            if (first.ok.not() || first.error.isNotEmpty()) {
+                _laneFailure.value = com.jarvis.client.net.ModelLane.failureWords(first)
+                return
+            }
+            var waited = 0L
+            while (waited < com.jarvis.client.net.ModelLane.WATCH_LIMIT_MS) {
+                delay(com.jarvis.client.net.ModelLane.WATCH_MS)
+                waited += com.jarvis.client.net.ModelLane.WATCH_MS
+                val next = when (val read = api.modelLane()) {
+                    is ApiResult.Ok -> read.value
+                    // A read that did not land says nothing about the lane.
+                    // Keep asking; the limit below is what ends this.
+                    is ApiResult.Failed -> continue
+                }
+                _modelLane.value = next
+                if (com.jarvis.client.net.ModelLane.isUp(next)) {
+                    _laneFailure.value = null
+                    // The PC's own verdict, so the standing line clears from it
+                    // rather than from this phone's opinion.
+                    refreshStatus()
+                    return
+                }
+                if (next.state == com.jarvis.client.net.ModelLane.DOWN && !next.canStart) {
+                    // The PC has given its verdict: it did not come up. Said in
+                    // the PC's own words, and the warning stays standing.
+                    _laneFailure.value = com.jarvis.client.net.ModelLane
+                        .failureWords(next, com.jarvis.client.net.ModelLane.UNSETTLED)
+                    refreshStatus()
+                    return
+                }
+            }
+            // Out of time before the PC gave a verdict: never read as "up".
+            _laneFailure.value = com.jarvis.client.net.ModelLane.UNSETTLED
+            refreshStatus()
+        } finally {
+            _laneStarting.value = false
+        }
+    }
+
+    /**
+     * Reads the lane the PC's chat uses, for the standing model line's one
+     * action. Called only while that line is drawn, so a healthy PC is never
+     * asked about its lanes. A read that fails leaves what was last known: a
+     * failure is not evidence about the lane.
+     */
+    suspend fun refreshModelLane() {
+        if (_link.value != LinkState.CONNECTED) return
+        api.modelLane().onOk { _modelLane.value = it }
     }
 
     /**

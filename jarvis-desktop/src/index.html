@@ -920,13 +920,21 @@
 
                Its own state, NOT "Jarvis isn't connected": the PC is fine here,
                only answers are. Same words as the widget and the HUD window
-               (lane-warning.js). Nothing here acts - there is no button, no
-               card and no restart: the owner starts his lanes, and this says
-               whether they answered. -->
+               (lane-warning.js).
+
+               ONE ACTION since the owner's decision of 2026-10-13: "Start the
+               local model" asks the PC to run its OWN Windows logon task for
+               the lane the chat uses (lane-start.js), and then asks again until
+               the lane really answers. Starting a task is not the model
+               arriving, so the press does NOT clear this line; only the lane
+               answering does. A start that does not come up says so, in the PC's
+               own words, and this line stays standing. -->
           <div class="model-notice" id="model-warn" hidden>
             <b id="model-warn-text"></b>
             <span id="model-warn-fix"></span>
             <span id="model-warn-host" hidden></span>
+            <button class="btn btn-quiet" type="button" id="model-warn-start" hidden></button>
+            <span id="model-warn-start-note" hidden></span>
           </div>
 
           <footer class="card-foot">
