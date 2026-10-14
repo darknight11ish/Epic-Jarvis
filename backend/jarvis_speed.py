@@ -439,6 +439,19 @@ class Meter:
             row = self.row(model, tools=tools)
         except Exception:
             return None
+        # E3: what this answer cost, when it was a paid cloud lane. Recorded
+        # HERE, from the figures this Meter has just measured, because every
+        # line of jarvis_hud.py's streaming loop belongs to a patch-stack hunk -
+        # see jarvis_chatbot_api.note_answer_spend for the measurement that
+        # showed it. Before the "nothing was said" return below on purpose: a
+        # cloud answer that came back empty was still charged for its prompt.
+        # A local turn writes nothing, and a failure here is never the reason an
+        # answered turn reports an error.
+        try:
+            import jarvis_chatbot_api
+            jarvis_chatbot_api.note_answer_spend(row)
+        except Exception:
+            pass
         if not row.get("words") and not row.get("tokens"):
             return None               # nothing was said; nothing to time
         target = log or SpeedLog()
