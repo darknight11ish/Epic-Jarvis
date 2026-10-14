@@ -2168,3 +2168,81 @@ open on 2026-09-25 - **idea I-1**, question 1 of
   words refused outright, which is never a card. Every card still shows the exact
   search words and says why in plain words.
 
+Decided 2026-10-13, the owner's three answers after being asked the multi-device
+questions as short multiple choice (`docs/MULTI-DEVICE-DESIGN.md` section 4, and
+`.dsh-scratch/multi-device-questions.md`; the worked questions were task-51):
+
+- **The laptop / other-PC client: START IT NOW** as the main piece of the
+  multi-device work. It is the largest item in that design - a client mode in the
+  desktop app, a second credential store on the other machine, its own pairing
+  screen - and a client cannot approve risky cards, because Windows Hello on that
+  machine proves nothing to this PC. **The client mode itself is NOT built yet**;
+  what this change lands is the backend half it needs (below), so a non-phone
+  client is no longer recorded as a phone.
+- **Who may approve a new device - a LOOSENING, with his explicit yes:** a phone
+  that already signs approvals may also approve a *new* device. It is recorded as
+  a loosening because it is one: until now `pair_device` is in
+  `jarvis_owner_check.PC_ONLY_ACTIONS` and a device can never approve a device.
+  **It is NOT built, and must not be built before the phone signing half is
+  proved on a real phone** (a fresh fingerprint per risky approval, and the four
+  words matched against the card - `docs/MULTI-DEVICE-DESIGN.md` section 1 says
+  that last mile has never been proved on hardware). Nothing in this change
+  touches that gate; the PC-only rule stands until that proof exists, and the
+  proof is a later, separate piece of work.
+- **Nothing else per-device, for now** - no per-device notifications and no
+  "quiet this device" switch. Only the animal's sharpness and frame rate are
+  per-device (`jarvis_animal.py`), and that stays. **Written down for whenever it
+  is revisited: quieting one device must never hide an approval card.** A card is
+  how Jarvis asks, and a device the owner has quieted is still a device he must
+  be able to answer on.
+
+Decided 2026-10-13, after he asked whether a cloud model could "take over
+Jarvis's brain": **the cloud lanes are for background work and genuinely hard
+questions only - `jarvis-escalate`, `jarvis-critic` and `jarvis-bulk`, the three
+he already has configured in `~/.openjarvis/litellm-proxy.yaml` (OpenRouter's
+free tier). Ordinary conversation stays on this PC, and rule 1 remains a
+guarantee for it.** His question and this decision are deliberately NOT the same
+thing: what is being switched on is a lane a hard question may be *offered* to,
+not a cloud replacement for the everyday model. The everyday chat, the voice
+turns and the approvals are untouched by it.
+
+**What this replaces:** nothing was previously switched on at all. Until this
+entry the whole lane was inert - `ARCHITECTURE.md` recorded cloud use as "per
+use, with permission ... No standing grant", and the router has always refused to
+escalate on its own (its gate 6, the owner's decision of 2026-09-24: *"any long,
+non-private question went to the first cloud lane, and the owner saw a Cloud
+badge afterwards"* was the old behaviour that was removed). So this narrows
+nothing and widens nothing in what may leave the PC; it only makes the existing
+offer reachable, which it was not.
+
+Decided 2026-10-13, the precondition the code itself demanded: **Jarvis stops
+injecting the owner's saved facts into every request.** His words, asked exactly
+that: *"Yes - stop injecting my facts into every request."* He was told plainly
+that this changes his everyday chat, and agreed knowing it.
+
+**Why it was required, in the code's own words** (`backend/cloud-say-yes.patch`,
+lines 10-12): *"While Jarvis injects memory itself we cannot escalate safely: it
+would attach your facts to a free-tier cloud request."* That is why
+`jarvis_hud.py` passed `lanes=[]` and every cloud lane was hard-disabled while
+`[agent] context_from_memory = true` - and his own routing log said so on every
+turn, `gate: "privacy"`, `reason: "escalation off while Jarvis injects memory
+itself"`.
+
+**What this replaces, said plainly because it is a real change to his chat:**
+the setting he had, `context_from_memory = true`, was **switching the memory
+block OFF**. The name reads the other way round and that misled the brief for
+this work; the code is `if decision.inject_memory and ROUTING and not
+jarvis_side_memory:` (`jarvis_hud.py:4819`), so `true` meant "Jarvis is injecting
+it itself" and the block was skipped. Changing it to `false` therefore **turns
+his saved facts back on for local answers** - it does not take them away. That is
+the opposite of a regression, but it is a behaviour change and it is recorded as
+one. **Measured 2026-10-13 on his PC:** the same question returned
+`gate: "privacy"` before the change and `gate: "complexity"` after, which is the
+gate moving past the memory check.
+
+**One honest limit on that measurement.** His memory store holds **0 facts**
+(`~/.openjarvis/memory.db`, `SELECT COUNT(*) FROM facts` -> 0), so
+`injected_facts` was 0 both before and after. The change is proven to have
+**enabled the path** (the gate moved); it could not be shown to **change an
+answer**, because there is nothing saved to recall. When he saves facts, this is
+where they will appear.

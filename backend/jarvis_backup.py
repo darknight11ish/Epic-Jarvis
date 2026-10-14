@@ -4,8 +4,19 @@ docs/CUTTING-EDGE-2026-09-26-round2-trust.md, "2. Encrypted backup and plain
 restore"). docs/JARVIS-API.md section 45.
 
 NEW MODULE, shipped whole. backup.patch adds one call at start-up,
-`install(Handler, ...)`, which answers the six routes below (the same shape
+`install(Handler, ...)`, which answers the nine routes below (the same shape
 as jarvis_documents.py).
+
+THE PHONE'S HALF (2026-10-13, the owner asked for a "Back up now" button on
+the phone on 2026-10-10 and was told why not - this is the answer built for
+real). Three routes: `STATUS_ROUTE` (read-only, any paired device) says what
+the folder holds; `PREPARE_ROUTE` (any paired device) mints this run's one-time
+recovery code and writes NOTHING; `COMMIT_ROUTE` (this PC only) writes the file
+when the owner says he has kept the code - with that same code, so the code he
+kept is the code that opens it. See PREPARE_ROUTE's own comment for why it is
+two calls rather than one: an unfinished run must leave the folder exactly as
+it was, because a new backup DELETES the oldest of the KEEP, and a file nobody
+can open is worse than no new file at all.
 
 THE OWNER'S DECISION (CLAUDE.md, 2026-09-27, answering
 docs/OWNER-QUESTIONS-2026-09-27.md): "one locked backup file into a folder
@@ -223,6 +234,65 @@ LIST_ROUTE = "/api/backup/list"
 PREVIEW_ROUTE = "/api/backup/restore/preview"
 RESTORE_ROUTE = "/api/backup/restore"
 
+#: The PHONE's half of Backups (2026-10-13, the owner's question of 2026-10-10
+#: answered for real). Two routes, both about ONE thing: the phone may ask for
+#: a backup and may see what the folder holds - and the PC does the writing.
+#:
+#:   * `STATUS_ROUTE` (GET, any paired device): what the FOLDER holds - when
+#:     the last backup was made, which folder it went to (its last path
+#:     segment), how many are kept and how many are there, and whether the
+#:     newest file is complete and well formed. It NEVER carries a recovery
+#:     code and never can: `status_view` reads the settings file and the
+#:     folder, and neither has a code in it (`_load_settings` keeps "folder"
+#:     and nothing else; `_audit` refuses to record one).
+#:
+#:   * `PREPARE_ROUTE` (POST, any paired device) and `COMMIT_ROUTE` (POST,
+#:     THIS PC ONLY): the phone asks, the PC writes. This pair replaces the
+#:     old plain "no, a phone may never ask" with a rule that cannot lose a
+#:     backup - see "WHY THE PHONE'S RUN IS TWO CALLS" below.
+#:
+#: WHY THE PHONE'S RUN IS TWO CALLS, AND WHY THAT IS THE WHOLE SAFETY OF IT.
+#: Each backup file is locked with its OWN one-time recovery code and the code
+#: is never stored anywhere (`generate_code`; the module docstring). A backup
+#: whose code was never written down is a file nobody can ever open - and
+#: because making a new one deletes the oldest of the KEEP (5), a run whose
+#: code never reached the owner does not just add a dud: it PUSHES OUT an
+#: older backup that its own code could still open. That is the one outcome
+#: this feature may never produce.
+#:
+#: So the phone's run does not write a file when it is asked. `prepare` mints
+#: the code and holds it - in memory, for PENDING_TTL_S, never on disk - and
+#: hands it back to the phone. The phone shows it, in the owner's face, and
+#: asks him to keep it. Only his "I have saved it", carrying that same code
+#: back (`commit`), writes anything. A phone that is put down, a link that
+#: drops, a run nobody finishes: each of those writes NO FILE AT ALL, so the
+#: five backups already in the folder are untouched. The old file is never
+#: replaced by one nobody can open.
+#:
+#: The code does therefore travel to the phone, once, in the reply to
+#: `prepare`, and lives on the phone's screen until the run is finished - the
+#: change `docs/ARCHITECTURE.md` section 8 records for this one screen. Its
+#: cost is the same as the code's cost on the PC, and it is said on the screen
+#: in so many words: a code that is not kept is a backup that can never be
+#: opened, and Jarvis cannot recover it.
+#:
+#: `commit` is THIS PC ONLY (`_from_this_pc`): the phone asks, and the PC -
+#: the machine that holds the folder - is what writes into it. That keeps the
+#: standing rule that a phone never writes to the PC's disk by itself, and it
+#: is what makes a stolen token useless here: a thief can ask all day and
+#: nothing is ever written, because the write is refused from anywhere but the
+#: PC. The PC's own "Back up now" (`NOW_ROUTE`) is untouched: still one call,
+#: still no card, still this PC only.
+STATUS_ROUTE = "/api/backup/status"
+PREPARE_ROUTE = "/api/backup/prepare"
+COMMIT_ROUTE = "/api/backup/commit"
+
+#: How long a prepared run stays open. Long enough to read a code out and put
+#: it in a password manager or a notes app, short enough that a forgotten run
+#: cannot be committed hours later out of a stale screen. The same 15 minutes
+#: approval cards wait (the owner's decision of 2026-10-13, #378).
+PENDING_TTL_S = 15 * 60
+
 #: Setting the folder - jarvis_documents.py's own action for "let Jarvis see
 #: (or write into) one more place".
 CARD_ACTION = "change_own_config"
@@ -330,6 +400,51 @@ ERASE_LIMIT = ("\"Erase the words\" cannot reach into an older backup: an erased
                "erased, until that backup ages out of the last {keep} kept. A chat you "
                "delete is the same, and so is a review deck or card: it can still be in an "
                "older backup until that backup ages out.").format(keep=KEEP)
+
+#: The phone's run, said before it starts (2026-10-13). What a caller about to
+#: ask for a backup has to know first: where the file goes, that the code is
+#: the only way in, and that nothing is written until the code is kept.
+PREPARE_LEAD = ("Your PC will make one locked backup into the folder you chose there, and show "
+                "you a recovery code for it. Nothing is written until you say you have saved "
+                "that code - so a run you do not finish leaves your PC exactly as it was.")
+#: Said when the prepared run exists but the folder does not. `NO_FOLDER` is the
+#: PC's own sentence and is reused, never a second wording of the same thing.
+COMMIT_NO_RUN = ("That backup run has expired or was never started, so nothing was written. "
+                 "Ask for a backup again from your phone.")
+COMMIT_WRONG_CODE = ("That is not the code for the backup waiting to be written, so nothing "
+                     "was written and your folder is unchanged. Ask for a backup again.")
+#: A caller that is not this PC asking to COMMIT. `PC_ONLY` (the backups panel)
+#: is not this: it reads as advice to go and set backups up. This says what
+#: actually happened to the ask.
+COMMIT_PC_ONLY = ("The backup is written on your PC, so nothing was written from here. Ask "
+                  "for a backup in Jarvis on your phone, then keep the code it shows: your "
+                  "PC writes the file when you tap that you have saved it. If you cannot "
+                  "reach your phone, make one at the PC - Settings, Backups, \"Back up "
+                  "now\".")
+#: `verify.why` values, in the phone's own words. Each says what was ACTUALLY
+#: checked: the file's own bytes, never that it can be opened.
+CHECK_WORDS = {
+    "complete": "Jarvis checked this file just now: it is a complete, well-formed backup, "
+                "and nothing about it has changed since it was written.",
+    "missing": "Jarvis cannot find that backup file in the folder any more. Look in the "
+               "folder on your PC.",
+    "too_small": "That backup file is smaller than a real backup can be, so it is not "
+                 "usable. Something may have cut the copy short - make a new backup on "
+                 "your PC.",
+    "not_a_backup": "That file is not one of Jarvis's own backup files. Something else has "
+                    "taken its name in the folder - look at the folder on your PC.",
+    "unreadable": "Jarvis could not read that backup file just now. It may be locked by "
+                  "another program (a sync program, or an antivirus scan). More backups are "
+                  "still kept; look at the folder on your PC.",
+    "no_folder": "No folder has been chosen on your PC yet, so there is nothing to check.",
+    "empty": "There is no backup in the folder on your PC yet.",
+}
+#: Always drawn beside the check line. The one thing a check CANNOT prove, said
+#: rather than left to be inferred: only the code opens a backup, and only the
+#: PC can try a code.
+CHECK_LIMIT = ("Jarvis cannot prove from your phone that a backup OPENS - that needs the "
+               "recovery code, and codes are only ever typed on your PC. To prove one "
+               "opens, open Jarvis there, Settings, Backups, and check it with its code.")
 
 
 class WrongCode(Exception):
@@ -781,6 +896,124 @@ def list_backups(folder, *, now: Optional[float] = None) -> list:
     return out
 
 
+def check_file(path) -> dict:
+    """{"ok", "why", "size"} for one backup file, read from the file itself.
+
+    What this CAN prove, and it is worth saying exactly: the file starts with
+    our own magic bytes, its length is a whole one (a header, a salt, a nonce,
+    at least the check bytes, and no trailing rubbish), and the Argon2id
+    parameters in that header are the ones `encrypt_blob` writes. That is the
+    difference between a backup and a copy that was cut short, and it is the
+    check `list_backups` alone cannot make - `complete` there is a length, not
+    a shape.
+
+    What it CANNOT prove, and never claims to: that the file OPENS. That needs
+    the recovery code, which is not on disk anywhere and by design cannot be
+    (`generate_code`; `t_a_lost_code_truly_cannot_be_recovered`). So the words
+    the phone draws beside a pass are `CHECK_WORDS["complete"]`, and
+    `CHECK_LIMIT` says the rest - never "this backup works"."""
+    p = Path(path)
+    try:
+        st = p.stat()
+    except FileNotFoundError:
+        return {"ok": False, "why": "missing", "size": 0}
+    except OSError:
+        return {"ok": False, "why": "unreadable", "size": 0}
+    size = st.st_size
+    if size < MIN_FILE_BYTES:
+        return {"ok": False, "why": "too_small", "size": size}
+    try:
+        with p.open("rb") as fh:
+            head = fh.read(len(MAGIC) + _HEADER_STRUCT.size)
+    except OSError:
+        return {"ok": False, "why": "unreadable", "size": size}
+    if not head.startswith(MAGIC):
+        return {"ok": False, "why": "not_a_backup", "size": size}
+    try:
+        lanes, memory_kib, iterations = _HEADER_STRUCT.unpack_from(head, len(MAGIC))
+    except struct.error:                       # pragma: no cover - size checked above
+        return {"ok": False, "why": "not_a_backup", "size": size}
+    if (lanes, memory_kib, iterations) != (ARGON_LANES, ARGON_MEMORY_KIB, ARGON_ITERATIONS):
+        return {"ok": False, "why": "not_a_backup", "size": size}
+    # No trailing rubbish: our own file is exactly its header, its salt, its
+    # nonce and its ciphertext (which carries the tag). A file LONGER than the
+    # minimum by anything is still fine - what would not be is a file whose
+    # declared shape cannot fit inside it, and `MIN_FILE_BYTES` is that shape's
+    # floor. Everything past the floor is ciphertext, which only the code can
+    # read.
+    return {"ok": True, "why": "complete", "size": size}
+
+
+def _folder_name(folder: Optional[str]) -> Optional[str]:
+    """The LAST segment of the backup folder, for a phone.
+
+    Deliberately not the whole path: `C:\\Users\\<name>\\Documents\\Jarvis
+    Backups` names the owner's Windows account and his folder tree, and
+    `docs/ARCHITECTURE.md` section 8 already keeps the memory store's own path
+    off the phone for exactly that reason. "Jarvis Backups" answers "where did
+    it go?" - which is the question - and the whole path is one tap away on the
+    PC that has it."""
+    if not folder:
+        return None
+    try:
+        name = Path(folder).name
+    except Exception:                          # pragma: no cover - Path is forgiving
+        return None
+    return name or folder
+
+
+def status_view() -> dict:
+    """GET /api/backup/status - what the FOLDER holds, for the phone.
+
+    Read-only, on any paired device, and it carries no recovery code and no
+    full path (see `_folder_name`). Everything in it is read from the folder
+    and the settings file at the moment it is asked, so it is TRUE after the
+    backend restarts - which the older `last_backup_at` (the PC's memory only,
+    cleared on start-up) was not. `net/Backup.kt` draws it; the desktop may
+    read the same keys out of `GET /api/backup` and does not need to.
+
+    `verify` is about the NEWEST kept file, read now. `last_attempt` is the
+    last run THIS backend made, remembered in memory - it is the only place a
+    refusal can be seen, so a failed backup is never reported as a success."""
+    with _B_LOCK:
+        last_attempt = dict(_B_STATE["last"]) if _B_STATE["last"] else None
+    with _P_LOCK:
+        prepared = dict(_P_STATE["pending"]) if _P_STATE["pending"] else None
+    st = _load_settings()
+    folder = st["folder"]
+    rows = list_backups(folder) if folder else []
+    complete = [r for r in rows if r["complete"]]
+    newest = complete[0] if complete else None
+    if not folder:
+        check = {"ok": False, "why": "no_folder"}
+    elif newest is None:
+        check = {"ok": False, "why": "empty"}
+    else:
+        check = check_file(Path(folder) / newest["name"])
+        check.pop("size", None)
+    # The time the phone shows: the newest kept file's own date, which is true
+    # after a restart. Falling back to the last ATTEMPT's time only when the
+    # folder holds nothing (a run whose file was deleted since, or one that
+    # failed after the folder was set).
+    at = newest["at"] if newest else (last_attempt or {}).get("at")
+    return {
+        "available": True,
+        "folder": _folder_name(folder),
+        "keep": KEEP,
+        "kept": len(complete),
+        "last_backup_at": at or None,
+        "last_backup_name": newest["name"] if newest else None,
+        "verify": {"ok": bool(check["ok"]), "why": check["why"],
+                   "words": CHECK_WORDS.get(check["why"], ""), "proves_open": False,
+                   "limit": CHECK_LIMIT},
+        "last_attempt": ({"ok": bool(last_attempt.get("ok")),
+                          "at": last_attempt.get("at"),
+                          "error": last_attempt.get("error") or ""} if last_attempt else None),
+        "prepared": ({"at": prepared.get("at"), "expires_at": prepared.get("expires_at")}
+                     if prepared else None),
+    }
+
+
 def _retain(folder, keep_name: Optional[str] = None) -> None:
     """Keeps the newest KEEP complete backups and deletes the rest. The file
     just written (`keep_name`) is NEVER deleted, whatever its rank, and counts
@@ -1028,6 +1261,121 @@ def request_list(*, peer=None, local=None, here: Optional[bool] = None) -> tuple
     if not st["folder"]:
         return 200, {"ok": True, "backups": []}
     return 200, {"ok": True, "backups": list_backups(st["folder"])}
+
+
+# ---------------------------------------------------------------------------
+#   The phone's run: ask, then keep the code - the file is written on the ask
+#   that comes back (2026-10-13; the routes and the reasoning are at
+#   PREPARE_ROUTE, near the top)
+# ---------------------------------------------------------------------------
+
+_P_LOCK = threading.Lock()
+#: ONE run at a time: {"id", "code", "at", "expires_at"}. `code` is held here
+#: for at most PENDING_TTL_S and is never written to disk, logged or audited -
+#: `_audit` refuses to carry one. Cleared by a commit, by the next prepare, and
+#: by a failed code check on an expired run.
+_P_STATE: dict = {"pending": {}}
+
+
+def _clear_pending() -> None:
+    with _P_LOCK:
+        _P_STATE["pending"].clear()
+
+
+def _is_expired(row: dict) -> bool:
+    try:
+        return float(row.get("expires_at") or 0) <= time.time()
+    except (TypeError, ValueError):            # pragma: no cover - we write floats
+        return True
+
+
+def request_prepare(body=None, *, peer=None, local=None, here: Optional[bool] = None) -> tuple:
+    """POST /api/backup/prepare {} - the phone asks for a backup.
+
+    Answers 200 with the recovery code, which the caller must show the owner
+    and send back to `COMMIT_ROUTE` before ANYTHING is written. This PC only
+    is not required (the phone is the point); the folder is, because a code
+    minted with nowhere to write is a code the owner would be told to keep for
+    nothing."""
+    st = _load_settings()
+    if not st["folder"]:
+        return 409, {"ok": False, "error": NO_FOLDER}
+    code = generate_code()
+    now = time.time()
+    pid = uuid.uuid4().hex
+    with _P_LOCK:
+        _P_STATE["pending"].clear()          # one run at a time; the older code is dropped
+        _P_STATE["pending"].update(id=pid, code=code, at=now, expires_at=now + PENDING_TTL_S)
+    return 200, {"ok": True, "pending": True, "id": pid, "recovery_code": code,
+                 "at": now, "expires_at": now + PENDING_TTL_S,
+                 "folder": _folder_name(st["folder"]), "keep": KEEP,
+                 "message": PREPARE_LEAD + " " + LOST_CODE}
+
+
+def request_commit(body=None, *, peer=None, local=None, here: Optional[bool] = None,
+                   run: Optional[Callable[[str, str], dict]] = None) -> tuple:
+    """POST /api/backup/commit {"id","code"} - the owner says the code is kept.
+
+    THIS PC ONLY. This is the call that writes the file, and a phone never
+    writes to the PC's disk by itself: the write is what the PC does. A caller
+    that is not this PC is refused BEFORE the body is read, in
+    `COMMIT_PC_ONLY`, and nothing is ever written for it.
+
+    The code must be the one `prepare` minted and must still be inside
+    PENDING_TTL_S. A wrong or missing code, and an expired or never-started
+    run, both write NOTHING - the whole point of the two calls. The file is
+    made with that same code (`backup_now(code=...)`), so the code the owner
+    kept is the code that opens what lands. Returns the same shape the PC's own
+    "Back up now" does, plus the file's byte size, which is what the phone
+    shows him next to the code."""
+    run = run or (lambda folder, code: backup_now(folder, code=code))
+    is_here = bool(here) if here is not None else _from_this_pc(peer, local)
+    if not is_here:
+        return 403, {"ok": False, "error": COMMIT_PC_ONLY, "pc_only": True}
+    want = body.get("code") if isinstance(body, dict) else None
+    # Cleaned the way the owner would type it (`_clean_code`: uppercased, and
+    # hyphens and spaces dropped), because the phone shows him the code in four
+    # groups of five and may hand it back with or without the hyphens. Both
+    # sides are cleaned, so either shape matches - and a code that is not this
+    # run's still matches nothing.
+    want = _clean_code(want)
+    with _P_LOCK:
+        row = dict(_P_STATE["pending"]) if _P_STATE["pending"] else {}
+        if not row or _is_expired(row):
+            _P_STATE["pending"].clear()
+            return 409, {"ok": False, "error": COMMIT_NO_RUN}
+        if not want or want != _clean_code(row["code"]):
+            # The run stays open, so a mistyped code can be corrected. Nothing
+            # is written either way - that is the guarantee, not the message.
+            return 400, {"ok": False, "error": COMMIT_WRONG_CODE}
+    st = _load_settings()
+    if not st["folder"]:
+        _clear_pending()
+        return 409, {"ok": False, "error": NO_FOLDER}
+    try:
+        out = run(st["folder"], row["code"])
+    except (BackupUnavailable, ValueError) as exc:
+        _record_backup_outcome(False, error=str(exc))
+        _clear_pending()
+        return 503, {"ok": False, "error": str(exc)}
+    except OSError as exc:
+        _record_backup_outcome(False, error=f"could not write the backup ({type(exc).__name__})")
+        _clear_pending()
+        return 500, {"ok": False, "error": f"could not write the backup file "
+                                           f"({type(exc).__name__})"}
+    size = out.get("size")
+    if size is None:
+        try:
+            size = (Path(st["folder"]) / out["name"]).stat().st_size
+        except OSError:                        # pragma: no cover - a write we just made
+            size = 0
+    _record_backup_outcome(True, name=out["name"], at=out["at"], counts=out["counts"])
+    _audit("backup.made", {"ok": True, "from": "phone"})
+    _clear_pending()
+    return 200, {"ok": True, "name": out["name"], "at": out["at"], "counts": out["counts"],
+                 "size": size, "folder": _folder_name(st["folder"]), "keep": KEEP,
+                 "recovery_code": out["recovery_code"],
+                 "message": f"Backed up. {LOST_CODE}"}
 
 
 # ---------------------------------------------------------------------------
@@ -1742,6 +2090,8 @@ def handle_get(route: str, *, peer=None, local=None) -> tuple:
         return 200, view(here=here)
     if route == LIST_ROUTE:
         return request_list(peer=peer, local=local, here=here)
+    if route == STATUS_ROUTE:
+        return 200, status_view()
     return 404, {"ok": False, "error": "not found"}
 
 
@@ -1751,6 +2101,10 @@ def handle_post(route: str, body, *, peer=None, local=None) -> tuple:
         return request_set_folder(body, peer=peer, local=local, here=here)
     if route == NOW_ROUTE:
         return request_backup_now(body, peer=peer, local=local, here=here)
+    if route == PREPARE_ROUTE:
+        return request_prepare(body, peer=peer, local=local, here=here)
+    if route == COMMIT_ROUTE:
+        return request_commit(body, peer=peer, local=local, here=here)
     if route == PREVIEW_ROUTE:
         return preview_restore(body, peer=peer, local=local, here=here)
     if route == RESTORE_ROUTE:
@@ -1761,7 +2115,7 @@ def handle_post(route: str, body, *, peer=None, local=None) -> tuple:
 
 
 def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
-    """Wrap `handler_cls.do_GET`/`do_POST` so the six routes above are
+    """Wrap `handler_cls.do_GET`/`do_POST` so the nine routes above are
     answered here, after the server's own origin and token checks; every
     other request goes straight to the original - the same shape as
     jarvis_documents.py's `install`."""
@@ -1769,7 +2123,8 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
     get0, post0 = handler_cls.do_GET, handler_cls.do_POST
     if getattr(post0, "_jarvis_backup", False):
         _ARMED = True
-        return "  backups    /api/backup, folder, now, list, restore (already on)"
+        return ("  backups    /api/backup, folder, now, list, status, prepare, commit, "
+                "restore (already on)")
 
     from urllib.parse import urlsplit
 
@@ -1788,7 +2143,7 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
 
     def do_GET(self):
         route = urlsplit(str(getattr(self, "path", "") or "")).path.rstrip("/") or "/"
-        if route not in (PATH, LIST_ROUTE):
+        if route not in (PATH, LIST_ROUTE, STATUS_ROUTE):
             return get0(self)
         if not _allowed(self):
             return None
@@ -1801,7 +2156,8 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
 
     def do_POST(self):
         route = urlsplit(str(getattr(self, "path", "") or "")).path.rstrip("/")
-        if route not in (FOLDER_ROUTE, NOW_ROUTE, PREVIEW_ROUTE, RESTORE_ROUTE, DELETE_ROUTE):
+        if route not in (FOLDER_ROUTE, NOW_ROUTE, PREPARE_ROUTE, COMMIT_ROUTE,
+                         PREVIEW_ROUTE, RESTORE_ROUTE, DELETE_ROUTE):
             return post0(self)
         if not _allowed(self):
             return None
@@ -1821,7 +2177,7 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
     handler_cls.do_GET = do_GET
     handler_cls.do_POST = do_POST
     _ARMED = True
-    return "  backups    /api/backup, folder, now, list, restore"
+    return "  backups    /api/backup, folder, now, list, status, prepare, commit, restore"
 
 
 def _reset_for_tests() -> None:
@@ -1833,6 +2189,8 @@ def _reset_for_tests() -> None:
         _R_STATE.update(pending={}, withdrawn=set(), last={}, latest={})
     with _B_LOCK:
         _B_STATE["last"] = {}
+    with _P_LOCK:
+        _P_STATE["pending"].clear()
     with _D_LOCK:
         _D_STATE.update(pending={}, withdrawn=set(), last={}, latest={})
 

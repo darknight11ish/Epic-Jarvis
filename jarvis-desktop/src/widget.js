@@ -47,6 +47,11 @@ import { EMAIL_APPROVE, emailDetail, isEmailCard } from "./email-sending.js";
 import { CARD_KICKER, cardTitle } from "./card-words.js";
 import { needsFullCard } from "./heavy-approve.js";
 import { faceWords } from "./face-words.js";
+// The PC answering while its own model is not: one rule, two windows
+// (`laneWarning`'s sentences, `paintLaneWarning`'s DOM half). The HUD window
+// imports the same file, so the two cannot come to different wording for one
+// fact - and the phone's copy is read out of it by ModelWordsTest.
+import { laneWarning, paintLaneWarning, startHealthBeat } from "./lane-warning.js";
 import { relayFaceVoice } from "./face-voice.js";
 import { relayFaceMoments } from "./face-moments.js";
 import { startSkyFeed } from "./sky-feed.js";
@@ -145,6 +150,9 @@ const dom = {
   offline: $("widget-offline"),
   offlineText: $("widget-offline-text"),
   offlineRetry: $("widget-offline-retry"),
+  model: $("widget-model"),
+  modelText: $("widget-model-text"),
+  modelFix: $("widget-model-fix"),
   gpuTemp: $("gpu-temp-compact"),
   routePill: $("route-pill"),
 
@@ -263,6 +271,19 @@ const CRITICAL_AT = 92;
 /** GPU temperature, in °C — this is the GPU number worth a warning colour. */
 const TEMP_WARN = 78;
 const TEMP_CRITICAL = 87;
+
+/**
+ * How often the widget asks whether the PC's own model is running. The number
+ * itself lives in `lane-warning.js` (`HEALTH_BEAT_MS`), shared with the Jarvis
+ * bar - they are watching one fact between them.
+ *
+ * Nothing on the event bus reports a lane dying, so a probe is the only way to
+ * hear it - and the incident this exists for (2026-10-13: both of the owner's
+ * lanes dead for about five hours) is exactly what boot-only probing produced.
+ */
+
+/** One health probe at a time: a slow PC must not stack them up. */
+let healthBusy = false;
 
 /* ==========================================================================
    Native window sizing
@@ -940,6 +961,28 @@ function applyHealth(report) {
       : "no local service answered";
   dom.netDot.setAttribute("role", "img");
   dom.netDot.setAttribute("aria-label", `Connection: ${word}`);
+
+  // The model row. `check_server_health` builds the Ollama entry from the
+  // BACKEND's own /api/status `ollama` field, which is the reachability check
+  // of the address the chat itself uses - so a lane on another port (the
+  // owner's is 11436) is judged where it really is, and this row cannot
+  // disagree with the answer the owner would get by asking.
+  //
+  // A report that never arrived leaves the row as it was: no report is not
+  // evidence about the model, and this window has no business guessing.
+  const ollama = report.services.find((s) => s.id === "ollama");
+  if (ollama) {
+    // `online` here is already the backend's field, so the rule for drawing
+    // is the same one the HUD uses: only the PC saying "not running" draws it.
+    const warn = laneWarning(ollama.online === false ? false : true);
+    if (dom.model) dom.model.hidden = !warn.down;
+    if (dom.modelText) dom.modelText.textContent = warn.words;
+    if (dom.modelFix) dom.modelFix.textContent = warn.fix;
+    dom.modelText?.setAttribute(
+      "aria-label",
+      warn.down ? `${warn.words} ${warn.fix}` : "",
+    );
+  }
 
   const core = report.services.find((s) => s.id === "jarvis");
   if (core && !core.online) applyLane("offline");
@@ -1883,9 +1926,27 @@ startLink();
   startSkyFeed({ onEvent });
 
   // Ollama and the cloud lane's own state are not on the bus, so their dots need
-  // one probe. Once, at boot — there is no timer here any more.
+  // a probe. Once at boot, and then on the shared slow beat.
+  //
+  // It used to be boot only - "there is no timer here any more", which was true
+  // and was the bug: 2026-10-13, both of the owner's lanes died at about 16:30
+  // and this window looked healthy until he asked something at 21:5x. A lane
+  // dying generates no event on the bus, so nothing else here would ever notice.
   const report = await invoke("check_server_health");
   if (report) applyHealth(report);
+  startHealthBeat(async () => {
+    // Not while a report is already in flight: one beat can outlast the next
+    // if the PC is slow to answer, and stacked probes are how a widget starts
+    // costing more than it looks.
+    if (healthBusy) return;
+    healthBusy = true;
+    try {
+      const next = await invoke("check_server_health");
+      if (next) applyHealth(next);
+    } finally {
+      healthBusy = false;
+    }
+  });
 
   syncSize();
   console.info(

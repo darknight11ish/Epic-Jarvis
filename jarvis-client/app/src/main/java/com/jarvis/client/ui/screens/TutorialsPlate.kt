@@ -63,6 +63,18 @@ internal fun TutorialsSection() {
                     color = chrome.textMid,
                 )
             } else {
+                // The one number this screen shows, and it counts down - the
+                // PC's own totals, which nothing drew until now (the desktop
+                // draws the same sentence from the same counts). No percentage,
+                // no streak, no badge: see Catalogue.metWords.
+                loaded.catalogue.metWords.takeIf { it.isNotEmpty() }?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = chrome.textMid,
+                    )
+                    Gap(8)
+                }
                 // The two sections the owner asked for: this app's own, and the
                 // shared ones, which appear in both apps.
                 for ((id, title) in Tutorials.SECTIONS) {

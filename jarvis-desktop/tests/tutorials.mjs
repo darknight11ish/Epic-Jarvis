@@ -35,6 +35,44 @@ function check(what, fn) {
   console.log(`ok   ${what}`);
 }
 
+/**
+ * The CATALOGUE literal of the real backend module, up to its own closing
+ * bracket. The module's prose explains `point` and `try` with examples, and an
+ * example is not a step - reading the whole file made an earlier version of
+ * these checks fail on a docstring.
+ */
+function catalogueText() {
+  const py = readFileSync(join(REPO, "backend", "jarvis_tutorials.py"), "utf-8");
+  const start = py.indexOf("\nCATALOGUE = (");
+  if (start <= 0) throw new Error("the catalogue is not where this check expects it");
+  const end = py.indexOf("\n)\n", start);
+  if (end <= start) throw new Error("the catalogue has no closing bracket");
+  return py.slice(start, end);
+}
+
+/**
+ * Every name the catalogue's `point` maps give one app, in file order.
+ *
+ * Read as `point` maps and not as loose `"desktop": "..."` matches: a step may
+ * carry a `try` as well, whose names belong to a different registry
+ * (`TRY_ACTIONS`). Conflating the two is the check being wrong about its own
+ * subject, which is how this one was written the first time.
+ */
+function namesIn(field, app) {
+  const pattern = new RegExp(
+    `"${field}":\\s*\\{[^}]*?"${app}":\\s*(?:"([a-z0-9-]+)"|null)`, "g");
+  return [...catalogueText().matchAll(pattern)].map((m) => m[1]).filter(Boolean);
+}
+
+function catalogueControls(app) {
+  return namesIn("point", app);
+}
+
+/** The same, for the `try` maps - the not-yet-built half of the design. */
+function catalogueTries(app) {
+  return namesIn("try", app);
+}
+
 const tutorial = (over = {}) => ({
   id: "memory", section: "both", title: "What Jarvis remembers", why: "…",
   minutes: 3, steps: [{}, {}, {}, {}, {}], steps_total: 5,
@@ -108,6 +146,34 @@ check("a finished or skipped tutorial is offered again, a fresh one is not", () 
   assert.equal(T.showsAgain(tutorial()), false);
 });
 
+check("the one number this page shows counts down, and is never a percentage", () => {
+  // The backend has computed `counts` since the route was written and nothing
+  // drew it. This is the drawing: "met" (every lesson with any record, skipped
+  // included - met and declined) out of the total, and the remainder said out
+  // loud. The design refuses a percentage, a streak and a nudge, so the words
+  // are asserted and the forbidden shapes are asserted absent.
+  assert.equal(T.metWords({ done: 0, due: 23, total: 23 }),
+    "You have met 0 of the 23 lessons here. 23 to go.");
+  assert.equal(T.metWords({ done: 12, due: 14, total: 23 }),
+    "You have met 9 of the 23 lessons here. 14 to go.");
+  assert.equal(T.metWords({ done: 23, due: 0, total: 23 }),
+    "You have met all 23 lessons here.");
+  // A skipped lesson counts as MET, which is the whole reason `due` is the
+  // input: the backend sets `due` false for a skipped one, so it is met.
+  assert.match(T.metWords({ done: 0, due: 20, total: 23 }), /met 3 of the 23/);
+  // One lesson is not "1 lessons".
+  assert.equal(T.metWords({ done: 0, due: 1, total: 1 }), "You have met 0 of the 1 lesson here. 1 to go.");
+  assert.equal(T.metWords({ done: 1, due: 0, total: 1 }), "You have met all 1 lesson here.");
+  // A backend too old to send `counts` gets NO line, rather than a made-up one.
+  for (const nothing of [undefined, null, {}, { total: 0, due: 0 }, { total: "x", due: 1 }]) {
+    assert.equal(T.metWords(nothing), "", `a missing total invented a line: ${nothing && JSON.stringify(nothing)}`);
+  }
+  // And nothing in the sentence is a shape the design rejected.
+  const said = T.metWords({ done: 1, due: 22, total: 23 });
+  assert.ok(!said.includes("%"), "the line is a percentage");
+  assert.ok(!/streak|badge|points|score/i.test(said), "the line scores the owner");
+});
+
 check("a step writes back exactly what the route wants", () => {
   assert.deepEqual(T.progressBody(tutorial({ id: "intro" }), 2),
     { id: "intro", state: "in_progress", step: 2 });
@@ -178,17 +244,12 @@ check("every control the catalogue points at here is one this app declares", () 
   // file rather than a fixture: a step added to the catalogue with a name
   // nothing declares is the silent lie this check exists to catch.
   //
-  // Only the CATALOGUE literal is read, and only up to the closing bracket.
-  // The module's prose explains `point` with an example, and an example is not
-  // a step - the first run of this check failed on that docstring, and the
-  // second failed on a second docstring further down.
-  const py = readFileSync(join(REPO, "backend", "jarvis_tutorials.py"), "utf-8");
-  const start = py.indexOf("\nCATALOGUE = (");
-  assert.ok(start > 0, "the catalogue is where this check expects it");
-  const end = py.indexOf("\n)\n", start);
-  assert.ok(end > start, "and it has a closing bracket");
-  const catalogue = py.slice(start, end);
-  const named = [...catalogue.matchAll(/"desktop":\s*"([a-z0-9-]+)"/g)].map((m) => m[1]);
+  // Only the `point` maps are read, not every `"desktop": "..."` in the
+  // catalogue: each step now also carries an optional `try`, whose keys are a
+  // DIFFERENT registry (TRY_ACTIONS, the not-yet-built `used` half of
+  // docs/TUTORIALS-DESIGN.md). Reading the whole file made this check call them
+  // point controls, which is the check being wrong about its own subject.
+  const named = catalogueControls("desktop");
   assert.ok(named.length > 0, "the catalogue points at something on the PC");
   for (const name of named) {
     assert.ok(
@@ -198,23 +259,46 @@ check("every control the catalogue points at here is one this app declares", () 
   }
 });
 
+check("every action the catalogue asks this app to notice is one it declares", () => {
+  // `try` is DESIGNED, NOT BUILT (docs/TUTORIALS-DESIGN.md). It is checked here
+  // anyway, for the reason the `point` check above exists: a name written into
+  // the catalogue that no app declares is drift, and drift written down once is
+  // the kind that survives. Nothing observes these yet - the registry is the
+  // list, and step 2 of that design is wiring it up.
+  const named = catalogueTries("desktop");
+  assert.ok(named.length > 0, "the lessons added on 2026-10-10 still carry their try actions");
+  for (const name of named) {
+    assert.ok(
+      Object.prototype.hasOwnProperty.call(T.TRY_ACTIONS, name),
+      `src/tutorials.js declares the try action \`${name}\``,
+    );
+  }
+});
+
 check("a control in this window is a selector that really matches the markup", () => {
   // `{ selector }` entries are the ones the owner actually SEES highlighted, so
   // they are held to the markup itself. A selector that matches nothing is a
   // "Show me" button that does nothing.
-  const windows = {
-    "index.html": readFileSync(join(REPO, "jarvis-desktop", "src", "index.html"), "utf-8"),
-    "brain.html": readFileSync(join(REPO, "jarvis-desktop", "src", "brain.html"), "utf-8"),
-  };
-  const markup = Object.values(windows).join("\n");
+  //
+  // THE PANEL IS DRAWN IN ONE DOCUMENT, AND IT IS brain.html: brain.js calls
+  // `showTutorials($("tutorials-root"))`, and `id="tutorials-root"` is in
+  // brain.html. So this reads THAT file and no other. It used to concatenate
+  // index.html and brain.html into one `markup` string and check the joined
+  // text - which proved an id was in ONE OF THE TWO, and could not tell that it
+  // was in the wrong one. Two entries (`prompt-field`, `approval-card`) were
+  // declared "in this window" while their ids live in index.html, so `pointAt`
+  // found nothing and said "Nothing on this screen to point at for this step".
+  // Both are `{ file, id, label }` now, and this check can tell the documents
+  // apart so they cannot come back.
+  const brain = readFileSync(join(REPO, "jarvis-desktop", "src", "brain.html"), "utf-8");
   let pointed = 0;
   for (const [name, entry] of Object.entries(T.CONTROL_POINTS)) {
     if (!entry.selector) continue;
     pointed += 1;
     const id = entry.selector.replace(/^#/, "");
     assert.ok(
-      markup.includes(`id="${id}"`),
-      `\`${name}\` (${entry.selector}) is a real element in a window this panel is drawn in`,
+      brain.includes(`id="${id}"`),
+      `\`${name}\` (${entry.selector}) says it is in the panel's own document, and brain.html has no id="${id}"`,
     );
   }
   assert.ok(pointed > 0, "at least one control is in this window, so Show me is not a word only");
@@ -257,11 +341,14 @@ check("a step with no target gets no button, rather than a button that does noth
 });
 
 check("pointing at a control in this window marks it, and marks nothing else", () => {
+  // `brain-memory` is one of the three that really are in the panel's own
+  // document. The control a step points at is found by its own selector, so the
+  // stub answers only that one.
   const marked = [];
   const fake = {
-    querySelector: (sel) => (sel === "#prompt-field" ? { classList: { add: (c) => marked.push(c), remove: () => {} }, scrollIntoView: () => {} } : null),
+    querySelector: (sel) => (sel === "#view-memory" ? { classList: { add: (c) => marked.push(c), remove: () => {} }, scrollIntoView: () => {} } : null),
   };
-  assert.equal(T.pointAt({ point: { desktop: "prompt-field" } }, fake), T.LABELS.pointed);
+  assert.equal(T.pointAt({ point: { desktop: "brain-memory" } }, fake), T.LABELS.pointed);
   assert.deepEqual(marked, ["tutorial-pointed"]);
 });
 
@@ -269,6 +356,14 @@ check("a control in another window is answered in words, not faked", () => {
   const said = T.pointAt({ point: { desktop: "hotkeys" } }, { querySelector: () => null });
   assert.ok(said.includes(T.LABELS.otherWindow), said);
   assert.ok(said.includes("Settings"), said);
+  // And the two that used to be declared "in this window" while their ids were
+  // in the Jarvis bar's document: they name that window now instead of finding
+  // nothing and saying so.
+  const prompt = T.pointAt({ point: { desktop: "prompt-field" } }, { querySelector: () => null });
+  assert.ok(prompt.includes(T.LABELS.otherWindow), prompt);
+  assert.ok(prompt.includes("Jarvis bar"), prompt);
+  const card = T.pointAt({ point: { desktop: "approval-card" } }, { querySelector: () => null });
+  assert.ok(card.includes("approval card"), card);
 });
 
 check("pointing NEVER presses: the only verbs pointAt has are mark and scroll", () => {

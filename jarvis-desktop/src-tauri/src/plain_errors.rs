@@ -301,8 +301,8 @@ pub async fn set_thinking(
     Err(backend_refusal(status, &text))
 }
 
-/// The place an error's fix button opens: "settings" or "brain". Nothing
-/// else is accepted.
+/// The place an error's fix button opens: "settings", "brain", "history" or
+/// "tutorials". Nothing else is accepted.
 ///
 /// `async`, not a plain command: both windows are built the first time
 /// they are shown, and a plain command runs on the WebView2 callback
@@ -316,6 +316,10 @@ pub async fn open_fix_place(app: AppHandle, place: String) -> Result<(), String>
         // "Earlier chats" in the Jarvis bar (the chat audit, 2026-09-28):
         // the Brain, on its History tab. Navigation only.
         "history" => crate::windows::show_brain_at(&app, "history"),
+        // The "Set up Jarvis" card's own "Read the FAQ" (2026-10-10): the
+        // Brain, on "Tutorials and the FAQ" - the one Help place, and the same
+        // destination the palette's Help row opens. Navigation only.
+        "tutorials" => crate::windows::show_brain_at(&app, "tutorials"),
         _ => Err("That is not a place this button opens.".to_string()),
     }
 }

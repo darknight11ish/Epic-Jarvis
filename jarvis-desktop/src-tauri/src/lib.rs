@@ -100,7 +100,17 @@ const TELEMETRY_INTERVAL: std::time::Duration = std::time::Duration::from_secs(3
 /// runtime via [`commands::jarvis_base`]. `JARVIS_HUD_PORT` defaults to 4719
 /// in `jarvis_hud.py`; nothing here assumes any other number.
 pub const JARVIS_SERVER_URL: &str = commands::DEFAULT_BASE;
-/// Local Ollama daemon.
+/// Local Ollama daemon, for the one caller that really talks to Ollama
+/// directly (`vision.rs`'s picture reader).
+///
+/// **Not the health check's address any more** (2026-10-13). It used to be, and
+/// that was the bug: this is 11434, while the owner's everyday lane runs on
+/// 11436 (`OLLAMA_URL` in his environment, which is what `jarvis_hud.py` and
+/// every chat turn use). The health report read one address and the chat used
+/// another, so the app could say one thing while the other was true. The
+/// "is the model running?" answer now comes from the backend's own
+/// `GET /api/status`, which knows the address it actually asks -
+/// `commands::check_server_health`.
 pub const OLLAMA_URL: &str = "http://127.0.0.1:11434";
 /// The cloud escalation lane's own state, answered by the backend.
 ///

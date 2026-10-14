@@ -575,7 +575,7 @@ fun SettingsScreen(
             if (menus.shows("settings.reach")) if (drawn("reach")) if (menus.shows("settings.reach")) item(key = "reach") { MenuFrame(menus, "settings.reach") { ReachSection() } }
             if (menus.shows("settings.email-sending")) if (drawn("email-sending")) if (menus.shows("settings.email-sending")) item(key = "email-sending") { MenuFrame(menus, "settings.email-sending") { EmailSendingSection() } }
             if (menus.shows("settings.folders")) if (drawn("folders")) if (menus.shows("settings.folders")) item(key = "folders") { MenuFrame(menus, "settings.folders") { FoldersSection() } }
-            if (menus.shows("settings.backup")) if (drawn("backup")) if (menus.shows("settings.backup")) item(key = "backup") { MenuFrame(menus, "settings.backup") { BackupSection() } }
+            if (menus.shows("settings.backup")) if (drawn("backup")) if (menus.shows("settings.backup")) item(key = "backup") { MenuFrame(menus, "settings.backup") { BackupSection(canAct = canAct) } }
             if (menus.shows("settings.watch-notify")) if (drawn("watch-notify")) if (menus.shows("settings.watch-notify")) item(key = "watch-notify") { MenuFrame(menus, "settings.watch-notify") { WatchNotifySection(canAct = canAct) } }
             if (menus.shows("settings.phone-notify")) if (drawn("phone-notify")) if (menus.shows("settings.phone-notify")) item(key = "phone-notify") {
                 MenuFrame(menus, "settings.phone-notify") {
