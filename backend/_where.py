@@ -856,6 +856,21 @@ SHIPPED = (
     # action, so it raises ONE card (undo_action, tier ask) and a denied card
     # changes nothing. jarvis_goals.py records a receipt for every step tick.
     "jarvis_receipts.py",
+    # The blind credential vault (2026-10-14; the owner's brief,
+    # feat/blind-credential-vault): a secret is stored in Windows Credential
+    # Manager - the SAME store and the same ctypes calls jarvis_token_store
+    # already uses, never a second mechanism - and every other part of the
+    # system carries an opaque handle, `{{vault:github}}`, never the value.
+    # `resolve()` puts the real value in exactly once, at the point of use, and
+    # only for the host the value is bound to; `redact()` puts anything that
+    # comes back through jarvis_scrub. No patch and no core change:
+    # `plugins/ready/vault/plugin.json` names this module and the loader calls
+    # its install(). `install()` wraps the Handler for GET /api/vault/handles
+    # (names and last use - never a value, never a prefix of one) and
+    # POST /api/vault/put (ONE approval card at tier ask; a denied, timed-out
+    # or refused card stores nothing). The names, their host binding and their
+    # times live in vault.json; NO VALUE IS EVER IN THAT FILE.
+    "jarvis_vault.py",
 )
 
 
