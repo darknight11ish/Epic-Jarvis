@@ -1575,6 +1575,31 @@ jobs:
       #                          test_work.py is in NO workflow's suite array, so
       #                          this runs only when someone runs it by hand.
       # ---------------------------------------------------------------------
+      # The published base's own uncovered corner (2026-10-14).
+      #
+      # jarvis-backend/ is the folder a clone runs its backend from, and an edit
+      # in it reaches the owner's PC through one of two mechanisms and no
+      # other: a patch apply-patches.ps1 APPLIES writes the file, or its name is
+      # in the script's $SHIPPED block and it is copied whole, every run. A file
+      # in neither is a file no edit reaches his machine through - and every
+      # check this repository had was blind to it, because the twin checks
+      # compare backend/<f> with jarvis-backend/<f> and such a file has no
+      # backend/ twin to compare.
+      #
+      # Measured 2026-10-14, by running the installer against a copy of the base
+      # with two files deleted from it: jarvis_style.py stayed missing while
+      # jarvis_accounts.py was restored from $SHIPPED - and the work order of
+      # that morning had just sent a feature at jarvis_style.py.
+      #
+      # It classifies every .py in the base, prints the four buckets and names
+      # the files nothing delivers, and fails on any name not already recorded
+      # with its reason in its own UNMANAGED dict. It promotes nothing: moving a
+      # file into $SHIPPED means the installer starts overwriting the owner's
+      # own copy of it, which is his decision and not a checker's.
+      # backend/test_unmanaged_files.py, which runs in the required `backend`
+      # job through run_suites.py, is the proof that this checker bites.
+      - name: Every .py in the published base is delivered, or recorded as not
+        run: python3 ../../tools/check_unmanaged_files.py
 
   python-advisories:
     # The backend's Python packages, next to `cargo deny` above (feasibility
