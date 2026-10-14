@@ -1423,10 +1423,10 @@
     "id": "backup",
     "group": "The PC itself",
     "title": "Backups",
-    "what": "One locked backup file, into a folder you pick.",
-    "where": "Settings, Backups.",
-    "asks": "Setting the folder raises one card. Restoring is one card that always needs Windows Hello.",
-    "limit": "Locked with a recovery code only you have, shown once - lose the code and the backup is useless. Erased facts stay in older backups until they age out. Jarvis keeps only the last few.",
+    "what": "One locked backup file, into a folder you pick. Your phone reads what is in that folder and can ask the PC to make a new one.",
+    "where": "Settings, Backups. On the phone too, in Settings.",
+    "asks": "Setting the folder raises one card. Restoring is one card that always needs Windows Hello. Asking for a backup from the phone raises nothing: the file is written only once you say you have saved the recovery code the phone shows you.",
+    "limit": "Locked with a recovery code only you have, shown once - lose the code and the backup is useless, and Jarvis cannot recover it. The phone shows the code and will not write the file until you tick that you have saved it, so an unfinished run leaves your PC untouched. Jarvis cannot prove from the phone that a backup opens: only the code opens one, and codes are only typed on the PC. Each new backup deletes the oldest of the last few kept, so making many pushes older copies out. Erased facts stay in older backups until they age out.",
     "surface": "both",
     "covers": [
       "settings.backup"
