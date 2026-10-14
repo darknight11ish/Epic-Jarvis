@@ -1688,8 +1688,16 @@ notification, card, quick-access and coverage audits (one pull request):
 - **Backups:** retention never deletes the file just written and ranks by real
   file time; a restore is all-or-nothing with rollback; the restore card says it
   replaces the memory and chat files; `POST /api/backup/delete-older` (one card)
-  is built on the backend - **the apps' "Delete older backups now" button after
-  an Erase is queued** (owner, 2026-09-30).
+  is built on the backend - and the desktop's "Delete older backups now" button
+  after an Erase is **built too**: `jarvis-desktop/src/settings.html:2368` draws
+  it, and `jarvis-desktop/src/backup-settings.js` wires it to the
+  `delete_older_backups` command (`src-tauri/src/backup.rs:249`, registered in
+  `lib.rs:1161`), which raises the one card. **This line said that button was
+  *queued* when the decision was recorded (owner, 2026-09-30); it was corrected
+  on 2026-10-13, because the button had been built and the sentence had stopped
+  being true.** The phone still has no such button **on purpose**: a phone is
+  not this PC, the route answers 403 there, so the screen says "PC only" in
+  plain words instead (`jarvis-client/.../net/Backup.kt`).
 - **Time:** the PC sends `age_s` for a fired job; "12 at night" is midnight and a
   bare 12 is said back; timers survive a clock set back; DST "last week" and a
   leap-day range no longer crash.
