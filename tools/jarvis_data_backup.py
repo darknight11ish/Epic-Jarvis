@@ -165,6 +165,55 @@ itself is a supported, documented option:
     refuses to make. Sealing is for the runs the owner starts by hand, and for
     a folder he later decides to sync.
 
+NORDLOCKER - MEASURED, AND WHY THE WEEKLY DESTINATION IS NOT INSIDE IT
+(2026-10-13, on this PC, read-only first and then with a probe file that was
+removed afterwards)
+
+The owner asked for the weekly snapshots to be encrypted at rest with
+NordLocker, which is installed. It cannot do that job, and this is what was
+measured rather than assumed:
+
+  * **NordLocker has no service and no named driver of its own.** Nothing
+    matching `nord` or `locker` appears in the service list or in
+    `C:\\Windows\\System32\\drivers` (that is a search by name, so it proves the
+    absence of a *named* NordLocker driver rather than of any driver at all;
+    `fltmc` needs administrator and was refused). What it does ship is
+    `NordLocker.CloudFilter.dll`, and its vault folder
+    (`C:\\Users\\pcadmin\\NordLocker_9019064`) is a **Windows Cloud Files
+    placeholder** - `fsutil reparsepoint query` reports tag `0x9000201a`
+    (hydrate-on-open) and `0x9000301a` (hydrate-on-close), the same reparse
+    machinery OneDrive uses. The vault is *file names plus placeholders*, not a
+    mounted encrypted volume;
+  * **when the folder is not being hydrated, writes land as plaintext.** With
+    NordLocker closed, a 40 MB file of a repeated ASCII marker written into
+    `NordLocker_9019064\\My Files\\` **consumed 42.03 MB of free space on C:**
+    (131066798080 -> 131022725120 bytes), and `fsutil reparsepoint query` said
+    of that file *"The file or directory is not a reparse point"* - it was not
+    a cloud placeholder at all, but an ordinary local file. Restarting
+    NordLocker and waiting 20 seconds did **not** encrypt it or turn it into a
+    placeholder;
+  * **the same is true of a real database.** A `SQLite format 3` file written
+    into the locker with NordLocker closed read back its first 16 bytes as
+    `53 51 4c 69 74 65 20 66 6f 72 6d 61 74 20 33 00` and still contained its
+    plaintext marker;
+  * the locker folder is writable in both states - so a weekly run pointed
+    there would **succeed**, write the snapshot in the clear, and report OK.
+    That silent success is the whole danger, and it is why this tool now
+    refuses a locker destination outright (`refuse_write_into_a_locker`) rather
+    than warning about it;
+  * NordLocker's own data is not in doubt: its `node_system_cache.db` (48 MB)
+    and `crypto_identity_cache.db` begin `4b f3 31 d0…` and `de b1 23 9d…` -
+    high-entropy blobs with no `SQLite format 3` header, so its cache is
+    encrypted. That is the cache, not the vault folder.
+
+So an unattended encrypted run through NordLocker is **not possible on this
+PC**: unlocking a locker is a thing a person does in a window. The alternatives
+that do work unattended are Windows' own - **EFS** on the snapshot folder
+(transparent, per-user, key tied to the Windows account) and **BitLocker** on
+the whole drive - and both are written up as a choice for the owner in
+`docs/DATA-BACKUP.md`, because the trade is his to make and neither is
+something this tool should switch on for him.
+
 THE ONE LINE, AND THE TIMER
 
 Back up now, one line, pasted into a terminal:
@@ -286,6 +335,26 @@ TASK_NAME = "Jarvis Personal Data Backup"
 TASK_DAY = "SUN"
 TASK_AT = "03:00"
 
+#: What the task says about itself, shown in Task Scheduler's own window and in
+#: `schtasks /Query /V`. Written for whoever finds this task in a year: it says
+#: what runs, where the output lands, and - the part that is easy to get wrong -
+#: **that the snapshot is not encrypted**, so nobody mistakes it for the locked
+#: `.jbak` archive the app's button makes. See the NORDLOCKER section of the
+#: module docstring for why the weekly run cannot be sealed by itself.
+TASK_DESCRIPTION = (
+    "Weekly verified snapshot of the owner's personal Jarvis data "
+    "(~/.openjarvis), taken by tools/jarvis_data_backup.py. "
+    "Lands in %USERPROFILE%\\jarvis-data-snapshots as plain files, newest 4 kept. "
+    "NOT encrypted: an unattended run has no passphrase, and NordLocker does not "
+    "encrypt anything while its app is closed (measured 2026-10-13 - see "
+    "docs/DATA-BACKUP.md). For the encrypted copy, run the tool with --seal by hand.")
+
+#: A NordLocker vault folder, as it appears on Windows:
+#: `C:\Users\<user>\NordLocker_9019064`. See `refuse_write_into_a_locker` - and
+#: the module docstring's NORDLOCKER section - for why this tool refuses one
+#: rather than using it.
+LOCKER_DIR = re.compile(r"^nordlocker_\d+$", re.IGNORECASE)
+
 
 class Refused(Exception):
     """This cannot go ahead; the message is plain words for the owner."""
@@ -336,6 +405,38 @@ def refuse_write_inside(target, source) -> Path:
             f"{t} is inside {_resolve(source)} - the folder Jarvis is using right now. "
             f"Nothing was written there and nothing will be: choose a folder outside it, "
             f"such as {DEFAULT_DEST}")
+    return t
+
+
+def refuse_write_into_a_locker(target) -> Path:
+    """`target` as a Path, or Refused when it is a NordLocker vault folder.
+
+    Measured on the owner's PC, 2026-10-13 - the whole of the reason is in the
+    module docstring - so the short version is here: a NordLocker locker only
+    encrypts a file **while the NordLocker app is running and unlocked**. With
+    the app closed, a file written into the locker folder lands on the disk as
+    ordinary plaintext, is NOT encrypted when the app next starts, and reads
+    back word for word with nothing but the path. The weekly task runs
+    unattended at 03:00, so that is exactly the state it would be writing in -
+    and it would look like a success, because the write really does succeed.
+
+    A backup that reports OK and is secretly readable is the one outcome this
+    tool must never produce, so a destination inside a locker is refused rather
+    than warned about, and the refusal says what to do instead.
+    """
+    t = _resolve(target)
+    for part in t.parts:
+        if LOCKER_DIR.match(part):
+            raise Refused(
+                f"{t} is inside a NordLocker locker. A locker only encrypts a file "
+                f"while the NordLocker app is running and unlocked - with it closed, "
+                f"files written here are left on the disk as ordinary readable files, "
+                f"and NordLocker does not encrypt them afterwards. The weekly task "
+                f"runs with no one there to unlock anything, so it would write your "
+                f"data out in the clear and still report success. Nothing was written "
+                f"there. Choose a folder outside the locker, such as {DEFAULT_DEST}, "
+                f"and if you want the archive itself protected use --seal with a "
+                f"passphrase (see docs/DATA-BACKUP.md).")
     return t
 
 
@@ -528,6 +629,7 @@ def take_snapshot(source=None, dest=None, *, keep: int = KEEP, passphrase=None,
     if not source.is_dir():
         raise Refused(f"{source} is not a folder, so there is nothing to back up")
     refuse_write_inside(dest, source)          # never write into the live folder
+    refuse_write_into_a_locker(dest)           # never write readable into a locker
     dest.mkdir(parents=True, exist_ok=True)
 
     at = time.time() if now is None else now
@@ -1059,7 +1161,7 @@ def powershell_exe() -> str:
 
 
 def task_script(exe, script, *, name: str = TASK_NAME, day: str = TASK_DAY,
-                at: str = TASK_AT) -> str:
+                at: str = TASK_AT, description: str = TASK_DESCRIPTION) -> str:
     """The PowerShell that registers the weekly run. Pure - `register_task`
     runs it, and a test can read it without touching the Task Scheduler.
 
@@ -1069,8 +1171,16 @@ def task_script(exe, script, *, name: str = TASK_NAME, day: str = TASK_DAY,
     `-StartWhenAvailable` is what makes a run that was MISSED happen - at 03:00
     his PC may well be asleep, and without it the weekly backup would simply
     never happen, which is the one failure worse than a late backup.
+
+    `-Description` is what the task says about itself in Task Scheduler's own
+    window, and it says plainly that this snapshot is NOT encrypted - see
+    `TASK_DESCRIPTION`. A scheduled task with no description is a task nobody
+    can explain a year later, and the one thing about this one that could be
+    mistaken for something it is not is whether the data is protected.
     """
     parent = Path(script).parent
+    # PowerShell single-quoted strings escape a quote by doubling it.
+    described = description.replace("'", "''")
     return "\n".join([
         "$ErrorActionPreference = 'Stop'",
         f"$action = New-ScheduledTaskAction -Execute '{exe}' "
@@ -1079,8 +1189,8 @@ def task_script(exe, script, *, name: str = TASK_NAME, day: str = TASK_DAY,
         "$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable "
         "-AllowStartIfOnBatteries -DontStopIfGoingOnBatteries "
         "-MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 1)",
-        f"Register-ScheduledTask -TaskName '{name}' -Action $action "
-        f"-Trigger $trigger -Settings $settings -Force | Out-Null",
+        f"Register-ScheduledTask -TaskName '{name}' -Description '{described}' "
+        f"-Action $action -Trigger $trigger -Settings $settings -Force | Out-Null",
         "Write-Output 'registered'",
     ])
 
