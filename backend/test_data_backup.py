@@ -590,8 +590,9 @@ def t_a_refused_run_still_leaves_a_trace():
     jdb._crypto = lambda: (None, None)
     os_environ_set("JARVIS_TEST_PHRASE", "phrase")
     try:
-        code = jdb.main(["backup", "--source", str(src), "--dest", str(dest),
-                         "--seal", "--passphrase-env", "JARVIS_TEST_PHRASE"])
+        with isolated_env(JARVIS_DATA_BACKUP_STATE_DIR=str(base / "state")):
+            code = jdb.main(["backup", "--source", str(src), "--dest", str(dest),
+                             "--seal", "--passphrase-env", "JARVIS_TEST_PHRASE"])
         note = dest / "last-run.txt"
         check("a run that refused before writing anything is recorded as FAILED",
               code == 2 and note.is_file() and "FAILED" in note.read_text(encoding="utf-8"),
@@ -599,16 +600,24 @@ def t_a_refused_run_still_leaves_a_trace():
         check("and the reason is in it, so the owner can act on it",
               note.is_file() and "cryptography" in note.read_text(encoding="utf-8"),
               note.read_text(encoding="utf-8") if note.is_file() else "ABSENT")
+        check("...and nothing that looks like a backup was left behind",
+              jdb.list_snapshots(dest) == [], str(jdb.list_snapshots(dest)))
     finally:
         jdb._crypto = real
         os_environ_unset("JARVIS_TEST_PHRASE")
 
     # And the note must never be the thing that writes into the live folder.
     refusals = src / "would-be-dest"
-    jdb.main(["backup", "--source", str(src), "--dest", str(refusals)])
+    with isolated_env(JARVIS_DATA_BACKUP_STATE_DIR=str(base / "state2")):
+        jdb.main(["backup", "--source", str(src), "--dest", str(refusals)])
     check("a run refused because the destination is inside the live folder writes "
           "NO note there", not refusals.exists(),
           str(sorted(p.name for p in src.iterdir())))
+    check("...and the record of it is written where it can still be found",
+          (base / "state2" / "last-run.txt").is_file()
+          and "FAILED" in (base / "state2" / "last-run.txt").read_text(encoding="utf-8"),
+          (base / "state2" / "last-run.txt").read_text(encoding="utf-8")
+          if (base / "state2" / "last-run.txt").is_file() else "ABSENT")
 
 
 def t_the_data_folder_follows_the_same_setting_jarvis_uses():
@@ -722,6 +731,294 @@ def os_environ_unset(name):
     os.environ.pop(name, None)
 
 
+class isolated_env:
+    """Set environment variables for one check, and put every one of them back
+    afterwards whatever it was.
+
+    This matters more than it looks: `run_suites.py` sets `OPENJARVIS_CONFIG_DIR`
+    AND `JARVIS_CONFIG_DIR` at a private folder before this file starts, so a
+    check that unsets one of them and does not restore it changes the
+    environment every check after it runs in - which is exactly how the
+    "with nothing set it is ~/.openjarvis" check above came to fail under the
+    runner while passing when this file was run on its own."""
+
+    def __init__(self, **values):
+        self.values = values
+        self.kept = {}
+
+    def __enter__(self):
+        import os
+        for name, value in self.values.items():
+            self.kept[name] = os.environ.get(name)
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+        return self
+
+    def __exit__(self, *exc):
+        import os
+        for name, value in self.kept.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+        return False
+
+
+class default_folder:
+    """Point the tool's built-in default folder at a temp folder for one check,
+    so a test never reads or writes the real `~/jarvis-data-snapshots`."""
+
+    def __init__(self, path):
+        self.path = Path(path)
+        self.real = None
+
+    def __enter__(self):
+        self.real = jdb.DEFAULT_DEST
+        jdb.DEFAULT_DEST = self.path
+        return self.path
+
+    def __exit__(self, *exc):
+        jdb.DEFAULT_DEST = self.real
+        return False
+
+
+# ---------------------------------------------------------------------------
+#   10. ONE destination, chosen by the owner - backup.json's `folder` key
+# ---------------------------------------------------------------------------
+
+
+def t_the_destination_is_the_folder_the_owner_chose_in_the_app():
+    """The `folder` key of `backup.json` - the file the app's own `.jbak`
+    backups keep their destination in, and the window in Settings, Backups sets
+    through `/api/backup/folder` - is what this tool reads, at run time."""
+    print("\n--- t_the_destination_is_the_folder_the_owner_chose_in_the_app ---")
+    base = Path(tempfile.mkdtemp(prefix="jarvis-databak-choice-", dir=ROOT_TMP))
+    src = build_source(base)
+    config, chosen, previous = base / "config", base / "chosen by the owner", base / "default"
+    for folder in (config, chosen, previous):
+        folder.mkdir()
+    (config / jdb.SETTINGS_NAME).write_text(json.dumps({jdb.SETTINGS_KEY: str(chosen)}),
+                                            encoding="utf-8")
+    # A snapshot from before the folder changed, in the built-in default.
+    old = Path(jdb.take_snapshot(src, previous, now=1_700_004_000)["path"])
+
+    with default_folder(previous), isolated_env(
+            OPENJARVIS_CONFIG_DIR=str(config), JARVIS_CONFIG_DIR=None,
+            JARVIS_DATA_BACKUP_STATE_DIR=str(base / "state")):
+        check("the destination is read from the app's own settings file, not invented "
+              "as a second setting here",
+              jdb.settings_file() == config / jdb.SETTINGS_NAME
+              and jdb.SETTINGS_KEY == "folder" and jdb.chosen_destination() == chosen,
+              f"{jdb.settings_file()} -> {jdb.chosen_destination()}")
+        where, note = jdb.destination(None, src)
+        check("so the run's destination is the folder he chose, not the built-in default",
+              where == chosen and note == "", f"{where} ({note!r})")
+
+        code = jdb.main(["backup", "--source", str(src)])
+        made = [r["name"] for r in jdb.list_snapshots(chosen) if not r["incomplete"]]
+        check("the command line wrote the snapshot into the chosen folder",
+              code == 0 and len(made) == 1, f"exit {code}, {made}")
+        check("and nothing new was written into the built-in default folder",
+              [r["name"] for r in jdb.list_snapshots(previous)] == [old.name],
+              str([r["name"] for r in jdb.list_snapshots(previous)]))
+
+        check("older snapshots left in the old folder are reported, not ignored",
+              [r["count"] for r in jdb.older_snapshots_elsewhere(chosen)] == [1],
+              str(jdb.older_snapshots_elsewhere(chosen)))
+        check("...and the old folder still holds its snapshot, untouched",
+              old.is_dir() and old.parent == previous)
+        check("a hand-run --dest still overrides the setting for one run",
+              jdb.destination(str(base / "elsewhere"), src)[0] == base / "elsewhere")
+
+    # A PC where he has never chosen: nothing in backup.json, so the default.
+    empty = base / "config with nothing in it"
+    empty.mkdir()
+    with default_folder(previous), isolated_env(OPENJARVIS_CONFIG_DIR=str(empty),
+                                                JARVIS_CONFIG_DIR=None):
+        check("with nothing chosen at all the built-in default is still used",
+              jdb.destination(None, src)[0] == previous)
+
+
+def t_the_weekly_tasks_own_command_line_follows_the_setting():
+    """The task runs the script with NO arguments at all. That is the shape
+    that has to follow the folder, not a hand-run that happens to pass one."""
+    print("\n--- t_the_weekly_tasks_own_command_line_follows_the_setting ---")
+    base = Path(tempfile.mkdtemp(prefix="jarvis-databak-task-", dir=ROOT_TMP))
+    live = build_source(base)                     # stands in for ~/.openjarvis
+    chosen = base / "where he sends them"
+    chosen.mkdir()
+    settings = live / jdb.SETTINGS_NAME
+    settings.write_text(json.dumps({jdb.SETTINGS_KEY: str(chosen)}, indent=2), encoding="utf-8")
+    before = settings.read_text(encoding="utf-8")
+
+    with default_folder(base / "unused default"), isolated_env(
+            OPENJARVIS_CONFIG_DIR=str(live), JARVIS_CONFIG_DIR=None,
+            JARVIS_DATA_BACKUP_STATE_DIR=str(base / "state")):
+        code = jdb.main([])                       # the task's own command line
+        made = [r for r in jdb.list_snapshots(chosen) if not r["incomplete"]]
+        check("the weekly run, with no arguments, lands in the folder backup.json names",
+              code == 0 and len(made) == 1, f"exit {code}, {[r['name'] for r in made]}")
+        check("it read that folder from backup.json rather than the default",
+              not list(jdb.list_snapshots(base / "unused default")))
+        check("the setting file is left exactly as the app wrote it",
+              settings.read_text(encoding="utf-8") == before)
+        check("and the run's own record says where it landed",
+              (chosen / "last-run.txt").is_file()
+              and str(chosen) in (chosen / "last-run.txt").read_text(encoding="utf-8"),
+              (chosen / "last-run.txt").read_text(encoding="utf-8")
+              if (chosen / "last-run.txt").is_file() else "no last-run.txt")
+
+
+def t_a_folder_inside_the_live_data_folder_is_refused_and_nothing_is_written():
+    print("\n--- t_a_folder_inside_the_live_data_folder_is_refused_and_nothing_is_written ---")
+    base = Path(tempfile.mkdtemp(prefix="jarvis-databak-inside-", dir=ROOT_TMP))
+    live = build_source(base)
+    config = base / "config"
+    config.mkdir()
+    state = base / "state"
+    (config / jdb.SETTINGS_NAME).write_text(json.dumps({jdb.SETTINGS_KEY: str(live)}),
+                                            encoding="utf-8")
+
+    with default_folder(base / "unused default"), isolated_env(
+            OPENJARVIS_CONFIG_DIR=str(config), JARVIS_CONFIG_DIR=None,
+            JARVIS_DATA_BACKUP_STATE_DIR=str(state)):
+        before = sorted(p.name for p in live.iterdir())
+        why = _raised(lambda: jdb.destination(None, live))
+        check("a chosen folder inside the live data folder is refused",
+              isinstance(why, jdb.Refused), str(why))
+        check("...in plain words, naming the folder and the reason",
+              isinstance(why, jdb.Refused) and str(live) in str(why)
+              and "inside" in str(why), str(why))
+
+        code = jdb.main(["backup", "--source", str(live)])
+        after = sorted(p.name for p in live.iterdir())
+        check("the run stops instead of backing up into the thing being backed up",
+              code == 2, str(code))
+        check("nothing at all was created in the live data folder",
+              after == before, f"{before} -> {after}")
+        check("not even the failure note - the guard is not routed round by the "
+              "note about the failure", not (live / "last-run.txt").exists())
+        note = state / "last-run.txt"
+        check("the failure is written where it can still be seen, saying FAILED",
+              note.is_file() and "FAILED" in note.read_text(encoding="utf-8"),
+              note.read_text(encoding="utf-8") if note.is_file() else "no note")
+
+
+def t_a_chosen_folder_that_is_gone_fails_loudly():
+    print("\n--- t_a_chosen_folder_that_is_gone_fails_loudly ---")
+    base = Path(tempfile.mkdtemp(prefix="jarvis-databak-gone-", dir=ROOT_TMP))
+    src = build_source(base)
+    config, chosen, state = base / "config", base / "chosen", base / "state"
+    for folder in (config, chosen):
+        folder.mkdir()
+    (config / jdb.SETTINGS_NAME).write_text(json.dumps({jdb.SETTINGS_KEY: str(chosen)}),
+                                            encoding="utf-8")
+
+    with default_folder(base / "unused default"), isolated_env(
+            OPENJARVIS_CONFIG_DIR=str(config), JARVIS_CONFIG_DIR=None,
+            JARVIS_DATA_BACKUP_STATE_DIR=str(state)):
+        jdb.main(["backup", "--source", str(src)])
+        good = (chosen / "last-run.txt").read_text(encoding="utf-8")
+        check("a good run leaves an OK record in the folder", good.startswith("20")
+              and "OK" in good, good)
+
+        # The drive was unplugged, or the folder was deleted.
+        shutil.rmtree(chosen)
+        code = jdb.main(["backup", "--source", str(src)])
+        check("the next run stops instead of quietly re-making the folder",
+              code == 2, str(code))
+        check("...and does not re-create a folder he did not choose this time",
+              not chosen.exists())
+        note = state / "last-run.txt"
+        check("the failure is written where it can still be seen, saying FAILED",
+              note.is_file() and "FAILED" in note.read_text(encoding="utf-8"),
+              note.read_text(encoding="utf-8") if note.is_file() else "no note")
+        check("status says the same rather than reporting an empty backup folder",
+              jdb.main(["status"]) == 2)
+
+
+def t_an_unwritable_folder_fails_loudly():
+    print("\n--- t_an_unwritable_folder_fails_loudly ---")
+    base = Path(tempfile.mkdtemp(prefix="jarvis-databak-nowrite-", dir=ROOT_TMP))
+    src = build_source(base)
+    config, chosen, state = base / "config", base / "chosen", base / "state"
+    for folder in (config, chosen):
+        folder.mkdir()
+    (config / jdb.SETTINGS_NAME).write_text(json.dumps({jdb.SETTINGS_KEY: str(chosen)}),
+                                            encoding="utf-8")
+    a_file = base / "not a folder"
+    a_file.write_text("x", encoding="utf-8")
+
+    check("a place that is not a folder at all cannot be written into",
+          jdb.can_write(a_file) is False)
+    real = jdb.can_write
+    jdb.can_write = lambda folder: False          # stand in for a full or locked disk
+    try:
+        with default_folder(base / "unused default"), isolated_env(
+                OPENJARVIS_CONFIG_DIR=str(config), JARVIS_CONFIG_DIR=None,
+                JARVIS_DATA_BACKUP_STATE_DIR=str(state)):
+            why = _raised(lambda: jdb.destination(None, src))
+            check("a folder Jarvis cannot write into is refused, naming the folder",
+                  isinstance(why, jdb.Refused) and str(chosen) in str(why)
+                  and "cannot write" in str(why), str(why))
+            code = jdb.main(["backup", "--source", str(src)])
+            check("the run stops rather than reporting a backup it did not make",
+                  code == 2, str(code))
+            check("and no snapshot was left in the folder",
+                  list(jdb.list_snapshots(chosen)) == [],
+                  str(jdb.list_snapshots(chosen)))
+            note = state / "last-run.txt"
+            check("the failure is written where it can still be seen, saying FAILED",
+                  note.is_file() and "FAILED" in note.read_text(encoding="utf-8"),
+                  note.read_text(encoding="utf-8") if note.is_file() else "no note")
+    finally:
+        jdb.can_write = real
+    skip("a directory whose Windows permissions really refuse a write",
+         "making one needs icacls and this account's own name; the refusal above is "
+         "driven through the same door the real probe goes through (can_write), and "
+         "the probe itself is checked on a place that genuinely refuses one")
+
+
+def t_the_other_drive_is_a_note_and_the_program_folder_is_a_refusal():
+    print("\n--- t_the_other_drive_is_a_note_and_the_program_folder_is_a_refusal ---")
+    base = Path(tempfile.mkdtemp(prefix="jarvis-databak-drive-", dir=ROOT_TMP))
+    src = build_source(base)
+    note = jdb.drive_note(Path("D:/backups"))
+    if os.name == "nt":
+        check("a folder on another drive comes back as a note naming that drive",
+              "D:" in note and "Windows" in note, note)
+        check("a folder on the drive Windows is on has no note",
+              jdb.drive_note(Path(os.environ.get("SystemDrive", "C:") + "/backups")) == "")
+    else:
+        skip("the other-drive note", "it is a Windows question; os.name is not nt")
+
+    program = jdb.program_folder()
+    refused = _raised(lambda: jdb.take_snapshot(src, program / "snapshots"))
+    check("a destination inside this tool's own program folder is refused",
+          isinstance(refused, jdb.Refused), str(refused))
+    check("...in plain words, naming that folder",
+          isinstance(refused, jdb.Refused) and str(program) in str(refused), str(refused))
+    check("...and nothing was created there", not (program / "snapshots").exists())
+
+    root = Path(Path.home().anchor)
+    why = _raised(lambda: jdb.check_chosen_folder(root, src))
+    check("the top of a whole drive is refused as a backup folder",
+          isinstance(why, jdb.Refused) and "top of a whole drive" in str(why), str(why))
+
+    # The note is RECORDED, not just printed: an unattended run has no console,
+    # so a printed warning about the drive would never be read. (The note is
+    # passed in rather than produced by a real second drive - this PC has one.)
+    dest = base / "snapshots"
+    jdb.take_snapshot(src, dest, now=1_700_004_500,
+                      dest_note="this folder is on drive D:, not the drive Windows is on (C:)")
+    text = (dest / "last-run.txt").read_text(encoding="utf-8")
+    check("a note about the destination is written into last-run.txt, where an "
+          "unattended run can be read later",
+          "NOTE:" in text and "drive D:" in text, text)
+
+
 # ---------------------------------------------------------------------------
 
 
@@ -743,7 +1040,13 @@ def main() -> int:
                    t_a_refused_run_still_leaves_a_trace,
                    t_the_data_folder_follows_the_same_setting_jarvis_uses,
                    t_a_passphrase_without_seal_refuses_rather_than_ignoring_it,
-                   t_the_weekly_task_has_no_window_and_needs_no_administrator):
+                   t_the_weekly_task_has_no_window_and_needs_no_administrator,
+                   t_the_destination_is_the_folder_the_owner_chose_in_the_app,
+                   t_the_weekly_tasks_own_command_line_follows_the_setting,
+                   t_a_folder_inside_the_live_data_folder_is_refused_and_nothing_is_written,
+                   t_a_chosen_folder_that_is_gone_fails_loudly,
+                   t_an_unwritable_folder_fails_loudly,
+                   t_the_other_drive_is_a_note_and_the_program_folder_is_a_refusal):
             try:
                 fn()
             except Exception:

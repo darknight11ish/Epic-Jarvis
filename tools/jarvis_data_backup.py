@@ -106,18 +106,35 @@ pruned by hand on 2026-10-13). Making a new one deletes the ones past that.
 Nothing but this tool's own `jarvis-snap-*` entries is ever deleted - the
 owner's `.jbak` files, and the older plain copy, are not this tool's business.
 
-WHERE IT LANDS, AND WHY NOT IN THE FOLDER HE ALREADY HAS
+WHERE IT LANDS - ONE DESTINATION, AND THE OWNER PICKS IT (2026-10-14)
 
-Default destination: `C:\\Users\\pcadmin\\jarvis-data-snapshots`.
+**`folder` in `~/.openjarvis/backup.json` is the one setting.** This tool reads
+that key at run time, and so does `backend/jarvis_backup.py` (which has kept its
+own `.jbak` files in that folder since 2026-09-27); the desktop's Settings ->
+Backups window is where the owner changes it, with Windows' own folder picker
+and one approval card. Before this, the two halves of Jarvis disagreed: the
+`.jbak` backups went where he chose and these snapshots went to a folder
+compiled into this file, so "where are my backups" had two answers.
 
-**Deliberately not** `C:\\Users\\pcadmin\\Documents\\Jarvis Backups`, the
-folder the app writes `.jbak` files into. That folder is one the app is
-allowed to point at a cloud-synced place - its own docstring says a NordLocker
-or OneDrive folder is fine because rule 1 is bent "for that one locked file
-only", the file being encrypted before it is written. These snapshots are
-plain files. OneDrive is installed on this PC, so putting unencrypted memory
-facts in a folder that may become a synced one would bend rule 1 without the
-owner ever deciding to.
+Read at RUN TIME, every time - not copied into the task when it is registered.
+The weekly task is registered once and runs for years, so a destination baked
+into its command line would have stopped following the setting the moment it
+changed. `--dest` still overrides it for a hand-run.
+
+What he gets if he has never chosen: `~/jarvis-data-snapshots`, where the first
+copy of these snapshots went. It is a default, not a decision, and the folder he
+picks wins over it.
+
+**The one thing to know about a shared folder:** the `.jbak` half is encrypted
+before it is written, so the app's own docstring rightly says a NordLocker or
+OneDrive folder is fine for *it*. These snapshots are **plain files** unless
+`--seal` is asked for, so if the folder he picks is one a sync program uploads,
+his memory and chat history are uploaded too. That is now his decision to make
+with the folder picker in front of him (the app's own panel says so in those
+words), rather than something decided here by pointing this tool somewhere else.
+The validation refuses the places that are never right - a folder inside
+`~/.openjarvis`, or inside this tool's own program folder - and names the drive
+when it is not the one Windows is on.
 
 RULE 1 AND THE ONE THING THIS TOOL WILL NOT DO
 
@@ -135,7 +152,18 @@ nail.
 both the destination and any restore target are refused if they resolve inside
 the source folder (`refuse_write_inside`), so a typo cannot turn a backup into
 a write over the live data. Restoring is a separate, explicit act with its own
-target folder - and the target is never the live folder.
+target folder - and the target is never the live folder. Nor into the folder
+this tool itself runs from: a backup kept beside the program can be replaced or
+deleted with it, which is the same mistake one step out.
+
+**A chosen folder that is gone or unwritable STOPS the run and says so.** The
+folder chosen in the app must already be there: the picker can only pick a
+folder that exists, so a folder that has since disappeared means a drive that
+was unplugged or a folder that was deleted, and quietly re-making it would put
+the backup on a path the owner never chose. The run then writes a FAILED
+`last-run.txt` - in the destination when it can, and in the installed copy's own
+folder when it cannot - and exits non-zero, because an unattended run with no
+console has nothing else to be loud with.
 
 ENCRYPTION - THE HALF THAT IS SAFE TO DECIDE, DECIDED
 
@@ -220,7 +248,9 @@ Back up now, one line, pasted into a terminal:
 
     python "$env:LOCALAPPDATA\\JarvisDataBackup\\jarvis_data_backup.py"
 
-It prints where the snapshot landed in plain words. Set it up once with:
+It prints where the snapshot landed in plain words - the same folder the app's
+`.jbak` backups go to, unless `--dest` overrides it for this run. Set it up once
+with:
 
     python "<a checkout>\\tools\\jarvis_data_backup.py" --install --register-task
 
@@ -275,6 +305,15 @@ VERSION = "1"
 
 DEFAULT_DEST = Path(os.path.expanduser("~")) / "jarvis-data-snapshots"
 
+#: The settings file the OTHER half of Jarvis already keeps its backup folder
+#: in, and the key inside it. One file and one key on purpose: `backup.json`
+#: `{"folder": ...}` is what `backend/jarvis_backup.py` reads and writes
+#: (`settings_path`), what the desktop's Settings -> Backups window sets through
+#: `/api/backup/folder`, and what the phone-control work is being told to use.
+#: A second setting here would be a second answer to "where are my backups".
+SETTINGS_NAME = "backup.json"
+SETTINGS_KEY = "folder"
+
 
 def default_source() -> Path:
     """Where Jarvis keeps its data: `OPENJARVIS_CONFIG_DIR`, then
@@ -289,6 +328,35 @@ def default_source() -> Path:
         if value:
             return Path(os.path.expanduser(value))
     return Path(os.path.expanduser("~")) / ".openjarvis"
+
+
+def settings_file() -> Path:
+    """`backup.json` in the folder Jarvis keeps its settings in - the file the
+    app's own backup feature reads its destination from. Read, never written:
+    this tool must not change a setting the owner set in the app."""
+    return default_source() / SETTINGS_NAME
+
+
+def chosen_destination():
+    """The folder the owner chose in Jarvis (Settings, Backups) - the `folder`
+    key of `backup.json` - or None when he has never chosen one.
+
+    Read at RUN TIME, every run. The weekly task is registered once and runs for
+    years, so a destination read once and written into the task would stop
+    following the setting the moment it changed. A file that is missing, is not
+    JSON, is not an object or holds a folder that is not a string is "he has not
+    chosen one" - never a crash and never a guess."""
+    try:
+        raw = json.loads(settings_file().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(raw, dict):
+        return None
+    value = raw.get(SETTINGS_KEY)
+    if isinstance(value, str) and value.strip():
+        return Path(value.strip())
+    return None
+
 
 SNAP_PREFIX = "jarvis-snap-"
 INCOMPLETE = "-INCOMPLETE"
@@ -398,13 +466,16 @@ def is_inside(child, parent) -> bool:
 def refuse_write_inside(target, source) -> Path:
     """`target` as a Path, or Refused when writing there would write into the
     live data. THE guard the brief asks for: this tool never writes into
-    `~/.openjarvis`, and this is what makes that true rather than intended."""
+    `~/.openjarvis`, and this is what makes that true rather than intended.
+    A backup inside the thing being backed up is not a backup."""
     t = _resolve(target)
     if is_inside(t, source):
         raise Refused(
-            f"{t} is inside {_resolve(source)} - the folder Jarvis is using right now. "
-            f"Nothing was written there and nothing will be: choose a folder outside it, "
-            f"such as {DEFAULT_DEST}")
+            f"{t} is inside {_resolve(source)}, the folder Jarvis is using right now - "
+            f"a backup inside the thing being backed up is not a backup. Nothing was "
+            f"written there and nothing will be. Choose a folder outside it in Jarvis "
+            f"(Settings, Backups); with nothing chosen at all, this tool's own default "
+            f"is {DEFAULT_DEST}")
     return t
 
 
@@ -438,6 +509,169 @@ def refuse_write_into_a_locker(target) -> Path:
                 f"and if you want the archive itself protected use --seal with a "
                 f"passphrase (see docs/DATA-BACKUP.md).")
     return t
+
+
+def program_folder() -> Path:
+    """The folder this tool's own program lives in - the installed copy under
+    `%LOCALAPPDATA%\\JarvisDataBackup`, or the `tools/` folder of a checkout it
+    is being run from. There is exactly one honest answer and this is it: the
+    copy that is executing is in that folder by definition."""
+    try:
+        return Path(__file__).resolve().parent
+    except Exception:
+        return Path.cwd()
+
+
+def check_destination(dest, source) -> Path:
+    """The destination as a Path, or Refused with a sentence. EVERY path that
+    writes goes through here, so no caller can route round it:
+
+      * never inside the folder Jarvis is using right now (`refuse_write_inside`);
+      * never inside a NordLocker vault folder, whose app only encrypts a file
+        while it is running and unlocked - measured on this PC 2026-10-13, and
+        the whole of it is in the module docstring's NORDLOCKER section;
+      * never inside this tool's own program folder - a backup kept beside the
+        program can be replaced or deleted with it.
+
+    Existence and writability are NOT checked here, on purpose: the built-in
+    default folder is created on a first run, and a hand-run `--dest` is a
+    scratch folder that may not exist yet. `check_chosen_folder` is the strict
+    half, for the folder the owner picked in the app."""
+    t = refuse_write_inside(dest, source)
+    t = refuse_write_into_a_locker(t)
+    program = program_folder()
+    if is_inside(t, program):
+        raise Refused(
+            f"{t} is inside {program}, which is where this tool's own program "
+            f"lives. A backup kept in the program folder is lost with the program: "
+            f"choose another folder in Jarvis (Settings, Backups)")
+    return t
+
+
+def can_write(folder: Path) -> bool:
+    """Whether a file can actually be created in `folder`.
+
+    This is the only honest test on Windows, where a *folder's* "read-only"
+    attribute means something else entirely and tells you nothing. One empty
+    file with this process's id in its name, removed at once; nothing else in
+    the folder is touched, and a folder that refuses it is reported rather than
+    written into anyway."""
+    probe = folder / f".jarvis-write-test-{os.getpid()}"
+    try:
+        probe.write_bytes(b"")
+    except OSError:
+        return False
+    try:
+        probe.unlink()
+    except OSError:
+        pass
+    return True
+
+
+def drive_note(folder: Path) -> str:
+    """A sentence to show the owner when the folder is not on the drive Windows
+    is on, and "" when it is (or when this is not Windows).
+
+    A note, not a refusal: another disk, a USB stick or a memory card is a
+    perfectly good place for a backup. But a backup on a drive that gets
+    unplugged is a backup that stops happening, and the owner is the only one
+    who knows which kind of drive it is."""
+    if os.name != "nt":
+        return ""
+    try:
+        here = (folder.drive or "").rstrip("\\/").upper()
+        system = (os.environ.get("SystemDrive") or "C:").rstrip("\\/").upper()
+    except Exception:
+        return ""
+    if not here or here == system:
+        return ""
+    return (f"this folder is on drive {here}, not the drive Windows is on ({system})")
+
+
+def check_chosen_folder(path, source) -> tuple:
+    """The folder the owner chose in the app, or Refused with plain words.
+
+    Returns `(the folder, a note to show him)`. This is the strict half of the
+    destination rules and applies only to a folder he picked:
+
+      * **it must be there.** The app's picker can only pick a folder that
+        exists, so a folder that has since gone means a drive was unplugged or
+        the folder was deleted - and re-making it would quietly put the backup
+        somewhere he never chose;
+      * **Jarvis must be able to write into it** - one empty probe file,
+        removed at once;
+      * never inside `~/.openjarvis`, never inside this tool's own program
+        folder;
+      * a folder on a drive that is not the one Windows is on is allowed, and
+        comes back with a note saying so. It is his drive; only he knows whether
+        it stays plugged in.
+    """
+    p = _resolve(path)
+    if not p.is_dir():
+        raise Refused(
+            f"{p} is not a folder on this PC any more, so the weekly backup has "
+            f"nowhere to put a snapshot and DID NOT run. Nothing was written. If it is "
+            f"a drive or a card, plug it back in; otherwise open Jarvis, Settings, "
+            f"Backups and choose the folder again")
+    if p.parent == p:
+        # The app's own check (`jarvis_documents.check_folder`) refuses a drive's
+        # top for the same reason, so a folder set there cannot reach this tool -
+        # but a hand-edited backup.json can, and every file on a whole drive is
+        # not a backup folder.
+        raise Refused(
+            f"{p} is the top of a whole drive, so your backups would be mixed in with "
+            f"everything else on it. Choose a folder of its own in Jarvis (Settings, "
+            f"Backups)")
+    p = check_destination(p, source)
+    if not can_write(p):
+        raise Refused(
+            f"Jarvis cannot write into {p} - the empty test file it tried to create "
+            f"there was refused (a full disk, or a folder only another account may "
+            f"write to). The weekly backup DID NOT run and nothing was written. Choose "
+            f"a folder you can write to, in Jarvis, Settings, Backups")
+    return p, drive_note(p)
+
+
+def destination(dest=None, source=None) -> tuple:
+    """`(where this run writes, a note to show)`, in this order:
+
+      1. `--dest`, the hand-run override. Taken as given - it may be a scratch
+         folder that does not exist yet, and it is created - but still checked
+         against the two places a backup must never go;
+      2. **the folder the owner chose in Jarvis, Settings, Backups**, read from
+         `backup.json` at run time and validated strictly by
+         `check_chosen_folder`. This is the one that makes the weekly task
+         follow the setting;
+      3. `DEFAULT_DEST`, this tool's own default, created if it is missing -
+         what a PC where he has never chosen a folder gets.
+
+    Raises Refused with a sentence when the destination is a place a backup must
+    never go, or when the chosen folder is gone or unwritable."""
+    source = _resolve(source or default_source())
+    if dest:
+        return check_destination(dest, source), ""
+    chosen = chosen_destination()
+    if chosen is not None:
+        return check_chosen_folder(chosen, source)
+    return check_destination(DEFAULT_DEST, source), ""
+
+
+def older_snapshots_elsewhere(dest) -> list:
+    """Snapshots still sitting in the built-in default folder, when this run is
+    writing somewhere else. `[{"folder", "count", "newest"}]`.
+
+    Kept, and said out loud, rather than moved or deleted: they are real backups
+    of real data, retention only ever looks in the folder the run itself is
+    writing to, and changing the destination must not silently empty the old
+    folder or make its snapshots invisible."""
+    default = _resolve(DEFAULT_DEST)
+    if dest is None or _resolve(dest) == default or not default.is_dir():
+        return []
+    rows = [r for r in list_snapshots(default) if not r["incomplete"]]
+    if not rows:
+        return []
+    return [{"folder": default, "count": len(rows),
+             "newest": time.strftime("%Y-%m-%d %H:%M", time.localtime(rows[0]["at"]))}]
 
 
 def _connect_ro(path, timeout=30.0) -> sqlite3.Connection:
@@ -618,18 +852,26 @@ def _copy_dir(src: Path, dest: Path, manifest: dict, arcname: str) -> None:
 
 
 def take_snapshot(source=None, dest=None, *, keep: int = KEEP, passphrase=None,
-                  timeout: float = 30.0, now: float | None = None) -> dict:
+                  timeout: float = 30.0, now: float | None = None,
+                  dest_note: str = "") -> dict:
     """Take, verify, keep. Returns a result dict - {"name", "path", "manifest",
     "problems", "removed", "sealed", "ok"} - and never raises for a database
     that merely failed its checks; that is reported in `problems` with `ok`
     False, and the snapshot is kept as `-INCOMPLETE` so it can be looked at.
-    """
+
+    `dest_note` is a sentence about the destination worth keeping - currently
+    "this folder is on another drive" - written into `last-run.txt`, because an
+    unattended run has no console for a printed warning to be read on."""
     source = _resolve(source or default_source())
-    dest = _resolve(dest or DEFAULT_DEST)
     if not source.is_dir():
         raise Refused(f"{source} is not a folder, so there is nothing to back up")
-    refuse_write_inside(dest, source)          # never write into the live folder
-    refuse_write_into_a_locker(dest)           # never write readable into a locker
+    if dest:
+        dest = check_destination(dest, source)
+    else:
+        # No destination named: the same three-step rule the command line uses,
+        # so a caller that does not name one still honours the folder the owner
+        # chose in the app rather than a second, compiled-in answer.
+        dest, _note = destination(None, source)
     dest.mkdir(parents=True, exist_ok=True)
 
     at = time.time() if now is None else now
@@ -733,6 +975,7 @@ def take_snapshot(source=None, dest=None, *, keep: int = KEEP, passphrase=None,
         result.update(name=final_name, path=str(sealed_path), sealed=True)
 
     result["removed"] = retain(dest, keep, protect=final_name, now=at)
+    result["dest_note"] = dest_note
     _write_last_run(dest, result)
     return result
 
@@ -808,9 +1051,76 @@ def _write_last_run(dest: Path, result: dict) -> None:
         f"  removed older: {', '.join(result['removed']) or 'none'}",
         f"  landed in: {Path(result['path']).parent}",
     ]
+    if result.get("dest_note"):
+        lines.append(f"  NOTE: {result['dest_note']}")
     for problem in result["problems"]:
         lines.append(f"  PROBLEM: {problem}")
     _write_text(dest / "last-run.txt", "\n".join(lines) + "\n")
+
+
+def state_dir() -> Path:
+    """Where a run's outcome is written when the DESTINATION cannot hold it:
+    the installed copy's own folder, which is this tool's own program folder and
+    is there whether or not the drive the backups go to is.
+
+    A missing or unwritable destination is exactly the failure that has nowhere
+    else to be written down, and under `pythonw.exe` there is no console to
+    print to either - so a weekly run that stopped happening would otherwise
+    leave the last good run's `OK` line standing in the folder for ever.
+    `JARVIS_DATA_BACKUP_STATE_DIR` overrides it, which is how the test suite
+    writes a failure without touching a real install folder."""
+    override = os.environ.get("JARVIS_DATA_BACKUP_STATE_DIR")
+    if override:
+        return Path(os.path.expanduser(override))
+    return install_dir()
+
+
+def record_failed_run(dest, why: str, source=None) -> list:
+    """Write `last-run.txt` saying FAILED, and return the folders it reached.
+
+    Written into the destination when it is reachable, so `status` and anyone
+    looking in the backup folder sees the failure where the last good run's
+    record sits - and into the state folder as well, so a destination that has
+    gone away cannot take the record of its own disappearance with it.
+
+    NEVER into the live data folder: the refusal that got here may have been
+    "that destination is inside the folder Jarvis is using", and a failure note
+    must not be the one write that gets through the guard the destination was
+    refused by. Nothing here raises: a run that could not write its own failure
+    note must still print the reason and exit non-zero."""
+    dest = _resolve(dest) if dest else None
+    live = [default_source()] + ([source] if source else [])
+    if dest is not None and any(is_inside(dest, folder) for folder in live):
+        dest = None
+    if dest is not None:
+        try:
+            refuse_write_into_a_locker(dest)
+        except Refused:
+            # A locker's own folder must not be created on the way to
+            # leaving a note about a refusal to write there: the trace
+            # records the refusal instead of undoing it. The note still
+            # goes to state_dir() below.
+            dest = None
+    lines = [
+        f"{time.strftime('%Y-%m-%d %H:%M:%S')}  FAILED - nothing was backed up",
+        f"  why: {why}",
+        f"  destination: {dest or '(none)'}",
+        "  nothing was written to the destination; the last good snapshot is still there",
+    ]
+    text = "\n".join(lines) + "\n"
+    places = []
+    for where in (dest, state_dir()):
+        if where is not None and str(where) not in places:
+            places.append(str(where))
+    wrote = []
+    for where in places:
+        try:
+            Path(where).mkdir(parents=True, exist_ok=True)
+            _write_text(Path(where) / "last-run.txt", text)
+            wrote.append(where)
+        except OSError:
+            continue
+    return wrote
 
 
 # ---------------------------------------------------------------------------
@@ -1261,41 +1571,14 @@ def _print_snapshot(result: dict) -> None:
     print(f"  Backed up to {Path(result['path']).parent}")
 
 
-def _write_failed_run(dest, source, message: str) -> None:
-    """A line where the last run is read, for a failure that never got as far as
-    writing a snapshot.
-
-    Without this, the weekly task could stop working and leave NO trace at all:
-    `pythonw.exe` has no console to print to, so a refusal written to stdout
-    goes nowhere, and a task that failed would look exactly like one that has
-    not run yet. Counts and the reason only - never a row of anybody's data.
-
-    It refuses to write inside the live folder, like everything else here: a
-    failure note is not a reason to write into `~/.openjarvis`. **And it
-    refuses a locker folder too** - `Refused` is not an `OSError`, so it is
-    caught by name below. Without that, this note's own `mkdir(parents=True)`
-    would create the locker path on the way to writing the note, which is the
-    one thing the guard exists to prevent: the trace has to record the
-    refusal, not undo it.
-    """
-    try:
-        folder = _resolve(dest)
-        if is_inside(folder, source):
-            return
-        refuse_write_into_a_locker(folder)
-        folder.mkdir(parents=True, exist_ok=True)
-        _write_text(folder / "last-run.txt",
-                    f"{time.strftime('%Y-%m-%d %H:%M:%S')}  FAILED - nothing was "
-                    f"backed up\n  {message}\n")
-    except (OSError, Refused):
-        pass
-
-
 def cmd_backup(args) -> int:
-    def failed(message: str) -> int:
-        print(f"Nothing was backed up: {message}")
-        _write_failed_run(args.dest, args.source or default_source(), message)
-        return 2
+    def failed(message, dest=None) -> int:
+        """Every refusal in this command goes through here, not just the ones
+        that got as far as the destination: `pythonw.exe` has no console, so a
+        refusal printed to stdout goes nowhere and a task that FAILED must not
+        look like one that has not run yet."""
+        return _nothing_backed_up(message, dest if dest is not None else args.dest,
+                                  args.source)
 
     try:
         phrase = passphrase_from(args, required=args.seal)
@@ -1317,12 +1600,43 @@ def cmd_backup(args) -> int:
                           "installed here. Take the backup without --seal, or install "
                           "it - nothing was written unsealed instead.")
     try:
-        result = take_snapshot(args.source, args.dest, keep=args.keep,
-                               passphrase=phrase if args.seal else None)
+        dest, note = destination(args.dest, args.source)
     except Refused as exc:
         return failed(str(exc))
+    if note:
+        print(f"Note: {note} - a backup there stops happening if it is unplugged.")
+    try:
+        result = take_snapshot(args.source, dest, keep=args.keep,
+                               passphrase=phrase if args.seal else None,
+                               dest_note=note)
+    except Refused as exc:
+        return failed(str(exc), dest)
     _print_snapshot(result)
+    _print_older_elsewhere(dest)
     return 0 if result["ok"] else 1
+
+
+def _nothing_backed_up(message, dest, source=None) -> int:
+    """A run that could not start, said three ways: on the screen, in the exit
+    code, and in a `last-run.txt` where the failure can still be found later by
+    a person the next morning. `pythonw.exe` has no console, so the file is the
+    only one of the three the owner will ever see."""
+    print(f"Nothing was backed up: {message}")
+    wrote = record_failed_run(dest, str(message), source)
+    for where in wrote:
+        print(f"  A note saying so was written to {Path(where) / 'last-run.txt'}")
+    if not wrote:
+        print("  (no note could be written anywhere - the folder is gone)")
+    return 2
+
+
+def _print_older_elsewhere(dest) -> None:
+    """Snapshots this tool left in the old default folder, when the destination
+    has moved. Said after every run and by `status`, so a folder change does not
+    make older backups invisible - they are kept, not moved and not deleted."""
+    for row in older_snapshots_elsewhere(dest):
+        print(f"Note: {row['count']} older snapshot(s) are still in {row['folder']} "
+              f"(newest {row['newest']}). They are left exactly where they are.")
 
 
 def cmd_verify(args) -> int:
@@ -1377,7 +1691,17 @@ def cmd_restore(args) -> int:
 
 
 def cmd_status(args) -> int:
-    dest = _resolve(args.dest)
+    try:
+        dest, note = destination(args.dest, args.source)
+    except Refused as exc:
+        print(f"Nothing is being backed up: {exc}")
+        print("  The folder the owner chose is the `folder` key of "
+              f"{settings_file()} - change it in Jarvis, Settings, Backups.")
+        return 2
+    print(f"Snapshots go to {dest}"
+          f"{'  (the folder you chose in Jarvis)' if not args.dest else '  (--dest)'}")
+    if note:
+        print(f"  note: {note}")
     rows = list_snapshots(dest)
     good = [r for r in rows if not r["incomplete"]]
     print(f"Snapshots in {dest}: {len(good)} good"
@@ -1385,21 +1709,32 @@ def cmd_status(args) -> int:
     print(f"  keeping the newest {KEEP}; the older ones are deleted as new ones arrive")
     for row in rows[:8]:
         when = time.strftime("%Y-%m-%d %H:%M", time.localtime(row["at"]))
-        note = "  (sealed)" if row["sealed"] else ""
+        marks = "  (sealed)" if row["sealed"] else ""
         if row["incomplete"]:
-            note += "  (INCOMPLETE - do not rely on this one)"
+            marks += "  (INCOMPLETE - do not rely on this one)"
         size = 0
         if row["path"].is_dir():
             size = sum(f.stat().st_size for f in row["path"].rglob("*") if f.is_file())
         elif row["path"].is_file():
             size = row["path"].stat().st_size
-        print(f"  {when}  {size / 1024:8.0f} KB  {row['name']}{note}")
+        print(f"  {when}  {size / 1024:8.0f} KB  {row['name']}{marks}")
     last = dest / "last-run.txt"
     if last.is_file():
         print("\nLast run (last-run.txt):")
         print("  " + last.read_text(encoding="utf-8").strip().replace("\n", "\n  "))
+    else:
+        elsewhere = state_dir() / "last-run.txt"
+        if elsewhere.is_file():
+            # The destination could not hold the record of its own failure, so
+            # the tool's own folder did. Without this line a run that has been
+            # failing for weeks reads as a folder that was never used.
+            print(f"\nLast run ({elsewhere}):")
+            print("  " + elsewhere.read_text(encoding="utf-8").strip().replace("\n", "\n  "))
+    _print_older_elsewhere(dest)
     if os.name == "nt":
         print(f"\nWeekly task '{TASK_NAME}': next run {task_next_run() or 'not found'}")
+        print(f"  It runs {install_dir() / TOOL} - re-run `install --register-task` after "
+              f"this file changes, and it then follows the folder above.")
     return 0
 
 
@@ -1420,10 +1755,13 @@ def cmd_install(args) -> int:
 
 
 def _newest(dest):
-    rows = [r for r in list_snapshots(_resolve(dest or DEFAULT_DEST)) if not r["incomplete"]]
+    """The newest good snapshot, in `--dest` when one is named and in the folder
+    the owner chose otherwise - the same resolution a backup uses, so `verify`
+    and `restore` look where the runs actually write."""
+    folder = _resolve(dest) if dest else destination(None)[0]
+    rows = [r for r in list_snapshots(folder) if not r["incomplete"]]
     if not rows:
-        raise Refused(f"there are no snapshots in {_resolve(dest or DEFAULT_DEST)} yet - "
-                      f"make one first")
+        raise Refused(f"there are no snapshots in {folder} yet - make one first")
     return str(rows[0]["path"])
 
 
@@ -1440,8 +1778,10 @@ def build_parser() -> argparse.ArgumentParser:
                         "the newest is used when this is left out")
     p.add_argument("--source", default=None,
                    help=f"the folder holding Jarvis's data (default {default_source()})")
-    p.add_argument("--dest", default=str(DEFAULT_DEST),
-                   help=f"where snapshots are written (default {DEFAULT_DEST})")
+    p.add_argument("--dest", default=None,
+                   help="where snapshots are written for THIS run; left out, it is the "
+                        f"folder you chose in Jarvis, Settings, Backups (the `{SETTINGS_KEY}` "
+                        f"key of {SETTINGS_NAME}), and {DEFAULT_DEST} when you have chosen none")
     p.add_argument("--keep", type=int, default=KEEP,
                    help=f"how many snapshots to keep (default {KEEP})")
     p.add_argument("--to", default=None, help="restore into this folder")

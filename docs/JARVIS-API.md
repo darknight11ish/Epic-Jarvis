@@ -8824,6 +8824,41 @@ never run reads as a live one.
   restore card; approving it still needs Windows Hello at the backend
   (`jarvis_owner_check`). Step 1's known limits (`docs/ARCHITECTURE.md`
   section 3) apply.
+
+### 45.7 One destination, chosen by the owner (added 2026-10-14)
+
+The `folder` key of `~/.openjarvis/backup.json` - written by `POST
+/api/backup/folder`, read by `GET /api/backup` - is **the one setting** that
+says where backups go, and it now governs both halves of Jarvis's backups:
+
+- this section's `.jbak` feature, as it has since 2026-09-27;
+- `tools/jarvis_data_backup.py` (`docs/DATA-BACKUP.md`), run weekly by the
+  `Jarvis Personal Data Backup` task. It reads the same key **at run time**,
+  every run, rather than writing to a folder compiled into itself: the task's
+  command line carries no destination, so changing the folder changes where the
+  next snapshot lands. `--dest` overrides it for one hand-run.
+
+Nothing new on the wire: no route, no card and no setting was added. The tool
+never writes `backup.json` (it must not change a setting the owner made in the
+app) and never writes into `~/.openjarvis`, which its own suite enforces.
+
+**The folder is checked before it is accepted**, in the words the owner reads,
+by two halves that apply the same rules:
+
+| rule | desktop (`backup.rs`, before the card) | weekly tool (`jarvis_data_backup.py`, before it writes) |
+|---|---|---|
+| it must be there | "is not there any more. Choose the folder again." | "is not a folder on this PC any more ... DID NOT run" |
+| it must be writable | one empty probe file, removed at once | the same probe |
+| never inside `~/.openjarvis` | refused | refused |
+| never in a program folder | refused - this app's own, and the backend's when it can be resolved | refused - the folder the tool itself runs from |
+| another drive | a question naming the drive, answered by the owner; nothing is sent until he answers | a note on the run's output, recorded as usual |
+
+The desktop's refusal is shown on the Settings, Backups panel and **no approval
+card is raised** - nothing was sent to the backend. The tool's is loud in the
+three ways an unattended run can be: exit code 2, the reason printed, and a
+`FAILED` `last-run.txt` written where it can be seen. A folder that is gone or
+unwritable therefore cannot leave the last good run's `OK` line standing as if
+nothing had happened.
 ---
 
 ## 46. News headlines in the morning briefing (added 2026-09-27)

@@ -136,8 +136,9 @@ one.
 python "$env:LOCALAPPDATA\JarvisDataBackup\jarvis_data_backup.py"
 ```
 
-The last line it prints says where the snapshot landed:
-`C:\Users\pcadmin\jarvis-data-snapshots`.
+The last line it prints says where the snapshot landed - the folder you chose in
+Settings, Backups (`C:\Users\pcadmin\Documents\Jarvis Backups` on this PC), or
+`C:\Users\pcadmin\jarvis-data-snapshots` if you have never chosen one.
 
 | what you want | one line |
 |---|---|
@@ -171,7 +172,9 @@ One Windows task, named **`Jarvis Personal Data Backup`**:
 
 **Verified end to end**: the task was started through Task Scheduler itself,
 and it finished with **Last Result 0** and a verified snapshot of 19 databases
-and 607 rows in `jarvis-data-snapshots`.
+and 607 rows in `jarvis-data-snapshots`. (That was 2026-10-13, before the
+destination became the folder you choose - see "Where it lands" below for where
+the runs go now and what the task has to be refreshed to.)
 
 ## What is kept, and for how long
 
@@ -221,17 +224,82 @@ arrived with **6 tables** where the plain copy had none. `restore` writes a
 short `README.txt` beside the restored data saying how to put it back, because
 whoever needs that file will be reading it at the worst possible moment.
 
-## Where it lands - and why not in the folder you already have
+## Where it lands - one destination, and you pick it (2026-10-14)
 
-`C:\Users\pcadmin\jarvis-data-snapshots`.
+**`folder` in `C:\Users\pcadmin\.openjarvis\backup.json` is the one setting.**
+It is the key the locked `.jbak` backups have used since 2026-09-27, and this
+tool now reads the same key, at run time, so both halves of Jarvis put their
+backups in the same place - the folder **you** chose, not two folders that
+disagree.
 
-**Deliberately not** `C:\Users\pcadmin\Documents\Jarvis Backups`. That folder
-is one your app is allowed to point at a cloud-synced place: its own source
-says a NordLocker or OneDrive folder is fine there, because rule 1 is bent "for
-that one locked file only" - the file being encrypted before it is written.
-These snapshots are plain files. OneDrive is installed on your PC, so putting
-unencrypted memory facts in a folder that might become a synced one would bend
-rule 1 without you ever deciding to.
+**What you click:** Jarvis Desktop → Settings → **Backups** → **"Choose a
+folder…"**. That opens Windows' own "Select folder" dialog (the same one
+"Folders Jarvis may look in" uses), shows the folder's full path back to you,
+and raises one approval card on the PC. Until this change this tool ignored that
+setting and wrote to `C:\Users\pcadmin\jarvis-data-snapshots` instead.
+
+**Read fresh every run.** The weekly task is registered once and runs for years,
+and its command line names no folder at all: it asks `backup.json` each time, so
+changing the folder changes where the *next* snapshot lands. `--dest <folder>`
+overrides it for a single hand-run. If you have never chosen one, you get
+`C:\Users\pcadmin\jarvis-data-snapshots`, which is where the first snapshots
+went - a default, not a decision.
+
+**What is checked before a folder is accepted.** The app refuses, in the panel
+and before any card is raised:
+
+| rule | what you see |
+|---|---|
+| it must be a folder that is there | "…is not there any more. Choose the folder again." |
+| Jarvis must be able to write into it | one empty probe file, created and deleted at once; "Jarvis cannot write into…" if it is refused |
+| never inside `C:\Users\pcadmin\.openjarvis` | "…is inside Jarvis's own data folder - the very thing being backed up. A backup kept inside what it is backing up is not a backup…" |
+| never inside a program folder | "…is inside <folder>, where Jarvis's own program lives. A backup kept there is lost with the program…" |
+| another drive | not a refusal: a question naming the drive, asked before anything is sent |
+
+The weekly tool applies the same rules and says the same things in its own
+words, because it is the half that runs with no window on the screen.
+
+**The one caveat, said plainly.** The `.jbak` files are encrypted before they
+are written, so a cloud-synced folder (NordLocker, OneDrive) is fine for *them*.
+These snapshots are **plain files** unless you seal them with `--seal`, so if the
+folder you pick is one a sync program uploads, your memory and chat history go
+up with it. The Backups panel says so in those words now, next to the picker -
+it is your decision to make with the folder in front of you, not something this
+tool decides for you by writing somewhere else.
+
+### What happens to the backups that are already there
+
+Nothing is moved, nothing is deleted and nothing is silently ignored.
+
+- **Your four `.jbak` files** (`jarvis-backup-20261010-*.jbak`) are already in
+  `C:\Users\pcadmin\Documents\Jarvis Backups`, which is the folder you chose.
+  They stay exactly where they are, and the weekly run now writes beside them.
+  The two retentions cannot eat each other: this tool only ever deletes entries
+  named `jarvis-snap-*`, and the app's own retention only ever deletes files
+  named `jarvis-backup-*`. Whichever folder holds both, each leaves the other
+  alone.
+- **The snapshots already in `C:\Users\pcadmin\jarvis-data-snapshots`** stay
+  there too. Retention only ever looks in the folder the run itself is writing
+  to, so a destination change cannot delete them - and to make sure they are not
+  simply forgotten, every run and `status` now print a line naming that folder
+  and how many snapshots are still in it. They are older backups of real data;
+  they are kept.
+- **Nothing was moved automatically**, on purpose: moving somebody's backups
+  without asking is how a backup ends up half in one place, and a copy is not
+  free on a disk that may be full. If you want them together, delete the old
+  folder's contents by hand once you are satisfied the new runs are landing.
+
+**One step is still yours to do on the PC.** The weekly task points at the
+installed copy, `%LOCALAPPDATA%\JarvisDataBackup\jarvis_data_backup.py`, which
+is the old build until it is refreshed. After this change lands:
+
+```powershell
+python "<a checkout>\tools\jarvis_data_backup.py" install --register-task
+```
+
+That copies the new tool into place and re-registers the same weekly task, which
+then follows the folder above. `status` prints where snapshots go now and where
+the task will run from, so you can check rather than trust.
 
 **And not inside the NordLocker locker.** That is not a preference: it was
 measured, it does not encrypt anything with the app closed, and the tool now
@@ -382,12 +450,16 @@ of them is this tool deciding for you.
 
 ## If something looks wrong
 
-* `last-run.txt` in `jarvis-data-snapshots` says what the last run did, in
-  counts. A run that failed names the database and the reason.
+* `last-run.txt` in the backup folder says what the last run did, in counts. A
+  run that failed names the database and the reason. When the backup folder
+  itself has gone, the note is written to
+  `%LOCALAPPDATA%\JarvisDataBackup\last-run.txt` instead, and `status` shows it.
 * A snapshot whose name ends `-INCOMPLETE` **is not a backup** - it is kept so
   you can see what went wrong, and the next good run does not count it.
 * `verify` opens a snapshot and prints the real row count of every database.
   If it says "every database opens and matches its manifest", the snapshot is
   good.
 * The whole thing is one file, `tools/jarvis_data_backup.py`, and it is
-  checked by `backend/test_data_backup.py` (82 checks) on every push.
+  checked by `backend/test_data_backup.py` (119 checks, plus 1 skipped on this
+  PC: a directory whose Windows permissions really refuse a write, which
+  needs icacls) on every push.
