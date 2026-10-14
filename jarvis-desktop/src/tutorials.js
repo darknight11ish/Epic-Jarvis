@@ -74,28 +74,40 @@ export const LABELS = {
  *
  * Two kinds, because the Brain panel can only reach its OWN document:
  *
- *   * `{ selector }` - a control in this window. It is found, scrolled to and
- *     marked, so the owner sees the real thing rather than a picture of it.
- *   * `{ file, id, label }` - a control in a different window (Settings, the
- *     HUD, the Faces window). No script here can highlight it, so the step says
- *     which window to open instead of pretending. `tests/tutorials.mjs` checks
- *     that the file really holds that id, so this cannot rot into a lie.
+ *   * `{ selector }` - a control in THIS window, which is `brain.html`. It is
+ *     found, scrolled to and marked, so the owner sees the real thing rather
+ *     than a picture of it.
+ *   * `{ file, id, label }` - a control in a different window (the Jarvis bar,
+ *     Settings, the HUD, the Faces window). No script here can highlight it, so
+ *     the step says which window to open instead of pretending.
+ *     `tests/tutorials.mjs` checks that the file really holds that id, so this
+ *     cannot rot into a lie.
+ *
+ * `prompt-field` and `approval-card` were `{ selector }` entries until
+ * 2026-10-10 and belonged to neither kind: the ids are in `index.html` - the
+ * Jarvis bar's prompt field and its approval card - while this panel is drawn
+ * in `brain.html` (`brain.js` calls `showTutorials($("tutorials-root"))` and
+ * `id="tutorials-root"` is in brain.html). `pointAt` searched the Brain's own
+ * document, found nothing, and said "Nothing on this screen to point at for
+ * this step" - which is the honest answer, and exactly the wrong one. The
+ * suite did not catch it because it concatenated the two documents before
+ * looking; it does not any more. Two of the ten names were in that state, and
+ * they are the two most-reached controls in the whole curriculum.
  *
  * The name is a registry key and never a raw selector, so the catalogue cannot
  * name a `div` that merely happens to exist, and a control that moves is fixed
  * in one place here.
  */
 export const CONTROL_POINTS = {
-  // This window - the Jarvis bar (index.html), which is where the Brain panel
-  // and this panel both live.
-  "prompt-field": { selector: "#prompt-field" },
-  "approval-card": { selector: "#approval" },
+  // This window - brain.html, which is where this panel is drawn.
   "brain-memory": { selector: "#view-memory" },
   "brain-tutorials": { selector: "#tutorials-root" },
   "brain-about": { selector: "#memory-about" },
 
   // Other windows - pointed at by naming the window, which is all that is
   // honest from here.
+  "prompt-field": { file: "index.html", id: "prompt-field", label: "The Jarvis bar's own prompt field" },
+  "approval-card": { file: "index.html", id: "approval", label: "The approval card in the Jarvis bar" },
   "hotkeys": { file: "settings.html", id: "hotkey-rows", label: "Settings → Hotkeys" },
   "asks-first": { file: "settings.html", id: "asks-first", label: "Settings → What asks first" },
   "faces": { file: "faces.html", id: "face-n", label: "The Faces window" },
@@ -105,6 +117,44 @@ export const CONTROL_POINTS = {
 
 /** The two sections, in the order the backend sends them. */
 export const SECTION_ORDER = ["pc", "phone"];
+
+/**
+ * `TRY_ACTIONS` - the actions a step may ask this app to NOTICE, which is the
+ * `used` half of the design and is **designed and NOT BUILT**
+ * (docs/TUTORIALS-DESIGN.md, "`try` and the `used` state - DESIGN ONLY").
+ *
+ * A step may carry `try` beside `point`, in the same per-app shape:
+ *
+ *   "try": {"desktop": "switch-model", "phone": null}
+ *
+ * `None` means "this app never shows this as a thing to do", exactly as it does
+ * for `point`, and for the same reason: a step the app cannot observe must not
+ * offer a control that never lights up.
+ *
+ * **NOTHING OBSERVES THESE YET.** No state is written, no `used` record can
+ * exist, and neither app draws one - `tutorials.js` never reads this map. It is
+ * a registry of NAMES, declared so that the catalogue cannot name an action no
+ * app declares, and so that building the mechanism is a change to one file per
+ * app rather than a rewrite of the curriculum. `tests/tutorials.mjs` holds the
+ * catalogue to it, which is the whole point of it existing now.
+ *
+ * Each name is a verb phrase the app could recognise from something it already
+ * does: switching the model, finishing the measurement, deciding a card. When
+ * it is built, the observing code goes where the app already knows the thing
+ * happened - nothing new listens to anything.
+ */
+export const TRY_ACTIONS = {
+  "switch-model": "the model actually changed, confirmed by the PC's own answer",
+  "measure-hardware": "a hardware measurement finished and was reported",
+  "open-crash-notes": "the crash-notes list really drew a note",
+  "finish-set-up": "the Set up Jarvis card was finished",
+  "spending-summary": "a spending summary was really read back",
+  "ask-home-status": "Home Assistant answered a status question",
+  "open-memory": "the Memory tab was really opened",
+  "open-work": "the Work tab was really opened",
+  "pick-voice": "the spoken voice really changed",
+  "ring-phone": "a paired phone really rang",
+};
 
 /**
  * Where the place key sends the Brain for this page - "Tutorials and the FAQ".
@@ -175,6 +225,48 @@ export function stateWords(tutorial) {
 /** The button a finished or skipped tutorial shows instead of starting over. */
 export function showsAgain(tutorial) {
   return Boolean(tutorial && (tutorial.done || tutorial.state === "skipped"));
+}
+
+/**
+ * "You have met 9 of the 23 lessons here. 14 to go." - the ONE number this page
+ * is allowed to show, and it counts down.
+ *
+ * The backend has computed this since the route was written
+ * (`jarvis_tutorials.py`'s `read()`: `counts.done`, `counts.due`,
+ * `counts.total`) and NOTHING DREW IT - not this page, not the phone. This is
+ * the drawing of it.
+ *
+ * Four decisions, and each of them is the design's (docs/EDUCATION-TAB-DESIGN.md
+ * sections 5.2 and 5.3), not a preference:
+ *
+ *   * NOT a percentage, and not "X% complete". A percentage is the number that
+ *     goes up fastest by clicking Next through the shortest lessons, and this
+ *     project already refuses to count a row nobody reached as a pass
+ *     (`CLAUDE.md`: BLOCKED and NOT-TESTABLE are never passes).
+ *   * "met", not "done" or "learned". A lesson that was skipped was MET AND
+ *     DECLINED - the backend keeps `skipped` and "never opened" apart, and a
+ *     total that merged them would destroy the only distinction this page has.
+ *     So `met` is every tutorial with a record of any kind.
+ *   * The remainder is stated, not implied. "14 to go" is the honest half of
+ *     the same sentence, and it is information rather than a nag: nothing here
+ *     interrupts the owner about it (the design refuses a nudge outright).
+ *   * It never says what he CAN DO. Only that he has looked. The stronger
+ *     `used` state is designed and deliberately not built
+ *     (docs/EDUCATION-TAB-DESIGN.md section 5.3) - this line must not imply it.
+ *
+ * The counts come from the PC, so the two apps can never disagree about them.
+ * A backend too old to send `counts` gets no line at all rather than a made-up
+ * one - an invented total is worse than no total.
+ */
+export function metWords(counts) {
+  const total = Number(counts && counts.total);
+  const due = Number(counts && counts.due);
+  if (!Number.isFinite(total) || !Number.isFinite(due) || total <= 0) return "";
+  const met = total - due;
+  const toGo = total - met;
+  const lessons = total === 1 ? "lesson" : "lessons";
+  if (toGo <= 0) return `You have met all ${total} ${lessons} here.`;
+  return `You have met ${met} of the ${total} ${lessons} here. ${toGo} to go.`;
 }
 
 /**
@@ -286,6 +378,12 @@ export async function showTutorials(root) {
   }
 
   const columns = el("div", "tutorial-columns");
+  // The one number this page shows, and it counts down (see `metWords`). Drawn
+  // above the two lists, from the PC's own total for everything the page lists -
+  // including the shared tutorials, which appear in both sections and are
+  // therefore counted once.
+  const met = metWords(catalogue.counts);
+  if (met) body.append(el("p", "tutorial-met", met));
   for (const section of SECTION_ORDER) {
     const title = ((catalogue.sections || []).find((s) => s.id === section) || {}).title
       || section;

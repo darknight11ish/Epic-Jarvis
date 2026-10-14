@@ -208,6 +208,80 @@ await check("the read-aloud ids are the voice table's own two", () => {
   }
 });
 
+/* ── The one Help button, and the id that made it do nothing ─────────────── */
+
+/**
+ * THE DEFECT THIS SUITE WAS MISSING, and it was shipped for two days.
+ *
+ * The card's own "Read the FAQ" was wired to `goToCard("faq")`. `goToCard`
+ * looks the id up in THIS document and quietly returns when it is not there,
+ * and the "Help and FAQ" card it named was deleted from `settings.html` on
+ * 2026-10-08 (`settings.js:950-955`; `tests/faq.mjs` asserts the card is gone).
+ * So the only first-run control that says "here is help" did nothing at all
+ * when pressed - and nothing failed, because the id was never read.
+ *
+ * The check above cannot see it: it reads `$("id")`, and `goToCard` takes a
+ * plain string. This one reads the `goToCard` calls themselves. Note the fake
+ * DOM below still holds an element with id `faq`, which is exactly how the old
+ * shape stayed invisible - a test harness is not the page.
+ */
+await check("every card the card's own buttons jump to is really in settings.html", () => {
+  // Comments are stripped first, and that is not tidiness: this module's own
+  // comment above `openTutorials` quotes the OLD call, `goToCard("faq")`, to
+  // explain the defect. A check that reads prose as code fails on its own
+  // explanation.
+  const code = JS.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  const targets = [...code.matchAll(/goToCard\(\s*"([\w-]+)"\s*\)/g)].map((m) => m[1]);
+  assert.ok(targets.length >= 2, `only ${targets.length} goToCard calls found - is the row still wired?`);
+  for (const id of new Set(targets)) {
+    assert.ok(HTML.includes(`id="${id}"`),
+      `goToCard("${id}") names a card settings.html does not have - that button does nothing`);
+  }
+});
+
+await check("the FAQ button opens the Brain's one Help tab, and not a card in this page", async () => {
+  // The id it used to name is gone; the help that exists is the Brain's
+  // "Tutorials and the FAQ". The button must therefore leave the place the
+  // Brain reads and ask the app to bring that window forward - the same route
+  // the palette's own Help row takes. Both halves are asserted, because either
+  // one alone does nothing: the place without the command is never read, and
+  // the command without the place opens the Brain on its landing tab.
+  const stub = fakeDom({ stored: null });
+  const calls = [];
+  globalThis.__TAURI__ = {
+    core: {
+      invoke: async (command, args) => {
+        calls.push([command, args]);
+        return {};
+      },
+    },
+  };
+  let unload = () => {};
+  try {
+    unload = await loadModule(stub);
+    const help = stub.els.get("fr-rows").querySelector("#fr-help");
+    assert.ok(help, "the card has no help row at all");
+    const buttons = help.querySelectorAll("button");
+    assert.ok(buttons.length >= 1, "the help row drew no controls");
+    calls.length = 0;
+    for (const fn of buttons[0].listeners.click) await fn();
+    const opened = calls.filter((c) => c[0] === "open_fix_place");
+    assert.deepEqual(opened, [["open_fix_place", { place: "tutorials" }]],
+      `the FAQ button asked for ${JSON.stringify(calls)}`);
+    // The place really travelled: the Brain reads this key on load and on
+    // focus, and `forget-range-panel.js` takes it only while it is fresh.
+    const left = JSON.parse(stub.localStorage._value());
+    assert.equal(left.place, "tutorials", "the place the Brain reads was not left behind");
+    assert.equal(typeof left.at, "number", "the place carries no timestamp, so it is never taken");
+    // And the owner is told it worked rather than left guessing.
+    assert.match(help.querySelector(".status").textContent, /Tutorials and the FAQ/,
+      "the card does not say where the help opened");
+  } finally {
+    unload();
+    delete globalThis.__TAURI__;
+  }
+});
+
 /* ── The skip, and the way back ─────────────────────────────────────────── */
 
 await check("the marker is a version, following ONBOARDING_VERSION", () => {
@@ -302,9 +376,13 @@ function makeNode(tag) {
 }
 
 function fakeDom({ stored = null, refuseWrites = false } = {}) {
+  // The ids settings.html really has for the two in-page jump targets. `faq` is
+  // deliberately NOT stubbed any more: it was how the dead button stayed
+  // invisible for two days - the page had no such element and this harness did,
+  // so `goToCard("faq")` looked like it worked.
   const ids = ["first-run", "fr-body-plain", "fr-body-full", "fr-state", "fr-status",
     "fr-rows", "fr-done", "fr-again", "fr-again-line", "fr-intro", "fr-intro-status",
-    "faq", "asks-first", "connection"];
+    "asks-first", "connection"];
   const byId = new Map();
   for (const id of ids) {
     const el = makeNode("div");
