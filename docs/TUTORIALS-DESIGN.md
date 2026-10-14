@@ -350,8 +350,8 @@ interactive.
 
 | Piece | Where | What it is |
 |---|---|---|
-| 23 tutorials | `backend/jarvis_tutorials.py` | Data: `{id, version, section, title, why, minutes, steps[]}`, each step `{title, body, where}` |
-| Sections | same file, `SECTIONS = ("pc", "phone", "both")` | 11 `pc`, 6 `phone`, 6 `both` |
+| 35 tutorials (23 when this part was written) | `backend/jarvis_tutorials.py` | Data: `{id, version, section, title, why, minutes, steps[]}`, each step `{title, body, where}`, and since 2026-10-10 an optional `try` |
+| Sections | same file, `SECTIONS = ("pc", "phone", "both")` | 15 `pc`, 8 `phone`, 12 `both` (11 / 6 / 6 when this part was written) |
 | Desktop screen | `jarvis-desktop/src/tutorials.js` | Brain panel: Next / Back / Skip / Leave it here |
 | Phone screen | `jarvis-client/.../ui/screens/TutorialsPlate.kt` | The same card, the same buttons |
 | Delivery | `backend/tutorials.patch` (19 lines) + `jarvis_tutorials.py` via `_where.SHIPPED` | The patch only wires the module into `jarvis_hud.py` |
