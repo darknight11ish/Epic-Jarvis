@@ -92,6 +92,34 @@ dshwork/
 # of the pasted copies of jarvis_gate.py.
 .dsh-scratch/
 
+# The DSH agent's scratch TOOLS folder, and its scratchpad/ (rule added
+# 2026-10-14). Neither was ignored, and both were TRACKED - five files and no
+# rule covering any of them:
+#
+#   .dsh-scratch-tools/make_picture_card_patch.py   a throwaway script, and the
+#       only in-tree writer of the tracked `backend/picture-card.patch`
+#   scratchpad/admem/budget_measure.py              a measurement script
+#   scratchpad/brain-sections/brain-0{1,2,3}-*.png  brain screenshots
+#
+# This is the same failure the dshwork/ and .dsh-scratch/ notes above record,
+# found a third time: agent scratch that a plain `git add -A` sweeps into a
+# public repository. Nothing here is read by code, a test or a workflow, so no
+# build and no check needs any of it - the files stay on disk.
+#
+# Two of the five ARE named from elsewhere, and untracking them is a decision
+# somebody should look at rather than discover: docs/ADAPTIVE-MEMORY-DESIGN.md
+# section 8 says scratchpad/admem/budget_measure.py "is kept ... so the numbers
+# can be re-run rather than taken on trust", and .dsh-scratch-tools/
+# make_picture_card_patch.py is the only in-tree writer of the tracked
+# backend/picture-card.patch. A clone no longer carries either. If one of those
+# promises should survive a clone, the script belongs under tools/ - where this
+# project's other patch writers and measurement tools live - with the pointer in
+# the document moved to match it.
+# tools/check_no_scratch_in_the_tree.py is the guard that bites if one of these
+# is tracked again.
+.dsh-scratch-tools/
+scratchpad/
+
 # An accidental nested copy of the repository root. A directory of this name
 # INSIDE the repository is never intended. This does not match the
 # repository's own root: a .gitignore pattern is relative to the directory the
