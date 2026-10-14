@@ -882,7 +882,7 @@
   "type": "function",
   "function": {
    "name": "change_setting",
-   "description": "Change one of Jarvis's own on/off settings, named the way the owner said it - any wording; you match it, this is not a fixed phrase. For example \"prompt coach\", \"quiet hours\", \"web search\", \"humour\".  \"value\" is on or off. A change that loosens a rule, or turns on something that reads or reaches more, raises ONE approval card and changes nothing until it is answered; a cosmetic one happens at once. If Jarvis cannot change that setting, say so plainly - never claim it was changed.",
+   "description": "Call this tool when the owner asks you to change one of Jarvis's own settings, in any words - do not ask first, just call it. Examples: \"turn on humour\", \"switch the prompt coach off\", \"enable web search\", \"turn on quiet hours\". \"setting\" is the setting in their words, e.g. \"humour\"; \"value\" is on or off. Its own result says what happened: a change that loosens a rule or reads more waits for one approval card, a cosmetic one changes at once. Repeat that result - never say a setting changed when it did not.",
    "parameters": {
     "type": "object",
     "properties": {
