@@ -35,8 +35,12 @@ made in a temp folder: **nothing in this file reads or writes the owner's real
      the owner's `.jbak` files and the older plain copy are left alone;
   8. a sealed snapshot round-trips, a wrong passphrase is refused in plain
      words, and a missing `cryptography` refuses BEFORE anything is written;
-  9. the weekly task runs `pythonw.exe` (no window), weekly, with no `/RU` and
-     no `/RP` (no administrator, no stored password).
+  9. a NordLocker locker is refused as a destination, before anything is
+     written - measured on the owner's PC, a locker does not encrypt a file
+     while the app is closed, so a weekly run into one would have written his
+     data in the clear and reported success;
+  10. the weekly task runs `pythonw.exe` (no window), weekly, with no `/RU` and
+      no `/RP` (no administrator, no stored password).
 """
 import json
 import os
@@ -492,9 +496,56 @@ def t_sealing_without_the_library_writes_nothing():
 
 
 # ---------------------------------------------------------------------------
+#   8b. a NordLocker locker is refused, because it does not encrypt unattended
+# ---------------------------------------------------------------------------
+#
+# Measured on the owner's PC, 2026-10-13: a locker folder is a Microsoft cloud
+# placeholder, and with the NordLocker app closed a file written into it stays
+# ordinary plaintext on the disk - 40 MB written cost 42.03 MB of free space and
+# the file was not a reparse point at all. A weekly run pointed there would
+# therefore have succeeded and left the data readable, which is the one outcome
+# a backup must never produce quietly. `docs/DATA-BACKUP.md` has the numbers.
+
+
+def t_a_nordlocker_locker_is_refused_as_a_destination():
+    print("\n--- t_a_nordlocker_locker_is_refused_as_a_destination ---")
+    # A branch merging without the guard is not a red build: the feature is
+    # simply absent, and this says so rather than passing. `tools/` and this
+    # suite are edited in parallel worktrees, so this is a real case and not a
+    # hypothetical one.
+    if not hasattr(jdb, "refuse_write_into_a_locker"):
+        skip("a NordLocker locker destination is refused",
+             "this build of the tool has no refuse_write_into_a_locker - the "
+             "guard is not in this tree, so there is nothing to check")
+        return
+    base = Path(tempfile.mkdtemp(prefix="jarvis-databak-locker-", dir=ROOT_TMP))
+    src = build_source(base)
+    locker = base / "NordLocker_9019064"
+
+    for gone in (locker, locker / "My Files", locker / "My Files" / "snapshots"):
+        raised = _raised(lambda p=gone: jdb.refuse_write_into_a_locker(p))
+        check(f"{gone.name} is refused in plain words, not taken as a destination",
+              isinstance(raised, jdb.Refused) and "locker" in str(raised), str(raised))
+
+    # The refusal has to happen BEFORE anything is written, or it is a comment
+    # rather than a guard.
+    code = jdb.main(["backup", "--source", str(src), "--dest",
+                     str(locker / "My Files" / "snapshots")])
+    check("the command line stops before taking any snapshot at all",
+          code == 2 and not locker.exists(),
+          f"exit {code}, locker exists: {locker.exists()}")
+
+    # ...and an ordinary folder is still fine, so the guard is not a wall.
+    allowed = _raised(lambda: jdb.refuse_write_into_a_locker(base / "snapshots"))
+    check("an ordinary destination is still allowed", allowed is None, str(allowed))
+    ok = jdb.take_snapshot(src, base / "snapshots", now=1_700_004_000)
+    check("and a real snapshot into one still verifies",
+          ok["ok"] and Path(ok["path"]).is_dir(), str(ok["problems"]))
+
+
+# ---------------------------------------------------------------------------
 #   9. the weekly timer: no window, no administrator
 # ---------------------------------------------------------------------------
-
 
 def t_two_runs_inside_one_second_do_not_collide():
     print("\n--- t_two_runs_inside_one_second_do_not_collide ---")
@@ -638,6 +689,18 @@ def t_the_weekly_task_has_no_window_and_needs_no_administrator():
     check("registering is refused in plain words where there is no Task Scheduler",
           _os.name == "nt" or
           isinstance(_raised(lambda: jdb.register_task("x")), jdb.Refused))
+    # The task's own description is what somebody reads in Task Scheduler a year
+    # from now. The one thing about this task that could be mistaken for
+    # something it is not is whether the data is protected, so it says so.
+    check("the task describes itself, so it can be explained a year later",
+          "-Description" in text
+          and jdb.TASK_DESCRIPTION.replace("'", "''") in text,
+          "no -Description in the registration script")
+    check("and that description says plainly that the snapshot is NOT encrypted",
+          "NOT encrypted" in jdb.TASK_DESCRIPTION
+          and "seal" in jdb.TASK_DESCRIPTION, jdb.TASK_DESCRIPTION)
+    check("so re-running --register-task replaces the task and its description",
+          "-Force" in text)
 
 
 def _raised(fn):
@@ -675,6 +738,7 @@ def main() -> int:
                    t_keeping_the_newest_few_touches_nothing_else,
                    t_a_sealed_snapshot_round_trips,
                    t_sealing_without_the_library_writes_nothing,
+                   t_a_nordlocker_locker_is_refused_as_a_destination,
                    t_two_runs_inside_one_second_do_not_collide,
                    t_a_refused_run_still_leaves_a_trace,
                    t_the_data_folder_follows_the_same_setting_jarvis_uses,
