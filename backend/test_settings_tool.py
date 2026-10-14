@@ -43,6 +43,11 @@ WHAT IT CHECKS, IN PLAIN WORDS
   6. every module function a setting's setter calls actually exists. The humour
      switch named `jarvis_manner.handle_post`, which has never existed - so
      "turn on humour", added by #360, raised AttributeError and could not work.
+  7. THE HALF THE 2026-10-13 FIELD TEST TURNED ON: the tool is still OFFERED by
+     the shipped settings file, the description that made the model actually
+     call it is still an instruction rather than a note about the tool, and the
+     tier rule behind it has not moved - the privacy actions still ask first,
+     and the cosmetic setters still reach no gate at all.
 
 No network, no model, no Windows, and nothing under the owner's real config
 directory is read or written: every setter this suite reaches is a recording
@@ -61,6 +66,22 @@ import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+
+#: THIS SUITE MUST NOT LITTER THE TREE IT TESTS (measured 2026-10-13). One of
+#: its own checks imports `jarvis_gate` from this repository's `jarvis-backend/`
+#: copy (t_its_gate_action_already_exists, which appends that folder to
+#: sys.path). Run WITHOUT `-B` - which is how tools/check_claims.py runs every
+#: `test:` row, as a plain child process - that import wrote
+#: `jarvis-backend/__pycache__/jarvis_gate.cpython-312.pyc`, and
+#: `backend/test_base_matches_repo.py` fails on exactly that file ("no private,
+#: generated or superseded file is in the base"). The damage is not visible in
+#: the run that causes it: the pycache is written during ONE run and the base
+#: check fails in the NEXT one, so `backend/test_claims.py` - which runs the
+#: whole register, then runs it again to read its green line - went red the
+#: moment a `test:` row named this suite (row F01 of docs/CLAIMS.tsv). A run
+#: with `python -B`, which is how the briefs say to run a suite by hand, hides
+#: it entirely. So bytecode writing is off for this whole process.
+sys.dont_write_bytecode = True
 
 #: Before ANY import of the backend: a temp config dir, so that nothing this
 #: suite touches can reach the owner's own settings.
@@ -685,6 +706,161 @@ def t_every_one_of_the_21_switches_resolves_from_its_own_names():
           len(R.BOOL_SETTINGS) == 21, str(len(R.BOOL_SETTINGS)))
 
 
+def gate_signs_in(source: str, fn_name: str) -> list:
+    """Names in ONE function of `source` that would mean it puts a change to a
+    gate (or asks a person) rather than applying it. Read with `ast`, so a
+    comment saying "no card" cannot make this pass.
+
+    THE LIMIT, said plainly: this reads ONE function's own body. A setter that
+    is a thin wrapper (set_background_learning, set_learn_sensitive) calls
+    another module which does the asking, so an empty answer here means "this
+    function raises no card itself", never "this change needs no card" - the
+    second claim is the tier rows' job, above."""
+    signs = []
+    for node in ast.walk(ast.parse(source)):
+        if not (isinstance(node, ast.FunctionDef) and node.name == fn_name):
+            continue
+        for sub in ast.walk(node):
+            if isinstance(sub, ast.Name) and "gate" in sub.id.lower():
+                signs.append(sub.id)
+            if isinstance(sub, ast.Attribute) and "gate" in sub.attr.lower():
+                signs.append(sub.attr)
+            if (isinstance(sub, ast.Call) and isinstance(sub.func, ast.Attribute)
+                    and sub.func.attr in ("check", "raise_card")):
+                signs.append(f"{ast.unparse(sub.func)}()")
+    return sorted(set(signs))
+
+
+def function_source(source: str, fn_name: str) -> str:
+    """One function's own body, as text (`ast.unparse`), for a check that has
+    to see WHICH module a setter hands the change to."""
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.FunctionDef) and node.name == fn_name:
+            return ast.unparse(node)
+    return ""
+
+
+# --------------------------------------------------------------------------
+#   8. the two things the 2026-10-13 field test turned on: is it OFFERED still,
+#      and does the wording that made the model call it stay in place
+# --------------------------------------------------------------------------
+
+def t_it_ships_on_so_a_turn_really_offers_it():
+    """FAILS IF THE TOOL STOPS BEING OFFERED. The field test found this half
+    intact - `enabled_tools_for_turn` returned 28 names including this tool and
+    `offered_tools` returned it - and it is the half that would take the
+    feature away without a word: `offered_tools` silently drops a name in
+    `[tools].enabled` that is not a tool here.
+
+    The owner's decision of 2026-10-13 ("yes turn it on for my pc. it should
+    also be enabled by default") is what the shipped file has to keep saying;
+    the owner's own PC reads `~/.openjarvis/config.toml`'s list, which no test
+    on another machine can check, so what is pinned here is the SHIPPED
+    file - `backend/rebuilt/jarvis-framework.toml`, the copy this repository
+    puts beside `jarvis_hud.py` on a fresh install."""
+    toml = (REPO / "backend" / "rebuilt" / "jarvis-framework.toml").read_text(encoding="utf-8")
+    m = re.search(r"^enabled\s*=\s*\[(.*?)\]", toml, re.M | re.S)
+    enabled = [n.strip().strip('"') for n in m.group(1).split(",")] if m else []
+    check("the shipped settings file names it in [tools].enabled",
+          AG.SETTINGS_TOOL in enabled, repr(enabled))
+    check("so a fresh install's turn OFFERS it",
+          AG.SETTINGS_TOOL in AG.offered_tools(set(enabled)),
+          repr(AG.offered_tools(set(enabled))))
+    check("and it is a real tool, so the turn could actually run a call to it",
+          AG.SETTINGS_TOOL in AG.TOOLS)
+    check("a turn that names NO tools still does not offer it - the switch is "
+          "the only thing that turns it on",
+          AG.SETTINGS_TOOL not in AG.offered_tools(set()), repr(AG.offered_tools(set())))
+
+
+def t_its_description_tells_the_model_to_call_it():
+    """THE WORDING IS THE FIX, so it is pinned like the rest of the tool text
+    (backend/test_tool_text.py pins the shape of every description).
+
+    Measured on the owner's own PC and model (qwen3.5:9b) through the real turn
+    on 2026-10-13, HEAD's whole module against this branch's: the same seven
+    owner-worded requests three times each, the owner's own `[tools].enabled`
+    list, every question tagged `provenance: "typed"` as both apps tag it, a
+    recording setter so a call is visible and harmless, and the calculator
+    request as a control. The old text - a note ABOUT the tool, third person,
+    bare setting names as examples, and "say so plainly" offering an answer in
+    words as a fine outcome - called it 0 times in 21 at temperature 0 and 3 in
+    21 at the model's own 1.0, while the control called its own tool 3/3 and
+    2/3. The text below calls it 18 in 21 at temperature 0 and 13 in 21 at 1.0,
+    control 3/3 and 3/3. `_settings_tool_text`'s own docstring in
+    jarvis_agent.py carries the full record, including what this is NOT (one
+    request in twenty still finds no call at the model's own temperature, and
+    "turn on background learning" was never called in any run).
+
+    Each check below is one of the levers that measurement found, so this fails
+    if the text drifts back into a note rather than an instruction."""
+    text = AG.TOOLS[AG.SETTINGS_TOOL].schema()["function"]["description"]
+    check("it opens by telling the model to call the tool",
+          text.startswith("Call this tool when the owner asks you to change "), text[:60])
+    check("it says not to ask first - the old text's replies kept asking",
+          "do not ask first, just call it" in text)
+    for phrase in ("turn on humour", "switch the prompt coach off",
+                   "enable web search", "turn on quiet hours"):
+        check(f"its examples are whole sentences the owner says ({phrase!r})",
+              phrase in text)
+    check('it says the value is "on" or "off", as the parameter demands',
+          '"value" is on or off' in text)
+    check("it says the tool's OWN RESULT reports the change, which keeps the "
+          "honesty half of the old last line",
+          "Its own result says what happened" in text
+          and "never say a setting changed when it did not" in text)
+    check("the old escape hatch is gone - 'say so plainly' was the line that "
+          "let a text answer stand in for a call",
+          "say so plainly" not in text)
+    check("the full list of switches is still deliberately NOT in it (the "
+          "registry answers with it when a name cannot be changed)",
+          "background learning" not in text and "quiet hours" in text)
+
+
+def t_the_tier_rule_is_untouched_by_the_wording():
+    """THE DOOR, WHICH THE WORDING MUST NOT MOVE.
+
+    Driven END TO END on 2026-10-13 with the real setters, the real gate and a
+    temp config dir (nothing of the owner's touched): `change_setting("humour",
+    "on")` applied at once, reported changed true, raised no card, and wrote
+    `{"humor": true}`; `change_setting("sensitive topics automatically", "on")`
+    raised ONE card (`cards == 1`), reported `changed` false and `waiting`
+    true, and changed nothing. That drive is NOT in this suite: the
+    sensitive-topics path imports the memory embedder, which downloads a 66 MB
+    model, and a suite must not need the network. What a suite can hold is
+    pinned here instead - the shipped tier for the actions those setters use,
+    and that the cosmetic setters' own bodies raise no card (the limit of that
+    reading is in gate_signs_in's own docstring)."""
+    toml = (REPO / "backend" / "rebuilt" / "jarvis-framework.toml").read_text(encoding="utf-8")
+    for action in ("learning_sensitive_enable", "learning_auto_enable"):
+        check(f"{action} still asks first in the shipped file",
+              re.search(rf"^{action}\s*=\s*\"ask\"", toml, re.M) is not None)
+    src = (HERE / "jarvis_settings_registry.py").read_text(encoding="utf-8")
+    for fn in ("set_humor", "set_pc_quiet_hours"):
+        signs = gate_signs_in(src, fn)
+        check(f"{fn} raises no card of its own (nothing gate-shaped in it, and "
+              f"the module it calls - the manner wording, this PC's notification "
+              f"choices - asks nobody)", signs == [], repr(signs))
+    # The two that DO ask: as thin wrappers, so the card is raised one level
+    # down, in the module whose own tier rows are pinned above. Named here so
+    # the difference between these and the two above is a check and not a
+    # reader's assumption.
+    for fn in ("set_background_learning", "set_learn_sensitive"):
+        body = function_source(src, fn)
+        check(f"{fn} hands the change to jarvis_auto_learn's own request(), "
+              f"where the card is raised", "handle_post" in body, body[:200])
+    check("the same function is what change_setting calls for the cosmetic one",
+          R.find_bool_setting_words("humour") is not None
+          and R.find_bool_setting_words("humour").set is R.set_humor)
+    check("and the privacy one resolves to its own setter, not a cosmetic one",
+          (R.find_bool_setting_words("sensitive topics automatically") or None)
+          is not None
+          and R.find_bool_setting_words("sensitive topics automatically").set
+          is R.set_learn_sensitive)
+    check("the tool itself still carries no gate action of its own",
+          AG.SETTINGS_GATE_ACTION != AG.SETTINGS_TOOL)
+
+
 if __name__ == "__main__":
     for fn in (t_the_tool_exists_and_is_offered_only_when_enabled,
                t_asking_and_speaking_run_the_same_function,
@@ -705,7 +881,10 @@ if __name__ == "__main__":
                t_a_phrase_that_names_no_setting_is_refused,
                t_every_setter_calls_a_function_that_exists,
                t_a_pending_change_cannot_back_an_i_did_it_claim,
-               t_every_one_of_the_21_switches_resolves_from_its_own_names):
+               t_every_one_of_the_21_switches_resolves_from_its_own_names,
+               t_it_ships_on_so_a_turn_really_offers_it,
+               t_its_description_tells_the_model_to_call_it,
+               t_the_tier_rule_is_untouched_by_the_wording):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

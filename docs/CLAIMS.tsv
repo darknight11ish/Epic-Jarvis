@@ -38,6 +38,15 @@
 # silently - the port it publishes against the address jarvis_search.py
 # calls, and the one SearXNG setting Jarvis cannot work without (json in the
 # settings file's `formats:` list).
+# Bucket F is the model-facing settings tool (2026-10-13). The field test found The rows below are F01 only.
+# the model would not call it, and the fix left two sentences this project now
+# says about itself: the tool IS offered on a fresh install by the shipped
+# `[tools].enabled` list, and its description is an instruction to call it (in
+# the owner's own phrasings) rather than a note about the tool. Both are things
+# a later edit could quietly take away, which is what a row is for.
+# Bucket F continued: the personal-data backup (2026-10-13), the other half
+# of the F prefix. These four rows are about tools/jarvis_data_backup.py and
+# are numbered from F02 because main's F01 is the settings tool above.
 A01	the desktop app has a Notifications settings screen (docs/DECISIONS.md's queue item 1, first half)	grep:jarvis-desktop/src/settings.html:id="notifications"	built	docs/DECISIONS.md:1673
 A02	that screen has one switch per notification kind (alarms, reminders, briefing, handoff)	grep:jarvis-desktop/src/settings.html:notif-handoff-row	built	docs/DECISIONS.md:1672
 A03	that screen has a "Send test notification" button	grep:jarvis-desktop/src/settings.html:notif-send-test	built	docs/DECISIONS.md:1672
@@ -166,7 +175,8 @@ D13	no line of docs/JARVIS-API.md calls a module this repository holds "not in t
 E01	one command brings up the default web-search provider (SearXNG) on this PC's own loopback, at the address jarvis_search.py calls by default (added 2026-10-09)	grep:docker/searxng/docker-compose.yml:127.0.0.1:8888:8080	built	docker/searxng/docker-compose.yml:46
 E02	the compose file publishes the same port jarvis_search.py names in DEFAULT_SEARXNG_URL, so the two cannot drift apart silently	number:docker/searxng/docker-compose.yml:backend/jarvis_search.py:8888	built	backend/jarvis_search.py:122
 E03	the SearXNG settings this repository ships switch its JSON output on, which jarvis_search.py needs (it asks format=json and is answered 403 without it)	grep:docker/searxng/settings.template.yml:- json	built	backend/jarvis_search.py:1011
-F01	the personal-data backup tool makes no network call at all - no socket, no urllib, no http, no requests - checked by reading its own source, so a later "send it to the cloud" option cannot be added without this suite going red	test:backend/test_data_backup.py	built	tools/jarvis_data_backup.py:124
-F02	a snapshot of the owner's data is a consistent SQLite copy taken by SQLite itself with the write-ahead log folded in, not a file copy, so it is safe while Jarvis is running and a plain copy's lost databases cannot happen	grep:tools/jarvis_data_backup.py:VACUUM INTO	built	tools/jarvis_data_backup.py:395
-F03	the data backup never writes into the folder it reads: the destination and every restore target inside it are refused, so a typo cannot turn a backup into a write over the live data	grep:tools/jarvis_data_backup.py:refuse_write_inside	built	tools/jarvis_data_backup.py:314
-F04	every snapshot is verified by opening it again - integrity_check, the same set of tables the live database had, and no table holding fewer rows - and one that fails is never counted as a backup	grep:tools/jarvis_data_backup.py:integrity_check	built	tools/jarvis_data_backup.py:427
+F01	the model-facing settings tool (change_setting) is OFFERED on a fresh install by the shipped [tools].enabled list, and its description is an instruction to call it that keeps the owner's own phrasings	test:backend/test_settings_tool.py	built	docs/JARVIS-API.md:19605
+F02	the personal-data backup tool makes no network call at all - no socket, no urllib, no http, no requests - checked by reading its own source, so a later "send it to the cloud" option cannot be added without this suite going red	test:backend/test_data_backup.py	built	tools/jarvis_data_backup.py:124
+F03	a snapshot of the owner's data is a consistent SQLite copy taken by SQLite itself with the write-ahead log folded in, not a file copy, so it is safe while Jarvis is running and a plain copy's lost databases cannot happen	grep:tools/jarvis_data_backup.py:VACUUM INTO	built	tools/jarvis_data_backup.py:395
+F04	the data backup never writes into the folder it reads: the destination and every restore target inside it are refused, so a typo cannot turn a backup into a write over the live data	grep:tools/jarvis_data_backup.py:refuse_write_inside	built	tools/jarvis_data_backup.py:314
+F05	every snapshot is verified by opening it again - integrity_check, the same set of tables the live database had, and no table holding fewer rows - and one that fails is never counted as a backup	grep:tools/jarvis_data_backup.py:integrity_check	built	tools/jarvis_data_backup.py:427
