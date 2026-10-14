@@ -22,17 +22,35 @@
 //!
 //! Every artifact is signed with a private key that is not in this repository
 //! and never will be, and `tauri.conf.json` is where the matching public key
-//! goes. **This build has none yet** — `"pubkey": ""` there, with
-//! `"createUpdaterArtifacts": false` beside it — so it cannot update itself at
-//! all: `configured()` below is false, `spawn_startup_check` returns before it
-//! makes a request, and Settings says "Not set up yet" rather than offering an
-//! update it could not verify. Filling that key in is what switches this module
-//! on, and the release workflow already refuses to sign or publish without it.
-//! Once it is there: the updater verifies the signature before it hands the
-//! bytes to the installer, so a release replaced at the CDN, a hijacked DNS
+//! goes. **That key is there now** — `plugins.updater.pubkey` in
+//! `tauri.conf.json` carries a real minisign public key (checked 2026-10-13) —
+//! so `configured()` below reads it, returns true, and Settings offers the
+//! update instead of saying "Not set up yet". This paragraph used to say the
+//! opposite — that the key was empty and this build could not update itself —
+//! which stopped being true when the key landed. A comment that sends the next
+//! reader looking for a bug that is not there is a defect in this project, not
+//! a harmless leftover.
+//!
+//! `bundle.createUpdaterArtifacts` is still `false` in the committed config,
+//! and that one is deliberate rather than more staleness: the private key is
+//! not in the repository, so the committed file has to stay buildable without
+//! it, and `.github/workflows/desktop-release.yml` turns artifact creation on
+//! for the release build only.
+//!
+//! With the key configured: the updater verifies the signature before it hands
+//! the bytes to the installer, so a release replaced at the CDN, a hijacked DNS
 //! answer or a proxy rewriting the response all fail closed — and a build with
 //! no public key configured cannot update at all, which is the correct
-//! behaviour rather than a degraded one (see `available()`).
+//! behaviour rather than a degraded one (see `configured()`).
+//!
+//! ## Both halves, in one button
+//!
+//! Since 2026-10-13 the same card also updates the **Python backend**, which had
+//! never been driven by anything but the owner's own hands. [`update_both`] runs
+//! the two halves in one deliberate order and is reachable only from the one
+//! button; [`crate::backend_update`] owns the backend half and its own refusals.
+//! The order, and why it is that order, is written out on [`update_both`]
+//! itself.
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
@@ -254,7 +272,17 @@ pub fn set_update_check_on_start(app: AppHandle, enabled: bool) -> Result<bool, 
 /// edit can make checking install something by passing `true`.
 #[tauri::command]
 pub async fn install_update(app: AppHandle) -> Result<String, String> {
-    if !configured(&app) {
+    install_now(&app).await
+}
+
+/// The install, with no command wrapper on it — so the one button that updates
+/// **both** halves can use the same code rather than a second copy of it.
+///
+/// Nothing else in this module may call this: it is the half of an update that
+/// replaces the executable, and the only two doors into it are the Install
+/// button and [`update_both`]'s second step.
+async fn install_now(app: &AppHandle) -> Result<String, String> {
+    if !configured(app) {
         return Err("this build has no update key, so it cannot verify a download".to_string());
     }
     let updater = app
@@ -294,6 +322,242 @@ pub async fn install_update(app: AppHandle) -> Result<String, String> {
         .await
         .map_err(|e| format!("the update failed to install: {e}"))?;
     Ok(version)
+}
+
+// ---------------------------------------------------------------------------
+// Both halves, in one button
+// ---------------------------------------------------------------------------
+
+/// The id of the backend half in a [`Step`]. The words the card shows come from
+/// `crate::backend_update`, not from here.
+pub const STEP_BACKEND: &str = "backend";
+/// The id of the desktop half in a [`Step`].
+pub const STEP_DESKTOP: &str = "desktop";
+
+/// The words the desktop half shows when the backend half did not finish, so
+/// nothing was put on top of it.
+///
+/// Written once, here, rather than at the call site — and the test below reads
+/// this same constant. The sentence exists to say "Not installed" about a half
+/// that was not installed, and nothing can check that against a *copy* of the
+/// words: a copy drifts, and the first version of that test drifted on the
+/// first letter, asserting `"Not installed"` against its own lowercase fixture
+/// and so failing every run from the day it was written.
+const DESKTOP_SKIPPED_DETAIL: &str =
+    "Not installed. The backend step did not finish, so nothing was put on top of \
+     it. Fix what the log above says, then run this again - and Install on its own \
+     below still works if you only want the desktop half.";
+
+/// One half of a two-half update, as it ended.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Step {
+    /// [`STEP_BACKEND`] or [`STEP_DESKTOP`].
+    pub step: String,
+    /// `ok`, `partial`, `failed` or `skipped`.
+    ///
+    /// `partial` is its own answer rather than a flavour of `ok`, because this
+    /// project's rule is that a check which could not run is never a pass: a
+    /// backend that patched but skipped its own tests is patched, and is not
+    /// proven, and those are two different sentences.
+    pub state: String,
+    /// Plain words for the card. Always says what happened, and never says
+    /// "updated" about a half that did not update.
+    pub detail: String,
+    /// The half's own log folder, for the backend half.
+    pub log_dir: Option<String>,
+    /// The script's own last lines, folded away behind the report.
+    pub tail: String,
+}
+
+impl Step {
+    fn ok(step: &str, detail: impl Into<String>) -> Step {
+        Step {
+            step: step.to_string(),
+            state: "ok".to_string(),
+            detail: detail.into(),
+            log_dir: None,
+            tail: String::new(),
+        }
+    }
+
+    fn partial(step: &str, detail: impl Into<String>) -> Step {
+        Step {
+            state: "partial".to_string(),
+            ..Step::ok(step, detail)
+        }
+    }
+
+    fn failed(step: &str, detail: impl Into<String>) -> Step {
+        Step {
+            state: "failed".to_string(),
+            ..Step::ok(step, detail)
+        }
+    }
+
+    fn skipped(step: &str, detail: impl Into<String>) -> Step {
+        Step {
+            state: "skipped".to_string(),
+            ..Step::ok(step, detail)
+        }
+    }
+
+    /// The backend half's own log and last lines, folded onto any of the four
+    /// endings above. The desktop half has neither, so this is only ever used
+    /// on that one.
+    fn with_log(self, log_dir: Option<String>, tail: String) -> Step {
+        Step {
+            log_dir,
+            tail,
+            ..self
+        }
+    }
+}
+
+/// What [`update_both`] did, half by half.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BothOutcome {
+    /// Both halves, in the order they ran. A half that was not attempted is
+    /// present as `skipped` with the reason, never left out — so the card
+    /// cannot show one green line where two things were promised.
+    pub steps: Vec<Step>,
+    /// **True only when every step is `ok`.** This is the one boolean the card
+    /// is allowed to paint green, and the rule it encodes is the whole point of
+    /// the feature: a half-updated machine must never look updated.
+    pub updated_both: bool,
+    /// Whether the app or the backend was stopped and wants starting again.
+    pub restart_needed: bool,
+}
+
+/// The rule above, as a function rather than a comment.
+pub fn both_updated(steps: &[Step]) -> bool {
+    !steps.is_empty() && steps.iter().all(|s| s.state == "ok")
+}
+
+/// **The order, in one place: backend first, the executable second, and the
+/// executable not at all if the backend step did not finish.**
+///
+/// **Not held on a stale link, deliberately, and that is the same decision
+/// `backup_now` and `check_tool_updates` already made.** Being held belongs to
+/// a command that raises or answers an approval card, so that the card is
+/// decided against a live queue — this one raises none and decides none. What it
+/// touches is this PC's own files and this PC's own executable, at the machine
+/// the owner is sitting at, and the two steps check themselves: the patcher
+/// rehearses the whole list on a copy before it writes, and `install_now`
+/// verifies a signature before it runs anything.
+///
+/// Why this order and not the other:
+///
+/// * `apply-patches.ps1` refuses to touch a backend whose own `jarvis_hud.py` is
+///   still running, and it is right to — a running Python has already imported
+///   the modules being rewritten. This app is what started that process, so the
+///   backend half is the one that needs a process stopped, and it goes first
+///   while that is still true.
+/// * A failure after the **first** half leaves a new backend with the old
+///   desktop. That is the state this project lives in most of the time anyway
+///   (the app is released far more often than the patcher is run), and every
+///   screen already renders it honestly: a route the old app does not know is
+///   simply not called. So it is the direction that degrades into the ordinary.
+/// * A failure after the **second** half would be new desktop on an old backend:
+///   the other everyday state, and also survivable — but it is the one that can
+///   leave an executable that will not start, so it goes last, when the smaller,
+///   signed, signature-checked step is all that is left.
+/// * The backend half is also the one that can leave the machine half changed
+///   (`apply-patches.ps1` says so itself, in its own words, when it has already
+///   started writing). Doing it first means the run that says "not updated" is
+///   the run that has *not* already replaced the executable.
+///
+/// **A second step that did not run is reported as `skipped`, and the whole
+/// outcome is `updated_both: false`.** Nothing here can leave the card showing
+/// one line where two things were asked for.
+///
+/// Never automatic: this is a `#[tauri::command]` reachable only from the one
+/// button, nothing spawns it, and there is no setting anywhere that turns it
+/// into a background job.
+#[tauri::command]
+pub async fn update_both(app: AppHandle) -> Result<BothOutcome, String> {
+    let mut steps: Vec<Step> = Vec::new();
+
+    // ---- 1. the backend ------------------------------------------------
+    let _ = app.emit(crate::events::UPDATE_STEP, step_starting(STEP_BACKEND));
+    let backend = crate::backend_update::run(&app).await;
+    // `proven` is its own answer rather than a flavour of done: a backend that
+    // patched but skipped its own checks is patched, and is not a pass.
+    let backend_step = if !backend.ok {
+        Step::failed(STEP_BACKEND, backend.detail.clone())
+    } else if backend.proven {
+        Step::ok(STEP_BACKEND, backend.detail.clone())
+    } else {
+        Step::partial(STEP_BACKEND, backend.detail.clone())
+    }
+    .with_log(backend.log_dir.clone(), backend.tail.clone());
+    let _ = app.emit(crate::events::UPDATE_STEP, backend_step.clone());
+    let backend_ok = backend.ok;
+    let backend_stopped = backend.stopped;
+    steps.push(backend_step);
+
+    if !backend_ok {
+        // STOP. The desktop half is not attempted, and the card is told so in
+        // as many words rather than being left to infer it from a green line
+        // that is not there.
+        let skipped = Step::skipped(STEP_DESKTOP, DESKTOP_SKIPPED_DETAIL);
+        let _ = app.emit(crate::events::UPDATE_STEP, skipped.clone());
+        steps.push(skipped);
+        return Ok(BothOutcome {
+            updated_both: both_updated(&steps),
+            steps,
+            // Only when this attempt actually stopped Jarvis. A refusal that
+            // never got that far has nothing to start again.
+            restart_needed: backend_stopped,
+        });
+    }
+
+    // ---- 2. the executable ---------------------------------------------
+    let _ = app.emit(crate::events::UPDATE_STEP, step_starting(STEP_DESKTOP));
+    let desktop_step = match install_now(&app).await {
+        Ok(version) => Step::ok(
+            STEP_DESKTOP,
+            format!("Jarvis Desktop {version} is installed and restarts as {version}."),
+        ),
+        Err(err) => Step::failed(
+            STEP_DESKTOP,
+            format!(
+                "Jarvis Desktop was NOT installed: {err}. The backend half above is done; \
+                 press Install on its own below to try this half again."
+            ),
+        ),
+    };
+    let installed = desktop_step.state == "ok";
+    let _ = app.emit(crate::events::UPDATE_STEP, desktop_step.clone());
+    steps.push(desktop_step);
+
+    let outcome = BothOutcome {
+        updated_both: both_updated(&steps),
+        steps,
+        // Either the new executable is on disk and the old one is still
+        // running, or Jarvis was stopped for the backend half and is still off.
+        restart_needed: installed || backend_stopped,
+    };
+    Ok(outcome)
+}
+
+/// The placeholder a step emits when it starts, so the card can say which half
+/// is running rather than sitting silent for the minutes a patch run takes.
+fn step_starting(step: &str) -> Step {
+    Step {
+        step: step.to_string(),
+        state: "running".to_string(),
+        detail: if step == STEP_BACKEND {
+            "Patching the backend folder. This can take several minutes - it applies every \
+             patch and then runs the test suites."
+                .to_string()
+        } else {
+            "Downloading and verifying Jarvis Desktop.".to_string()
+        },
+        log_dir: None,
+        tail: String::new(),
+    }
 }
 
 /// Restarts the app — reachable only from the button the install's own
@@ -344,7 +608,10 @@ pub fn spawn_startup_check(app: &AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    use super::friendly;
+    use super::{
+        both_updated, friendly, step_starting, Step, DESKTOP_SKIPPED_DETAIL, STEP_BACKEND,
+        STEP_DESKTOP,
+    };
 
     #[test]
     fn a_missing_release_is_explained_rather_than_numbered() {
@@ -364,5 +631,71 @@ mod tests {
     #[test]
     fn an_unknown_failure_is_passed_through_rather_than_swallowed() {
         assert_eq!(friendly("something odd"), "something odd");
+    }
+
+    // ---- both halves ------------------------------------------------------
+
+    fn done(step: &str) -> Step {
+        Step::ok(step, "fine")
+    }
+
+    #[test]
+    fn only_two_ok_halves_read_as_updated() {
+        // The load-bearing rule of the whole feature, as a function: a machine
+        // with one half done is NOT an updated machine, and a card that said
+        // otherwise would be the exact failure this was built to avoid.
+        assert!(both_updated(&[done(STEP_BACKEND), done(STEP_DESKTOP)]));
+        // A backend that patched but could not prove itself is not a pass.
+        assert!(!both_updated(&[
+            Step::partial(STEP_BACKEND, "patched, unproven"),
+            done(STEP_DESKTOP)
+        ]));
+        // A refused or failed backend half, with the desktop half not tried.
+        assert!(!both_updated(&[
+            Step::failed(STEP_BACKEND, "did not finish"),
+            Step::skipped(STEP_DESKTOP, "not installed")
+        ]));
+        // A backend that worked and a desktop half that did not.
+        assert!(!both_updated(&[
+            done(STEP_BACKEND),
+            Step::failed(STEP_DESKTOP, "no newer version")
+        ]));
+        // Nothing at all is not "updated" either.
+        assert!(!both_updated(&[]));
+    }
+
+    #[test]
+    fn a_skipped_half_is_reported_rather_than_dropped() {
+        // The sentence the card is actually handed, not a copy of it: this test
+        // used to assert "Not installed" against a fixture it had typed as
+        // "not installed" itself, so it failed every run without ever looking at
+        // the words the owner sees.
+        let skipped = Step::skipped(STEP_DESKTOP, DESKTOP_SKIPPED_DETAIL);
+        assert_eq!(skipped.state, "skipped");
+        // ...and it says it was NOT installed, not that it was.
+        assert!(
+            skipped.detail.contains("Not installed"),
+            "{}",
+            skipped.detail
+        );
+        assert!(
+            !skipped.detail.contains("is installed"),
+            "the skipped half reads as if it had been installed: {}",
+            skipped.detail
+        );
+        assert_ne!(skipped.state, "ok");
+    }
+
+    #[test]
+    fn a_running_half_says_which_half_and_never_reads_as_finished() {
+        let backend = step_starting(STEP_BACKEND);
+        let desktop = step_starting(STEP_DESKTOP);
+        assert_eq!(backend.state, "running");
+        assert_eq!(desktop.state, "running");
+        assert!(backend.detail.contains("Patching the backend"));
+        assert!(desktop.detail.contains("Downloading"));
+        // Neither can be mistaken for an ending: if a window is closed and
+        // reopened mid-run the card must not paint either as done.
+        assert_ne!(backend.state, "ok");
     }
 }

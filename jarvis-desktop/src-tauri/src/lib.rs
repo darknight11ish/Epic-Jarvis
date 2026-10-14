@@ -26,6 +26,7 @@ pub mod appearance;
 pub mod asks_first;
 pub mod attention;
 pub mod autostart;
+pub mod backend_update;
 pub mod backup;
 pub mod brain;
 pub mod browser_engine;
@@ -158,6 +159,13 @@ pub mod events {
     /// while an install already pressed is in flight. Informational only,
     /// same as `UPDATE_STATUS`: nothing here starts or resumes anything.
     pub const UPDATE_PROGRESS: &str = "update-progress";
+    /// Payload: [`crate::update::Step`] — one half of the two-half update, as
+    /// it starts, ends, or is skipped. Emitted only from `update_both`, which
+    /// is reachable only from its own button; like `UPDATE_STATUS`, nothing
+    /// that receives this starts, resumes or approves anything. The `running`
+    /// state is why it exists: the backend half takes minutes, and a card that
+    /// said nothing for that long would look like a button that did nothing.
+    pub const UPDATE_STEP: &str = "update-step";
     /// Payload: none. The appearance document (which face, which state
     /// bindings) changed — the tray already repaints on this via
     /// `on_appearance_changed`; sent to every window too so a display-mode
@@ -1188,7 +1196,10 @@ pub fn run() {
             update::check_for_update,
             update::set_update_check_on_start,
             update::install_update,
+            update::update_both,
             update::restart_app,
+            backend_update::backend_update_status,
+            backend_update::set_update_folders,
             hotkeys::get_hotkeys,
             hotkeys::set_hotkeys,
             hotkeys::reset_hotkeys,

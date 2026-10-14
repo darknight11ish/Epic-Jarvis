@@ -497,6 +497,13 @@ fn main() {
             // owner installed an update, pressed Restart, and got "not
             // allowed on window" while the new binary sat there unused.
             "restart_app",
+            // Both halves of an update in one press (2026-10-13): the Python
+            // backend's patches, then the signed desktop release. Settings
+            // window only, and reached only from its own button - no timer, no
+            // startup path and no setting can call any of these three.
+            "update_both",
+            "backend_update_status",
+            "set_update_folders",
             "get_hotkeys",
             "set_hotkeys",
             "reset_hotkeys",

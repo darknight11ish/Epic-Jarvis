@@ -514,8 +514,77 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
+/**
+ * "Update both halves" (2026-10-13). The shapes here are what Rust really
+ * returns — `backend_update::Where` (the two folders, where the second was read
+ * from, and the refusal when one is missing) and `update::BothOutcome` (one
+ * `Step` per half, `updatedBoth`, `restartNeeded`) — so a suite drives the
+ * page against the real wire shape rather than an invented one.
+ *
+ * `bothOk` is the only shape that may paint as updated, and the two below it
+ * are the ones this project refuses to call a pass: a backend that patched
+ * without proving its tests (`partial`), and a backend that did not finish at
+ * all, with the desktop half `skipped` behind it.
+ */
+export const UPDATE_BOTH = {
+  where: {
+    repo: "C:\\Users\\pcadmin\\Epic-Jarvis",
+    backend: "C:\\Users\\pcadmin\\Documents\\Claude\\Open jarvis files\\Desktop program",
+    backendTyped: null,
+    backendSource: "the folder this app starts Jarvis from",
+    script: "C:\\Users\\pcadmin\\Epic-Jarvis\\scripts\\apply-patches.ps1",
+    blocked: null,
+  },
+  notTold: {
+    repo: null,
+    backend: "C:\\Users\\pcadmin\\Documents\\Claude\\Open jarvis files\\Desktop program",
+    backendTyped: null,
+    backendSource: "the folder this app starts Jarvis from",
+    script: null,
+    blocked: "This app does not know where the Jarvis program folder is on this PC, so it " +
+      "cannot update the backend. Type its full path into \"The Jarvis program folder on " +
+      "this PC\" above - the folder you cloned from GitHub, the one with a scripts folder " +
+      "in it. Nothing was changed.",
+  },
+  bothOk: {
+    steps: [
+      { step: "backend", state: "ok", logDir: "C:\\backend\\_jarvis-logs", tail: "",
+        detail: "The backend folder is patched, and the patch program proved it with its tests." },
+      { step: "desktop", state: "ok", logDir: null, tail: "",
+        detail: "Jarvis Desktop 0.2.158 is installed and restarts as 0.2.158." },
+    ],
+    updatedBoth: true,
+    restartNeeded: true,
+  },
+  patchedUnproven: {
+    steps: [
+      { step: "backend", state: "partial", logDir: "C:\\backend\\_jarvis-logs", tail: "",
+        detail: "The backend folder is patched, but the patch program could not prove every " +
+          "check (it says which were skipped in the log). That is not the same as a proven " +
+          "update." },
+      { step: "desktop", state: "ok", logDir: null, tail: "",
+        detail: "Jarvis Desktop 0.2.158 is installed and restarts as 0.2.158." },
+    ],
+    updatedBoth: false,
+    restartNeeded: true,
+  },
+  backendRefused: {
+    steps: [
+      { step: "backend", state: "failed", logDir: null, tail: "FAIL  nothing has been changed",
+        detail: "The backend step did not finish, so Jarvis Desktop was NOT installed on " +
+          "top of it." },
+      { step: "desktop", state: "skipped", logDir: null, tail: "",
+        detail: "Not installed. The backend step did not finish, so nothing was put on top " +
+          "of it. Fix what the log above says, then run this again - and Install on its own " +
+          "below still works if you only want the desktop half." },
+    ],
+    updatedBoth: false,
+    restartNeeded: true,
+  },
+};
+
 export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals, quiz, progress, decks, topics,
-  folders, animal, chatbot, support, historyImport, widgets, devices, screen, spending, retirement, youtube, invokeFails,
+  folders, animal, chatbot, support, historyImport, widgets, devices, screen, spending, retirement, youtube, invokeFails, updateBoth,
   tutorials, faq }) {
   const listeners = {};
   window.__calls = [];
@@ -526,6 +595,10 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   // exactly the defect, and it cannot be caught by a scenario that only ever
   // sees successes.
   window.__invokeFails = invokeFails || {};
+  // "Update both halves" (2026-10-13): { where, afterSave, outcome, statusFails,
+  // saveFails, fails }. Unset, the card finds both folders and both halves come
+  // back ok - see UPDATE_BOTH above for the shapes each one takes.
+  window.__updateBoth = updateBoth || {};
   // animal.rs: GET /api/animal's answer (a scenario's, else a PC nobody has
   // changed), changed by set_animal like the PC would.
   window.__animal = animal ? JSON.parse(JSON.stringify(animal)) : null;
@@ -919,6 +992,61 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             if (window.__restartFails) throw new Error(window.__restartFails);
             window.__calls.push(["__restarted"]);
             return null;
+          // "Update both halves" (backend_update.rs + update.rs's
+          // update_both, 2026-10-13). A scenario passes `updateBoth`:
+          //   where       what backend_update_status answers
+          //   afterSave   what set_update_folders answers
+          //   outcome     what update_both answers
+          //   statusFails / saveFails / fails   the three refusals
+          // Unset, every one is the happy shape: both folders found, and a run
+          // in which both halves came back ok. The defaults are written out
+          // here rather than read from `UPDATE_BOTH` above because this whole
+          // function is serialised into the page and cannot see module scope -
+          // which is also why `UPDATE_BOTH is not defined` is a failure this
+          // file has already had once.
+          case "backend_update_status": {
+            const ub = window.__updateBoth || {};
+            if (ub.statusFails) throw new Error(ub.statusFails);
+            return ub.where || {
+              repo: "C:\\Users\\pcadmin\\Epic-Jarvis",
+              backend: "C:\\Users\\pcadmin\\Documents\\Claude\\Open jarvis files\\Desktop program",
+              backendTyped: null,
+              backendSource: "the folder this app starts Jarvis from",
+              script: "C:\\Users\\pcadmin\\Epic-Jarvis\\scripts\\apply-patches.ps1",
+              blocked: null,
+            };
+          }
+          case "set_update_folders": {
+            window.__ubSaved = window.__ubSaved || [];
+            window.__ubSaved.push({ repo: args.repo, backend: args.backend });
+            const ub = window.__updateBoth || {};
+            if (ub.saveFails) throw new Error(ub.saveFails);
+            return ub.afterSave || {
+              repo: args.repo || null,
+              backend: "C:\\Users\\pcadmin\\Documents\\Claude\\Open jarvis files\\Desktop program",
+              backendTyped: args.backend || null,
+              backendSource: args.backend ? "set on this card"
+                : "the folder this app starts Jarvis from",
+              script: "C:\\Users\\pcadmin\\Epic-Jarvis\\scripts\\apply-patches.ps1",
+              blocked: null,
+            };
+          }
+          case "update_both": {
+            window.__calls.push(["__updatedBoth"]);
+            const ub = window.__updateBoth || {};
+            if (ub.fails) throw new Error(ub.fails);
+            return ub.outcome || {
+              steps: [
+                { step: "backend", state: "ok", logDir: "C:\\backend\\_jarvis-logs", tail: "",
+                  detail: "The backend folder is patched, and the patch program proved it " +
+                    "with its tests." },
+                { step: "desktop", state: "ok", logDir: null, tail: "",
+                  detail: "Jarvis Desktop 0.2.158 is installed and restarts as 0.2.158." },
+              ],
+              updatedBoth: true,
+              restartNeeded: true,
+            };
+          }
           case "reset_hotkeys":
             window.__hotkeys = window.__hotkeys.map((h) => ({
               ...h, accelerator: h.default, registered: Boolean(h.default), error: null,
