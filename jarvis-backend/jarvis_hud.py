@@ -1496,6 +1496,77 @@ def _reachable(url: str, timeout: float = 1.5) -> bool:
         return False
 
 
+# /api/status answers from HERE, not by probing the network on the request
+# thread. DEF-002 (docs/DEFECT-REGISTER.md, docs/defect-register.tsv): the route
+# made three or four live upstream probes through _reachable()/_http_json(),
+# each carrying its own 1.5-2.0 s timeout, and the whole answer was measured at
+# 4,598 ms against 9 ms for /api/pending, which is only a database read - so the
+# HUD's own status card paid seconds for a fact nobody had changed. One daemon
+# thread now does the probing every _STATUS_POLL_SECONDS and the route returns
+# what the last poll found, so an upstream service that hangs costs the poller
+# instead of the caller. The rest of the payload (the config read, the budget,
+# the lanes) stays a live local read - those are milliseconds, and they are the
+# parts a person has just changed.
+_STATUS_POLL_SECONDS = 15.0
+_STATUS_CACHE: dict = {}
+_STATUS_LOCK = threading.Lock()
+
+
+def _status_probe() -> dict:
+    """The upstream half of /api/status, and the only part that goes over a socket."""
+    jarvis_up = _reachable(f"{JARVIS_URL}/health")
+    models = []
+    if jarvis_up:
+        try:
+            data = _http_json(f"{JARVIS_URL}/v1/models")
+            models = [m.get("id") for m in data.get("data", []) if m.get("id")]
+        except Exception:
+            models = []
+    return {
+        "jarvis": jarvis_up,
+        "ollama": _reachable(f"{OLLAMA_URL}/api/tags"),
+        "proxy": _reachable(f"{PROXY_URL}/health"),
+        "models": models,
+    }
+
+
+def _status_poll_once() -> dict:
+    """Probe once, remember it, and hand back what was found."""
+    found = _status_probe()
+    with _STATUS_LOCK:
+        _STATUS_CACHE.update(found)
+        _STATUS_CACHE["polled_at"] = time.time()
+    return found
+
+
+def _status_poller_daemon() -> None:
+    """Refresh the cache for ever: one probe, then _STATUS_POLL_SECONDS of sleep."""
+    while True:
+        try:
+            _status_poll_once()
+        except Exception:
+            # A probe that raises is no reason to drop the last good answer; the
+            # next tick tries again. (_reachable() itself returns False rather
+            # than raising, so a service that is simply down says so.)
+            pass
+        time.sleep(_STATUS_POLL_SECONDS)
+
+
+def _status_start_poller() -> None:
+    """Warm the cache once, then start the one poller thread.
+
+    Called from main(), never at import time: about twenty suites import this
+    module - and `_stack.stand_in('<this file>')` on their behalf - and none of
+    them should find a thread reaching for a network that is not there.
+    """
+    try:
+        _status_poll_once()
+    except Exception:
+        pass
+    threading.Thread(target=_status_poller_daemon, name="jarvis-status-poll",
+                     daemon=True).start()
+
+
 # --------------------------------------------------------------------------
 # Brain graph
 # --------------------------------------------------------------------------
@@ -3179,14 +3250,22 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, retrieve(q))
 
         if path == "/api/status":
-            jarvis_up = _reachable(f"{JARVIS_URL}/health")
-            models = []
-            if jarvis_up:
+            # DEF-002: the seconds were the probes, and the probes now happen on
+            # the poller's thread. `?force=1` asks for one right now, on this
+            # thread, for the screen that wants to know this second. An empty
+            # cache means no poller has run - a suite driving this handler
+            # without main() - so the first answer is still the honest live one.
+            from urllib.parse import parse_qs, urlparse
+            force = (parse_qs(urlparse(self.path).query).get("force") or [""])[0] == "1"
+            if force or not _STATUS_CACHE:
                 try:
-                    data = _http_json(f"{JARVIS_URL}/v1/models")
-                    models = [m.get("id") for m in data.get("data", []) if m.get("id")]
+                    _status_poll_once()
                 except Exception:
-                    models = []
+                    pass
+            with _STATUS_LOCK:
+                upstream = dict(_STATUS_CACHE)
+            jarvis_up = bool(upstream.get("jarvis", False))
+            models = list(upstream.get("models") or [])
             lanes = []
             if PROXY_FILE.exists():
                 try:
@@ -3203,8 +3282,8 @@ class Handler(BaseHTTPRequestHandler):
                 "jarvis_injects_memory": jarvis_injects_memory(),
                 "budget": budget,
                 "jarvis": jarvis_up,
-                "ollama": _reachable(f"{OLLAMA_URL}/api/tags"),
-                "proxy": _reachable(f"{PROXY_URL}/health"),
+                "ollama": bool(upstream.get("ollama", False)),
+                "proxy": bool(upstream.get("proxy", False)),
                 "models": models,
                 "lanes": lanes,
                 "default_model": (cfg.get("intelligence") or {}).get("default_model", ""),
@@ -5848,6 +5927,9 @@ def main() -> None:
     else:
         print("  hud token  NOT SET    loopback-only: non-local callers get 401.")
         print("             Set HUD_TOKEN before reaching this from a phone.")
+    # DEF-002: warm the /api/status cache, then keep it warm. Started here, in
+    # main(), rather than at import time - see _status_start_poller's docstring.
+    _status_start_poller()
     global _ENGINE, _PUMP
     if MEMORY:
         try:
