@@ -530,3 +530,124 @@ What was **not** built, and why:
   other, which is the drift the owner is complaining about in the first place.
 * A tutorial that highlights a control while the owner is mid-task. Pointing
   must be something the owner asks for, never something that happens to him.
+
+---
+
+# `try` and the `used` state — DESIGN ONLY, NOT BUILT
+
+Status: **designed, deliberately not built** (2026-10-10). The owner's call on
+docs/EDUCATION-TAB-DESIGN.md §13 question 2 was *"design it now, build it
+later"*, and this section is that design. **Nothing here is implemented**: no
+`try` is observed, no `used` record can be written, and neither app draws a
+`used` state. What has been written is the catalogue side of it — the lessons
+that could carry a `try` carry one, in the shape below — so that building the
+mechanism is a change to two or three files rather than a rewrite of the
+curriculum.
+
+The problem it answers, in one line: **"Done" today means the owner pressed
+Next to the end of a lesson, not that he can do the thing it taught.**
+
+## 1. `try` — one real action, in the catalogue
+
+A step may gain one optional field, in the same shape `point` already has:
+
+```python
+{"title": "Models",
+ "body": "...",
+ "where": "Brain → Model → Models",
+ "point": {"desktop": None, "phone": None},
+ "try": {"desktop": "switch-model", "phone": None}},
+```
+
+`try` names a **registry key**, never a sentence and never a selector — exactly
+like `point`, and for exactly the same reason: a key can be checked against
+what the app really declares, and a sentence cannot. Each app declares its own
+map, beside `CONTROL_POINTS`:
+
+* desktop — `TRY_ACTIONS` in `jarvis-desktop/src/tutorials.js`;
+* phone — `TRY_ACTIONS` in `jarvis-client/.../net/Tutorials.kt`.
+
+**A `try` the app cannot observe must be `None`, and `None` means "this step
+never shows a thing to do here".** That is the mechanism `point`'s per-app
+`null` already uses, and it is the same failure it prevents: the phone must
+never be told to do something it cannot see, because then it would show a
+control that never lights up.
+
+**No step is required to have one.** A lesson with no `try` simply cannot reach
+`used`; it can only reach `done`. That is deliberate — the state stays honest
+instead of universal.
+
+## 2. `used` — one new state, and nothing else changes
+
+`tutorials.json` keeps `state`, `step`, `version` and `at` exactly as they are.
+One value is added to `STATES`:
+
+| state | what it means |
+|---|---|
+| *(no record)* | never opened |
+| `in_progress` | opened, part-way through |
+| `done` | read to the end |
+| `skipped` | met and declined |
+| **`used`** | **read to the end AND the `try` action really happened** |
+
+`used` is written by the app that observed the action, through the same
+`POST /api/tutorials/progress` route — no new route, so `tools/check_parity.py`
+gains nothing and the phone keeps the two routes it already has.
+
+**When a lesson's words change, `used` goes back to `done`, not to `used`.**
+`one()` already re-offers a tutorial whose recorded `version` is lower than the
+catalogue's; the same comparison clears the stronger half, because the words the
+owner demonstrated it against are not the words on screen any more.
+
+## 3. The one number, and the words it is allowed to use
+
+The line both apps now draw from the backend's `counts`
+(`jarvis_tutorials.py`'s `read()`) is:
+
+> **You have met 9 of the 23 lessons here. 14 to go.**
+
+It says **met**, and "met" is every lesson with a record of any kind —
+`in_progress`, `done`, `skipped` and `used` alike. Skipped is *met and
+declined*, which is information and not a failure mark. The line never says
+*learned*, and it never says what he can **do**.
+
+When `used` is built, its count is added **beside** that sentence, not folded
+into it:
+
+> You have met 12 of the 23 lessons here. 11 to go — and you have used what 4 of
+> them taught.
+
+## 4. What is refused, and why
+
+The refusals are docs/EDUCATION-TAB-DESIGN.md §5.4's, and they hold here:
+
+| not built | why |
+|---|---|
+| a completion percentage | it rewards skipping — the fastest way to raise a percentage is Next through the shortest lessons |
+| streaks, "don't lose your streak" | pressure with a deadline, for one person learning his own tool |
+| badges for clicking | a badge for opening a page teaches nothing and lies about what he can do |
+| a nudge — "you haven't finished Memory" | the intro is offered once and nothing else ever pops up; that stands |
+| a leaderboard, or anything that leaves the PC | there is nobody to share with, and rule 1 keeps this on his own machine |
+| timing how long a lesson takes | it turns a lesson into a task and measures the wrong thing |
+| locking a lesson behind another | §7's order is a suggestion; gating his own documentation is a strange way to say so |
+
+## 5. How it should be built, in the order that keeps it small
+
+1. **The field and the registries.** `try` in the catalogue (already written on
+   the lessons that can carry one), `TRY_ACTIONS` in each app, and the same
+   shape check `point` has — `backend/test_tutorials.py` for the shape,
+   `jarvis-desktop/tests/tutorials.mjs` and `TutorialsTest.kt` against each
+   app's own registry. **This step alone is honest and changes no state.**
+2. **Observation, desktop first.** One `TRY_ACTIONS` entry per action, wired to
+   the place the app already knows the thing happened — the model switch
+   returning, a card being decided, a backup finishing. Nothing new listens to
+   anything; the app is already doing the thing it would report.
+3. **The state.** `used` in `STATES`, written by the app that observed the
+   action, and the second half of the sentence above.
+4. **The phone last, and only for what it can see.** A `try` the phone cannot
+   observe stays `None`, so this step may legitimately be "nothing to do".
+
+**The thing that must not happen first is the state.** A `used` written by
+anything other than an observed action is the same lie as a `done` earned by
+pressing Next, one level up.
+

@@ -20,7 +20,8 @@
     "limit": "It never sends anything by itself and never changes your words unless you pick the rewritten one - a low score does not stop you sending what you wrote. It runs on the small model on this PC, so its advice is sometimes wrong and it misses things a bigger model would catch.",
     "surface": "both",
     "covers": [
-      "settings.prompt-coach"
+      "settings.prompt-coach",
+      "how-it-talks"
     ]
   },
   {
@@ -44,7 +45,8 @@
     "limit": "Off until you turn it on. The check cannot tell a recording or a copy of your voice from the real one, and the app says so.",
     "surface": "both",
     "covers": [
-      "settings.voice"
+      "settings.voice",
+      "talking"
     ]
   },
   {
@@ -56,7 +58,10 @@
     "asks": "No card.",
     "limit": "An answer that used a sensitive saved fact stays on screen instead, unless you allow it.",
     "surface": "both",
-    "covers": []
+    "covers": [
+      "talking",
+      "how-it-talks"
+    ]
   },
   {
     "id": "spoken-style",
@@ -67,7 +72,9 @@
     "asks": "No card.",
     "limit": "Typed questions are unchanged, and a spoken answer can still be long if you ask for more.",
     "surface": "both",
-    "covers": []
+    "covers": [
+      "how-it-talks"
+    ]
   },
   {
     "id": "voice-training",
@@ -78,7 +85,9 @@
     "asks": "One approval card before your voice is learned. The recordings are deleted either way.",
     "limit": "Nothing is learned until you approve it.",
     "surface": "both",
-    "covers": []
+    "covers": [
+      "how-it-talks"
+    ]
   },
   {
     "id": "voice-check",
@@ -90,7 +99,8 @@
     "limit": "It cannot tell a recording or a copy from your real voice.",
     "surface": "both",
     "covers": [
-      "entry.voice-check"
+      "entry.voice-check",
+      "how-it-talks"
     ]
   },
   {
@@ -103,7 +113,8 @@
     "limit": "The voice pack is a 350 MB download on the PC, checksum-pinned.",
     "surface": "both",
     "covers": [
-      "settings.voices"
+      "settings.voices",
+      "how-it-talks"
     ]
   },
   {
@@ -116,7 +127,8 @@
     "limit": "Humour is off to start, and never appears on a card, an error or a serious topic.",
     "surface": "both",
     "covers": [
-      "settings.manner"
+      "settings.manner",
+      "how-it-talks"
     ]
   },
   {
@@ -140,7 +152,9 @@
     "limit": "Not full-duplex, so a turn takes a couple of seconds. The voice check still runs on every clip, and side remarks meant for someone else are ignored and not kept.",
     "surface": "both",
     "covers": [
-      "safety.live-stop"
+      "safety.live-stop",
+      "talking",
+      "phone-live"
     ]
   },
   {
@@ -152,7 +166,10 @@
     "asks": "The headset button never approves anything.",
     "limit": "Live pauses itself during a phone or video call, where the phone can tell one is happening.",
     "surface": "both",
-    "covers": []
+    "covers": [
+      "talking",
+      "phone-live"
+    ]
   },
   {
     "id": "talk-to-type",
@@ -163,7 +180,9 @@
     "asks": "One approval card to switch it on; after that no card each time. Switching it off is instant.",
     "limit": "On the PC only - a client must not turn speech into words. It waits while Jarvis Live is on.",
     "surface": "desktop",
-    "covers": []
+    "covers": [
+      "how-it-talks"
+    ]
   },
   {
     "id": "chat-thread",
@@ -175,7 +194,8 @@
     "limit": "The thread hides while \"Hide memory lists and chat history\" is on. A new conversation starts after 30 quiet minutes by default - 10 minutes, 1 hour, 4 hours or never can be chosen in Settings - and the old one stays in History, where Continue brings it back.",
     "surface": "both",
     "covers": [
-      "settings.idle-new"
+      "settings.idle-new",
+      "records"
     ]
   },
   {
@@ -211,7 +231,8 @@
     "surface": "both",
     "covers": [
       "brain.work.briefing",
-      "settings.briefing-settings"
+      "settings.briefing-settings",
+      "work-and-attention"
     ]
   },
   {
@@ -224,7 +245,8 @@
     "limit": "A late alarm rings only if it is at most 10 minutes late; after that it is a quiet note saying it was missed.",
     "surface": "both",
     "covers": [
-      "brain.work.coming-up"
+      "brain.work.coming-up",
+      "timers-reminders"
     ]
   },
   {
@@ -237,7 +259,8 @@
     "limit": "",
     "surface": "both",
     "covers": [
-      "brain.work.today"
+      "brain.work.today",
+      "work-and-attention"
     ]
   },
   {
@@ -250,7 +273,8 @@
     "limit": "A widget's tile actions are a fixed set, and nothing a widget shows is ever turned into an instruction.",
     "surface": "both",
     "covers": [
-      "brain.work.widgets"
+      "brain.work.widgets",
+      "home-overview"
     ]
   },
   {
@@ -263,7 +287,8 @@
     "limit": "",
     "surface": "both",
     "covers": [
-      "brain.work.jobs"
+      "brain.work.jobs",
+      "work-and-attention"
     ]
   },
   {
@@ -279,7 +304,8 @@
       "brain.tab.now",
       "brain.now.right-now",
       "brain.now.trace",
-      "brain.now.findings"
+      "brain.now.findings",
+      "work-and-attention"
     ]
   },
   {
@@ -292,7 +318,8 @@
     "limit": "",
     "surface": "both",
     "covers": [
-      "brain.now.budget"
+      "brain.now.budget",
+      "work-and-attention"
     ]
   },
   {
@@ -305,7 +332,9 @@
     "limit": "It watches which app is in front on the PC only, and keeps counts, never what it saw. The report has no streak line.",
     "surface": "both",
     "covers": [
-      "brain.work.focus"
+      "brain.work.focus",
+      "focus-sessions",
+      "work-and-attention"
     ]
   },
   {
@@ -318,7 +347,8 @@
     "limit": "The lists hide while \"Hide memory lists and chat history\" is on.",
     "surface": "desktop",
     "covers": [
-      "brain.tab.memory"
+      "brain.tab.memory",
+      "memory"
     ]
   },
   {
@@ -331,7 +361,8 @@
     "limit": "Only your own words count - never a web page, an email, a document or tool output.",
     "surface": "both",
     "covers": [
-      "brain.memory.auto"
+      "brain.memory.auto",
+      "memory"
     ]
   },
   {
@@ -344,7 +375,9 @@
     "limit": "This is the one list that is never hidden.",
     "surface": "both",
     "covers": [
-      "brain.memory.waiting"
+      "brain.memory.waiting",
+      "memory",
+      "money-and-health"
     ]
   },
   {
@@ -357,7 +390,8 @@
     "limit": "Erasing a fact's words can also offer to delete the chat it came from.",
     "surface": "desktop",
     "covers": [
-      "brain.memory.known"
+      "brain.memory.known",
+      "memory-lists"
     ]
   },
   {
@@ -370,7 +404,8 @@
     "limit": "The desktop keeps no people-and-things list of its own.",
     "surface": "phone",
     "covers": [
-      "brain.memory.people-things"
+      "brain.memory.people-things",
+      "memory-lists"
     ]
   },
   {
@@ -383,7 +418,8 @@
     "limit": "It holds a fixed number of characters, and the card says how many are used.",
     "surface": "both",
     "covers": [
-      "brain.memory.profile"
+      "brain.memory.profile",
+      "memory-lists"
     ]
   },
   {
@@ -396,7 +432,8 @@
     "limit": "",
     "surface": "both",
     "covers": [
-      "brain.memory.between-us"
+      "brain.memory.between-us",
+      "memory-lists"
     ]
   },
   {
@@ -409,7 +446,8 @@
     "limit": "",
     "surface": "both",
     "covers": [
-      "brain.memory.topics"
+      "brain.memory.topics",
+      "memory-lists"
     ]
   },
   {
@@ -422,7 +460,9 @@
     "limit": "Everyday facts are learned automatically by default.",
     "surface": "both",
     "covers": [
-      "brain.memory.learning"
+      "brain.memory.learning",
+      "memory",
+      "money-and-health"
     ]
   },
   {
@@ -435,7 +475,8 @@
     "limit": "",
     "surface": "both",
     "covers": [
-      "brain.memory.wiki"
+      "brain.memory.wiki",
+      "notes-and-wiki"
     ]
   },
   {
@@ -448,7 +489,8 @@
     "limit": "The questions and answers are your own words, so they hide with the memory lists.",
     "surface": "both",
     "covers": [
-      "brain.memory.deep"
+      "brain.memory.deep",
+      "memory-lists"
     ]
   },
   {
@@ -461,7 +503,8 @@
     "limit": "It needs the connection live.",
     "surface": "phone",
     "covers": [
-      "brain.memory.as-of"
+      "brain.memory.as-of",
+      "memory"
     ]
   },
   {
@@ -474,7 +517,8 @@
     "limit": "Imported text is outside text - it is never learned from.",
     "surface": "desktop",
     "covers": [
-      "brain.memory.history-import"
+      "brain.memory.history-import",
+      "memory-lists"
     ]
   },
   {
@@ -489,7 +533,8 @@
     "covers": [
       "brain.tab.history",
       "brain.history.conversations",
-      "entry.history"
+      "entry.history",
+      "records"
     ]
   },
   {
@@ -503,7 +548,8 @@
     "surface": "both",
     "covers": [
       "brain.history.tags",
-      "brain.history.tag-suggestions"
+      "brain.history.tag-suggestions",
+      "memory-lists"
     ]
   },
   {
@@ -516,7 +562,9 @@
     "limit": "After the 10 minutes the chats are gone for good. Erasing a fact's words for good stays the separate per-fact action.",
     "surface": "both",
     "covers": [
-      "brain.history.forget-range"
+      "brain.history.forget-range",
+      "memory",
+      "records"
     ]
   },
   {
@@ -529,7 +577,8 @@
     "limit": "Drawn from the same memory lists, so it hides with them.",
     "surface": "desktop",
     "covers": [
-      "brain.tab.galaxy"
+      "brain.tab.galaxy",
+      "memory-lists"
     ]
   },
   {
@@ -542,7 +591,8 @@
     "limit": "Passwords, keys and card numbers are painted solid black first, and if Jarvis's own window is in front - or the cleaner cannot check the picture - none is attached and Jarvis says why. With one graphics card it reads the screen's words; picture mode can read the picture too, slowly, and is off by default.",
     "surface": "both",
     "covers": [
-      "settings.screen-look"
+      "settings.screen-look",
+      "screens-and-pictures"
     ]
   },
   {
@@ -554,7 +604,9 @@
     "asks": "Starting is held while the connection is catching up or App lock would ask; stopping never is.",
     "limit": "A visible \"Jarvis is watching\" sign shows the whole time. It pauses on password fields and on the apps you exclude (banking), and nothing is saved.",
     "surface": "both",
-    "covers": []
+    "covers": [
+      "screens-and-pictures"
+    ]
   },
   {
     "id": "picture-mode",
@@ -565,7 +617,9 @@
     "asks": "Turning it on raises one card on the PC; turning it off is instant.",
     "limit": "Off by default, slow, and it runs on the processor rather than the graphics card.",
     "surface": "both",
-    "covers": []
+    "covers": [
+      "screens-and-pictures"
+    ]
   },
   {
     "id": "photo-reminder",
@@ -576,7 +630,9 @@
     "asks": "It only proposes. Your tap adds ONE reminder, with no card.",
     "limit": "The dates are read on the PC, and a scan sets nothing up by itself.",
     "surface": "both",
-    "covers": []
+    "covers": [
+      "screens-and-pictures"
+    ]
   },
   {
     "id": "live-camera",
@@ -587,7 +643,9 @@
     "asks": "No extra card - the Live session is already running.",
     "limit": "Off until the 12 GB card is in and the photo test passes. There is no words-only camera on one card.",
     "surface": "phone",
-    "covers": []
+    "covers": [
+      "phone-live"
+    ]
   },
   {
     "id": "quiz",
@@ -614,7 +672,8 @@
     "surface": "both",
     "covers": [
       "brain.projects.pictures",
-      "settings.pictures"
+      "settings.pictures",
+      "screens-and-pictures"
     ]
   },
   {
@@ -639,7 +698,9 @@
     "asks": "No card normally. In a turn where Jarvis has read an email, a page or a file, writing a note raises one.",
     "limit": "Only the note apps this PC is set up for. With App lock on, adding a note to a running task needs an unlock first.",
     "surface": "both",
-    "covers": []
+    "covers": [
+      "notes-and-wiki"
+    ]
   },
   {
     "id": "folders",
@@ -651,7 +712,8 @@
     "limit": "A Notion export goes into a folder Jarvis searches; imported notes are outside text and are never learned as facts.",
     "surface": "both",
     "covers": [
-      "settings.folders"
+      "settings.folders",
+      "documents-and-search"
     ]
   },
   {
@@ -663,7 +725,9 @@
     "asks": "Reading needs no card. Writing a note back after reading it raises one, as any note write after outside text does.",
     "limit": "",
     "surface": "both",
-    "covers": []
+    "covers": [
+      "documents-and-search"
+    ]
   },
   {
     "id": "tutorials",
@@ -677,7 +741,8 @@
     "covers": [
       "brain.tab.tutorials",
       "brain.model.tutorials",
-      "entry.help"
+      "entry.help",
+      "set-up-jarvis-card"
     ]
   },
   {
@@ -730,7 +795,9 @@
     "surface": "both",
     "covers": [
       "brain.tab.watch",
-      "brain.watch.watchlist"
+      "brain.watch.watchlist",
+      "work-and-attention",
+      "limits-and-notes"
     ]
   },
   {
@@ -743,7 +810,9 @@
     "limit": "Nothing private - email, files, credentials, memory - goes into those chats. Each card names that company's terms risk, and a monthly money limit stops a paid service when it is reached.",
     "surface": "both",
     "covers": [
-      "brain.work.chatbot"
+      "brain.work.chatbot",
+      "money-and-health",
+      "limits-and-notes"
     ]
   },
   {
@@ -769,7 +838,8 @@
     "limit": "Never health or money numbers, memory, email or credentials go out of a Shareable project. Jarvis writing code waits for the 12 GB card.",
     "surface": "both",
     "covers": [
-      "brain.tab.projects"
+      "brain.tab.projects",
+      "projects"
     ]
   },
   {
@@ -782,7 +852,8 @@
     "limit": "",
     "surface": "both",
     "covers": [
-      "brain.work.goals"
+      "brain.work.goals",
+      "projects"
     ]
   },
   {
@@ -795,7 +866,8 @@
     "limit": "The picture is taken out while the private lists are hidden or App lock is on.",
     "surface": "both",
     "covers": [
-      "brain.projects.progress"
+      "brain.projects.progress",
+      "projects"
     ]
   },
   {
@@ -808,7 +880,8 @@
     "limit": "Plain code on the PC adds it up - no model sees the numbers, and the phone only shows what the PC sends.",
     "surface": "both",
     "covers": [
-      "settings.spending"
+      "settings.spending",
+      "money-and-health"
     ]
   },
   {
@@ -821,7 +894,8 @@
     "limit": "Nothing is asked or sent while the private lists are hidden or App lock is on.",
     "surface": "both",
     "covers": [
-      "brain.work.retirement"
+      "brain.work.retirement",
+      "money-and-health"
     ]
   },
   {
@@ -834,7 +908,8 @@
     "limit": "The amount is an estimate from a price list you can see and correct, and the card says \"about\". Jarvis also asks each service to cap how long an answer can be.",
     "surface": "desktop",
     "covers": [
-      "settings.chatbot-api-keys"
+      "settings.chatbot-api-keys",
+      "money-and-health"
     ]
   },
   {
@@ -846,7 +921,10 @@
     "asks": "One card, every time - unless you turn on \"Also remember sensitive topics automatically\", which is off by default.",
     "limit": "Passwords, PINs, account numbers and ID numbers always wait, even with that setting on.",
     "surface": "both",
-    "covers": []
+    "covers": [
+      "money-and-health",
+      "memory"
+    ]
   },
   {
     "id": "crisis-help",
@@ -858,7 +936,9 @@
     "limit": "A crisis question and its answer are never learned from and never counted, and do not stay in the thread. The chat is still kept in History, called \"A difficult moment\".",
     "surface": "both",
     "covers": [
-      "safety.crisis-help"
+      "safety.crisis-help",
+      "money-and-health",
+      "when-something-is-wrong"
     ]
   },
   {
@@ -870,7 +950,10 @@
     "asks": "No card to read.",
     "limit": "Plain http is allowed only inside your own networks, and the token is kept as safely as a password.",
     "surface": "both",
-    "covers": []
+    "covers": [
+      "home-devices",
+      "home-calendar-email"
+    ]
   },
   {
     "id": "lights",
@@ -881,7 +964,9 @@
     "asks": "Off by default. Turning it on raises one card; turning it off is instant, and it never applies in a turn that has read outside text.",
     "limit": "Locks, doors, alarms and covers are never covered by it.",
     "surface": "both",
-    "covers": []
+    "covers": [
+      "home-devices"
+    ]
   },
   {
     "id": "locks",
@@ -892,7 +977,9 @@
     "asks": "Always one card of its own - never a standing permission.",
     "limit": "One smart-home card may list several named devices at once; locks, doors, alarms and covers never share theirs.",
     "surface": "both",
-    "covers": []
+    "covers": [
+      "home-devices"
+    ]
   },
   {
     "id": "calendar",
@@ -903,7 +990,9 @@
     "asks": "Read-only. Loosening it from the settings file is PC-only and raises one card plus Windows Hello.",
     "limit": "The link is kept as safely as a password: never logged, never shown, and sent nowhere but Google.",
     "surface": "desktop",
-    "covers": []
+    "covers": [
+      "home-calendar-email"
+    ]
   },
   {
     "id": "weather-sky",
@@ -914,7 +1003,9 @@
     "asks": "Your own Home Assistant needs no card. Open-Meteo online receives your rough location, so turning it on raises one card; turning it off is instant.",
     "limit": "Off by default. Rain, snow and wind only appear behind a character face.",
     "surface": "both",
-    "covers": []
+    "covers": [
+      "home-devices"
+    ]
   },
   {
     "id": "email-read",
@@ -925,7 +1016,9 @@
     "asks": "Reading needs no card. \"Tell me when\" for a named sender is set up with one card.",
     "limit": "Text from an email is outside text: it never makes Jarvis act on its own and is never learned as a fact.",
     "surface": "both",
-    "covers": []
+    "covers": [
+      "home-calendar-email"
+    ]
   },
   {
     "id": "email-send",
@@ -937,7 +1030,8 @@
     "limit": "The card says plainly when the conversation has read outside text. Sending is a named way out of the PC.",
     "surface": "both",
     "covers": [
-      "settings.email-sending"
+      "settings.email-sending",
+      "home-calendar-email"
     ]
   },
   {
@@ -949,7 +1043,9 @@
     "asks": "One card every time, showing the full draft, before any text goes to the folder.",
     "limit": "",
     "surface": "desktop",
-    "covers": []
+    "covers": [
+      "home-calendar-email"
+    ]
   },
   {
     "id": "inbox-tidy",
@@ -960,7 +1056,9 @@
     "asks": "One card lists every email it will touch, approved on screen and never by voice. Then 10 minutes of Undo. \"Delete\" only ever moves to Trash.",
     "limit": "The card says when the choice came from reading email. It has been tried against a stand-in mail server, never a real mailbox.",
     "surface": "both",
-    "covers": []
+    "covers": [
+      "home-calendar-email"
+    ]
   },
   {
     "id": "news-and-page-watches",
@@ -973,7 +1071,9 @@
     "surface": "both",
     "covers": [
       "brain.work.briefing",
-      "brain.work.coming-up"
+      "brain.work.coming-up",
+      "home-calendar-email",
+      "work-and-attention"
     ]
   },
   {
@@ -987,7 +1087,10 @@
     "surface": "both",
     "covers": [
       "settings.connection",
-      "entry.checks"
+      "entry.checks",
+      "phone-pairing",
+      "brain",
+      "limits-and-notes"
     ]
   },
   {
@@ -1000,7 +1103,9 @@
     "limit": "This one can never be hidden, so a lost phone can always be removed.",
     "surface": "both",
     "covers": [
-      "settings.devices"
+      "settings.devices",
+      "phone-pairing",
+      "home-overview"
     ]
   },
   {
@@ -1013,7 +1118,8 @@
     "limit": "Only the apps you choose, never banking. One-time codes are hidden before anything reaches the model, and it never makes Jarvis act. Never text messages, and Jarvis never replies or sends.",
     "surface": "phone",
     "covers": [
-      "settings.phone-notify"
+      "settings.phone-notify",
+      "phone-notifications"
     ]
   },
   {
@@ -1026,7 +1132,8 @@
     "limit": "",
     "surface": "phone",
     "covers": [
-      "settings.watch-notify"
+      "settings.watch-notify",
+      "phone-extras"
     ]
   },
   {
@@ -1039,7 +1146,8 @@
     "limit": "Bubble mode may need more than this setting before Android shows it at all - try it on the real phone.",
     "surface": "phone",
     "covers": [
-      "settings.floating-avatar"
+      "settings.floating-avatar",
+      "phone-extras"
     ]
   },
   {
@@ -1052,7 +1160,9 @@
     "limit": "The tile never approves anything.",
     "surface": "phone",
     "covers": [
-      "settings.quick-tiles"
+      "settings.quick-tiles",
+      "phone-extras",
+      "phone-live"
     ]
   },
   {
@@ -1065,7 +1175,8 @@
     "limit": "It only asks. It cannot change the phone's own display setting - that belongs to the phone, and only the phone's own Settings or a system app can change it. If the screen does not take the rate, the row says so rather than pretending. A higher rate uses more battery. Not the animal's frame rate, which is how often the animal is drawn.",
     "surface": "phone",
     "covers": [
-      "settings.screen-rate"
+      "settings.screen-rate",
+      "phone-extras"
     ]
   },
   {
@@ -1077,7 +1188,9 @@
     "asks": "Your tap only - never on its own.",
     "limit": "The copy in the phone's own apps rings even when the PC is off or out of reach.",
     "surface": "both",
-    "covers": []
+    "covers": [
+      "home-overview"
+    ]
   },
   {
     "id": "find-phone",
@@ -1088,7 +1201,9 @@
     "asks": "No card - your own words only, and it is answered without the AI model.",
     "limit": "The phone rings on the alarm channel, so it rings even on silent. It stops from the phone or after its time runs out.",
     "surface": "both",
-    "covers": []
+    "covers": [
+      "home-overview"
+    ]
   },
   {
     "id": "phone-limits",
@@ -1099,7 +1214,9 @@
     "asks": "Nothing to ask.",
     "limit": "No deep config editing, no model catalogue to browse, no speech-to-text on the phone, and no approve-all anywhere. Switching or installing a model by typing its name is allowed - it raises a card on the PC like any other change.",
     "surface": "phone",
-    "covers": []
+    "covers": [
+      "phone-limits"
+    ]
   },
   {
     "id": "appearance",
@@ -1112,7 +1229,9 @@
     "surface": "both",
     "covers": [
       "settings.appearance-card",
-      "entry.appearance"
+      "entry.appearance",
+      "faces",
+      "home-devices"
     ]
   },
   {
@@ -1125,7 +1244,8 @@
     "limit": "Desktop only. The phone keeps its own crash screen, which appears after a crash on the phone.",
     "surface": "desktop",
     "covers": [
-      "settings.crash-notes"
+      "settings.crash-notes",
+      "limits-and-notes"
     ]
   },
   {
@@ -1137,7 +1257,9 @@
     "asks": "The first time you pick an animal face, one line asks whether to use its own voice. A face never changes the voice by itself, and an approval never gets a wave or anything cute.",
     "limit": "Animal voices are Jarvis's own voices, blends and pitch - never a real person's.",
     "surface": "both",
-    "covers": []
+    "covers": [
+      "faces"
+    ]
   },
   {
     "id": "animal-options",
@@ -1149,7 +1271,8 @@
     "limit": "The \"Voice follows the face\" switch starts off.",
     "surface": "both",
     "covers": [
-      "settings.animal-options"
+      "settings.animal-options",
+      "faces"
     ]
   },
   {
@@ -1162,7 +1285,8 @@
     "limit": "Desktop only. The phone's first screen is pairing instead.",
     "surface": "desktop",
     "covers": [
-      "settings.first-run"
+      "settings.first-run",
+      "set-up-jarvis-card"
     ]
   },
   {
@@ -1175,7 +1299,8 @@
     "limit": "This hides menus on this device only, and the system-tray menu is not affected.",
     "surface": "both",
     "covers": [
-      "settings.menu-visibility"
+      "settings.menu-visibility",
+      "brain"
     ]
   },
   {
@@ -1188,7 +1313,9 @@
     "limit": "A key another program already owns is refused, with the reason.",
     "surface": "desktop",
     "covers": [
-      "settings.shortcuts"
+      "settings.shortcuts",
+      "how-it-talks",
+      "pc-at-a-glance"
     ]
   },
   {
@@ -1203,7 +1330,8 @@
     "covers": [
       "models",
       "brain.model.models",
-      "brain.tab.faculties"
+      "brain.tab.faculties",
+      "model-page"
     ]
   },
   {
@@ -1216,7 +1344,9 @@
     "limit": "",
     "surface": "both",
     "covers": [
-      "brain.model.compute"
+      "brain.model.compute",
+      "hardware",
+      "model-page"
     ]
   },
   {
@@ -1230,7 +1360,8 @@
     "surface": "both",
     "covers": [
       "skills",
-      "brain.model.skills"
+      "brain.model.skills",
+      "model-page"
     ]
   },
   {
@@ -1243,7 +1374,8 @@
     "limit": "Hides with the other memory lists.",
     "surface": "desktop",
     "covers": [
-      "brain.model.memory"
+      "brain.model.memory",
+      "model-page"
     ]
   },
   {
@@ -1256,7 +1388,8 @@
     "limit": "Desktop only. On the phone these are Android's own per-channel notification controls, reached from the \"Notifications from Jarvis\" row on Settings.",
     "surface": "desktop",
     "covers": [
-      "settings.notifications"
+      "settings.notifications",
+      "phone-notifications"
     ]
   },
   {
@@ -1269,7 +1402,9 @@
     "limit": "Desktop only: the backend runs on the PC, next to the desktop app.",
     "surface": "desktop",
     "covers": [
-      "settings.start-jarvis"
+      "settings.start-jarvis",
+      "limits-and-notes",
+      "set-up-jarvis-card"
     ]
   },
   {
@@ -1282,7 +1417,8 @@
     "limit": "",
     "surface": "desktop",
     "covers": [
-      "brain.tab.work"
+      "brain.tab.work",
+      "work-and-attention"
     ]
   },
   {
@@ -1295,7 +1431,8 @@
     "limit": "The list shows how far each job got and which tools it will use, never what the job is about - the PC sends no titles or step text. Nothing runs while Jarvis is switched off, and the plan card that would start a job from a chat is still switched off.",
     "surface": "both",
     "covers": [
-      "tasks"
+      "tasks",
+      "work-and-attention"
     ]
   },
   {
@@ -1308,7 +1445,8 @@
     "limit": "Second-card features are off until that feature has been measured on your PC.",
     "surface": "both",
     "covers": [
-      "settings.hardware"
+      "settings.hardware",
+      "hardware"
     ]
   },
   {
@@ -1325,7 +1463,9 @@
       "settings.second-card.study-helper",
       "settings.second-card.referee",
       "settings.second-card.third-card",
-      "settings.second-card.chat-card"
+      "settings.second-card.chat-card",
+      "hardware",
+      "model-page"
     ]
   },
   {
@@ -1338,7 +1478,8 @@
     "limit": "Slow, and only worth it with both cards installed.",
     "surface": "both",
     "covers": [
-      "settings.big-model"
+      "settings.big-model",
+      "hardware"
     ]
   },
   {
@@ -1351,7 +1492,8 @@
     "limit": "",
     "surface": "both",
     "covers": [
-      "settings.updates"
+      "settings.updates",
+      "limits-and-notes"
     ]
   },
   {
@@ -1364,7 +1506,8 @@
     "limit": "Updating a tool is a change, and raises its own card first.",
     "surface": "desktop",
     "covers": [
-      "settings.tool-updates"
+      "settings.tool-updates",
+      "model-page"
     ]
   },
   {
@@ -1377,7 +1520,8 @@
     "limit": "",
     "surface": "desktop",
     "covers": [
-      "settings.more-options"
+      "settings.more-options",
+      "limits-and-notes"
     ]
   },
   {
@@ -1390,7 +1534,8 @@
     "limit": "It lists the names only, never their values.",
     "surface": "both",
     "covers": [
-      "settings.backend-supports"
+      "settings.backend-supports",
+      "model-page"
     ]
   },
   {
@@ -1403,7 +1548,8 @@
     "limit": "",
     "surface": "both",
     "covers": [
-      "settings.about"
+      "settings.about",
+      "intro"
     ]
   },
   {
@@ -1416,7 +1562,8 @@
     "limit": "The HUD's own chat box has no Temporary chat, no New conversation and no crisis panel.",
     "surface": "desktop",
     "covers": [
-      "settings.hud-window"
+      "settings.hud-window",
+      "pc-at-a-glance"
     ]
   },
   {
@@ -1429,7 +1576,8 @@
     "limit": "Locked with a recovery code only you have, shown once - lose the code and the backup is useless. Erased facts stay in older backups until they age out. Jarvis keeps only the last few.",
     "surface": "both",
     "covers": [
-      "settings.backup"
+      "settings.backup",
+      "backups"
     ]
   },
   {
@@ -1442,7 +1590,8 @@
     "limit": "The phone is never asked for an account secret.",
     "surface": "desktop",
     "covers": [
-      "settings.account-secrets"
+      "settings.account-secrets",
+      "money-and-health"
     ]
   },
   {
@@ -1455,7 +1604,8 @@
     "limit": "Read-only; the PC writes it from its own settings.",
     "surface": "both",
     "covers": [
-      "settings.reach"
+      "settings.reach",
+      "documents-and-search"
     ]
   },
   {
@@ -1468,7 +1618,8 @@
     "limit": "Some things offer 10 minutes to undo; after that they are gone.",
     "surface": "both",
     "covers": [
-      "brain.work.undo"
+      "brain.work.undo",
+      "work-and-attention"
     ]
   },
   {
@@ -1481,7 +1632,9 @@
     "limit": "It shows the title, Approved / Denied / Timed out, when, and which device.",
     "surface": "both",
     "covers": [
-      "brain.work.activity"
+      "brain.work.activity",
+      "records",
+      "asks-first"
     ]
   },
   {
@@ -1494,7 +1647,8 @@
     "limit": "Only what the PC's own table offers: every limit names a setting the PC already reads, and the phone may not change the ones the table marks for the PC alone.",
     "surface": "both",
     "covers": [
-      "settings.limits"
+      "settings.limits",
+      "limits-and-notes"
     ]
   },
   {
@@ -1519,7 +1673,9 @@
     "surface": "both",
     "covers": [
       "safety.approvals",
-      "settings.approval-cards"
+      "settings.approval-cards",
+      "asks-first",
+      "phone-approvals"
     ]
   },
   {
@@ -1532,7 +1688,10 @@
     "limit": "Nothing outside that short list can be loosened from an app.",
     "surface": "both",
     "covers": [
-      "settings.asks-first"
+      "settings.asks-first",
+      "asks-first",
+      "home-devices",
+      "money-and-health"
     ]
   },
   {
@@ -1545,7 +1704,9 @@
     "limit": "With App lock on, the phone blocks screenshots, and the PC's approval widget shows only a short title with Approve opening the locked app.",
     "surface": "both",
     "covers": [
-      "settings.security"
+      "settings.security",
+      "when-something-is-wrong",
+      "phone-limits"
     ]
   },
   {
@@ -1559,7 +1720,9 @@
     "surface": "both",
     "covers": [
       "settings.handoff",
-      "settings.handoff-front"
+      "settings.handoff-front",
+      "asks-first",
+      "phone-approvals"
     ]
   },
   {
@@ -1572,7 +1735,8 @@
     "limit": "This is deliberate: acting on a stale picture of the world is how the wrong thing gets approved.",
     "surface": "both",
     "covers": [
-      "safety.stale-link"
+      "safety.stale-link",
+      "when-something-is-wrong"
     ]
   },
   {
@@ -1585,7 +1749,9 @@
     "limit": "There is no control anywhere that clears a rush latch, and no approve-in-bulk.",
     "surface": "both",
     "covers": [
-      "safety.stop-everything"
+      "safety.stop-everything",
+      "pc-at-a-glance",
+      "how-it-talks"
     ]
   },
   {
@@ -1600,7 +1766,9 @@
     "covers": [
       "brain.tab.trust",
       "brain.trust.ledger",
-      "brain.trust.content-risk"
+      "brain.trust.content-risk",
+      "records",
+      "when-something-is-wrong"
     ]
   },
   {
@@ -1613,7 +1781,8 @@
     "limit": "No control clears it, and it is never hidden.",
     "surface": "phone",
     "covers": [
-      "brain.trust.rush-latch"
+      "brain.trust.rush-latch",
+      "when-something-is-wrong"
     ]
   },
   {
@@ -1625,7 +1794,10 @@
     "asks": "It is what makes the next risky step ask: note writes, web searches, smart-home switches.",
     "limit": "Outside text is never learned as a fact, and the tier is raised when it tries to rush you.",
     "surface": "both",
-    "covers": []
+    "covers": [
+      "asks-first",
+      "when-something-is-wrong"
+    ]
   },
   {
     "id": "settings-entry",
