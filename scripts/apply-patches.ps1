@@ -1490,7 +1490,7 @@ $PATCHES = @(
     # or on any error, the banner says so and the routes are simply not there.
     'picture-card.patch'
     # The 30B coder: both cards, with Jarvis paused (2026-10-11). It only ADDS two
-    # new route blocks to jarvis_hud.py - GET /api/big-coder and the two POSTs -
+    # new route blocks to jarvis_hud.py - a GET and a POST on /api/big-coder -
     # anchored on handler lines no other patch here writes, so its position is
     # order-independent; it sits here, before plugin-loader.patch, because that one
     # must stay last of all (test_gate_touches.py). It touches no gate list, adds
@@ -1821,7 +1821,7 @@ $SHIPPED = @(
     # --- Ask for a picture, and keep it (2026-10-11, pictures.patch, JARVIS-API section 129) ---
     'jarvis_pictures.py'         # /api/pictures, /api/pictures/file and POST /api/pictures: a prompt the owner typed, drawn by a program ON THIS PC (ComfyUI or stable-diffusion.cpp, a setting with named values, never guessed at), saved as a PNG in a folder on this PC (Pictures\Jarvis by default, PC-only) with a sidecar holding the prompt, the seed, the model and the settings so it can be made again. Nothing leaves the PC; no route sends a picture anywhere, so making one needs NO approval card. Nothing is deleted on a timer. The switch ("Making pictures") is OFF by default - the second card is shared with the everyday model - and with nothing configured the owner gets ONE plain sentence naming both programs to install, never a crash. Not a tool in jarvis_agent.py, so no model turn can fill in a prompt
     # --- The 30B coder, both cards (2026-10-11) ---
-    'jarvis_big_coder.py'        # One model the owner asked for by name (qwen3-coder-30b-a3b-ud-q3-k-xl): the best coder and the fastest writer measured on this PC (10/10 coding, ~101/76.5/76.3 tok/s, no thinking mode), and the only model here that needs BOTH cards - it cannot sit beside anything. An OPT-IN mode, off by default, that pauses the two live lanes, proves from /api/ps that both went, loads at the largest zero-spill context measured (28,672), announces the pause BEFORE it starts, and puts both lanes back exactly as they were, proved again. Turning it on is ONE card (change_own_config, ask); the pause goes through power_manage. Nothing downloads; every call is loopback. big-coder.patch wires its three routes
+    'jarvis_big_coder.py'        # One model the owner asked for by name (qwen3-coder-30b-a3b-ud-q3-k-xl): the best coder and the fastest writer measured on this PC (10/10 coding, ~101/76.5/76.3 tok/s, no thinking mode), and the only model here that needs BOTH cards - it cannot sit beside anything. An OPT-IN mode, off by default, that pauses the two live lanes, proves from /api/ps that both went, loads at the largest zero-spill context measured (28,672), announces the pause BEFORE it starts, and puts both lanes back exactly as they were, proved again. Turning it on is ONE card (change_own_config, ask); the pause goes through power_manage. Nothing downloads; every call is loopback. big-coder.patch wires its two routes
 )
 
 # The settings file. Installed only where none exists; never overwritten.
