@@ -988,8 +988,7 @@ def record_failed_run(dest, why: str, source=None) -> list:
     if dest is not None and any(is_inside(dest, folder) for folder in live):
         dest = None
     lines = [
-        f"{time.strftime('%Y-%m-%d %H:%M:%S')}  FAILED",
-        "  the run could not start, so no snapshot was made",
+        f"{time.strftime('%Y-%m-%d %H:%M:%S')}  FAILED - nothing was backed up",
         f"  why: {why}",
         f"  destination: {dest or '(none)'}",
         "  nothing was written to the destination; the last good snapshot is still there",
@@ -1451,32 +1450,37 @@ def _print_snapshot(result: dict) -> None:
 
 
 def cmd_backup(args) -> int:
+    def failed(message, dest=None) -> int:
+        """Every refusal in this command goes through here, not just the ones
+        that got as far as the destination: `pythonw.exe` has no console, so a
+        refusal printed to stdout goes nowhere and a task that FAILED must not
+        look like one that has not run yet."""
+        return _nothing_backed_up(message, dest if dest is not None else args.dest,
+                                  args.source)
+
     try:
         phrase = passphrase_from(args, required=args.seal)
     except Refused as exc:
-        print(f"Nothing was backed up: {exc}")
-        return 2
+        return failed(str(exc))
     if phrase and not args.seal:
         # A passphrase was given but sealing was not asked for. Writing the
         # data out readable would quietly ignore the one thing the caller
         # clearly meant, so this stops instead.
-        print("Nothing was backed up: a passphrase was given but --seal was not, so "
-              "the snapshot would have been written readable. Add --seal, or leave "
-              "the passphrase out.")
-        return 2
+        return failed("a passphrase was given but --seal was not, so the snapshot "
+                      "would have been written readable. Add --seal, or leave the "
+                      "passphrase out.")
     if args.seal:
         # Asked to seal: check the tool is here BEFORE a snapshot is taken, so
         # a missing `cryptography` cannot leave a plainly readable copy behind.
         aesgcm, _argon2 = _crypto()
         if aesgcm is None:
-            print("Nothing was backed up: sealing needs the `cryptography` package, "
-                  "which is not installed here. Take the backup without --seal, or "
-                  "install it - nothing was written unsealed instead.")
-            return 2
+            return failed("sealing needs the `cryptography` package, which is not "
+                          "installed here. Take the backup without --seal, or install "
+                          "it - nothing was written unsealed instead.")
     try:
         dest, note = destination(args.dest, args.source)
     except Refused as exc:
-        return _nothing_backed_up(exc, args.dest, args.source)
+        return failed(str(exc))
     if note:
         print(f"Note: {note} - a backup there stops happening if it is unplugged.")
     try:
@@ -1484,19 +1488,19 @@ def cmd_backup(args) -> int:
                                passphrase=phrase if args.seal else None,
                                dest_note=note)
     except Refused as exc:
-        return _nothing_backed_up(exc, dest, args.source)
+        return failed(str(exc), dest)
     _print_snapshot(result)
     _print_older_elsewhere(dest)
     return 0 if result["ok"] else 1
 
 
-def _nothing_backed_up(exc, dest, source=None) -> int:
+def _nothing_backed_up(message, dest, source=None) -> int:
     """A run that could not start, said three ways: on the screen, in the exit
     code, and in a `last-run.txt` where the failure can still be found later by
     a person the next morning. `pythonw.exe` has no console, so the file is the
     only one of the three the owner will ever see."""
-    print(f"Nothing was backed up: {exc}")
-    wrote = record_failed_run(dest, str(exc), source)
+    print(f"Nothing was backed up: {message}")
+    wrote = record_failed_run(dest, str(message), source)
     for where in wrote:
         print(f"  A note saying so was written to {Path(where) / 'last-run.txt'}")
     if not wrote:

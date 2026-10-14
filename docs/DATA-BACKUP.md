@@ -369,4 +369,4 @@ disk. **That is your call, and nothing here does it for you.**
   If it says "every database opens and matches its manifest", the snapshot is
   good.
 * The whole thing is one file, `tools/jarvis_data_backup.py`, and it is
-  checked by `backend/test_data_backup.py` (103 checks, plus 1 skipped on a PC with one drive) on every push.
+  checked by `backend/test_data_backup.py` (110 checks, plus 1 skipped on a PC with one drive) on every push.

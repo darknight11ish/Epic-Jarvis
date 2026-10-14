@@ -483,7 +483,8 @@ def t_sealing_without_the_library_writes_nothing():
         code = jdb.main(["backup", "--source", str(src), "--dest", str(dest),
                          "--seal", "--passphrase-env", "JARVIS_TEST_PHRASE"])
         check("the command line refuses before taking any snapshot at all",
-              code == 2 and not list(dest.iterdir()),
+              code == 2 and jdb.list_snapshots(dest) == []
+              and not [p.name for p in dest.iterdir() if p.is_dir()],
               f"exit {code}, dest holds {[p.name for p in dest.iterdir()]}")
     finally:
         jdb._crypto = real
@@ -524,24 +525,78 @@ def t_two_runs_inside_one_second_do_not_collide():
           str([p.name for p in dest.iterdir()]))
 
 
+def t_a_refused_run_still_leaves_a_trace():
+    print("\n--- t_a_refused_run_still_leaves_a_trace ---")
+    base = Path(tempfile.mkdtemp(prefix="jarvis-databak-trace-", dir=ROOT_TMP))
+    src = build_source(base)
+    dest = base / "snapshots"
+    dest.mkdir()
+    # The weekly task never passes --seal, so this refusal is not the task's
+    # own path - but it is the shape of every early refusal, and the point is
+    # that `pythonw.exe` has no console: a refusal printed to stdout goes
+    # nowhere, and a task that FAILED must not look like one that has not run.
+    real = jdb._crypto
+    jdb._crypto = lambda: (None, None)
+    os_environ_set("JARVIS_TEST_PHRASE", "phrase")
+    try:
+        with isolated_env(JARVIS_DATA_BACKUP_STATE_DIR=str(base / "state")):
+            code = jdb.main(["backup", "--source", str(src), "--dest", str(dest),
+                             "--seal", "--passphrase-env", "JARVIS_TEST_PHRASE"])
+        note = dest / "last-run.txt"
+        check("a run that refused before writing anything is recorded as FAILED",
+              code == 2 and note.is_file() and "FAILED" in note.read_text(encoding="utf-8"),
+              f"exit {code}, note: {note.read_text(encoding='utf-8') if note.is_file() else 'ABSENT'}")
+        check("and the reason is in it, so the owner can act on it",
+              note.is_file() and "cryptography" in note.read_text(encoding="utf-8"),
+              note.read_text(encoding="utf-8") if note.is_file() else "ABSENT")
+        check("...and nothing that looks like a backup was left behind",
+              jdb.list_snapshots(dest) == [], str(jdb.list_snapshots(dest)))
+    finally:
+        jdb._crypto = real
+        os_environ_unset("JARVIS_TEST_PHRASE")
+
+    # And the note must never be the thing that writes into the live folder.
+    refusals = src / "would-be-dest"
+    with isolated_env(JARVIS_DATA_BACKUP_STATE_DIR=str(base / "state2")):
+        jdb.main(["backup", "--source", str(src), "--dest", str(refusals)])
+    check("a run refused because the destination is inside the live folder writes "
+          "NO note there", not refusals.exists(),
+          str(sorted(p.name for p in src.iterdir())))
+    check("...and the record of it is written where it can still be found",
+          (base / "state2" / "last-run.txt").is_file()
+          and "FAILED" in (base / "state2" / "last-run.txt").read_text(encoding="utf-8"),
+          (base / "state2" / "last-run.txt").read_text(encoding="utf-8")
+          if (base / "state2" / "last-run.txt").is_file() else "ABSENT")
+
+
 def t_the_data_folder_follows_the_same_setting_jarvis_uses():
     print("\n--- t_the_data_folder_follows_the_same_setting_jarvis_uses ---")
-    # BOTH variables, and both restored: the runner sets OPENJARVIS_CONFIG_DIR
-    # and JARVIS_CONFIG_DIR at a private folder before this file starts, so
-    # unsetting only the first one left the second still naming that folder -
-    # and the "nothing set" check below could never pass under the runner. It
-    # did not pass there: measured 2026-10-14, 67 passed / 1 failed through
-    # `python backend/run_suites.py test_data_backup.py` on the unmodified
-    # branch, while the same file run on its own was 68/0.
-    with isolated_env(OPENJARVIS_CONFIG_DIR=r"C:\some\other\place",
-                      JARVIS_CONFIG_DIR=None):
-        check("OPENJARVIS_CONFIG_DIR is honoured, as jarvis_framework.py already "
-              "honours it", jdb.default_source() == Path(r"C:\some\other\place"),
+    # "Nothing set" has to be MADE true, not assumed: backend/run_suites.py sets
+    # OPENJARVIS_CONFIG_DIR to its own state folder for every suite it runs, so
+    # a check that read the environment as it found it passed here on the
+    # owner's PC and failed in CI - measured, 67 passed / 1 failed in job
+    # 115712066771. Both names are cleared, and put back afterwards.
+    saved = {name: os.environ.pop(name)
+             for name in ("OPENJARVIS_CONFIG_DIR", "JARVIS_CONFIG_DIR")
+             if name in os.environ}
+    try:
+        check("with neither variable set it is ~/.openjarvis, which is where his "
+              "data really is", jdb.default_source() == Path.home() / ".openjarvis",
               str(jdb.default_source()))
-    with isolated_env(OPENJARVIS_CONFIG_DIR=None, JARVIS_CONFIG_DIR=None):
-        check("with nothing set it is ~/.openjarvis, which is where his data is",
-              jdb.default_source() == Path.home() / ".openjarvis",
-              str(jdb.default_source()))
+    finally:
+        os.environ.update(saved)
+
+    for name in ("OPENJARVIS_CONFIG_DIR", "JARVIS_CONFIG_DIR"):
+        os_environ_set(name, r"C:\some\other\place")
+        try:
+            check(f"{name} is honoured, as jarvis_framework.py already honours it",
+                  jdb.default_source() == Path(r"C:\some\other\place"),
+                  str(jdb.default_source()))
+        finally:
+            os_environ_unset(name)
+    check("and with both cleared again it is back to ~/.openjarvis",
+          jdb.default_source() == Path.home() / ".openjarvis",
+          str(jdb.default_source()))
 
 
 def t_a_passphrase_without_seal_refuses_rather_than_ignoring_it():
@@ -556,7 +611,8 @@ def t_a_passphrase_without_seal_refuses_rather_than_ignoring_it():
                          "--passphrase-env", "JARVIS_TEST_PHRASE"])
         check("a passphrase given without --seal stops, instead of quietly writing "
               "the data out readable",
-              code == 2 and not list(dest.iterdir()),
+              code == 2 and jdb.list_snapshots(dest) == []
+              and not [p.name for p in dest.iterdir() if p.is_dir()],
               f"exit {code}, dest holds {[p.name for p in dest.iterdir()]}")
     finally:
         os_environ_unset("JARVIS_TEST_PHRASE")
@@ -917,6 +973,7 @@ def main() -> int:
                    t_a_sealed_snapshot_round_trips,
                    t_sealing_without_the_library_writes_nothing,
                    t_two_runs_inside_one_second_do_not_collide,
+                   t_a_refused_run_still_leaves_a_trace,
                    t_the_data_folder_follows_the_same_setting_jarvis_uses,
                    t_a_passphrase_without_seal_refuses_rather_than_ignoring_it,
                    t_the_weekly_task_has_no_window_and_needs_no_administrator,
