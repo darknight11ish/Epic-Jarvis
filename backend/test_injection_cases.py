@@ -290,8 +290,18 @@ def t_every_tool_result_is_labelled_and_the_turn_says_so_once():
           notes and first_ask is not None and notes[0] == first_ask - 1
           and all(last[i + 1]["role"] == "tool" for i, m in enumerate(last)
                   if m.get("tool_calls")), repr([m.get("role") for m in last]))
-    check("the first message is still the owner's, so the Modelfile's own SYSTEM is kept",
-          last[0]["role"] == "user", repr(last[0]))
+    # Was "the first message is still the owner's, so the Modelfile's own SYSTEM
+    # is kept" until 2026-10-14, and that reason is the belief this branch
+    # corrects: the owner's everyday model, qwen3.5:9b, is a plain library pull
+    # with NO Modelfile SYSTEM, so "the first message is the owner's" meant "no
+    # rules at all" on the lane he actually uses (jarvis_agent.LANE_SYSTEM,
+    # with_rules_first). What the check was really guarding - that the
+    # injection-defence note is added in its own place and does not become the
+    # first message - is kept, and is the stronger statement now: the rules
+    # really do lead, on every local turn.
+    check("the Jarvis rules lead the request, and the tool-data note is not the "
+          "first message",
+          last[0] == {"role": "system", "content": AG.LANE_SYSTEM}, repr(last[0]))
 
 
 def t_intake_flags_unicode_tag_characters():
