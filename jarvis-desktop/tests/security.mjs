@@ -20,6 +20,9 @@ import { dirname, join } from "node:path";
 import * as K from "./uikit.mjs";
 import * as S from "../src/security-settings.js";
 import { APPROVE_WHERE } from "../src/jarvis-link.js";
+// The search's own matching rule, imported so the check below runs the SHIPPED
+// engine rather than a copy of it (the page imports the same module).
+import { rank as searchRank } from "../src/settings-search.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const read = (p) => readFileSync(join(HERE, "..", p), "utf8");
@@ -47,6 +50,10 @@ const look = (page) => page.evaluate(() => {
     appLock: $("sec-app-lock").checked,
     appLockOff: $("sec-app-lock").disabled,
     privateAnswers: $("sec-private").checked,
+    // The switch's own on-screen name, read off the page rather than written
+    // out again in this file: it is what a search has to be able to find.
+    privateLabel: $("sec-private").closest("label").querySelector("span")
+      .textContent.replace(/\s+/g, " ").trim(),
     relock: pressed("sec-relock"),
     relockAll: [...$("sec-relock").querySelectorAll("button")].map((b) => b.textContent),
     approvals: pressed("sec-approvals"),
@@ -119,6 +126,16 @@ await check("what each lock covers is said plainly, gaps included", async () => 
   assert.doesNotMatch(s.all, /Windows Hello for private answers|private answers is on/);
   assert.match(S.relockNote(S.DEFAULTS),
     /It matters once App lock, or Windows Hello for memory lists and chat history, is on\.$/);
+  // The switch's own name is what finds it in Settings' search box, on this
+  // app as on the phone (`tests/settings-search.mjs` types the live label).
+  // Here it is a claim about THIS row's words: the label read off the page
+  // above must be one a search can match, or a person typing what they can
+  // see is told the setting does not exist (the phone's defect of
+  // 2026-10-13, which this app does not have because it matches the page's
+  // own text at the moment of the search).
+  assert.ok(s.privateLabel.length > 0, "the memory-lists switch has no label at all");
+  assert.ok(searchRank(s.privateLabel, s.privateLabel, "chat history") > 0,
+    `a search for "chat history" does not match this switch's own label, "${s.privateLabel}"`);
 });
 
 await check("tightening: one change sent, and the switch shows what Rust stored", async () => {

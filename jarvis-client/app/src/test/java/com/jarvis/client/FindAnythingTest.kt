@@ -389,6 +389,66 @@ class FindAnythingTest {
         assertTrue("the rest of the app is still findable", "place.inbox" in hidden)
     }
 
+    /**
+     * The words printed on a switch find it here too - and reaching the switch
+     * is NOT a way round the switch's own hiding rule.
+     *
+     * The second half is the point, and it is worth being exact about, because
+     * it is easy to write the alarming version of this test instead. The switch
+     * "Hide memory lists and chat history" is drawn under Security, and
+     * `settings.security` is never a memory list and is never hideable - a
+     * search result that reaches it does what the owner's own thumb does when
+     * the finger goes to that card. What [FindAnything.PRIVATE_IDS] hides is
+     * the CONTENT the switch covers (the Brain's memory lists, the History
+     * entry, the chat history), and none of those ids is `settings.security`.
+     * So a search for the switch's words may open the switch, while a search
+     * for the things it hides still returns nothing - both asserted below, so
+     * neither half can be satisfied by breaking the other.
+     */
+    @Test
+    fun `a switch is found by the words printed on it, without breaking what it hides`() {
+        val menus = MenuView()
+        // The owner's exact title, on the box he typed it into.
+        assertTrue(
+            "typing \"Hide memory lists and chat history\" must find Security",
+            FindAnything.results("Hide memory lists and chat history", menus, privateHidden = false)
+                .any { it.id == "settings.security" },
+        )
+        // The half-title a person types when they half-remember it. Both words
+        // must be found together (AND, not OR), so this is the switch's own
+        // index entry and not the word "history" alone.
+        assertTrue(
+            "typing \"chat history\" must find the switch's own section",
+            FindAnything.results("chat history", menus, privateHidden = false)
+                .any { it.id == "settings.security" },
+        )
+        // ...and the result is the app's own row, with the app's own words.
+        val row = FindAnything.results("Hide memory lists and chat history", menus, false)
+            .first { it.id == "settings.security" }
+        assertEquals(Screen.SETTINGS, row.screen)
+        assertEquals("security", row.section)
+
+        // The switch's own words never reach the content it hides. This is the
+        // rule `FindAnything`'s own doc says must survive: while the switch is
+        // ON, a typed search must not put a memory list or the chat history
+        // back on the screen.
+        for (q in listOf("chat history", "memory lists", "between us", "waiting")) {
+            val hidden = FindAnything.results(q, menus, privateHidden = true).map { it.id }
+            val leaked = hidden.filter { it in FindAnything.PRIVATE_IDS }
+            assertTrue(
+                "while \"Hide memory lists and chat history\" is on, \"$q\" returned $leaked",
+                leaked.isEmpty(),
+            )
+        }
+        // ...and the switch itself is still reachable while it is on, so the
+        // owner can always find the control that turned the hiding on.
+        assertTrue(
+            "the switch that hides the memory lists must stay findable while it is on",
+            FindAnything.results("Hide memory lists and chat history", menus, privateHidden = true)
+                .any { it.id == "settings.security" },
+        )
+    }
+
     // ------------------------------------------- 3. opening goes where it says
 
     @Test

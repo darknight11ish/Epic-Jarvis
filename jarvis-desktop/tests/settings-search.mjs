@@ -130,6 +130,39 @@ await check("a switch and its detail are both searchable", async () => {
   await page.close();
 });
 
+await check("a switch is found by its own label, not only by its detail", async () => {
+  // The phone's defect of 2026-10-13 was that a switch's own words found
+  // nothing, because the phone matches a hand-kept index. This module matches
+  // the page's own text at the moment of the search, so the two switches below
+  // are checks that the desktop really does not have that gap - and that the
+  // labels a person reads are the words that find them. Read from the DOM
+  // rather than written out again here, so a relabelled switch fails this
+  // rather than passing against a stale copy.
+  const page = await open();
+  const securityLabel = await page.locator("#sec-private").evaluate((box) =>
+    box.closest("label").querySelector("span").textContent.replace(/\s+/g, " ").trim());
+  assert.ok(securityLabel.length > 0,
+    "the memory-lists switch has no label at all, so a person has nothing to type");
+  await type(page, securityLabel.toLowerCase());
+  const left = await showing(page);
+  assert.ok(left.includes("security"),
+    `typing the switch's own label, "${securityLabel}", did not find the Security card: ` +
+    `${left.join(", ") || "nothing was left showing"}`);
+  // A phrase from the middle of the same label, which is what a person types
+  // when they half-remember the switch.
+  await type(page, "memory lists");
+  assert.ok((await showing(page)).includes("security"),
+    `"memory lists" did not find the card that switch is drawn in: ${(await showing(page)).join(", ")}`);
+  // ...and a second switch elsewhere, read the same way, so this is not one
+  // row's happy accident.
+  const clickLabel = await page.locator("#floating-click-through").evaluate((box) =>
+    box.closest("label").querySelector("span").textContent.replace(/\s+/g, " ").trim());
+  await type(page, clickLabel.toLowerCase());
+  assert.ok((await showing(page)).includes("appearance-card"),
+    `typing "${clickLabel}" did not find the Appearance card: ${(await showing(page)).join(", ")}`);
+  await page.close();
+});
+
 /* ── The empty state ────────────────────────────────────────────────────── */
 
 await check("nothing matched is said in words, with the way back", async () => {

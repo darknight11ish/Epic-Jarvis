@@ -21,11 +21,22 @@ package com.jarvis.client.ui
  *  2. **Every section on the screen can be found.** [ROWS] is one entry per
  *     `item(key = ...)` in `SettingsScreen.kt`, and the test holds it to that
  *     screen's own rows - a section added without a line here fails.
- *  3. **The quotes are really what the app says.** Every `quotes` phrase must
- *     appear in that section's own source, so an index cannot describe a
- *     screen that no longer exists. This is the phone's answer to the
- *     desktop's "the words are read off the page" - Compose cannot hand a
- *     test its rendered text, so the test reads the composables instead.
+ *  3. **The words really are the app's words.** Every `quotes` phrase and every
+ *     `titles` name must appear in that section's own source, so an index
+ *     cannot describe a screen that no longer exists. This is the phone's
+ *     answer to the desktop's "the words are read off the page" - Compose
+ *     cannot hand a test its rendered text, so the test reads the composables
+ *     instead.
+ *
+ *  `titles` is the half of that which was missing until 2026-10-13, and the
+ *  owner's own defect: the box knew a section's heading and its prose, and not
+ *  the names of the switches drawn on it. Typing **"Hide memory lists and chat
+ *  history"** - the switch's own words, four steps down in Security - answered
+ *  **"Nothing here matches that."** (`SettingsSearchTest`'s "a switch is found
+ *  by the words printed on it" measures exactly that, and its "the indexed
+ *  switch names are the app's own, and no switch of theirs is missing" reads
+ *  the named sources for every `SwitchRow(title = ...)` so a section cannot
+ *  quietly grow a switch the index does not know.)
  *
  * It changes nothing: no section, switch or value is touched, and clearing
  * the box puts every row back. Nothing here calls the network or the desktop.
@@ -55,14 +66,26 @@ object SettingsSearch {
      * @param title the section's own heading, in the app's words.
      * @param label extra words for the controls that have no heading of their
      *   own ("Train my voice", "Think through complex questions").
+     * @param titles THE NAMES OF THE CONTROLS DRAWN UNDER THIS SECTION - the
+     *   exact words a `SwitchRow`, a sub-section or a plate puts on the screen
+     *   ("Hide memory lists and chat history", "Follow the system"). Each one
+     *   must appear in [source] as the literal the control is really drawn
+     *   with, so the index cannot quote a switch the screen no longer has.
+     *   This is the field the defect of 2026-10-13 asked for: a switch was
+     *   findable by the names Jarvis answers to and by the section's prose, and
+     *   NOT by the words printed on it. Defaulted, so a row that draws no
+     *   control of its own says nothing rather than an empty list twice.
      * @param quotes the detail sentences under those controls, the same
      *   words the screen shows. Each one must appear in [source].
-     * @param source the files `SettingsSearchTest` looks for those quotes in.
+     * @param source the files `SettingsSearchTest` looks for those titles and
+     *   quotes in, and - for a row that names a switch - the files it reads to
+     *   prove no switch of that section was left out of the index.
      */
     data class Row(
         val key: String,
         val title: String,
         val label: String,
+        val titles: List<String> = emptyList(),
         val quotes: List<String>,
         val source: List<String>,
     )
@@ -107,24 +130,63 @@ object SettingsSearch {
         Row(
             key = "security", title = "Security",
             label = "Lock and fingerprint settings; App lock; screen lock; approvals",
+            // The names the Security screen prints, in the order it draws them
+            // (SecurityScreen.kt: app-lock, live-end, approvals, private,
+            // method). "Hide memory lists and chat history" is the switch the
+            // owner typed in full on 2026-10-13 and got "Nothing here matches
+            // that" - the section's heading and prose never carried it, so the
+            // very words on the screen could not find it. The two fingerprints
+            // are the sub-headings the switches sit under, which is what he
+            // called the place when he described it.
+            titles = listOf(
+                "App lock",
+                "Lock Jarvis",
+                "Fingerprint for approvals",
+                "Fingerprint for private lists",
+                "Hide memory lists and chat history",
+                "What counts as you",
+            ),
             quotes = listOf("Lock and fingerprint settings"),
-            source = SCREEN,
+            // The switches are DRAWN in SecurityScreen.kt, which is the file
+            // their `title = "..."` literals live in - the same reason the
+            // browser row names net/BrowserEngine.kt for its heading.
+            source = SCREEN + listOf(PLATES + "SecurityScreen.kt"),
         ),
         Row(
             key = "menu-visibility", title = "Show or hide menus",
-            label = "Hide a menu; show a menu; fold a card away; the " +
+            // "Fold a card away" was the phrase here until 2026-10-13, found by
+            // the sweep that followed the switch-title defect: no screen has
+            // ever said it. The plate's own two states are `MenuWords.FOLDED_LINE`
+            // ("Folded. Tap Open to see it.") and `MenuWords.STATE_EXPANDED`
+            // ("Expanded"), so those are the words this row offers now, and
+            // `source` names the plate they live in.
+            label = "Hide a menu; show a menu; folded; expanded; the " +
                 "three hidden - Show line",
             quotes = listOf("Show or hide menus"),
-            source = JUMP + SCREEN,
+            source = JUMP + SCREEN + listOf(PLATES + "MenuVisibilityPlate.kt"),
         ),
         Row(
             key = "appearance", title = "Appearance",
             label = "Theme; colours; face; animal options; sharpness; frame rate",
+            // The screen's own "More options" fold (AppearanceScreen.kt) plus
+            // the face editor it draws (FaceEditor.kt). The device cards these
+            // switches belong to are what makes "Follow the system" and
+            // "Battery saver" findable here, where a person would look for them.
+            titles = listOf(
+                "Follow the system",
+                "More options",
+                "Make room for approvals",
+                "Shrink the face while typing",
+                "Follow the reply",
+                "Face editor",
+                "Auto adjust",
+                "Battery saver",
+            ),
             quotes = listOf(
                 "Theme, the reactor's face, the animal options, and how it all looks.",
                 "Pair with your desktop first - Appearance shares the face and ",
             ),
-            source = SCREEN,
+            source = SCREEN + listOf(PLATES + "AppearanceScreen.kt", PLATES + "FaceEditor.kt"),
         ),
         Row(
             // "Approval cards" (the owner's request of 2026-10-09: "a more simple
@@ -245,8 +307,13 @@ object SettingsSearch {
             // are net/HandoffFront.kt's own constants, so the quote is looked
             // for there, like the browser heading.
             key = "handoff-front", title = "When a captcha stops Jarvis",
-            label = "A captcha or a sign-in page blocking a window; leave the window " +
-                "where it is; bring it to the front",
+            // Both choice lines are `HandoffFront.LEAVE_IN_PLACE_LABEL` and
+            // `BRING_TO_FRONT_LABEL` word for word, so the words the box answers
+            // to are the words the two buttons carry ("Leave it where it is" -
+            // the index used to say "leave the window where it is", which no
+            // screen has ever printed).
+            label = "A captcha or a sign-in page blocking a window; leave it where it is; " +
+                "bring it to the front",
             quotes = listOf("When a captcha stops Jarvis"),
             source = JUMP + listOf("net/HandoffFront.kt"),
         ),
@@ -295,7 +362,8 @@ object SettingsSearch {
             // screen, so it is last here too.
             key = "limits", title = "Limits and how often Jarvis does things",
             label = "How much Jarvis does at once; how long you can undo; how long it waits " +
-                "before it reads something of yours; turning something up asks you on the PC",
+                "before it reads something of yours; changing something here may take " +
+                "effect at once or ask you on the PC first",
             // The heading and both sentences are `net/Limits.kt`'s own
             // constants - the plate draws them rather than writing its own -
             // so the quotes are looked for there, like the browser heading.
@@ -308,6 +376,16 @@ object SettingsSearch {
             // what holds for all of them. The screen changed and this index did
             // not, which is the drift `SettingsSearchTest` exists to catch - it
             // caught it on `main` on 2026-10-10.
+            //
+            // The same sentence was still in this row's `label`, as the
+            // paraphrase "turning something up asks you on the PC" - the old
+            // `LOOSEN_NOTE`, one wording behind, and no screen says it any more.
+            // Found on 2026-10-13 by the sweep that followed the switch-title
+            // defect, and replaced with the line the plate really carries, so
+            // the words the box answers to are the words the section prints.
+            // (No test holds the rest of `label` this way - see the note above
+            // the typo contract in `SettingsSearchTest` for why that check
+            // cannot be written honestly.)
             quotes = listOf(
                 "How much Jarvis does at once, how long you can undo, and how long it waits before it ",
                 "Changing something here may take effect at once or ask you on the PC first, and " +
@@ -342,10 +420,10 @@ object SettingsSearch {
     /** The row for a section key, or null for one this app does not draw. */
     fun row(key: String): Row? = ROWS.firstOrNull { it.key == key }
 
-    /** What one section is searched by: its heading and then its own words. */
+    /** What one section is searched by: its heading, its own words, and the words it prints. */
     fun wordsFor(key: String): String {
         val r = row(key) ?: return ""
-        return listOf(r.title, r.label).plus(r.quotes).joinToString(" ")
+        return listOf(r.title, r.label).plus(r.titles).plus(r.quotes).joinToString(" ")
     }
 
     /** The keys matching [query], in screen order. Empty query: nothing matched yet. */
@@ -381,7 +459,11 @@ object SettingsSearch {
      */
     fun rank(key: String, query: String): Int {
         val r = row(key) ?: return 0
-        return rankPart(r.title, r.label + " " + r.quotes.joinToString(" "), query)
+        return rankPart(
+            r.title,
+            r.label + " " + r.titles.joinToString(" ") + " " + r.quotes.joinToString(" "),
+            query,
+        )
     }
 
     /**
