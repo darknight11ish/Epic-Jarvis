@@ -18589,8 +18589,10 @@ model, so the advice's quality and its latency are both unmeasured.
 
 ## 121. Thinking levels: how long a model may think before it answers (added 2026-10-09)
 
-`backend/thinking.patch` (one `install()` call in `jarvis_hud.py`; `jarvis_thinking.py`
-is shipped whole), `backend/test_thinking.py`, and one row per running model on both
+`backend/thinking.patch` (two route blocks in `jarvis_hud.py` - `GET` and
+`POST /api/thinking`, each behind the server's own origin and token checks;
+`jarvis_thinking.py` is shipped whole), `backend/test_thinking.py`, and one row
+per running model on both
 apps (`jarvis-desktop/src/thinking-module.js`, `jarvis-client/.../net/Thinking.kt`,
 `JarvisApi.kt`). **This section exists because the route was live on both apps and
 written down nowhere**: before it, `docs/JARVIS-API.md` had no mention of
@@ -19161,18 +19163,24 @@ not re-litigate: **OFF by default, never resident beside the two live lanes,
 the pause announced before it starts, and both lanes put back exactly as they
 were - proved from `/api/ps`.**
 
-### 126.1 The three routes
+### 126.1 The two routes
+
+Both routes are the ONE path `/api/big-coder`, told apart by the method: a
+`GET`, and a `POST`. That is exactly what `backend/big-coder.patch` installs -
+two route blocks, `if path == "/api/big-coder":` in the GET handler and `if
+route == "/api/big-coder":` in the POST handler.
 
 | Route | Method | Body | What it does |
 |---|---|---|---|
 | `/api/big-coder` | GET | - | The switch, the model, the context, what is loaded on all three ports right now, and what a start would do. **Read-only**: it loads nothing, unloads nothing and writes nothing |
-| `/api/big-coder/mode` | POST | `{"on": true\|false}` | The opt-in switch. **ON is ONE approval card** (`change_own_config`, tier `"ask"`); OFF is immediate |
-| `/api/big-coder/run` | POST | `{"action": "start"\|"stop"}` | Start the mode, or stop it and restore the lanes. Through `power_manage`, the action that already governs what is on the cards |
+| `/api/big-coder` | POST | `{"on": true\|false}`, or `{"action": "start"\|"stop"}` | The one write, and the body says which. **`on`** is the opt-in switch: ON is ONE approval card (`change_own_config`, tier `"ask"`), OFF is immediate. **`action`** starts the mode or stops it and restores the lanes, through `power_manage`, the action that already governs what is on the cards |
 
-All three go through the server's own origin and token checks, like every other
-route, and every call is loopback only. No new gate action is invented: the
-opt-in reuses `change_own_config` (the shape `jarvis_backup.py` and
-`jarvis_big_model.py` use) and the mode itself reuses `power_manage`.
+The POST answers `400` to anything that is neither shape, so a caller with a
+bug finds out rather than getting a silent success. Both go through the
+server's own origin and token checks, like every other route, and every call
+is loopback only. No new gate action is invented: the opt-in reuses
+`change_own_config` (the shape `jarvis_backup.py` and `jarvis_big_model.py`
+use) and the mode itself reuses `power_manage`.
 
 There is **no desktop Settings row or phone control yet** - the route is the
 backend half, and the switch can also be turned on by asking Jarvis ("turn on
