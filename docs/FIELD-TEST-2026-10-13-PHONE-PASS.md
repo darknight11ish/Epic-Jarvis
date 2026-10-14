@@ -27,13 +27,19 @@ the Settings page printed its summary line **`App lock off, risky approvals ask,
 While a pass reads that line, the memory menus of `brain.memory.*` are hidden and Find does not offer
 them.
 
-> **A correction to the brief, measured, and it is the first thing a reader needs.** The brief says that
-> while the setting is OFF the summary line is *"App lock off, risky approvals ask, memory lists
-> hidden."* - i.e. that the line does not change with the setting. **On this build it does not read that
-> way at all.** With the setting OFF, the line printed on the phone at the start of this pass was
-> **`App lock off, risky approvals ask, memory lists hidden.`**, and every memory row below was
-> reachable and drew its content. The line is **not** a safe way to read the switch; section 6 records
-> what happened when the pass tried to use the switch itself.
+> **A correction to the brief, measured, and it is the first thing a reader needs.** The brief says the
+> phone was handed over with the setting **OFF** because the owner had just turned it off for exactly
+> this work. **The device did not read that way, and this pass cannot make the two agree.** The summary
+> line the phone printed at the **start** of the pass was
+> **`App lock off, risky approvals ask, memory lists hidden.`**, and the line it printed at the **end**
+> of the pass was the same sentence - and the code that builds that sentence adds the clause
+> **only when the setting is on** (`SecurityRules.summary`, `jarvis-client/.../data/Security.kt:397`,
+> held by `SecurityRulesTest.kt:204`). At the same time, **every memory row was reachable and drew its
+> content all pass**, which is what the setting exists to prevent. **Both readings are real and they
+> contradict each other; section 6 sets out both with their evidence, and it does not pick a winner.**
+> What is certain is that **nothing was loosened by this pass** - no prompt was answered and no
+> fingerprint or PIN was given - so whatever the state was when the phone was handed over, it is the
+> state it was left in.
 
 ## 2. The memory group that was BLOCKED only because of that setting - driven at last
 
@@ -166,9 +172,9 @@ first.**
 
 **This is the section the owner asked for by name, and it is the one place where this pass cannot give
 him a clean answer. Both readings are recorded, with their evidence, and the next pass should treat the
-switch as the thing to re-measure.**
+switch as the thing to re-measure first.**
 
-**Reading one - the app is already restrictive, and says so twice:**
+**Reading one - the app reports the setting as already on, three ways:**
 
 - The switch row's own clickable node (the row the accessibility tree marks `checkable`/`checked`) reads
   **`checked=true`** at bounds `[90,395][990,1118]`.
@@ -199,17 +205,33 @@ switch as the thing to re-measure.**
   learning is off.`); the **History** screen listed 41 conversations under `Untagged (41)` with no
   `Show` gate; and the memory screen's sections (`ALWAYS KEEP IN MIND`, `BETWEEN US`, `TOPICS`,
   `PEOPLE AND THINGS`, `FORGET A TIME FRAME`, `WIKI`) all drew their bodies.
-- The Settings page's security summary line printed **`App lock off, risky approvals ask, memory lists
-  hidden.`** at the start of the pass.
+- **The Settings page's security summary line, read at the very end of the pass, still printed
+  `App lock off, risky approvals ask, memory lists hidden.`** - the same sentence it printed at the
+  start. That clause is added by `SecurityRules.summary` **only when the setting is on**
+  (`jarvis-client/app/src/main/java/com/jarvis/client/data/Security.kt:397`:
+  `if (s.privateLists) add("memory lists hidden")`, held by `SecurityRulesTest.kt:204`, which asserts
+  `"App lock off, risky approvals ask, memory lists hidden."` for `Security(privateLists = true)`).
+  **So the line is a measurement, not a fixed string, and it reports the setting as on.**
+- **The memory content was readable all pass, which is what the setting exists to prevent**: the Brain
+  drew `What Jarvis knows about you` with a count (`10 inside`) instead of the record's
+  **`Hidden. Tap Show and confirm it is you.`**; `MEMORY AWAITING REVIEW` printed the ordinary empty
+  state (`Nothing is waiting. Either Jarvis has not heard anything worth keeping, or background
+  learning is off.`); the **History** screen listed 41 conversations under `Untagged (41)` with no
+  `Show` gate; and the memory screen's sections (`ALWAYS KEEP IN MIND`, `BETWEEN US`, `TOPICS`,
+  `PEOPLE AND THINGS`, `FORGET A TIME FRAME`, `WIKI`) all drew their bodies.
 
-**What this pass can stand behind, and what it cannot.** It **cannot** report that it turned the
+**What this pass can stand behind, and what it cannot.** It **cannot** claim credit for turning the
 setting back on, because **it never completed a change to it**: every attempt drew the fingerprint
-prompt, and a prompt a pass cannot answer is not a pass. It **can** report that the two strongest
-independent signals the device offers - the app's own loosening-branch prompt and the block on screen
-capture (with `Lock Jarvis` measured off, so the block has only one possible cause left) - both read as
-though the setting is **on**, and that the switch's displayed state and the readable memory content both
-read as though it is **off**. **The switch is the thing the next pass must re-measure, and the owner's
-finger on the sensor is what settles it.**
+prompt, and a prompt a pass cannot answer is not a pass. **It also cannot confirm the brief's statement
+that the phone was handed over with the setting off**, because the phone's own summary line said
+otherwise at both ends of the pass. What it **can** report is that **three of the four independent
+signals the device offers - the summary line the code only adds when the setting is on, the switch row's
+own `checked=true`, and the app's own loosening-branch `Loosen security` prompt - all read as though the
+setting is on**, that the block on screen capture has no other possible cause once `Lock Jarvis` is
+measured off, and that **the memory content being readable is the one signal that reads the other way**.
+**The switch and the summary line disagree with the memory content on this build, and that disagreement
+is itself the finding.** The owner's finger on the sensor settles it in one tap; the next pass should
+read the switch first and the summary line second, and never treat one as proof of the other.
 
 **Nothing was loosened by this pass.** No prompt was answered; no fingerprint or PIN was given; the
 Security screen was left as it was found.
