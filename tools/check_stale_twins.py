@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
-"""Name the twins under `jarvis-backend/` that no longer match `backend/`, in seconds.
+"""Name the twins under `jarvis-backend/` that no longer match their source, in seconds.
 
     py -3 tools/check_stale_twins.py
     py -3 tools/check_stale_twins.py --root <a checkout>
 
 WHY THIS EXISTS
 
-`backend/test_base_matches_repo.py` requires the modules this repository ships
-whole to have a byte-identical twin under `jarvis-backend/`, line endings
-ignored - 181 pairs on 2026-10-10: the 180 `SHIPPED` entries, every module in
-`backend/rebuilt/`, and its `jarvis-framework.toml`. That suite is the
-authority on WHICH files those are and on when two
-files count as the same, and it is right to be - but it reports in CI's
-`backend` job, which starts only after the `frontend` job has taken its time.
-Measured on 2026-10-10: three pull requests failed CI for this one reason
+`backend/test_base_matches_repo.py` requires every file the base is re-taken
+from to have a copy under `jarvis-backend/` holding the same text, line endings
+ignored - 191 modules on 2026-10-13 (the `SHIPPED` entries, every module in
+`backend/rebuilt/`, and its `jarvis-framework.toml`), plus the BESIDE-files
+`tools/gen_base_from_backend.py` re-takes from this repository that the modules
+do not already cover (`requirements.lock`, `quiz_grader_cases.json`,
+`rust-crates.lock`). That suite is the authority on WHICH files those are and on
+when two files count as the same, and it is right to be - but it reports in
+CI's `backend` job, which starts only after the `frontend` job has taken its
+time. Measured on 2026-10-10: three pull requests failed CI for this one reason
 (#167 with two stale twins, #173 with one, #175 with one), and because the
 claims register's row D06 takes its evidence from
 `test:backend/test_base_matches_repo.py`, each failure also turned
@@ -23,32 +25,53 @@ therefore looked like a systemic failure and cost a full CI round trip to find.
 This tool is the same question asked locally, in about a second, before a push:
 which files drifted, with both byte sizes so the message is actionable.
 
+THE GAP IT HAD, AND WHAT IT COST (2026-10-13)
+
+It used to check the modules only, and the beside-files were not modules. PR #390
+added `rapidocr` to `backend/requirements.lock` and left
+`jarvis-backend/requirements.lock` alone; this tool reported "all 191 shipped
+modules match" and CI went red on two jobs at once - `backend` and `audit` - on
+`FAIL ... these differ (or are absent): requirements.lock`, a line
+`backend/test_base_regeneration.py` prints. A green local run and a red CI run,
+over one file, was the whole of the failure. It now compares every file the
+re-take rule keeps equal, so that cannot happen again silently.
+
 WHAT IT REUSES, SO IT CANNOT DISAGREE BY ACCIDENT
 
 It does not re-state the rule. It loads the rule's own code from the checkout it
 is checking:
 
-  * `backend/test_base_matches_repo.py`'s `shipped_pairs()` - WHICH files must
-    match. That reads `backend/_where.py`'s SHIPPED list plus every module in
-    `backend/rebuilt/`, plus `backend/rebuilt/jarvis-framework.toml`, so a
-    module added to SHIPPED is checked here with no edit to this file.
+  * `backend/test_base_matches_repo.py`'s `twin_pairs()` - WHICH files must
+    match, which is `shipped_pairs()` (that reads `backend/_where.py`'s SHIPPED
+    list plus every module in `backend/rebuilt/`, plus
+    `backend/rebuilt/jarvis-framework.toml`) plus `beside_pairs()` (that reads
+    the BESIDE table out of `tools/gen_base_from_backend.py`, the re-take rule
+    itself). So a module added to SHIPPED, or a beside-file added to that table,
+    is checked here with no edit to this file.
   * the same file's `same_text()` - WHEN two files count as the same. It is
     `_where._same_text()`'s rule: `.gitattributes` is `eol=lf`, a Windows clone
     may hold CRLF, so line endings do not count.
 
 `backend/test_base_matches_repo.py`'s own
 `t_the_stale_twin_check_agrees_with_the_rule` holds the agreement: it builds a
-deliberately perturbed copy of the two folders and fails unless this tool names
-exactly the files the rule names - and it fails too if this tool is absent, or
-reports nothing, or goes red on a difference that is only line endings.
+deliberately perturbed copy of the two folders - one shipped module drifted, one
+beside-file drifted at a time - and fails unless this tool names exactly the
+files the rule names. It fails too if this tool is absent, or reports nothing,
+or goes red on a difference that is only line endings.
 
 WHAT IT DELIBERATELY DOES NOT DO
 
-It is not a second opinion and not a substitute for the suite. It checks only
-the shipped-twin half of `test_base_matches_repo.py`; that suite also checks
-that the base's own imports close, that the non-Python files its code reads are
-beside it, and that no private or generated file was swept in. Green here means
-"the twins match", never "the `backend` job will pass".
+It is not a second opinion and not a substitute for the suite. It checks the
+files the base must hold verbatim; `test_base_matches_repo.py` also checks that
+the base's own imports close and that no private or generated file was swept in,
+and `backend/test_base_regeneration.py` checks the one file that is NOT compared
+this way - `jarvis-backend/_where.py`, which is DERIVED as
+`backend/_where.py` plus `BASE_WHERE_TRAILER`, so it differs by design and is
+compared by its own rule there, never by `same_text()`. It also cannot see
+`jarvis-visual-spec.json`, which is re-taken from the owner's live backend
+folder: there is no copy of it in this repository to compare against, in CI or
+anywhere else. Green here means "the files the base holds verbatim match",
+never "the `backend` job will pass".
 
 WHICH SIDE IS NEWER IS NOT KNOWABLE FROM HERE, so nothing here claims it.
 `apply-patches.ps1` step 3 copies `backend/<name>` over the base, and a
@@ -73,11 +96,25 @@ REPO = Path(__file__).resolve().parent.parent
 DIFFERS = "stale twin: "
 MISSING = "missing twin: "
 
-#: What a person should do about a red run. `shipped_pairs()` maps a
-#: `rebuilt/x.py` entry onto the base as a bare `x.py`, so the repository side
-#: of a pair can be `backend/` or `backend/rebuilt/` - the line says which.
+#: What a person should do about a red run. `twin_pairs()` maps a
+#: `rebuilt/x.py` entry onto the base as a bare `x.py`, and a beside-file onto
+#: the base as its own name, so the repository side of a pair can be `backend/`,
+#: `backend/rebuilt/`, `jarvis-desktop/src/` or `jarvis-desktop/src-tauri/` -
+#: the line says which.
 FIX = ("copy the repository's copy over jarvis-backend/ "
        "(a rebuilt/ module lands as its bare name), then run this again")
+
+#: The two files the re-take rule keeps equal that this tool cannot compare with
+#: `same_text()`, and where each IS checked. Printed on a green run, so a green
+#: run never reads as more coverage than it is.
+NOT_COMPARED = (
+    ("_where.py",
+     "the base's copy is DERIVED - backend/_where.py plus BASE_WHERE_TRAILER - so it "
+     "differs by design; backend/test_base_regeneration.py compares it with that rule"),
+    ("jarvis-visual-spec.json",
+     "re-taken from the owner's live backend folder, and there is no copy of it in "
+     "this repository to compare against"),
+)
 
 
 def load_rule(root: Path):
@@ -89,7 +126,11 @@ def load_rule(root: Path):
     `test_base_matches_repo.py` binds `BACKEND`/`BASE` from that at import.
 
     Raises `RuleUnreadable` when either file is not there or will not import -
-    a check that cannot read its rule must say so, never pass.
+    a check that cannot read its rule must say so, never pass. It is raised for
+    a rule that has no `twin_pairs()` too: that is a checkout from before
+    2026-10-13, whose rule cannot answer the beside-file half of the question,
+    and checking less than the reader believes is the failure this tool exists
+    to stop.
     """
     backend = root / "backend"
     for name in ("_where", "test_base_matches_repo"):
@@ -106,6 +147,13 @@ def load_rule(root: Path):
         sys.path.remove(str(backend))
         for name in ("_where", "test_base_matches_repo"):
             sys.modules.pop(name, None)
+    if not callable(getattr(rule, "twin_pairs", None)):
+        raise RuleUnreadable(
+            f"{backend / 'test_base_matches_repo.py'} has no twin_pairs(), so it "
+            f"cannot say which beside-files the base must hold. This is a "
+            f"checkout from before 2026-10-13, when the rule covered the shipped "
+            f"modules only - and `requirements.lock` went stale under exactly "
+            f"that gap (PR #390). Update the checkout this --root points at.")
     return rule
 
 
@@ -116,13 +164,13 @@ class RuleUnreadable(Exception):
 def drifted(rule) -> tuple[list[tuple[str, Path, Path, int, int]], list[str]]:
     """(twins whose text differs, twins with no copy in the base).
 
-    Every judgement here is the rule's: the pair list is `rule.shipped_pairs()`
+    Every judgement here is the rule's: the pair list is `rule.twin_pairs()`
     and sameness is `rule.same_text()`. The only thing this function adds is
     the reporting - a leaf name and both byte sizes instead of one long string.
     """
     differs: list[tuple[str, Path, Path, int, int]] = []
     missing: list[str] = []
-    for leaf, ours in rule.shipped_pairs():
+    for leaf, ours in rule.twin_pairs():
         theirs = rule.BASE / leaf
         if not theirs.is_file() or not ours.is_file():
             missing.append(leaf)
@@ -156,7 +204,7 @@ def main() -> int:
         print(f"::error::{err}")
         return 1
 
-    pairs = rule.shipped_pairs()
+    pairs = rule.twin_pairs()
     differs, missing = drifted(rule)
 
     for leaf, theirs, ours, their_size, our_size in differs:
@@ -175,13 +223,19 @@ def main() -> int:
               "when they match again.")
         return 1
 
+    shipped_leaves = {leaf for leaf, _ours in rule.shipped_pairs()}
+    extra = [leaf for leaf, _ours in rule.beside_pairs() if leaf not in shipped_leaves]
     print(f"{_rel(rule.BASE, root)}/ is this repository's copy: all "
-          f"{len(pairs)} modules this repository ships whole match, line "
-          f"endings ignored ({len(rule._where.SHIPPED)} SHIPPED entries plus "
-          f"backend/rebuilt/).")
-    print("This is the shipped-twin half of backend/test_base_matches_repo.py "
-          "only; that suite also checks the base's imports, the files beside "
-          "its code and that nothing private was swept in.")
+          f"{len(pairs)} files the base is re-taken from match, line endings "
+          f"ignored.")
+    print(f"     {len(shipped_leaves)} modules this repository ships whole"
+          + (f", plus {len(extra)} file(s) it owns beside them: "
+             f"{', '.join(extra)}." if extra else "."))
+    print("This is the verbatim-copy half of backend/test_base_matches_repo.py "
+          "only; that suite also checks the base's imports and that nothing "
+          "private was swept in.")
+    for name, why in NOT_COMPARED:
+        print(f"Not compared here, on purpose: {name} - {why}.")
     return 0
 
 

@@ -239,6 +239,43 @@ def t_check_fails_on_a_base_that_disagrees():
               repr((base / "jarvis_hud.py").read_text(encoding="utf-8")))
 
 
+def t_the_fast_twin_check_covers_every_beside_file_this_repository_owns():
+    """The beside-file half of the two-file rule, against the fast local check.
+
+    `tools/check_stale_twins.py` compares `twin_pairs()`, and `twin_pairs()` is
+    the modules plus `BESIDE_TWINS`. Until 2026-10-13 the tool compared the
+    modules only, and PR #390 added `rapidocr` to `backend/requirements.lock`
+    while leaving `jarvis-backend/requirements.lock` alone: the tool reported
+    191 of 191 modules matching, and CI's `backend` and `audit` jobs went red on
+    `these differ (or are absent): requirements.lock` - a line printed by the
+    test above. So the two lists are held together here.
+
+    Nothing is restated: the beside names come from `G.BESIDE`, the re-take
+    rule's own table, and the coverage comes from the rule's own `twin_pairs()`.
+    A file added to that table and not covered fails this, which is the point.
+    """
+    import test_base_matches_repo as M          # noqa: PLC0415
+
+    covered = {leaf for leaf, _ours in M.twin_pairs()}
+    repo_owned = {n for n, where, _why in G.BESIDE if "{source}" not in where}
+    check("every beside-file the re-take rule takes from THIS repository is in "
+          "the fast twin check's list",
+          repo_owned <= covered,
+          "the fast check does not compare: " + ", ".join(sorted(repo_owned - covered)))
+    check("... and requirements.lock, the file that went stale in PR #390 while "
+          "the module half was green, is one of them",
+          "requirements.lock" in covered, str(sorted(covered))[:300])
+    check("... and the beside-file that comes from the owner's live folder is not, "
+          "because there is no copy of it here to compare against",
+          "jarvis-visual-spec.json" not in covered and "jarvis-visual-spec.json" not in repo_owned,
+          str(sorted(covered))[:300])
+    check("... and _where.py is not either: the base's copy is DERIVED - this "
+          "repository's copy plus BASE_WHERE_TRAILER - so it is compared by the "
+          "check above and never with the same-text rule",
+          "_where.py" not in covered,
+          str(sorted(covered))[:300])
+
+
 def t_the_repository_s_own_inputs_are_the_ones_in_the_base():
     """The files the rule takes from THIS repository, against the committed base.
 
@@ -301,6 +338,7 @@ if __name__ == "__main__":
                t_a_plan_copies_what_the_rule_says_and_refuses_what_it_says,
                t_a_folder_that_is_not_a_backend_is_refused,
                t_check_fails_on_a_base_that_disagrees,
+               t_the_fast_twin_check_covers_every_beside_file_this_repository_owns,
                t_the_repository_s_own_inputs_are_the_ones_in_the_base):
         print(f"\n--- {fn.__name__} ---")
         try:

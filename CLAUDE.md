@@ -518,13 +518,58 @@ from a commit message:
   could not be reached is written as BLOCKED, PARTIAL or NOT-TESTABLE and reads as
   such; only a feature driven on real hardware is a PASS. The rule and the rows it
   applies to are in `docs/FIELD-TEST-MATRIX-2026-10-11.md`.
-- **Editing any file under `backend/` is a two-file change.** `backend/<file>` and
-  `jarvis-backend/<file>` are kept equal - the second is the published base an
-  installer starts from - so a change to one must be carried to the other, and
-  `backend/test_base_matches_repo.py` is run before pushing. `tools/check_stale_twins.py`
-  is the same comparison as a tool. **Neither is run by a workflow** (see
-  `docs/AUDIT-2026-10-11-IS-MAIN-COHERENT.md` section 1), so this one is on the
-  person pushing, not on CI.
+- **Editing any file under `backend/` is a two-file change, and "any file" is
+  broader than "any module".** `backend/<file>` and `jarvis-backend/<file>` are
+  kept equal - the second is the published base an installer starts from - so a
+  change to one must be carried to the other. That is the modules this repository
+  ships whole (the `SHIPPED` list in `backend/_where.py`, plus `backend/rebuilt/`)
+  **and the "beside-files" the base's code reads without importing**, which land
+  under the same bare name in the base: `backend/rebuilt/jarvis-framework.toml`,
+  `backend/requirements.lock`, `backend/quiz_grader_cases.json`,
+  `jarvis-desktop/src/jarvis_hud.html` and
+  `jarvis-desktop/src-tauri/Cargo.lock`. The authority on that list is the
+  re-take rule's own table - `BESIDE` in `tools/gen_base_from_backend.py`, the
+  script that writes the base. Two entries there are deliberately **not** carried
+  by copying: `backend/_where.py` lands as the base's copy *plus*
+  `BASE_WHERE_TRAILER`, so re-take it rather than copy it, and
+  `jarvis-visual-spec.json` is re-taken from the owner's live backend folder, so
+  this repository holds no copy of it to compare. (`backend/requirements.txt` is
+  not part of this - the base carries no `.txt` at all, so it has no twin.) Run
+  **all three** before pushing: `python -B backend/test_base_matches_repo.py`,
+  `python -B backend/test_base_regeneration.py` and
+  `python -B tools/check_stale_twins.py`. **CI does run all three, and that is not
+  a reason to skip them at the desk.** The two suites run in the **required**
+  `backend` job, through `python backend/run_suites.py`
+  (`.github/workflows/ci.yml:213`, which globs every `backend/test_*.py`), and
+  `test_base_matches_repo.py` runs a second time in the **required**
+  `backend-windows` job by name (`.github/workflows/ci.yml:578`).
+  `tools/check_stale_twins.py` runs in the `audit` job
+  (`.github/workflows/ci.yml:1534`), which is informational and does **not** gate
+  a merge. So a stale twin is caught before merge - and costs a full CI round
+  trip plus the diagnosis, which is the reason to run the three at the desk
+  first. **This bullet used to end "Neither is run by a workflow", quoting
+  `docs/AUDIT-2026-10-11-IS-MAIN-COHERENT.md` section 1; that was true when the
+  audit measured it, and `df9ae3d9` ("ci: run the five checkers that existed and
+  no workflow ran") made it false the same week. Corrected 2026-10-13.**
+
+  **Why the beside-files are spelled out here, measured 2026-10-13.** PR #390
+  added `rapidocr` to `backend/requirements.lock` and not to
+  `jarvis-backend/requirements.lock`. The rule as it used to read named
+  `backend/<file>` and was read as being about modules;
+  `tools/check_stale_twins.py` compared the shipped modules only; the author's
+  local run was green, "all 191 shipped modules match". CI went red on two jobs
+  at once - `backend` and `audit` - on
+  `FAIL ... these differ (or are absent): requirements.lock`, the line
+  `backend/test_base_regeneration.py` prints. One missing line reached both
+  jobs through the claims register: `tools/check_claims.py` runs every suite a
+  `test:` row names (row D11 is this one), the `audit` job runs that checker
+  directly, and the required `backend` job runs it through
+  `backend/test_claims.py`, which asserts it exits 0. **A local check that
+  passes while CI fails is the expensive case** - it costs the pushed run, the
+  diagnosis and a second push, for a one-line omission - so the beside-files are
+  named here rather than left to be inferred from `backend/<file>`.
+  `tools/check_stale_twins.py` compares them now too, so it is caught in a
+  second at the desk instead.
 - The same day's owner decision - **the phone may raise a spending limit with its
   own fingerprint** - is recorded in `docs/DECISIONS.md` (search it for "the phone
   may raise the limit too"), not in this file, and is deliberately not repeated here.
