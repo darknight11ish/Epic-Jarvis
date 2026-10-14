@@ -28,16 +28,39 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # The list is READ OUT OF THE WORKFLOWS, not typed in here. The four
+          # tags that were typed in had all been left behind - checkout v4
+          # against the v5.0.1 this repository pins, setup-java v4 against
+          # v5.0.0, upload-artifact v4 against v6.0.0, setup-android v3 against
+          # v4.0.4 - and four actions the workflows do pin (setup-python,
+          # download-artifact, rust-cache, install-action) were missing from it
+          # altogether, so the table below answered with commit SHAs for code
+          # that is not in this repository (audit 2026-10-07, D3). Derived, it
+          # cannot go stale: a `uses:` that lands tomorrow is in the table the
+          # next time this probe is run.
+          #
+          # The trailing `# vX.Y.Z` comment is the tag - that is the convention
+          # every workflow here follows, and it is the only place the tag still
+          # exists once the pin is a commit. `dtolnay/rust-toolchain` is the one
+          # pin deliberately NOT resolved: its comment is `# stable branch`, a
+          # moving branch rather than a tag, so the tags endpoint has nothing to
+          # answer with. The version filter at the end drops it.
+          mapfile -t specs < <(
+            grep -rhoE 'uses: [^ ]+@[0-9a-f]{40} # [^ ]+' .github/workflows/ \
+            | sed -E 's|^uses: ||; s|@[0-9a-f]{40} # |:|' \
+            | grep -E ':[vV]?[0-9]' \
+            | sort -u)
+          if [ "${#specs[@]}" -eq 0 ]; then
+            echo "::error::read no pinned action out of .github/workflows - this probe would have printed an empty table, which says nothing about anything"
+            exit 1
+          fi
+          echo "Resolving ${#specs[@]} pinned action(s): ${specs[*]}"
           {
             echo "## Action tag → commit SHA"
             echo
             echo '| action | tag | sha |'
             echo '| --- | --- | --- |'
-            for spec in \
-              "actions/checkout:v4" \
-              "actions/setup-java:v4" \
-              "actions/upload-artifact:v4" \
-              "android-actions/setup-android:v3"; do
+            for spec in "${specs[@]}"; do
               repo="${spec%:*}"; tag="${spec##*:}"
               sha=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" \
                     "https://api.github.com/repos/$repo/git/ref/tags/$tag" \

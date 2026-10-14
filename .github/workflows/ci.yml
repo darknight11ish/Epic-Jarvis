@@ -318,6 +318,16 @@ jobs:
           python tools/gen_tasks_cases.py --check
           python tools/gen_tasks_patch.py --check
           node jarvis-desktop/tests/job-list.mjs
+      # picture-card.patch is anchored on the owner's own lines just before the
+      # socket is built, and its generator reads that anchor back out of
+      # jarvis_hud.py. It spent three days emitting the OLD placement - inside
+      # progress.patch's install chain, which is the one place this patch must
+      # not go, because a block there leaves the next patch's hunk without its
+      # context (measured 2026-10-11: the whole apply run was refused). The
+      # generator was moved into tools/ on 2026-10-14, where people run things,
+      # so this check is what stops the two drifting apart in silence again.
+      - name: Picture card - the patch is what its generator builds
+        run: python tools/gen_picture_card_patch.py --check
       # A command registered in lib.rs but missing from build.rs's own ACL
       # export list has no permission at all, and every window's call to it
       # is refused at runtime - a compile-time-invisible break that bit two
