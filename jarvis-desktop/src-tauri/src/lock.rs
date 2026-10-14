@@ -1257,6 +1257,8 @@ mod capture_tests {
 mod capture_probe {
     use super::*;
     use image::RgbaImage;
+    // `writeln!` on the process's own stderr handle, in `skipped_by_env` below.
+    use std::io::Write;
     use windows_sys::Win32::Foundation::HWND;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         CreateWindowExW, DestroyWindow, GetWindowDisplayAffinity, GetWindowRect, IsWindowVisible,
@@ -1373,8 +1375,181 @@ mod capture_probe {
             .count() as u32
     }
 
+    /// The documented way out of the probe below, for anyone working at this
+    /// PC: `JARVIS_SKIP_WINDOW_TESTS=1` in the environment and the probe never
+    /// runs.
+    ///
+    /// Why a helper and not `#[ignore]`: `#[ignore]` inverts the default, so
+    /// every ordinary run would lose the probe; it cannot be driven by an
+    /// environment variable; and it prints `ignored`, which this project does
+    /// not accept in place of "did not run". The guard keeps the default the
+    /// right way round - the probe runs - and the opt-out is explicit.
+    ///
+    /// The line is written through the process's own `stderr` handle rather
+    /// than with `eprintln!`, and that is measured, not assumed: **libtest
+    /// captures `eprintln!` exactly as it captures `println!`**, so this line
+    /// was invisible in a plain `cargo test` run until it was written this way
+    /// (checked at this PC's terminal, 1.99.0). `--nocapture` is the usual way
+    /// to see a captured line, and the whole point is the run where someone
+    /// has NOT passed it and still needs to know the probe did not run.
+    ///
+    /// This is the project's rule, not a nicety: **BLOCKED and NOT-TESTABLE
+    /// are never counted as passes**, so a skipped test says so out loud.
+    fn skipped_by_env(what: &str) -> bool {
+        let skip = std::env::var("JARVIS_SKIP_WINDOW_TESTS").is_ok_and(|v| v == "1");
+        if skip {
+            // The handle, not the macro: see this function's doc above.
+            let mut err = std::io::stderr();
+            let _ = writeln!(
+                err,
+                "SKIPPED  {what} - this test opens a window or reads the screen, and \
+                 JARVIS_SKIP_WINDOW_TESTS=1 is set. It did NOT run, and it did NOT pass. Unset \
+                 that variable to run it."
+            );
+            let _ = err.flush();
+        }
+        skip
+    }
+
+    /// The opt-out itself must be the documented one, the guard at the top of
+    /// the probe must still be there, and this must still be the ONLY test that
+    /// needs the opt-out - every other source file in the crate is included
+    /// below, so a second desktop-needing test fails to compile until it is
+    /// added to that list on purpose. A gate that quietly stopped working would
+    /// put the red window back on the owner's screen, so a rename here is
+    /// caught rather than discovered. Reads the source, so it needs no desktop
+    /// and never opens one.
+    #[test]
+    fn the_window_probe_is_the_only_test_the_opt_out_guards() {
+        let src = include_str!("lock.rs");
+        assert!(
+            src.contains(r#"std::env::var("JARVIS_SKIP_WINDOW_TESTS")"#),
+            "the opt-out is no longer JARVIS_SKIP_WINDOW_TESTS"
+        );
+        let probe = &src[src
+            .find("fn the_exclusion_is_real_and_reversible_on_this_pc")
+            .expect("the probe")..];
+        let body = &probe[..probe.find("\n    }\n").expect("its end")];
+        assert!(
+            body.contains("skipped_by_env("),
+            "the probe no longer asks to be skipped, so it will open a red window on \
+             every run:\n{body}"
+        );
+
+        // Every other file of the crate, which is what makes the name above
+        // true rather than merely confident. Built by hand rather than by a
+        // directory walk so the list is visible and a new file is a deliberate
+        // edit: the failure mode this guards - a second test that opens a
+        // window - arrives as a new file or a new test in one of these.
+        const ELSEWHERE: &[&str] = &[
+            include_str!("account_addresses.rs"),
+            include_str!("account_secrets.rs"),
+            include_str!("aec.rs"),
+            include_str!("animal.rs"),
+            include_str!("appearance.rs"),
+            include_str!("asks_first.rs"),
+            include_str!("attention.rs"),
+            include_str!("attention/state.rs"),
+            include_str!("autostart.rs"),
+            include_str!("backup.rs"),
+            include_str!("brain.rs"),
+            include_str!("brain/auto_learn.rs"),
+            include_str!("brain/briefing.rs"),
+            include_str!("brain/chatbot.rs"),
+            include_str!("brain/conversation_facts.rs"),
+            include_str!("brain/decks.rs"),
+            include_str!("brain/fact_history.rs"),
+            include_str!("brain/focus.rs"),
+            include_str!("brain/forget_range.rs"),
+            include_str!("brain/form_review.rs"),
+            include_str!("brain/goals.rs"),
+            include_str!("brain/history.rs"),
+            include_str!("brain/history_import.rs"),
+            include_str!("brain/inbox_tidy.rs"),
+            include_str!("brain/photo_reminder.rs"),
+            include_str!("brain/pictures.rs"),
+            include_str!("brain/profile.rs"),
+            include_str!("brain/progress.rs"),
+            include_str!("brain/projects.rs"),
+            include_str!("brain/quiz.rs"),
+            include_str!("brain/quiz_cloud.rs"),
+            include_str!("brain/retirement.rs"),
+            include_str!("brain/routes.rs"),
+            include_str!("brain/schedule.rs"),
+            include_str!("brain/shared.rs"),
+            include_str!("brain/sources.rs"),
+            include_str!("brain/support.rs"),
+            include_str!("brain/topics.rs"),
+            include_str!("brain/used.rs"),
+            include_str!("brain/widgets.rs"),
+            include_str!("brain/youtube.rs"),
+            include_str!("browser_engine.rs"),
+            include_str!("chatbot_money.rs"),
+            include_str!("clipboard_privacy.rs"),
+            include_str!("commands.rs"),
+            include_str!("crash_notes.rs"),
+            include_str!("devices.rs"),
+            include_str!("email_sending.rs"),
+            include_str!("folders.rs"),
+            include_str!("handoff.rs"),
+            include_str!("hardware.rs"),
+            include_str!("hotkeys.rs"),
+            include_str!("hud_proxy.rs"),
+            include_str!("lib.rs"),
+            include_str!("limits.rs"),
+            include_str!("live.rs"),
+            include_str!("lock/rules.rs"),
+            include_str!("logfile.rs"),
+            include_str!("look.rs"),
+            include_str!("main.rs"),
+            include_str!("notifications.rs"),
+            include_str!("open_app.rs"),
+            include_str!("plain_errors.rs"),
+            include_str!("proctree.rs"),
+            include_str!("prompt_coach.rs"),
+            include_str!("pyfind.rs"),
+            include_str!("reach.rs"),
+            include_str!("screen_work.rs"),
+            include_str!("sidecar.rs"),
+            include_str!("sky.rs"),
+            include_str!("spec.rs"),
+            include_str!("spec_drift.rs"),
+            include_str!("spending.rs"),
+            include_str!("sse.rs"),
+            include_str!("stream.rs"),
+            include_str!("system_theme.rs"),
+            include_str!("talk_type.rs"),
+            include_str!("talk_type/paste_tx.rs"),
+            include_str!("talk_type/paste_windows.rs"),
+            include_str!("talk_type/rules.rs"),
+            include_str!("token_store.rs"),
+            include_str!("tool_updates.rs"),
+            include_str!("tray.rs"),
+            include_str!("tutorials.rs"),
+            include_str!("update.rs"),
+            include_str!("vision.rs"),
+            include_str!("voice.rs"),
+            include_str!("voice_flow.rs"),
+            include_str!("voice_training.rs"),
+            include_str!("web_search.rs"),
+            include_str!("window_memory.rs"),
+            include_str!("windows.rs"),
+            include_str!("winrt_toast.rs"),
+        ];
+        for (i, other) in ELSEWHERE.iter().enumerate() {
+            assert!(
+                !other.contains("skipped_by_env"),
+                "file {i} of the list above calls `skipped_by_env`, so this test's name is \
+                 now wrong: add it here on purpose"
+            );
+        }
+    }
+
     #[test]
     fn the_exclusion_is_real_and_reversible_on_this_pc() {
+        if skipped_by_env("the_exclusion_is_real_and_reversible_on_this_pc") {
+            return;
+        }
         let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|p| p.into_inner());
 
         // The primary display, and the capture of a small region of it around

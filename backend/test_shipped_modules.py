@@ -97,6 +97,15 @@ THIRD_PARTY = {
     "onnx": "onnx",
     # "Better voice" (2026-09-28): the optional second "hey Jarvis" detector
     "pymicro_wakeword": "pymicro-wakeword",
+    # The SECOND picture reader (2026-10-13), OFF until the owner turns it on
+    # (jarvis_ocr.set_reader). Imported inside a `try`, lazily, so a backend
+    # without it still reads pictures with Windows' own reader.
+    "rapidocr": "rapidocr",
+    # jarvis_ocr.bgra_from_bytes decodes a picture that is not a PNG the
+    # backend can open itself (a phone's JPEG), in a `try`, so the black-out
+    # can paint on it. PIL is pillow's own import name; the INDIRECT entry
+    # below already says pillow is needed by name elsewhere.
+    "PIL": "pillow",
 }
 
 # Packages in requirements.txt that no shipped module imports BY NAME,
