@@ -754,6 +754,28 @@ body {
   white-space: nowrap;
 }
 
+/* The PC is answering and its own model is not (2026-10-13). Amber, the same
+   family as the stale row above and never the red of "Jarvis is down": the PC
+   is fine, only answers are. It wraps instead of clipping - the sentence is
+   the whole point of the row, and the widget's own frame is measured from this
+   content, so nothing here is a fixed height. It carries no button: this is
+   information, and the owner starts his own lanes. */
+.widget-model {
+  margin: 0 0 10px;
+  padding: 6px 9px;
+  border-left: 2px solid var(--warn);
+  border-radius: var(--radius-chip, 4px);
+  background: var(--warn-faint);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+.widget-model b {
+  color: var(--warn);
+  font-weight: 500;
+}
+
 .approval-actions {
   display: flex;
   gap: 6px;

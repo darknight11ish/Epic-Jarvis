@@ -1494,6 +1494,26 @@ html[data-state="error"] .pulse {
 .answer-cloud-offer-label { margin: 0 0 4px; }
 .answer-cloud-offer-micro { margin: 4px 0 0; color: var(--text-faint); }
 
+/* The PC is answering and its own model is not (2026-10-13). The same quiet
+   strip the widget draws, in this window's own tokens: amber, never the red of
+   "Jarvis isn't connected" - the PC is fine here, only answers are - and no
+   button, because nothing about it is a decision. Under the answer, above the
+   composer, so it is read before anything is typed and clears itself when the
+   lane comes back. */
+.model-notice {
+  margin: 8px 0 0;
+  padding: 7px 12px;
+  border-left: 2px solid var(--warn);
+  border-radius: var(--radius-chip, 4px);
+  background: var(--warn-faint);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+.model-notice[hidden] { display: none; }
+.model-notice b { color: var(--warn); font-weight: 600; }
+.model-notice #model-warn-host { color: var(--text-faint); }
+
 /* Temporary chat (2026-09-25): a marker for the whole chat - the strip at
    the top of the stack, and a dashed edge round the bar - so it is never
    the toggle's colour alone that says so. */
