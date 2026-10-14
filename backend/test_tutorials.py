@@ -86,6 +86,47 @@ def t_the_catalogue_is_well_formed():
                   step.get("shows") is None or isinstance(step.get("shows"), str))
 
 
+def t_a_step_may_carry_a_try_in_the_point_shape():
+    """`try` is the DESIGNED half of "used", and it is NOT BUILT.
+
+    docs/TUTORIALS-DESIGN.md ("`try` and the `used` state - DESIGN ONLY") is the
+    record: the owner chose "design it now, build it later", so no app observes
+    a `try`, no `used` state can be written and nothing draws one. What is
+    checked here is the shape, and nothing else - because a field that is
+    written into the catalogue and then forgotten is drift, and this is the
+    cheap half of stopping it.
+
+    The shape is `point`'s, deliberately: a per-app map of REGISTRY KEYS, with
+    `None` meaning "this app never shows this as a thing to do". Reusing it is
+    what makes the phone's standing limit easy to hold (a `try` it cannot
+    observe must be None, or it will draw a control that never lights up).
+    """
+    tries = 0
+    for t in T.CATALOGUE:
+        for n, step in enumerate(t["steps"], 1):
+            where = f"{t['id']} step {n}"
+            raw = step.get("try")
+            check(f"{where}: a try is a per-app map, or absent",
+                  raw is None or isinstance(raw, dict), raw)
+            if not isinstance(raw, dict):
+                continue
+            for app in raw:
+                check(f"{where}: try names an app that exists",
+                      app in ("desktop", "phone"), app)
+            for app in ("desktop", "phone"):
+                got = raw.get(app)
+                check(f"{where}: {app}'s try is a non-empty key or None",
+                      got is None or (isinstance(got, str) and got.strip()), got)
+                if got:
+                    check(f"{where}: a try key is a registry key, not a sentence",
+                          " " not in got and len(got) <= 40, got)
+                    tries += 1
+    # The lessons added on 2026-10-10 carry these; a catalogue that lost all of
+    # them would still pass the shape checks above, which is exactly the check
+    # that proves nothing. This is the one that does not.
+    check("the lessons that can carry a try still do", tries >= 10, tries)
+
+
 def t_a_step_points_at_one_real_control_per_app():
     """`point` is the interactive half: which REAL control a step sends the
     owner to, in each app's own words.
@@ -419,6 +460,7 @@ def t_the_routes_are_wired_and_guarded():
 if __name__ == "__main__":
     for fn in (t_the_catalogue_is_well_formed, t_both_sections_have_tutorials,
                t_a_step_points_at_one_real_control_per_app,
+               t_a_step_may_carry_a_try_in_the_point_shape,
                t_a_phone_tutorial_never_points_at_a_pc_control,
                t_nothing_is_done_before_it_is_read,
                t_quitting_records_the_step_and_resuming_continues,

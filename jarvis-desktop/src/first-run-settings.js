@@ -485,13 +485,52 @@ async function setReadAloud(box, input, wasAloud) {
 
 /* ── Row 5: where to find help ───────────────────────────────────────────── */
 
+/**
+ * The one Help place, and the key that asks for it.
+ *
+ * Until 2026-10-08 this window had its own "Help and FAQ" card and the first
+ * button below scrolled to it (`goToCard("faq")`). That card moved to the
+ * Brain's "Tutorials and the FAQ" tab and was deleted from `settings.html`
+ * (`settings.js:950-955`; `tests/faq.mjs` asserts it is gone) - so the button
+ * was left pointing at an id this document has not had for two days, and the
+ * only first-run control that says "here is help" did nothing at all when
+ * pressed. Nothing failed: `goToCard` looks the id up and quietly returns when
+ * it is not there.
+ *
+ * The fix is the route the rest of the app already uses for this destination:
+ * the same one the palette's own Help row takes. The place travels in
+ * `localStorage` under the key the Brain reads on load and on focus
+ * (`forget-range.js` `BRAIN_PLACE_KEY`, `forget-range-panel.js`
+ * `takeAnyPlace`), and `open_fix_place` is the navigation-only command that
+ * brings the Brain window forward - it changes no setting and approves
+ * nothing, which is why the settings window may hold it.
+ */
+const TUTORIALS_PLACE = "tutorials";
+const BRAIN_PLACE_KEY = "jarvis.brain.place";
+
+/** Ask for the Brain's "Tutorials and the FAQ" tab, and say what happened. */
+async function openTutorials(box) {
+  // The place first: the Brain takes it on load or on focus, and a window that
+  // is already open is only focused by the command below.
+  try {
+    localStorage.setItem(BRAIN_PLACE_KEY, JSON.stringify({ place: TUTORIALS_PLACE, at: Date.now() }));
+  } catch {
+    // A store that refuses the write is not a reason to refuse to open the
+    // Brain: it opens on its own landing tab instead, which is where the help
+    // lives anyway. The button still does something.
+  }
+  try {
+    await invoke("open_fix_place", { place: TUTORIALS_PLACE });
+    say(box, "Opened the Brain's \"Tutorials and the FAQ\" tab.");
+  } catch (error) {
+    say(box, `${problemWords(error)} It is in the Brain window, on \"Tutorials and the FAQ\".`, "bad");
+  }
+}
+
 function paintHelp(box) {
   const controls = box.querySelector(".fr-controls");
   const rowEl = node("div", "row");
-  // Navigation only, and only inside this page: every card named here already
-  // exists in this window, so this needs no command and no permission at all -
-  // it is the jump list's own behaviour, from a button.
-  rowEl.append(button("Read the FAQ", () => goToCard("faq")));
+  rowEl.append(button("Read the FAQ", () => openTutorials(box)));
   rowEl.append(button("What asks first", () => goToCard("asks-first"), { ghost: true }));
   rowEl.append(button("Is Jarvis reachable?", () => goToCard("connection"), { ghost: true }));
   controls.append(rowEl);
@@ -574,7 +613,7 @@ function prepareRows() {
   aloud.id = "fr-read-aloud";
   aloud._paint = paintReadAloud;
   const help = row("Where to find help",
-    "Three cards in this page answer most first-day questions. Nothing opens a new window: each button just scrolls to the card.",
+    "The first button opens the Brain window's \"Tutorials and the FAQ\" tab, which is where the questions and the step-by-step lessons live. The other two scroll to cards on this page.",
     []);
   help.id = "fr-help";
   paintHelp(help);

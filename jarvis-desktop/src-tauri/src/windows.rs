@@ -733,7 +733,14 @@ pub fn show_brain(app: &AppHandle) -> Result<(), String> {
 /// The Brain places a tray item or the Jarvis bar may open it at. The page
 /// is told the name alone (`#history` on a new window, the
 /// [`BRAIN_PLACE_EVENT`] event on an open one), never anything else.
-pub(crate) const BRAIN_PLACES: [&str; 1] = ["history"];
+///
+/// `"tutorials"` is the second one (2026-10-10): the "Set up Jarvis" card's own
+/// "Read the FAQ" button, which used to scroll to a card this app no longer has.
+/// It is the view's own key in `brain.js`'s `VIEWS`, and the same destination the
+/// palette's Help row already opens - so the first-run card now points at help
+/// that really exists. Navigation only: `open_fix_place` still changes no
+/// setting and approves nothing.
+pub(crate) const BRAIN_PLACES: [&str; 2] = ["history", "tutorials"];
 
 /// The event an open Brain hears a place by.
 pub(crate) const BRAIN_PLACE_EVENT: &str = "brain-place";
