@@ -2044,6 +2044,69 @@ def _family_count(module_name: str, fallback: int) -> int:
     return fallback
 
 
+#: Said when the backend running on the PC cannot do something the app knows
+#: about. It says TELL, never update: this detection does not update anything,
+#: and the app's own updater carries the desktop binary only.
+BACKEND_BEHIND = ("Your Jarvis backend is behind this app: the app knows about "
+                  "{expected} abilities and the backend running on this PC has {got} "
+                  "of them. Updating the app does not update the backend. On the PC, "
+                  "run apply-patches.ps1 to bring the backend up to date.")
+
+
+def capability_keys() -> list:
+    """The stable names of what THIS backend can change, sorted.
+
+    KEYS, not the spoken names: `changeable_settings()` words its rows for
+    reading aloud, so two builds can say the same thing in different words and a
+    comparison on those strings would cry wolf. These are the switch `key`s, the
+    asks-first targets, the reading tools, and the family tables by the module
+    that owns them.
+
+    This is the seam for "is my backend behind my app?". The app is built from
+    one commit and the backend on the PC runs another, and neither knows the
+    other's version - but each can say what it can DO, and that is comparable.
+    """
+    keys = [f"switch:{b.key}" for b in BOOL_SETTINGS]
+    keys += [f"asks_first:{k}" for k in _ASKS_FIRST_TARGETS]
+    keys += [f"tool:{k}" for k in _TOOL_TARGETS]
+    for what, _where, _count, module in _OTHER_REACHABLE:
+        keys.append(f"family:{module or what}")
+    return sorted(set(keys))
+
+
+def capability_report() -> dict:
+    """What this backend can change, as the small thing both sides compare:
+    {"keys": [...], "count": n}. `count` is the number the owner is told when he
+    asks what he can change, so a report can be read out as-is."""
+    return {"keys": capability_keys(), "count": changeable_settings()["count"]}
+
+
+def behind(expected, reported) -> dict:
+    """Is the backend behind the app? Two CAPABILITY sets and nothing else.
+
+    `expected`: what the caller's build knows (the app's own report), or an
+    "expected" list of keys; `reported`: what the running backend said, or its
+    report. Returns {"behind", "missing", "extra", "line"} - `line` is empty
+    when the backend is not behind, and plain words when it is.
+
+    WHAT THIS DOES NOT COVER: it sees capability names, so it catches a backend
+    that cannot do something the app knows about (the measured 13-vs-51 settings
+    case), and it cannot see a difference in behaviour, wording, a bug that was
+    fixed, or anything neither side names. It is not a version check.
+    """
+    if isinstance(expected, dict):
+        expected = expected.get("keys") or ()
+    if isinstance(reported, dict):
+        reported = reported.get("keys") or ()
+    want = {str(k) for k in (expected or ())}
+    got = {str(k) for k in (reported or ())}
+    missing = sorted(want - got)
+    if not missing:
+        return {"behind": False, "missing": [], "extra": sorted(got - want), "line": ""}
+    return {"behind": True, "missing": missing, "extra": sorted(got - want),
+            "line": BACKEND_BEHIND.format(expected=len(want), got=len(got))}
+
+
 def changeable_settings() -> dict:
     """Everything the owner can change by talking, in plain words.
 

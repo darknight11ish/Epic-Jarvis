@@ -697,5 +697,49 @@ def main():
     return 1 if FAILED else 0
 
 
+
+def t_the_backend_behind_check():
+    """Does the app know about something the backend on this PC cannot do?
+
+    The capability seam (task-55): the app is built from one commit and the
+    backend on the PC runs another, and the measured symptom is a backend that
+    offers 13 settings where the app's build knows 51. This detects a CAPABILITY
+    mismatch - nothing more, which is what its own words say."""
+    import jarvis_settings_registry as R
+
+    full = R.capability_report()
+    check("the report names what this backend can change",
+          bool(full["keys"]) and full["count"] >= 1, full)
+    check("the count is the one the owner is told when he asks what he can change",
+          full["count"] == R.changeable_settings()["count"], full)
+    same = R.behind(full["keys"], full)
+    check("a backend that can do everything the app knows is NOT behind",
+          same["behind"] is False, same)
+    check("...and then there is nothing to say to the owner", same["line"] == "", same)
+
+    old = [k for k in full["keys"] if k.startswith("switch:")]
+    verdict = R.behind(full["keys"], old)
+    check("a backend that only offers the on/off switches IS behind",
+          verdict["behind"] is True, verdict)
+    check("...and it names everything that is missing",
+          len(verdict["missing"]) == len(full["keys"]) - len(old), verdict)
+    check("...and the line says TELL, never update, and names the script to run",
+          "behind this app" in verdict["line"]
+          and "does not update the backend" in verdict["line"]
+          and "apply-patches.ps1" in verdict["line"], verdict["line"])
+    check("...and it never claims anything is automatic",
+          "automatic" not in verdict["line"].lower(), verdict["line"])
+
+    one = R.behind(full["keys"] + ["switch:a_setting_this_backend_does_not_have"], full)
+    check("one capability the backend does not have is enough to be behind",
+          one["behind"] is True
+          and one["missing"] == ["switch:a_setting_this_backend_does_not_have"], one)
+    more = R.behind(full["keys"][:-1], full)
+    check("a backend that can do MORE than the app knows is not behind",
+          more["behind"] is False and bool(more["extra"]), more)
+    check("a report dict can be passed where a key list is expected",
+          R.behind({"keys": full["keys"]}, full)["behind"] is False, full)
+
+
 if __name__ == "__main__":
     raise SystemExit(main())
