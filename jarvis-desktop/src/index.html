@@ -911,6 +911,24 @@
             </div>
           </div>
 
+          <!-- The PC is answering and its own model is not (2026-10-13: both of
+               the owner's Ollama lanes were dead for about five hours and this
+               window said nothing). Standing, before any question, and it clears
+               itself when the lane comes back - it is written from the same
+               probe the health dots use, which now reads the backend's own
+               `/api/status` verdict rather than asking the wrong port.
+
+               Its own state, NOT "Jarvis isn't connected": the PC is fine here,
+               only answers are. Same words as the widget and the HUD window
+               (lane-warning.js). Nothing here acts - there is no button, no
+               card and no restart: the owner starts his lanes, and this says
+               whether they answered. -->
+          <div class="model-notice" id="model-warn" hidden>
+            <b id="model-warn-text"></b>
+            <span id="model-warn-fix"></span>
+            <span id="model-warn-host" hidden></span>
+          </div>
+
           <footer class="card-foot">
             <span class="services" id="services" title="Local service health">
               <span class="service" data-service="jarvis"><i></i>Core</span>

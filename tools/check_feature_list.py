@@ -63,6 +63,7 @@ MENU_PLACES = (
     ROOT / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis"
     / "client" / "ui" / "MenuPlaces.kt"
 )
+TUTORIALS_PY = ROOT / "backend" / "jarvis_tutorials.py"
 
 #: The groups, in the order both apps draw them (docs/FEATURES-LIST-DESIGN.md).
 GROUPS = [
@@ -101,6 +102,49 @@ INTERNAL = {
     "watch": "the GitHub watchlist's own read; 'github-watchlist' names the feature",
     "watch_report": "the GitHub watchlist's read-only peek; 'github-watchlist' names the feature",
 }
+
+#: The lessons a feature may be taught by, read from the real catalogue. A
+#: `covers` list now holds two kinds of id - the menus and routes a feature is
+#: reachable through (checked against the registries above) and the tutorials
+#: that TEACH it (checked against this). Nothing else distinguishes them, which
+#: is the design's own choice (docs/EDUCATION-TAB-DESIGN.md section 8 step 2):
+#: "It gains the lessons that teach it, in the same list."
+#:
+#: The list is read from `backend/jarvis_tutorials.py` itself, so a lesson
+#: renamed there cannot be left behind in a `covers` list, and a feature cannot
+#: claim a lesson that does not exist.
+LESSON_EXEMPT = {
+    "typing": "the box you type in; the app's own prompt field is the lesson",
+    "talk-button": "one button, press and hold - the screen says what it does",
+    "interrupt": "the talk button stops the answer; there is nothing to learn",
+    "temporary-chat": "one switch in the chat head; its own label is the lesson",
+    "history-search": "a search box over the list it is above",
+    "quiz": "the deck screen explains itself; it is revision, not a Jarvis feature",
+    "decks": "the deck screen explains itself; a deck is yours, not Jarvis's",
+    "pc-help": "five answers on one card; the card is the lesson",
+    "web-search": "a switch in Settings and a sentence saying search leaves the PC",
+    "browser-engine": "a switch in Settings; the card says what it does",
+    "support": "one button that starts a support session, and a log to send",
+    "settings-by-asking": "saying a setting in words; the reply names the setting",
+    "settings-entry": "the way into Settings; the tray row and Ctrl+K say where",
+}
+
+
+def lesson_ids() -> list:
+    """Every tutorial id the catalogue really defines, in file order.
+
+    Read from the source rather than by importing the module: this checker runs
+    in CI beside every other one and must not need the backend's runtime (the
+    module imports `jarvis_framework` when it is there). The pattern is the same
+    shape `tools/check_tutorial_places.py` reads the same file with.
+    """
+    text = TUTORIALS_PY.read_text(encoding="utf-8")
+    start = text.index("CATALOGUE = (")
+    block = text[start:text.index("\n)\n", start)]
+    ids = re.findall(r'^\s{8}"id": "([a-z0-9-]+)",$', block, re.MULTILINE)
+    if len(ids) < 20:
+        raise AssertionError(f"read only {len(ids)} lesson ids from jarvis_tutorials.py - the parse broke")
+    return ids
 
 
 def source_bytes() -> bytes:
@@ -229,10 +273,57 @@ def field_problems(got: list) -> list:
 def phantom_covers(got: list, known: dict) -> list:
     """Rule 2: a `covers` id that is no longer in the code (or in INTERNAL)."""
     bad = []
+    lessons = set(lesson_ids())
     for e in got:
         for c in e.get("covers") or []:
-            if c not in known and c not in INTERNAL:
-                bad.append(f"{e.get('id')}: covers `{c}`, which is in no registry and in INTERNAL")
+            if c in known or c in INTERNAL:
+                continue
+            if c in lessons:
+                continue
+            bad.append(f"{e.get('id')}: covers `{c}`, which is in no registry, "
+                       "in no lesson and in INTERNAL")
+    return bad
+
+
+def teaching_problems(got: list, known: dict) -> list:
+    """Rule 6: every feature is taught by a lesson, or exempted with a reason.
+
+    THE POINT OF THE WHOLE EXERCISE (docs/EDUCATION-TAB-DESIGN.md section 8):
+    "A new feature with neither a lesson nor an exemption becomes a red check,
+    not a note nobody reads." The exemption is the project's existing pattern -
+    a short list, each entry with a reason, and a stale entry is itself an
+    error (INTERNAL above, PHONE_LACKS in check_registry_phone.py, KNOWN_DRIFT
+    in check_tutorial_places.py).
+
+    The two kinds of id are told apart by looking the id up, and a name that
+    exists in BOTH is not an error: it is a lesson. `memory` is the real case -
+    a route section in `READ_ROUTES` and a tutorial id - and a `covers` list
+    naming it is a claim about the tutorial, which is what this rule is for. A
+    registry id is still checked where a registry id belongs, by rules 1 and 2.
+    """
+    bad = []
+    lessons = set(lesson_ids())
+    seen = {e.get("id") for e in got if isinstance(e, dict)}
+    for fid, why in LESSON_EXEMPT.items():
+        if not str(why).strip():
+            bad.append(f"LESSON_EXEMPT `{fid}` has no reason")
+        if fid not in seen:
+            bad.append(f"LESSON_EXEMPT lists `{fid}`, which is not a feature any "
+                       "more - delete the line")
+        else:
+            entry = next(e for e in got if e.get("id") == fid)
+            taught = [c for c in (entry.get("covers") or []) if c in lessons]
+            if taught:
+                bad.append(f"{fid} is in LESSON_EXEMPT and also names the lesson(s) "
+                           f"{', '.join(taught)} - one or the other")
+    for e in got:
+        fid = e.get("id")
+        taught = [c for c in (e.get("covers") or []) if c in lessons]
+        if taught or fid in LESSON_EXEMPT:
+            continue
+        bad.append(f"{fid}: no lesson teaches it and it is not in LESSON_EXEMPT - "
+                   "name the lesson in `covers`, or add it to LESSON_EXEMPT with "
+                   "the one-line reason teaching it is not useful")
     return bad
 
 
@@ -273,20 +364,24 @@ def problems() -> list:
     got = entries()
     known = known_ids()
     return (field_problems(got) + phantom_covers(got, known) + uncovered(got, known)
-            + internal_problems(known) + copy_problems())
+            + internal_problems(known) + copy_problems() + teaching_problems(got, known))
 
 
 def main() -> int:
     got = entries()
     known = known_ids()
+    lessons = set(lesson_ids())
     checks = [
         (f"{len(got)} entries, each with what / where / asks / limit / surface",
          field_problems(got)),
-        ("every `covers` id is still in the code", phantom_covers(got, known)),
+        ("every `covers` id is a real registry id, a real lesson, or in INTERNAL",
+         phantom_covers(got, known)),
         (f"every one of the {len(known)} route sections and menu ids is covered or in INTERNAL",
          uncovered(got, known)),
         (f"INTERNAL's {len(INTERNAL)} lines are real, with reasons", internal_problems(known)),
         ("the three copies of features.json are byte-identical", copy_problems()),
+        (f"every feature is taught by one of the {len(lessons)} lessons, or exempt with a reason",
+         teaching_problems(got, known)),
     ]
     failed = 0
     for name, bad in checks:
@@ -295,11 +390,25 @@ def main() -> int:
             print(f"        {line}")
         failed += bool(bad)
     covered = set()
+    taught = 0
+    by_lesson = {}
     for e in got:
         covered.update(e.get("covers") or [])
+        named = [c for c in (e.get("covers") or []) if c in lessons]
+        if named:
+            taught += 1
+        for lesson in named:
+            by_lesson[lesson] = by_lesson.get(lesson, 0) + 1
     print(f"\n{len(got)} entries in {len(GROUPS)} groups; "
           f"{len(covered & set(known))} of {len(known)} route sections and menu ids covered, "
           f"{len(INTERNAL)} named in INTERNAL")
+    print(f"{taught} of {len(got)} features are taught by a lesson; "
+          f"{len(LESSON_EXEMPT)} are exempt with a reason; "
+          f"{len(by_lesson)} of the {len(lessons)} lessons are named by a feature")
+    unused = sorted(lessons - set(by_lesson))
+    if unused:
+        print("lessons no feature names (information, not a failure): "
+              + ", ".join(unused))
     print(f"{len(checks) - failed} passed, {failed} failed")
     return 1 if failed else 0
 

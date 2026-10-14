@@ -1,13 +1,13 @@
 # The documents, and which ones are current
 
-There are **380 markdown documents** here, adding up to about **9.3 MB**. Neither
+There are **383 markdown documents** here, adding up to about **9.3 MB**. Neither
 number is a guess, and neither is asked to stay still: the documents are written
 to all day, so the count and the size both move. Both were measured on 2026-10-13
 with the two lines below, run from the top of the repository - so run them again
 whenever you want today's numbers rather than this page's:
 
 ```powershell
-(Get-ChildItem docs -Recurse -Filter *.md).Count                        # 380 documents
+(Get-ChildItem docs -Recurse -Filter *.md).Count                        # 383 documents
 "{0:N0}" -f (Get-ChildItem docs -Recurse -Filter *.md |
   Measure-Object -Property Length -Sum).Sum                             # about 9,290,220 bytes
 ```
@@ -143,6 +143,7 @@ what changed when.
 | Date | Document | About |
 |---|---|---|
 | undated | [clean-room/](clean-room/) | **Clean-room specs.** Each file here describes one good idea from a project whose licence Jarvis cannot copy code from (GPL, AGPL, closed-source apps and the like), in plain words and with no code in it. |
+| 2026-10-14 | [FIELD-TEST-2026-10-14-RUN.md](FIELD-TEST-2026-10-14-RUN.md) | **The field-test run, 2026-10-14: what was driven, and what was not.** The result of the pass `FIELD-TEST-PLAN-2026-10-14.md` planned, against the live desktop 0.2.169, the live backend and the phone at 0.2.1380. Four PASS, seven PARTIAL, twenty-six BLOCKED and twenty-six NOT-TESTABLE rows, each with the literal words it answered with; §5 is the explicit list of what is blocked on the newer phone APK, checked commit by commit with `git merge-base --is-ancestor` rather than assumed from a date. One recovery code was minted and left to lapse, no backup was committed, three cards were raised and denied, and every setting written was proved back by SHA-256. |
 | 2026-10-13 | [FIELD-TEST-2026-10-13-DESKTOP.md](FIELD-TEST-2026-10-13-DESKTOP.md) | **Desktop field test, 2026-10-13: the two FAILs, the conversation gap, and what was left unreachable.** Written by the desktop half of the owner's 2026-10-13 request - "make sure everything is field tested that can be on both the desktop and android app." The phone is another session's; nothing below touches it, adb was not used, and no phone was read or driven. |
 | 2026-10-12 | [CHECKER-CENSUS-2026-10-12.md](CHECKER-CENSUS-2026-10-12.md) | **The checker census (2026-10-12).** Why this exists. A checker that nothing runs is green this morning and worthless the moment it stops being green, because nothing tells anyone. |
 | 2026-10-12 | [FIELD-TEST-2026-10-12-TOPUP-2.md](FIELD-TEST-2026-10-12-TOPUP-2.md) | **Field test top-up, second half: the seven drivable rows, driven (2026-10-12).** This file does not rewrite anything. FIELD-TEST-2026-10-11-RESULTS.md and FIELD-TEST-2026-10-12-TOPUP.md stay exactly as their passes wrote them - including the eleven rows that end "not driven in this pass". |
