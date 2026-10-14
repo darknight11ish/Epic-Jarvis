@@ -57,10 +57,16 @@ OWNER_ONLY = {
     "jarvis_extract": "the learning queue; patched (memory-safety, decide-once, ...), never shipped",
     "jarvis_models": "the model manager; patched (vram-estimate, gpu-offload), never shipped",
     "jarvis_skills": "the skill store; patched (skill-notes), never shipped",
-    "jarvis_style": "probed by name in rebuilt jarvis_events.py's capability list, which "
-                    "reports false when it is absent; not in backend/, so never shipped - "
-                    "the owner's PC does have it, and it is published in "
-                    "jarvis-backend/jarvis_style.py, imported only by test_tripwire.py",
+    "jarvis_style": "probed by name in rebuilt jarvis_events.py's capability list "
+                    "(the persona entry does `__import__(\"jarvis_style\")`), which "
+                    "reports false when it is absent, and named in selftest.py's "
+                    "EXPECTED list of the twenty-six modules jarvis_hud and its "
+                    "siblings import; not in backend/, so never shipped - the owner's "
+                    "PC does have it, and it is published in "
+                    "jarvis-backend/jarvis_style.py. (This line ended \"imported only "
+                    "by test_tripwire.py\" until 2026-10-13. No test_tripwire.py has "
+                    "ever existed in this tree: it is in no commit and in no working "
+                    "copy - `git log --all -- '*test_tripwire*'` is empty.)",
 }
 
 # A shipped file that imports a test-plumbing module ONLY when it is run from

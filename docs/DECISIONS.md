@@ -1688,8 +1688,16 @@ notification, card, quick-access and coverage audits (one pull request):
 - **Backups:** retention never deletes the file just written and ranks by real
   file time; a restore is all-or-nothing with rollback; the restore card says it
   replaces the memory and chat files; `POST /api/backup/delete-older` (one card)
-  is built on the backend - **the apps' "Delete older backups now" button after
-  an Erase is queued** (owner, 2026-09-30).
+  is built on the backend - and the desktop's "Delete older backups now" button
+  after an Erase is **built too**: `jarvis-desktop/src/settings.html:2368` draws
+  it, and `jarvis-desktop/src/backup-settings.js` wires it to the
+  `delete_older_backups` command (`src-tauri/src/backup.rs:249`, registered in
+  `lib.rs:1161`), which raises the one card. **This line said that button was
+  *queued* when the decision was recorded (owner, 2026-09-30); it was corrected
+  on 2026-10-13, because the button had been built and the sentence had stopped
+  being true.** The phone still has no such button **on purpose**: a phone is
+  not this PC, the route answers 403 there, so the screen says "PC only" in
+  plain words instead (`jarvis-client/.../net/Backup.kt`).
 - **Time:** the PC sends `age_s` for a fired job; "12 at night" is midnight and a
   bare 12 is said back; timers survive a clock set back; DST "last week" and a
   leap-day range no longer crash.
@@ -2126,4 +2134,37 @@ What that decided, in plain words:
 This replaces the earlier position in the same day's work that the tool "ships
 OFF, like every tool but `web_search`". That was the safe default while the
 choice was still open; it is no longer what the project does.
+
+Decided 2026-10-13, the owner's explicit answer to a question the audits left
+open on 2026-09-25 - **idea I-1**, question 1 of
+`docs/creativity-2026-09-25/rules.md` section 6:
+
+- **A web search asks first only when private words could actually end up in the
+  search.** This is a LOOSENING - fewer cards, less asking - so it was put to him
+  as one, and he said yes; the project's rule is that loosening anything
+  privacy-related is his call and asks first.
+- **It is the same rule as the 2026-09-25 entry above, which landed then, so NO
+  CODE CHANGED for this entry.** What this adds is the record of his explicit yes
+  to it *as a loosening*, and the proof that the behaviour now shipped is the
+  behaviour he chose. It was checked on 2026-10-13 rather than assumed.
+- **Where it lives in the code.** `jarvis_agent.web_search_card_lines` builds the
+  card's reasons; the memory reason asks `jarvis_search.repeated_facts`, which
+  needs the SEARCH WORDS to match a saved fact's own words (words the owner used
+  themselves do not count), plus `jarvis_search.fact_topic` for sensitive facts.
+  A pinned "Always keep in mind" fact on its own therefore raises no card - it is
+  added to every question, which is what made it the most frequent unneeded card
+  (`docs/creativity-2026-09-25/experience.md` section 0.4).
+- **Verified on 2026-10-13** in `.dsh-scratch/wt-searchask`, `JARVIS_BACKEND`
+  unset: a pinned, non-sensitive fact with a plainly public search -> **no card,
+  0 lines**; a sensitive saved fact with the same public search -> **a card**,
+  whose exact line is *"Jarvis used a saved fact about health for this question,
+  so it asks before searching - something private could be in the search words."*;
+  search words that repeat the fact -> a card; `backend/test_web_search.py` ->
+  343 passed, 0 skipped, 0 failed.
+- **What deliberately did not move:** sensitive saved facts (health, money,
+  passwords and account details, and private details about other people), search
+  words that repeat a saved fact, outside text read in the conversation, pasted or
+  shared text, the owner's own "Ask before every web search", and password-looking
+  words refused outright, which is never a card. Every card still shows the exact
+  search words and says why in plain words.
 

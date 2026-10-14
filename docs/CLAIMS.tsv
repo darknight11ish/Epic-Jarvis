@@ -144,8 +144,8 @@ C45	the 2026-09-30 handoff no longer says the cloud-grade grade has no app scree
 C46	ARCHITECTURE section 10's checked date is no longer two weeks behind the tree	absent:docs/ARCHITECTURE.md:against the repository on 2026-09-24	open	docs/FEATURE-REVIEW-2026-10-04.md:543
 C47	CHANGELOG.md has an entry for the 2026-09-30 features	grep:CHANGELOG.md:menu visibility	open	docs/FEATURE-REVIEW-2026-10-04.md:540
 C48	VERSION names something newer than 0.2.0, the 26 September version	absent:VERSION:0.2.0	open	docs/FEATURE-REVIEW-2026-10-04.md:540
-C49	the docs index covers the current load-bearing documents	grep:docs/README.md:BUILD-QUEUE-2026-09-30	open	docs/FEATURE-REVIEW-2026-10-04.md:534
-C50	the docs index mentions the audit-reports directory at all	grep:docs/README.md:audit-reports-2026-09-29-30	open	docs/FEATURE-REVIEW-2026-10-04.md:534
+C49	the docs index covers the current load-bearing documents	grep:docs/README.md:BUILD-QUEUE-2026-09-30	built	docs/FEATURE-REVIEW-2026-10-04.md:534
+C50	the docs index mentions the audit-reports directory at all	grep:docs/README.md:audit-reports-2026-09-29-30	built	docs/FEATURE-REVIEW-2026-10-04.md:534
 C51	"Things you can say" is built in the desktop's empty Jarvis bar	grep:jarvis-desktop/src/sayable.js:Things you can say	built	docs/EASE-OF-USE-AUDIT-2026-09-27.md:29
 C52	the ease-of-use audit no longer calls the built "Things you can say" list not built	absent:docs/EASE-OF-USE-AUDIT-2026-09-27.md:I116 "Things you can say", I28 speaking speed	open	docs/EASE-OF-USE-AUDIT-2026-09-27.md:144
 C53	the documents page prints the command that measures its own count	grep:docs/README.md:Get-ChildItem docs -Recurse -Filter *.md	built	docs/README.md:10

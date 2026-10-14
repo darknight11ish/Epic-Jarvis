@@ -449,6 +449,22 @@ place, and what the symbol *meant* had to survive at 40 px.
   real renderer, the removed shapes are gone from the markup and the stylesheet,
   every state and the offline ring reach the frame, the owner's face arrives,
   and "Caught it" and the speech envelope still drive it.
+- **The frame is square, and that needs saying in the CSS (fixed 2026-10-13).**
+  The frame only *looked* right because the slot is a grid container: a grid
+  item's automatic minimum size is its content's, so the frame's own document
+  won the argument with `height: 100%` and the frame laid out **40 x 150** in
+  its 40 x 40 slot, for three days after this landed. The face canvas inside
+  kept its square backing store, so what the bar showed was that square squeezed
+  into a tall, narrow box - one bright vertical sliver where the orb should be,
+  clipped top and bottom by the 80 px window - which is what the owner reported
+  on 2026-10-13. `style.css` now pins `min-height: 0` on `#reactor-face`, which
+  drops that automatic minimum and lets the 100% decide. Nothing about the face
+  changed. This is the same shape as the 2026-10-07 incident recorded in
+  `tests/csp.mjs` (a display canvas laid out at its backing store) and it hid
+  the same way: `tests/bar-face.mjs` measured the canvas's WIDTH, which read a
+  correct 40 both before and after, and never its height. It now measures the
+  frame's own box on the real `index.html`, where a copy of the rules cannot
+  stand in for the shipped ones.
 
 **The pictures above** were redrawn on 2026-09-29 from the current shaders
 and pose code: the red panda's and pygmy owl's still showed a wave at
