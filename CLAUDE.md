@@ -542,3 +542,77 @@ The owner's evidence for the other half is five merged PRs (#312, #314, #315, #3
 a signal to fix `main`'s own state - never a reason to hold a PR.** The cost of not
 knowing this was hours of holding mergeable work, which is why it is written here
 rather than left to be inferred.
+
+## Appending to a shared file: put it at the end, and keep both when two PRs cross
+
+**The owner's rule, 2026-10-13.** Some files in this repo grow by having a new line,
+row or block **added at the end**, and every pull request that writes to them writes
+there. Two such PRs therefore change the same place **by construction** - the two
+sides do not disagree about anything, they simply both appended - and git cannot
+merge that on its own. The rule for all of them:
+
+- **Add the new entry at the very end, and nowhere else.** Do not insert it among
+  the other entries, and do not reorganise the file to make room.
+- **When the two sides cross, keep both**, and touch neither side's words. In a
+  dated file the older date goes first and the newer one after it, which is the
+  order the file already keeps; nothing is dropped to make the merge smaller.
+- **Then check that nothing was lost**, which is one command - `git diff
+  --diff-filter=D --name-only` over those files prints **nothing**, because a
+  conflict that is only two appends must add lines and remove none. Push the
+  merge, and the PR's checks start.
+
+**And the why.** A conflicted pull request gets **no CI at all**: GitHub builds no
+`pull_request` run while a conflict is open, so the PR cannot be tested until
+somebody clears it. The rule on `docs/README.md` above is this same race one file
+over; this is the one PR #386 hit, and #386 is where to look for how it reads:
+
+- The re-merge `6fda2b29` (2026-10-13, PR #386) says it in one line: *"One conflict,
+  in docs/DECISIONS.md: both sides appended a dated entry at the end of the file.
+  Both are kept, in file order"* - this branch's Tauri entry first, then main's
+  DEF-008 entry, both `2026-10-13`. Nothing was lost, and the merge says which side
+  contributed what: the branch's entry is **+72 lines, 0 deleted**, main's is
+  **+20, 0 deleted**. The two sides were `0cbfbdfc` (the Tauri stack entry) and
+  `042ad747` (a fired reminder can be deleted), and neither touched the other's half.
+- **The two rescue PRs are the cost written large.** #369 and #371, opened
+  2026-10-13 07:03 and closed that evening, were `CONFLICTING` the whole time and
+  **not one workflow run ever happened for either** - zero runs against each head
+  commit, and no `refs/pull/<n>/merge` ref was ever created. Checked here, not
+  assumed: `git ls-remote origin "refs/pull/369/*"` lists only `refs/pull/369/head`.
+  A PR nobody can test is a PR nobody can land.
+- **One resolution each, before the checks can start.** The longest check in CI,
+  `frontend`, is about **62 minutes** (61m32s on run 38491853470 and 61m52s on
+  38496601036, both measured). So every crossing is a 62-minute delay **on top of**
+  the wait for somebody to notice - and the noticing is the hard part, because the
+  end of a 2,129-line, 142 KB file is exactly where a conflict is least visible.
+
+**The files this covers, and the ones it does not.** The same shape - a new entry
+appended at the end by whoever has one, so two such PRs always meet - is in:
+
+- `docs/DECISIONS.md`, the dated record of the owner's decisions;
+- `docs/CLAIMS.tsv`, one row per claim, appended by every PR that adds one;
+- `docs/defect-register.tsv` with `docs/DEFECT-REGISTER.md`, the register agents
+  claim defects in. Its rows are **claimed rather than appended** - the `owner`
+  column is the whole point - so two agents still meet there, and its two files must
+  still agree about which defects are open. `tools/check_defect_register.py` is the
+  checker for that, and it runs in the `audit` job.
+
+Two neighbours look like this race and are **not** it, so nothing is done to them:
+
+- `plugins/registry.json` and `plugins/README.md` are **generated** by
+  `tools/gen_plugin_catalogue.py`, from the patch stack in `apply-patches.ps1`.
+  A PR that adds a patch regenerates them instead of typing in them, and the
+  generator is **deterministic** - run it twice on one tree and the 50 files come
+  out byte-identical, and it reproduces the committed tree exactly. So the answer
+  there is "run the tool", not "keep both", and a patch-adding PR was already going
+  to meet every other one in the patch stack itself.
+- The two figures at the top of `docs/README.md` are the previous section's race,
+  and that one already has its rule: **do not regenerate the size, bump the count.**
+  Hand-typing a number the generator would write is the mistake there, and the file
+  it fights over is a different one.
+
+`CHANGELOG.md` is appended at the tail too, and `6fda2b29` records it merging on its
+own with both entries intact - so it is not in the list above, which is where the
+evidence is.
+
+Four files that all grow at the tail, and one fix for a crossing, so it is written
+down **once**, here, rather than four times beside each file.
