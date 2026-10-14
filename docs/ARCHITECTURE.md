@@ -2673,7 +2673,14 @@ they landed):
   finishes (the `step` event, from `jarvis_agent.py`, only when tools are
   switched on), but not the model's private reasoning: that text can quote
   email or files, and the event bus reaches a phone's lock screen (§6), so
-  it is deliberately not published.
+  it is deliberately not published. **One exception, the owner's decision of
+  2026-10-14:** a CLOUD lane's reply that carries no visible answer but does
+  carry the model's working-out is shown - in the answer text only, under one
+  line saying what it is (`jarvis_chatbot_api.CloudAnswer`; `docs/DECISIONS.md`,
+  entry of 2026-10-14), because the alternative was the blank card the field
+  test measured. It never reaches the event bus, and a cloud lane is never
+  handed stored memory, email or files (rule 1), so nothing of the owner's can
+  be in it.
 - The `documents` table - read by two code paths, created by none. The status
   line says `documents: false`, which is correct. Since
   `documents-owned.patch`, a `documents` table is read only if Epic-Jarvis

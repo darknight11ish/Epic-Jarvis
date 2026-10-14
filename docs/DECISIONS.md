@@ -2246,3 +2246,56 @@ gate moving past the memory check.
 **enabled the path** (the gate moved); it could not be shown to **change an
 answer**, because there is nothing saved to recall. When he saves facts, this is
 where they will appear.
+
+Decided 2026-10-14, from the field test that measured it
+(`docs/FIELD-TEST-CLOUD-ESCALATION-2026-10-14.md`, its section 6, and the same
+day's four escalated calls): **when a cloud answer comes back empty and the
+reply carries the model's own working-out, Jarvis shows that working-out under
+one line that says what it is - rather than raising the answer cap or turning
+his thinking off.**
+
+* **The measurement that forced the choice.** Four escalated turns driven
+  through the live `/api/chat` (two `stream: false`, two `stream: true`): all
+  four `finish_reason: "length"`, `len(content) == 0`, and 2048 of 2048
+  completion tokens spent on `reasoning_tokens`. Read back off the live SSE
+  stream: *"chunks with visible content: 0, chunks with reasoning only: 2048"*.
+  DeepSeek's thinking mode is ON BY DEFAULT, its thinking is billed INSIDE
+  `max_tokens`, `max_tokens` defaults to 2048, and nothing in the program read
+  `reasoning_content` at all - `git grep -n reasoning_content` matched nothing
+  on that day's `main`. So the hardest questions, the only ones that earn an
+  offer, bought a blank card: **$0.0099 for four blank answers.**
+* **The two changes he did NOT choose, and why that is the point.** Raising the
+  cap for a cloud lane and turning thinking off for `deepseek-flash` were both
+  on the table, and both change what he is billed for or what the model does.
+  He chose to leave the request exactly as it is and show what came back.
+* **What it is not.** Not a replacement, and not silent. A reply with any
+  visible text is passed through **byte for byte**; a reply whose only text is
+  the working-out is shown under one line naming it
+  (`REASONING_NOT_ANSWER`), so it cannot be read as a finished answer; a turn
+  with neither says so in one plain sentence (`NO_ANSWER_AT_ALL`) instead of
+  rendering an empty card; and anything unreadable is passed through untouched,
+  because a filter that lost an answer would be worse than the blank it fixes.
+* **Where it lives.** The rule is in `jarvis_chatbot_api.py` and its
+  byte-identical twin `jarvis-backend/jarvis_chatbot_api.py`: `CloudAnswer`
+  rewrites a streamed or whole-JSON cloud reply, and `reasoning_answer()` is the
+  same law where a whole reply is parsed (`ApiChatbot._parse`). The wire is
+  `jarvis-backend/jarvis_hud.py`'s cloud relay, which now runs the service's
+  bytes through it and still hands `jarvis_speed`'s meter the **service's own
+  bytes, in the same order** - so what the turn is recorded as spending cannot
+  move because of this.
+* **Deliberately unchanged:** the request itself (model, cap,
+  `reasoning_effort`), the local lane (jarvis_agent has its own `<think>`
+  handling), the money (`_count_money` counts the ORIGINAL text, so a guessed
+  token count cannot become the working-out's length), and every client - the
+  added line is text, so the HUD page, the desktop window and the phone need no
+  change. A flag in the reply's headers was the alternative and was turned down:
+  on a streamed reply the headers are on the wire before the first byte of the
+  body, so the flag could not be known at the moment it would have to be
+  written.
+* **One thing this does contradict, said plainly:** `jarvis_thinking.py`'s
+  docstring says "Thinking text is never shown, saved or learned from." That
+  stands for every ordinary turn - thinking is still switched off per model and
+  never reaches a client - but a cloud reply that wrote nothing else is now
+  shown, marked, because an empty card is not an answer either. The working-out
+  is not saved as a fact and never reaches the event bus.
+
