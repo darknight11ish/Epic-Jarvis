@@ -838,7 +838,7 @@ SHIPPED = (
     # off by default, that pauses the two live lanes (proved from /api/ps), loads
     # at the largest zero-spill context measured (28,672), announces the pause
     # BEFORE it starts, and puts both lanes back exactly as they were, proved
-    # again. big-coder.patch wires its three routes; nothing downloads, every
+    # again. big-coder.patch wires its two routes; nothing downloads, every
     # call is loopback, and turning it on is one approval card.
     "jarvis_big_coder.py",
 )
