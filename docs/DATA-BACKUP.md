@@ -390,4 +390,4 @@ of them is this tool deciding for you.
   If it says "every database opens and matches its manifest", the snapshot is
   good.
 * The whole thing is one file, `tools/jarvis_data_backup.py`, and it is
-  checked by `backend/test_data_backup.py` (77 checks) on every push.
+  checked by `backend/test_data_backup.py` (82 checks) on every push.

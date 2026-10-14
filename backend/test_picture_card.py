@@ -526,8 +526,9 @@ def t_its_hunk_applies_to_the_stack_at_its_own_turn():
     patch "applied"; the file as it stands at this patch's own turn does not,
     so apply-patches.ps1's own strip-and-re-apply rehearsal would have answered
     "will not apply" and refused the whole run, and _stack.py's walk had to
-    invent the hunk's pre-image (51 materialised against its pin of 50, which
-    is what test_installed_stand_in.py and test_retrieve_count.py failed on).
+    invent the hunk's pre-image (51 materialised against the 50 it was pinned
+    at then, which is what test_installed_stand_in.py and
+    test_retrieve_count.py failed on).
 
     A hunk whose context is a LATER patch's lines is the drift that pin exists
     to catch, so it is fixed rather than pinned: the block now sits on the

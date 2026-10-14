@@ -1261,35 +1261,66 @@ def _print_snapshot(result: dict) -> None:
     print(f"  Backed up to {Path(result['path']).parent}")
 
 
+def _write_failed_run(dest, source, message: str) -> None:
+    """A line where the last run is read, for a failure that never got as far as
+    writing a snapshot.
+
+    Without this, the weekly task could stop working and leave NO trace at all:
+    `pythonw.exe` has no console to print to, so a refusal written to stdout
+    goes nowhere, and a task that failed would look exactly like one that has
+    not run yet. Counts and the reason only - never a row of anybody's data.
+
+    It refuses to write inside the live folder, like everything else here: a
+    failure note is not a reason to write into `~/.openjarvis`. **And it
+    refuses a locker folder too** - `Refused` is not an `OSError`, so it is
+    caught by name below. Without that, this note's own `mkdir(parents=True)`
+    would create the locker path on the way to writing the note, which is the
+    one thing the guard exists to prevent: the trace has to record the
+    refusal, not undo it.
+    """
+    try:
+        folder = _resolve(dest)
+        if is_inside(folder, source):
+            return
+        refuse_write_into_a_locker(folder)
+        folder.mkdir(parents=True, exist_ok=True)
+        _write_text(folder / "last-run.txt",
+                    f"{time.strftime('%Y-%m-%d %H:%M:%S')}  FAILED - nothing was "
+                    f"backed up\n  {message}\n")
+    except (OSError, Refused):
+        pass
+
+
 def cmd_backup(args) -> int:
+    def failed(message: str) -> int:
+        print(f"Nothing was backed up: {message}")
+        _write_failed_run(args.dest, args.source or default_source(), message)
+        return 2
+
     try:
         phrase = passphrase_from(args, required=args.seal)
     except Refused as exc:
-        print(f"Nothing was backed up: {exc}")
-        return 2
+        return failed(str(exc))
     if phrase and not args.seal:
         # A passphrase was given but sealing was not asked for. Writing the
         # data out readable would quietly ignore the one thing the caller
         # clearly meant, so this stops instead.
-        print("Nothing was backed up: a passphrase was given but --seal was not, so "
-              "the snapshot would have been written readable. Add --seal, or leave "
-              "the passphrase out.")
-        return 2
+        return failed("a passphrase was given but --seal was not, so the snapshot "
+                      "would have been written readable. Add --seal, or leave the "
+                      "passphrase out.")
     if args.seal:
         # Asked to seal: check the tool is here BEFORE a snapshot is taken, so
         # a missing `cryptography` cannot leave a plainly readable copy behind.
         aesgcm, _argon2 = _crypto()
         if aesgcm is None:
-            print("Nothing was backed up: sealing needs the `cryptography` package, "
-                  "which is not installed here. Take the backup without --seal, or "
-                  "install it - nothing was written unsealed instead.")
-            return 2
+            return failed("sealing needs the `cryptography` package, which is not "
+                          "installed here. Take the backup without --seal, or install "
+                          "it - nothing was written unsealed instead.")
     try:
         result = take_snapshot(args.source, args.dest, keep=args.keep,
                                passphrase=phrase if args.seal else None)
     except Refused as exc:
-        print(f"Nothing was backed up: {exc}")
-        return 2
+        return failed(str(exc))
     _print_snapshot(result)
     return 0 if result["ok"] else 1
 
