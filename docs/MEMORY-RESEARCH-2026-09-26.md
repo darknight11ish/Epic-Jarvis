@@ -46,6 +46,23 @@ Ranked by value for the effort. S = small (one module plus tests), M = medium (s
 
 ### Idea 1. A re-ranker (S)
 
+- **Built, and where (2026-10-15).** Do not build this again in a new module - it
+  already lives inside the shipped rebuilt module. The re-ranker is
+  `rebuilt/jarvis_memory.py:608-806`: `RERANK_POOL` (`:667`, the top 20 facts
+  search already found), `FastReranker` over fastembed's
+  `Xenova/ms-marco-MiniLM-L-6-v2` (`:709-726`), `reranker()`/`set_reranker()`
+  (`:772`, `:792`), and the fail-soft path that hands back today's order
+  (`:634-641`, "recall is exactly what it was"). It is **OFF** unless
+  `JARVIS_MEMORY_RERANK=1` (`:670-672`), and `backend/test_memory_rerank.py`
+  proves both the off-by-default and the unchanged-order properties. A 3D work
+  order of 2026-10-15 asked for this as a patch-free `backend/jarvis_rerank.py`
+  + `jarvis-backend/jarvis_rerank.py` twin; that module was **not** built,
+  because a second re-ranker path beside this one is exactly the duplicate
+  `CLAUDE.md`'s new-feature audit forbids. Two deltas worth knowing before
+  touching it: the switch is an environment variable, not a `[memory]` line in
+  `jarvis-framework.toml`, and the weights come from fastembed, which
+  **downloads them once** (`:624-625`) instead of requiring local ONNX to be
+  already on disk. Nothing about either was changed here.
 - **What it is.** Today search makes three lists (words, meaning, people) and merges them with a fixed formula (`rebuilt/jarvis_memory.py:1278`, `:1303`, `:1318`). A re-ranker reads the question and each candidate fact *together*, and scores how well the fact answers it. This is more accurate than the formula, because it reads both side by side.
 - **Where from.** Hindsight (MIT) uses exactly this as its default: `cross-encoder/ms-marco-MiniLM-L-6-v2`, run locally (`hindsight_api/config.py:1270`). The same model ships in fastembed 0.8.1 as `Xenova/ms-marco-MiniLM-L-6-v2`: 0.08 GB, Apache-2.0. Jarvis already uses fastembed for meaning search (`rebuilt/jarvis_memory.py:421`). So this needs no new download tool. **I have not checked which fastembed version is on your PC.**
 - **Fit with the rules.** It runs on the processor, on the PC, with no network after a one-time download. It only re-orders facts that search already found. It never adds, changes or hides a fact. `k` (5 facts) and both floors stay as they are. It could also add a third floor: drop a candidate the re-ranker scores very low.

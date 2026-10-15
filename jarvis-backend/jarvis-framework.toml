@@ -1303,6 +1303,7 @@ wake_word_enabled = false
 # "Voice: install the models", has the one-line download for each.
 stt_engine = "sherpa-onnx"
 # sherpa_stt_kind = "nemo_transducer"   # or "sense_voice"; normally guessed from the files
+# sherpa_stt_parakeet_v3 = false        # true: read the local multilingual Parakeet TDT 0.6B v3 out of voice-models/stt/parakeet-tdt-0.6b-v3/; off keeps today's English model. Jarvis never downloads it, so the folder has to be there already.
 # stt_threads = 4                       # CPU threads for speech-to-text (default: 4, or 2 on a small PC)
 # tts_threads = 4                       # CPU threads for the voice (the same default)
 # tts_speaker_id = 0                    # Kokoro voice, in the OLD numbering only: 0 = American female; 9 = British male (bm_george). Better: pick a voice by name in either app (Settings / Voices) - that choice wins over this line
