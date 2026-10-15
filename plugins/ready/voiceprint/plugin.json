@@ -3,5 +3,5 @@
   "summary": "Write Like Me: Jarvis drafts in the owner's own voice, learned from his own words on his own PC, with names and numbers taken out before any of it reaches a model.",
   "module": "jarvis_voiceprint",
   "install": "handler",
-  "stack_order": 142
+  "stack_order": 146
 }

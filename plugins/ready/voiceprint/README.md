@@ -10,9 +10,13 @@ folder (or run `scripts\add-plugin.ps1 -Name voiceprint`) and restart Jarvis.
 
 - Module the loader calls: `jarvis_voiceprint.install()` (takes the core's Handler)
 - The patch this replaces: none - this is not a feature that used to be a patch
-- Position in the loader's order: 144, after every folder the old patch stack had
-  (`receipts` is 143), so its four paths are checked in the order they were
-  added rather than in the middle of somebody else's
+- Position in the loader's order: **146**. It was 142 until 2026-10-15, when
+  `skill-hub` was found to claim 142 as well - so the loader was ordering the two
+  by folder NAME, which nobody chose. `skill-hub` kept 142 and this moved to the
+  first free number after it: 143 (`receipts`), 144 (`auto-router`) and 145
+  (`vault`, on `fix/vault-fail-closed`) are all taken, so 146 is the next one
+  free. Its four paths are therefore checked after those rather than in the
+  middle of somebody else's.
 
 The module itself is one of the ones this repository ships
 (`backend/jarvis_voiceprint.py`), copied into the backend by

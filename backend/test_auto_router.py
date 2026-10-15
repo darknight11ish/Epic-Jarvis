@@ -252,11 +252,25 @@ def t_plugin_folder():
     check("plugin: stack_order is a whole number", isinstance(data.get("stack_order"), int), str(data))
     check("plugin: it has a summary in plain words", len(str(data.get("summary") or "")) > 40, str(data))
     check("plugin: the README is there", (folder / "README.md").is_file())
-    check("plugin: it is the LAST folder in the loader's order",
-          data.get("stack_order") == max(
-              [json.loads(p.read_text(encoding="utf-8")).get("stack_order", 0)
-               for p in (REPO / "plugins" / "ready").glob("*/plugin.json")] or [0]),
-          str(data.get("stack_order")))
+    # REWRITTEN 2026-10-15, because `voiceprint` moved from 142 to 146 in the
+    # same tree. This used to read "it is the LAST folder in the loader's
+    # order" - `stack_order == max(...)` over EVERY folder - which is a claim
+    # about every folder added after it as much as about this one, so the next
+    # patch-free folder broke it while nothing about the auto-router had
+    # changed. That is the same over-claim `backend/test_receipts.py` carried,
+    # and it is repaired the same way rather than by moving a folder's number to
+    # keep it true. What the claim was for, and what it says now: the auto-router
+    # sits AFTER every folder the old patch stack wrote. 141 is `pictures`, the
+    # highest position the patch stack has; everything at or below it came from a
+    # patch, and the auto-router is above all of them. A folder added later lands
+    # after it and this stays true.
+    stack_orders = [json.loads(p.read_text(encoding="utf-8")).get("stack_order", 0)
+                    for p in (REPO / "plugins" / "ready").glob("*/plugin.json")]
+    from_stack = [o for o in stack_orders if isinstance(o, int) and o <= 141]
+    check("plugin: it sits after every folder the old patch stack wrote",
+          bool(from_stack) and max(from_stack) < data.get("stack_order", 0),
+          f"auto-router at {data.get('stack_order')}, the highest from the stack is "
+          f"{max(from_stack) if from_stack else None}")
 
 
 def t_docstring_says_it_advises():

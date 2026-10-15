@@ -264,6 +264,60 @@ def t_order_is_the_patch_stack_order():
               core.sent[-1] == (200, {"from": "aaa"}), str(core.sent))
 
 
+def t_a_null_stack_order_does_not_stop_the_loader():
+    """`dict.get(k, default)` uses its default only when the key is ABSENT.
+
+    A manifest that says `"stack_order": null` therefore put None into this
+    module's own sorted() and raised `TypeError: '<' not supported between
+    instances of 'NoneType' and 'int'` - out of discover(), out of install(),
+    and the whole backend failed to start over one bad manifest. Nothing in
+    `plugins/ready/` is written that way (all 28 folders state a real number),
+    so this was LATENT; `backend/test_plugin_stack_order.py` found it while
+    proving its own checks could fail. The value is read and then defaulted now,
+    so a null number takes the same path as an absent one.
+    """
+    jarvis_plugins._reset_for_tests()
+    core = Core()
+    with Sandbox() as box:
+        box.plugin("bbb_five", module="_plugintest_five", order=5,
+                   body=mod_body("five", "/api/five"))
+        box.plugin("aaa_null", module="_plugintest_null", order=None,
+                   body=mod_body("null", "/api/null"))
+        # The key ABSENT entirely - the ONE shape the old `.get(k, default)` did
+        # cover. Kept here so the two shapes cannot drift apart again.
+        box.plugin("ccc_absent", module="_plugintest_absent",
+                   manifest_text=json.dumps(
+                       {"name": "ccc_absent", "module": "_plugintest_absent",
+                        "install": "handler",
+                        "summary": "the absent-number module"}),
+                   body=mod_body("absent", "/api/absent"))
+        entries = None
+        try:
+            entries = jarvis_plugins.discover(box.folder)
+            check("a null stack_order does not raise out of discover()", True)
+        except Exception as exc:  # noqa: BLE001
+            check("a null stack_order does not raise out of discover()", False,
+                  f"{type(exc).__name__}: {exc} - THIS IS THE START-UP CRASH: one "
+                  f"manifest with \"stack_order\": null stopped the whole backend "
+                  f"from starting.")
+        if entries is None:
+            return
+        check("no folder is dropped when one number is null",
+              len(entries) == 3, str([e.get("name") for e in entries]))
+        check("a null number behaves exactly like an absent one - both fall to "
+              "the sentinel, after the real number, and tie-break by name",
+              [e["name"] for e in entries] == ["bbb_five", "aaa_null", "ccc_absent"],
+              str([(e.get("name"), e.get("stack_order")) for e in entries]))
+        # And the whole start-up path, which is what the crash actually broke.
+        line = jarvis_plugins.install(core.Handler, **core.ctx())
+        check("the whole install() path survives a null stack_order",
+              isinstance(line, str)
+              and jarvis_plugins.status()["failed"] == []
+              and jarvis_plugins.status()["loaded"]
+              == ["bbb_five", "aaa_null", "ccc_absent"],
+              f"{line} {jarvis_plugins.status()}")
+
+
 def t_one_bad_module_does_not_stop_the_rest():
     jarvis_plugins._reset_for_tests()
     core = Core()
