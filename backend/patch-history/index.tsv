@@ -39,6 +39,8 @@ chatbot-limits.patch	chatbot-limits/581cda8.patch	581cda87af0da89dd45f9d069d93f3
 chatbot-routes.patch	chatbot-routes/59b73f8.patch	59b73f84de12bc9c9661fa7ef1620052d2437275	2026-09-28T02:09:55Z	Merge branch 'studio-chatbot-screens' into claude/jarvis-ai-assistant-research-ff37vy
 chatbot.patch	chatbot/8b95a55.patch	8b95a5550048e1a6ae397787b2f1ac8eef2e6ee5	2026-09-28T01:31:34Z	Chatbot driver, step 2: the Gemini website adapter (not usable from the apps yet)
 cloud-one-turn.patch	cloud-one-turn/7fda1b7.patch	7fda1b7a7ad8bd26508e0e7bae5a4539ede50410	2026-09-23T22:32:19Z	Follow-ups remember the conversation, on the phone and the quickbar
+cloud-say-yes.patch	cloud-say-yes/9a596c4.patch	9a596c4f43c83ef9376d032f10bd79301327fa21	2026-10-15T15:21:24-07:00	backend: Project Mode's Shareable switch gates the cloud lanes
+cloud-say-yes.patch	cloud-say-yes/3583bf0.patch	3583bf0211eecf87e9335b33bf6638a5b0d0c606	2026-09-27T20:58:06Z	Backend: the owner's yes reaches jarvis_router's cloud-offer gate
 devices.patch	devices/bd55634.patch	bd55634d1d0bc149d4ae0236c443f90265db6e5f	2026-09-28T21:11:27Z	backend: devices.patch, before every token_ok=_token_ok; ship jarvis_devices.py
 email-send.patch	email-send/ab2eb89.patch	ab2eb8925786245dca22da666433ce25f1b22678	2026-09-25T22:40:42Z	Email sending: one approval card per email, the whole text on it (backend)
 extraction-wiring.patch	extraction-wiring/2641f6d.patch	2641f6d676ed75ad47d45e453c350baf9b163eab	2026-09-15T02:33:18Z	Routes to read, edit, forget and export what Jarvis has learned
