@@ -4,12 +4,56 @@
 
 Epic-Jarvis combines a **Windows 11 Desktop Spotlight & Brain HUD** (`jarvis-desktop`, built with Tauri v2, Rust, and WebView2), a **Local Python Agent & Memory Backend** (`jarvis-backend`), and a **Native Android Companion App** (`jarvis-client`, built with Kotlin and Jetpack Compose). Your everyday conversations, memory, documents, voice, and personal data stay on your own hardware via **Ollama** and **ONNX Runtime**, with tightly budgeted, opt-in cloud escalation available when you want extra horsepower.
 
-## The Four Non-Negotiable Guarantees
+## The five rules that are not negotiable
 
-1. **Private by Architecture, Not Just Policy**: Anything touching your emails, local files, credentials, finances, or long-term memory is locked to your **local LLM** via automatic taint latches (`jarvis_gate.py`). Sensitive turns cannot leave your PC.
-2. **Zero Public Tunnels**: Cross-device sync between your Windows 11 PC and your Android phone runs strictly over **localhost (`127.0.0.1`)**, **Tailscale**, or **NordVPN Meshnet**—never through public ingress tunnels (`ngrok`, Cloudflare Tunnel, or Tailscale Funnel).
-3. **Fail-Closed Credential Vault & Scrubber**: Secrets live in a host-bound vault (`jarvis_vault.py`, backed by Windows Credential Manager) and are handled by name (`vault://...`). Values resolve only at the single outbound request header that authenticates with them and are scrubbed everywhere else (`jarvis_scrub.py`).
-4. **Human-in-the-Loop Approval & 1-Click Undo**: Consequential actions follow **Plan → Describe → Gate → Run** (`jarvis_gate.py`). Approval cards never steal keyboard focus (so a stray `Enter` while typing can never auto-approve an action), wait up to 15 minutes, and record reversible before/after snapshots in `receipts.db` for **1-Click Undo** (`jarvis_receipts.py`).
+These are not features. They are the promises the whole program is built
+around, and every change is checked against them. They are in the owner's own
+words, because the exact wording is part of the decision.
+
+1. Anything touching email, files, credentials or stored memory stays on the
+   local model. The app sends none of it anywhere.
+2. The app never opens a public tunnel. No ngrok, no Cloudflare Tunnel, no
+   Tailscale Funnel, no "share my Jarvis".
+3. API keys are allowed in the app - the owner reversed the old blanket ban
+   on 2026-09-17, to unblock things like a GitHub API integration. Any key
+   still gets the same care the pairing token already gets: never logged,
+   sent only to the one service it authenticates against, and kept out of
+   anything the app writes to disk in plain text.
+4. The app never auto-approves anything, and blocks acting when the event
+   stream is stale.
+5. Non-commercial build. Sideloaded via adb, never listed on Play.
+   The owner said on 2026-09-28 that EpicJarvis **will never be
+   commercialized**. So a non-commercial licence (CC BY-NC, CC BY-NC-SA) is
+   no reason to avoid or replace a part - don't raise "it blocks selling
+   Jarvis" as a concern. Everything else those licences ask still applies:
+   credit in THIRD-PARTY-NOTICES.txt, share-alike, no redistribution
+   against their terms.
+
+> **Three approved exceptions exist, and each is named and bounded.** Rule 1 is
+> bent for exactly two things in what ships today.
+>
+> - A project's **"Shareable"** switch — **off by default**, approved by you
+>   each time it is used, and it never carries health or money numbers, memory,
+>   email or credentials — may send a short piece of that project's files,
+>   shown word for word on its card first, to a web search or a chatbot.
+> - The **locked backup file** may be saved into a folder your cloud service
+>   syncs. It is a locked copy of what Jarvis knows — which is exactly why its
+>   recovery code matters so much.
+>
+> Rule 4 is bent for exactly one thing: one approval covers a whole chatbot
+> conversation, and Jarvis may then keep asking questions on its own, inside the
+> limits you set (see [What asks first](#what-asks-first)). Nothing else in
+> these five rules is loosened anywhere.
+
+## How the five rules are enforced
+
+The rules above are the promises; this is the machinery behind them, so a
+reader can check them rather than take them on trust.
+
+1. **Private by architecture, not just policy**: anything touching your emails, local files, credentials, finances, or long-term memory is locked to your **local LLM** via automatic taint latches (`jarvis_gate.py`). Sensitive turns cannot leave your PC.
+2. **Zero public tunnels**: cross-device sync between your Windows 11 PC and your Android phone runs strictly over **localhost (`127.0.0.1`)**, **Tailscale**, or **NordVPN Meshnet** — never through public ingress tunnels (`ngrok`, Cloudflare Tunnel, or Tailscale Funnel).
+3. **Fail-closed credential vault & scrubber**: secrets live in a host-bound vault (`jarvis_vault.py`, backed by Windows Credential Manager) and are handled by name (`vault://...`). Values resolve only at the single outbound request header that authenticates with them, and are scrubbed everywhere else (`jarvis_scrub.py`).
+4. **Human-in-the-loop approval & 1-click undo**: consequential actions follow **Plan → Describe → Gate → Run** (`jarvis_gate.py`). Approval cards never steal keyboard focus (so a stray `Enter` while typing can never auto-approve an action), wait up to 15 minutes, and record reversible before/after snapshots in `receipts.db` for **1-click undo** (`jarvis_receipts.py`).
 
 ## Major Features at a Glance
 
@@ -50,6 +94,35 @@ Epic-Jarvis combines a **Windows 11 Desktop Spotlight & Brain HUD** (`jarvis-des
 ### 5. Unified Design System & Living UI
 * **Single-Source W3C DTCG Tokens (`tokens/themes.tokens.json`)**: Ten color families compiled via `tools/tokens/build.mjs` into three Desktop themes (`deep-space`, `paper`, `high-contrast`) and three Android themes (`reactor`, `daylight`, `contrast`), verified for WCAG AA/AAA contrast (`themecheck.mjs` & `contrast.mjs`).
 * **Procedural Seasonal Sky & Animated Companions**: Dynamic astronomical sky/season calculations (`sky.js`, `season.js`) and animated critters (`faces.html`, `CritterShaders.kt`) that automatically pause rendering when windows are hidden.
+
+## What asks first
+
+**Jarvis never acts without a card for anything that leaves the PC or touches
+private things.** It asks, you decide — on the PC or on the phone. Rule 4 above
+is the short version. One qualification, said plainly: **a card can cover a whole
+job, not just a single message.** When you approve a chatbot conversation, Jarvis
+may then follow up with that AI *on its own*, inside the limits you set — that is
+the one place rule 4 is deliberately loosened.
+
+- Every action that is not completely safe raises **one approval card**.
+  Nothing runs until you answer, and there is no "approve all" control
+  anywhere.
+- **Risky** cards need Windows Hello on the PC, or your screen lock on the
+  phone. With no lock set up, the card is refused until you set one up. This
+  narrows a real gap without closing it — see [Honest limits](#honest-limits).
+- **Stopping is never held back.** Stop everything, Cancel on a job, muting
+  and Undo all happen at once, with no card.
+- **Outside text raises the bar.** In a turn that has read an email, a page, a
+  file or other outside text, note writes, web searches and smart-home
+  switches ask first.
+- The named ways out of the PC — sending email, the chatbot driver,
+  Open-Meteo weather, a web search that could repeat something private — each
+  get their own card, and each card says what will leave the PC.
+
+The full list, in plain words, is **Settings → What asks first** in both apps.
+It also has "make stricter" switches, and a short safe list the PC may loosen
+— each change costing one card plus Windows Hello. Nothing outside that list
+can be loosened from an app.
 
 ## Repository Structure
 
@@ -93,6 +166,68 @@ Epic-Jarvis/
    python tools/check_stale_twins.py
    ```
 
+## Honest limits
+
+This project's habit is to say what is not done. One of its own architecture
+rules is that **nothing is claimed that is not true**. The short list:
+
+- **The desktop installer is not published yet.** Settings → Updates says
+  "Not set up yet", and the desktop app has to be built from source until
+  somebody makes the update signing key (about ten minutes, in
+  [`docs/INSTALL.md`](docs/INSTALL.md)). The update command falls back to
+  building it.
+- **The second graphics card is installed and measured, but its features are
+  not.** It offers seven switches (longer conversations, pictures, background
+  learning, browser control, the wiki builder, the study helper, referee
+  suggestions); **every one is off, and each needs its own approval card**.
+  That includes the camera in Jarvis Live, which stays off until the card is
+  in and a photo test passes.
+- **Everyday chat has a small memory: about 4,096 tokens** of conversation.
+  Longer talks get strange before they get long, and the bigger figures for
+  what fits on each card are still worked out on paper — none of them is
+  measured.
+- **The wake word has not been tried on a real voice.** It was tested against
+  made-up (synthesised) speech, 44 of 44 heard; what it does with a real
+  person, a television or a phone's battery is unmeasured.
+- **Some things are deliberately absent.** No always-on screen watching with a
+  history (Recall-style). No phone calls for urgent alerts — a call would send
+  private text to an outside voice company. No approve-all anywhere, and no
+  control that clears the "text tried to rush you" warning. The phone does no
+  speech-to-text, has no model catalogue to browse, and no deep config
+  editing. Jarvis does not change Windows settings (Night light, dark mode,
+  Focus Assist) — PC help only reads. The model's private reasoning is not
+  shown, on purpose: it can quote your email and files.
+- **Built, but never tried for real.** The chatbot website conversations, the
+  chatbot API conversations, the comparison of several AIs, the
+  customer-support chat and the hidden browser are each labelled "not yet
+  tried for real" in the project's own notes. The job list says "nothing here
+  has run on the owner's PC". The inbox tidy has been tried against a stand-in
+  mail server, never a real mailbox. Nobody has listened to a v1.0 voice yet.
+  The prompt coach and other newer pieces say in their own notes that nobody
+  has measured how good their advice is.
+- **The approval gap is narrowed, not closed.** The PC's own backend now asks
+  Windows Hello for risky approvals, and stamps each real approval so a row
+  written straight into the database does not count. A program written
+  specifically to attack Jarvis can still get around it.
+- **The updater's own log is not scrubbed.** `backend.log` is (passwords,
+  keys and the pairing key are taken out), but `jarvis-desktop.log` is not, and
+  neither catches everything — read one before sending it anywhere.
+- **A token in Windows Credential Manager can still be read by any program
+  running as you.** What changed is that it no longer sits on disk as readable
+  text.
+- **`Alt+Space` can lose the race at startup.** Every startup program asks for
+  its shortcuts at once, so being present after a reboot is not the same as
+  owning the key. The tray icon's "Show or hide the Jarvis bar" is the way in
+  when that happens.
+- **Do not run a downloaded OpenJarvis copy.** It writes into the same
+  `%USERPROFILE%\.openjarvis\` folder as Jarvis.
+- **`docs/INSTALL.md` → "Known rough edges"** is the fuller, live list. Read
+  it before reporting a problem.
+
 ## License
 
-Released under the **MIT License**. See [LICENSE](LICENSE) and [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt) for full third-party notices.
+Released under the **MIT License** — see [LICENSE](LICENSE), and
+[THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt) for every third-party part
+and its own terms, including wake-word models that are non-commercial use only.
+The build is non-commercial and sideloaded only (rule 5 above); the MIT licence
+covers the code in this repository, not the parts it borrows.
