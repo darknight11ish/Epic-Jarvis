@@ -39,16 +39,38 @@ CI runs that test.
 """
 import argparse
 import filecmp
+import os
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 BACKEND = ROOT / "backend"
 HISTORY = BACKEND / "patch-history"
+
+
+def _scratch_dir(prefix: str) -> str:
+    """A private directory under the system temp dir, created so it is WRITABLE.
+
+    NOT `tempfile.mkdtemp()` on its own, and the reason is measured rather than
+    theoretical: `mkdtemp` creates its directory with mode 0o700, and on the
+    owner's Windows machine `os.mkdir(d, 0o700)` produces a directory this
+    process then cannot write into - `PermissionError [Errno 13]`. `mkdtemp`
+    therefore raises on the very first `write_bytes`/`write_text` inside it,
+    which is how this tool once died part way through and left
+    `backend/patch-history/` EMPTY (2026-10-15: 166 unstaged deletions, restored
+    with `git checkout -- backend/patch-history`). `os.makedirs` inherits
+    ordinary permissions, so the base is made with that and the private name is
+    added by hand.
+    """
+    base = Path(tempfile.gettempdir()) / f"{prefix}{uuid.uuid4().hex[:8]}"
+    os.makedirs(base, exist_ok=True)
+    return str(base)
+
 
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
@@ -140,7 +162,7 @@ def well_formed(text: bytes) -> bool:
     # target file, and catches both directions: a header claiming too many lines
     # ("corrupt patch") and one claiming too few ("patch fragment without
     # header"). It costs one git start per candidate version.
-    probe = Path(tempfile.mkdtemp(prefix="jarvis-patch-parse-")) / "probe.patch"
+    probe = Path(_scratch_dir(prefix="jarvis-patch-parse-")) / "probe.patch"
     try:
         probe.write_bytes(text)
         parsed = subprocess.run([git_bin, "apply", "--numstat", str(probe)],
@@ -150,7 +172,7 @@ def well_formed(text: bytes) -> bool:
     finally:
         shutil.rmtree(probe.parent, ignore_errors=True)
 
-    d = Path(tempfile.mkdtemp(prefix="jarvis-patch-check-"))
+    d = Path(_scratch_dir(prefix="jarvis-patch-check-"))
     try:
         for target in targets:
             f = d / target
@@ -277,7 +299,28 @@ def main() -> int:
                 return 1
             print("backend/patch-history is up to date.")
             return 0
-        n = build(a.out)
+        # STAGED, THEN SWAPPED. uild() starts by discarding whatever it is
+        # pointed at, so pointing it straight at ackend/patch-history meant a
+        # failure part way through left that folder EMPTY - which is exactly what
+        # happened on 2026-10-15, when this tool died on the read-only temp
+        # directory above and left 166 unstaged deletions behind. Now the whole
+        # new history is built first and only then put in place, so any failure
+        # before the swap leaves the committed history exactly as it was.
+        staging = Path(_scratch_dir(prefix="jarvis-patch-history-")) / "patch-history"
+        n = build(staging)
+
+        stale = [p for p in a.out.rglob("*") if p.is_file()
+                 and not (staging / p.relative_to(a.out)).is_file()]
+        a.out.mkdir(parents=True, exist_ok=True)
+        for p in sorted(staging.rglob("*")):
+            if not p.is_file():
+                continue
+            dest = a.out / p.relative_to(staging)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(p, dest)
+        for p in stale:
+            p.unlink()
+        shutil.rmtree(staging.parent, ignore_errors=True)
     except NoHistory as e:
         print(f"Cannot read the patches' history: {e}.")
         return 2
