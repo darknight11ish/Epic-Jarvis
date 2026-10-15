@@ -655,13 +655,17 @@ mod tests {
 
     #[test]
     fn another_drive_is_a_question_and_the_system_drive_is_silent() {
+        // What this function says is the two drives, by letter. It does NOT
+        // carry the "unplugged" warning: that is the confirmation sentence the
+        // PAGE adds beside this message (backup-settings.js, which appends "A
+        // backup on a drive that gets unplugged is a backup that stops
+        // happening."). An earlier version of this test asserted "unplugged"
+        // here, in the Rust string, where it has never appeared - it failed on
+        // CI (rust, 2026-10-15) on a message that was correct all along. The
+        // assertion below is the contract: the note names the drive it is on.
         let other = other_drive_note(Path::new(r"D:\Backups"), "C:");
         assert!(
             other.as_deref().is_some_and(|w| w.contains("drive D:")),
-            "{other:?}"
-        );
-        assert!(
-            other.as_deref().is_some_and(|w| w.contains("unplugged")),
             "{other:?}"
         );
         assert_eq!(other_drive_note(Path::new(r"c:\Backups"), "C:"), None);
