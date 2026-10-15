@@ -37,6 +37,7 @@ pub mod crash_notes;
 pub mod devices;
 pub mod email_sending;
 pub mod folders;
+pub mod frame_feed;
 pub mod handoff;
 pub mod hardware;
 pub mod hotkeys;

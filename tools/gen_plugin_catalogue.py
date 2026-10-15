@@ -25,6 +25,11 @@ Everything else - a patch that edits real code, or adds routes and gate
 tables inline - is left in the CORE bucket, untouched and still applied by
 `scripts/apply-patches.ps1` exactly as before.
 
+A folder that replaces NO patch is neither written nor removed here: the
+catalogue is built from `$PATCHES`, so a feature that was born as a folder
+(`plugins/ready/receipts`) has no row in it, and `prune_ready` leaves it
+alone. `tools/check_plugins.py` checks those folders instead.
+
 Run:  py -3 tools/gen_plugin_catalogue.py [--check]
       --check fails instead of writing, the way the other gen_* tools do.
 
@@ -356,19 +361,43 @@ the module file itself, so adding it again needs no re-install.
 """
 
 
+def replaces_no_patch(folder: Path) -> bool:
+    """True for a folder that is a drop-in WITHOUT being a patch's mirror.
+
+    `plugins/ready/receipts` is the first one (2026-10-14, action receipts and
+    one-click undo): a feature whose whole wiring is a folder, so there is no
+    patch anywhere for this generator to read it out of, and `plugin.json`
+    carries no `replaces_patch`. The catalogue cannot list it - it is built
+    from `$PATCHES` - so the one thing this generator must do is leave it
+    where it is. `tools/check_plugins.py` is what keeps such a folder honest
+    (its module is in `backend/`, it has an `install()`, and `apply-patches.ps1`
+    copies it in): this function only decides whether it may be deleted.
+    """
+    manifest = folder / "plugin.json"
+    if not manifest.is_file():
+        return False
+    try:
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+    except Exception:
+        return False
+    return isinstance(data, dict) and not data.get("replaces_patch")
+
+
 def prune_ready(data: dict) -> list[str]:
     """Delete `ready/<name>/` folders whose feature is no longer a drop-in.
 
-    A folder stays only while its patch is still one of these: when a patch
-    stops being a drop-in, its folder must go, or the tree keeps a manifest
-    for something that is no longer true.
+    A folder stays while its patch is still one of these: when a patch stops
+    being a drop-in, its folder must go, or the tree keeps a manifest for
+    something that is no longer true. A folder that replaces NO patch is not
+    this generator's to delete at all (replaces_no_patch, above): it is not a
+    stale mirror of anything, and it is the whole of that feature's wiring.
     """
     ready = PLUGINS / "ready"
     keep = {e["name"] for e in data["entries"] if e["bucket"] == "plug-in"}
     removed: list[str] = []
     if ready.is_dir():
         for child in sorted(ready.iterdir()):
-            if child.is_dir() and child.name not in keep:
+            if child.is_dir() and child.name not in keep and not replaces_no_patch(child):
                 shutil.rmtree(child, ignore_errors=True)
                 removed.append(child.name)
     return removed
@@ -425,6 +454,9 @@ def main() -> int:
     PLUGINS.mkdir(exist_ok=True)
     for name in prune_ready(data):
         print(f"  pruned ready/{name} (no longer a drop-in module)")
+    for child in sorted((PLUGINS / "ready").iterdir()) if (PLUGINS / "ready").is_dir() else []:
+        if child.is_dir() and replaces_no_patch(child):
+            print(f"  kept   ready/{child.name} (a drop-in with no patch of its own)")
     for path, text in owned:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")

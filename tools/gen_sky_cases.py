@@ -63,6 +63,23 @@ def cases() -> dict:
     SK.request_weather("open_meteo", gate=lambda *a: _Yes(), tier_of=lambda a: "ask",
                        spawn=held.append)
     out["open_meteo_waiting"] = SK.view(here=False)
+    if not held:
+        # `held[0]()` on an empty list is an IndexError with nothing to read,
+        # and that is exactly how this reached CI on 2026-10-07 (audit D8): the
+        # two `handle_post` calls above discard their return codes, so a
+        # throwaway config folder that cannot be written stores no town,
+        # `request_weather` answers 409 BEFORE it ever reaches `spawn`, and the
+        # run died as `gen_sky_cases.py  code=1  IndexError: list index out of
+        # range` instead of saying what was wrong. The other two paths that do
+        # not spawn (a card already waiting, a tier that is not "ask") end the
+        # same way. Say which, in a sentence, and exit non-zero.
+        raise SystemExit(
+            "sky cases: the Open-Meteo request never reached `spawn`, so no card "
+            "was queued to resolve. It does not spawn when no town is stored - "
+            "which is what a throwaway config folder that cannot be written "
+            "leaves behind - and it does not spawn when a card is already "
+            "waiting or when the tier of that card is not 'ask'. Nothing was "
+            "written; the fixtures are untouched.")
     held[0]()
     t = [1759000000.0]
     deps = SK.Deps(open_meteo_fetch=lambda url: json.dumps({"current": {

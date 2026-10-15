@@ -5,6 +5,12 @@
  *
  * The point is to make a change visible across all the states it touches at
  * once, rather than checking the one screen that happened to be open.
+ *
+ * A page error, or a scenario whose own driver threw, is collected and printed
+ * as a `PROBLEMS:` list, and the run then exits 1 (2026-10-14). Until then it
+ * printed that list and still exited 0, so `npm run shots` - and the contact
+ * sheet built from its output - read as a clean run with a scene visibly
+ * failing inside it.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -88,6 +94,7 @@ const SCENES = [
 const { base, close } = await K.serve();
 const browser = await K.launch();
 const problems = [];
+let rendered = 0;
 
 for (const theme of THEMES) {
   const dir = path.join(OUT, theme);
@@ -98,6 +105,7 @@ for (const theme of THEMES) {
     if (scene.drive) { try { await scene.drive(page); } catch (e) { problems.push(`${scene.id}: drive failed: ${e.message}`); } }
     await page.waitForTimeout(250);
     await page.screenshot({ path: path.join(dir, `${scene.id}.png`) });
+    rendered += 1;
     for (const e of page.__errors) problems.push(`${theme}/${scene.id}: ${e}`);
     await page.close();
   }
@@ -106,4 +114,9 @@ for (const theme of THEMES) {
 
 await browser.close();
 close();
-if (problems.length) { console.log("\nPROBLEMS:\n  " + problems.join("\n  ")); }
+if (problems.length) {
+  console.log("\nPROBLEMS:\n  " + problems.join("\n  "));
+  console.log(`\nThe shots: ${rendered} rendered, ${problems.length} problem(s)`);
+  process.exit(1);
+}
+console.log(`\nThe shots: ${rendered} rendered, none`);

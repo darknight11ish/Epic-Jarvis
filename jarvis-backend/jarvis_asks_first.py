@@ -533,6 +533,15 @@ GROUPS = (
         "change_own_config", "stop_asking_before_every_web_search", "learning_enable",
         "learning_auto_enable", "learning_sensitive_enable", "history_enable",
         "memory_manage", "memory_forget_range", "user_profile_manage", "custom_voice",
+        # Action receipts (jarvis_receipts.py, 2026-10-14): putting ONE recorded
+        # change back - what changed, from the receipt Jarvis wrote before it
+        # changed it. It sits in this group with the other actions over the
+        # owner's own data on this PC (`memory_forget_range` is the nearest
+        # neighbour), because that is what it acts on. It raises no tier of its
+        # own: the shipped settings file has no line for it, so it takes
+        # unknown_action_tier, which is "ask" - one card per undo. The page must
+        # name it because a card can.
+        "undo_action",
         "better_voice_enable", "watch_notifications_enable", "phone_notifications_read",
         "topic_loosen", "chat_tags_suggest_on", "chat_tag_suggest",
         # The chatbot API money limits (chatbot-limits.patch, 2026-10-06): both

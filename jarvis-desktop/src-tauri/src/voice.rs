@@ -724,6 +724,15 @@ struct ActiveCapture {
     join: JoinHandle<()>,
 }
 
+impl ActiveCapture {
+    /// Signals the capture thread to drop the `cpal::Stream` and release the
+    /// microphone. Not joined - the caller is not waiting on a result, and
+    /// nothing on the UI path may block for the audio API.
+    fn stop(&self) {
+        let _ = self.stop_tx.send(());
+    }
+}
+
 /// How often push-to-talk re-reads the tail of the buffer for the face's
 /// mic-level meter - the same cadence [`VAD_POLL_INTERVAL`] uses for the
 /// same reason: often enough that a syllable is not averaged away, cheap
@@ -950,7 +959,7 @@ pub async fn stop_voice_capture(
 
     // Ignored: a closed receiver means the thread already exited (an error
     // it already reported through `ready_tx`), not a new failure to surface.
-    let _ = stop_tx.send(());
+    stop_tx.send(()).ok();
 
     tauri::async_runtime::spawn_blocking(move || join.join())
         .await
@@ -977,17 +986,51 @@ pub async fn stop_voice_capture(
     post_utterance(&app, &base, spec, &raw_samples, "push_to_talk", waited).await
 }
 
+impl VoiceCaptureState {
+    /// Discards the recording in progress, if any, and closes the microphone.
+    ///
+    /// The sender is what the capture thread's own loop waits on
+    /// (`start_voice_capture`), so sending is what makes that thread DROP the
+    /// `cpal::Stream` and release the device (this file's "WHAT STOP ACTUALLY
+    /// DOES"). The buffer goes with the [`ActiveCapture`] that held it, so the
+    /// clip can never be sent afterwards.
+    ///
+    /// Not joined, deliberately: closing the device takes as long as the audio
+    /// API takes, and both callers must not wait on it. `stop_voice_capture`
+    /// (the owner letting go) does join, because it needs the samples.
+    fn stop(&self) {
+        let active = self.0.lock().unwrap_or_else(|p| p.into_inner()).take();
+        if let Some(active) = active {
+            active.stop();
+        }
+    }
+}
+
 /// If a recording is in progress, discards it without sending anything -
 /// the desktop equivalent of releasing push-to-talk without meaning it.
 #[tauri::command]
 pub fn cancel_voice_capture(state: State<VoiceCaptureState>) -> Result<(), String> {
-    let active = state.0.lock().map_err(poisoned)?.take();
-    if let Some(active) = active {
-        let _ = active.stop_tx.send(());
-        // Not joined: the caller is not waiting on a result, and this
-        // command must not block the UI thread for the stream to close.
-    }
+    state.stop();
     Ok(())
+}
+
+/// "Stop everything" (commands.rs `stop_everything_now`): closes a
+/// push-to-talk microphone that is open right now, and discards its clip.
+///
+/// WHY THIS EXISTS. Until this was called, `stop_everything_now` stopped the
+/// OTHER microphone - talk-to-type's (`crate::talk_type::stop`) - and nothing
+/// else here. `cancel_voice_capture` was reachable only from the page, on a
+/// pointer leaving the mic button, so the "Stop everything" hotkey pressed
+/// while the owner held that button left the `cpal` stream open and the
+/// samples growing until they let go. The owner's own record of this key says
+/// only "halts any action Jarvis is taking on the screen at once"
+/// (docs/DECISIONS.md, 2026-09-25) - a live microphone is not an action to
+/// leave running.
+///
+/// Called BEFORE the backend is asked, exactly as `talk_type::stop` is: a
+/// machine whose Jarvis is down must still close its microphone.
+pub fn stop_push_to_talk(app: &AppHandle) {
+    app.state::<VoiceCaptureState>().stop();
 }
 
 // ---------------------------------------------------------------------------

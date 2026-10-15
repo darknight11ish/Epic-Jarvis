@@ -1,6 +1,6 @@
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
-@@ -6523,3 +6523,25 @@
+@@ -6591,3 +6591,25 @@
      _loopback_companion(bind, HUD_PORT, Handler)
      print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")
 +    # picture-card.patch ("Which card draws the pictures", the owner's decision of
