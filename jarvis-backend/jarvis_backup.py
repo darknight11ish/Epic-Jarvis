@@ -359,9 +359,15 @@ CODE_GROUPS, CODE_GROUP_LEN = 4, 5
 #: states, tool names, step counts and the same words a step was approved with -
 #: no more than the other working databases here - and it travels only inside
 #: this one locked file, like every name below.
+#:
+#: voiceprint.db (2026-10-14) is the "Write Like Me" exemplars: what the owner
+#: wrote, kept so Jarvis can draft in his own voice. It is the owner's own words
+#: about his own life, so it belongs in the locked backup for the same reason
+#: memory.db does - and test_backup.py's own rule catches a module that names a
+#: database and does not get it in here, which is how this was found.
 SOURCE_DBS = ("memory.db", "chat-history.db", "schedule.db", "feedback.db", "projects.db",
               "goals.db", "study.db", "arbiter.db", "jobs.db", "ledger.db", "watch.db",
-              "tasks.db", "receipts.db")
+              "tasks.db", "receipts.db", "voiceprint.db")
 
 STUDY_DB = "study.db"
 
