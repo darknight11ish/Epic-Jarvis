@@ -395,6 +395,10 @@
       "title": "Jarvis wants to use a tool it has no plain name for"
     },
     {
+      "action": "undo_action",
+      "title": "Jarvis wants to put back a change it made"
+    },
+    {
       "action": "unretire_shared_key",
       "title": "Jarvis wants to let the old shared key work from other devices again"
     },
@@ -1561,6 +1565,18 @@
       "notice": {
         "title": "Jarvis wants to use a tool it has no plain name for",
         "summary": "Jarvis wants to use a tool it has no plain name for.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "undo_action",
+      "notice": {
+        "title": "Jarvis wants to put back a change it made",
+        "summary": "Jarvis wants to put back the change shown.",
         "full": "not classified, so treated as the worst case. nothing has happened yet.",
         "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",

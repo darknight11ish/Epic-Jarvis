@@ -18589,8 +18589,10 @@ model, so the advice's quality and its latency are both unmeasured.
 
 ## 121. Thinking levels: how long a model may think before it answers (added 2026-10-09)
 
-`backend/thinking.patch` (one `install()` call in `jarvis_hud.py`; `jarvis_thinking.py`
-is shipped whole), `backend/test_thinking.py`, and one row per running model on both
+`backend/thinking.patch` (two route blocks in `jarvis_hud.py` - `GET` and
+`POST /api/thinking`, each behind the server's own origin and token checks;
+`jarvis_thinking.py` is shipped whole), `backend/test_thinking.py`, and one row
+per running model on both
 apps (`jarvis-desktop/src/thinking-module.js`, `jarvis-client/.../net/Thinking.kt`,
 `JarvisApi.kt`). **This section exists because the route was live on both apps and
 written down nowhere**: before it, `docs/JARVIS-API.md` had no mention of
@@ -19161,18 +19163,24 @@ not re-litigate: **OFF by default, never resident beside the two live lanes,
 the pause announced before it starts, and both lanes put back exactly as they
 were - proved from `/api/ps`.**
 
-### 126.1 The three routes
+### 126.1 The two routes
+
+Both routes are the ONE path `/api/big-coder`, told apart by the method: a
+`GET`, and a `POST`. That is exactly what `backend/big-coder.patch` installs -
+two route blocks, `if path == "/api/big-coder":` in the GET handler and `if
+route == "/api/big-coder":` in the POST handler.
 
 | Route | Method | Body | What it does |
 |---|---|---|---|
 | `/api/big-coder` | GET | - | The switch, the model, the context, what is loaded on all three ports right now, and what a start would do. **Read-only**: it loads nothing, unloads nothing and writes nothing |
-| `/api/big-coder/mode` | POST | `{"on": true\|false}` | The opt-in switch. **ON is ONE approval card** (`change_own_config`, tier `"ask"`); OFF is immediate |
-| `/api/big-coder/run` | POST | `{"action": "start"\|"stop"}` | Start the mode, or stop it and restore the lanes. Through `power_manage`, the action that already governs what is on the cards |
+| `/api/big-coder` | POST | `{"on": true\|false}`, or `{"action": "start"\|"stop"}` | The one write, and the body says which. **`on`** is the opt-in switch: ON is ONE approval card (`change_own_config`, tier `"ask"`), OFF is immediate. **`action`** starts the mode or stops it and restores the lanes, through `power_manage`, the action that already governs what is on the cards |
 
-All three go through the server's own origin and token checks, like every other
-route, and every call is loopback only. No new gate action is invented: the
-opt-in reuses `change_own_config` (the shape `jarvis_backup.py` and
-`jarvis_big_model.py` use) and the mode itself reuses `power_manage`.
+The POST answers `400` to anything that is neither shape, so a caller with a
+bug finds out rather than getting a silent success. Both go through the
+server's own origin and token checks, like every other route, and every call
+is loopback only. No new gate action is invented: the opt-in reuses
+`change_own_config` (the shape `jarvis_backup.py` and `jarvis_big_model.py`
+use) and the mode itself reuses `power_manage`.
 
 There is **no desktop Settings row or phone control yet** - the route is the
 backend half, and the switch can also be turned on by asking Jarvis ("turn on
@@ -19801,3 +19809,191 @@ feature — the signed release check — added no route either; it is
 executable second, and the executable not at all when the first half did not
 finish), where the app reads the two paths from, what the owner configures once,
 and the three questions deliberately left for the owner.
+
+
+## 132. Action receipts, and one button to put a change back (added 2026-10-14)
+
+`backend/jarvis_receipts.py`, its drop-in folder `plugins/ready/receipts/`,
+and the goals tick wired to it. The idea is borrowed from
+BasedHardware/omi: an action that CHANGES something leaves a receipt saying
+what changed, with one button to put it back.
+
+### 132.1 What was missing
+
+Every other record in this backend says what Jarvis was ALLOWED to do
+(`approvals.db`, `jarvis_gate.py`) or what was SAID (`chat-history.db`).
+Nothing said what an action actually changed - so an action that was allowed,
+ran, and turned out to be wrong left no way back except doing the opposite by
+hand, from memory. `jarvis_inbox_tidy.py` and `jarvis_forget_range.py` each
+keep an Undo of their own, in memory, for ten minutes; neither records
+anything another module could read. `jarvis_sources.py` is a "tool receipt"
+of a different kind: what an ANSWER read, read-only.
+
+### 132.2 The store
+
+One table, `action_receipts`, in its own SQLite file beside `goals.db` and
+`schedule.db` - `receipts.db` in the settings folder, `JARVIS_RECEIPTS_DB`
+overriding it - opened once per call, closed by the caller, WAL, a 10-second
+busy timeout, exactly as `jarvis_chat_log.py` and `jarvis_gate.py` do it.
+**Deliberately not a table in `approvals.db`:** that file is one of the nine
+`jarvis_gate.py` refuses to let any tool modify, because the approval stamp
+lives in it, and receipts are written by the same call path as the action they
+record - which would hand every recorded action a write path into the file
+the gate trusts.
+
+| column | what it holds |
+|---|---|
+| `receipt_id` | `"rc"` + 12 hex characters (`uuid4`, like every other id here) |
+| `created_at` | when the change was made |
+| `tool_name` | which action changed it (`"goals.mark_step"`) |
+| `summary` | what changed, in the owner's own words, scrubbed |
+| `before_snapshot_json` | enough to put it back, scrubbed, capped at 8,000 characters |
+| `after_snapshot_json` | what it looks like now, scrubbed |
+| `undo_callable` | the code that can put it back, BY NAME (`"jarvis_goals.restore_row"`) |
+| `undone_at` | when Undo really ran, or NULL |
+
+`receipts.db` joined the locked backup on 2026-10-14 (`jarvis_backup.SOURCE_DBS`,
+with every other database): a receipt holds the owner's own words - what
+changed, and what the thing looked like before - so a restore that put
+`goals.db` or `projects.db` back while dropping the receipts for those rows
+would leave Undo pointing at changes the archive had already replaced. The
+archive is encrypted before it touches a disk, so those words are never in the
+clear.
+
+### 132.3 The four functions
+
+```
+record(tool_name, summary, *, before=None, after=None, undo=None) -> str
+undo(receipt_id) -> dict
+recent(limit=20) -> list
+get(receipt_id) -> dict | None
+register_restorer(tool_name, fn)     the code that applies a before snapshot
+```
+
+`record()` is called BEFORE the change: the before snapshot is what Undo
+writes back. It **never raises into the caller** - a receipt that cannot be
+written returns `""` and is audit-logged by name only, because a receipt must
+never fail the action it was recording.
+
+**Nothing unscrubbed is ever written.** `jarvis_scrub.scrub_text` cleans the
+summary and every string in both snapshots, keys included, so a key, token or
+password that happened to be in the words an action changed lands as
+`[redacted: ...]`. With no scrubber at all, `record()` returns `""` and writes
+nothing - the same rule chat history follows with no key. A snapshot larger
+than the cap is replaced by a note saying so rather than truncated, and Undo
+reads that note as "not enough to restore" and refuses rather than putting
+back half of a row.
+
+### 132.4 Undo is idempotent, and says which way it went
+
+The claim is one conditional `UPDATE ... WHERE receipt_id=? AND undone_at IS
+NULL`, run BEFORE the reversal: only the caller whose UPDATE changed a row
+reverses anything, so a double tap, two screens or a retry cannot apply the
+reversal twice. A second call is refused in plain words - *"this was already
+undone"* - and `undone_at` is set only when the reversal really ran. If the
+reversal itself fails, the claim is released and the reason returned, so a
+receipt is never left marked undone when nothing was put back. The one honest
+gap: a process killed between the claim and the reversal leaves it marked
+undone, and it will not be applied again.
+
+Two ways back, and the answer says which one ran:
+
+1. **`"path": "callable"`** - the zero-argument callable `record(undo=...)`
+   was given, still held in this process. It is the exact code that made the
+   change, so it is preferred.
+2. **`"path": "snapshot"`** - a new process has no in-memory callable, which
+   is the normal case rather than an error. The store takes the restorer
+   registered for that `tool_name`, or resolves the name in the row
+   (`undo_callable`) in its own module, importing it when it is a `jarvis_`
+   module and not already loaded - which is what runs its `register_restorer()`
+   again - and calls it with the parsed before snapshot.
+3. **Neither** - it refuses, in plain words, and leaves `undone_at` NULL so it
+   can be tried again.
+
+### 132.5 The two routes
+
+```
+GET  /api/receipts                       the recent list, newest first
+     ?limit=<n>                          whole number, 1 to 200 (default 20)
+POST /api/receipts/<receipt_id>/undo      put one change back
+```
+
+Both are installed by the module's own `install()`, wrapped round the core's
+Handler after its own origin and token checks, exactly as `jarvis_news.py`,
+`jarvis_sources.py` and `jarvis_goals.py` do it. **No patch is involved:**
+`plugins/ready/receipts/plugin.json` names `jarvis_receipts` with
+`"install": "handler"`, and `jarvis_plugins.py` makes the call the patch would
+have made. `stack_order` is 143 - after every folder the old patch stack had
+(the highest is `pictures` at 141).
+
+The list answers `{"ok", "receipts", "count", "limit", "undo_action",
+"undo_tier", "waiting", "last", "words"}`. Each receipt carries its own
+`"undoable"` flag, worked out in this process, so an app is never offered a
+button that can only refuse. `"last"` is how the most recent Undo card ended,
+in fixed plain words from the module's own table - never a payload.
+
+**Undo is a mutating action, so it goes through the ONE permission model**
+(ARCHITECTURE §3): ONE card, action `undo_action`, and the reversal runs only
+on the gate's own answer. A denied or timed-out card changes nothing at all,
+and at tier `ask` only an outcome of `"approved"` counts as a yes - `allowed`
+alone is not "a human decided", because the gate returns `allowed=True` at
+tier `notify` and at tier `auto` with nobody in the loop. The receipt id is
+checked, and the receipt's own state read, BEFORE any card - no card is ever
+raised for a receipt that cannot be undone, and a receipt already undone is a
+plain 409 with no card. One card at a time, like every other card in this
+project. The route answers 202 and the reversal runs on its own thread: a card
+can wait fifteen minutes and an HTTP request must not.
+
+**Which tier, and why the module does not decide it.** `undo_action` is
+deliberately absent from `[autonomy.tiers]` in the shipped
+`jarvis-framework.toml`, so it takes `unknown_action_tier`, which that file
+says is **"ask"**: one card per undo, by default, which is what this feature is
+for. The module does **not** read that table and does **not** force the tier,
+and that is deliberate rather than an omission. `jarvis_gate.py` carries
+`_NO_RULE_FROM_DENIAL`, the list of actions whose always-ask, button-started
+"no" must not become a proposed standing rule; `backend/test_gate_denial_rule.py`
+reads every module that refuses to act on any tier but `ask` and requires its
+action to be on that list. Joining it means editing `jarvis_gate.py` - one of
+the files this feature is forbidden to touch, and a patch is the thing the
+drop-in folder exists to avoid - so this module takes the tier the gate gives
+it, exactly as `jarvis_media.py` and `jarvis_news.py` do, and the tier table
+stays the single policy with one reader. The consequence, said plainly: if the
+owner ever writes a tier for `undo_action` in their own settings file, that is
+what happens; the shipped file has no such line, so today it is one card.
+
+**`undo_action` is deliberately not in `jarvis_gate.py`'s `_RISK` table**, and
+this feature adds no row for it: a row means patching the gate, and the
+drop-in folder exists so a new route needs no patch. An action nobody
+classified is treated by the gate's own fail-closed rule as irreversible and
+outbound, which makes the Undo card risky (Windows Hello on the PC, the screen
+lock on the phone) and heavy. That is stricter than the action it undoes,
+which is the safe direction to be wrong in - and it is said here so a reader
+does not think the card was classified on purpose.
+
+### 132.6 What is wired to it today
+
+**One mutation, on purpose and named:** `jarvis_goals.Goals.mark_step` - the
+everyday tick, no card, one tap, often by voice, and the easiest change in
+this backend to make by accident. A receipt is written before the row changes,
+holding the whole row (`plan`, `status`, `changed`, `checkin_job`), the tick
+result carries `"receipt_id"` (null when the receipt could not be written),
+and Undo puts the plan back EXACTLY - the same `done_at`, the step that waited
+on it locked again - rather than re-ticking or clearing it. `restore_row()` in
+`jarvis_goals.py` is the restorer, registered at import, so the snapshot path
+works after a restart. `jarvis_goals.py` imports `jarvis_receipts` lazily,
+inside a `try`, in both places: a backend folder without the module still
+ticks steps.
+
+Not wired, and said plainly: goals `create`/`accept`/`stop`, everything in
+`jarvis_projects.py`, and every other mutating module. Each needs its own
+honest reversal - deleting the row a draft created, putting back the check-in
+job `delete` removed - and inventing one that does not truly reverse the
+change is worse than not offering the button.
+
+### 132.7 Neither app has a screen for it yet
+
+`docs/ARCHITECTURE.md` §8 carries the row: the machine-readable half is built
+and both routes are live, and the UI is not built on either app. When it is,
+it goes on BOTH, on this same store and this same card. `tools/check_parity.py`
+cannot see it: it scans the two apps' own source, so a backend route no app
+calls is outside what it decides.

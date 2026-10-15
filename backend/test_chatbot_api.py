@@ -1349,6 +1349,46 @@ def t_money_prices_and_the_command_line():
               for w in ("set_limit", "set_price", "reset_price")))
 
 
+def t_a_zero_price_is_allowed_and_says_what_it_costs():
+    """E5 of the 2026-10-07 cloud-lane audit: `set_price` refused only a price
+    ABOVE `MOST_PRICE`, so a price of zero was accepted in silence - and a price
+    of zero is the one price that makes the monthly limit unenforceable. Every
+    answer is counted as free, so the month's total stays at zero, so
+    `money_check` can never reach the limit and never refuses the lane: a money
+    control that looks set and cannot hold.
+
+    The price is still ALLOWED - a service can genuinely cost nothing, and
+    removing the ability to say so would be a product decision this file has no
+    business making. What is fixed is the silence: the command line now says
+    what a zero price means while the owner is still looking at it.
+    """
+    clean()
+    point_all(limit=1.0)
+    STORE[API.KEY_TARGETS["openai_api"]] = KEY
+    lines = []
+    rc = API._main(["price", "openai", "0", "0"], out=lines.append)
+    said = lines[-1] if lines else ""
+    check("a price of zero is accepted", rc == 0, lines)
+    check("... and the words say the monthly limit cannot be reached at that price",
+          "cannot be reached" in said and "recorded, not enforced" in said, said)
+    check("... and it is a real price, not the same as having none",
+          API.price_of("openai_api", "gpt-5-mini")[:2] == (0.0, 0.0),
+          API.price_of("openai_api", "gpt-5-mini"))
+    # The consequence, measured rather than asserted in prose.
+    API.record_spend("openai_api", "gpt-5-mini", 5_000_000, 5_000_000)
+    check("CONTROL: at a zero price a month of answers costs nothing",
+          API.spent_of("openai_api") == 0.0, API.spent_of("openai_api"))
+    why, _cap = API.money_check("openai_api", "gpt-5-mini", next_chars=10, next_messages=1)
+    check("CONTROL: ... so the lane is never refused - exactly what the words warn about",
+          why == "", why)
+    # Only BOTH at zero is unenforceable: a zero input price still charges for
+    # the answer, so that one must not carry the warning.
+    rc = API._main(["price", "openai", "0", "1"], out=lines.append)
+    check("a half-zero price is allowed and does NOT carry the warning",
+          rc == 0 and "cannot be reached" not in (lines[-1] if lines else ""),
+          lines[-1] if lines else "")
+
+
 def t_money_file_unreadable_fails_closed():
     clean()
     point_all(limit=5.0)

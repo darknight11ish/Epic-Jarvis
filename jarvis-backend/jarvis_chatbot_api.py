@@ -691,6 +691,46 @@ CUT_OFF = ("Jarvis asked for a short answer so it stays within your limit; the r
 CUT_OFF_EMPTY = ("{name} used up the answer length Jarvis asked for, to stay within your "
                  "money limit, before writing any answer. Nothing more was sent.")
 
+# ============================================================================
+#   A reply whose only text is the model's working-out
+# ============================================================================
+#
+# MEASURED ON THE OWNER'S PC, 2026-10-14, on four escalated turns driven
+# through the live `/api/chat` (docs/FIELD-TEST-CLOUD-ESCALATION-2026-10-14.md):
+# DeepSeek's thinking mode is ON BY DEFAULT, `max_tokens` defaults to 2048, and
+# DeepSeek bills the hidden reasoning INSIDE that cap. Every one of the four
+# came back `finish_reason: "length"`, `content: ""`, and 2048 of 2048
+# completion tokens spent on `reasoning_tokens` - so pressing "Try the cloud
+# model" on the hardest question the router will ever offer bought a blank
+# screen, $0.0099 for the four. The field was never read anywhere: on that
+# day's `main`, `git grep -n reasoning_content` matched nothing at all, so the
+# working-out was thrown away and the empty `content` was everything the apps,
+# and this file, ever saw.
+#
+# THE OWNER'S DECISION (2026-10-14): when the visible answer is empty and the
+# reply carries the model's reasoning, SHOW THE REASONING - rather than turn
+# his thinking off or change what he is billed for. So this is a FALLBACK and
+# never a replacement: a reply with any visible text is untouched, byte for
+# byte, and the only replies this can ever change are the ones that would
+# otherwise be a blank card. Nothing about the request changes with it - not
+# the cap, not `reasoning_effort`, not the money - and the tokens recorded are
+# the service's own `usage` figures exactly as they were.
+#
+# WHY IT IS MARKED, AND WHY IN THE TEXT. A reasoning-only reply is NOT an
+# answer and the owner must not read one as the other, so the working-out is
+# shown under one line that says what it is. A flag in the reply's headers was
+# the other candidate and was turned down: on a STREAMED reply the headers are
+# on the wire before the first byte of the body, so the flag could not be
+# known at the moment it would have to be written, and a flag that is there
+# only sometimes is worse than one honest line. A line of text reaches every
+# client - the HUD page, the desktop's main window, the phone - with no change
+# to any of them.
+REASONING_NOT_ANSWER = ("The cloud model ran out of room before it wrote an answer. "
+                        "Here is its working-out instead:")
+#: Said when there is neither an answer nor any working-out to show, so a turn
+#: that produced nothing is never left as an empty card.
+NO_ANSWER_AT_ALL = "The cloud model did not send an answer this time."
+
 
 class MoneyFileError(RuntimeError):
     """The money file is there but cannot be read: nothing is used until
@@ -946,9 +986,21 @@ def set_price(pid: str, model: str, pin, pout) -> dict:
         data["prices"].setdefault(pid, {})[model] = {
             "in": a, "out": b, "set": time.strftime("%Y-%m-%d", time.localtime(_now()))}
         _save(data)
+    # A price of zero is allowed - a service can genuinely cost nothing - but it
+    # is the one price that makes the monthly money limit unenforceable: every
+    # answer is counted as free, so `money_check` can never reach the limit and
+    # never refuses the lane. Said out loud here rather than left for the owner
+    # to discover, because the command line is the only way in and the silence
+    # is what made this a finding (`E5` in the 2026-10-07 cloud-lane audit).
+    free = (a == 0 and b == 0)
     return {"ok": True, "said": f"{PRESETS[pid].company}, model {model}: ${a:g} per million "
                                 f"word-pieces in, ${b:g} out. Jarvis uses this price from the "
-                                f"next answer; what is already counted stays as it was."}
+                                f"next answer; what is already counted stays as it was."
+                                + ("" if not free else
+                                   " Both prices are zero, so every answer counts as free and the "
+                                   "monthly money limit cannot be reached for this model: it is "
+                                   "recorded, not enforced. Set a real price if you want it to "
+                                   "hold.")}
 
 
 def reset_price(pid: str, model: str) -> dict:
@@ -1359,6 +1411,17 @@ class ApiChatbot(CB.Adapter):
                    and _finish_reason(got) == "length")
         with self._lock:
             self._cut_off = cut
+        # reasoning-fallback (the owner's decision, 2026-10-14; the block at
+        # the top of this file has the measurement): an empty answer with the
+        # model's working-out under it is shown, marked, rather than read as
+        # "answered nothing". The money above was counted from the service's
+        # own figures and the ORIGINAL text, so what this turn costs cannot
+        # move because of it - and a reply with any visible text never
+        # reaches this line at all.
+        if (text is None or not text.strip()) and not tool_calls(got):
+            shown, from_reasoning = reasoning_answer(got)
+            if from_reasoning:
+                text = shown
         if cut and (text is None or not text.strip()):
             raise ApiUnavailable(CUT_OFF_EMPTY.format(name=self.name), "cut_off")
         if text is None:
@@ -1426,6 +1489,271 @@ def _content(got: dict) -> Optional[str]:
                  if isinstance(p, dict) and p.get("type") in ("text", "output_text")]
         return "".join(parts) if parts else None
     return None
+
+
+def _text_of(value) -> str:
+    """One `content` field as a string: a string, or a list of text parts.
+
+    The list shape is OpenAI's own ("content": [{"type": "text", "text": ...}]),
+    which some services answer with; anything else is not text and reads ""."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return "".join(str(p.get("text") or "") for p in value
+                       if isinstance(p, dict) and p.get("type") in ("text", "output_text"))
+    return ""
+
+
+def visible_and_reasoning(got: dict) -> tuple:
+    """(the answer text, the model's hidden working-out) of one reply or chunk.
+
+    Both are strings, and "" means the field was not there. `message` is read
+    before `delta`, so a whole reply and a streamed chunk are the same call.
+    The reasoning is DeepSeek's own `reasoning_content` - measured 2026-10-14,
+    this is the only place in this program that reads it, and it is read only
+    to be shown when there is nothing else (see `REASONING_NOT_ANSWER`)."""
+    if not isinstance(got, dict):
+        return "", ""
+    choices = got.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        return "", ""
+    text = reasoning = ""
+    for key in ("message", "delta"):        # a whole reply, then a streamed chunk
+        part = choices[0].get(key)
+        if not isinstance(part, dict):
+            continue
+        text = text or _text_of(part.get("content"))
+        reasoning = reasoning or _text_of(part.get("reasoning_content"))
+    return text, reasoning
+
+
+def reasoning_answer(got: dict) -> tuple:
+    """(what to show, whether that is the working-out) for a WHOLE reply.
+
+    The owner's rule of 2026-10-14, in one place: a reply with visible text is
+    returned as it is and never touched; a reply with none but with the model's
+    reasoning is returned marked; a reply with neither is ("", False), which
+    leaves the caller's own "answered nothing" words to do their job."""
+    text, reasoning = visible_and_reasoning(got)
+    if text.strip():
+        return text, False
+    said = reasoning.strip()
+    if said:
+        return REASONING_NOT_ANSWER + "\n\n" + said, True
+    return "", False
+
+
+def _is_reply(got) -> bool:
+    """Whether a body has the one shape this file may rewrite: a `choices`
+    list whose first entry carries a `message` or a `delta`."""
+    if not isinstance(got, dict):
+        return False
+    choices = got.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        return False
+    return (isinstance(choices[0].get("message"), dict)
+            or isinstance(choices[0].get("delta"), dict))
+
+
+def tool_calls(got) -> bool:
+    """Whether a reply or chunk carries the model asking for a tool.
+
+    A tool call IS the model's answer - `content` is empty by design - so a
+    reply carrying one is never rewritten and never counted as blank: the
+    fallback is for a reply that said NOTHING, and a model that asked for a
+    tool said something. No cloud lane offers tools today (jarvis_hud builds
+    every request from model, messages, stream, temperature and max_tokens
+    alone), so this cannot fire in practice; it is here because "only when
+    there is no answer at all" has to hold for a shape this file does not
+    build itself."""
+    if not isinstance(got, dict):
+        return False
+    choices = got.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        return False
+    for key in ("message", "delta"):
+        part = choices[0].get(key)
+        if isinstance(part, dict) and part.get("tool_calls"):
+            return True
+    return False
+
+
+def _next_event(raw: bytes) -> tuple:
+    """(one whole SSE event, what is left) - or (b"", raw) when no event is whole.
+
+    An event ends at a blank line, and SSE allows either `\\n\\n` or
+    `\\r\\n\\r\\n`. Both are handled here rather than one of them, because a
+    reader that knew only `\\n\\n` would quietly hold the whole stream and add
+    nothing to it: no corruption, but the fallback would not fire on a service
+    that used the other ending. The event is returned with its own blank line,
+    so an untouched stream stays byte for byte what came in."""
+    unix = raw.find(b"\n\n")
+    dos = raw.find(b"\r\n\r\n")
+    if dos >= 0 and (unix < 0 or dos < unix):
+        return raw[:dos + 4], raw[dos + 4:]
+    if unix >= 0:
+        return raw[:unix + 2], raw[unix + 2:]
+    return b"", raw
+
+
+def _added_chunk(text: str) -> bytes:
+    """One SSE chunk carrying `text`, in the shape every reader here parses.
+
+    The shape is the service's own: `choices[0].delta.content`, with no
+    `finish_reason`, so a reader treats it as more of the answer rather than as
+    the end of it. Nothing about the model, the usage or the cap is invented:
+    this chunk is not part of what the service sent or charged for."""
+    payload = {"choices": [{"index": 0, "delta": {"content": text}, "finish_reason": None}]}
+    return b"data: " + json.dumps(payload, ensure_ascii=False).encode("utf-8") + b"\n\n"
+
+
+class CloudAnswer:
+    """Reads a cloud service's reply and makes sure a blank one is not what
+    the owner sees when the model wrote its working-out instead.
+
+    Feed it every chunk as it arrives and write what it returns; call `close()`
+    when the service has finished and write that too. What it does:
+
+      * a reply with visible text is passed through UNCHANGED, byte for byte,
+        with nothing held back - an ordinary answer keeps the bytes and the
+        latency it had before this existed;
+      * a reply whose only text is the working-out is given ONE line naming it
+        (`REASONING_NOT_ANSWER`), then that working-out;
+      * a reply with neither is given one plain sentence (`NO_ANSWER_AT_ALL`),
+        because an empty card is not a report;
+      * anything it cannot read is passed through untouched. A filter that lost
+        an answer would be far worse than the blank it exists to fix.
+
+    `streamed=True` for a `text/event-stream` body, `False` for one whole JSON
+    reply. In the streamed case the events that END the stream (a
+    `finish_reason`, `data: [DONE]`) are held back until `close()`, so the
+    added text lands BEFORE the client is told the answer is over: every reader
+    this program has finalizes on that event and would drop anything written
+    after it. `used_reasoning` says whether the working-out is what was shown.
+    """
+
+    def __init__(self, streamed: bool) -> None:
+        self.streamed = bool(streamed)
+        #: True once the working-out has been shown as the answer. Read by
+        #: whoever wants to say so somewhere else too; never set otherwise.
+        self.used_reasoning = False
+        self._raw = b""          # read, not yet written
+        self._held: list = []    # whole events that would end the stream
+        self._hidden: list = []  # the working-out, in the order it arrived
+        self._visible = False    # has anything that counts as an answer been seen?
+        self._ended = False      # has the stream said it is finished?
+
+    # ---- the wire --------------------------------------------------------
+    def feed(self, chunk: bytes) -> bytes:
+        """What to write for one chunk read from the service. `b""` means
+        "nothing yet": what is withheld is written by `close()`."""
+        if not chunk:
+            return b""
+        self._raw += chunk
+        if not self.streamed:
+            return b""                      # one JSON body: decided at the end
+        out = []
+        while True:
+            event, rest = _next_event(self._raw)
+            if not event:
+                break
+            self._raw = rest
+            self._read_event(event)
+            if self._ended and not self._visible:
+                self._held.append(event)     # written after the added text
+            else:
+                out.append(event)
+        return b"".join(out)
+
+    def close(self) -> bytes:
+        """Whatever is still to be written once the service has finished."""
+        raw, self._raw = self._raw, b""
+        if not self.streamed:
+            return self._whole_body(raw)
+        out = []
+        if not raw and not self._visible and self._ended:
+            # The reply ended, said so, and carried no answer: the one case
+            # this exists for. `raw` empty means it ended on an event
+            # boundary; a stream that stopped mid-event is a fragment, and the
+            # client's own "interrupted" handling is the honest answer for it.
+            out.append(self._added())
+        out.extend(self._held)
+        self._held = []
+        if raw:
+            out.append(raw)                  # never drop a byte
+        return b"".join(out)
+
+    # ---- reading it ------------------------------------------------------
+    def _read_event(self, event: bytes) -> None:
+        """Read one whole SSE event: what it says, and whether it ends the
+        stream. A `data:` line that is not JSON is text - every reader in this
+        program renders one as a raw token, so it counts as a visible answer."""
+        for line in event.split(b"\n"):
+            line = line.strip()
+            if not line.startswith(b"data:"):
+                continue
+            body = line[5:].strip()
+            if body == b"[DONE]":
+                self._ended = True
+                continue
+            try:
+                got = json.loads(body.decode("utf-8", "replace"))
+            except ValueError:
+                self._visible = True
+                continue
+            if not isinstance(got, dict):
+                continue
+            text, reasoning = visible_and_reasoning(got)
+            if text.strip() or tool_calls(got):
+                # A tool call is an answer of its own kind: nothing is added
+                # to a reply that already said something.
+                self._visible = True
+            if reasoning:
+                self._hidden.append(reasoning)
+            if (_finish_reason(got) or got.get("done") is True
+                    or got.get("finished") is True):
+                self._ended = True
+
+    def _added(self) -> bytes:
+        """The chunk that stands in for an answer that was never written."""
+        said = "".join(self._hidden).strip()
+        if said:
+            self.used_reasoning = True
+            return _added_chunk(REASONING_NOT_ANSWER + "\n\n" + said)
+        return _added_chunk(NO_ANSWER_AT_ALL)
+
+    def _whole_body(self, raw: bytes) -> bytes:
+        """One whole JSON reply, rewritten only when it has no answer in it.
+
+        A reply with any visible text is returned as the very bytes that came
+        in - not re-serialised, not re-ordered. A body that is an error, an
+        unfamiliar shape or not JSON at all is returned the same way."""
+        if not raw:
+            return raw
+        try:
+            got = json.loads(raw.decode("utf-8", "replace"))
+        except ValueError:
+            return raw
+        if not _is_reply(got):
+            return raw
+        text, reasoning = visible_and_reasoning(got)
+        if text.strip() or tool_calls(got):
+            return raw
+        said = reasoning.strip()
+        if said:
+            self.used_reasoning = True
+            shown = REASONING_NOT_ANSWER + "\n\n" + said
+        else:
+            shown = NO_ANSWER_AT_ALL
+        try:
+            choice = got["choices"][0]
+            part = choice.get("message")
+            if not isinstance(part, dict):
+                part = choice["delta"]
+            part["content"] = shown
+            return json.dumps(got, ensure_ascii=False).encode("utf-8")
+        except Exception:                    # pragma: no cover - never lose a body
+            return raw
 
 
 # ============================================================================

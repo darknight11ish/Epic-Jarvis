@@ -237,6 +237,8 @@ TITLES = {
     "register_approval_key": "let a phone approve risky actions with its fingerprint or PIN",
     # --- the app builder (docs/APP-BUILDER-DESIGN.md)
     "app_merge_change": "add its change to one of your apps",
+    # --- action receipts (2026-10-14): putting one recorded change back
+    "undo_action": "put back a change it made",
     # --- helpers and anything else a tool asks for
     "agent_spawn": "start a helper task",
     "agent_kill": "stop a helper task",
@@ -389,6 +391,8 @@ SUMMARY = {
     "register_approval_key": "let a phone approve with its fingerprint",
     # --- the app builder
     "app_merge_change": "add its change to one of your apps",
+    # --- action receipts (2026-10-14): putting one recorded change back
+    "undo_action": "put back the change shown",
     # --- helpers and anything else a tool asks for
     "agent_spawn": "start a helper task",
     "agent_kill": "stop a helper task",

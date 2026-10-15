@@ -49,6 +49,8 @@ import types
 import zipfile
 from pathlib import Path
 
+import datetime as _dt
+
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 sys.path.insert(0, str(HERE))
@@ -439,6 +441,98 @@ def t_overlapping_exports_count_once():
     both, once = SP.combine([a, b])
     check("overlap 1 + 2 has the same rows as the full export",
           sorted((t.date, t.cents, t.desc) for t in both) == sorted((t.date, t.cents, t.desc) for t in full))
+
+
+def t_a_row_ingested_twice_is_a_no_op_the_second_time():
+    """The row fingerprint: the same row ingested twice counts once, two real
+    identical charges on one day count twice, and money is whole cents."""
+    d1, d2 = _dt.date(2026, 3, 5), _dt.date(2026, 3, 6)
+    one = [SP.Txn(d1, -350, "COSTA COFFEE", "GBP"), SP.Txn(d2, -1200, "TESCO STORES", "GBP")]
+    led = SP.RowLedger()
+    kept, dup = led.ingest(one)
+    check("a first ingest keeps every row", len(kept) == 2 and dup == 0 and len(led) == 2,
+          (len(kept), dup, len(led)))
+    again, dup2 = led.ingest(one)
+    check("the same rows ingested again are a no-op (every one a duplicate)",
+          again == [] and dup2 == 2 and len(led) == 2, (again, dup2, len(led)))
+    # Two genuinely identical charges on one day are two transactions: what tells
+    # them apart is the intra-day occurrence, not the amount.
+    coffees = [SP.Txn(d1, -350, "COSTA COFFEE", "GBP")] * 2
+    led2 = SP.RowLedger()
+    kept, dup = led2.ingest(coffees)
+    check("two identical charges on one day are two transactions, not one",
+          len(kept) == 2 and dup == 0 and len(led2) == 2, (len(kept), dup, len(led2)))
+    fp0 = SP.row_fingerprint(d1, -350, "COSTA COFFEE", 0)
+    fp1 = SP.row_fingerprint(d1, -350, "COSTA COFFEE", 1)
+    check("... and their fingerprints differ by the intra-day occurrence", fp0 != fp1, (fp0, fp1))
+    both, once = SP.combine([coffees, list(coffees)])
+    check("... and two exports of those two coffees count two, never four",
+          len(both) == 2 and once == 2, (len(both), once))
+    # A changed description is a different row.
+    led3 = SP.RowLedger()
+    led3.ingest([SP.Txn(d1, -350, "COSTA COFFEE", "GBP")])
+    kept, dup = led3.ingest([SP.Txn(d1, -350, "COSTA COFFEE LONDON", "GBP")])
+    check("a changed description is a different row", len(kept) == 1 and dup == 0, (kept, dup))
+    pair, once = SP.combine([[SP.Txn(d1, -350, "COSTA COFFEE", "GBP")],
+                            [SP.Txn(d1, -350, "COSTA COFFEE LONDON", "GBP")]])
+    check("... so an export that renamed a shop adds a row, never removes one",
+          len(pair) == 2 and once == 0, (len(pair), once))
+    # The normalisation is documented folding, and exact equality after it.
+    check("punctuation, case, width and accents fold, and nothing else does",
+          SP.normalise_description("  COSTA--Coffee  #12 ") == "costa coffee 12"
+          and SP.normalise_description("ＣＯＳＴＡ") == "costa"
+          and SP.normalise_description("CAFÉ") == "cafe"
+          and SP.normalise_description("A_B") == "a b"
+          and SP.normalise_description(None) == "",
+          [SP.normalise_description(x) for x in ("  COSTA--Coffee  #12 ", "ＣＯＳＴＡ", "CAFÉ",
+                                                 "A_B", None)])
+    check("it is equality, never approximation: COSTA is not COSTCO",
+          SP.normalise_description("COSTA") != SP.normalise_description("COSTCO"))
+    rows, once = SP.combine([[SP.Txn(d1, -1200, "TESCO-STORES #12", "GBP")],
+                             [SP.Txn(d1, -1200, "Tesco Stores 12", "GBP")]])
+    check("the same shop written with other punctuation and case is the same row",
+          len(rows) == 1 and once == 1, (len(rows), once))
+    check("the same row gives the same fingerprint on every run",
+          SP.row_fingerprint(d1, -350, "COSTA COFFEE", 0) == fp0
+          and SP.row_fingerprint(d1, -350, " COSTA coffee ", 0) == fp0
+          and len(fp0) == 64 and all(c in "0123456789abcdef" for c in fp0), fp0)
+    # Whole cents, exactly: an amount that is not is refused, never rounded.
+    try:
+        SP.row_fingerprint(d1, -3.5, "COSTA", 0)
+        refused = False
+    except ValueError:
+        refused = True
+    check("an amount that is not whole cents is refused, never rounded", refused)
+    try:
+        SP.row_fingerprint(d1, -350, "COSTA", -1)
+        refused_bad_occ = False
+    except ValueError:
+        refused_bad_occ = True
+    check("an occurrence below zero is refused", refused_bad_occ)
+    check("a cent's difference is a different row",
+          SP.row_fingerprint(d1, -350, "COSTA", 0) != SP.row_fingerprint(d1, -351, "COSTA", 0))
+    check("an amount read from a file is whole cents, as an int",
+          isinstance(M.parse_money("-3.50"), int) and M.parse_money("-3.50") == -350)
+    check("the fingerprint is over the whole cents, never over text that could drift",
+          SP.row_fingerprint(d1, 350, "COSTA", 0) != SP.row_fingerprint(d1, -350, "COSTA", 0))
+    # Two currencies are two rows, whatever the words say.
+    led4 = SP.RowLedger()
+    led4.ingest([SP.Txn(d1, -1000, "SHOP", "GBP")])
+    kept, dup = led4.ingest([SP.Txn(d1, -1000, "SHOP", "EUR")])
+    check("the same amount in two currencies is two rows", len(kept) == 1 and dup == 0, (kept, dup))
+    # Which export is read first never changes the answer.
+    a1, n1 = SP.combine([[SP.Txn(d1, -350, "C", "GBP"), SP.Txn(d1, -350, "C", "GBP")],
+                         [SP.Txn(d1, -350, "C", "GBP")]])
+    a2, n2 = SP.combine([[SP.Txn(d1, -350, "C", "GBP")],
+                         [SP.Txn(d1, -350, "C", "GBP"), SP.Txn(d1, -350, "C", "GBP")]])
+    check("the union of overlapping exports does not depend on the order they are read",
+          len(a1) == len(a2) == 2 and n1 == n2 == 1, (len(a1), len(a2), n1, n2))
+    # And the fingerprints themselves leave no words behind.
+    led5 = SP.RowLedger()
+    led5.ingest([SP.Txn(d1, -350, "SECRET SHOP LTD", "GBP")])
+    check("the ledger keeps fingerprints, never a row's own words",
+          not any("SECRET" in str(x).upper() or "secret" in str(x)
+                  for x in led5._seen), led5._seen)
 
 
 def t_no_float_in_the_money_code():
