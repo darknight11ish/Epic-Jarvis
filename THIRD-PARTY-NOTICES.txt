@@ -76,6 +76,37 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+SKILLS ADAPTED FROM OTHER PROJECTS (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+OpenAI's `pdf` skill (openai/skills), Apache-2.0 -
+https://github.com/openai/skills/tree/main/skills/.curated/pdf
+  One agent skill, adapted by hand into skills/pdf-workflow/SKILL.md for Jarvis.
+  The upstream skill is a Markdown file of instructions - there is no code in
+  it, and none of its files are shipped as they are. What was KEPT is the shape:
+  render the pages and look at them rather than trusting extracted text, agree
+  the plan before generating, re-render after every change, and the list of what
+  "finished" means (no clipped text, no broken tables, no placeholder strings,
+  ASCII hyphens only). What was CHANGED is everything that assumed a terminal:
+  its `brew`/`apt-get`/`uv pip install` instructions became "these packages must
+  already be on this PC, and Jarvis does not install packages on its own", and
+  every tool it reaches for is now named with Jarvis's OWN tool vocabulary
+  (`my_files`, `file_read`, `shell_exec`, `propose_plan`) instead of upstream's
+  shell commands. Nothing in it is executable and it grants no permission: each
+  `shell_exec` it describes still goes through the approval gate on its own.
+  Its LICENSE.txt is the unmodified Apache License, Version 2.0 (the
+  "Copyright [yyyy] [name of copyright owner]" line at its end is not filled in)
+  and the repository carries no NOTICE file. Read on 2026-10-15 from
+  openai/skills at main; that repository's README states the licence of an
+  individual skill is in `<skill>/LICENSE.txt`, and its root has no licence
+  file. Its README also says the repository is deprecated. The full Apache-2.0
+  text is given below, under LICENCE TEXTS.
+  NOT included, and named here so the gap is not silent: `skill-creator` and
+  `grill-me` were considered for the same bundle and are NOT vendored.
+  `skill-creator` has no source in openai/skills at all (its curated folder
+  holds `cli-creator`, not `skill-creator`), and the repository that really has
+  it carries no licence file; `grill-me`'s published copy is GPL-3.0, not the
+  MIT it was believed to be, and a copyleft licence is the owner's decision.
+
 "HEY JARVIS" - MODEL FILES AND LIBRARIES (not generated - keep when regenerating)
 ---------------------------------------------------------------------------
 openWakeWord pre-trained models, release v0.5.1 -
