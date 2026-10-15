@@ -30,37 +30,52 @@ the snapshot still matches the owner's file today. Re-verify against the
 real file before trusting this patch on a PC whose jarvis_hud.py has
 changed around that line since 2026-09-27.
 
-THAT FIXTURE IS NOW AN INPUT PLUS ONE INSERTED LINE, NOT A QUOTE.
+THE PROJECT MODE GATE, AND THE 500 THIS FILE FIRST MISSED
 
-`lanes=<the Project Mode gate>` was inserted (2026-10-15) between
-`budget=budget,` and `owner_said_yes=...`, inside the SAME hunk, because a
-second `.patch` file costs registration in three lists plus a 27-file
-catalogue regeneration. So `_PRE` below is still the fifteen verified lines
-and `_POST` is what the patch makes of them. `t_the_guard_is_the_patch_s_own`
-reads the guard line back OUT of the patch file it is testing - never a
-hand-typed copy - so a fixture that drifted from the patch cannot pass, and
-`t_the_guard_survives_removal` shows that check going red when the guard is
-deleted. What is still NOT proven here: that the owner's file at that point
-in the stack is byte-for-byte `_PRE`. Only a PC holding his jarvis_hud.py
-can say that.
+`lanes=<the Project Mode gate>` was added (2026-10-15) ON the existing
+`lanes=` line inside the SAME hunk, because a second `lanes=` argument is a
+duplicate keyword argument - a SyntaxError, so the backend would not start -
+and a second `.patch` file costs registration in three lists plus a
+catalogue regeneration. `t_the_patch` re-applies it to the real pre-image and
+reverses it; `t_the_patch_counts_match` keeps the `@@` header honest, which
+is what `git apply` refuses the whole file over.
 
-THE ONE THING THIS PATCH ADDS TO POLICY, AND WHY IT IS STILL SAFE
+THE INSTRUMENT WAS BROKEN AND THIS FILE PASSED OVER A 500 ON THE COMMON
+PATH. As first committed (9a596c4f), the guard called
+`jarvis_projects.get().get(jarvis_projects.active_project_id())` with no test
+on the id first. `Projects._project_row` raises `KeyError(pid)` for an id
+that is not a string, and `active_project_id()` is `None` on EVERY turn with
+no Project Mode active - so that line was a 500 on an ordinary chat turn, not
+only on a deleted-project one. It survived this suite because `_stub_projects`
+answered for ANY pid handed to it, `None` included: a stub that models nothing
+cannot fail. Both halves are now fixed and both are pinned:
 
-`lanes` is a request, not a grant: `choose()` decides, and every one of its
-privacy gates reads that list. So any expression that can only ever return
-`[]` or the list it was handed can only ever REMOVE a lane - it cannot add
-one, and it cannot talk a gate out of a refusal. `t_lanes_can_only_be_removed`
-measures exactly that over every state the gate can be in, including the
-"Shareable is on" case, which is where a mistake WOULD add one.
+  * the id is tested before it is used - `isinstance(..., str) and bool(p)` -
+    so None, "" and a non-string id all answer `[]` without reaching `get()`;
+    `t_the_ordinary_turn_does_not_raise` asserts the store is never asked, and
+    `t_the_old_expression_fails_this_suite` runs the OLD expression through the
+    same stub and shows it raising `KeyError(None)`.
+  * `_stub_projects` now raises exactly as `Projects._project_row` does, for a
+    non-string pid and for an id with no row;
+    `t_the_stub_the_old_suite_used_could_not_see_it` is what says so.
+
+One state is still not survived, and is pinned rather than hidden: an
+id-shaped pointer whose row is gone (a `projects.db` restored from an older
+backup) still reaches `get()` and raises. A single expression cannot catch an
+exception. The ORDINARY way that state was created - deleting the active
+project - is closed by `fix/active-project-deleted` (29a9cf81, merged into
+this branch): `Projects._delete` clears the mode file, measured end-to-end in
+`t_the_deleted_active_project_clears_project_mode` against the real module.
 
 The guard reads the project's Shareable flag through `jarvis_projects`, and
 it does its own `import` inside the inserted line, so `backend/`'s copy of
 this file never needs `jarvis_projects` to be an importable name at module
-scope. No active project, and no `jarvis_projects.py` at all, both end in
-`[]` - local. One state does still raise, and it is measured rather than
-hidden: `jarvis_projects.get().get(pid)` raises `KeyError` for a project
-that was deleted while it was still the active one (the mode file keeps the
-id). `_s4`'s finding, reported up rather than papered over.
+scope. No active project, an id that is not a string, and no
+`jarvis_projects.py` at all all end in `[]` - local.
+
+What is still NOT proven here: that the owner's file at that point in the
+stack is byte-for-byte `_PRE`. Only a PC holding his jarvis_hud.py can say
+that.
 
 `jarvis_router.choose()`'s own `owner_said_yes` gate - what actually makes
 a "yes" safe (every privacy gate still runs first, in order) - is real,
@@ -73,6 +88,7 @@ in the right place, doing nothing else.
 from __future__ import annotations
 
 import ast
+import re
 import shutil
 import subprocess
 import sys
@@ -154,12 +170,20 @@ _POST = '''\
                 # and the lanes that were passed are never added to. Nothing
                 # leaves this PC from a project until the owner has turned
                 # that project's Shareable switch on himself
-                # (docs/PROJECTS-DESIGN.md); no active project, and no
-                # jarvis_projects.py at all, both read as "not shareable" and
-                # stay local. jarvis_projects.get().get(pid) raises for a
-                # project deleted while still the active one, which
-                # backend/test_cloud_say_yes.py measures rather than hides.
-                lanes=[] if jarvis_side_memory else (lanes if (lambda m: hasattr(m, "active_project_id") and bool((m.get().get(m.active_project_id()) or {}).get("shareable")))(__import__("jarvis_projects")) else []),
+                # (docs/PROJECTS-DESIGN.md).
+                #
+                # THE ID IS TESTED BEFORE IT IS USED, and that is not
+                # tidiness: Projects.get() RAISES KeyError for an id that is
+                # not a string (Projects._project_row: "if not isinstance(pid,
+                # str) ... raise KeyError(pid)"), and active_project_id() is
+                # None on EVERY ordinary turn. Handing that None to get() is
+                # a KeyError out of the chat turn - measured against the real
+                # module, not assumed. So no active project, an empty id and
+                # a non-string id all answer "local" without ever reaching
+                # get(). An id that IS a string but is not a row would still
+                # raise; jarvis_projects' own delete path clears the mode file
+                # when it deletes the active project, so no such id is left.
+                lanes=[] if jarvis_side_memory else (lanes if (lambda m: hasattr(m, "active_project_id") and isinstance((p := m.active_project_id()), str) and bool(p) and bool((m.get().get(p) or {}).get("shareable")))(__import__("jarvis_projects")) else []),
                 has_image=bool(body.get("has_image")),
                 conversation_tainted=tainted,
                 budget=budget,
@@ -210,32 +234,59 @@ def _guard_expr(patch_text: str = None) -> str:
     return line[len("lanes="):].rstrip().rstrip(",").strip()
 
 
-def _stub_projects(pid, row, *, raises=None, has_module=True):
-    """A `jarvis_projects` good enough for the guard: which project is active,
-    and what one lookup of it answers. Returns the module object, so the test
-    can show it to the expression by putting it in sys.modules."""
+#: The id shape `jarvis_projects._ID` accepts. Copied from that module so the
+#: stub below refuses exactly what `Projects._project_row` refuses.
+_ID_LIKE = re.compile(r"^[0-9a-f]{32}$")
+
+
+def _stub_projects(pid, row, *, has_module=True, rows=None, raise_on_get=None):
+    """A `jarvis_projects` that behaves like the real one, not like a rubber
+    stamp: which project is active, and what a lookup really answers.
+
+    THE STUB IS AN INSTRUMENT AND WAS ONCE A BROKEN ONE. It used to return
+    `row` for ANY pid handed to it, `None` included - so the no-active-project
+    case, which is every ordinary turn, could never fail here while the REAL
+    `Projects.get()` raised `KeyError(None)` out of `Projects._project_row`
+    ("if not isinstance(pid, str) ... raise KeyError(pid)"). This suite passed
+    over a 500 on the common path. It now raises the way the real store does:
+    a pid that is not a string at all, or an id that is not a row, both raise
+    `KeyError(pid)`. Nothing is returned for a pid the real store would refuse.
+    """
     mod = types.ModuleType("jarvis_projects")
     if has_module:
         mod.active_project_id = lambda: pid
+        known = dict(rows or {})
 
         class _Store:
             def get(self, pid_asked):
-                if raises is not None:
-                    raise raises
-                return row
+                if raise_on_get is not None:
+                    raise (
+                        KeyError(pid_asked) if raise_on_get is True else raise_on_get
+                    )
+                if not isinstance(pid_asked, str) or not _ID_LIKE.match(pid_asked):
+                    # Projects._project_row, word for word.
+                    raise KeyError(pid_asked)
+                if pid_asked not in known:
+                    # ... and its second raise, for an id with no row.
+                    raise KeyError(pid_asked)
+                return known[pid_asked]
 
         mod.get = lambda: _Store()
     sys.modules["jarvis_projects"] = mod
     return mod
 
 
-def _lanes_from_patch(*, pid, row, raises=None, has_module=True, memory=False,
-                      lanes=None):
+def _lanes_from_patch(*, pid, row=None, rows=None, has_module=True, memory=False,
+                      lanes=None, raise_on_get=None):
     """Evaluate the patch's own guard line exactly as the installed HUD would.
 
     `jarvis_projects` is put in sys.modules first, so the line's own
-    `__import__("jarvis_projects")` finds this stub on any machine."""
-    _stub_projects(pid, row, raises=raises, has_module=has_module)
+    `__import__("jarvis_projects")` finds this stub on any machine. `row` is
+    shorthand for "this one id has this row"; `rows` is the whole table."""
+    if rows is None:
+        rows = {} if row is None else ({pid: row} if isinstance(pid, str) else {})
+    _stub_projects(pid, row, has_module=has_module, rows=rows,
+                   raise_on_get=raise_on_get)
     expr = _guard_expr()
     return eval(expr, {"jarvis_side_memory": memory,
                        "lanes": list(LANES if lanes is None else lanes)})
@@ -409,17 +460,41 @@ def t_the_guard_is_the_patch_s_own():
         check("... and the guard is valid Python on its own", False, str(exc))
 
 
+_PID = "0123456789abcdef0123456789abcdef"
+_SHARED = {"id": _PID, "shareable": True}
+_UNSHARED = {"id": _PID, "shareable": False}
+#: A second, different id, so "some other project is the active one" is a real
+#: state and not the same string under another name.
+_OTHER = "fedcba9876543210fedcba9876543210"
+
+
 def t_lanes_can_only_be_removed():
     """THE BITE THAT MATTERS: over every state the gate can be in, the value
     handed to choose() is either exactly the list that was passed in, or `[]`.
     Nothing else is reachable, so the guard can never ADD a lane - and a
     Shareable project really does keep its lanes, so the guard is not just
-    always returning `[]`."""
+    always returning `[]`.
+
+    Every case below goes through the stub that RAISES the way the real store
+    raises, and `rows` is filled in ONLY for ids that really have a row. Every
+    state listed is one the guard can really meet: with
+    `fix/active-project-deleted` merged, `Projects._delete` clears the mode
+    file when it deletes the active project, so an id whose row is gone is not
+    a state this line has to survive - see
+    `t_an_id_shaped_pointer_with_no_row` for the one that is left."""
     cases = [
-        ("Project Mode off", dict(pid=None, row=None)),
-        ("active, Shareable off (the default)", dict(pid="p1", row={"id": "p1", "shareable": False})),
-        ("active, Shareable on", dict(pid="p1", row={"id": "p1", "shareable": True})),
-        ("active, no jarvis_projects.py", dict(pid="p1", row=None, has_module=False)),
+        ("Project Mode off (active is None)",
+         dict(pid=None, rows={})),
+        ("active is the empty string",
+         dict(pid="", rows={})),
+        ("active is not a string at all",
+         dict(pid=17, rows={})),
+        ("active, Shareable off (the default)",
+         dict(pid=_PID, rows={_PID: _UNSHARED})),
+        ("active, Shareable on",
+         dict(pid=_PID, rows={_PID: _SHARED})),
+        ("active, no jarvis_projects.py",
+         dict(pid=_PID, rows={_PID: _SHARED}, has_module=False)),
     ]
     rows = []
     for name, kw in cases:
@@ -443,16 +518,117 @@ def t_lanes_can_only_be_removed():
     check("a project that is NOT Shareable loses every cloud lane",
           bool(off) and off[0][2] == [], off)
     check("... and an empty lane list stays empty in every state",
-          all(_empty_stays_empty(name) for name, _ in cases), "")
+          all(_empty_stays_empty(name) for name in
+              [n for n, _ in cases]), "")
+
+
+def t_an_id_shaped_pointer_with_no_row():
+    """WHAT IS STILL NOT SURVIVED, said plainly instead of left implicit.
+
+    An id that is a real 32-hex id but has no row (a `projects.db` restored
+    from an older backup, or a mode file edited by hand) still reaches
+    `Projects.get()` and raises `KeyError(id)`. A single expression cannot
+    catch an exception, and the ORDINARY way that state was created -
+    deleting the active project - is closed by
+    `fix/active-project-deleted` (29a9cf81): measured in
+    `t_the_deleted_active_project_clears_project_mode`, `active_project_id()`
+    answers None afterwards, which the guard's own test handles. This check
+    pins the leftover behaviour so nobody has to guess at it later."""
+    saved = sys.modules.get("jarvis_projects")
+    try:
+        _stub_projects(_OTHER, None, rows={_PID: _SHARED})
+        try:
+            got = eval(_guard_expr(), {"jarvis_side_memory": False,
+                                       "lanes": list(LANES)})
+            raised = None
+        except Exception as exc:                # noqa: BLE001
+            got, raised = None, exc
+    finally:
+        _restore_modules(saved)
+    check("an id-shaped pointer with no row still raises (measured, not hidden)",
+          isinstance(raised, KeyError), (raised, got))
+
+
+def t_the_ordinary_turn_does_not_raise():
+    """THE 500 THAT WAS SHIPPING IN THIS LINE, measured. `Projects.get()` raises
+    `KeyError` for an id that is not a string, and `active_project_id()` is
+    `None` on every turn with no Project Mode active - so a guard that hands
+    that None straight to `get()` takes down the common path, not just the
+    deleted-project one. The id must be tested BEFORE it is used.
+
+    The check is written so it FAILS on the old shape of the line: it asserts
+    both that nothing raises AND that the store was never asked at all."""
+    line = _guard_line()
+    check("the guard tests the id before it uses it",
+          "isinstance(" in line and "active_project_id()" in line,
+          "no isinstance guard: a None or non-string id would reach get()")
+    for label, pid in (("no project active (None, every ordinary turn)", None),
+                       ("the empty string", ""),
+                       ("an int where an id belongs", 17)):
+        saved = sys.modules.get("jarvis_projects")
+        asked = []
+        try:
+            _stub_projects(pid, None, rows={})
+            real_get = sys.modules["jarvis_projects"].get
+
+            class _Recording:
+                def get(self, pid_asked):
+                    asked.append(pid_asked)
+                    return real_get().get(pid_asked)
+
+            sys.modules["jarvis_projects"].get = lambda: _Recording()
+            try:
+                got = eval(_guard_expr(), {"jarvis_side_memory": False,
+                                           "lanes": list(LANES)})
+                raised = None
+            except Exception as exc:            # noqa: BLE001
+                got, raised = None, exc
+        finally:
+            _restore_modules(saved)
+        check(f"{label}: the guard does not raise", raised is None,
+              f"{type(raised).__name__}: {raised}" if raised else "")
+        check(f"{label}: and the store is never asked for that id", asked == [], asked)
+        check(f"{label}: so the turn stays local", got == [], got)
+
+
+def t_the_stub_the_old_suite_used_could_not_see_it():
+    """BITE, and the reason this file went green while the line was broken: the
+    stub must refuse what the real store refuses. If it ever answers for None
+    or for an id with no row, `t_the_ordinary_turn_does_not_raise` can pass
+    over a real 500 and this check is what says so."""
+    saved = sys.modules.get("jarvis_projects")
+    try:
+        _stub_projects(None, None, rows={})
+        store = sys.modules["jarvis_projects"].get()
+        for label, pid_asked in (("None", None), ("an int", 17),
+                                 ("a string that is not an id", "p1"),
+                                 ("an id with no row", _OTHER)):
+            try:
+                store.get(pid_asked)
+                check(f"the stub raises KeyError for {label}, like _project_row", False,
+                      "it answered instead - this is the rubber stamp that hid the 500")
+            except KeyError:
+                check(f"the stub raises KeyError for {label}, like _project_row", True)
+        check("... and it still answers for an id that really has a row", True)
+        _stub_projects(_PID, None, rows={_PID: _UNSHARED})
+        check("... and it really does return the row for a live id",
+              sys.modules["jarvis_projects"].get().get(_PID) == _UNSHARED)
+    finally:
+        _restore_modules(saved)
 
 
 def _empty_stays_empty(name):
     """The one property that must hold everywhere: `[]` in, `[]` out - the
     memory-injection line's own promise, now covering the project gate too."""
-    kw = {"Project Mode off": dict(pid=None, row=None),
-          "active, Shareable off (the default)": dict(pid="p1", row={"id": "p1", "shareable": False}),
-          "active, Shareable on": dict(pid="p1", row={"id": "p1", "shareable": True}),
-          "active, no jarvis_projects.py": dict(pid="p1", row=None, has_module=False)}[name]
+    kw = {
+        "Project Mode off (active is None)": dict(pid=None, rows={}),
+        "active is the empty string": dict(pid="", rows={}),
+        "active is not a string at all": dict(pid=17, rows={}),
+        "active, Shareable off (the default)": dict(pid=_PID, rows={_PID: _UNSHARED}),
+        "active, Shareable on": dict(pid=_PID, rows={_PID: _SHARED}),
+        "active, no jarvis_projects.py": dict(pid=_PID, rows={_PID: _SHARED},
+                                              has_module=False),
+    }[name]
     for memory in (False, True):
         saved = sys.modules.get("jarvis_projects")
         try:
@@ -482,11 +658,10 @@ def t_the_guard_survives_removal():
     # patch would be left with.
     saved = sys.modules.get("jarvis_projects")
     try:
-        _stub_projects("p1", {"id": "p1", "shareable": False})
+        _stub_projects(_PID, None, rows={_PID: _UNSHARED})
         old = eval("[] if jarvis_side_memory else lanes",
                    {"jarvis_side_memory": False, "lanes": list(LANES)})
-        new = _lanes_from_patch(pid="p1", row={"id": "p1", "shareable": False},
-                                memory=False)
+        new = _lanes_from_patch(pid=_PID, rows={_PID: _UNSHARED}, memory=False)
     finally:
         _restore_modules(saved)
     check("with the guard, a not-Shareable active project offers NO lane",
@@ -497,25 +672,86 @@ def t_the_guard_survives_removal():
           old != new, (old, new))
 
 
-def t_the_deleted_active_project_is_not_hidden():
-    """The one state the guard still cannot survive, measured rather than
-    described. `jarvis_projects.get().get(pid)` raises KeyError for a project
-    deleted while it was still the active one - the mode file keeps the id.
-    THIS IS REPORTED, NOT FIXED HERE: the fix belongs to jarvis_projects'
-    delete path, not to a bigger expression in jarvis_hud.py."""
+def t_the_old_expression_fails_this_suite():
+    """THE BITE FOR THE NO-PROJECT FIX, run against the expression this branch
+    actually shipped in 9a596c4f.
+
+    That line called `m.get().get(m.active_project_id())` with no test on the
+    id first. With the stub now modelling the real store, it raises
+    `KeyError(None)` on the ordinary no-Project-Mode turn - which is exactly
+    what the real `Projects.get()` does, measured in this tree. The fixed line
+    answers `[]`. If the old shape ever passes these checks again, the stub has
+    gone back to being a rubber stamp."""
+    old_expr = ('([] if jarvis_side_memory else (lanes if (lambda m: hasattr(m,'
+                ' "active_project_id") and bool((m.get().get(m.active_project_id())'
+                ' or {}).get("shareable")))(__import__("jarvis_projects")) else []))')
     saved = sys.modules.get("jarvis_projects")
     try:
-        _stub_projects("p1", None, raises=KeyError("p1"))
+        _stub_projects(None, None, rows={})
         try:
-            _lanes_from_patch(pid="p1", row=None, raises=KeyError("p1"), memory=False)
-            raised = None
-        except KeyError as exc:
-            raised = exc
+            eval(old_expr, {"jarvis_side_memory": False, "lanes": list(LANES)})
+            old_raised = None
+        except Exception as exc:                # noqa: BLE001
+            old_raised = exc
     finally:
         _restore_modules(saved)
-    check("a deleted-but-active project makes the guard raise (measured in this tree)",
-          isinstance(raised, KeyError),
-          "if this stops raising, the expression changed shape - re-read the docstring")
+    saved = sys.modules.get("jarvis_projects")
+    try:
+        _stub_projects(None, None, rows={})
+        try:
+            fixed = eval(_guard_expr(), {"jarvis_side_memory": False,
+                                         "lanes": list(LANES)})
+            fixed_raised = None
+        except Exception as exc:                # noqa: BLE001
+            fixed_raised = exc
+    finally:
+        _restore_modules(saved)
+    check("the OLD line raises KeyError(None) on the no-project turn (the 500)",
+          isinstance(old_raised, KeyError), old_raised)
+    check("the FIXED line answers [] on the same state",
+          fixed_raised is None and fixed == [], (fixed_raised, fixed))
+    check("so the fix is measurable on this stub, not just asserted",
+          isinstance(old_raised, KeyError) and fixed == [], (old_raised, fixed))
+
+
+def t_the_deleted_active_project_clears_project_mode():
+    """The OTHER half of the reachable defect, and the reason it is folded in
+    here: `fix/active-project-deleted` (29a9cf81, merged into this branch) makes
+    `Projects._delete` clear the mode file when it deletes the ACTIVE project,
+    so `active_project_id()` can never answer an id whose row is gone. The
+    guard's own `isinstance` test covers None; the id that is a real-shaped
+    string with no row is this commit's job.
+
+    Measured against the REAL jarvis_projects from this tree, with its config
+    and db redirected into a scratch folder."""
+    real = Path(__file__).resolve().parent.parent / "jarvis-backend" / "jarvis_projects.py"
+    if not real.is_file():
+        print("skip  jarvis_projects.py is not in jarvis-backend/ here")
+        return
+    saved = sys.modules.pop("jarvis_projects", None)
+    scratch = Path(tempfile.mkdtemp(prefix="jarvis-s4-mode-"))
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("jarvis_projects_real", real)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        mod._config_dir = lambda: scratch
+        mod.db_path = lambda: scratch / "projects.db"
+        pid = mod.get().create({"name": "mode", "kind": "life"}, here=False)["id"]
+        mod.set_active_project(pid)
+        check("the real store has that project active",
+              mod.active_project_id() == pid, mod.active_project_id())
+        mod.get().delete_full(pid)
+        check("deleting the ACTIVE project leaves Project Mode (no dead id)",
+              mod.active_project_id() is None, mod.active_project_id())
+        # And now the guard's own read on that state answers local, no raise.
+        check("... so the guard's read answers local on that state",
+              _lanes_from_patch(pid=None, rows={}) == [], "guard did not answer []")
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+        sys.modules.pop("jarvis_projects_real", None)
+        if saved is not None:
+            sys.modules["jarvis_projects"] = saved
 
 
 def t_cloud_yes_is_read_as_a_plain_bool():
@@ -536,8 +772,11 @@ def t_cloud_yes_is_read_as_a_plain_bool():
 
 if __name__ == "__main__":
     for fn in (t_the_patch, t_the_patch_counts_match, t_the_guard_is_the_patch_s_own,
-               t_lanes_can_only_be_removed, t_the_guard_survives_removal,
-               t_the_deleted_active_project_is_not_hidden,
+               t_lanes_can_only_be_removed, t_an_id_shaped_pointer_with_no_row,
+               t_the_ordinary_turn_does_not_raise,
+               t_the_stub_the_old_suite_used_could_not_see_it,
+               t_the_guard_survives_removal, t_the_old_expression_fails_this_suite,
+               t_the_deleted_active_project_clears_project_mode,
                t_cloud_yes_is_read_as_a_plain_bool):
         print(f"\n--- {fn.__name__} ---")
         try:

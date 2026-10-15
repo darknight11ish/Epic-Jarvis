@@ -1,6 +1,6 @@
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
-@@ -2557,27 +2557,40 @@
+@@ -2557,27 +2557,48 @@
          if ROUTING and body.get("auto", True):
              budget = jarvis_router.Budget.load()
              tainted = _history_tainted(messages, body)
@@ -18,12 +18,20 @@
 +                # and the lanes that were passed are never added to. Nothing
 +                # leaves this PC from a project until the owner has turned
 +                # that project's Shareable switch on himself
-+                # (docs/PROJECTS-DESIGN.md); no active project, and no
-+                # jarvis_projects.py at all, both read as "not shareable" and
-+                # stay local. jarvis_projects.get().get(pid) raises for a
-+                # project deleted while still the active one, which
-+                # backend/test_cloud_say_yes.py measures rather than hides.
-+                lanes=[] if jarvis_side_memory else (lanes if (lambda m: hasattr(m, "active_project_id") and bool((m.get().get(m.active_project_id()) or {}).get("shareable")))(__import__("jarvis_projects")) else []),
++                # (docs/PROJECTS-DESIGN.md).
++                #
++                # THE ID IS TESTED BEFORE IT IS USED, and that is not
++                # tidiness: Projects.get() RAISES KeyError for an id that is
++                # not a string (Projects._project_row: "if not isinstance(pid,
++                # str) ... raise KeyError(pid)"), and active_project_id() is
++                # None on EVERY ordinary turn. Handing that None to get() is
++                # a KeyError out of the chat turn - measured against the real
++                # module, not assumed. So no active project, an empty id and
++                # a non-string id all answer "local" without ever reaching
++                # get(). An id that IS a string but is not a row would still
++                # raise; jarvis_projects' own delete path clears the mode file
++                # when it deletes the active project, so no such id is left.
++                lanes=[] if jarvis_side_memory else (lanes if (lambda m: hasattr(m, "active_project_id") and isinstance((p := m.active_project_id()), str) and bool(p) and bool((m.get().get(p) or {}).get("shareable")))(__import__("jarvis_projects")) else []),
                  has_image=bool(body.get("has_image")),
                  conversation_tainted=tainted,
                  budget=budget,
