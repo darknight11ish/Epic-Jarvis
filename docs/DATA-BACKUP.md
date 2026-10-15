@@ -233,6 +233,11 @@ These snapshots are plain files. OneDrive is installed on your PC, so putting
 unencrypted memory facts in a folder that might become a synced one would bend
 rule 1 without you ever deciding to.
 
+**And not inside the NordLocker locker.** That is not a preference: it was
+measured, it does not encrypt anything with the app closed, and the tool now
+refuses a locker destination in code rather than warning about it. The section
+above has the numbers.
+
 ## Encryption - the half that is safe to decide
 
 Encrypting the **live** files is your decision and it has not been made, so
@@ -261,11 +266,94 @@ there, and it is the one used.
 **The weekly run is not sealed, on purpose.** An unattended run has no
 passphrase, and the only place it could keep one is the same disk as the
 backup - which is exactly the trade the app's own backup feature refuses to
-make. Sealing is for the runs you start by hand. If you later want the weekly
-snapshots encrypted too, the honest answer is not to store a passphrase but to
-move `jarvis-data-snapshots` inside a NordLocker locker (or another encrypted
-volume) - then the files are protected at rest and no passphrase sits on the
-disk. **That is your call, and nothing here does it for you.**
+make. Sealing is for the runs you start by hand.
+
+## NordLocker cannot encrypt these snapshots, and this was measured
+
+You asked for the weekly snapshots to be encrypted at rest with NordLocker,
+which is installed on your PC. **It cannot do that job**, so nothing was wired
+to it - a weekly task that appeared to be encrypted and was not would be worse
+than no encryption at all. This is what was actually measured on your machine
+on 2026-10-13. A small probe file was written and then deleted; nothing else
+was changed.
+
+**How NordLocker holds your files.** Its vault,
+`C:\Users\pcadmin\NordLocker_9019064`, is **not** a locked disk. It is a folder
+of placeholders - the file names are visible, and the contents are fetched on
+demand. The proof is the filesystem's own record: `fsutil reparsepoint query`
+on that folder reports reparse tag `0x9000201a` (fetch the contents when the
+file is opened) and `0x9000301a` (fetch them when it is closed) - the same
+mechanism OneDrive uses, and the reason `NordLocker.CloudFilter.dll` ships
+inside the program folder. NordLocker also has no Windows service and no
+driver of its own, so there is nothing left running to do any encrypting when
+the app is closed.
+
+**The test that decides it.** NordLocker was closed, and a 40 MB file was
+written into `NordLocker_9019064\My Files\`:
+
+* **it consumed 42.03 MB of free space on `C:`** (131,066,798,080 bytes free
+  before, 131,022,725,120 after) - the data really did land on the disk;
+* `fsutil` said of that file, *"The file or directory is not a reparse point"*
+  - it was not a placeholder, it was an ordinary local file;
+* **starting NordLocker and waiting did not encrypt it.** It stayed an
+  ordinary readable file.
+
+A real database written the same way behaved the same: a `SQLite format 3`
+file in the locker still began `53 51 4c 69 74 65 20 66 6f 72 6d 61 74 20 33 00`
+and still contained its plaintext marker, word for word.
+
+**And it would have looked like a success.** The locker folder is writable
+whether or not NordLocker is running, so a task pointed there would report
+"OK", write your data in the clear, and nobody would know. **That is why
+`jarvis_data_backup.py` now refuses a locker folder as its destination
+outright**, with a message saying so, instead of warning about it.
+
+**Why it cannot be made to work unattended:** unlocking a locker is something a
+person does, in a window, with a password. At 03:00 on a Sunday there is
+nobody there to do it.
+
+**NordLocker's own files are not the problem.** Its `node_system_cache.db`
+(48 MB) and `crypto_identity_cache.db` begin `4b f3 31 d0…` and `de b1 23 9d…`
+- high-entropy blobs with no `SQLite format 3` header, so NordLocker's own
+cache really is encrypted. That is its cache, not the vault folder.
+
+## If you want the weekly snapshots encrypted - your choice, three ways
+
+None of these is switched on, because each is a trade only you can accept.
+
+**1. `--seal` with a passphrase (works today, no new setup).** The snapshot is
+written as one `.jba` file, locked with AES-256-GCM under a key stretched from
+your passphrase. The catch: the weekly task cannot type a passphrase, so this
+only protects runs **you** start - and if you leave the passphrase in a file on
+this PC for the task to read, it sits on the same disk as the backup it
+protects.
+
+**2. Encrypt the snapshot folder itself with Windows EFS** (Encrypting File
+System - Windows' own file encryption, tied to your Windows account). Measured
+on your PC: EFS is available (`cipher.exe` is present, `DisableEncryption = 0`,
+the EFS service is installed), and once a folder is encrypted **new files
+written into it are encrypted automatically, with no prompt** - a file created
+after `cipher /e` on a folder came out with the Encrypted attribute set, and
+read back normally. Windows made you a self-signed certificate for this
+(`CN=pcadmin`, valid to 2126, private key present). It is transparent: the
+weekly task needs no password and nothing about it changes. The catch is that
+the key is the backup - **export that certificate and keep the file somewhere
+else**, or a lost Windows profile means the snapshots can never be read again.
+What it does **not** protect against: anyone using your Windows account.
+
+**3. BitLocker**, which encrypts the whole drive. What it does **not** protect
+against: anyone using your PC once Windows is running - it defends a stolen or
+removed disk, not a logged-in stranger. It also covers everything on the drive,
+not just the snapshots. (Its state on your PC is **not checked** here: reading
+BitLocker status needs an administrator, and nothing in this work ran
+elevated.)
+
+**4. Leave it as it is.** The snapshot folder is plain files on a drive only
+you use. That is what you have today, and it is a deliberate choice rather than
+an oversight.
+
+If you want one of the first three, say which and it can be set up - but none
+of them is this tool deciding for you.
 
 ## What this deliberately does not do
 
@@ -279,6 +367,9 @@ disk. **That is your call, and nothing here does it for you.**
   resolve inside it - so a typo cannot turn a backup into a write over the live
   data. The suite asks for both, expects both to be refused, and checks that
   the live folder is byte-for-byte as it was.
+* **It refuses a NordLocker locker as its destination** - measured on this PC,
+  and explained above. The alternative is a backup that says it is protected
+  and is not.
 * **It does not back up the program.** Code is not personal data and this is
   not a code backup; the app's encrypted feature is where the source rides
   along.
@@ -299,4 +390,4 @@ disk. **That is your call, and nothing here does it for you.**
   If it says "every database opens and matches its manifest", the snapshot is
   good.
 * The whole thing is one file, `tools/jarvis_data_backup.py`, and it is
-  checked by `backend/test_data_backup.py` (73 checks) on every push.
+  checked by `backend/test_data_backup.py` (82 checks) on every push.
