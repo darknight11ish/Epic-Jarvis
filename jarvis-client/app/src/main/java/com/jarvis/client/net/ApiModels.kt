@@ -95,6 +95,30 @@ data class StatusInfo(
     val activity: String? = null,
     val held: Boolean = false,
     /**
+     * Whether the PC's own local model is answering, as the PC itself reports
+     * it - `GET /api/status`'s `ollama` field, which is
+     * `_reachable(OLLAMA_URL + "/api/tags")` in the owner's `jarvis_hud.py`.
+     *
+     * **Nullable on purpose, and the null is load-bearing.** `true` is the
+     * model answering, `false` is the PC saying it is not, and `null` is the
+     * PC not having said - an older backend with no such field, or a response
+     * that carried something other than a boolean. Only `false` draws the
+     * warning ([com.jarvis.client.ModelWords]): a line that appeared whenever
+     * this field was missing would be telling the owner something the PC
+     * never said, and the first time the app cries wolf over nothing is the
+     * last time he believes it.
+     *
+     * The field matters because the phone cannot work it out for itself: the
+     * owner's everyday lane runs on its own port (`OLLAMA_URL` in his
+     * environment), which the phone is never told, and only the PC knows the
+     * address it really asks. Until 2026-10-13 the phone parsed this route and
+     * threw this fact away: both of the owner's lanes were dead for about five
+     * hours and the app looked normally connected the whole time, admitting it
+     * only when he asked a question and the answer came back
+     * `model_not_running`.
+     */
+    @SerialName("ollama") val ollama: Boolean? = null,
+    /**
      * What Jarvis is doing right now, in words - "Step 2/3: a click in another
      * program's window" (a step number and a fixed word, never a control's name,
      * a window title or an address - security audit L4).

@@ -57,7 +57,13 @@ real file, made by jarvis_chat_log.py, is "chat-history.db")
     memory.db, chat-history.db, schedule.db, feedback.db, projects.db, goals.db,
     and (2026-09-30) study.db, the review decks; and (2026-10-07) arbiter.db,
     jobs.db, ledger.db and watch.db, the files of the arbiter, jobs, ledger and
-    watch modules; and (2026-10-08) tasks.db, the job list.
+    watch modules; and (2026-10-08) tasks.db, the job list; and (2026-10-14)
+    receipts.db, the action receipts and their Undo snapshots
+    (jarvis_receipts.py). A receipt holds the owner's own words - what changed,
+    and what the thing looked like before - and a restore that put goals.db or
+    projects.db back while dropping the receipts for those rows would leave
+    Undo pointing at changes the archive had already replaced. The whole
+    archive is encrypted, so the words are never in the clear.
   * Every `*.json` file directly in the Jarvis settings folder (folders.
     json, asks_first.json, manner.json, and so on) - never a subfolder, so
     this glob can never reach into "voice" or "notes" by accident.
@@ -456,7 +462,8 @@ CODE_GROUPS, CODE_GROUP_LEN = 4, 5
 #: stops being in one list or the other.
 SOURCE_DBS = ("memory.db", "chat-history.db", "schedule.db", "feedback.db", "projects.db",
               "goals.db", "study.db", "arbiter.db", "jobs.db", "ledger.db", "watch.db",
-              "tasks.db", "knowledge.db", "traces.db")
+              "tasks.db", "knowledge.db", "traces.db",
+              "receipts.db", "voiceprint.db")
 
 #: Databases in the settings folder this module leaves out ON PURPOSE
 #: (2026-10-13). Named here, with the reason, so an exclusion is a decision

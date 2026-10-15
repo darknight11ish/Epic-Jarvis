@@ -593,15 +593,22 @@ def t_the_newly_covered_databases_and_named_files_really_go_in():
           all(isinstance(v, str) and len(v) > 20 for v in B.NOT_BACKED_UP.values()),
           B.NOT_BACKED_UP)
 
-    # A FILE THAT IS COVERED CANNOT BE DROPPED IN SILENCE. Every one of the 19
+    # A FILE THAT IS COVERED CANNOT BE DROPPED IN SILENCE. Every one of the
     # databases the owner's install has is either carried or written down as an
     # exclusion; anything else is a name somebody forgot. This is the check
     # that fails if `SOURCE_DBS` loses an entry.
+    #
+    # 16, not the 14 this branch first counted: this branch adds knowledge.db and
+    # traces.db (14 -> 16 at the time), and main then added receipts.db (#432,
+    # the action receipts and their Undo snapshots) and voiceprint.db (#436,
+    # "Write Like Me"). Both numbers are asserted rather than derived, on
+    # purpose - the point is that adding a database is a decision somebody has
+    # to make here as well as in the module, and this is the line that asks.
     check("every covered database is in SOURCE_DBS or in NOT_BACKED_UP",
           not ({n for n in B.SOURCE_DBS} & {n for n in B.NOT_BACKED_UP}),
           "a database is in both lists")
-    check("the databases of the owner's install, split 14 + 5, are all accounted for",
-          len(B.SOURCE_DBS) == 14 and len(B.NOT_BACKED_UP) == 5,
+    check("the databases of the owner's install, split 16 + 5, are all accounted for",
+          len(B.SOURCE_DBS) == 16 and len(B.NOT_BACKED_UP) == 5,
           f"{len(B.SOURCE_DBS)} backed up, {len(B.NOT_BACKED_UP)} excluded")
 
 

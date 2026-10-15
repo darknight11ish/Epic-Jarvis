@@ -13,12 +13,15 @@ exchanges the two apps are allowed to send actually reach the model today?
 
 Run from the repository root:
 
-    py -3 scratchpad/admem/budget_measure.py
+    py -3 tools/measure_admem_budget.py
 """
 import sys
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[2]
+# This lived at scratchpad/admem/budget_measure.py until 2026-10-14, where the
+# repository root was parents[2]. From tools/ it is parents[1] - the move
+# changes the depth, so this is not a cosmetic edit.
+REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "backend"))
 
 import jarvis_agent as AG  # noqa: E402

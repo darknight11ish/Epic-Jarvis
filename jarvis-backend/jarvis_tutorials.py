@@ -726,6 +726,508 @@ CATALOGUE = (
              "where": "Brain, from the tray or the bar"},
         ),
     },
+    # ------------------------------------------------------------------
+    # THE LESSONS ADDED ON 2026-10-10 (docs/EDUCATION-TAB-DESIGN.md section 7,
+    # stage 3, and section 12 step D). Coverage was measured at 66 of the 129
+    # features in features.json taught and 63 not, and these are the areas that
+    # measurement named: the Model page (15 of 31 in "The PC itself" untaught),
+    # money and health (3 of 5), the home beyond status (4 of 6), memory's lists
+    # (9 of 17) and the everyday controls nobody had written down. One lesson
+    # covers an area rather than one feature, which is why there are thirteen
+    # rather than sixty-three.
+    #
+    # Every `where` line here names a control that really exists. The breadcrumb
+    # ones are checked by tools/check_tutorial_places.py on every run - 87 of the
+    # 131 `where` lines carry a breadcrumb and that checker only judges those -
+    # so the sentences were read against the apps by hand and every name in them
+    # is a menu title, a card heading or a button label taken from
+    # `jarvis-desktop/src/settings.html`, `menu-catalog.js` or the phone's own
+    # screens. Nothing in this block is invented.
+    # ------------------------------------------------------------------
+    {
+        "id": "model-page",
+        "version": 1,
+        "section": "pc",
+        "title": "The Model page, and which model answers",
+        "why": "What is loaded, why it matters, and where the choice is made.",
+        "minutes": 3,
+        "steps": (
+            {"title": "Models",
+             "body": "The Brain's Model page lists the models this PC has. One "
+                     "of them is loaded and answering; the others are installed "
+                     "and waiting. Switching between models the PC already has "
+                     "is allowed from the phone too, and it raises an approval "
+                     "card like any other change - nothing is downloaded and "
+                     "nothing is swapped until you approve it.",
+             "where": "Brain \u2192 Model \u2192 Models",
+             "try": {"desktop": "switch-model", "phone": None}},
+            {"title": "Memory is the thing you are choosing",
+             "body": "The card with more memory holds more of the conversation "
+                     "before the model forgets the oldest part of it. That is "
+                     "why the everyday model is on the second card - the one "
+                     "with no monitor - and why a bigger model is not simply "
+                     "better: it keeps more and it answers more slowly.",
+             "where": "Brain \u2192 Model"},
+            {"title": "What this backend supports",
+             "body": "The PC tells both apps what it can do, and both the Model "
+                     "page and Settings show it rather than leaving you to "
+                     "guess: which features are on, which need a tool that is "
+                     "not installed, and which need the second card. When "
+                     "something is refused, this is the page that says why.",
+             "where": "Settings \u2192 What this backend supports"},
+            {"title": "Skills, and checking them for updates",
+             "body": "A Skill is one thing Jarvis can do as a tool: reading a "
+                     "document, the calendar, pictures, the wiki. Skills is the "
+                     "list, and each one has its own switch. Check for tool "
+                     "updates asks whether the installed ones have newer "
+                     "versions - it only looks; nothing is installed without "
+                     "your yes.",
+             "where": "Settings \u2192 Check for tool updates"},
+            {"title": "Which card runs your everyday chat",
+             "body": "There is a setting for which graphics card runs the model "
+                     "you chat with, and it is the one the Set up Jarvis card "
+                     "asks about. The second card's own features - the ones "
+                     "marked as waiting for it - each have their own switch and "
+                     "are off until you turn them on, because they have not been "
+                     "measured yet on this PC.",
+             "where": "Settings \u2192 Set up Jarvis"},
+        ),
+    },
+    {
+        "id": "hardware",
+        "version": 1,
+        "section": "pc",
+        "title": "The two graphics cards, and what runs where",
+        "why": "There are two cards in this PC. This is which one does what.",
+        "minutes": 3,
+        "steps": (
+            {"title": "Hardware and models",
+             "body": "This is the measured numbers: what each card is, how much "
+                     "memory it has, and what it can run. They were measured on "
+                     "this PC rather than copied from a specification sheet, so "
+                     "what you read here is what your machine really reported.",
+             "where": "Settings \u2192 Hardware and models",
+             "try": {"desktop": "measure-hardware", "phone": None}},
+            {"title": "The second graphics card",
+             "body": "The second card has no monitor and a larger memory, and it "
+                     "is where the everyday model lives. It is installed but its "
+                     "extra features are NOT measured yet, so every feature that "
+                     "uses it keeps its own switch, off, until you turn that "
+                     "feature on and see for yourself. Three of them can be "
+                     "tried: a separate chat model, a referee for hard questions "
+                     "and a helper that studies the local models.",
+             "where": "Settings \u2192 Second graphics card"},
+            {"title": "Compute",
+             "body": "Compute is the plan rather than the parts: how many layers "
+                     "of a model go on which card, and what is left over when "
+                     "they do not all fit. It is what to look at when an answer "
+                     "is slower than you expected, because it shows where the "
+                     "model is really running.",
+             "where": "Brain \u2192 Model \u2192 Compute"},
+            {"title": "The big model, when you want it slow",
+             "body": "The big model is a larger model the PC can run but not "
+                     "quickly. Turning it on loads it and gives the phone's "
+                     "notifications and other background work to it, while your "
+                     "own chat stays on the everyday model. It is off by "
+                     "default, and the card says plainly that it is slow.",
+             "where": "Settings \u2192 Big model (slow)"},
+        ),
+    },
+    {
+        "id": "limits-and-notes",
+        "version": 1,
+        "section": "pc",
+        "title": "Limits, logs and what Jarvis notices about itself",
+        "why": "Where to look when something is slow, refused or has gone wrong.",
+        "minutes": 3,
+        "steps": (
+            {"title": "Limits and frequency",
+             "body": "Every limit Jarvis works under, in one list: how long an "
+                     "answer may take, how much it may say, how often it may "
+                     "interrupt you, and what the model's own window is. Each "
+                     "row shows the number in use now. Reading this is how you "
+                     "tell a limit apart from a fault.",
+             "where": "Settings \u2192 Limits and frequency"},
+            {"title": "Starting Jarvis for you",
+             "body": "Off unless you turn it on. With it on, opening the app "
+                     "starts Jarvis too, and Windows starting it is the other "
+                     "half of the same switch. It persists a program path, so it "
+                     "sits in Settings rather than anywhere a page could reach "
+                     "it by accident.",
+             "where": "Settings \u2192 Starting Jarvis for you"},
+            {"title": "Startup and logs",
+             "body": "The settings file the app reads, the folder the logs are "
+                     "written to, and a button to open that folder. The logs are "
+                     "plain text on this PC and they never leave it. This is the "
+                     "first place to look when Jarvis starts and then stops, or "
+                     "when a message says the backend could not be reached.",
+             "where": "Settings \u2192 Startup and logs"},
+            {"title": "Hang and crash notes",
+             "body": "When Jarvis hangs or closes by itself it writes down what "
+                     "it was doing at the time, and this card lists those notes, "
+                     "newest first, on this PC only. A crash you can read is a "
+                     "crash somebody can fix, and you are the somebody.",
+             "where": "Settings \u2192 Hang and crash notes",
+             "try": {"desktop": "open-crash-notes", "phone": None}},
+        ),
+    },
+    {
+        "id": "set-up-jarvis-card",
+        "version": 1,
+        "section": "pc",
+        "title": "Set up Jarvis: the card a new install meets",
+        "why": "The first card in Settings, and every switch on it.",
+        "minutes": 2,
+        "steps": (
+            {"title": "What the card is for",
+             "body": "It gathers the few settings that matter on a first day, in "
+                     "one place, in the order a person would do them. It waits "
+                     "at the top of Settings until you answer it or finish it, "
+                     "and Set up again brings it back afterwards - it never "
+                     "reopens by itself.",
+             "where": "Settings \u2192 Set up Jarvis",
+             "try": {"desktop": "finish-set-up", "phone": None}},
+            {"title": "The four switches, and the card each one raises",
+             "body": "Which graphics card runs your everyday chat (no card), "
+                     "starting Jarvis for you (no card), letting your phone "
+                     "reach this PC (a card), and read aloud (a card, because it "
+                     "is the looser choice). Each control goes through the same "
+                     "command that setting's own card already used, so one code "
+                     "path raises the approval rather than two.",
+             "where": "Settings \u2192 Connection"},
+            {"title": "Where to find help from here",
+             "body": "The last row's first button opens the Brain on its "
+                     "Tutorials and the FAQ tab - the same place the palette's "
+                     "Help row opens. The other two buttons stay on this page. "
+                     "If you are reading this lesson, that button worked: the "
+                     "paragraph beside it says what each one does.",
+             "where": "Brain \u2192 Tutorials and the FAQ"},
+        ),
+    },
+    {
+        "id": "money-and-health",
+        "version": 1,
+        "section": "both",
+        "title": "Money, health and the sensitive facts",
+        "why": "What Jarvis will work out for you, and what it waits to be told.",
+        "minutes": 3,
+        "steps": (
+            {"title": "Spending summaries",
+             "body": "Jarvis can add up what you spent over a period and group it "
+                     "into categories, from figures you give it. The categories "
+                     "are yours to name and change, and it says which figures it "
+                     "used rather than presenting a total from nowhere.",
+             "where": "Settings \u2192 Spending summaries",
+             "try": {"desktop": "spending-summary", "phone": None}},
+            {"title": "Retirement what-if",
+             "body": "A what-if is a calculation, not advice: you set the "
+                     "assumptions and it shows what follows from them. Its own "
+                     "defaults are filled in so nothing is silently zero, and "
+                     "the answer says which numbers it was given.",
+             "where": "Brain \u2192 Work \u2192 Retirement what-if"},
+            {"title": "A monthly money limit, and the chatbot keys",
+             "body": "If you use a cloud chatbot through Jarvis, this is where "
+                     "its keys live and where a monthly limit in money is set. "
+                     "The keys are held like the pairing token: never logged, "
+                     "sent only to the service they belong to, and kept out of "
+                     "anything written to disk in plain text. Raising the limit "
+                     "raises a card, and the phone can do it with its own "
+                     "fingerprint.",
+             "where": "Settings \u2192 Chatbot API keys"},
+            {"title": "Health and money facts wait for your yes",
+             "body": "Jarvis learns by itself from your own words, but health, "
+                     "money, passwords, account details and private details "
+                     "about other people wait for a card before they are saved - "
+                     "unless you turn on the switch Also remember sensitive "
+                     "topics automatically, which is off by default and needs a "
+                     "card of its own to turn on. Turning one of those switches "
+                     "on raises a card; turning one off is immediate.",
+             "where": "Brain \u2192 Memory \u2192 The learning switches"},
+            {"title": "Crisis help",
+             "body": "If something you say reads as a crisis, Jarvis answers with "
+                     "real help and the numbers to call, and that answer is "
+                     "deliberately not something the model makes up. It raises "
+                     "no card and saves nothing from it.",
+             "where": "Nothing to change - ask, and it answers"},
+        ),
+    },
+    {
+        "id": "home-devices",
+        "version": 1,
+        "section": "both",
+        "title": "The house: lights, locks and the weather",
+        "why": "What Jarvis can work in your home, and what always asks.",
+        "minutes": 3,
+        "steps": (
+            {"title": "Ask how the house is",
+             "body": "Asking is the cheap half: Jarvis reads the state of your "
+                     "home - which lights are on, whether a door is locked, the "
+                     "temperature - and answers. A read changes nothing, so it "
+                     "never raises a card.",
+             "where": "Home Assistant, connected on this PC",
+             "try": {"desktop": "ask-home-status", "phone": "ask-home-status"}},
+            {"title": "Lights, plugs and fans",
+             "body": "Switching something on or off changes your house, so it "
+                     "asks first like any other action. One switch, in What asks "
+                     "first, can let these go ahead without a card each time, "
+                     "and it covers lights, plugs and fans only. Turning that "
+                     "switch on raises a card; turning it off is immediate.",
+             "where": "Settings \u2192 What asks first"},
+            {"title": "Locks, doors, alarms and covers",
+             "body": "Locks, doors, alarms and covers are in the same list of "
+                     "actions, and they are the ones to leave asking. Jarvis can "
+                     "unlock a door and open a garage, so the card is the point "
+                     "rather than an obstacle - and saying yes out loud never "
+                     "approves it.",
+             "where": "Settings \u2192 What asks first"},
+            {"title": "Weather and the sky",
+             "body": "The weather comes from Open-Meteo, over the internet, and "
+                     "it is on by default; the sun, the moon and the sky behind "
+                     "the animal faces are settings of their own. If you would "
+                     "rather the weather did not leave the PC, this is the "
+                     "switch, and the app says plainly which choice is which.",
+             "where": "Settings \u2192 Appearance"},
+        ),
+    },
+    {
+        "id": "memory-lists",
+        "version": 1,
+        "section": "both",
+        "title": "What Jarvis knows: the memory lists",
+        "why": "Five lists, what each one is for, and how to take any of it back.",
+        "minutes": 4,
+        "steps": (
+            {"title": "What Jarvis knows about you",
+             "body": "Every fact it has saved, with when it was learned and "
+                     "where it came from. Facts are learned from your own words "
+                     "only - never from a web page, an email, a document, a note "
+                     "or something a tool printed. Each one has Forget beside "
+                     "it, and Forget asks whether you are sure first, because it "
+                     "cannot be undone.",
+             "where": "Brain \u2192 Memory",
+             "try": {"desktop": "open-memory", "phone": "open-memory"}},
+            {"title": "People and things",
+             "body": "The names the facts mention, gathered into one place, so a "
+                     "question about your brother has an answer. It is a view of "
+                     "the facts rather than a second copy of them, so forgetting "
+                     "the fact removes it from here too.",
+             "where": "Brain \u2192 Memory"},
+            {"title": "Always keep in mind, and Between us",
+             "body": "Always keep in mind pins a few facts that go into every "
+                     "conversation, whatever it is about. Between us is the "
+                     "opposite kind: things you have said in confidence, which "
+                     "are never read out loud and never leave a screen you can "
+                     "see. Both are lists you add to and take from yourself.",
+             "where": "Brain \u2192 Memory"},
+            {"title": "Topics, and deep questions",
+             "body": "A topic is a subject Jarvis has noticed you work on; you "
+                     "can rename one, hide it, or tell it to stop collecting "
+                     "that subject. Deep questions are the ones it will not "
+                     "guess at while it is busy - it asks them when there is room "
+                     "to think, and the answer is slower and better for it. "
+                     "Neither one changes anything on its own.",
+             "where": "Brain \u2192 Memory"},
+            {"title": "Bring in old chats, and tags",
+             "body": "Bring in old chats reads an export you already have and "
+                     "files it into History. Tagging a chat is a label you put "
+                     "on it: the tags are yours, they are searchable, and Jarvis "
+                     "can suggest one from the conversation. Galaxy shows the "
+                     "same facts as a picture of who and what they connect.",
+             "where": "Brain \u2192 History"},
+        ),
+    },
+    {
+        "id": "work-and-attention",
+        "version": 1,
+        "section": "both",
+        "title": "The Work tab, and how much Jarvis may interrupt",
+        "why": "Everything in flight, and the switch that keeps it quiet.",
+        "minutes": 3,
+        "steps": (
+            {"title": "The Work tab",
+             "body": "Work is what is happening rather than what has happened: "
+                     "what is coming up, the jobs in flight, and what can be put "
+                     "back. Today is the short version for the day ahead, and "
+                     "the morning briefing is the same news said to you once, at "
+                     "the time you chose - read out, never a window that steals "
+                     "the screen.",
+             "where": "Brain \u2192 Work"},
+            {"title": "Background jobs",
+             "body": "A job is work that outlives one answer: a long read of many "
+                     "documents, a survey of a folder, a report that takes "
+                     "minutes. Each one shows what step it is on, and each one "
+                     "can be stopped. A finished job stays listed until you clear "
+                     "it.",
+             "where": "Brain \u2192 Work",
+             "try": {"desktop": "open-work", "phone": "open-work"}},
+            {"title": "What Jarvis is doing right now",
+             "body": "Now is the live view: the turn running, each tool it "
+                     "called, and what it found. It is how you tell a hard "
+                     "question apart from a stuck one, and Stop is beside it. "
+                     "The whole trace is kept on this PC and is never sent "
+                     "anywhere.",
+             "where": "Brain \u2192 Now"},
+            {"title": "How much Jarvis may interrupt you",
+             "body": "An interruption budget is a number of notices in a period, "
+                     "yours to set, and a focus session lowers it without you "
+                     "changing anything. An approval card is never counted "
+                     "against it and is never held back: the budget is for what "
+                     "Jarvis noticed, not for what it needs an answer to.",
+             "where": "Brain \u2192 Now"},
+        ),
+    },
+    {
+        "id": "how-it-talks",
+        "version": 1,
+        "section": "both",
+        "title": "How Jarvis talks, and how to change it",
+        "why": "Shorter answers, a different voice, and how to stop it talking.",
+        "minutes": 3,
+        "steps": (
+            {"title": "How Jarvis talks",
+             "body": "The manner settings decide how it sounds when it answers, "
+                     "and Short answers is the one for spoken questions: with it "
+                     "on, a reply that will be read out loud is kept short "
+                     "instead of being a page. A sensitive fact still keeps its "
+                     "answer on screen, whatever this says.",
+             "where": "Settings \u2192 How Jarvis talks"},
+            {"title": "Jarvis's voice",
+             "body": "The voice it speaks with, chosen from the ones installed "
+                     "on this PC, and Custom voices for a voice of your own. "
+                     "Each face can have its own voice. Changing the voice is a "
+                     "setting like any other; nothing is downloaded without your "
+                     "yes.",
+             "where": "Settings \u2192 Jarvis's voice",
+             "try": {"desktop": "pick-voice", "phone": None}},
+            {"title": "Interrupting it, and stopping it",
+             "body": "While an answer is being read out, the talk button stops "
+                     "the speaking without stopping the answer, and Stop "
+                     "everything - the hotkey on the bar - ends the turn itself. "
+                     "Neither one approves anything: they only stop.",
+             "where": "Settings \u2192 Shortcuts"},
+            {"title": "Teach Jarvis your voice",
+             "body": "A few sentences are enough for a voice print, which is "
+                     "then checked before a clip is used. It is honest about its "
+                     "limit: it cannot tell a recording of you from you, and it "
+                     "says so rather than pretending. The print is kept on this "
+                     "PC and never leaves it.",
+             "where": "Settings \u2192 Voice"},
+            {"title": "Check a prompt before you send it",
+             "body": "The prompt coach reads what you are about to send and "
+                     "suggests a clearer wording - on this PC, by the model that "
+                     "already runs here. It never sends anything itself, and "
+                     "nothing you type in it is kept unless you send it.",
+             "where": "Settings \u2192 Prompt coach"},
+        ),
+    },
+    {
+        "id": "home-overview",
+        "version": 1,
+        "section": "both",
+        "title": "The home screen and the widget",
+        "why": "The first thing you see, and the small thing that sits on top.",
+        "minutes": 2,
+        
+        "steps": (
+            {"title": "Home",
+             "body": "Home is the one screen that answers what needs me: the "
+                     "approval cards waiting, what is coming up, and the way in "
+                     "to every other screen. Nothing on it is a decision you did "
+                     "not make - it gathers, it does not act.",
+             "where": "Home"},
+            {"title": "Also on my phone, and Ring my phone",
+             "body": "Jarvis knows which devices are paired and which app each "
+                     "one runs, and both apps can show that list. Ring my phone "
+                     "fires an alarm on it so you can find it; a device can be "
+                     "removed from here, which takes its key away at once.",
+             "where": "Settings \u2192 Devices",
+             "try": {"desktop": "ring-phone", "phone": "ring-phone"}},
+            {"title": "Widgets you describe",
+             "body": "A widget is a small block you ask for in words - a line "
+                     "like the three things I keep forgetting - and Jarvis drafts "
+                     "it for you. You see the draft before it is kept, and you "
+                     "can change it or delete it. A widget reads; it does not "
+                     "decide anything.",
+             "where": "Brain \u2192 Work \u2192 Widgets"},
+            {"title": "The floating widget, and Today",
+             "body": "Floating Jarvis is a small always-on-top window for the "
+                     "phone and the PC, and Today is the one-line summary of the "
+                     "day. Both are optional, both can be turned off, and "
+                     "neither one approves anything on its own.",
+             "where": "Settings \u2192 Floating Jarvis"},
+        ),
+    },
+    {
+        "id": "phone-limits",
+        "version": 1,
+        "section": "phone",
+        "title": "What the phone deliberately does not do",
+        "why": "Where the line is, so a missing button is not a mystery.",
+        "minutes": 2,
+        "steps": (
+            {"title": "It is a window, not a second Jarvis",
+             "body": "The model, the memory and every file live on the PC. The "
+                     "phone holds none of them: it draws what the PC sends and "
+                     "records one answer at a time. That is why the app is small "
+                     "and why uninstalling it loses nothing.",
+             "where": "Nothing to change - this is how it is built"},
+            {"title": "Speech-to-text stays on the PC",
+             "body": "The phone records and sends; the PC works the words out. A "
+                     "client must never do speech-to-text itself, because the "
+                     "voice check needs the whole clip, and the words it hears "
+                     "must not be produced on a device that can be lost.",
+             "where": "Nothing to change - this is how it is built"},
+            {"title": "No model catalogue, no memory graph",
+             "body": "The phone cannot browse models to install and cannot draw "
+                     "the memory graph. Switching or installing a model the PC "
+                     "already has IS allowed - you type the name and the PC "
+                     "raises a card - but there is no list to scroll and no "
+                     "picture of what Jarvis knows.",
+             "where": "Nothing to change - this is how it is built"},
+            {"title": "Nothing is approved in bulk",
+             "body": "There is no approve-everything button on either app, and "
+                     "there never will be. One card is one decision, the card is "
+                     "signed, and saying yes out loud is not a decision at all. "
+                     "A notification tells you a card is waiting; it never "
+                     "answers it.",
+             "where": "Home"},
+        ),
+    },
+    {
+        "id": "phone-extras",
+        "version": 1,
+        "section": "phone",
+        "title": "The phone's own extras",
+        "why": "The tiles, the watch, the rate and the floating window.",
+        "minutes": 2,
+        "steps": (
+            {"title": "Quick Settings tiles",
+             "body": "The phone's quick panel can hold a tile for Live and one "
+                     "for asking something without opening the app. Where a tile "
+                     "goes is Android's own arrangement, so this setting only "
+                     "says whether Jarvis offers them at all.",
+             "where": "Settings \u2192 Quick Settings tiles",
+             "try": {"desktop": None, "phone": "add-live-tile"}},
+            {"title": "Smartwatch notifications",
+             "body": "An approval can be mirrored to a paired watch, so you see "
+                     "that something is waiting without taking the phone out. "
+                     "The watch shows the card; the decision is still made on the "
+                     "phone, with the buttons or the fingerprint.",
+             "where": "Settings \u2192 Smartwatch notifications"},
+            {"title": "Screen refresh rate",
+             "body": "The faces are drawn at up to the screen's own rate, and "
+                     "this setting is how you spend less battery on them. It "
+                     "changes how smooth a face looks and nothing about what "
+                     "Jarvis does.",
+             "where": "Settings \u2192 Screen refresh rate"},
+            {"title": "Floating Jarvis",
+             "body": "A small always-on-top window over other apps, for asking "
+                     "something without leaving what you were doing. It can be "
+                     "turned off, and it never approves anything: a card in it "
+                     "still needs its own answer.",
+             "where": "Settings \u2192 Floating Jarvis"},
+        ),
+    },
     {
         "id": "phone-talking",
         "version": 1,

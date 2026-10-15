@@ -4,6 +4,7 @@ import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.JarvisJson
 import com.jarvis.client.net.Tutorials
+import java.io.File
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertEquals
@@ -54,7 +55,8 @@ class TutorialsTest {
             "why": "why", "minutes": 3, "steps": [{"title": "one", "body": "b", "where": "Brain"}],
             "state": "skipped", "step": 0, "steps_total": 1, "done": false,
             "resume_at": null, "due": false}
-         ]}
+          ],
+          "counts": {"done": 1, "due": 2, "total": 4}}
         """.trimIndent()
     )
 
@@ -122,6 +124,52 @@ class TutorialsTest {
         assertNull(intro.backIndex(0))
         assertEquals(1, intro.backIndex(2))
         assertEquals("${Tutorials.STEP_OF} 2 ${Tutorials.OF} 3", intro.copy(step = 1).stepWords)
+    }
+
+    @Test
+    fun `the one number this screen shows counts down, and is never a percentage`() {
+        // The PC has computed `counts` since the route was written and NOTHING
+        // DREW IT - not this app, not the desktop. The desktop draws the same
+        // sentence from the same counts (tests/tutorials.mjs), so the two apps
+        // cannot disagree about the number.
+        val loaded = (Tutorials.readOf(ApiResult.Ok(catalogue)) as Tutorials.Read.Loaded).catalogue
+        assertEquals(Tutorials.Counts(done = 1, due = 2, total = 4), loaded.counts)
+        assertEquals("You have met 2 of the 4 lessons here. 2 to go.", loaded.metWords)
+        // A skipped lesson counts as MET: `due` is false for one, so it is in
+        // the met half. That is the only distinction this line keeps.
+        assertEquals("You have met all 4 lessons here.",
+            loaded.copy(counts = Tutorials.Counts(done = 3, due = 0, total = 4)).metWords)
+        assertEquals("You have met 0 of the 1 lesson here. 1 to go.",
+            loaded.copy(counts = Tutorials.Counts(done = 0, due = 1, total = 1)).metWords)
+        assertEquals("You have met all 1 lesson here.",
+            loaded.copy(counts = Tutorials.Counts(done = 1, due = 0, total = 1)).metWords)
+        // A PC too old to send `counts` gets NO line, rather than a made-up one.
+        assertEquals("", loaded.copy(counts = null).metWords)
+        assertEquals("", loaded.copy(counts = Tutorials.Counts(done = 0, due = 0, total = 0)).metWords)
+        // And the sentence is not a shape the design refused.
+        val said = loaded.metWords
+        assertFalse("the line is a percentage", said.contains("%"))
+        assertFalse(
+            "the line scores the owner",
+            Regex("streak|badge|points|score", RegexOption.IGNORE_CASE).containsMatchIn(said),
+        )
+    }
+
+    @Test
+    fun `a catalogue without counts is still read, and draws no line`() {
+        // An older PC: everything else about the screen works, and the line is
+        // simply absent.
+        val noCounts = json(
+            """{"ok": true, "sections": [], "tutorials": [
+                 {"id": "intro", "section": "both", "title": "t", "why": "w", "minutes": 1,
+                  "steps": [{"title": "one", "body": "b", "where": "Brain"}],
+                  "state": "not_started", "step": 0, "steps_total": 1, "done": false,
+                  "resume_at": null, "due": true}]}"""
+        )
+        val loaded = Tutorials.parse(noCounts)
+        assertEquals(1, loaded?.tutorials?.size)
+        assertNull(loaded?.counts)
+        assertEquals("", loaded?.metWords)
     }
 
     @Test
@@ -230,6 +278,94 @@ class TutorialsTest {
         // A step with no point is prose, and says so rather than guessing.
         assertEquals("", steps[2].point)
         assertFalse(steps[2].pointsHere)
+    }
+
+    /**
+     * THE REAL CATALOGUE, NOT A FIXTURE. This is the check the phone was
+     * missing, and the defect it would have caught shipped: the catalogue asks
+     * the phone to point at `asks-first` (`intro` step 2) and `CONTROL_POINTS`
+     * had no such entry, so that step lost its phone target silently. The test
+     * above reads its own inline JSON, so it could never see the drift.
+     *
+     * The desktop's half has read `backend/jarvis_tutorials.py` all along
+     * (jarvis-desktop/tests/tutorials.mjs, "every control the catalogue points
+     * at here is one this app declares"). This is the same check, for the
+     * phone, against the same file - and it is deliberately aimed at every
+     * `"phone": "..."` in the CATALOGUE block rather than at one tutorial.
+     */
+    @Test
+    fun `every control the real catalogue points at on the phone is one this app declares`() {
+        val catalogue = catalogueText()
+        val named = namesIn(catalogue, "point", "phone")
+        assertTrue("the catalogue points at something on the phone", named.isNotEmpty())
+        for (name in named.toSet()) {
+            assertTrue(
+                "net/Tutorials.kt declares the phone control `$name`, which the catalogue points at",
+                Tutorials.CONTROL_POINTS.containsKey(name),
+            )
+        }
+        // And the one that was missing, named so a future deletion fails loudly.
+        assertTrue(Tutorials.CONTROL_POINTS.containsKey("asks-first"))
+    }
+
+    /**
+     * `try` is DESIGNED AND NOT BUILT (docs/TUTORIALS-DESIGN.md), and it is
+     * checked here anyway for the reason the `point` check exists: a name
+     * written into the catalogue that no app declares is drift, and drift
+     * written down once is the kind that survives. Nothing observes these yet;
+     * [Tutorials.TRY_ACTIONS] is the list, and wiring it up is step 2 of that
+     * design.
+     */
+    @Test
+    fun `every action the real catalogue asks the phone to notice is one this app declares`() {
+        val named = namesIn(catalogueText(), "try", "phone")
+        assertTrue(
+            "the lessons added on 2026-10-10 still carry their phone try actions",
+            named.isNotEmpty(),
+        )
+        for (name in named.toSet()) {
+            assertTrue(
+                "net/Tutorials.kt declares the try action `$name`, which the catalogue asks for",
+                Tutorials.TRY_ACTIONS.containsKey(name),
+            )
+        }
+    }
+
+    /**
+     * The CATALOGUE literal of the real module, up to its own closing bracket.
+     * The module's prose explains `point` and `try` with examples, and an
+     * example is not a step - reading the whole file would judge prose.
+     */
+    private fun catalogueText(): String {
+        val py = repoFile("backend/jarvis_tutorials.py").readText()
+        val start = py.indexOf("\nCATALOGUE = (")
+        assertTrue("the catalogue is where this check expects it", start > 0)
+        val end = py.indexOf("\n)\n", start)
+        assertTrue("the catalogue has a closing bracket", end > start)
+        return py.substring(start, end)
+    }
+
+    /**
+     * Every name one app is given by the catalogue's `point` (or `try`) maps.
+     *
+     * Read as the maps themselves and NOT as loose `"phone": "..."` matches: a
+     * step may carry both, and their names belong to two different registries.
+     * Conflating them is how the desktop's own version of this check went wrong
+     * the first time.
+     */
+    private fun namesIn(catalogue: String, field: String, app: String): List<String> =
+        Regex("\"$field\":\\s*\\{[^}]*?\"$app\":\\s*(?:\"([a-z0-9-]+)\"|null)")
+            .findAll(catalogue).map { it.groupValues[1] }.filter { it.isNotEmpty() }.toList()
+
+    /** Walks up from Gradle's working folder to the repository root. */
+    private fun repoFile(rel: String): File {
+        var dir: File? = File(System.getProperty("user.dir") ?: ".").absoluteFile
+        while (dir != null) {
+            val f = File(dir, rel)
+            if (f.isFile) return f
+            dir = dir.parentFile
+        }
+        error("$rel not found above ${System.getProperty("user.dir")}")
     }
 
     @Test

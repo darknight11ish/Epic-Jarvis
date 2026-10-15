@@ -25,7 +25,11 @@ this PC's hardware. What this proves:
     /api/pictures (jarvis_pictures.py's surface);
   - the module is registered where the repo expects it to be, and its one hunk
     applies to the stack AT ITS OWN TURN - not to an invented pre-image of
-    lines a patch that runs after it writes (2026-10-11).
+    lines a patch that runs after it writes (2026-10-11);
+  - the generator's `--check` compares placement, context, added lines and
+    counts rather than bytes, so a stale hunk-header LINE NUMBER passes (it is
+    advisory: git apply finds a hunk by its context) while every way a patch can
+    actually be wrong still fails (2026-10-14).
 
 Nothing here reads THIS machine's state: nvidia-smi, the real cards and the
 real model files are all fed canned answers or replaced by this test's own
@@ -515,6 +519,105 @@ def t_registered_where_the_repo_expects():
         text = patch.read_text(encoding="utf-8")
         check("the patch adds exactly one install block",
               text.count("import jarvis_picture_card") == 1, text[:200])
+
+
+def t_its_generator_check_is_semantic_not_byte_exact():
+    """What `tools/gen_picture_card_patch.py --check` compares, and what it must
+    still refuse (2026-10-14).
+
+    The check was byte-exact, which made the hunk header's LINE NUMBER
+    load-bearing. It is not: `git apply` finds a hunk by matching its context
+    contiguously, so the number is advisory. On 4d1812b7 the committed patch
+    says `@@ -6591,3 +6591,25 @@` and the generator derives
+    `@@ -6629,3 +6629,25 @@`, because jarvis_hud.py has since moved 38 lines.
+    Both files are 29 lines and line 3 is the only difference. That made CI red
+    on EVERY branch, including ones that never touch this patch, and held up ten
+    pull requests - while the 143-patch rehearsal passed with the stale number,
+    which is the proof it applies.
+
+    A check that only accepts byte equality is not checking anything the owner
+    cares about; a check that accepts everything is worse than none. So this
+    drives the generator's own `check()` and asks for BOTH halves:
+
+      * the committed patch, stale line number and all, PASSES, and the skew is
+        reported rather than hidden;
+      * each way a patch can actually be wrong FAILS - a changed added line, a
+        changed context line, edited header counts, a truncated patch, a renamed
+        file, an introduced deletion, and a context line swapped with its
+        neighbour (same lines, same counts, different placement).
+
+    Line 3 of the patch is asserted to still be the stale/generated pair this
+    was measured on, so if either side moves the numbers in the docstring above
+    are re-measured rather than left to rot.
+    """
+    import importlib.util
+
+    path = REPO / "tools" / "gen_picture_card_patch.py"
+    if not path.is_file():
+        return skip("tools/gen_picture_card_patch.py is not in this tree")
+    spec = importlib.util.spec_from_file_location("_gen_picture_card_patch", path)
+    gen = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gen)
+    want, note = gen.build(gen.HUD.read_text(encoding="utf-8").splitlines())
+    check("the generator still finds its anchor in jarvis_hud.py", want is not None, note)
+    if want is None:
+        return
+    have = gen.OUT.read_bytes() if gen.OUT.exists() else b""
+    committed = have.split(b"\n")
+    generated = want.split(b"\n")
+    check("the committed patch and the generated one are both one hunk",
+          len(committed) == 29 and len(generated) == 29,
+          f"committed {len(committed)} lines, generated {len(generated)}")
+    check("the committed patch's header is the stale one this was measured on",
+          committed[2] == b"@@ -6591,3 +6591,25 @@", committed[2])
+    check("the generated header is the one this was measured on",
+          generated[2] == b"@@ -6629,3 +6629,25 @@", generated[2])
+
+    ok, summary, why = gen.check(have, want)
+    check("the committed patch PASSES the semantic check even though its hunk "
+          "header is 38 lines stale", ok, why)
+    check("... and the skew is reported, not swallowed",
+          ok and "38 line(s)" in (summary or ""), summary)
+
+    def must_fail(label, bad):
+        ok, summary, why = gen.check(bad, want)
+        check("the check still FAILS: " + label, not ok, summary or "it passed")
+
+    def swap_line(patch, old, new):
+        return patch.replace(old, new, 1)
+
+    must_fail("an added line changed",
+              swap_line(have, b"+        import jarvis_picture_card",
+                        b"+        import jarvis_wrong_module"))
+    must_fail("a context line changed",
+              swap_line(have, b"     httpd = ThreadingHTTPServer",
+                        b"     httpd = SomeOtherServer"))
+    must_fail("the header's counts were edited",
+              swap_line(have, b"@@ -6591,3 +6591,25 @@", b"@@ -6591,4 +6591,26 @@"))
+    must_fail("the trailing after-context line was dropped",
+              b"\n".join(have.split(b"\n")[:-3]) + b"\n")
+    must_fail("the file was renamed",
+              swap_line(have, b"--- a/jarvis_hud.py", b"--- a/jarvis_other.py"))
+    must_fail("a deletion was introduced",
+              swap_line(have, b"+        import jarvis_picture_card",
+                        b"-        gone\n+        import jarvis_picture_card"))
+    must_fail("the hunk was anchored on different lines",
+              swap_line(have, b"     httpd = ThreadingHTTPServer((bind, HUD_PORT), Handler)",
+                        b"     something_else_entirely = True"))
+    # Same lines, same counts, different placement: the case that a comparison of
+    # content alone would wave through.
+    lines = have.split(b"\n")
+    must_fail("two context lines were swapped (placement changed, counts kept)",
+              b"\n".join([lines[0], lines[1], lines[2], lines[3], lines[5],
+                          lines[4]] + lines[6:]) + b"\n")
+    must_fail("the header's two starts disagree with each other",
+              swap_line(have, b"@@ -6591,3 +6591,25 @@", b"@@ -6591,3 +6500,25 @@"))
+
+    # ... but a bare line-number change, of either number, is exactly what this
+    # check exists to tolerate.
+    renumbered = swap_line(have, b"@@ -6591,3 +6591,25 @@", b"@@ -1,3 +1,25 @@")
+    ok, summary, why = gen.check(renumbered, want)
+    check("the advisory line number alone may move, and still PASSES", ok, why)
 
 
 def t_its_hunk_applies_to_the_stack_at_its_own_turn():

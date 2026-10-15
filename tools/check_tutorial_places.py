@@ -6,7 +6,7 @@ apps really have.
 
 WHY THIS EXISTS
 
-The 23 tutorials are written as steps, and each step carries a `where` line
+The tutorials are written as steps, and each step carries a `where` line
 naming the button, card or screen the owner should use. Those lines are read on
 the phone and on the PC, by someone who is new to the app, and they are the
 most confident sentences in the whole project: "Settings -> Stop everything",
@@ -119,8 +119,10 @@ and a guard that cries wolf is worse than no guard:
 
 The last two were found by pointing this check at the sixteen tutorials another
 pull request is adding, which is also how the check was proved not to cry wolf:
-with those shapes in, all 23 tutorials pass and every recorded entry still
-matches, while an invented name anywhere in a breadcrumb still exits 1.
+with those shapes in, every tutorial passed and every recorded entry still
+matched, while an invented name anywhere in a breadcrumb still exits 1. (That
+was 23 tutorials at the time, on 2026-10-09; the catalogue had 35 on
+2026-10-10, and the paragraph below is why a number here would rot.)
 
 A recorded name still fails when it MOVES: the key is the kind of entry, its id,
 its step number and the breadcrumb piece EXACTLY as the tutorial writes it, so a

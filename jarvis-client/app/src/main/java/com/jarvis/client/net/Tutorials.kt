@@ -137,7 +137,22 @@ object Tutorials {
 
     data class Question(val q: String, val a: String, val where: String)
 
-    data class Catalogue(val sections: List<String>, val tutorials: List<Tutorial>) {
+    /**
+     * What the PC counts across the catalogue it just sent
+     * (`jarvis_tutorials.py` `read()`'s `counts`: `done`, `due`, `total`).
+     *
+     * `due` is "no record at all, or the steps changed since one was written",
+     * so `total - due` is the number of lessons the owner has MET - including
+     * the ones they skipped, because a skipped lesson was met and declined.
+     * That distinction is the backend's and is not merged here.
+     */
+    data class Counts(val done: Int, val due: Int, val total: Int)
+
+    data class Catalogue(
+        val sections: List<String>,
+        val tutorials: List<Tutorial>,
+        val counts: Counts? = null,
+    ) {
         /**
          * One section's list: its own tutorials plus the shared ones, which is
          * what "the same tutorials on both apps" means - one catalogue, two
@@ -145,6 +160,34 @@ object Tutorials {
          */
         fun forSection(section: String): List<Tutorial> =
             tutorials.filter { it.section == section || it.section == "both" }
+
+        /**
+         * The ONE number this screen shows, and it counts down: "You have met 9
+         * of the 23 lessons here. 14 to go."
+         *
+         * The desktop draws the same sentence from the same counts
+         * (`jarvis-desktop/src/tutorials.js` `metWords`), which is why the two
+         * apps can never disagree about it. NOT a percentage, not a streak and
+         * not a badge: the design refuses all three
+         * (docs/EDUCATION-TAB-DESIGN.md section 5.4), and a percentage is the
+         * number that rises fastest by skipping the shortest lessons.
+         *
+         * It says what he has MET, never what he can DO. The stronger `used`
+         * state is designed and deliberately not built (section 5.3).
+         *
+         * Empty when the PC did not send `counts` (an older backend): a
+         * made-up total would be worse than no total.
+         */
+        val metWords: String
+            get() {
+                val counts = counts ?: return ""
+                if (counts.total <= 0) return ""
+                val met = (counts.total - counts.due).coerceAtLeast(0)
+                val toGo = counts.total - met
+                val lessons = if (counts.total == 1) "lesson" else "lessons"
+                return if (toGo <= 0) "You have met all ${counts.total} $lessons here."
+                else "You have met $met of the ${counts.total} $lessons here. $toGo to go."
+            }
     }
 
     sealed interface Read {
@@ -171,6 +214,16 @@ object Tutorials {
      *
      * Each name says where the owner should look, in the phone's own words.
      * Nothing here is tapped for them.
+     *
+     * `asks-first` was MISSING until 2026-10-10, and it is the reason the check
+     * in TutorialsTest now reads the real catalogue. The catalogue asks the
+     * phone to point at it (`intro` step 2, "Your private things never leave
+     * it"), this map had no entry, and `Step.pointsHere` was therefore false -
+     * so that step silently lost its phone target. Nothing failed, because the
+     * phone's own test asserted against a fixture this file cannot drift from
+     * the catalogue into. The desktop's equivalent (jarvis-desktop/tests/
+     * tutorials.mjs) read `backend/jarvis_tutorials.py` all along and would
+     * have caught it on this side.
      */
     val CONTROL_POINTS = mapOf(
         "approval-card" to "The approval card on Home - tap it, or swipe it",
@@ -179,10 +232,42 @@ object Tutorials {
         "notifications" to "Your phone's own notification shade",
         "live-tile" to "The Live tile in Quick Settings",
         "phone-pc-only" to "Nothing to tap - this one is worth knowing",
+        "asks-first" to "What asks first, in Settings",
     )
 
-    private fun str(obj: JsonObject, key: String): String =
-        (obj[key] as? JsonPrimitive)?.contentOrNull.orEmpty()
+    /**
+     * The actions a step may ask this app to NOTICE: the `used` half of the
+     * design, which is **designed and NOT BUILT** (docs/TUTORIALS-DESIGN.md,
+     * "`try` and the `used` state - DESIGN ONLY").
+     *
+     * A step may carry `try` beside `point`, in the same per-app shape as
+     * [CONTROL_POINTS]:
+     *
+     *     "try": {"desktop": "switch-model", "phone": null}
+     *
+     * `null` means "this app never shows this as a thing to do" - the same rule
+     * `point` uses, and the same failure it prevents: a step this app cannot
+     * observe must not offer something that never lights up.
+     *
+     * **Nothing observes these yet.** No `used` record can be written and this
+     * screen draws none - `Tutorials.kt` never reads this map. It is a registry
+     * of NAMES, so the catalogue cannot name an action no app declares, and so
+     * that building the mechanism is one file per app rather than a rewrite of
+     * the curriculum. `TutorialsTest` holds the real catalogue to it.
+     *
+     * Only what THIS app can really see is listed. "add-live-tile" is here
+     * because the phone owns the tile; the desktop's map has no such entry, so
+     * the catalogue sends it `null` there.
+     */
+    val TRY_ACTIONS = mapOf(
+        "ask-home-status" to "Home Assistant answered a status question",
+        "open-memory" to "the Memory part of Brain was really opened",
+        "open-work" to "the Work part of Brain was really opened",
+        "ring-phone" to "a paired phone really rang",
+        "add-live-tile" to "the Live tile was really placed in Quick Settings",
+    )
+
+    private fun str(obj: JsonObject, key: String): String =        (obj[key] as? JsonPrimitive)?.contentOrNull.orEmpty()
 
     /** The phone's own target for a step: `point.phone`, empty when None. */
     private fun point(obj: JsonObject): String {
@@ -224,7 +309,17 @@ object Tutorials {
         val sections = (obj["sections"] as? JsonArray)
             ?.mapNotNull { (it as? JsonObject)?.let { s -> str(s, "id").ifEmpty { null } } }
             .orEmpty()
-        return Catalogue(sections.ifEmpty { SECTIONS.map { it.first } }, tutorials)
+        return Catalogue(sections.ifEmpty { SECTIONS.map { it.first } }, tutorials, counts(obj))
+    }
+
+    /** The PC's own totals, or null when it did not send them (an older one). */
+    private fun counts(obj: JsonObject): Counts? {
+        val block = obj["counts"] as? JsonObject ?: return null
+        fun number(key: String): Int? = (block[key] as? JsonPrimitive)?.intOrNull
+        val done = number("done") ?: return null
+        val due = number("due") ?: return null
+        val total = number("total") ?: return null
+        return Counts(done = done, due = due, total = total)
     }
 
     /** One question and its answer, or null when it is not that shape. */

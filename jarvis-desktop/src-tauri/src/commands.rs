@@ -14,7 +14,7 @@ use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use serde::Serialize;
 use tauri::{ipc::Channel, AppHandle, Manager, State};
 
-use crate::{windows, ChatState, CLOUD_LANE_STATUS_PATH, HUD_LABEL, OLLAMA_URL};
+use crate::{windows, ChatState, CLOUD_LANE_STATUS_PATH, HUD_LABEL};
 
 /// JPEG quality for desktop captures. 82 keeps text legible while staying well
 /// under the size at which a base64 data URI becomes painful over IPC.
@@ -96,7 +96,8 @@ pub struct ServiceStatus {
     /// One-line explanation suitable for a tooltip.
     pub detail: String,
     /// Parsed JSON body, when the service returned one and it was small enough
-    /// to be worth forwarding (the Ollama model list, for instance).
+    /// to be worth keeping. Read by `check_server_health` for `/api/status`'s
+    /// own `ollama` field; never drawn by any window.
     pub payload: Option<serde_json::Value>,
     /// Only needed for something the owner may not use. The cloud escalation
     /// lane is off unless the owner has set one up: with no cloud lane, the
@@ -1592,6 +1593,12 @@ pub async fn capture_screen() -> Result<CapturePayload, String> {
 // ---------------------------------------------------------------------------
 
 /// Probes one endpoint and shapes the outcome into a [`ServiceStatus`].
+///
+/// Nothing here reads a body any more. The one body that was read - Ollama's
+/// own tag list, for a "N model(s) loaded" line - came off a direct probe of
+/// `OLLAMA_URL`, which since 2026-10-13 is not asked at all: the owner's
+/// everyday lane runs on another port, and only the backend knows which
+/// address the model is really on. See [`check_server_health`].
 async fn probe(
     client: &reqwest::Client,
     id: &'static str,
@@ -1601,10 +1608,10 @@ async fn probe(
 ) -> ServiceStatus {
     let started = Instant::now();
 
-    // Ollama and the LiteLLM proxy are unauthenticated; Jarvis is not. Probing
-    // it bare meant `_origin_ok` fell through to its `X-Jarvis-Client` check —
-    // reqwest sends no Origin — and answered 403 every time, so the core dot
-    // read "unhealthy" against a perfectly healthy server.
+    // Jarvis is not unauthenticated. Probing it bare meant `_origin_ok` fell
+    // through to its `X-Jarvis-Client` check — reqwest sends no Origin — and
+    // answered 403 every time, so the core dot read "unhealthy" against a
+    // perfectly healthy server.
     let request = match headers {
         Some(headers) => client.get(&url).headers(headers),
         None => client.get(&url),
@@ -1614,11 +1621,11 @@ async fn probe(
         Ok(response) => {
             let status = response.status();
             let latency_ms = started.elapsed().as_millis();
-            // Bodies are only forwarded when they are small and JSON — the
-            // Ollama tag list is genuinely useful in the UI, a stray HTML error
-            // page is not.
+            // Kept for the one caller that reads a field out of it -
+            // `check_server_health` and `/api/status`'s own `ollama`. No
+            // window draws it: the "N model(s) loaded" line it used to feed
+            // came off a direct probe of the wrong port.
             let payload = response.json::<serde_json::Value>().await.ok();
-
             ServiceStatus {
                 id,
                 name,
@@ -1627,17 +1634,7 @@ async fn probe(
                 http_status: Some(status.as_u16()),
                 latency_ms,
                 detail: if status.is_success() {
-                    match (id, &payload) {
-                        ("ollama", Some(body)) => {
-                            let models = body
-                                .get("models")
-                                .and_then(|m| m.as_array())
-                                .map(|m| m.len())
-                                .unwrap_or(0);
-                            format!("online — {models} model(s) loaded, {latency_ms} ms")
-                        }
-                        _ => format!("online — HTTP {} in {latency_ms} ms", status.as_u16()),
-                    }
+                    format!("online — HTTP {} in {latency_ms} ms", status.as_u16())
                 } else {
                     format!("reachable but unhealthy — HTTP {}", status.as_u16())
                 },
@@ -1668,9 +1665,24 @@ async fn probe(
     }
 }
 
-/// Pings the local Jarvis orchestrator, Ollama and the cloud lane's own state,
-/// and returns a structured report. All three are probed concurrently, so the
-/// command costs roughly one timeout in the worst case rather than three.
+/// Pings the local Jarvis backend and the cloud lane's own state, and returns a
+/// structured report. Both are probed concurrently, so the command costs
+/// roughly one timeout in the worst case rather than two.
+///
+/// **Ollama is not probed directly, and the report is handed the backend's own
+/// answer instead.** Until 2026-10-13 this asked `OLLAMA_URL/api/tags` -
+/// `http://127.0.0.1:11434` - while the backend asks the lane the model is
+/// really on, `OLLAMA_URL` from the owner's environment. His everyday lane
+/// runs on `127.0.0.1:11436`, so the two disagreed about the same word, and
+/// the one the app drew was the wrong one. `GET /api/status` carries `ollama`,
+/// the backend's own reachability check of the address it actually uses
+/// (`jarvis_hud.py`, `_reachable(OLLAMA_URL + "/api/tags")`), so this reads it
+/// from the answer it already asked for. A backend too old to have the field
+/// is reported as unknown, never as down.
+///
+/// An unreachable backend is an error here rather than a report with a made-up
+/// Ollama line: "the PC did not answer" is not evidence about its model, and a
+/// caller that drew one from it would be inventing it.
 #[tauri::command]
 pub async fn check_server_health(app: AppHandle) -> Result<HealthReport, String> {
     let client = reqwest::Client::builder()
@@ -1687,20 +1699,15 @@ pub async fn check_server_health(app: AppHandle) -> Result<HealthReport, String>
     // A refused address: Jarvis is not asked at all (the probe below would
     // only fail on the empty base), and the sentence says why.
     require_base_allowed(&app)?;
-    let (jarvis, ollama, cloud_lane) = tokio::join!(
+    let base = jarvis_base(&app);
+    let headers = jarvis_headers(&app).ok();
+    let (jarvis, cloud_lane) = tokio::join!(
         probe(
             &client,
             "jarvis",
             "Jarvis Core",
-            format!("{}/api/status", jarvis_base(&app)),
-            jarvis_headers(&app).ok(),
-        ),
-        probe(
-            &client,
-            "ollama",
-            "Ollama",
-            format!("{OLLAMA_URL}/api/tags"),
-            None,
+            format!("{base}/api/status"),
+            headers.clone(),
         ),
         // The cloud escalation lane's real state - not a proxy on :4000. It is
         // the backend that owns the lane's key and monthly limit, so the
@@ -1710,10 +1717,26 @@ pub async fn check_server_health(app: AppHandle) -> Result<HealthReport, String>
             &client,
             "cloud_lane",
             "Cloud model",
-            format!("{}{CLOUD_LANE_STATUS_PATH}", jarvis_base(&app)),
-            jarvis_headers(&app).ok(),
+            format!("{base}{CLOUD_LANE_STATUS_PATH}"),
+            headers,
         ),
     );
+
+    if !jarvis.online {
+        return Err(format!(
+            "the Jarvis backend did not answer at {base} — {}",
+            jarvis.detail
+        ));
+    }
+
+    // The backend's own field, read off the probe above (`jarvis` holds the
+    // parsed body).
+    let ollama_field = jarvis
+        .payload
+        .as_ref()
+        .and_then(|body| body.get("ollama"))
+        .and_then(|v| v.as_bool());
+    let ollama = ollama_status(ollama_field, jarvis.latency_ms);
 
     // The cloud lane is optional: not set up is the normal state, so it does
     // not turn every status check into "2/3 online - offline: Cloud model".
@@ -1736,6 +1759,46 @@ pub async fn check_server_health(app: AppHandle) -> Result<HealthReport, String>
         summary,
         services,
     })
+}
+
+/// The "Ollama" row of a health report, from the backend's own `ollama` field.
+///
+/// `Some(true)` - the model is there. `Some(false)` - it is not, and that is
+/// the only value anything warns on. `None` - the backend answered without the
+/// field, which an older one does: the row says "unknown" and counts as
+/// answering, because nothing has said it is down. An app that drew a warning
+/// out of an absent field would be inventing the fact - see the same rule in
+/// `jarvis-desktop/src/lane-warning.js`.
+///
+/// There is no HTTP status here: this row is not a probe of its own, so it has
+/// no response code to report, and `url` says where it came from instead of
+/// printing an address this shell never asked.
+fn ollama_status(field: Option<bool>, latency_ms: u128) -> ServiceStatus {
+    let (online, detail) = match field {
+        Some(true) => (
+            true,
+            format!("online — the PC answered for its local model in {latency_ms} ms"),
+        ),
+        Some(false) => (
+            false,
+            "not running — the PC is answering, its own model server is not".to_string(),
+        ),
+        None => (
+            true,
+            "unknown — this PC's backend does not report whether its model is running".to_string(),
+        ),
+    };
+    ServiceStatus {
+        id: "ollama",
+        name: "Ollama",
+        url: "/api/status (the backend's own check)".to_string(),
+        online,
+        http_status: None,
+        latency_ms,
+        detail,
+        payload: None,
+        optional: false,
+    }
 }
 
 /// The counts and the one-line summary. An optional service (the cloud
@@ -2872,8 +2935,9 @@ pub async fn stop_task(app: AppHandle) -> Result<serde_json::Value, String> {
 /// "Stop everything" (the owner's decision of 2026-09-25; the hotkey,
 /// `Alt+Shift+X` by default). Speech stops HERE first - every window that
 /// speaks is told at once, before the backend is asked, so a dead link never
-/// keeps Jarvis talking - then `POST /api/stop_all` stops the running task,
-/// the answer's remaining tools and every registered stopper
+/// keeps Jarvis talking - and so does any microphone this app has open
+/// (talk-to-type's and push-to-talk's), then `POST /api/stop_all` stops the
+/// running task, the answer's remaining tools and every registered stopper
 /// (`backend/jarvis_stop_all.py`). A notification says what was stopped.
 ///
 /// Never held: not on a stale stream (rule 4 blocks ACTING, and this is the
@@ -2886,6 +2950,11 @@ pub fn stop_everything_now(app: &AppHandle) {
     // Talk-to-type: the microphone closes and nothing still on its way is
     // typed (talk_type.rs `stop`).
     crate::talk_type::stop(app);
+    // Push-to-talk: the same, for the other microphone this app can have open.
+    // Holding the mic button while the hotkey is pressed used to leave the
+    // `cpal` stream running until the button was let go (voice.rs
+    // `stop_push_to_talk`).
+    crate::voice::stop_push_to_talk(app);
     crate::emit_all(app, crate::events::STOP_EVERYTHING, ());
     // The HUD window is the backend's own page and speaks through the
     // browser's speech engine; a fixed line, no payload.
@@ -5936,7 +6005,7 @@ pub fn quit_app(app: AppHandle) {
 
 #[cfg(test)]
 mod health_tests {
-    use super::{summarise_health, ServiceStatus};
+    use super::{ollama_status, summarise_health, ServiceStatus};
 
     fn svc(id: &'static str, name: &'static str, online: bool, optional: bool) -> ServiceStatus {
         ServiceStatus {
@@ -5989,6 +6058,54 @@ mod health_tests {
         ]);
         assert_eq!((online, total), (1, 2));
         assert!(summary.contains("offline: Ollama"), "{summary}");
+    }
+
+    /// The owner's own backend field, all three readings of it.
+    ///
+    /// This is the fix for 2026-10-13 in one place: the app's idea of "the
+    /// model is running" now comes from the field the backend sets by asking
+    /// the lane the model is really on, not from this shell's own probe of
+    /// 11434 (his everyday lane is 11436).
+    #[test]
+    fn the_model_row_follows_the_backends_own_field() {
+        let up = ollama_status(Some(true), 12);
+        assert!(up.online, "{up:?}");
+        assert!(up.detail.contains("online"), "{}", up.detail);
+
+        let down = ollama_status(Some(false), 12);
+        assert!(!down.online, "{down:?}");
+        assert!(down.detail.contains("not running"), "{}", down.detail);
+        // And it says WHICH of the two things is wrong: the PC answered.
+        assert!(
+            down.detail.contains("the PC is answering"),
+            "{}",
+            down.detail
+        );
+
+        // An older backend with no such field: unknown, counted as answering.
+        // Drawing "the model is down" from a field nobody sent is inventing it.
+        let unknown = ollama_status(None, 12);
+        assert!(unknown.online, "{unknown:?}");
+        assert!(unknown.detail.contains("unknown"), "{}", unknown.detail);
+    }
+
+    /// The row is not a probe, so it must not claim a response code, and its
+    /// tooltip must not print an address this shell never asked - the whole
+    /// point is that the backend asks a different one.
+    #[test]
+    fn the_model_row_does_not_invent_a_probe() {
+        let row = ollama_status(Some(false), 12);
+        assert_eq!(row.http_status, None, "{row:?}");
+        assert!(!row.url.contains("11434"), "{}", row.url);
+        assert!(!row.url.contains("http"), "{}", row.url);
+    }
+
+    /// CONTROL: the two readings that must NOT both be drawn as a warning.
+    #[test]
+    fn only_a_plain_false_is_a_dead_lane() {
+        assert!(!ollama_status(Some(false), 1).online);
+        assert!(ollama_status(Some(true), 1).online);
+        assert!(ollama_status(None, 1).online, "unknown is not down");
     }
 }
 
