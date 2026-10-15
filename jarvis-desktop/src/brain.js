@@ -314,6 +314,7 @@ import {
   findNames,
   findStatus,
   groupWords,
+  MAX_RENDERED_NODES,
   sharedWords,
 } from "./galaxy-view.js";
 import {
@@ -12312,14 +12313,24 @@ function renderGraph() {
     graphEmptyWith("No people or things yet. They appear here as Jarvis saves facts that name them.");
     return;
   }
+  // The cap again, here. buildEntityGraph already ordered and cut the list
+  // (galaxy-view.js), so this slice changes nothing today - it cannot be made
+  // to fail, and it is not the cap the picture relies on. It is the bound on
+  // what the ring, the signature and the "N names" line can be handed if a
+  // caller ever hands this function a node list it built itself; every name
+  // is a real button over the picture (galaxy-constellation.js), so the bound
+  // is what keeps the tab usable.
+  const drawn = nodes.length > MAX_RENDERED_NODES
+    ? nodes.slice(0, MAX_RENDERED_NODES)
+    : nodes;
   dom.graphEmpty.hidden = true;
   dom.graphEmptyActions?.replaceChildren();
 
   const byId = new Map();
-  const N = nodes.map((n, i) => {
+  const N = drawn.map((n, i) => {
     // A deterministic ring start rather than random: the same graph lays out
     // the same way twice, so the picture the owner learns stays learnable.
-    const a = (i / nodes.length) * Math.PI * 2;
+    const a = (i / drawn.length) * Math.PI * 2;
     const r = 40 + (i % 9) * 26;
     const node = {
       id: n.id,
@@ -12359,7 +12370,7 @@ function renderGraph() {
   // used to replay 1.3s of assembly on every visit, which is charming once and
   // an obstacle by the tenth time. Refresh still re-lays it out, so the
   // spectacle is one click away and never imposed.
-  const signature = nodes.map((n) => n.id).join("\u0000");
+  const signature = drawn.map((n) => n.id).join("\u0000");
   const settled = state.graph && state.graph.signature === signature
     ? new Map(state.graph.nodes.map((n) => [n.id, n]))
     : null;
@@ -12375,8 +12386,15 @@ function renderGraph() {
   dom.inspector.hidden = true;
   galaxyPanel.clear();
   buildLegend();
+  // When the cap dropped names, say so: "240 of 648 names" is honest, and
+  // "240 names" would read as "these are all the names Jarvis knows". A list
+  // inside the cap reads exactly as it always did.
+  const total = Array.isArray(view.entities) ? view.entities.length : drawn.length;
+  const names = drawn.length < total
+    ? `${drawn.length} of ${total} names`
+    : `${N.length} ${N.length === 1 ? "name" : "names"}`;
   dom.graphStat.textContent =
-    `${N.length} ${N.length === 1 ? "name" : "names"} · ${L.length} ${L.length === 1 ? "link" : "links"}`;
+    `${names} · ${L.length} ${L.length === 1 ? "link" : "links"}`;
   // A search typed before this read finds its matches in the new picture.
   galaxyFind.hits = [];
   if (dom.graphSearch.value.trim()) findInGalaxy({ keepAt: true });

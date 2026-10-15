@@ -1,0 +1,7 @@
+{
+  "name": "skill-hub",
+  "summary": "the skill library's other doors: a reference manual read only when it is asked for, leading /skill and /bundle chains, a project's own skills, and /learn.",
+  "module": "jarvis_skill_hub",
+  "install": "handler",
+  "stack_order": 142
+}
