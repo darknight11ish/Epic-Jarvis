@@ -962,6 +962,15 @@
        "title": "Put back a change it made"
       },
       {
+       "action": "vault_put",
+       "fixed": false,
+       "id": "vault_put",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Keep a secret for you"
+      },
+      {
        "action": "better_voice_enable",
        "fixed": false,
        "id": "better_voice_enable",
@@ -2191,6 +2200,15 @@
        "title": "Put back a change it made"
       },
       {
+       "action": "vault_put",
+       "fixed": false,
+       "id": "vault_put",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Keep a secret for you"
+      },
+      {
        "action": "better_voice_enable",
        "fixed": false,
        "id": "better_voice_enable",
@@ -3415,6 +3433,15 @@
        "title": "Put back a change it made"
       },
       {
+       "action": "vault_put",
+       "fixed": false,
+       "id": "vault_put",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Keep a secret for you"
+      },
+      {
        "action": "better_voice_enable",
        "fixed": false,
        "id": "better_voice_enable",
@@ -4634,6 +4661,15 @@
        "title": "Put back a change it made"
       },
       {
+       "action": "vault_put",
+       "fixed": false,
+       "id": "vault_put",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Keep a secret for you"
+      },
+      {
        "action": "better_voice_enable",
        "fixed": false,
        "id": "better_voice_enable",
@@ -5851,6 +5887,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put back a change it made"
+      },
+      {
+       "action": "vault_put",
+       "fixed": false,
+       "id": "vault_put",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Keep a secret for you"
       },
       {
        "action": "better_voice_enable",
@@ -7086,6 +7131,15 @@
        "title": "Put back a change it made"
       },
       {
+       "action": "vault_put",
+       "fixed": false,
+       "id": "vault_put",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Keep a secret for you"
+      },
+      {
        "action": "better_voice_enable",
        "fixed": false,
        "id": "better_voice_enable",
@@ -8308,6 +8362,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put back a change it made"
+      },
+      {
+       "action": "vault_put",
+       "fixed": false,
+       "id": "vault_put",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Keep a secret for you"
       },
       {
        "action": "better_voice_enable",
