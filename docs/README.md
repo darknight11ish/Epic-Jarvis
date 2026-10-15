@@ -1,13 +1,13 @@
 # The documents, and which ones are current
 
-There are **383 markdown documents** here, adding up to about **9.5 MB**. Neither
+There are **385 markdown documents** here, adding up to about **9.5 MB**. Neither
 number is a guess, and neither is asked to stay still: the documents are written
 to all day, so the count and the size both move. Both were measured on 2026-10-13
 with the two lines below, run from the top of the repository - so run them again
 whenever you want today's numbers rather than this page's:
 
 ```powershell
-(Get-ChildItem docs -Recurse -Filter *.md).Count                        # 383 documents
+(Get-ChildItem docs -Recurse -Filter *.md).Count                        # 385 documents
 "{0:N0}" -f (Get-ChildItem docs -Recurse -Filter *.md |
   Measure-Object -Property Length -Sum).Sum                             # about 9,480,193 bytes
 ```
@@ -125,6 +125,7 @@ Also current, for one area each:
 | [QUIZ-DECKS-DESIGN.md](QUIZ-DECKS-DESIGN.md) | **Review decks and typed Spanish practice: design (2026-09-30).** Status: built (re-checked 2026-10-05; this page called itself a design until the claims register re-checked it). |
 | [RULE-FLEXIBILITY.md](RULE-FLEXIBILITY.md) | **Changing a rule to enable a feature.** Written 2026-10-09, at the owner's request: "change this rule with flexibility and alerts if it is going to be changed to enable a feature." |
 | [SCREEN-DESIGN.md](SCREEN-DESIGN.md) | **Looking at the screen: "Look at this" and "Watch with me" (design).** Picture mode (2026-09-29): the "one card = words only" lines below now have an exception. |
+| [SNAPSHOT-ENCRYPTION.md](SNAPSHOT-ENCRYPTION.md) | **Your weekly snapshots are encrypted now, and the key is the thing to look after.** Turned on 2026-10-14 with Windows EFS: exactly which two folders are encrypted (and why the live databases in `~/.openjarvis` deliberately are not), the `cipher /e` plus `cipher /e /s:` pair that catches the files already there, the measured proof that a restore from an encrypted snapshot still returns the same 604 rows, the export command that puts the key on your Desktop for you to move off this PC, and what happens if it is lost. |
 | [SETTINGS-BY-CONVERSATION.md](SETTINGS-BY-CONVERSATION.md) | **Changing every setting by talking to Jarvis.** Owner's decision, 2026-10-10 (.dsh-scratch/QUEUE-OWNER-DECISIONS-2026-10-10.md, Decision 4). |
 | [SETTINGS-UX-DESIGN.md](SETTINGS-UX-DESIGN.md) | **Settings: simpler and searchable.** Written 2026-10-09 for the owner's request: "make the settings page in both jarvis on desktop and jarvis on android a lot more visually simple, with a search bar in settings. I still want everything adjustable, just easier to find and more efficient." The answer, up front: the search bar is the whole of the win, and it is the only part that is unambiguous. |
 | [STUDY-FROM-TEXT-DESIGN.md](STUDY-FROM-TEXT-DESIGN.md) | **Study from text and video: design (2026-09-30).** Status: built (re-checked 2026-10-05; this page called itself a design until the claims register re-checked it): the paste-in quiz is backend/jarvis_quiz.py quiz.patch (JARVIS-API section 98), the YouTube slice is backend/jarvis_youtube.py + youtube.patch behind one card (section 112), and "grade this better" is backend/jarvis_quiz_cloud.py + quiz-cloud.patch (section 113). |
