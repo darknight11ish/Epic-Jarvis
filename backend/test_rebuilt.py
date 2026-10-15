@@ -1446,11 +1446,20 @@ class Small(unittest.TestCase):
         """Neither was reconstructible. Reporting them as working would be
         the worst outcome: a Jarvis that looks proactive and is not."""
         # The overnight tidy is built since 2026-09-28 - cards only
-        # (jarvis_tidy.py) - and says so; the initiative engine is not.
+        # (jarvis_tidy.py) - and says so.
         self.assertTrue(SL.status()["implemented"])
         self.assertIn("cards only", SL.status()["note"])
+        # The initiative engine, 2026-10-14 (task-8): this asserted 0. That
+        # measurement was the finding - NOTHING in production ever called
+        # register(), so the engine started, ticked and could not have filed
+        # anything, for ever. build_from_config() now arms ONE read-only check
+        # (the events-pump watch; the tests below prove it bites and that it
+        # writes nothing), so the count is 1 and the "no checks are
+        # registered" line is gone. What must NOT change is the honesty: the
+        # note still says the ORIGINAL check list is not recoverable, because
+        # one check is not the list that was lost.
         e = IN.build_from_config()
-        self.assertEqual(e.status()["checks"], 0)
+        self.assertEqual(e.status()["checks"], 1)
         self.assertIn("not recoverable", e.status()["note"])
 
     def test_a_check_that_throws_does_not_kill_the_heartbeat(self):
@@ -1625,6 +1634,139 @@ class Initiative(unittest.TestCase):
         ts = [threading.Thread(target=spam) for _ in range(40)]
         [t.start() for t in ts]; [t.join() for t in ts]
         self.assertEqual(len(rows), len(set(rows)), "duplicate ids were filed")
+
+    # ---- the one built-in check (task-8, 2026-10-14) ----------------------
+    #
+    # The factory arms the events-pump watch. Each of these checks is written
+    # to be able to FAIL: the task-8 report records the bite for every one of
+    # them (the mutation made, the failure it produced).
+
+    def test_the_factory_arms_exactly_one_check_and_it_is_the_pump_watch(self):
+        """The audit's finding was that no production path called register().
+        The fix is in the factory the HUD calls (jarvis_hud.py:6027), so this
+        is the assertion that the wire exists at all."""
+        e = IN.build_from_config()
+        self.assertEqual([n for n, _ in e.checks], [IN.BUILTIN_CHECK])
+        self.assertEqual(IN.BUILTIN_CHECK, "event_pump")
+        self.assertEqual(e.status()["checks"], 1)
+        # A fresh engine, built without checks, is still a bare engine - the
+        # factory is what arms the check, and a test-built one is unaffected.
+        self.assertEqual(IN.Engine(heartbeat_minutes=30).status()["checks"], 0)
+
+    def test_a_beat_files_the_pump_finding_through_the_factory_wiring(self):
+        """End to end over the real wire: build_from_config() -> beat() ->
+        a finding in the inbox. There is no thread named jarvis-events in this
+        process, so the honest answer is that the pump is not running."""
+        keep = IN.pump_running
+        keep_grace = IN.PUMP_GRACE_SECONDS
+        IN.pump_running = lambda: False
+        IN.PUMP_GRACE_SECONDS = 0.0
+        try:
+            e = IN.build_from_config()
+            got = e.beat()
+            self.assertEqual(len(got), 1, "the one registered check filed nothing")
+            self.assertEqual(got[0]["source"], IN.BUILTIN_CHECK)
+            finding = got[0]["finding"]
+            # The three keys the HUD's heartbeat card is written against
+            # (jarvis_hud.html:2591-2595: it.level, it.check, it.message), on
+            # the finding itself where file() puts them. The HUD reads them
+            # off the ROW instead, so it does not draw this yet - a mismatch
+            # older than this check, written up in the module docstring.
+            self.assertEqual(finding["level"], "alert")
+            self.assertEqual(finding["check"], "event stream")
+            self.assertIn("event stream", finding["message"])
+            # It reaches the queue the apps read.
+            self.assertEqual([f["id"] for f in e.drain()], [got[0]["id"]])
+        finally:
+            IN.pump_running = keep
+            IN.PUMP_GRACE_SECONDS = keep_grace
+
+    def test_the_check_bites_when_the_pump_is_missing_and_is_silent_when_it_is_there(self):
+        """BITES: no pump thread -> a finding. PASSES: the same engine with the
+        pump alive -> nothing. Both halves in one test, because a check that
+        always fires is as wrong as one that never does."""
+        keep = IN.pump_running
+        keep_grace = IN.PUMP_GRACE_SECONDS
+        IN.PUMP_GRACE_SECONDS = 0.0
+        watch = IN.pump_watch(built_at=0.0)
+        try:
+            IN.pump_running = lambda: False
+            self.assertIsNotNone(watch(), "the pump was missing and nothing was filed")
+            IN.pump_running = lambda: True
+            self.assertIsNone(watch(), "the pump was alive and the check still complained")
+        finally:
+            IN.pump_running = keep
+            IN.PUMP_GRACE_SECONDS = keep_grace
+
+    def test_the_pump_finding_is_said_once_per_death(self):
+        """A heartbeat every 30 minutes would otherwise file the same broken
+        pump into the inbox all day. It is said once, and said again only if
+        the pump comes back and dies a second time."""
+        keep = IN.pump_running
+        try:
+            IN.pump_running = lambda: False
+            watch = IN.pump_watch(built_at=0.0)
+            self.assertIsNotNone(watch(), "the first missing-pump beat said nothing")
+            self.assertIsNone(watch(), "the same dead pump was filed twice")
+            IN.pump_running = lambda: True
+            self.assertIsNone(watch())
+            IN.pump_running = lambda: False
+            self.assertIsNotNone(watch(), "a second death was never reported")
+        finally:
+            IN.pump_running = keep
+
+    def test_the_pump_check_says_nothing_inside_the_boot_grace_window(self):
+        """jarvis_hud.py builds this engine at :6027 and the pump at :6064 -
+        and Engine.start() beats once, immediately, before the pump exists.
+        A beat in that gap is not evidence of anything, so the check is silent
+        there and speaks only after PUMP_GRACE_SECONDS."""
+        t0 = 1000.0
+        self.assertIsNone(IN.pump_finding(now=t0, built_at=t0, alive=False))
+        self.assertIsNone(IN.pump_finding(now=t0 + IN.PUMP_GRACE_SECONDS - 1,
+                                          built_at=t0, alive=False))
+        self.assertIsNotNone(IN.pump_finding(now=t0 + IN.PUMP_GRACE_SECONDS + 1,
+                                            built_at=t0, alive=False))
+        # The factory's own watch starts inside that window, so a boot cannot
+        # file this finding before it could possibly be true.
+        self.assertIsNone(IN.pump_watch()())
+
+    def test_the_probe_is_the_thread_list_and_the_answer_follows_it(self):
+        """`alive` says what the probe found; left out, it IS the probe
+        (`pump_running`, read-only over threading.enumerate()). Both halves
+        are covered here because a check that ignores its own probe is how a
+        living pump gets reported dead, or a dead one goes unreported."""
+        keep = IN.pump_running
+        try:
+            IN.pump_running = lambda: True
+            self.assertIsNone(IN.pump_finding(built_at=0.0),
+                              "the probe found the pump and the check complained anyway")
+            self.assertIsNone(IN.pump_finding(built_at=0.0, alive=True))
+            IN.pump_running = lambda: False
+            self.assertIsNotNone(IN.pump_finding(built_at=0.0),
+                                 "the probe found no pump and nothing was filed")
+        finally:
+            IN.pump_running = keep
+
+    def test_the_one_check_is_strictly_read_only(self):
+        """The whole requirement: it may look at the thread list and nothing
+        else. Held by reading the three functions it is made of, so a later
+        edit that reaches for a file, the database, the network or a model is
+        caught here rather than found in review."""
+        import inspect
+        src = "\n".join(inspect.getsource(fn) for fn in
+                        (IN.pump_running, IN.pump_finding, IN.pump_watch))
+        for bad in ("_write(", "INSERT", "UPDATE ", "DELETE ", "open(",
+                    "sqlite3", "os.remove", "shutil.", "urllib", "requests.",
+                    "socket.", "subprocess", "jarvis_memory", "jarvis_jobs",
+                    "jarvis_arbiter", "jarvis_schedule", "eval(", "exec("):
+            self.assertNotIn(bad, src, f"the one check reaches for {bad!r}")
+        # And it does not import anything on its way in, either: the only
+        # module-level names it uses are threading and time, both already
+        # imported at the top of the file for the heartbeat itself.
+        self.assertEqual([t.name for t in __import__("threading").enumerate()
+                          if t.name == IN.PUMP_THREAD], [],
+                         "something in this process is already a pump; the test above cannot "
+                         "see the missing-pump case")
 
 
 if __name__ == "__main__":
