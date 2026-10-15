@@ -10,7 +10,8 @@ never a guess about what "should" happen:
     there too, in its usual place, untouched;
   - a paused session, or no session, adds nothing - jarvis_focus.is_active()
     is read fresh every turn, so this needs no signal to "turn off";
-  - it is never first: the rules block still leads (keep_rules_first);
+  - it is never first: the rules block leads every turn, in the request itself
+    (jarvis_agent.with_rules_first, 2026-10-14 - not left to a Modelfile);
   - it costs its own line in the token budget (_TEMPLATE_TOKENS does not
     have to cover it - it is added after trimming, like manner and the
     spoken note - but budget() itself must leave room, or trimming would
@@ -81,14 +82,17 @@ def t_a_running_unpaused_session_adds_the_note():
 
 
 def t_no_session_or_paused_adds_nothing():
-    # A bare first question with no note at all is sent exactly as it came
-    # (test_agent.py: "a first question with nothing recalled is sent as it
-    # is") - Ollama's own stored SYSTEM block covers it. Focus off adds
-    # nothing here either, so this proves the note is really the only
-    # difference the other cases show.
+    # Focus off adds no focus note. What else is in the request is the Jarvis
+    # rules, in front of it - in the request itself, since 2026-10-14, rather
+    # than left to a Modelfile (jarvis_agent.with_rules_first; the owner's
+    # everyday model, qwen3.5:9b, has no SYSTEM of its own, so "sent as it came"
+    # used to mean "sent with no rules at all" on the lane he uses). So the
+    # request is the rules and the question and nothing else, which is still
+    # what proves the focus note is the only difference the other cases show.
     q = {"role": "user", "content": "what's the capital of France"}
     got = turn([q], manner=None, focus_active=False)
-    check("nothing added: sent exactly as it came", got == [q], json.dumps(got))
+    check("no focus note: the rules in front, then the question as it came",
+          got == [BLOCK, q], json.dumps(got))
 
 
 def t_additive_the_manner_line_still_shows_up():
@@ -105,8 +109,9 @@ def t_a_follow_up_gets_the_note_just_before_the_question():
     history = [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "Hello."}]
     q = {"role": "user", "content": "and now?"}
     got = turn(history + [q], manner=None, focus_active=True)
-    check("the note lands right before the question, the rest untouched",
-          got == history + [FOCUS, q], json.dumps(got))
+    check("the note lands right before the question, the history untouched "
+          "between the rules and it",
+          got == [BLOCK] + history + [FOCUS, q], json.dumps(got))
 
 
 def t_still_never_first_when_a_system_message_would_be():
