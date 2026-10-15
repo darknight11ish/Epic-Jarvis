@@ -10,7 +10,9 @@
  * facts name it; two dots are joined when one fact names both, and the
  * line is as strong as how many facts they share. All of that is worked
  * out HERE, from the fact ids the list already carries - no new route, no
- * fact's words, nothing sent anywhere.
+ * fact's words, nothing sent anywhere. The picture is bounded: at most
+ * MAX_RENDERED_NODES dots, chosen by orderedEntities (most facts first,
+ * then the most recent) so the same list always draws the same Galaxy.
  *
  * It replaces the old picture of `/api/graph`, whose "fact" dots could
  * carry a fact's words while the memory lists said "hidden" (privacy
@@ -50,6 +52,104 @@ export const GROUP_WORDS = Object.freeze({
  *  fact is a list, and joining everything in it says nothing. */
 export const MAX_NAMES_PER_FACT = 12;
 
+/** The most names the Galaxy draws at once.
+ *
+ *  A CHOSEN bound, not a measured one: the PC caps its own answer at 500
+ *  entries (`entities_view(limit=500)`, rebuilt/jarvis_memory.py:3705), and
+ *  every one of these is a real HTML button over the picture
+ *  (galaxy-constellation.js), not a painted dot - so a picture of 500 names
+ *  is both unreadable and the heaviest thing this page can draw. 240 is
+ *  comfortably more than any list a person reads at a glance and well under
+ *  the PC's own ceiling. Which 240 is not arbitrary: see orderedEntities. */
+export const MAX_RENDERED_NODES = 240;
+
+/**
+ * Is a saved fact still in use at `asOfSeconds`? This is brain.js's own rule
+ * (brain.js:2884-2888), where the Memory tab renders every fact row with it:
+ * the server's `current` flag first, then the bi-temporal field it is
+ * derived from. The rule lives in two files and must not drift - the fact
+ * list writes it inline over the rows it draws, and the cap needs the same
+ * answer to decide which names survive - so a check in tests/galaxy.mjs
+ * compares both sources for it.
+ */
+export function isLiveFactAt(fact, asOfSeconds) {
+  if (!fact || typeof fact !== "object") return false;
+  if (fact.current === true) return true;
+  if (fact.current === false) return false;
+  const to = fact.valid_to;
+  return to === null || to === undefined || Number(to) > asOfSeconds;
+}
+
+/** The fact rows a caller handed us, by id (id -> row). */
+function factRowsById(facts) {
+  const by = new Map();
+  if (!Array.isArray(facts)) return by;
+  for (const f of facts) {
+    const id = Number(f && f.id);
+    if (Number.isInteger(id)) by.set(id, f);
+  }
+  return by;
+}
+
+/**
+ * The names the Galaxy draws, in the order the cap keeps, cut to
+ * MAX_RENDERED_NODES. Deterministic and total: the same list always draws
+ * the same picture, twice, and from a shuffled copy of itself.
+ *
+ *   1. most facts first - what a dot's size means, and the PC's own order
+ *      (`-facts, name, id`, rebuilt/jarvis_memory.py:3767);
+ *   2. then the newest fact id: the PC sends `fact_ids` newest-first
+ *      (rebuilt/jarvis_memory.py:3765, and memory-entities.js keeps that
+ *      order), so the highest id is the most recent thing Jarvis learned
+ *      about that name. This is the "recent wins" half of the rule, and it
+ *      is real - it is carried by the answer the Galaxy already reads;
+ *   3. then the label A-Z, then the entity id, so names that tie on all of
+ *      the above still have exactly one order.
+ *
+ * RETIRED FACTS. A caller may hand in fact rows (`facts`: the `facts` array
+ * of the Memory tab's /api/memory/facts answer, each `{id, current,
+ * valid_to}`) and the moment asked about. Then a name whose facts are all
+ * retired (`isLiveFactAt`) sorts below every name with a live fact and counts
+ * only its live facts, so retired names are the first the cap drops.
+ *
+ * That branch CANNOT ARISE FROM TODAY'S PC, and a reader must not expect to
+ * observe it: /api/memory/entities builds its links with `WHERE f.erased_at
+ * IS NULL AND (f.valid_to IS NULL OR f.valid_to > ?)`
+ * (rebuilt/jarvis_memory.py:3731-3732), so a retired fact is filtered at the
+ * source and never reaches this list at all. The rule is kept for a caller
+ * that does supply rows - a test, or a PC that one day lists them. A fact id
+ * with NO row handed in counts as live, because the PC's answer lists only
+ * current, unerased facts.
+ */
+export function orderedEntities(entities, { facts = null, asOfSeconds = null } = {}) {
+  const list = Array.isArray(entities) ? entities : [];
+  const by = factRowsById(facts);
+  // Left out, the moment asked about is NOW - not epoch 0, which is what
+  // Number(null) would quietly give a fact rows' caller.
+  const asked = asOfSeconds === null || asOfSeconds === undefined ? NaN : Number(asOfSeconds);
+  const at = Number.isFinite(asked) ? asked : Date.now() / 1000;
+  const scored = list.map((e, i) => {
+    const ids = Array.isArray(e && e.factIds) ? e.factIds : [];
+    let live = 0;
+    let newest = 0;
+    for (const id of ids) {
+      const n = Number(id);
+      const row = by.get(n);
+      if (row && !isLiveFactAt(row, at)) continue;   // retired: not counted
+      live += 1;
+      if (Number.isFinite(n) && n > newest) newest = n;
+    }
+    return { e, live, newest, i, label: String((e && e.name) || ""), id: Number(e && e.id) };
+  });
+  scored.sort((a, b) =>
+    b.live - a.live
+    || b.newest - a.newest
+    || a.label.localeCompare(b.label)
+    || ((Number.isFinite(a.id) ? a.id : 0) - (Number.isFinite(b.id) ? b.id : 0))
+    || a.i - b.i);
+  return scored.slice(0, MAX_RENDERED_NODES).map((s) => s.e);
+}
+
 export function groupFor(kind) {
   return (typeof kind === "string" && KIND_GROUPS[kind]) || "other";
 }
@@ -62,12 +162,17 @@ export function groupWords(group, { plural = true } = {}) {
 /**
  * readEntities()'s view (memory-entities.js) -> `{nodes, links}`:
  *   nodes: [{id: "e:<id>", entityId, label, group, weight (facts), aliases,
- *            also}], most facts first;
+ *            also}], in orderedEntities' order (most facts first), at most
+ *            MAX_RENDERED_NODES of them;
  *   links: [{source: "e:<a>", target: "e:<b>", shared (facts both are in)}].
+ *
+ * The cap is applied to the ENTITIES before the map, not to the finished
+ * nodes: a dropped name gets no dot, and the links below only ever join dots
+ * that are really drawn.
  */
-export function buildEntityGraph(view) {
+export function buildEntityGraph(view, opts = {}) {
   const entities = view && Array.isArray(view.entities) ? view.entities : [];
-  const nodes = entities.map((e) => ({
+  const nodes = orderedEntities(entities, opts).map((e) => ({
     id: `e:${e.id}`,
     entityId: e.id,
     label: e.name,
@@ -79,7 +184,6 @@ export function buildEntityGraph(view) {
     aliases: Array.isArray(e.aliases) ? e.aliases : [],
     also: Array.isArray(e.also) ? e.also : [],
   }));
-  nodes.sort((a, b) => b.weight - a.weight || a.label.localeCompare(b.label) || a.entityId - b.entityId);
   const byId = new Map(entities.map((e) => [e.id, e]));
   const byFact = new Map();
   for (const n of nodes) {
