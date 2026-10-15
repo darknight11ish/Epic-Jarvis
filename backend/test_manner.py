@@ -289,8 +289,16 @@ def t_just_before_the_question_never_first():
         check(f"{m}, first question: the rules first, word for word, then the line",
               msgs == [BLOCK, manner_msg(m)] + passed, json.dumps(msgs)[:400])
         msgs, passed = turn(HISTORY + [{"role": "user", "content": "and Sunday?"}], manner=m)
-        check(f"{m}, a follow-up: just before the newest question, all else as it came",
-              msgs == passed[:-1] + [manner_msg(m), passed[-1]], json.dumps(msgs)[:400])
+        # Since 2026-10-14 the rules are sent in EVERY local request, not only
+        # when something else would be first (jarvis_agent.with_rules_first) -
+        # the owner's everyday model has no Modelfile SYSTEM of its own. So the
+        # follow-up carries the rules in front too; what this check is really
+        # pinning is that the manner line is still, and only, just before the
+        # newest question, with the history untouched between them.
+        check(f"{m}, a follow-up: the rules first, the line just before the newest "
+              f"question, all else as it came",
+              msgs == [BLOCK] + passed[:-1] + [manner_msg(m), passed[-1]],
+              json.dumps(msgs)[:400])
     facts = {"role": "system", "content": "Things you remember about the owner: ..."}
     msgs, _ = turn([facts, {"role": "user", "content": "hi"}])
     check("recalled facts at position 0: the rules still go first",
@@ -324,8 +332,12 @@ def t_spoken_answers_keep_their_rules():
 
 def t_no_setting_no_line():
     msgs, passed = turn(HISTORY + [{"role": "user", "content": "x"}], manner=None)
-    check("manner None (a backend without jarvis_manner.py): sent exactly as it came",
-          msgs == passed, json.dumps(msgs)[:300])
+    # No manner line at all - and, since 2026-10-14, the rules still in front of
+    # it (jarvis_agent.with_rules_first; every local turn carries them now).
+    check("manner None (a backend without jarvis_manner.py): no manner line, "
+          "everything else as it came, the rules in front",
+          msgs == [BLOCK] + passed and manner_msg("warm") not in msgs
+          and manner_msg("plain") not in msgs, json.dumps(msgs)[:300])
     with Folder():
         M.handle_set({"manner": "plain"})
         msgs, _ = turn([{"role": "user", "content": "x"}], manner="auto")

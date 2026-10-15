@@ -5554,10 +5554,26 @@ def _combined_second_card_lane():
 
 #: The invariants every Jarvis answer is written under - backend/jarvis-
 #: primary.Modelfile's SYSTEM block, word for word (test_agent.py checks
-#: they match). The everyday model has them built in. The second card's
-#: models are plain library models (qwen3:8b, qwen2.5vl:7b) with no Jarvis
-#: SYSTEM of their own, so a turn answered there (long context, a picture,
-#: browser control) gets them as its first message instead (T4).
+#: they match). It is sent as the first message of EVERY local turn, on both
+#: cards, by `with_rules_first` below - one place, so the two lanes cannot
+#: drift.
+#:
+#: WHY IT IS SENT RATHER THAN LEFT TO THE MODEL (corrected 2026-10-14). This
+#: used to say "the everyday model has them built in", and that was only ever
+#: true of the model the rules were baked into: `jarvis-primary`, an
+#: `ollama create` of qwen3:8b whose Modelfile carries this block as its
+#: SYSTEM. The owner's everyday model since 2026-10-10 is `qwen3.5:9b`, a
+#: plain library model pulled from the library - `ollama show qwen3.5:9b
+#: --system` prints nothing - and Ollama adds a Modelfile SYSTEM block only
+#: when the request does not already start with a system message. On a fresh
+#: turn nothing did, so the model was sent the question and nothing else: the
+#: honesty rule ("never claim an action was taken that was not") was not in
+#: front of it on the lane the owner actually uses, and a reply that claimed
+#: a change nobody made went uncorrected (jarvis_claims.py's own backstop
+#: line was the only thing that contradicted it). Measured on this PC,
+#: 2026-10-14: a fresh turn on 11436 sent 271 prompt tokens with no tools and
+#: one question in it. The second card's models (qwen3:8b, qwen2.5vl:7b) are
+#: plain library models too, and already got the block this way (T4).
 LANE_SYSTEM = """You are Jarvis, a private assistant running entirely on this machine.
 
 Say what is a guess and what is verified. If you are not sure, say you are not sure - a confident wrong answer costs more here than a hedged one.
@@ -6586,6 +6602,36 @@ def keep_rules_first(msgs: list) -> list:
     return list(msgs)
 
 
+def with_rules_first(msgs: list) -> list:
+    """A new list that starts with the Jarvis rules block itself (LANE_SYSTEM).
+
+    WHY THIS EXISTS, and why it is not `keep_rules_first`. `keep_rules_first`
+    is a repair: it only steps in when something ELSE would be first, and it
+    trusts that Ollama will prepend the Modelfile's SYSTEM block when the first
+    message is the owner's own question. That trust is only earned by a model
+    that HAS such a block. The owner's everyday model is a plain library pull
+    with no SYSTEM of its own (`ollama show qwen3.5:9b --system` prints
+    nothing), so on the lane he actually uses nothing was sent at all - see
+    LANE_SYSTEM. This function is the other half: every local turn is given the
+    rules as its first message, so it does not depend on what the model was
+    built with, nor on which card answered.
+
+    Applied BEFORE trimming in run_local_turn, which is what `budget()` already
+    assumes: it reserves `_TEMPLATE_TOKENS` (the rules' real length) out of
+    every prompt.
+
+    ONE PLACE. A list that already starts with the rules, word for word, is
+    returned as it is (so the recalled-facts turn, whose block is placed by
+    memory-prefix.patch, does not end up with two). Every other list - starting
+    with a user message, or with any other system message - gets the rules in
+    front, exactly once. `keep_rules_first` runs after this and finds the rules
+    already first, so the two cannot fight and the block cannot double up."""
+    if (msgs and isinstance(msgs[0], dict) and msgs[0].get("role") == "system"
+            and msgs[0].get("content") == LANE_SYSTEM):
+        return list(msgs)
+    return [{"role": "system", "content": LANE_SYSTEM}] + list(msgs)
+
+
 # --------------------------------------------------------------------------
 #   The start of every local turn, built in one place - and the warm-up that
 #   sends exactly that start ahead of time (speed fix, 2026-09-28)
@@ -6792,7 +6838,13 @@ def chat_prefix(enabled_tools, *, ollama_url: str, model: str, manner="auto") ->
     first question is sent with on the main card - everything before the
     question itself - and its tool list, for these enabled tools and the
     owner's settings now. `manner` "auto" reads the PC's saved setting, as a
-    real turn does for a conversation that has no override of its own."""
+    real turn does for a conversation that has no override of its own.
+
+    The head STARTS WITH THE RULES (with_rules_first, the same call
+    run_local_turn's one_round makes), so the warm-up sends the bytes a real
+    first question sends - test_warm_prefix.py compares the two byte for
+    byte, and the owner's everyday model needs those bytes in the prompt
+    rather than in a Modelfile it does not have. See LANE_SYSTEM."""
     if manner == "auto":
         manner = _manner_now(None)
     names, _ = _allowed_tools(enabled_tools, ollama_url, model)
@@ -6800,7 +6852,7 @@ def chat_prefix(enabled_tools, *, ollama_url: str, model: str, manner="auto") ->
     _fill_offer(offer, names)
     msgs = dress_messages([{"role": "user", "content": WARM_WORD}], manner=manner,
                           focus=_focus_active_now())
-    return msgs[:-1], list(offer["schemas"])
+    return with_rules_first(msgs[:-1]), list(offer["schemas"])
 
 
 # -- which turns are running, and the warm-up that is --------------------------
@@ -7345,10 +7397,14 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     def one_round(offer_tools: bool) -> _Round:
         global _reasoning_field_refused
         rnd = _Round()
-        msgs = convo
-        if cur["feature"] is not None:
-            # A second-card lane: its model has no Jarvis SYSTEM block.
-            msgs = [{"role": "system", "content": LANE_SYSTEM}] + list(convo)
+        # EVERY local turn starts with the Jarvis rules - main card and second
+        # card alike, and before trimming, which is the room `budget()` already
+        # holds back for them (`_TEMPLATE_TOKENS`). This used to be true only
+        # when `cur["feature"]` was set (a second-card lane), on the belief
+        # that the everyday model carried the rules in its own Modelfile; the
+        # owner's everyday model does not. See LANE_SYSTEM and
+        # with_rules_first. One path for both lanes, so they cannot drift.
+        msgs = with_rules_first(convo)
         focus_brief = _focus_active_now()
         room = budget() - (estimate_tokens(_SPOKEN_MSG) if watch.spoken else 0)
         manner_msg = manner_message(manner)

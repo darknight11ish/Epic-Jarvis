@@ -1211,12 +1211,19 @@ def pf_model(live: Live) -> list:
     else:
         rows.append((FAIL, f"{model} gave an answer Jarvis could not read",
                      "Restart Ollama and run this again."))
-    # Is jarvis-primary running TODAY's rules? (I134, 2026-09-27.) keep_rules_first
-    # (jarvis_agent.py) adds LANE_SYSTEM only when something else would come first
-    # in the request - on most turns Ollama answers from the copy baked into the
-    # model itself by `ollama create`. A stale model would then mix an old rules
-    # block (missing the character paragraph, or an earlier wording) with the new
-    # one, on exactly the turns keep_rules_first does not fire. This is a read
+    # Is jarvis-primary running TODAY's rules? (I134, 2026-09-27.) Since the
+    # 2026-10-14 fix, with_rules_first (jarvis_agent.py) puts LANE_SYSTEM at the
+    # front of EVERY local request, so the rules the model answers under are the
+    # repository's on every turn - not the copy baked into the model itself by
+    # `ollama create`. A stale model is therefore no longer a privacy or honesty
+    # fault, only a model built from an older Modelfile, and Ollama's own
+    # collation keeps one system block rather than mixing two copies. The check
+    # is kept because it is still the one place a stale `jarvis-primary` on this
+    # PC is visible at all - see ARCHITECTURE.md, "The character block" - and
+    # because it costs a read. NOTE what it does NOT cover, which is how the
+    # 2026-10-14 fault went unseen: it is keyed on the NAME `jarvis-primary`, so
+    # the owner's everyday model (qwen3.5:9b, a plain library pull with no stored
+    # SYSTEM at all) is never looked at here. This is a read
     # (POST /api/show, never /api/generate or /api/chat), so it is checked here,
     # in the same step that already talks to this one model - not inside
     # doctor()'s own three read-only calls, which test_selftest_doctor.py holds to
