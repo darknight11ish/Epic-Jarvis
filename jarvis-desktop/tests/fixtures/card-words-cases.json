@@ -407,6 +407,10 @@
       "title": "Jarvis wants to change your profile"
     },
     {
+      "action": "vault_put",
+      "title": "Jarvis wants to keep a secret for you"
+    },
+    {
       "action": "watch_notifications_enable",
       "title": "Jarvis wants to let your notifications show on a smartwatch too"
     },
@@ -1601,6 +1605,18 @@
       "notice": {
         "title": "Jarvis wants to change your profile",
         "summary": "Jarvis wants to change your profile.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "vault_put",
+      "notice": {
+        "title": "Jarvis wants to keep a secret for you",
+        "summary": "Jarvis wants to keep a secret for you.",
         "full": "not classified, so treated as the worst case. nothing has happened yet.",
         "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",
