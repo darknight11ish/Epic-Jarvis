@@ -322,7 +322,7 @@ RAISED, by the owner's choice; none is a card answered for them.
 
 **The automatic restart of a dead model lane needs no card, and that is argued
 rather than assumed** (2026-10-14: *"Also restart the lane automatically when it
-dies"*; `jarvis_model_lanes.py`, `docs/JARVIS-API.md` §133.3). The rule that
+dies"*; `jarvis_model_lanes.py`, `docs/JARVIS-API.md` §134.3). The rule that
 governs a service start here is the one this project already wrote down for
 Docker - *"starting a service gives Jarvis more, so it asks"*
 (`docker_service_start = "ask"`) - and this is deliberately **not** that case.
@@ -2149,7 +2149,7 @@ the install block `model-lanes.patch` adds): one daemon thread, one loopback
 `/api/tags` probe of the lane the chat uses every 30 s, no model call, and a
 restart through the same `start()` the button uses - the owner's own Windows
 logon task, looked up on that PC by the stable half of its name, as argv, never a
-shell. `docs/JARVIS-API.md` §133.3 has the route, the numbers and what happens at
+shell. `docs/JARVIS-API.md` §134.3 has the route, the numbers and what happens at
 the cap.
 
 **Both apps, and nothing one-sided.** The Jarvis bar and the widget draw it from
@@ -2177,7 +2177,7 @@ the default, because that is what the owner asked for - **Jarvis will start a
 lane that was stopped deliberately, and will say so in both apps.** The switch
 (section 3 has the permission argument: no card, in either direction) is the only
 honest answer, because he is the only one who can say which it was. Nothing is
-hidden about this: it is in the module's own header, in `JARVIS-API.md` §133.3,
+hidden about this: it is in the module's own header, in `JARVIS-API.md` §134.3,
 and in this paragraph.
 
 ### One-sided on purpose
