@@ -27,6 +27,11 @@ throws the answer away. What this proves, against a fake Ollama listening on
   - `[power] warm_prefix = false` switches it off, and only a real false;
   - the wake-up path calls it once the model is loaded, and not when Jarvis
     went back on standby;
+  - the model's OWN earlier words are made canonical before they go back
+    (trailing whitespace only, assistant messages only), in dress_messages,
+    which both the warm-up and a real turn build through - llama.cpp #30357,
+    where a byte that renders differently invalidates the prefix cache and a
+    hybrid model pays for it with a full re-prefill;
   - warm-prefix.patch is last in apply-patches.ps1's list, its context is
     text extraction-wiring.patch writes, it applies to the stand-in of
     jarvis_hud.py the whole stack before it leaves and comes off again, and
@@ -803,6 +808,60 @@ def t_what_the_patch_does():
             sys.modules["jarvis_agent"] = saved
 
 
+def t_the_models_own_words_are_made_canonical():
+    """llama.cpp #30357 (Upgrade 3C, 2026-10-15).
+
+    An assistant turn comes back from the engine with trailing whitespace the
+    chat template does not reproduce, so the prompt we re-send is no longer the
+    token sequence the engine cached - and on a hybrid model (Qwen3.5: 8
+    attention layers and 24 Gated DeltaNet recurrent ones) the recurrent state
+    has no cache to fall back on, so the whole prompt is read again.
+
+    jarvis_agent.tidy_assistant_whitespace is the guard. It must run in
+    dress_messages, because that is the one function warm_prefix and
+    run_local_turn BOTH build through; normalising on one path only would make
+    their prefixes differ, which is the thing this prevents.
+    """
+    msgs = [{"role": "user", "content": "how do I fix it? \n"},
+            {"role": "assistant", "content": "Turn it off and on again.  \n"},
+            {"role": "assistant", "content": "Plain.", "reasoning_content": "because \t\n"},
+            {"role": "tool", "content": "exit code 0 \n"},
+            {"role": "system", "content": "the rules \n"}]
+    before = json.dumps(msgs, sort_keys=True)
+    out = AG.tidy_assistant_whitespace(msgs)
+    check("an assistant turn loses its TRAILING whitespace",
+          out[1]["content"] == "Turn it off and on again.", repr(out[1]["content"]))
+    check("...and so does its reasoning channel",
+          out[2]["reasoning_content"] == "because", repr(out[2]["reasoning_content"]))
+    check("a user turn is never touched", out[0]["content"] == "how do I fix it? \n",
+          repr(out[0]["content"]))
+    check("a tool turn is never touched", out[3]["content"] == "exit code 0 \n",
+          repr(out[3]["content"]))
+    check("a system turn is never touched", out[4]["content"] == "the rules \n",
+          repr(out[4]["content"]))
+    check("the caller's messages are not changed at all",
+          json.dumps(msgs, sort_keys=True) == before)
+    check("a message with nothing to trim is passed through as the SAME object",
+          out[3] is msgs[3] and out[0] is msgs[0])
+    pro = [{"role": "assistant", "content": "  first line\n\n  indented on purpose  "}]
+    check("leading and interior whitespace is the model's prose and survives",
+          AG.tidy_assistant_whitespace(pro)[0]["content"]
+          == "  first line\n\n  indented on purpose",
+          repr(AG.tidy_assistant_whitespace(pro)[0]["content"]))
+    check("a message that is not a dict, or is None, is left alone",
+          AG.tidy_assistant_whitespace(["not a dict", None]) == ["not a dict", None])
+    check("nothing to do is an empty list, never an error",
+          AG.tidy_assistant_whitespace([]) == [] and AG.tidy_assistant_whitespace(None) == [])
+    # THE CALL SITE, which is what makes the guard apply to a real turn.
+    dressed = AG.dress_messages(msgs, manner="warm")
+    assistants = [m for m in dressed if isinstance(m, dict) and m.get("role") == "assistant"]
+    check("dress_messages itself applies the guard (so the warm-up and a real turn agree)",
+          bool(assistants) and all(
+              not str(m.get("content") or "").endswith((" ", "\n", "\t", "\r"))
+              for m in assistants),
+          [m.get("content") for m in assistants])
+
+
 if __name__ == "__main__":
     try:
         for fn in (t_the_same_bytes_as_a_real_turn, t_a_real_question_starts_the_same_way,
@@ -811,7 +870,8 @@ if __name__ == "__main__":
                    t_live_warms_the_model_chat_uses,
                    t_a_live_warm_never_goes_out_without_a_context,
                    t_a_question_is_never_kept_waiting, t_a_turn_that_raises_is_still_uncounted,
-                   t_its_place_in_the_stack, t_what_the_patch_does):
+                   t_its_place_in_the_stack, t_what_the_patch_does,
+                   t_the_models_own_words_are_made_canonical):
             print(f"\n--- {fn.__name__} ---")
             try:
                 fn()
