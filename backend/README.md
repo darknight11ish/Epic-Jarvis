@@ -19264,9 +19264,9 @@ PR #409 built, with the button still there and one plain sentence saying it has 
 trying. A deliberate stop cannot be told from a crash - `schtasks` reports the same
 "Ready" either way - so the answer is the owner's own switch, off in one immediate press
 from either app, plus the fact that every automatic restart is said. The residual risk is
-stated in `docs/ARCHITECTURE.md` §3 and §8 and `docs/JARVIS-API.md` §134.3.
+stated in `docs/ARCHITECTURE.md` §3 and §8 and `docs/JARVIS-API.md` §137.3.
 
-`docs/JARVIS-API.md` section 133 has the fields, the status codes and the reasoning;
+`docs/JARVIS-API.md` section 137 has the fields, the status codes and the reasoning;
 `docs/ARCHITECTURE.md` section 8 has why the HUD window keeps the line and has no button.
 
 **Where it is wired in.** `model-lanes.patch` adds ONE `try: import

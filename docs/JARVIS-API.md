@@ -328,7 +328,7 @@ came from that text rather than from the owner (§4, "Tool calls and outside
 text"). It is part of the text; show it the way the rest is shown.
 
 `expires_in` is seconds left before the gate stops waiting and refuses the
-card (`approval_timeout_seconds`, 900 in the shipped config since 2026-10-13 -
+card (`approval_timeout_seconds`, 900 in the shipped config since 2026-10-14 -
 fifteen minutes, and changeable in Settings on either app, 5 minutes to an hour;
 it was 600, and 180 before that). Seconds left,
 not a clock time, so the phone's clock does not have to agree with the PC's.
@@ -1222,7 +1222,7 @@ path ever appears in it (`routes.rs:67-101`).
 | Endpoint | Method | Desktop | Android | Notes |
 |---|---|---|---|---|
 | `/api/version` | GET | `sidecar.rs:321`, `stream.rs:569` | `JarvisApi.kt:268` | The handshake. **Branch on capabilities, never on version numbers** (`JarvisRuntime.kt:394-396`). Also carries `activity` (the state word) - since 2026-09-23 in the rebuilt `jarvis_events.hello()`, which did not send it before. `capabilities.power` is `jarvis_power.status()` (`mode`, `why`, `quiet_hours`, ...) rather than a bare `true` (both apps read `why` for one thing: `"the focus session"` means a focus session put Jarvis on Quiet, so the animal shows its focus buddy, not a sleeping face - the desktop derives `power_set_by = "focus"` from it, the phone reads it on the handshake and on every `power` event; docs/CRITTERS.md); `capabilities.appearance` is true when `appearance.patch` is in the running server; `capabilities.temporary_chat` (2026-09-25) when `temporary-chat.patch` is - both apps offer a temporary chat only then (§4), the desktop asking through `temporary_chat_available` and again in `stream_chat`. `capabilities.owner_check` (2026-09-25) is `"backend"` when `owner-check.patch` has wrapped the running server's `/api/approve` (§3, "The PC's own check before an approval"); the desktop then leaves Windows Hello for risky cards to the backend. `capabilities.stop_all` (2026-09-25) is true when `stop-all.patch` has wrapped the running server's POST handler, so `POST /api/stop_all` answers (§28). `started` (2026-09-25) is when the server process started, in epoch seconds (§29). The desktop falls back to `/api/status` for anything an older server leaves out. |
-| `/api/status` | GET | `commands.rs:677`, `routes.rs:16`, `stream.rs` (power/activity fallback) | `JarvisApi.kt:271` | Reports the power mode (written by `POST /api/power` since `power-mode.patch`). Also `held` (a boolean): **what sets it is not documented anywhere in this repository** - it comes from the owner's `jarvis_hud.py`. Two phone comments used to give it two different meanings; the Brain screen now says only "something held back" and points to the undo shelf, and the quick-settings tile does not read it. **`ollama`** (a boolean, documented here 2026-10-13) is `_reachable(OLLAMA_URL + "/api/tags")` in `jarvis_hud.py:3206` - whether the PC's OWN model server is answering, at the address the chat itself uses. The owner's everyday lane runs on `http://127.0.0.1:11436` (`OLLAMA_URL` in his environment), not the default 11434, so only the PC can answer this. **Both apps draw a standing line from it, before and without a question** (the desktop windows from `check_server_health`, whose Ollama row IS this field; the phone from `StatusInfo.ollama`, on Home's status line), and **only a plain `false` draws it**: `true` is the model answering, and an absent field is a PC that did not say, which is not "down". The incident it answers: both of the owner's lanes were dead from about 16:30 to about 21:5x on 2026-10-13, this field said `false` the whole time, and neither app drew it - Jarvis admitted it only when he asked a question, with `model_not_running`. It is a different state from "Jarvis isn't connected" (the PC unreachable): here the PC is answering perfectly and only answers are missing. Nothing acts on it - no app starts or restarts a lane. |
+| `/api/status` | GET | `commands.rs:677`, `routes.rs:16`, `stream.rs` (power/activity fallback) | `JarvisApi.kt:271` | Reports the power mode (written by `POST /api/power` since `power-mode.patch`). Also `held` (a boolean): **what sets it is not documented anywhere in this repository** - it comes from the owner's `jarvis_hud.py`. Two phone comments used to give it two different meanings; the Brain screen now says only "something held back" and points to the undo shelf, and the quick-settings tile does not read it. **`ollama`** (a boolean, documented here 2026-10-14) is `_reachable(OLLAMA_URL + "/api/tags")` in `jarvis_hud.py:3206` - whether the PC's OWN model server is answering, at the address the chat itself uses. The owner's everyday lane runs on `http://127.0.0.1:11436` (`OLLAMA_URL` in his environment), not the default 11434, so only the PC can answer this. **Both apps draw a standing line from it, before and without a question** (the desktop windows from `check_server_health`, whose Ollama row IS this field; the phone from `StatusInfo.ollama`, on Home's status line), and **only a plain `false` draws it**: `true` is the model answering, and an absent field is a PC that did not say, which is not "down". The incident it answers: both of the owner's lanes were dead from about 16:30 to about 21:5x on 2026-10-14, this field said `false` the whole time, and neither app drew it - Jarvis admitted it only when he asked a question, with `model_not_running`. It is a different state from "Jarvis isn't connected" (the PC unreachable): here the PC is answering perfectly and only answers are missing. Nothing acts on it - no app starts or restarts a lane. |
 | `/api/graph` | GET | **no longer** (the HUD page only, through `hud_proxy.rs`) | **no — by rule** | The memory graph stays off the phone. **Taken off the Brain's allowlist on 2026-09-28** (§71.3, privacy finding B1): its fact dots were not hidden by "Windows Hello for memory lists". Galaxy is drawn from `/api/memory/entities` instead. The HUD's copy loses its fact, document and person dots while the lists are hidden (`lock/rules.rs` `redact_graph`). |
 | `/api/models` | GET | `routes.rs:17` | `JarvisApi.kt:300` | Phone reads it only where the handshake reports the `models` capability. A failed read falls back to the phone's own last successful one, cached on disk and clearly marked as old - see the note below the table. |
 | `/api/compute` | GET | `routes.rs:18` | via `probe` | GPU/VRAM plan. Shape undocumented — see below. |
@@ -4633,7 +4633,7 @@ only to these four routes:** `/api/models/install`, `/api/models/switch`,
 `/api/hardware/create`, `/api/second-card` (`hardware.rs` `step_request`,
 `Hardware.stepRequest`). There is no request that asks for more than one
 step. A step asked for shows as waiting for 600 seconds (ten minutes, from
-2026-10-13; it was 180) even when the PC
+2026-10-14; it was 180) even when the PC
 cannot see its card (a download's or switch's card is shaped by the owner's
 own `jarvis_gate`), so one tap is one card.
 
@@ -4781,7 +4781,7 @@ repeating job then moves to its next time - never once per missed time.
 | `GET /api/schedule` | - | 200 `{"available": true, "now", "tz", "jobs": [job], "todo": [job], "went_off": [job], "lists": [{"name", "title", "open"}], "running", "limits"}`; 503 `{"available": false, "error": <exception name>}` without `jarvis_schedule.py` | Token + origin. `jobs`: timers, alarms, reminders and repeating jobs that are active, paused or waiting for a card, soonest first. `todo`: the open to-do items of every list, oldest first (each with its `list`). Since 2026-09-25 (21.9): `went_off` - timers, alarms and reminders that went off in the last hour and are not snoozed, newest first, at most five; `lists` - the named lists with open items. An older PC sends neither. |
 | `GET /api/schedule?id=<id>` | - | 200 `{"available": true, "job": job}`; 404 `{"reason": "no_such_job"}` | ONE job - also one that went off in the last day (kept 24 hours). How an app reads a notification's words. |
 | `POST /api/schedule/add` | `{"kind": "todo", "text", "list"?}` (`list`: a named list, 21.9) · `{"kind": "timer", "seconds", "text"?}` · `{"kind": "alarm" \| "reminder", "at": <epoch seconds>, "text"?}` · `{"kind": "alarm" \| "reminder", "date": "YYYY-MM-DD", "time": "HH:MM", "text"?}` (since 2026-09-28, section 83: read on THIS PC's clock; 200 adds `"said"`, "Reminder set for 14:00 on Monday 12 October."; 400 for a time that has passed or a date not on the calendar) · `{"kind": "alarm" \| "reminder", "repeat": rule, "text"?}` | 200 `{"ok": true, "job"}` - since 2026-09-26 also for a plain repeating alarm or reminder and the standby schedule, with `"waiting": false` and `"said"` naming the next times; **202** `{"ok": true, "waiting": true, "job", "said"}` for a repeat that waits for its card (a briefing); 400 `{"ok": false, "error": <sentence>}`; 409 a list is full | No card for anything that goes off once, and (2026-09-26) none for a plain repeating alarm, reminder or standby schedule. A repeating briefing or "tell me when" raises ONE card and is set up only on its yes. Both apps add a to-do item here, a one-off reminder from "Photo to reminder" (section 83, the owner's tap),, and (since 2026-09-25) a morning briefing that repeats - `{"kind": "briefing", "repeat": rule}`, section 22; timers and reminders are said or typed to Jarvis. |
-| `POST /api/schedule/act` | `{"id", "do": "pause" \| "resume" \| "delete" \| "done" \| "add_time" \| "snooze", "seconds"?}` · `{"do": "clear_list", "list", "count"}` | 200 `{"ok": true, "id", "said"}` (`snooze` adds `"job"`: the copy, and `"already": true` when it was snoozed already); 404 `{"reason": "no_such_job"}`; 409 not possible for that job (`done` on a timer, pause on a to-do, time below nothing, snooze on something that has not gone off, and since 2026-10-13 every verb but `snooze` and `delete` on a job that has already gone off - "It has already gone off."); 400 anything else | ONE job, at once, no card - it only makes things quieter, or (snooze) sets the same thing to go off once more. **No "delete all"**: `id` must be one job id (`s` and ten hex digits). The one other form is `clear_list` (21.9): every item on ONE named list, only with the `count` the app showed, never the to-do list. Both apps hold every one on a stale link. Deleting a repeat whose card is still up withdraws it: approving that card then sets nothing up. Since 2026-10-13 (DEF-008, the owner's decision) **`delete` also acts on a job that has gone off**: it is one the apps SHOW under "Just went off", and it is kept for `FIRED_KEEP` (a day), so the route reaches back the same day `snooze` does. `snooze` and `delete` are the two verbs routed before the scheduler's state gate; nothing else changed. |
+| `POST /api/schedule/act` | `{"id", "do": "pause" \| "resume" \| "delete" \| "done" \| "add_time" \| "snooze", "seconds"?}` · `{"do": "clear_list", "list", "count"}` | 200 `{"ok": true, "id", "said"}` (`snooze` adds `"job"`: the copy, and `"already": true` when it was snoozed already); 404 `{"reason": "no_such_job"}`; 409 not possible for that job (`done` on a timer, pause on a to-do, time below nothing, snooze on something that has not gone off, and since 2026-10-14 every verb but `snooze` and `delete` on a job that has already gone off - "It has already gone off."); 400 anything else | ONE job, at once, no card - it only makes things quieter, or (snooze) sets the same thing to go off once more. **No "delete all"**: `id` must be one job id (`s` and ten hex digits). The one other form is `clear_list` (21.9): every item on ONE named list, only with the `count` the app showed, never the to-do list. Both apps hold every one on a stale link. Deleting a repeat whose card is still up withdraws it: approving that card then sets nothing up. Since 2026-10-14 (DEF-008, the owner's decision) **`delete` also acts on a job that has gone off**: it is one the apps SHOW under "Just went off", and it is kept for `FIRED_KEEP` (a day), so the route reaches back the same day `snooze` does. `snooze` and `delete` are the two verbs routed before the scheduler's state gate; nothing else changed. |
 
 A `job`:
 
@@ -5102,7 +5102,7 @@ was out of reach can still act on it - while **the "Just went off" list and
 the spoken phrase reach back one hour** (`WENT_OFF_SHOWN`, 3600, and
 `jarvis_quick.py`'s own words are "Nothing went off in the last hour, so there
 is nothing to snooze."). **`delete` uses that same day-long reach-back** (the
-owner's decision of 2026-10-13, DEF-008): a job that has gone off is one the
+owner's decision of 2026-10-14, DEF-008): a job that has gone off is one the
 "Just went off" list SHOWS, so it must be one the apps can clear, and `delete`
 is routed before the scheduler's own state gate exactly as `snooze` is. It is
 the only other verb that acts on such a job - `pause`, `resume`, `done` and
@@ -5123,7 +5123,7 @@ item, a briefing and the standby schedule cannot be snoozed (409).
   **Snooze 10 minutes** and **Delete** (the same word and the same `delete`
   every other row offers) - ONE job per tap, no question, held on a stale
   link. A snoozed copy's tag reads "alarm, snoozed". Delete works on an
-  entry that has ALREADY gone off since 2026-10-13 (DEF-008, the owner's
+  entry that has ALREADY gone off since 2026-10-14 (DEF-008, the owner's
   decision: `delete` is routed before the scheduler's state gate, the same
   way `snooze` is - see the `/api/schedule/act` row above). Nothing else
   about the row moved: it still ages out of "Just went off" after an hour on
@@ -8777,9 +8777,9 @@ words too (`"Erase the words" cannot reach into an older backup ...`).
 | `GET /api/backup/list` | The kept backup files in the folder, newest first. This PC only (**403** otherwise). |
 | `POST /api/backup/folder` `{"path"}` | Sets where backups are written. This PC only. **202** while ONE approval card waits (action `change_own_config`, the same action "Folders Jarvis may look in" uses to add a folder, and refused the same places - `jarvis_documents.check_folder`, imported not copied). |
 | `POST /api/backup/now` `{}` | Makes one backup into the folder already set. This PC only, **no card** - the folder was already approved. **409** with no folder set. 200 `{"ok", "name", "at", "counts", "recovery_code"}` - the code shown once. |
-| `GET /api/backup/status` | **What the FOLDER holds** (2026-10-13), for the phone. Read-only, **any paired device** - not PC-only. Returns `{"available", "folder", "keep", "kept", "last_backup_at", "last_backup_name", "verify", "last_attempt", "prepared"}`. `folder` is the folder's **LAST segment only** ("Jarvis Backups"), never the whole path: a full path names the owner's Windows account, which is what §8 already keeps off a phone for the memory store's own path. `keep` is `KEEP` (5); `kept` counts the files that are COMPLETE (the same rule retention uses). `last_backup_at` is read from the newest kept file's own name, so it is TRUE after the backend restarts - the older `last_backup_at` on `GET /api/backup` is the PC's memory only and answered null with four backups sitting in the folder. `verify` is `{"ok", "why", "words", "proves_open", "limit"}` for that newest file: `why` is `complete`/`missing`/`too_small`/`not_a_backup`/`unreadable`/`no_folder`/`empty`, checked against the file's own bytes (magic, header shape, minimum length). **`proves_open` is always false and is sent so a client never has to assume it**: only the recovery code opens a backup and codes are only typed on the PC. `last_attempt` is the last run THIS backend made, in memory - `{"ok", "at", "error"}` - and is where a **failure** is visible, so a failed backup is never read as a success. Carries no recovery code and never can. |
-| `POST /api/backup/prepare` `{}` | **The phone asks for a backup** (2026-10-13). **Any paired device.** Mints this run's one-time recovery code and **WRITES NOTHING AT ALL** - the folder is byte-for-byte unchanged. 200 `{"ok", "pending", "id", "recovery_code", "at", "expires_at", "folder", "keep", "message"}`. **409** with no folder set (`NO_FOLDER`), because a code minted with nowhere to write is a code the owner would be told to keep for nothing. The code is held in the PC's memory only, for `PENDING_TTL_S` (15 minutes), and is never written to a file, a log or the audit trail. A second ask replaces the first. |
-| `POST /api/backup/commit` `{"id", "code"}` | **The owner says he has kept the code, and the PC writes the file** (2026-10-13). **THIS PC ONLY** - the write into the PC's folder is the PC's own action, so a caller that is not the PC is refused **before the body is read**: **403** `{"ok": false, "pc_only": true, "error": "The backup is written on your PC, so nothing was written from here. ..."}`. The code must be the one `prepare` minted and must still be inside `PENDING_TTL_S`; the comparison is cleaned the way the owner would type it (uppercase, hyphens and spaces dropped), so the four-groups-of-five form and the bare 20 characters are the same code. A **wrong or missing** code: **400**, the run stays open so a typo can be corrected, **nothing written**. An **expired or never-started** run: **409**, the run is dropped, **nothing written**. On success: 200 `{"ok", "name", "at", "counts", "size", "folder", "keep", "recovery_code", "message"}`, the file being made with **that same code** (`backup_now(code=...)`) - so the code the owner kept is the code that opens what landed. Any failure (a full disk, a refusal by the module) records `last_attempt.ok: false` and writes nothing. |
+| `GET /api/backup/status` | **What the FOLDER holds** (2026-10-14), for the phone. Read-only, **any paired device** - not PC-only. Returns `{"available", "folder", "keep", "kept", "last_backup_at", "last_backup_name", "verify", "last_attempt", "prepared"}`. `folder` is the folder's **LAST segment only** ("Jarvis Backups"), never the whole path: a full path names the owner's Windows account, which is what §8 already keeps off a phone for the memory store's own path. `keep` is `KEEP` (5); `kept` counts the files that are COMPLETE (the same rule retention uses). `last_backup_at` is read from the newest kept file's own name, so it is TRUE after the backend restarts - the older `last_backup_at` on `GET /api/backup` is the PC's memory only and answered null with four backups sitting in the folder. `verify` is `{"ok", "why", "words", "proves_open", "limit"}` for that newest file: `why` is `complete`/`missing`/`too_small`/`not_a_backup`/`unreadable`/`no_folder`/`empty`, checked against the file's own bytes (magic, header shape, minimum length). **`proves_open` is always false and is sent so a client never has to assume it**: only the recovery code opens a backup and codes are only typed on the PC. `last_attempt` is the last run THIS backend made, in memory - `{"ok", "at", "error"}` - and is where a **failure** is visible, so a failed backup is never read as a success. Carries no recovery code and never can. |
+| `POST /api/backup/prepare` `{}` | **The phone asks for a backup** (2026-10-14). **Any paired device.** Mints this run's one-time recovery code and **WRITES NOTHING AT ALL** - the folder is byte-for-byte unchanged. 200 `{"ok", "pending", "id", "recovery_code", "at", "expires_at", "folder", "keep", "message"}`. **409** with no folder set (`NO_FOLDER`), because a code minted with nowhere to write is a code the owner would be told to keep for nothing. The code is held in the PC's memory only, for `PENDING_TTL_S` (15 minutes), and is never written to a file, a log or the audit trail. A second ask replaces the first. |
+| `POST /api/backup/commit` `{"id", "code"}` | **The owner says he has kept the code, and the PC writes the file** (2026-10-14). **THIS PC ONLY** - the write into the PC's folder is the PC's own action, so a caller that is not the PC is refused **before the body is read**: **403** `{"ok": false, "pc_only": true, "error": "The backup is written on your PC, so nothing was written from here. ..."}`. The code must be the one `prepare` minted and must still be inside `PENDING_TTL_S`; the comparison is cleaned the way the owner would type it (uppercase, hyphens and spaces dropped), so the four-groups-of-five form and the bare 20 characters are the same code. A **wrong or missing** code: **400**, the run stays open so a typo can be corrected, **nothing written**. An **expired or never-started** run: **409**, the run is dropped, **nothing written**. On success: 200 `{"ok", "name", "at", "counts", "size", "folder", "keep", "recovery_code", "message"}`, the file being made with **that same code** (`backup_now(code=...)`) - so the code the owner kept is the code that opens what landed. Any failure (a full disk, a refusal by the module) records `last_attempt.ok: false` and writes nothing. |
 | `POST /api/backup/restore/preview` `{"name", "code"}` | Decrypts to read the backup's own `manifest.json` - counts and its date, never any other content. Changes nothing. **400** `{"wrong_code": true}` for a code that does not open it. This PC only. |
 | `POST /api/backup/delete-older` `{}` | **"Delete older backups now"**, offered by both apps after an "Erase the words" (2026-09-30): erased words can still be readable in a backup made before the erase. This PC only (**403** otherwise). **202** while ONE approval card waits (action `change_own_config`, the folder card's own; the card says how many files go and that it cannot be undone). Approved: one FRESH backup is made first (a new recovery code, returned once in `last_delete_older.fresh_backup`), then every other backup file in the folder is deleted; if the fresh one cannot be made, nothing is deleted. **409** with no folder or no backups. The outcome is in `GET /api/backup` as `last_delete_older` (`outcome` `deleted`\|`denied`\|`timed_out`\|`withdrawn`\|`refused`\|`failed`, `deleted`, `message`, `fresh_backup`) and `pending_delete_older_card`. |
 | `POST /api/backup/restore` `{"name", "code"}` | **202** while ONE approval card waits, action **`restore_backup`** - in `jarvis_owner_check.PC_ONLY_ACTIONS`, so it ALWAYS needs Windows Hello and is ALWAYS refused from any device but this PC, whatever the gate's own risk table says (the same mechanism `loosen_what_asks_first` and `enable_reading_tool` use). From anything but this PC it is refused **up front, before the body is read** - **403** `{"ok": false, "pc_only": true, "error": "Restoring has to be done in Jarvis on your PC, so nothing was restored. Open Jarvis there, then Settings, Backups."}` - and never with the 202 above, which promises a Windows Hello card that such a caller can never approve (2026-10-10; the same words are on `/api/backup/restore/preview`). **Its card must not NAME a file `jarvis_gate.py` protects** (`jarvis_hud.py` among them): the card is what the gate is handed as its prompt, and a prompt naming one is refused at tier `never` before any card exists, so nobody is ever asked - the card says "the .py files in the folder Jarvis runs from", not the file's name, and `backend/test_backup.py` holds it against the gate's own `_PROTECTED` list. A refusal is recorded in `last_restore` with `outcome: "refused"`, the next step in plain words in `message` (the desktop's Settings, Backups shows that), and the technical reason - which tier, and the gate's own sentence - in `why`, for a bug report. On approval: Jarvis backs up the CURRENT state first, automatically, with a FRESH one-time recovery code (returned in the outcome exactly once), so the restore itself can be undone - then writes the backup's files back. Restore only adds and overwrites; it never deletes a file that is not in the backup. From 2026-10-05 it also writes the archive's `source/*.py` back into the folder the module runs from, so the CODE comes back with the data - and the card says plainly that restoring an OLDER backup therefore puts back the older program and undoes updates applied since, naming `apply-patches.ps1`. |
@@ -8843,7 +8843,7 @@ different depths); `/api/backup/status`, `/api/backup/prepare` and
 `/api/backup/commit` are `phone-only`; every other backup route is
 `deliberate` (`docs/ARCHITECTURE.md` section 8).
 
-**The phone's "Back up now", and why it is two calls (settled 2026-10-13).**
+**The phone's "Back up now", and why it is two calls (settled 2026-10-14).**
 The owner asked for this button on 2026-10-10; the answer then was that the
 phone could not have one that works, because `POST /api/backup/now` is refused
 for every caller that is not this PC (`jarvis_backup.request_backup_now` ->
@@ -8888,7 +8888,7 @@ limit beside the pass. To prove a backup opens, open it on the PC with its code
 
 ### 45.6 Known gaps, said plainly
 
-- **A paired device can churn the kept backups** (2026-10-13, found in this
+- **A paired device can churn the kept backups** (2026-10-14, found in this
   feature's own audit). `POST /api/backup/prepare` is open to any paired
   device, which is what lets the phone ask at all, and `commit` runs on the PC
   - so a caller holding the token can ask, then immediately commit, again and
@@ -13273,7 +13273,7 @@ that brings Android 17's background-sound limits
 network. A `targetSdk` bump without `ACCESS_LOCAL_NETWORK` would install, start
 and pair and then never reach the PC, reporting *"Your PC isn't answering"* with
 nothing pointing at the cause. The permission and its request flow are already
-built (PR #348, 2026-10-13); only the test on a real GrapheneOS phone is left
+built (PR #348, 2026-10-14); only the test on a real GrapheneOS phone is left
 (`docs/GRAPHENEOS-PIXEL9-EVAL-2026-10-12.md` §6).
 
 ### 81.4 Android 17 app bubbles
@@ -19699,7 +19699,7 @@ are tested without a Tauri app or a network
 
 `tools/check_parity.py` carries all three routes.
 
-## 130. Changing a setting by asking, in any words: the `change_setting` tool (added 2026-10-13)
+## 130. Changing a setting by asking, in any words: the `change_setting` tool (added 2026-10-14)
 
 **The defect this closes.** "Jarvis can change all settings if I ask" was false. A
 settings request reached a setting only when the sentence fitted the fixed phrase
@@ -19729,7 +19729,7 @@ function, `BoolSetting.set`, and that function is what a spoken sentence runs.
 Because the card is the setting's OWN, it carries that setting's own risk text, its own
 Windows Hello rule and its own PC rule: no second card is ever raised for one change, and
 no generic action name has to stand in for 21 different risk texts. The tool's own name
-maps to `change_own_config` in `jarvis_gate._TOOL_ACTIONS` - a row added on 2026-10-13 by
+maps to `change_own_config` in `jarvis_gate._TOOL_ACTIONS` - a row added on 2026-10-14 by
 `backend/gate-entries.patch` (with its previous version recorded in
 `backend/patch-history/`), because `test_agent.py` requires every tool's lookup name to be
 a KEY of that table, and the action name alone is not one. That action already carries the
@@ -19768,7 +19768,7 @@ work, while the Settings page's own route (`POST /api/manner`) went through `han
 and did. `backend/test_settings_tool.py` now walks every setter's own imports with `ast`
 and fails on any module attribute that does not exist.
 
-**What a second reader changed (2026-10-13).** Two weak spots were found in the first
+**What a second reader changed (2026-10-14).** Two weak spots were found in the first
 version of this work, and both are fixed with regression cases:
 
 * The tolerant word matcher accepted a request whose every word fitted INSIDE a longer
@@ -19791,12 +19791,12 @@ version of this work, and both are fixed with regression cases:
 **Where it lives.** `jarvis_agent.py` (`SETTINGS_TOOL`, `_settings_call`, the branch in
 `_one_call`, `_PLAN_EXCLUDED_STEPS` so a plan can never name it), `jarvis_settings_registry.py`
 (`find_bool_setting_words`, `cannot_change_setting_words`), `jarvis_reach.py` (its plain
-name). **It ships ON**, by the owner's decision of 2026-10-13 ("yes turn it on for my
+name). **It ships ON**, by the owner's decision of 2026-10-14 ("yes turn it on for my
 pc. it should also be enabled by default") - the second tool after `web_search` to be
 switched on out of the box, and `[tools].enabled` in `jarvis-framework.toml` says so.
 (Turning it back off is dropping that one name from that list.) Its description is 295
 tokens, so it has its own `more_tools` group rather than a place in the core. **The text
-of that description was rewritten on 2026-10-13**, from 285 tokens to 295, after the field
+of that description was rewritten on 2026-10-14**, from 285 tokens to 295, after the field
 test found the model would not call the tool: the old text read as a note ABOUT the tool
 (third person, bare setting names as its examples, and "say so plainly" offering an answer
 in words as a fine outcome), and the model answered all four of the owner's own requests
@@ -19819,9 +19819,9 @@ exists. `backend/test_tool_text.py`, `test_short_tool_list.py`,
 
 ---
 
-## 131. Updating both halves: there is no route, and that is the design (added 2026-10-13)
+## 131. Updating both halves: there is no route, and that is the design (added 2026-10-14)
 
-The owner asked for this directly, on 2026-10-13: one Update control that
+The owner asked for this directly, on 2026-10-14: one Update control that
 updates both the desktop program and the Python backend. **This section exists
 to say that it added nothing to this API**, so a reader looking for the routes
 of that feature finds the reason instead of nothing.
@@ -20035,9 +20035,6 @@ and both routes are live, and the UI is not built on either app. When it is,
 it goes on BOTH, on this same store and this same card. `tools/check_parity.py`
 cannot see it: it scans the two apps' own source, so a backend route no app
 calls is outside what it decides.
-
----
-
 ## 133. "Write Like Me": drafting in the owner's own voice (added 2026-10-15)
 
 `backend/jarvis_voiceprint.py`, and its drop-in folder
@@ -20141,7 +20138,411 @@ a sentence is not replaced.
 built; neither app has a list or a Forget. When they are built they go on BOTH,
 on this same store and this same confirm. `tools/check_parity.py` cannot see
 it for the same reason as §132.7.
-## 134. Starting the local model when it is not running (added 2026-10-13)
+=======
+## 134. The blind credential vault: a NAME everywhere, the value at the point of use (added 2026-10-14)
+
+**The idea, in one line.** The model, the prompt, the approval card, the audit
+line, the event payload and every returned string carry an opaque handle -
+`{{vault:github}}` - and the real value is put in **once**, on the one line that
+builds the outbound request that authenticates with it. Anything that comes back
+is run through `jarvis_scrub` before it is returned, so a service that echoes the
+key back cannot leak it. `backend/jarvis_vault.py`; borrowed from Meta's Muse and
+from the blind-credential-handle idea generally.
+
+**Where the value lives.** Windows Credential Manager, through
+`jarvis_token_store.WindowsStore` - the same store, the same generic-credential
+format and the same three ctypes calls the pairing token and the Exa/Tavily/Brave
+keys already use, one entry per name under `Jarvis Backend/vault/<name>`. This
+section adds no second mechanism to keep in step with the old one. **Values are
+never written to any file**: `<config folder>/vault.json` holds the names, the
+host each is bound to and when each was last used, and running the suite searches
+those bytes for the value, a prefix of it and its length. With no Credential
+Manager there is no fallback to plain text - `put()` refuses and `status()` says
+why.
+
+**The two routes** (drop-in: `plugins/ready/vault/plugin.json` names the module
+and the loader calls its `install()`; no patch, no core change):
+
+| route | what it answers |
+|---|---|
+| `GET /api/vault/handles` | every name, its handle, the host it is bound to, when it was last used and whether a value is really there - **never a value, never a masked prefix of one, never a length** |
+| `POST /api/vault/put` | `{"name", "value", "for_host"}` - store one secret. ONE approval card at tier `ask` |
+
+**The card, and what a denial does.** `POST /api/vault/put` is a mutating action,
+so it goes through the one permission model: `jarvis_gate.check()` under the
+action `vault_put`, tier `ask`, with the card's words written in the module and
+never assembled from the request. A denied, timed-out or refused card returns
+`403`/`503` with "nothing was stored" and **nothing is stored** - and nothing is
+stored *before* the answer either: `put()` is not reached until the card has been
+decided, and the suite reads the store from inside the gate itself to prove it. A
+verdict of `allowed=True` is not enough: the tier must BE `ask` and the outcome
+must be `approved` (`allowed=True` also comes back on tier `notify` with nobody
+asked - ARCHITECTURE §3, "`allowed` is not 'a human decided'"). A gate that
+cannot be reached fails closed. The value is never echoed back, in the answer or
+in a refusal.
+
+**`resolve()` is the one place a value is substituted**, and it is bounded:
+`{{vault:name}}` is replaced exactly once per occurrence; a handle that names
+nothing, or a value the store will not hand over, is left as the literal handle
+(a visible placeholder beats an empty string that authenticates wrong); and a
+handle **bound to a host resolves only for that host**. Rule 3's "sent only to the
+one service it authenticates against" is therefore a property of this function
+rather than of every caller remembering it: with no host given, a bound handle
+does not resolve at all.
+
+**The one real use, and why that one.** `jarvis_search.py` builds the credential
+header for the Exa, Tavily and Brave keys from the provider's own handle, and
+`_send()` substitutes it. Those three keys are the right first call site because
+each goes to exactly ONE host that is fixed in code (`api.exa.ai`,
+`api.tavily.com`, `api.search.brave.com`) - so the host binding can be enforced
+rather than trusted - and because a web search is "one request, one key, one
+service" with nothing in between. An empty vault changes nothing at all: the key
+is still read from the Credential Manager entry it always was. A provider that
+echoes the key into its answer is cleaned on the way back, both by putting this
+turn's values behind their handles and by the project's scrubber.
+
+**Deliberately not wired, and why.** `jarvis_browser_control.run()` has taken a
+`secrets(name, host)` hook since `browser-engine.patch`, and `jarvis_agent`'s
+`_run_browser_control` has never passed one - so a `<secret>` step stops today
+with "no secret store was given to this run". The vault is *not* plugged in there:
+a browsing turn can be pointed at any site, and a store that hands a value to
+whatever host the page is on would break rule 3's "only the one service it
+authenticates against" in exactly the place it matters most. Wiring it belongs
+with a per-site binding the owner chooses, which is a decision, not a plumbing
+job.
+
+**The tests that bite.** `backend/test_vault.py` (196 checks) searches the
+returned JSON, the audit details, `handles()`, `status()` and `vault.json`'s own
+bytes for the value - and for a masked prefix and the length - rather than
+asserting a flag; proves a four-character value is still hidden though the
+scrubber's own exact-match floor is eight; proves a denied card writes neither the
+store nor the file; and runs a real server on 127.0.0.1 to prove end to end that
+the vault's key reaches its one service, that a key bound elsewhere is not sent,
+and that the service's own echo of the key does not come back in the result.
+
+**Backend only, on purpose, and this is the whole reason.** Neither app has a
+vault screen and neither calls these two routes: a value is typed on the PC, in a
+setting or through `POST /api/vault/put` from this machine, and the phone is
+never asked for one - the same rule the web-search keys already follow
+("Keys are entered on the PC only ... the phone never asks for one: sending a key
+to the PC would send it somewhere other than its own service",
+`jarvis_search.KEY_ENTRY`). A phone screen for this would be a screen whose whole
+job is to carry a secret over the network to a machine that can read it from its
+own Credential Manager, which is more exposure for no gain.
+`GET /api/vault/handles` carries no value, so it is safe for an app to read; the
+desktop and phone halves are simply not built yet, and `tools/check_parity.py`
+reports both routes as the backend's own until one is.
+
+
+---
+
+
+---
+
+## 135. The skill library's other doors: four routes under `/api/skills/hub` (added 2026-10-15)
+
+`backend/jarvis_skill_hub.py`, and its drop-in folder `plugins/ready/skill-hub/`.
+Four routes, no patch. **It adds no route that already existed**: the list
+(`GET /api/skills`) and the removal (`POST /api/skills/decide`, with the "are
+you sure?" before it) are in §6's tables and stay exactly where they are. This
+section documents the four routes that are new, and nothing else.
+
+### 135.1 What this is
+
+A skill is a folder with a `SKILL.md` in it, and `jarvis_skills.py` owns
+everything about one: the frontmatter parser, the scanner that refuses the
+attack patterns the OpenClaw marketplaces really used, the quarantine, the
+~100-token card, the full body, installing, removing and writing. This module
+**re-implements none of that and calls all of it.** It adds the four things
+that were missing around it:
+
+1. **the reference manuals.** `parse_skill` already walked a skill's folder and
+   recorded every file in it, `references/<file>.md` included, in the skill's own
+   file list; nothing in the backend ever read one. A manual is now listed by
+   name and size for free, and read only when a caller asks for that one - which
+   is what keeps a large manual at zero tokens until it is wanted;
+2. **leading `/skill` and `/bundle` commands.** Up to five tokens off the FRONT
+   of a message, stopping dead at the first one that is not a known skill or
+   bundle, so `/path/to/file` is never swallowed;
+3. **a project's own skills**, at `<project folder>/.jarvis/skills`, for
+   projects the owner explicitly trusted;
+4. **`/learn`**: a four-section distillation (When to Use / Procedure /
+   Pitfalls / Verification), scrubbed, and saved only through
+   `jarvis_skills.write_skill()`.
+
+### 135.2 The four routes
+
+```
+GET  /api/skills/hub/references?skill=<name>            the manuals a skill ships
+GET  /api/skills/hub/references?skill=<name>&file=<ref>.md
+                                                        ONE manual, read now
+GET  /api/skills/hub/projects                           a trusted project's skills
+POST /api/skills/chain         {"text": "/skill-a /bundle rest of the message"}
+POST /api/skills/learn         {"topic", "steps"|"procedure", "when",
+                                "pitfalls", "verification", "name"}
+```
+
+All four are installed by the module's own `install()`, wrapped round the
+core's Handler after its own origin and token checks, exactly as
+`jarvis_receipts.py` (§132.5) does it. **No patch is involved:**
+`plugins/ready/skill-hub/plugin.json` names `jarvis_skill_hub` with
+`"install": "handler"`, and `jarvis_plugins.py` makes the call the patch would
+have made. `stack_order` is 142 - after every folder the old patch stack had
+(the highest of those is `pictures` at 141).
+
+The first route answers twice, on the same path, and the two forms report
+failure differently - one HTTP status, one payload - which a client has to know.
+With `?skill=` alone it lists: `{"ok", "name", "references": [{"reference",
+"bytes", "too_big_to_read"}], "note"}` - names and sizes, and **no text of any
+kind**. A missing `?skill=` is a 400; a skill that does not parse, or that is not
+there, is a 404. With `&file=` it reads that one manual and the answer is
+**always 200**, carrying `{"ok", "name", "reference", "text", "bytes",
+"findings", "warnings", "note"}` - a refusal is `{"ok": false, "refused": true,
+"findings": [...]}` **with no `text` key at all**, so a client that only checks
+the status code is told `ok` and must read the body. A manual is one `.md` file
+name inside the skill's own `references/` folder: a separator, a `..`, an
+absolute path, a name that is not there, or anything over 256 KB is refused with
+its reason rather than opened.
+
+The second route answers `{"ok", "skills", "quarantined", "skipped", "dirs"}`
+for every skill under every trusted project's `.jarvis/skills`. "Trusted" is
+not a second opinion invented here - it is `jarvis_projects.check_folder()`,
+the one check "Folders Jarvis may look in" already uses, asked again at use
+time because a folder can be taken off that list after a project was made. A
+project whose folder is no longer trusted is not looked in at all. 503 when
+`jarvis_skills.py` or `jarvis_projects.py` is not on this PC, which is a real
+answer rather than an empty list.
+
+The third answers `{"ok", "skills", "missing", "rest", "stopped_because"}` -
+the skill NAMES a chain asks for, the rest of the message untouched, and why
+the chain stopped. It cannot run a skill, reach a skill's body, or read a
+manual: it reads the index and returns names.
+
+The fourth is the only route here that writes anything.
+
+### 135.3 The permission model, said plainly
+
+The three reads raise **no approval card**, which is what the gate's own table
+already says: `skill_list`, `skill_load` and `skill_scan` are tier `auto`
+(`jarvis_gate.py:850`). Reading a skill, listing its manuals, looking in a
+trusted project's folder and parsing a chain are all things the owner can
+already do by opening the folder.
+
+`/api/skills/learn` is the writer, and **it reaches the write only through
+`jarvis_skills.write_skill()`**, which is the existing scanner and the existing
+card in the order that matters: it scans the body, refuses outright on a
+`block` finding, and raises ONE `modify_own_code` card **before** it writes
+(`jarvis_skills.py:799`, `:806`, `:816`). `modify_own_code` is `ask` in the
+shipped `jarvis-framework.toml` (:281), so it is ONE card and it waits for a
+person - the action does not exist unattended. Its risk row is
+`("hard", "local")` (`jarvis_gate.py:278`), and measured against the gate's own
+`risk_for()` that is `{"reversible": "hard", "reach": "local", "swipe_ok":
+false, "why": "revertible from a backup, not from here"}`: **`swipe_ok` is
+false**, so a gesture cannot approve it - the card has to be opened. **No new
+gate row was needed and none was added:** the vocabulary already had
+`skill_install` and `skill_write` mapped to `modify_own_code`
+(`jarvis_gate.py:852-853`).
+
+One thing is re-checked rather than assumed. `write_skill()` tests
+`Verdict.allowed`, and `allowed` is `True` on the tiers `notify` and `auto`
+where nobody was asked - `jarvis_skills.refine()` says exactly that about the
+gate it shares (`:853-864`). So `learn()` reads the TIER itself and refuses
+unless `modify_own_code` is `ask`, the way `jarvis_skill_discovery.offer()`
+does. A settings file that listed it as `notify` cannot turn this card into a
+rubber stamp.
+
+### 135.4 A reference manual is scanned before it is handed over
+
+A manual is text an agent will read and follow, exactly like a `SKILL.md`, so
+it earns the same scanner. It is read and then passed through
+`jarvis_skills.scan_text()` **before** it can reach a model: a `block` finding
+returns `{"ok": false, "refused": true, "findings": [...]}` and **no text at
+all**. A scanner that raises is a refusal too, not a pass - "the scanner did not
+answer" and "the scanner said no" end in the same place.
+
+The same rule covers a project's own skills, where it matters more: an
+untrusted-looking skill in the owner's own project folder is parsed, scanned,
+and **quarantined** if it fails - copied into `jarvis_skills.QUARANTINE` with
+the reason written beside it (`jarvis_skills.py:621`) - and never loaded. **The
+original is not deleted.** A skill that merely fails to parse is `skipped` with
+the reason, not quarantined, because nothing was scanned to refuse.
+
+### 135.5 What it deliberately does not do
+
+- **It does not re-document `GET /api/skills` or `POST /api/skills/decide`.**
+  Both already existed, on both apps, with a caller; this feature touches
+  neither and does not describe them again (§6).
+- **It does not install a skill from anywhere.** There is no download, no
+  import and no "install this skill" route: the only path to a new skill file
+  is `/learn` → `write_skill()` → scanner → card → write.
+- **It never deletes anything.** The one destructive-looking action is the
+  quarantine, and that only copies.
+- **It has no "yes to all".** No loop here raises a card, and there is no
+  approve-all anywhere in the module - `backend/test_skill_hub.py` asserts both
+  against the source with the comments stripped.
+- **It reads no web page, email, document or note.** `/learn` writes down what
+  its caller hands it and nothing else.
+- **A project's skills are not leading `/` tokens.** Parsing a message must
+  cost one small JSON read and must never run the scanner, so a project's own
+  skills are reached through the projects route and their project, not by a
+  bare command.
+
+### 135.6 Neither app has a screen for it yet
+
+`docs/ARCHITECTURE.md` §8 carries the row. The four routes are live and neither
+app calls any of them: no screen reads a reference manual, offers `/skill`
+completion, lists a project's skills, or offers `/learn`. When they are built
+they go on BOTH, on these same routes and this same `modify_own_code` card.
+`tools/check_parity.py` cannot see any of it - it scans the two apps' own
+source, so a backend route no app calls is outside what it decides - which is
+said here rather than read as a clean pass it did not earn.
+
+---
+
+## 136. The cost advisor: no route at all, and it decides nothing (added 2026-10-14)
+
+`backend/jarvis_auto_router.py`, and its drop-in folder
+`plugins/ready/auto-router/`.
+
+**This section exists to say that the feature added nothing to this API.** The
+same shape as §131, and for the same reason: a reader who goes looking for the
+routes of "the thing that decides whether a turn goes to the cloud" should find
+the reason there are none instead of finding nothing.
+
+### 136.1 The one sentence
+
+**This module ADVISES. `jarvis_router.choose()` DECIDES.**
+
+`choose()` (`backend/rebuilt/jarvis_router.py:590`) is the single authority on
+which lane answers a turn. Its gates run in a fixed order and every one of them
+can only move the answer *downward*, toward local - its own docstring says so
+(`jarvis_router.py:596-600`: "the order is the policy ... none of them can
+escalate past a gate that already refused"). `evaluate_route()` is a second
+opinion about COST, never a second permission. It asks `choose()` directly
+(through `_router_allows()`, with `owner_said_yes=True`), and any gate
+`choose()` refuses on becomes its answer too, so it is **strictly weaker** than
+the authority it advises about and can never open a gate that authority keeps
+shut. A parallel gate stack in this position would be the failure
+`jarvis_router.py:632-648` describes: a privacy decision with two sources of
+truth, and so a gate nobody can see.
+
+### 136.2 It serves no route, on purpose
+
+`plugins/ready/auto-router/plugin.json` sets `install: "none"`, so
+`jarvis_plugins.py` imports the module, calls `install()` **with no
+arguments**, and prints its one banner line - *"advises on cost only;
+jarvis_router.choose() still decides (no route)"*. No route is added, nothing
+about a live turn changes, and there is therefore no `tools/check_parity.py`
+row owed: a backend module with no route is outside what that tool decides.
+
+That is deliberate: nothing new is reachable, so there is no new permission
+surface to review, and the module cannot be hooked into a chat turn by
+accident. Adding a caller is a separate change with its own review.
+
+Owed anyway, and why: the callable below is a **frozen cross-module contract** -
+Project Mode step 4 is written against this signature - and a contract another
+module is built on is worth recording even when no HTTP call carries it. The
+folder's own `README.md` says no *route* entry is owed, and that stays true;
+this section records the *callable*, not a route.
+
+### 136.3 The frozen contract
+
+```
+evaluate_route(prompt, context_tokens=0, active_project=None, speed_stats=None,
+               *, last_turn=None, enabled=None) -> dict
+```
+
+**Never raises. Any input, including `None`, gives a dict.** Every key a caller
+may act on:
+
+| key | what it holds |
+|---|---|
+| `lane` | `"local"`, `"jarvis-escalate"` or `"jarvis-critic"` |
+| `recommended` | `True` only when `lane` is a cloud lane |
+| `advisory` | always `True` - this is advice, never a permission |
+| `gate` / `reason` | which rule decided; `"cost"` when advice was given |
+| `why` | the same thing in plain words, ready to show the owner |
+| `est_local_seconds` | the estimated wait on this PC (an estimate, deliberately crude) |
+| `complexity_score` | this module's own 0.0-1.0 score - **not** `jarvis_router.complexity()` |
+| `category` | the work setup `jarvis_work.match()` found, or `"general"` |
+| `tokens_per_s` / `tokens_per_s_why` | the rate used, and whether it was measured |
+| `would_send` | the **scrubbed** text - empty unless gate 4 passed |
+| `lane_if_allowed` | the lane that was under consideration |
+| `thresholds` / `gates` | the two thresholds, and which of the gates passed |
+
+A `recommended: True` result **always** carries a non-empty `would_send`, and
+that is the only text the advice covers. The raw `prompt` is never handed back
+as something to send: a caller that sends unscrubbed text has ignored this
+function rather than been misled by it.
+
+### 136.4 The four gates, then the cost question
+
+The gates are inputs to the ADVICE. `choose()` remains the decision.
+
+1. **Mode/switch** - OFF by default. On only when a caller passes
+   `enabled=True` for this call, or inside an active Project Mode workspace
+   whose `auto_route_cloud` is exactly `true`. A missing, unreadable, corrupt
+   or non-object switch file (`auto-route.json`, beside the framework config)
+   reads as **OFF** - the same answer for every one of those, because a switch
+   nobody can read has not been turned on by anybody.
+2. **Taint latch** - a HARD BLOCK, `reason="taint_latched_local_only"`. It
+   reads the ONE latch this project has (`jarvis_gate.taint_active()`) plus a
+   project whose `shareable` flag is not on, and not being able to read the
+   latch also blocks. The honest limitation, named rather than rounded off:
+   there is **one global latch, not one per topic** - `latch_taint()`'s `why`
+   argument is a label nothing reads back - so ANY active taint blocks,
+   whatever latched it.
+3. **Budget** - two separate caps, because the project has two and they answer
+   different questions: the on-disk per-minute/per-day request cap
+   (`jarvis_router.Budget`) and the owner's monthly MONEY cap
+   (`jarvis_chatbot_api.money_check()`). A cap that is exhausted **or
+   unconfigured** is a no; neither module readable is a no.
+4. **Scrubber** - the outbound text must pass `jarvis_scrub.scrub_text()`, and
+   **the scrubber being absent is itself a refusal**, as is a scrubber that
+   raises, returns nothing, or leaves a secret behind.
+
+Then, last, the shipped authority: `_router_allows()` asks the real `choose()`
+and any gate it refuses on ends the advice. Only if all of that passed does the
+COST question decide whether to say anything at all - a local wait over 25
+seconds, or a complexity score of 0.75 or more. A quick, simple turn is
+`"not_worth_it"` and says so.
+
+### 136.5 A one-file inventory
+
+Everything `backend/jarvis_auto_router.py` holds, read out of the module:
+
+| in the file | what it is |
+|---|---|
+| `LANE_ESCALATE` / `LANE_CRITIC` / `LOCAL_LANE` | the three lane names it may return |
+| `SECONDS_THRESHOLD` 25.0, `COMPLEXITY_THRESHOLD` 0.75 | when a wait is worth mentioning |
+| `CONTEXT_TOKENS_HEAVY` 3500, `DEFAULT_TOKENS_PER_S`, `CHARS_PER_TOKEN`, `ANSWER_TOKENS` 400, `REVIEW_ANSWER_TOKENS` 900 | the sizing constants; `DEFAULT_TOKENS_PER_S` is a number and not a measurement, and `measured_rate()` says which it used |
+| `SWITCH_NAME` = `auto-route.json` | the mode switch file, absent by default |
+| `W_MULTI_FILE`, `W_ARCHITECTURE`, `W_INDICATORS_CAP`, `W_HEAVY_CONTEXT`, `W_PRIOR_BAD_TURN` | the complexity weights: the two word lists together are capped at `W_INDICATORS_CAP` 0.45, so 0.45 + 0.25 + 0.30 is what makes a score of 1.0 reachable |
+| `_MULTI_FILE`, `_ARCHITECTURE`, `_REVIEW` | the three regexes behind that score, deliberately narrow |
+| `_router_module`, `_gate_module`, `_scrub_module`, `_money_module`, `_work_module`, `_speed_module` | the six neighbours, imported lazily on every call: the module imports cleanly in a clone holding none of them, and a suite can stand one in by name |
+| `_number`, `_tokens`, `_positive` | total coercers; nothing here raises |
+| `switch_path()`, `switch_state()`, `mode_on()` | gate 1 - where the switch is, what it says, and the caller's own `enabled` |
+| `taint_latched()` | gate 2 - the hard block, and its one-latch limitation |
+| `budget_allows(lane, next_chars=0)` | gate 3 - both caps |
+| `scrub_outbound(text)` | gate 4 - the text that would leave, or why nothing may |
+| `_router_allows(text, lane, budget=None, tainted=False)` | the delegation to `choose()`, which is what makes the advice never broader than the permission |
+| `_from_stats()`, `_best_from_summary()`, `measured_rate()` | the measurement: the caller's numbers, else this PC's own speed log, else a cautious default |
+| `category_of()` | which work setup the owner's words ask for, through `jarvis_work.match()` |
+| `_answer_tokens()`, `is_review()` | how long the ANSWER is expected to be, and whether this is `jarvis-critic`'s kind of task |
+| `est_local_seconds()`, `complexity_score()`, `_prior_bad_turn()` | the estimate, the score, and the one signal no reading of the question alone can produce |
+| `_local()`, `evaluate_route()` | every refusal leaves through `_local()`, so no return path can keep a cloud lane set; `evaluate_route()` is the advice itself |
+| `install()` | the loader's entry point: takes no arguments, installs nothing, returns the one banner line |
+| `__main__` demo | prints every key of one call, for a human at a terminal |
+
+### 136.6 It sends, writes, approves and logs nothing
+
+No network, no file written, no card raised, no model called, nothing logged.
+It returns a dict and stops. `docs/ARCHITECTURE.md` §8 carries the row for the
+permission model; when a caller is added it goes into BOTH apps on this same
+advisory function, and a cloud turn is still reached only when the owner says
+yes for that one question.
+
+## 137. Starting the local model when it is not running (added 2026-10-13)
 
 **The defect this answers.** On 2026-10-13 both of the owner's Ollama lanes died
 at about 16:30 and nothing said so for about five hours. `GET /api/status` had
@@ -20166,7 +20567,7 @@ guessed one. **One lane, never both.** There is no `{"lane": ...}` and no
 `{"all": true}` in this API at all, so no client can ask for another lane and
 nothing can start two at once.
 
-### 134.1 `GET /api/model-lanes` - the state, and whether a press would do anything
+### 137.1 `GET /api/model-lanes` - the state, and whether a press would do anything
 
 A read. It starts nothing, and it asks that one lane a single question on the
 PC (`/api/tags` on loopback).
@@ -20207,7 +20608,7 @@ PC (`/api/tags` on loopback).
 * `lane` is `""` and `why` explains it when Jarvis is not pointed at a lane on
   this PC at all (a remote `OLLAMA_URL`, or an address with no lane behind it).
 * `auto` is whether **Jarvis itself** starts that lane again when it finds it
-  down (§134.3): `true`, or `false` when the owner has turned it off. Absent on
+  down (§137.3): `true`, or `false` when the owner has turned it off. Absent on
   an older backend, and a client must then draw **no** switch at all rather than
   offer to turn off something it cannot see.
 * `auto_attempts` / `auto_limit` are how many automatic starts this episode has
@@ -20223,7 +20624,7 @@ PC (`/api/tags` on loopback).
   standing warning has cleared - and it is also reported whenever the switch is
   off, up or down, so the one press that turns it back on is always reachable.
 
-### 134.2 `POST /api/model-lanes/start` - the one action
+### 137.2 `POST /api/model-lanes/start` - the one action
 
 An **empty body** is the whole contract. It answers immediately, and never
 blocks for the ninety seconds a model may take:
@@ -20255,10 +20656,10 @@ A `model` event goes on the bus when a watch settles: `{"lane", "port", "up",
 dying publishes no event - which is what the standing line's own slow beat is
 for.
 
-### 134.3 `POST /api/model-lanes/auto` - the owner's switch, and why there is no card
+### 137.3 `POST /api/model-lanes/auto` - the owner's switch, and why there is no card
 
 **The owner's decision of 2026-10-14: *"Also restart the lane automatically when
-it dies."*** The line of §134.1 said it and acted on nothing (PR #409); §134.2's
+it dies."*** The line of §137.1 said it and acted on nothing (PR #409); §137.2's
 button waits for a press, and the defect is that nobody is there to press it at
 08:19 - his lanes die silently, with the PC's own Task Scheduler still reporting
 `Result=0 State=Ready`.
@@ -20282,7 +20683,7 @@ model call, no token, nothing generated. That is the whole standing cost.
 {"on": false}
 ```
 
-* **200** - changed; the body is §134.1 again with `changed: true`, so the client
+* **200** - changed; the body is §137.1 again with `changed: true`, so the client
   draws what really happened;
 * **400** - the body names a lane, says `"all"`, is missing `"on"`, or is not an
   object. There is no `{"lane": ...}` and no `{"all": true}` here either: it is
@@ -20329,7 +20730,7 @@ one is for:
 
 **AT THE CAP, WHAT REMAINS IS EXACTLY THE WARNING PR #409 BUILT.** Jarvis stops
 trying, `state` goes back to plain `down`, `auto_capped` is true, `can_start`
-stays true so §134.2's button is still there for the owner, and `auto_note`
+stays true so §137.2's button is still there for the owner, and `auto_note`
 carries one plain sentence: *"Jarvis started the local model 3 times and it did
 not come up, so it has stopped trying. You can still start it yourself."* The
 episode ends there. It does not begin again until the lane has really been back
@@ -20360,7 +20761,7 @@ The apps read `state: "starting"` and the sentence that goes with it, and the
 lane is there for the *next* turn rather than making this one hang for ninety
 seconds.
 
-### 134.4 The permission decision, and why there is no approval card
+### 137.4 The permission decision, and why there is no approval card
 
 This is the project's one permission model (`docs/ARCHITECTURE.md` §3), and the
 decision is reasoned rather than inherited:
@@ -20380,7 +20781,7 @@ There is therefore **no new tier line** to loosen, on purpose. What is **not**
 built, because it is forbidden outright: no bulk action, no "start both lanes",
 nothing that approves in bulk and nothing that clears a rush latch.
 
-**The automatic restart (§134.3) is a materially different case, and it is argued
+**The automatic restart (§137.3) is a materially different case, and it is argued
 rather than inherited.** The press above is gone, so "the owner's act is the
 consent" does not carry over on its own. The rule that governs it is the one
 `jarvis-framework.toml` already carries for Docker: *"starting a service gives
@@ -20414,12 +20815,12 @@ So: no card and no new tier line, for the automatic path either. The owner's own
 instruction of 2026-10-14 is the grant, the switch is how he takes it back, and
 the sentence in the apps is how he finds out it was used.
 
-### 134.5 Both apps
+### 137.5 Both apps
 
 **Both, and genuinely useful on the phone**: starting a lane on the PC while
 away from the desk is exactly when the owner cannot reach the PC by hand, and the
 lane coming back by itself when nobody is at the desk is the whole point of
-§134.3. So `docs/ARCHITECTURE.md` §8 carries no one-sided entry for any of the
+§137.3. So `docs/ARCHITECTURE.md` §8 carries no one-sided entry for any of the
 three routes, and `tools/check_parity.py` carries all three as `ported`.
 
 * **Desktop** - the Jarvis bar's standing model notice (`src/main.js`,
@@ -20441,9 +20842,9 @@ three routes, and `tools/check_parity.py` carries all three as `ported`.
 * **Phone** - Home's own status line (`ui/screens/HomeScreen.kt` `StatusLine`,
   `net/ModelLane.kt`, `JarvisRuntime.startModelLane`). The lane is read on the
   beat that already reads `/api/status`, so no second timer exists; and since
-  §134.3 it is read whether or not the standing line is drawn, for the reason
-  above. The phone sends the same empty body to §134.2, the same one-key body to
-  §134.3, and never changes its own words to claim a change the PC did not
+  §137.3 it is read whether or not the standing line is drawn, for the reason
+  above. The phone sends the same empty body to §137.2, the same one-key body to
+  §137.3, and never changes its own words to claim a change the PC did not
   confirm.
 * **The HUD window (`jarvis_hud.html`) deliberately keeps only the standing
   line**: no button, no automatic line, no switch. It is vendored from the
@@ -20459,12 +20860,12 @@ Both apps offer the button for the same conditions: the lane is down AND the PC
 says a press would really do something (`can_start`). An up lane, a PC that did
 not say, and a PC with no such task all offer nothing - **"the PC did not say"
 is not "the lane is down"**, which is the rule the standing line itself already
-follows. And both apps draw the automatic line (§134.3) whenever the PC has
+follows. And both apps draw the automatic line (§137.3) whenever the PC has
 something to say about it, **up or down**, and with **no switch at all** when the
 PC does not report one - offering to turn off something that was never on would
 be inventing a control.
 
-### 134.6 Tests
+### 137.6 Tests
 
 * `backend/test_model_lanes.py` (85 checks before this work, **159** with the
   automatic half) - the one-action rules: only a down lane is started, and it is
@@ -20508,5 +20909,4 @@ be inventing a control.
   `jarvis-desktop/src/lane-auto.js` so they cannot drift apart, and
   `JarvisRuntime` reading the lane on the beat whether or not the warning is
   drawn.
-
 
