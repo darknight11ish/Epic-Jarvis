@@ -578,7 +578,14 @@ def t_the_handles_route_never_leaks():
               value not in bytes_of(out))
         check("... nor a masked prefix of it",
               value[:6] not in bytes_of(out) and value[:8] not in bytes_of(out))
-        check("... nor its length", str(len(value)) not in bytes_of(out))
+        # Checked field by field, NOT against the whole blob: the blob also
+        # holds `last_used`, an epoch number, and a two-digit length lands
+        # inside almost any timestamp - so a whole-blob check reports a leak
+        # that is a coincidence in a clock reading.
+        check("... nor its length, in any field this module writes",
+              all(str(len(value)) not in str(h.get(f, ""))
+                  for h in out["handles"] for f in ("name", "handle", "for_host")),
+              bytes_of(out))
 
 
 def t_the_suite_cannot_reach_the_real_credential_store():
@@ -599,6 +606,37 @@ def t_the_suite_cannot_reach_the_real_credential_store():
         V._STORE_FACTORY = saved
     check("... and because TESTING is a module-level flag, no test can forget it",
           "if TESTING:" in (HERE / "jarvis_vault.py").read_text(encoding="utf-8"))
+
+
+def t_the_route_waits_at_least_as_long_as_the_card():
+    """The bug this pins, found in this branch's own first draft.
+
+    `_card_says_yes` gave itself a 300-second deadline. The gate waits
+    `approval_timeout_seconds` - 600 as shipped, TEN MINUTES - so an owner who
+    read the card for six minutes and then approved it met a route that had
+    already given up: it answered "nothing was stored" for a yes that was
+    given. A refusal nobody said, on the one route whose whole promise is that
+    a person's answer decides."""
+    src = (HERE / "jarvis_vault.py").read_text(encoding="utf-8")
+    check("the gate's own wait is what this route reads",
+          "def _gate_timeout" in src and "APPROVAL_TIMEOUT" in src)
+    check("... and it is at least the shipped ten minutes",
+          V._gate_timeout() >= 600.0, str(V._gate_timeout()))
+    check("... and the route waits LONGER than the gate, never less",
+          V._WAIT_AFTER_GATE > 0, str(V._WAIT_AFTER_GATE))
+
+    # And the behaviour: a gate that answers slowly is still obeyed.
+    reset()
+    import time as _time
+
+    def slow_gate(action, detail, prompt):
+        _time.sleep(0.25)
+        return Verdict(True, "ask", "approved")
+
+    code, out = V.handle_put(body_for(), gate=slow_gate, tier_of=lambda a: "ask",
+                             spawn=lambda fn: fn())
+    check("a card answered after a pause is still a yes, and the value is stored",
+          code == 200 and V.get("github") == FAKE_KEY, f"{code} {out}")
 
 
 def t_the_route_checks_origin_and_token_like_every_other():
@@ -943,6 +981,26 @@ def t_it_is_shipped_and_droppable():
               str(data))
         check("... and no replaces_patch, because there is no patch to replace",
               "replaces_patch" not in data, str(data))
+        # The same claim `receipts` makes about itself, made the same way: the
+        # loader runs folders in stack_order, and every folder at or below 141
+        # came from the patch stack. Read from the OTHER folders' own manifests
+        # rather than compared against a number written here, so a folder added
+        # later is compared with rather than silently ignored.
+        others = []
+        for folder in sorted((REPO / "plugins" / "ready").iterdir()):
+            other = folder / "plugin.json"
+            if folder.name == "vault" or not other.is_file():
+                continue
+            order = json.loads(other.read_text(encoding="utf-8")).get("stack_order")
+            if isinstance(order, int):
+                others.append((order, folder.name))
+        from_stack = [(o, n) for o, n in others if o <= 141]
+        check("... after every folder the old patch stack wrote",
+              bool(from_stack) and max(from_stack)[0] < data["stack_order"],
+              f"vault at {data['stack_order']}, the highest from the stack is "
+              f"{max(from_stack) if from_stack else None}")
+        check("... and it claims no position another folder already holds",
+              all(o != data["stack_order"] for o, _ in others), str(sorted(others)[-3:]))
     check("the module really has an install() the loader can call",
           callable(getattr(V, "install", None)))
 
@@ -962,8 +1020,15 @@ def t_it_writes_no_value_to_disk_anywhere():
           all(isinstance(k, str) for k in doc["names"])
           and all(set(row) <= {"for_host", "used"} for row in doc["names"].values()),
           raw)
-    check("... no value, no prefix of one, no length",
-          FAKE_KEY not in raw and FAKE_KEY[:6] not in raw and str(len(FAKE_KEY)) not in raw,
+    check("... no value and no prefix of one", FAKE_KEY not in raw and FAKE_KEY[:6] not in raw, raw)
+    # The length, checked against the strings the file HOLDS, not its whole
+    # text: it also holds epoch timestamps, and a two-digit length lands inside
+    # almost any of them, so a whole-file check reports a leak that is a clock
+    # reading. Measured here rather than assumed.
+    check("... and the length appears in no name or host the document holds",
+          all(str(len(FAKE_KEY)) not in str(name)
+              and str(len(FAKE_KEY)) not in str(row.get("for_host", ""))
+              for name, row in doc["names"].items()),
           raw)
     src = (HERE / "jarvis_vault.py").read_text(encoding="utf-8")
     hits = sorted(_BANNED_CALLS & calls_in(src))
