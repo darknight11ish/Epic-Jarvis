@@ -1515,6 +1515,21 @@ $PATCHES = @(
     # approval card (the same shape as a timer or a note). Sending a picture
     # anywhere would be a new named way out of the PC, and no route here does.
     'pictures.patch'
+    # reasoning-fallback.patch (2026-10-14). #424 added this change to BOTH the
+    # patches' target and the published base, and no patch delivered it - which
+    # broke the whole stack rather than just this feature: the rehearsal went to
+    # 102 "error:" lines and "29 patch(es) will not apply", exit 1, because one
+    # insertion in the cloud-streaming region moves the context that every later
+    # patch matches on. It is a patch now, and the base no longer carries it.
+    #
+    # It goes here, above the loader, because the rule above says every CORE
+    # patch does - and it is one: it edits jarvis_hud.py itself, unlike the
+    # drop-in folders below. It replaces two lines of the cloud-streaming loop
+    # (the plain `self.wfile.write(chunk)` / `flush()`) with the reader that
+    # relays a cloud answer whose whole cap went on hidden reasoning, so it
+    # needs that loop to be the one chat-stream.patch and speed-record.patch
+    # have already finished writing.
+    'reasoning-fallback.patch'
     'plugin-loader.patch'
 )
 
