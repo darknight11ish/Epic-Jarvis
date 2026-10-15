@@ -20035,103 +20035,6 @@ and both routes are live, and the UI is not built on either app. When it is,
 it goes on BOTH, on this same store and this same card. `tools/check_parity.py`
 cannot see it: it scans the two apps' own source, so a backend route no app
 calls is outside what it decides.
-## 134. The blind credential vault: a NAME everywhere, the value at the point of use (added 2026-10-14)
-
-**The idea, in one line.** The model, the prompt, the approval card, the audit
-line, the event payload and every returned string carry an opaque handle -
-`{{vault:github}}` - and the real value is put in **once**, on the one line that
-builds the outbound request that authenticates with it. Anything that comes back
-is run through `jarvis_scrub` before it is returned, so a service that echoes the
-key back cannot leak it. `backend/jarvis_vault.py`; borrowed from Meta's Muse and
-from the blind-credential-handle idea generally.
-
-**Where the value lives.** Windows Credential Manager, through
-`jarvis_token_store.WindowsStore` - the same store, the same generic-credential
-format and the same three ctypes calls the pairing token and the Exa/Tavily/Brave
-keys already use, one entry per name under `Jarvis Backend/vault/<name>`. This
-section adds no second mechanism to keep in step with the old one. **Values are
-never written to any file**: `<config folder>/vault.json` holds the names, the
-host each is bound to and when each was last used, and running the suite searches
-those bytes for the value, a prefix of it and its length. With no Credential
-Manager there is no fallback to plain text - `put()` refuses and `status()` says
-why.
-
-**The two routes** (drop-in: `plugins/ready/vault/plugin.json` names the module
-and the loader calls its `install()`; no patch, no core change):
-
-| route | what it answers |
-|---|---|
-| `GET /api/vault/handles` | every name, its handle, the host it is bound to, when it was last used and whether a value is really there - **never a value, never a masked prefix of one, never a length** |
-| `POST /api/vault/put` | `{"name", "value", "for_host"}` - store one secret. ONE approval card at tier `ask` |
-
-**The card, and what a denial does.** `POST /api/vault/put` is a mutating action,
-so it goes through the one permission model: `jarvis_gate.check()` under the
-action `vault_put`, tier `ask`, with the card's words written in the module and
-never assembled from the request. A denied, timed-out or refused card returns
-`403`/`503` with "nothing was stored" and **nothing is stored** - and nothing is
-stored *before* the answer either: `put()` is not reached until the card has been
-decided, and the suite reads the store from inside the gate itself to prove it. A
-verdict of `allowed=True` is not enough: the tier must BE `ask` and the outcome
-must be `approved` (`allowed=True` also comes back on tier `notify` with nobody
-asked - ARCHITECTURE §3, "`allowed` is not 'a human decided'"). A gate that
-cannot be reached fails closed. The value is never echoed back, in the answer or
-in a refusal.
-
-**`resolve()` is the one place a value is substituted**, and it is bounded:
-`{{vault:name}}` is replaced exactly once per occurrence; a handle that names
-nothing, or a value the store will not hand over, is left as the literal handle
-(a visible placeholder beats an empty string that authenticates wrong); and a
-handle **bound to a host resolves only for that host**. Rule 3's "sent only to the
-one service it authenticates against" is therefore a property of this function
-rather than of every caller remembering it: with no host given, a bound handle
-does not resolve at all.
-
-**The one real use, and why that one.** `jarvis_search.py` builds the credential
-header for the Exa, Tavily and Brave keys from the provider's own handle, and
-`_send()` substitutes it. Those three keys are the right first call site because
-each goes to exactly ONE host that is fixed in code (`api.exa.ai`,
-`api.tavily.com`, `api.search.brave.com`) - so the host binding can be enforced
-rather than trusted - and because a web search is "one request, one key, one
-service" with nothing in between. An empty vault changes nothing at all: the key
-is still read from the Credential Manager entry it always was. A provider that
-echoes the key into its answer is cleaned on the way back, both by putting this
-turn's values behind their handles and by the project's scrubber.
-
-**Deliberately not wired, and why.** `jarvis_browser_control.run()` has taken a
-`secrets(name, host)` hook since `browser-engine.patch`, and `jarvis_agent`'s
-`_run_browser_control` has never passed one - so a `<secret>` step stops today
-with "no secret store was given to this run". The vault is *not* plugged in there:
-a browsing turn can be pointed at any site, and a store that hands a value to
-whatever host the page is on would break rule 3's "only the one service it
-authenticates against" in exactly the place it matters most. Wiring it belongs
-with a per-site binding the owner chooses, which is a decision, not a plumbing
-job.
-
-**The tests that bite.** `backend/test_vault.py` (196 checks) searches the
-returned JSON, the audit details, `handles()`, `status()` and `vault.json`'s own
-bytes for the value - and for a masked prefix and the length - rather than
-asserting a flag; proves a four-character value is still hidden though the
-scrubber's own exact-match floor is eight; proves a denied card writes neither the
-store nor the file; and runs a real server on 127.0.0.1 to prove end to end that
-the vault's key reaches its one service, that a key bound elsewhere is not sent,
-and that the service's own echo of the key does not come back in the result.
-
-**Backend only, on purpose, and this is the whole reason.** Neither app has a
-vault screen and neither calls these two routes: a value is typed on the PC, in a
-setting or through `POST /api/vault/put` from this machine, and the phone is
-never asked for one - the same rule the web-search keys already follow
-("Keys are entered on the PC only ... the phone never asks for one: sending a key
-to the PC would send it somewhere other than its own service",
-`jarvis_search.KEY_ENTRY`). A phone screen for this would be a screen whose whole
-job is to carry a secret over the network to a machine that can read it from its
-own Credential Manager, which is more exposure for no gain.
-`GET /api/vault/handles` carries no value, so it is safe for an app to read; the
-desktop and phone halves are simply not built yet, and `tools/check_parity.py`
-reports both routes as the backend's own until one is.
-
-
----
-
 ## 133. "Write Like Me": drafting in the owner's own voice (added 2026-10-15)
 
 `backend/jarvis_voiceprint.py`, and its drop-in folder
@@ -20235,3 +20138,100 @@ a sentence is not replaced.
 built; neither app has a list or a Forget. When they are built they go on BOTH,
 on this same store and this same confirm. `tools/check_parity.py` cannot see
 it for the same reason as §132.7.
+## 134. The blind credential vault: a NAME everywhere, the value at the point of use (added 2026-10-14)
+
+**The idea, in one line.** The model, the prompt, the approval card, the audit
+line, the event payload and every returned string carry an opaque handle -
+`{{vault:github}}` - and the real value is put in **once**, on the one line that
+builds the outbound request that authenticates with it. Anything that comes back
+is run through `jarvis_scrub` before it is returned, so a service that echoes the
+key back cannot leak it. `backend/jarvis_vault.py`; borrowed from Meta's Muse and
+from the blind-credential-handle idea generally.
+
+**Where the value lives.** Windows Credential Manager, through
+`jarvis_token_store.WindowsStore` - the same store, the same generic-credential
+format and the same three ctypes calls the pairing token and the Exa/Tavily/Brave
+keys already use, one entry per name under `Jarvis Backend/vault/<name>`. This
+section adds no second mechanism to keep in step with the old one. **Values are
+never written to any file**: `<config folder>/vault.json` holds the names, the
+host each is bound to and when each was last used, and running the suite searches
+those bytes for the value, a prefix of it and its length. With no Credential
+Manager there is no fallback to plain text - `put()` refuses and `status()` says
+why.
+
+**The two routes** (drop-in: `plugins/ready/vault/plugin.json` names the module
+and the loader calls its `install()`; no patch, no core change):
+
+| route | what it answers |
+|---|---|
+| `GET /api/vault/handles` | every name, its handle, the host it is bound to, when it was last used and whether a value is really there - **never a value, never a masked prefix of one, never a length** |
+| `POST /api/vault/put` | `{"name", "value", "for_host"}` - store one secret. ONE approval card at tier `ask` |
+
+**The card, and what a denial does.** `POST /api/vault/put` is a mutating action,
+so it goes through the one permission model: `jarvis_gate.check()` under the
+action `vault_put`, tier `ask`, with the card's words written in the module and
+never assembled from the request. A denied, timed-out or refused card returns
+`403`/`503` with "nothing was stored" and **nothing is stored** - and nothing is
+stored *before* the answer either: `put()` is not reached until the card has been
+decided, and the suite reads the store from inside the gate itself to prove it. A
+verdict of `allowed=True` is not enough: the tier must BE `ask` and the outcome
+must be `approved` (`allowed=True` also comes back on tier `notify` with nobody
+asked - ARCHITECTURE §3, "`allowed` is not 'a human decided'"). A gate that
+cannot be reached fails closed. The value is never echoed back, in the answer or
+in a refusal.
+
+**`resolve()` is the one place a value is substituted**, and it is bounded:
+`{{vault:name}}` is replaced exactly once per occurrence; a handle that names
+nothing, or a value the store will not hand over, is left as the literal handle
+(a visible placeholder beats an empty string that authenticates wrong); and a
+handle **bound to a host resolves only for that host**. Rule 3's "sent only to the
+one service it authenticates against" is therefore a property of this function
+rather than of every caller remembering it: with no host given, a bound handle
+does not resolve at all.
+
+**The one real use, and why that one.** `jarvis_search.py` builds the credential
+header for the Exa, Tavily and Brave keys from the provider's own handle, and
+`_send()` substitutes it. Those three keys are the right first call site because
+each goes to exactly ONE host that is fixed in code (`api.exa.ai`,
+`api.tavily.com`, `api.search.brave.com`) - so the host binding can be enforced
+rather than trusted - and because a web search is "one request, one key, one
+service" with nothing in between. An empty vault changes nothing at all: the key
+is still read from the Credential Manager entry it always was. A provider that
+echoes the key into its answer is cleaned on the way back, both by putting this
+turn's values behind their handles and by the project's scrubber.
+
+**Deliberately not wired, and why.** `jarvis_browser_control.run()` has taken a
+`secrets(name, host)` hook since `browser-engine.patch`, and `jarvis_agent`'s
+`_run_browser_control` has never passed one - so a `<secret>` step stops today
+with "no secret store was given to this run". The vault is *not* plugged in there:
+a browsing turn can be pointed at any site, and a store that hands a value to
+whatever host the page is on would break rule 3's "only the one service it
+authenticates against" in exactly the place it matters most. Wiring it belongs
+with a per-site binding the owner chooses, which is a decision, not a plumbing
+job.
+
+**The tests that bite.** `backend/test_vault.py` (196 checks) searches the
+returned JSON, the audit details, `handles()`, `status()` and `vault.json`'s own
+bytes for the value - and for a masked prefix and the length - rather than
+asserting a flag; proves a four-character value is still hidden though the
+scrubber's own exact-match floor is eight; proves a denied card writes neither the
+store nor the file; and runs a real server on 127.0.0.1 to prove end to end that
+the vault's key reaches its one service, that a key bound elsewhere is not sent,
+and that the service's own echo of the key does not come back in the result.
+
+**Backend only, on purpose, and this is the whole reason.** Neither app has a
+vault screen and neither calls these two routes: a value is typed on the PC, in a
+setting or through `POST /api/vault/put` from this machine, and the phone is
+never asked for one - the same rule the web-search keys already follow
+("Keys are entered on the PC only ... the phone never asks for one: sending a key
+to the PC would send it somewhere other than its own service",
+`jarvis_search.KEY_ENTRY`). A phone screen for this would be a screen whose whole
+job is to carry a secret over the network to a machine that can read it from its
+own Credential Manager, which is more exposure for no gain.
+`GET /api/vault/handles` carries no value, so it is safe for an app to read; the
+desktop and phone halves are simply not built yet, and `tools/check_parity.py`
+reports both routes as the backend's own until one is.
+
+
+---
+
