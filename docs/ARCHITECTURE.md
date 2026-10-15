@@ -1796,8 +1796,9 @@ are architectural rather than configuration:
 - **The recalled-facts block goes late, never at index 0.** At index 0 it
   invalidates the KV prefix cache for the whole conversation every turn, *and*
   suppresses the Modelfile's `SYSTEM` block — which is where the persona
-  invariants live. Both from one line. If delimiters are ever added around
-  recalled facts, they go on that message, not around the list.
+  invariants live, for a model that has one. Both from one line. If delimiters
+  are ever added around recalled facts, they go on that message, not around the
+  list.
 - **The rules block always goes first; everything added to a turn goes after
   it.** The spoken-style note, the "you were interrupted" note, the owner's
   manner line (warm or plain, `jarvis_manner.py`, 2026-09-25) and the crisis
@@ -1814,6 +1815,25 @@ are architectural rather than configuration:
   is appended after the answer, or sent alone if the model fails - the one
   place in this codebase where the backend, not the model, adds words to a
   reply. Neither approves or acts (rule 4): both only change what is said.
+- **The rules are SENT, not assumed, on every local turn (2026-10-14;
+  `with_rules_first`, `backend/jarvis_agent.py`).** This is the correction to
+  the line above: `keep_rules_first` only repairs a request in which something
+  else would be first, and then trusts Ollama to prepend the Modelfile's
+  `SYSTEM` block - which only happens for a model that HAS one. The owner's
+  everyday model since 2026-10-10, `qwen3.5:9b`, is a plain library pull with
+  no `SYSTEM` of its own, so on a fresh main-lane turn the request was the
+  question and nothing else: the persona invariants, including "Never claim an
+  action was taken that was not", were not in front of the model on the lane he
+  actually uses. Every local turn is now sent `LANE_SYSTEM` as its first
+  message, before trimming (the room `budget()` already reserved for it via
+  `_TEMPLATE_TOKENS`), from ONE function that the main lane, the second card
+  and the warm-up's `chat_prefix` all call - so a recalled-facts turn or an
+  app's own leading system message cannot end up with two competing system
+  turns. Cost, measured on his PC: +340 prompt tokens a turn. What it does NOT
+  fix, measured: tool-call rates (35 of 35 calls both before and after, with
+  `change_setting` offered) and, at this sample size, the rate of claimed-but-
+  undone answers. `backend/test_lane_prompt.py`, `docs/JARVIS-API.md`
+  ("The main lane hears the rules") and the PR that landed it have the numbers.
 - **The character block** (feasibility I129, 2026-09-27,
   `docs/CUTTING-EDGE-2026-09-26-round4-character.md` section 1): a short,
   named-trait paragraph - "Who you are: Jarvis... Honest before agreeable...
@@ -1849,9 +1869,16 @@ are architectural rather than configuration:
   covers them, the key phrases are there, and no existing rule is weakened.
   `selftest.py`'s "model" preflight step reads `/api/show` for
   `jarvis-primary` and WARNs, with the exact `ollama create` line, when the
-  model's own stored rules do not match `LANE_SYSTEM` - a stale model would
-  otherwise mix an old block with the new one on whichever turns
-  `keep_rules_first` does not fire.
+  model's own stored rules do not match `LANE_SYSTEM`. Since 2026-10-14 the
+  rules are in EVERY local request (`with_rules_first`), so the mix this warns
+  about is now two copies of the rules - Ollama's own collation keeps one
+  system block - rather than the old block surviving on the turns
+  `keep_rules_first` did not fire. The warning is kept: a model whose stored
+  block is stale is still a model built from an older Modelfile, and the
+  `/api/show` check is the one place that is visible. **It does not cover the
+  owner's everyday model at all** - it is keyed on the name `jarvis-primary`,
+  and `qwen3.5:9b` has no stored block to compare, which is exactly how the
+  2026-10-14 fault went unseen.
 - **Style rules for every fixed line** (feasibility I135, 2026-09-27): a
   card title, a quick answer (`jarvis_quick.py`, `jarvis_sayable.py`,
   `jarvis_reach.py`, `jarvis_identity.py`), a focus callout
@@ -2180,6 +2207,90 @@ phone". `tools/check_parity.py` cannot see it at all - it scans the two apps'
 own source, so a backend route no app calls is outside what it decides -,
 which is said plainly here rather than read as a clean pass it did not earn.
 
+**Cost advice is built, and it is in no app yet - and this one is a decision
+about the permission model rather than a screen somebody forgot**
+(2026-10-14): **the complexity/latency auto-router**
+(`backend/jarvis_auto_router.py`, `plugins/ready/auto-router/`).
+`evaluate_route()` estimates what a turn will cost on this PC - the measured
+token rate `jarvis_speed.py` keeps, the size of the conversation, and the kind
+of work `jarvis_work.match()` reads - and advises when a cloud lane would be
+quicker. **It decides nothing.** `jarvis_router.choose()`
+(`backend/rebuilt/jarvis_router.py:590`) stays the one authority on which lane
+answers a turn; this module asks it directly and can only ever advise a lane
+`choose()` would also permit, so it is strictly weaker than that authority and
+cannot open a gate the authority keeps shut. Its own four gates are inputs to
+the ADVICE, never a second permission: the mode switch (off by default in
+general chat), the one taint latch this project has
+(`jarvis_gate.taint_active()`) together with a project whose `shareable` flag
+is not on, the on-disk cloud budget plus
+`jarvis_chatbot_api.money_check()` (an exhausted OR unconfigured monthly cap is
+a no), and `jarvis_scrub.scrub_text()`, whose absence is itself a refusal.
+`plugins/ready/auto-router/plugin.json` sets `install: "none"`, so the folder
+imports the module and prints one banner line and **adds no route at all**:
+nothing new is reachable, and no app is handed an endpoint to call. That is
+what keeps a second entry point into "should this go to the cloud?" from
+becoming a second source of truth for a privacy decision - the failure
+`jarvis_router.py:632-648` describes. `tools/check_parity.py` cannot see it -
+it scans the two apps' own source, so a backend module with no route is
+outside what it decides - which is said here rather than read as a clean pass
+it did not earn. **When a caller is added it goes into BOTH apps on the same
+advisory function**, and a cloud turn is still reached only when the owner says
+yes for that one question.
+**Not on either app yet either, and again that is the scope of the slice**
+(2026-10-15): **"Write Like Me"** - Jarvis drafting in the owner's own voice
+(`backend/jarvis_voiceprint.py`, `plugins/ready/voiceprint/`, JARVIS-API §133).
+The store and its four routes are built: `GET /api/voiceprint` (the learned
+samples, the voiceprint numbers and what the engine is doing),
+`POST /api/voiceprint/sample`, `POST /api/voiceprint/learn_edit` (his final
+version of a draft, as a gold sample) and `POST /api/voiceprint/forget`, which
+refuses unless the body carries `"confirm": true`. Neither app has a screen
+yet: no list and no Forget on the desktop or the phone. This is the same
+decision as the receipts slice above and is recorded here for the same reason -
+"not built yet" is not "kept off the phone". **When the screens are built they
+go on BOTH apps, on the same store and the same confirm**, and
+`tools/check_parity.py` cannot see any of it for the same structural reason: it
+scans the two apps' own source, and a backend route no app calls is outside
+what it decides. Said plainly rather than read as a clean pass it did not earn.
+
+**The engine is `jarvis_voiceprint.py`, and `jarvis_style.py` is left exactly
+as it is.** There was already an earlier version of this idea in
+`jarvis-backend/jarvis_style.py` (`strip_entities`, `exemplars`,
+`prompt_block`), and the owner's decision of 2026-10-15 was to build the engine
+in a new module rather than in that file, because **that file is delivered to
+nobody**: measured, the repository holds exactly one copy
+(`jarvis-backend/jarvis_style.py`; there is no `backend/jarvis_style.py` and no
+`backend/rebuilt/jarvis_style.py`), no patch the installer applies writes it,
+and `$SHIPPED` does not carry it -
+`python -B tools/check_unmanaged_files.py` classifies it **NEITHER**. An edit
+there reaches no PC. Promoting it into `$SHIPPED` instead would make
+`apply-patches.ps1` start **overwriting a file it has never managed**, on every
+run, with no way to know whether the owner had edited it - so it was refused as
+a change of behaviour that is his to approve, not a formality. Two consequences
+are deliberate and recorded rather than left to be discovered:
+
+  - the new module is **self-contained and never imports `jarvis_style`**. That
+    is a rule, not tidiness: `jarvis_style.py` IS present on the owner's PC, so
+    a `try: import jarvis_style` fallback would silently run the OLD code on
+    the one machine that matters. `backend/test_voiceprint.py` asserts the
+    module does not name it. The old file keeps its callsite-less career:
+    `rebuilt/jarvis_events.py` reports it as the `persona` capability and
+    `selftest.py` lists it, so an existing install still shows it. The new
+    engine is reported separately as `voiceprint` (`jarvis_events.py`, beside
+    `persona`), so the two can be told apart.
+  - the earlier engine's stripping had real leaks - a slash-date left its day
+    behind (`_PATH` ran before `_DATE`), a UK area code survived (`_PHONE`
+    needed a 3-4 digit group first), and bare numbers, decimals, postcodes and
+    times passed through untouched. The owner asked for all of them closed, and
+    they are: `jarvis_voiceprint.strip_entities` ends with a pass that replaces
+    any remaining run of digits, so **no digit survives** - asserted for every
+    row of that module's own docstring table by its suite.
+  - **One limitation, named:** the proper-noun walk keeps its inherited rule
+    and does not replace a capitalised word that OPENS a sentence, because the
+    first word is capitalised whether or not it is a name. So "Priya's number
+    is ..." keeps the name. Numbers are unaffected. Changing it would delete
+    the first word of every sentence from every exemplar, which is the shape of
+    the writing the feature exists to preserve.
+
 **On the desktop, kept off the phone:**
 
 | what | why |
@@ -2368,6 +2479,8 @@ neither: nothing safe to build it on exists yet (§10).
 **The form picture is on the Jarvis bar's card and the phone's card only** (2026-09-30, JARVIS-API §98). The second card of a filled-in web form carries one picture of the form, and it is shown where the card is decided in full: the desktop's Jarvis bar and the phone's Home. The desktop's widget, its toasts and the HUD page, every notification and the phone's home-screen widget stay title-only, like every card - a picture of the owner's name, phone and email does not belong on a lock screen or a widget. It is hidden under App lock and under "Hide memory lists and chat history" on both apps. The desktop has no equivalent of the phone's screenshot block, so there is nothing to match there. **It is the one screen picture NOT run through `jarvis_screen.clean_picture`** (owner, 2026-09-30): the owner must read their own details to check them, and the picture never reaches a model, is held in memory only, and is dropped when the card is decided. Every other screen picture still passes that door. Not a new way out of the PC: the form's words go out through browser control's existing `control_browser` way out, to the site the plan named.
 
 **"Start the local model" is on the Jarvis bar, the widget and the phone's Home, and deliberately NOT on the HUD window** (2026-10-13, JARVIS-API §133; the owner's decision after both of his Ollama lanes were dead for about five hours). The standing "the local model isn't running" line is drawn in all four places, and three of them now offer the one action that starts the lane the chat uses - by running **his own** Windows logon task, found on that PC by the half of its name a rename does not touch. **The HUD page is the one that keeps the line and offers no button**, and the reason is the proxy rather than the picture: `jarvis_hud.html` is vendored from the backend and runs under `hud_proxy.rs`, which allows it exactly five reads and one `POST /api/chat` precisely so that a script running in that page cannot call anything else. A route that starts a program on the PC is not something to add to that allow-list in passing - it is its own decision with its own review. Nothing is lost by it: the HUD's line still names the PC's own task, and the Jarvis bar (one summon away, and the window the owner chats in) carries the button. `tools/check_parity.py` is unaffected either way, because it reads the RUST commands and the JavaScript, and the bar's own `start_model_lane` is a desktop caller of both routes - so both are `ported`, and no other row in this section is needed for them.
+
+**The skill library's four new doors are on the backend only, and that is the scope of this slice rather than a one-sided decision** (2026-10-15): `jarvis_skill_hub.py` (`plugins/ready/skill-hub/`) serves `GET /api/skills/hub/references`, `GET /api/skills/hub/projects`, `POST /api/skills/chain` and `POST /api/skills/learn`. No screen calls any of them yet - reading a skill's own reference manual, opening a message with `/skill`, looking in a trusted project's `.jarvis/skills`, and `/learn` are all things no app offers today. **This slice adds no route that already existed**: the list (`GET /api/skills`) and the removal (`POST /api/skills/decide`, with the "are you sure?" before it) are unchanged and are still on BOTH apps. `tools/check_parity.py` cannot see any of this - it scans the two apps' own source, so a backend route no app calls is outside what it decides - which is said plainly here rather than read as a clean pass it did not earn. **When a screen is built it goes on BOTH apps, on the same routes and the same card**: `/learn` saves only through `jarvis_skills.write_skill()`, which runs the scanner and raises the existing `modify_own_code` card itself, and it writes nothing at all when `jarvis_scrub` is absent.
 
 ---
 

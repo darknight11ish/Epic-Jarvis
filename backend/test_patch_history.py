@@ -75,6 +75,86 @@ def texts(hist: Path, rows: list) -> set:
     return {(r[0], lf((hist / r[1]).read_bytes())) for r in rows if (hist / r[1]).is_file()}
 
 
+def _tree_state(root: Path) -> dict:
+    """{relative path -> bytes} for every file under `root`, or {} if absent.
+
+    Used to prove a folder is UNCHANGED, which is a different and stronger claim
+    than "the tool returned an error".
+    """
+    if not root.is_dir():
+        return {}
+    return {p.relative_to(root).as_posix(): p.read_bytes()
+            for p in root.rglob("*") if p.is_file()}
+
+
+def t_a_failure_part_way_through_leaves_the_history_untouched():
+    """The 2026-10-15 incident, pinned so it cannot happen again.
+
+    tools/build_patch_history.py used to call `build()` straight onto
+    `backend/patch-history`, and `build()`'s FIRST act is to discard whatever it
+    is pointed at. When the tool then died part way through - which it did, on a
+    temp directory its own process could not write into - it left
+    `backend/patch-history/` EMPTY: 166 unstaged deletions, recovered by hand
+    with `git checkout -- backend/patch-history`.
+
+    The fix builds the whole new history somewhere else first and only then puts
+    it in place. This drives the real `main()` with the BUILD step failing
+    part way through, and proves the folder is untouched.
+
+    Bite: with the old `build(a.out)` shape the target is discarded before the
+    failing write, so `after` comes back empty and these checks fail.
+    """
+    if not HIST.is_dir():
+        return skip("backend/patch-history is not in this tree")
+    before = _tree_state(HIST)
+    if not before:
+        return skip("backend/patch-history is empty here, so there is nothing to protect")
+
+    real_build = bph.build
+    calls = {"n": 0}
+
+    def half_failing_build(out_dir):
+        """Die part way through the FIRST build, after landing one file.
+
+        It must be the first call, not a later one: the buggy shape called
+        build() exactly ONCE, straight onto `backend/patch-history`, so a
+        fixture that only failed on a second call would pass against the very
+        code it is meant to catch. Measured - the first version of this test did
+        exactly that and proved nothing.
+        """
+        calls["n"] += 1
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "HALF-WRITTEN.txt").write_text("half a run", encoding="utf-8")
+        raise OSError("simulated failure part way through")
+
+    argv, raised = sys.argv, False
+    bph.build = half_failing_build
+    try:
+        sys.argv = ["build_patch_history.py"]
+        try:
+            bph.main()
+        except Exception:
+            raised = True
+    finally:
+        bph.build = real_build
+        sys.argv = argv
+
+    after = _tree_state(HIST)
+    check("the simulated failure really happened", raised, calls)
+    check("... and build() was entered before it failed", calls["n"] == 1, calls)
+    check("... and the half-written file did NOT land in backend/patch-history",
+          not (HIST / "HALF-WRITTEN.txt").exists(),
+          "a half-finished run wrote into the real history folder")
+    check("backend/patch-history still holds every file it held before",
+          set(after) == set(before),
+          f"lost {sorted(set(before) - set(after))[:5]}")
+    check("... and every one of those files is byte-for-byte unchanged",
+          after == before,
+          "a file's contents changed")
+    check("... and the folder was not left empty",
+          len(after) > 0, f"{len(after)} file(s) left")
+
+
 def t_history_is_up_to_date():
     try:
         with tempfile.TemporaryDirectory() as tmp:
@@ -455,6 +535,7 @@ if __name__ == "__main__":
     for fn in (t_history_is_up_to_date,
                t_index_and_folder_agree,
                t_every_earlier_version_comes_off,
+               t_a_failure_part_way_through_leaves_the_history_untouched,
                t_the_upgrade_rule_on_a_made_up_backend,
                t_the_script_reads_the_history):
         print(f"\n--- {fn.__name__} ---")

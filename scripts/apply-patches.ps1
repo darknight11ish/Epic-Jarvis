@@ -102,6 +102,25 @@
   was, so the baseline it holds is never quietly replaced. See the note under
   step 2 in this script, and docs/UPDATER-REDESIGN.md sections 4.1 and 5.
 
+  A COPY THAT CARRIES THIS FILE CANNOT BE REHEARSED, AND THE RESULT IS NOT A
+  FALSE PASS (measured 2026-10-15, after a session lost real time to it). When
+  the record is present AND every file hash in it still agrees, this script
+  takes the fast path in step 2, skips the rehearsal, and says "All N patches
+  are already on your backend (recorded by the last run)". That answer is
+  EARNED rather than assumed: `Test-ManifestCurrent` must pass and
+  `Test-ManifestDrift` must find nothing, so a record that disagrees with the
+  files on disk is not believed - it prints the drifted file names and runs the
+  rehearsal anyway.
+
+  What it means in practice is narrower than "a stale record fakes a pass": a
+  copy of `jarvis-backend/` has NO record (`jarvis-backend/` does not ship one),
+  so rehearsing against a fresh copy always rehearses. The trap is reusing a
+  directory an earlier run already recorded - including `$env:TEMP\hudstack`
+  from the handoff's own instructions, which a previous run leaves a record in.
+  Point the rehearsal at a NEWLY COPIED directory and the fast path cannot
+  trigger. If you are unsure, `Remove-Item` the `_jarvis-state.json` in the copy
+  first, or use `-Manifest none`.
+
 .EXAMPLE
   From the folder this repository is cloned into. -ExecutionPolicy Bypass
   lets Windows run a script file for this one command, without changing any
@@ -1625,6 +1644,7 @@ $SHIPPED = @(
     'jarvis_learning_switch.py'  # learning-asks.patch: turning learning on raises an approval card
     'jarvis_voicebank.py'        # other people's voices (numbers only): the voice check's comparison step, jarvis_voice.cohort_for
     'jarvis_voice_flow.py'       # voice-flow.patch: interrupting by talking, the delay in numbers, the "One moment." clip; jarvis_speech.py calls it
+    'jarvis_voiceprint.py'       # "Write Like Me": how the owner WRITES, measured from his own words, with names and numbers stripped before anything reaches a model. Its own voiceprint.db, every write guarded by jarvis_scrub. plugins\ready\voiceprint names it - NO patch
     'jarvis_mouth.py'            # the animals' mouths timed by Kokoro itself (a "jmth" chunk in say()'s WAV); jarvis_speech.py calls it, no patch. One-time step: backend\README.md "Mouths that match the words"
     'jarvis_chat_log.py'         # chat-history.patch: chat history kept on this PC, encrypted
     'jarvis_paste_guard.py'      # feasibility I115, "Paste guard": masks a pasted password, PIN or one-time code before it is written to the encrypted database
@@ -1873,6 +1893,10 @@ $SHIPPED = @(
     'jarvis_model_lanes.py'      # GET /api/model-lanes and POST /api/model-lanes/start: the button on the standing "the local model isn't running" line both apps already draw (PR #409). The one action runs HIS OWN Windows logon task - found on this PC with `schtasks`, matched by the stable half of its name, never a name typed from memory and never `ollama serve` - and then watches that lane's `/api/tags` every few seconds for up to 90 s, so "starting" is never reported as "up": a lane that does not come up leaves the warning standing, in plain words. One lane, the one Jarvis talks to (OLLAMA_URL's port - 11436 on his PC), never both, and nothing is started twice: not while it answers, not while a watched start is in flight, not while the PC's own Task Scheduler says that task is running. No approval card, on purpose - his own logon task already runs this command unattended, so a card would only be stricter than the thing it duplicates (see the module's PERMISSION section). Standard library only, no shell, one external program (`schtasks`), no network beyond 127.0.0.1
     # --- Action receipts and one-click undo (2026-10-14) ---
     'jarvis_receipts.py'         # a receipt for every action that CHANGES something: what changed, the before and after snapshots, and the code that can put it back, in its own receipts.db (WAL, one connection per call). record() must never raise into the action it records from and never writes an unscrubbed word; undo() is idempotent - a second call refuses with "this was already undone" - and falls back to the before snapshot when the in-memory callable is gone, saying plainly which path it took. GET /api/receipts and POST /api/receipts/<id>/undo come from its install(), called by the plugins\ready\receipts folder: NO patch, which is what the loader is for. Undo raises ONE card (undo_action, tier ask) and a denied card changes nothing. jarvis_goals.py records a receipt for every step tick
+    # --- Cost advice, and the four gates that bound it (2026-10-14) ---
+    'jarvis_auto_router.py'      # estimates what a turn will COST on this PC - the measured token rate jarvis_speed.py keeps, the size of the conversation, and the work jarvis_work.match() reads - and ADVISES jarvis-escalate (or jarvis-critic for a review task) when the wait looks long. It DECIDES NOTHING: jarvis_router.choose() is the one authority on which lane answers a turn, and this module asks it directly, so the advice can never name a lane choose() would refuse. Four gates bound it - the mode switch (off by default in general chat), the ONE taint latch (jarvis_gate.taint_active(), reason taint_latched_local_only) plus a project not marked shareable, the on-disk budget and jarvis_chatbot_api.money_check() (an exhausted OR unconfigured cap is a no), and jarvis_scrub.scrub_text() (absent means refuse, and a recommendation always carries the scrubbed text). Sends nothing, writes nothing, approves nothing, logs nothing, reaches no network and serves no route - plugins\ready\auto-router has install "none" - no patch
+    # --- The skill library's other doors (2026-10-15) ---
+    'jarvis_skill_hub.py'        # A reference manual read only when it is asked for (parse_skill collected references/<file>.md into the file list and nothing ever read one), leading /skill and /bundle tokens that stop dead at the first name they do not know - so /path/to/file survives whole - a trusted project's own skills at <folder>/.jarvis/skills with anything that fails the scan QUARANTINED rather than loaded, and /learn: a four-section distillation (When to Use / Procedure / Pitfalls / Verification) scrubbed through jarvis_scrub, writing NOTHING AT ALL when the scrubber is absent. It re-implements none of jarvis_skills.py - the index, the full body, the list, the removal and write_skill() are all CALLED - and every save goes through write_skill(), whose scanner runs first and whose modify_own_code card is raised BEFORE the write, so no client can reach a write around either. learn() re-checks the TIER itself, the way jarvis_skill_discovery.offer() does, so a config that listed modify_own_code as notify cannot turn the card into a rubber stamp. Its FOUR routes (GET /api/skills/hub/references, GET /api/skills/hub/projects, POST /api/skills/chain, POST /api/skills/learn) come from its own install(), called by the plugins\ready\skill-hub folder: NO patch. It adds no route that already existed - GET /api/skills and POST /api/skills/decide, with the "are you sure?" before them, stay where they are, on both apps
 )
 
 # The settings file. Installed only where none exists; never overwritten.
