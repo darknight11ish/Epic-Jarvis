@@ -63,16 +63,36 @@ export command and where the file must be kept (off this PC). This tool cannot
 check that the key was exported, because the honest place for that export is not
 on this machine; the document is where that half lives.
 
-SKIPPED OFF WINDOWS. EFS is a Windows feature and `GetFileAttributesW` is a
-Windows call, so a bare run on any other system prints SKIP with the reason and
-exits 0 - the same shape `tools/check_lanes.py` uses. `--self-test` is never
-skipped: it proves the reader itself, on a real temporary folder, by encrypting
-it with `cipher` and watching the answer change.
+OFF WINDOWS THIS IS NOT A CLEAN SKIP, AND THAT IS DELIBERATE. EFS is a Windows
+feature and `GetFileAttributesW` is a Windows call. A bare run on any other
+system is refused by `main()`'s host guard, which prints the SKIP lines - what
+it looked for, what `sys.platform` actually is, and that NOTHING was checked
+here - and then calls `self_test()` to prove the reader instead. `self_test()`
+cannot: its first act is `is_encrypted()`, which needs `ctypes.windll`, so the
+run ENDS THERE with an uncaught
 
-Exit: 0 when every folder and file checked is encrypted (or the run was
-skipped), 1 when any is not, when a folder named on the command line does not
-exist, or when the self-test fails. A plain file is never a pass here - a folder
-that is half encrypted is reported with the names of the plain ones.
+    AttributeError: module 'ctypes' has no attribute 'windll'
+
+(a traceback on stderr, raised in `attributes_of()`, reached from
+`self_test()`, reached from `main()`) and the process exits **1**. Measured
+2026-10-14, from this repository, the way `tools/check_lanes.py`'s docstring
+records proving its own skip: `sys.platform` monkeypatched to `"linux"` and
+`ctypes.windll` removed, since the machine this was measured on IS Windows.
+With `--dest` it is a shorter story and still non-zero: the folder cannot be
+read on this host, which the guard calls a failure rather than a skip.
+
+THE BEHAVIOUR IS NOT BEING CHANGED, ONLY WHAT THIS FILE SAYS ABOUT IT (the
+owner's decision, 2026-10-14). A checker that cannot read the files must not be
+able to end as though it had, and a non-zero end after "NOTHING was checked
+here" is the fail-closed answer. The paragraph above used to claim the clean
+skip `tools/check_lanes.py` has - "prints SKIP with the reason and exits 0" -
+and this tool has never had one. The docstring was what lied.
+
+Exit: 0 when every folder and file checked is encrypted; 1 when any is not,
+when a folder named on the command line does not exist, when the self-test
+fails, and off Windows in both shapes described above (a named folder, or the
+uncaught AttributeError that ends the run). A plain file is never a pass here -
+a folder that is half encrypted is reported with the names of the plain ones.
 """
 from __future__ import annotations
 
@@ -183,11 +203,17 @@ def self_test() -> int:
     Uses two real folders under `%TEMP%` and `cipher`, the same command the
     documentation gives the owner, and removes both when it is done.
 
-    OFF WINDOWS IT PROVES (2) ON ITS OWN, and that is deliberate rather than a
-    shrug: a plain file is a plain file on every system, and a reader that
-    answered "encrypted" to everything would be caught here. What it cannot show
-    without `cipher` is (1) and (3), and it says so instead of printing a green
-    line over them.
+    OFF WINDOWS THIS BRANCH CANNOT RUN, WHICH IS MEASURED RATHER THAN ASSUMED
+    (2026-10-14). It is written to prove (2) on its own - a plain file is a
+    plain file on every system, and a reader that answered "encrypted" to
+    everything would be caught by it - but its first act is `is_encrypted()`,
+    which needs `ctypes.windll`, so on a real non-Windows host it raises
+    `AttributeError: module 'ctypes' has no attribute 'windll'` before it has
+    printed or proved anything, and before the `return 0 if not found else 1`
+    below can be reached. `main()`'s host guard calls this function, so that is
+    also how a bare run off Windows ends: a traceback and exit code 1, not a
+    green skip. Fail-closed, and deliberately unchanged (the owner's decision,
+    2026-10-14: what was wrong was this docstring's promise, not the tool).
     """
     if sys.platform != "win32":
         with tempfile.TemporaryDirectory(prefix="efs-selftest-") as sandbox:
@@ -253,9 +279,9 @@ def main(argv=None) -> int:
                              "and the folder chosen in Jarvis)")
     parser.add_argument("--self-test", action="store_true",
                         help="prove the attribute reader on a real temporary "
-                             "folder, then exit (never skipped; it also runs "
-                             "by itself off Windows, where the folders cannot "
-                             "be read at all)")
+                             "folder, then exit (never skipped; off Windows it "
+                             "cannot: it fails closed on ctypes.windll, which "
+                             "the module docstring describes in full)")
     args = parser.parse_args(argv)
 
     if args.self_test:
