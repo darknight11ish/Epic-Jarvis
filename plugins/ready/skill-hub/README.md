@@ -11,15 +11,13 @@ folder (or run `scripts\add-plugin.ps1 -Name skill-hub`) and restart Jarvis.
 
 - Module the loader calls: `jarvis_skill_hub.install()` (takes the core's Handler)
 - The patch this replaces: none - this is not a feature that used to be a patch
-- Position in the loader's order: **142**, the first free slot after every folder
-  the old patch stack had (`pictures` is the highest at 141), so its four routes
-  are checked after the old stack rather than in the middle of somebody else's.
-  **142 and not 144, deliberately:** `backend/test_receipts.py` asserts that
-  `receipts` (143) still holds the highest position of any folder - it is the
-  check that a folder-born feature is appended rather than inserted - so taking
-  142 is what keeps that true without editing another feature's suite. Nothing
-  overlaps: this module answers `/api/skills/hub/*`, `/api/skills/chain` and
-  `/api/skills/learn`, and `receipts` answers `/api/receipts*`.
+- Position in the loader's order: **142**, the first free slot after every
+  folder the old patch stack had (`pictures` is the highest of those, at 141),
+  so its four routes are checked after that stack rather than in the middle of
+  somebody else's. 143 is `receipts` and 144 is `auto-router` - another folder
+  that replaces no patch - so 142 is the free slot that collides with neither.
+  `backend/test_receipts.py` asks only that a no-patch folder sorts AFTER every
+  catalogued one, which 142 does.
 
 The module itself is one of the ones this repository ships
 (`backend/jarvis_skill_hub.py`), copied into the backend by
