@@ -1209,11 +1209,20 @@ def t_the_rules_stay_first_after_trimming_and_for_an_app_s_own_note():
     check("an app's own leading system message gets the Jarvis rules in front of it",
           got == [rules] + clip, [str(m.get("content"))[:30] for m in got])
 
-    # A conversation that already starts with a user turn is sent unchanged:
-    # Ollama adds the Modelfile's SYSTEM block itself.
+    # A conversation that already starts with a user turn is sent with the
+    # rules IN FRONT - in the request, not left to Ollama (2026-10-14). It used
+    # to be sent unchanged, because the everyday model was believed to carry
+    # the Modelfile's SYSTEM block. The owner's everyday model, qwen3.5:9b, is
+    # a plain library pull with no SYSTEM of its own, so "sent unchanged" meant
+    # "sent with no rules at all" on the lane he actually uses - see
+    # LANE_SYSTEM and with_rules_first.
     plain = [{"role": "user", "content": "hello"}]
-    check("a first question with nothing recalled is sent as it is",
-          first_request(plain, 16384) == plain)
+    got = first_request(plain, 16384)
+    check("a first question with nothing recalled carries the Jarvis rules in front "
+          "of it, in the request itself", got == [rules] + plain, got)
+    check("CONTROL: keep_rules_first still leaves a user-first list alone - it is the "
+          "repair for a leading system message, not the thing that adds the rules",
+          AG.keep_rules_first(plain) == plain)
 
 
 def t_a_model_that_cannot_use_tools_is_offered_none_and_told_plainly():
