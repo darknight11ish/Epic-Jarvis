@@ -751,6 +751,41 @@ def t_the_api_document_has_the_section_and_it_matches_this_code():
           repr(tail))
 
 
+def t_the_sections_after_129_are_complete_and_not_just_in_order():
+    """Every number from 129 to the highest is present exactly once.
+
+    The order check above cannot see a DELETED section. It reads only the
+    headings that ARE there and asks whether they ascend, so a document that
+    has lost 130 and 131 entirely still passes it - and that is not
+    hypothetical. On 2026-10-15, merging main into a stale branch deleted
+    section 135 and 136 (305 lines) with NO conflict shown, and this file's
+    order check stayed green. The gap was found by eye, reading the document.
+
+    Why it matters beyond tidiness: docs/JARVIS-API.md is what the desktop and
+    Android apps are written against. A missing section is a route with no
+    contract written down. A duplicate number is worse - two different
+    contracts sharing one citation.
+
+    So this asserts the RUN, not the sequence: 129, 130, 131 ... up to the
+    highest number in the document, each exactly once, none missing. That
+    makes it independent of how many sections exist - adding 138 does not
+    need this list edited, and deleting 133 fails it.
+    """
+    api = (REPO / "docs" / "JARVIS-API.md").read_text(encoding="utf-8")
+    numbered = [int(m.group(1)) for m in re.finditer(r"\n## (\d+)\.", api)]
+    if 129 not in numbered:
+        check("the sections after 129 run without a gap", False,
+              "there is no section 129, so the run cannot be checked")
+        return
+    tail = numbered[numbered.index(129):]
+    expected = list(range(129, max(tail) + 1))
+    missing = [n for n in expected if n not in tail]
+    repeated = sorted({n for n in tail if tail.count(n) > 1})
+    check("the sections after 129 run without a gap",
+          not missing and not repeated,
+          f"missing {missing}, repeated {repeated}, tail {tail}")
+
+
 def t_the_settings_route_changes_one_named_thing_and_only_on_the_pc():
     """The switch, the drawing program and the folder. ONE named change at a
     time, and never from the phone: where a picture is written and which
@@ -867,7 +902,8 @@ def main() -> int:
                t_it_owns_nothing_under_picture_card,
                t_install_wraps_the_handler_and_leaves_every_other_request_alone,
                t_no_picture_is_sent_anywhere_and_no_model_can_reach_this,
-               t_the_api_document_has_the_section_and_it_matches_this_code):
+               t_the_api_document_has_the_section_and_it_matches_this_code,
+               t_the_sections_after_129_are_complete_and_not_just_in_order):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
