@@ -460,6 +460,13 @@ CODE_GROUPS, CODE_GROUP_LEN = 4, 5
 #: he was given. The other five are written down as deliberate exclusions, with
 #: their reasons, in `NOT_BACKED_UP` below; test_backup.py fails if a database
 #: stops being in one list or the other.
+#:
+#:
+#: voiceprint.db (2026-10-14) is the "Write Like Me" exemplars: what the owner
+#: wrote, kept so Jarvis can draft in his own voice. It is the owner's own words
+#: about his own life, so it belongs in the locked backup for the same reason
+#: memory.db does - and test_backup.py's own rule catches a module that names a
+#: database and does not get it in here, which is how this was found.
 SOURCE_DBS = ("memory.db", "chat-history.db", "schedule.db", "feedback.db", "projects.db",
               "goals.db", "study.db", "arbiter.db", "jobs.db", "ledger.db", "watch.db",
               "tasks.db", "knowledge.db", "traces.db",
