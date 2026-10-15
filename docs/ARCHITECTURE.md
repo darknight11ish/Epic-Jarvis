@@ -2097,6 +2097,26 @@ with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
 
+**Not on either app yet, and that is the scope of this slice rather than a
+one-sided decision** (2026-10-14): **action receipts with one-click undo**
+(`backend/jarvis_receipts.py`, `plugins/ready/receipts/`, JARVIS-API §132).
+The store and its two routes are built: `GET /api/receipts` (the recent list)
+and `POST /api/receipts/<receipt_id>/undo`, which raises ONE `undo_action`
+card - the shipped `jarvis-framework.toml` gives that action no tier, so it
+takes `unknown_action_tier`, which is "ask" - and the reversal runs only on
+the gate's own answer. What neither app has yet is a screen - no receipts list
+and no Undo button on the desktop's Jarvis bar or Brain, none on the phone.
+That is one decision, not two: this slice is the backend half, and the change
+the owner can already see is a tick on a goal's plan, which both apps' Goal
+screens show. **When the screen is built it goes on BOTH apps, on the same
+store and the same card**, and nothing about either app's permission model
+changes - so nothing here is kept off one app on purpose. It is written in
+this section because `CLAUDE.md` asks where a feature that is in no app is
+recorded, and "not built yet" is not the same sentence as "kept off the
+phone". `tools/check_parity.py` cannot see it at all - it scans the two apps'
+own source, so a backend route no app calls is outside what it decides -,
+which is said plainly here rather than read as a clean pass it did not earn.
+
 **On the desktop, kept off the phone:**
 
 | what | why |
@@ -2673,7 +2693,14 @@ they landed):
   finishes (the `step` event, from `jarvis_agent.py`, only when tools are
   switched on), but not the model's private reasoning: that text can quote
   email or files, and the event bus reaches a phone's lock screen (§6), so
-  it is deliberately not published.
+  it is deliberately not published. **One exception, the owner's decision of
+  2026-10-14:** a CLOUD lane's reply that carries no visible answer but does
+  carry the model's working-out is shown - in the answer text only, under one
+  line saying what it is (`jarvis_chatbot_api.CloudAnswer`; `docs/DECISIONS.md`,
+  entry of 2026-10-14), because the alternative was the blank card the field
+  test measured. It never reaches the event bus, and a cloud lane is never
+  handed stored memory, email or files (rule 1), so nothing of the owner's can
+  be in it.
 - The `documents` table - read by two code paths, created by none. The status
   line says `documents: false`, which is correct. Since
   `documents-owned.patch`, a `documents` table is read only if Epic-Jarvis

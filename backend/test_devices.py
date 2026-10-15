@@ -53,6 +53,7 @@ import tempfile
 import time
 import traceback
 import types
+import typing
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -1895,6 +1896,38 @@ def t_a_label_cannot_make_two_rows_read_the_same():
     code, out = D.label({"id": dev, "label": ""}, you="pc")
     check("CONTROL: an empty label still clears it, back to the name it sent",
           code == 200 and out["shown"] == "Pixel 9", (code, out))
+
+
+def t_every_annotation_in_this_module_can_be_resolved():
+    """A4 of the 2026-10-07 backend audit: `key_card_text` writes
+    `Optional[Sequence[str]]` in its signature, but the module imported only
+    `Callable, Optional` from `typing`. `from __future__ import annotations`
+    keeps the module import-safe, so nothing noticed - until anything resolves
+    the annotations, which raised `NameError: name 'Sequence' is not defined`.
+
+    Nothing in this repository calls `get_type_hints()`, so the defect was
+    latent rather than live. This check is what keeps it from becoming live the
+    day a tool, a doc generator or a test does resolve them: it walks every
+    function this module defines, not just the one the audit happened to name.
+    """
+    unresolved = []
+    for name, obj in vars(D).items():
+        if name.startswith("_") or not callable(obj):
+            continue
+        if getattr(obj, "__module__", "") != D.__name__:
+            continue
+        try:
+            typing.get_type_hints(obj)
+        except NameError as exc:
+            unresolved.append(f"{name}: {exc}")
+        except Exception:
+            # A signature that cannot be resolved for some other reason is not
+            # this check's business.
+            pass
+    check("every annotation in jarvis_devices resolves to a real name",
+          not unresolved, unresolved)
+    check("CONTROL: the function the audit named is one of them",
+          callable(getattr(D, "key_card_text", None)), "key_card_text is gone")
 
 
 def main() -> int:

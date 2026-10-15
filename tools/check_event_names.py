@@ -53,18 +53,33 @@ What it reads - all from THIS checkout:
                                                 CustomEvents it fires
   jarvis-desktop/src/**                         the pages and modules that read
                                                 them
+  jarvis-client/app/src/main/java/**            the PHONE's consumer, in Kotlin:
+                                                `JarvisRuntime.onEvent`'s
+                                                `when (event.kind)` and the
+                                                `const val EVENT` names its net/
+                                                classes define. `main/java` and
+                                                not the tests: the tests carry
+                                                the wire's own fixtures, not a
+                                                client reading it
+
+Two roads reach a surface, and the phone is a THIRD reader with no dead-branch
+class of its own - every frame is emitted as `Signal.Event` and handed to that
+one `when`, so a name it does not know falls to its `else` and is logged, never
+mysteriously lost. Checks 2 and 3 below are what cover it, and nothing here
+invents a check-1 finding for it.
 
 Two things it cannot decide, both of which it says out loud rather than
 guessing:
 
-  * a kind a page reads whose producer is the BACKEND, not this repository
-    (`wellbeing`, `sky`, `proposal`, ...). `stream.rs`'s `_ => {}` arm fans out
-    every frame whatever its name, so these are not dead - but no line in this
-    tree writes the name down. Each is listed in SENT_BY_THE_BACKEND with a
-    one-line reason, so a new one has to be added deliberately.
-  * a name the shell dispatches that no PAGE reads, because Rust consumes it
-    itself (`hello` updates the link, `handoff` shows a toast). Each is listed
-    in CONSUMED_WITHOUT_A_PAGE with a one-line reason.
+  * a kind a page OR the phone reads whose producer is the BACKEND, not the
+    files this check reads (`wellbeing`, `sky`, `proposal`, `ring_phone`, ...).
+    `stream.rs`'s `_ => {}` arm fans out every frame whatever its name, so
+    these are not dead - but no line this check READS writes the name down.
+    Each is listed in SENT_BY_THE_BACKEND with a one-line reason, so a new one
+    has to be added deliberately.
+  * a name the shell dispatches that no page and no phone reads, because Rust
+    consumes it itself (`hello` updates the link, `handoff` shows a toast).
+    Each is listed in CONSUMED_WITHOUT_A_PAGE with a one-line reason.
 """
 from __future__ import annotations
 
@@ -79,6 +94,7 @@ RUST = REPO / "jarvis-desktop" / "src-tauri" / "src"
 SSE = RUST / "sse.rs"
 STREAM = RUST / "stream.rs"
 BOOTSTRAP = RUST / "hud_bootstrap.js"
+PHONE = REPO / "jarvis-client" / "app" / "src" / "main" / "java"
 
 # ---------------------------------------------------------------------------
 #   Kinds whose producer is the backend, not this repository
@@ -96,6 +112,7 @@ SENT_BY_THE_BACKEND = {
     "step": "one chat turn's own progress line, fanned out on this same bus (main.js `toolWatch`).",
     "live": "Jarvis Live started or ended on the phone (main.js takes the phone's session from it).",
     "voices": "the voice list or a custom-voice card changed (voice-panel.js re-reads it).",
+    "ring_phone": "the PC was asked to ring the phone (its producer is `EVENT` in the backend's own jarvis_find_phone.py, which this check does not read; the desktop ignores the event on purpose and the PHONE rings on its alarm channel - net/FindPhone.kt's EVENT is the other end, and tools/check_event_names.py now reads it, 2026-10-14).",
 }
 
 # ---------------------------------------------------------------------------
@@ -465,6 +482,179 @@ def on_event_handlers(text: str, mask: list[bool]):
     return out
 
 
+# ---------------------------------------------------------------------------
+#   The phone's side (Kotlin)
+# ---------------------------------------------------------------------------
+# The phone is the second client and it reads the same bus, so a name renamed
+# on the PC's side has to fail here rather than on a phone nobody is watching:
+# `JarvisRuntime.onEvent`'s `when (event.kind)` sends an unknown kind to
+# `else -> Log.d(TAG, "unhandled event kind ...")`, one log line, and the
+# feature is silently dead on the phone. That is not hypothetical - the same
+# file records the last one (`activity_detail`, "which no backend sends").
+#
+# Two shapes are read, and both are deliberately narrow, exactly as the desktop
+# side's are:
+#
+#   * `when (event.kind) { "approval" -> ... }`, including the comma-separated
+#     multi-label form (`"power", "persona" ->`), read from inside that one
+#     block. The receiver must be `event.kind`, the SSE frame's own kind: the
+#     phone has a `kind` on jobs, patterns, cards, rounds and more, and a
+#     search wide enough for those would sweep in twenty namespaces that have
+#     nothing to do with the bus.
+#   * `const val EVENT = "..."` (and the `EVENT_...` spelling), which is how the
+#     net/ classes name the events they act on without a literal at the call
+#     site (`com.jarvis.client.net.FindPhone.EVENT`). The VALUE is what the wire
+#     carries, so the value is what is compared. Wider than `EVENT` alone on
+#     purpose: a `const val EVENT_X = "..."` some future consumer switches on
+#     would otherwise be a silent MISS, which is the failure this whole script
+#     exists to remove. The cost is a false positive on an `EVENT_...` string
+#     that is not a bus name - and the answer to one of those is to say so in
+#     the row, not to narrow this line back until the miss returns.
+#
+# `event.kind == "..."` outside the `when` is read too - `EventStream.kt` reads
+# `hello` that way to carry the payload on Open. String and char literals are
+# walked over rather than read as syntax; comments are blanked, because a name
+# written down in prose is not a reader (the same reason the desktop side masks
+# them).
+
+#: A `when` over the frame's own kind, and the case labels inside it.
+KOTLIN_WHEN_KIND = re.compile(r"when\s*\(\s*event\.kind\s*\)")
+KOTLIN_CASE_LABEL = re.compile(
+    r"((?:\"[a-z][a-z0-9_]*\"\s*,\s*)*\"[a-z][a-z0-9_]*\")\s*->")
+KOTLIN_KIND_NAME = re.compile(r'"([a-z][a-z0-9_]*)"')
+#: `event.kind == "x"` / `!=`, the one other way this client reads a bus name.
+KOTLIN_KIND_COMPARE = re.compile(
+    r'event\.kind\s*(?:===|!==|==|!=)\s*"([a-z][a-z0-9_]*)"')
+#: `const val EVENT = "x"`, and the `EVENT_...` spellings beside it.
+KOTLIN_EVENT_CONST = re.compile(
+    r'\bconst\s+val\s+EVENT(?:_[A-Z0-9_]+)?\s*=\s*"([a-z][a-z0-9_]*)"')
+
+
+def kotlin_scan(src: str) -> tuple[str, list[bool]]:
+    """(text, mask) for Kotlin source.
+
+    `text` has every COMMENT blanked out, with the offsets untouched, so a
+    reported line still points at the real line and a name written down in
+    prose is not read as a reader. STRING LITERALS ARE LEFT IN PLACE, because
+    their contents are the answer here - the opposite of `code_mask` above,
+    which is why that one cannot be reused.
+
+    `mask` is False inside a comment or a string/char literal and True
+    everywhere else. It is what lets `span` count a `when` block's braces
+    without the `${...}` inside `"unhandled event kind '${event.kind}'"`
+    counting as structure.
+    """
+    text = list(src)
+    mask = [True] * len(src)
+    i, n = 0, len(src)
+    while i < n:
+        c = src[i]
+        if c == '"':
+            if src.startswith('"""', i):                 # a raw string
+                end = src.find('"""', i + 3)
+                end = n if end < 0 else end + 3
+                for j in range(i, end):
+                    mask[j] = False
+                i = end
+                continue
+            mask[i] = False
+            i += 1
+            while i < n:
+                mask[i] = False
+                if src[i] == "\\":
+                    if i + 1 < n:
+                        mask[i + 1] = False
+                    i += 2
+                    continue
+                if src[i] == '"':
+                    i += 1
+                    break
+                i += 1
+            continue
+        if c == "'":                                     # a char literal
+            mask[i] = False
+            i += 1
+            while i < n:
+                mask[i] = False
+                if src[i] == "\\":
+                    if i + 1 < n:
+                        mask[i + 1] = False
+                    i += 2
+                    continue
+                if src[i] == "'":
+                    i += 1
+                    break
+                i += 1
+            continue
+        if c == "/" and src.startswith("//", i):
+            while i < n and src[i] != "\n":
+                text[i] = " "
+                mask[i] = False
+                i += 1
+            continue
+        if c == "/" and src.startswith("/*", i):
+            end = src.find("*/", i + 2)
+            end = n if end < 0 else end + 2
+            for j in range(i, end):
+                mask[j] = False
+                if src[j] != "\n":
+                    text[j] = " "
+            i = end
+            continue
+        i += 1
+    return "".join(text), mask
+
+
+def brace_depth(text: str, mask: list[bool], begin: int, at: int) -> int:
+    """How many `{` are open between a block's own brace at `begin` and `at`.
+
+    A case label sitting directly in the block is at depth 1; one inside a
+    nested `when (job.kind)` in a branch body is deeper, and job kinds are a
+    different namespace from bus kinds - so this is what keeps a future nested
+    match from being read as `onEvent` reading those names.
+    """
+    depth = 0
+    for i in range(begin, at):
+        if not mask[i]:
+            continue
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+    return depth
+
+
+def phone_reads() -> list[tuple[str, str, int]]:
+    """(file, name, line) for every bus name the PHONE reads.
+
+    Line order within a file, file order across them, so a finding reads the
+    same way twice.
+    """
+    out = []
+    for path in sorted(PHONE.rglob("*.kt")):
+        text, mask = kotlin_scan(path.read_text(encoding="utf-8", errors="replace"))
+        for m in KOTLIN_WHEN_KIND.finditer(text):
+            if not mask[m.start()]:
+                continue
+            brace = text.find("{", m.end())
+            if brace < 0:
+                continue
+            end = span(text, mask, brace)
+            for label in KOTLIN_CASE_LABEL.finditer(text, brace, end):
+                if brace_depth(text, mask, brace, label.start()) != 1:
+                    continue
+                for name in KOTLIN_KIND_NAME.finditer(label.group(1)):
+                    out.append((path.name, name.group(1),
+                                line_of(text, label.start() + name.start())))
+        for m in KOTLIN_KIND_COMPARE.finditer(text):
+            if mask[m.start()]:
+                out.append((path.name, m.group(1), line_of(text, m.start())))
+        for m in KOTLIN_EVENT_CONST.finditer(text):
+            if mask[m.start()]:
+                out.append((path.name, m.group(1), line_of(text, m.start())))
+    return out
+
+
 def main() -> int:
     verbose = "-v" in sys.argv
 
@@ -508,6 +698,12 @@ def main() -> int:
         readers.setdefault(name, []).append(f"{page}:{line}")
     for kind, (page, line) in hud_types.items():
         readers.setdefault(kind, []).append(f"a listener at {page}:{line}")
+    # The phone, from Kotlin. It is a READER for check 3 and a READ for check
+    # 2, exactly as a page is - and it has no dead-branch class, because every
+    # frame reaches its one `when` (see the module docstring).
+    phone = phone_reads()
+    for page, name, line in phone:
+        readers.setdefault(name, []).append(f"{page}:{line}")
 
     problems = False
     # Every recorded break this run actually reports, and every unrecorded
@@ -560,13 +756,17 @@ def main() -> int:
               "is keyed on check + file + line + the kind the handler is registered "
               "for + the name read, so it cannot cover a different branch.")
 
-    # 2. A listener or a read with no producer anywhere in this tree.
+    # 2. A listener or a read with no producer anywhere in this tree - the
+    # pages and the phone alike. The phone's names are reported with the .kt
+    # file they are read in, so a finding names the client it is about.
     unknown = sorted(
         {(name, f"{page}:{line}") for page, name, line in bus_reads
          if name not in dispatched and name not in SENT_BY_THE_BACKEND}
         | {(kind, f"{page}:{line}") for kind, (page, line) in hud_types.items()
            if kind not in dispatched and kind not in SENT_BY_THE_BACKEND
-           and kind not in ("open", "error")})
+           and kind not in ("open", "error")}
+        | {(name, f"{page}:{line}") for page, name, line in phone
+           if name not in dispatched and name not in SENT_BY_THE_BACKEND})
     new_unknown: list[str] = []
     if unknown:
         for name, where in unknown:
@@ -581,10 +781,10 @@ def main() -> int:
                     (page, "", int(at), name, int(at))
         if new_unknown:
             problems = True
-            print("::error::a page reads an event name no producer in this tree writes "
-                  "down - add it to SENT_BY_THE_BACKEND in this script with a one-line "
-                  "reason, or fix the name. Any name listed below is NOT recorded in "
-                  "KNOWN_BREAKS:")
+            print("::error::a page or the phone reads an event name no producer this "
+                  "check READS writes down - add it to SENT_BY_THE_BACKEND in this "
+                  "script with a one-line reason, or fix the name. Any name listed "
+                  "below is NOT recorded in KNOWN_BREAKS:")
             for name_where in new_unknown:
                 print("  " + name_where)
 
@@ -647,8 +847,8 @@ def main() -> int:
                 print(f"  {page}:{at}  reads `{name}` in the `{kind}` handler - an "
                       f"EventSource never calls that handler for type `{name}`")
             else:
-                print(f"  {page}:{at}  `{name}` is read here and no line in this "
-                      f"tree writes the name down")
+                print(f"  {page}:{at}  `{name}` is read here and no line this check "
+                      f"reads writes the name down")
             print(f"      cannot be fixed in this repository: {KNOWN_BREAKS[key].reason}")
             print(f"      the real fix belongs: {KNOWN_BREAKS[key].fix}")
 
@@ -670,8 +870,14 @@ def main() -> int:
           f"{sorted(t for t in bootstrap if t != '<payload.kind>')} plus the frame's "
           f"own kind as the type; the page registers listeners for {sorted(hud_types)} "
           f"- and only for those.")
+    print(f"The phone ({PHONE.relative_to(REPO).as_posix()}) reads "
+          f"{len({name for _page, name, _line in phone})} distinct event name(s) in "
+          f"Kotlin - `when (event.kind)` labels, `event.kind == \"...\"` and the "
+          f"`const val EVENT` strings - and every one is either dispatched here or "
+          f"listed above as published by the backend.")
     print(f"{len(SENT_BY_THE_BACKEND)} name(s) are published by the backend rather "
-          f"than written down here, each listed with its reason.")
+          f"than written down in the files this check reads, each listed with its "
+          f"reason.")
     if recorded:
         print(f"{len(recorded)} known break(s) reported, each recorded in "
               f"KNOWN_BREAKS - the HUD's stream handler reads kinds that arrive as "

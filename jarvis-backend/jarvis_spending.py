@@ -42,9 +42,11 @@ HOW A QUESTION IS ANSWERED
      model instructions is just a shop name that no rule matches.
   5. Categories are plain keyword rules in spending-categories.json. What no
      rule catches is "Uncategorised", always shown with a count.
-  6. Several files are combined by the larger count of any one file for each
-     (date, amount, description) - never the sum - and the answer says how many
-     rows were counted once.
+  6. Several files are combined by each row's FINGERPRINT - (date, whole cents,
+     the normalised description, and which identical row of that day it is) - so
+     a row that was already counted is a duplicate and never added again, while
+     two real identical charges on one day stay two rows. The answer says how
+     many rows were counted once. See normalise_description and row_fingerprint.
   7. The table (a JSON block) is kept in memory for two hours under an id, and
      the chat stream says `: jarvis-table <id>`; the apps fetch it with
      GET /api/chat/table?id=<id>. It is never written to disk and never part of
@@ -1240,11 +1242,119 @@ def _amount(row: list, cols: dict, dec: str, sign: str) -> Optional[int]:
     return None
 
 
+# --------------------------------------------------------------------------
+#   A row's fingerprint: the same row ingested twice is one transaction
+# --------------------------------------------------------------------------
+#
+# Overlapping monthly exports are the ordinary case - a bank exports "last 90
+# days", so March arrives in two files. The fingerprint below is what makes a
+# row that was already counted recognisable, so re-reading it is a no-op, while
+# two genuinely identical charges on one day stay two rows (what tells those
+# apart is the intra-day occurrence, not the amount). Nothing here is fuzzy: no
+# edit distance, no stemming, no prefix or substring match, and no clock, no
+# randomness and no locale. The same row gives the same string on every machine
+# and every run.
+
+#: Bump when the way a row is NAMED changes: an old fingerprint must never be
+#: read as if it had been made by the new rules.
+_FP_REV = "sp1"
+
+
+def normalise_description(desc) -> str:
+    """One description as the fingerprint sees it. Exactly this, in this order:
+
+      1. `_tidy`: control characters (zero-width and bidi marks included) become
+         spaces, every run of whitespace becomes one space, the ends are trimmed;
+      2. NFKC, so a full-width or half-width spelling and a compatibility form
+         fold together ("ＣＯＳＴＡ" is "COSTA");
+      3. casefold, so case never decides whether two rows are the same row;
+      4. combining marks are dropped (after an NFD pass), so an accent a bank
+         wrote and the same word typed without one fold together ("CAFÉ" is
+         "cafe");
+      5. everything that is not a letter or a digit becomes a space and the runs
+         collapse, so "TESCO-STORES #12" is "tesco stores 12".
+
+    Why this, and not a fuzzy match: one account's exports write the same shop
+    the same way apart from punctuation, case, width and accents, so folding
+    exactly those is enough - and it can never merge two different shops the way
+    an approximate match would ("COSTA" against "COSTCO"). The only comparison
+    ever made with the result is equality."""
+    t = _tidy(desc)
+    if not t:
+        return ""
+    t = unicodedata.normalize("NFKC", t).casefold()
+    t = "".join(ch for ch in unicodedata.normalize("NFD", t)
+                if unicodedata.category(ch) != "Mn")
+    return re.sub(r"\s+", " ", re.sub(r"[\W_]+", " ", t)).strip()
+
+
+def row_fingerprint(date, cents, desc, occurrence: int = 0) -> str:
+    """The deterministic name of ONE bank row: a sha256 over (date, whole cents,
+    normalised description, intra-day occurrence).
+
+    `cents` must be a whole number of cents, as an int, because every amount in
+    this file is one; an amount that is not whole cents is REFUSED rather than
+    rounded, since a fingerprint taken from a rounded amount would call two
+    different rows the same row. `occurrence` is which identical row of that day
+    this is - 0 for the first, 1 for the second - so two 2.50 coffees on one day
+    are two rows, and re-reading either of them names the same row again."""
+    if isinstance(cents, bool) or not isinstance(cents, int):
+        raise ValueError("a row's amount must be whole cents (an int)")
+    if isinstance(occurrence, bool) or not isinstance(occurrence, int) or occurrence < 0:
+        raise ValueError("a row's intra-day occurrence must be a whole number from 0")
+    d = date.isoformat() if hasattr(date, "isoformat") else str(date)
+    parts = (d, str(cents), normalise_description(desc), str(occurrence))
+    return hashlib.sha256((_FP_REV + "\x1f" + "\x1f".join(parts)).encode("utf-8")).hexdigest()
+
+
+class RowLedger:
+    """The rows already ingested, so ingesting the same row twice is a no-op the
+    second time.
+
+    It holds one fingerprint per row counted so far, and never the text of a row:
+    nothing about a shop is kept here. `ingest` gives each row of ONE file its
+    intra-day occurrence (0, 1, 2 ... for the identical rows of that day, in the
+    order that file lists them) and keeps only the rows whose fingerprint is new;
+    the others are counted as duplicates. So a file read twice adds nothing, two
+    identical coffees in a file stay two rows, and the same export re-read with a
+    third coffee in it adds exactly the third one.
+
+    The row's currency is part of the ledger's key as well as its text being part
+    of the fingerprint: a 10.00 row in GBP and a 10.00 row in EUR on the same day
+    with the same words are two purchases in two currencies, never one row."""
+
+    def __init__(self):
+        self._seen: set = set()
+        self._rows = 0
+
+    def __len__(self) -> int:
+        return self._rows
+
+    def ingest(self, txns) -> tuple:
+        """(kept, duplicates) for one file's transactions, in the order given."""
+        here: dict = {}
+        kept: list = []
+        duplicates = 0
+        for t in txns:
+            base = (t.currency, t.date, t.cents, normalise_description(t.desc))
+            occ = here.get(base, 0)
+            here[base] = occ + 1
+            key = (t.currency, row_fingerprint(t.date, t.cents, t.desc, occ))
+            if key in self._seen:
+                duplicates += 1
+                continue
+            self._seen.add(key)
+            self._rows += 1
+            kept.append(t)
+        return kept, duplicates
+
+
 def combine(files: list, tags: Optional[list] = None) -> tuple:
-    """(txns, counted_once). One file: as it is. Several: for each (date, cents,
-    description, currency) the LARGEST count in any single file, not the sum -
-    so a row in two overlapping exports counts once, and two real identical
-    coffees on one day in one file still count twice.
+    """(txns, counted_once). One file: as it is. Several: each row is named by its
+    fingerprint (see row_fingerprint), and a row whose fingerprint was already
+    counted is a duplicate - so a row in two overlapping exports counts once, and
+    two real identical coffees on one day still count twice (they are occurrence 0
+    and 1 of the same day's row).
 
     `tags`: one per file, the layout (or account) it was read with. Files with
     DIFFERENT tags are different accounts and are never matched against each
@@ -1270,24 +1380,13 @@ def combine(files: list, tags: Optional[list] = None) -> tuple:
 def _combine_same(files: list) -> tuple:
     if len(files) == 1:
         return list(files[0]), 0
-    per_file = []
-    for txns in files:
-        c: dict = defaultdict(list)
-        for t in txns:
-            c[(t.date, t.cents, t.desc.casefold(), t.currency)].append(t)
-        per_file.append(c)
-    keys: OrderedDict = OrderedDict()
-    for c in per_file:
-        for k in c:
-            keys.setdefault(k, None)
+    ledger = RowLedger()
     out: list = []
     once = 0
-    for k in keys:
-        counts = [len(c.get(k, [])) for c in per_file]
-        best = max(counts)
-        once += sum(counts) - best
-        src = per_file[counts.index(best)][k]
-        out.extend(src)
+    for txns in files:
+        kept, duplicates = ledger.ingest(txns)
+        out.extend(kept)
+        once += duplicates
     return out, once
 
 
