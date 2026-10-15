@@ -102,6 +102,25 @@
   was, so the baseline it holds is never quietly replaced. See the note under
   step 2 in this script, and docs/UPDATER-REDESIGN.md sections 4.1 and 5.
 
+  A COPY THAT CARRIES THIS FILE CANNOT BE REHEARSED, AND THE RESULT IS NOT A
+  FALSE PASS (measured 2026-10-15, after a session lost real time to it). When
+  the record is present AND every file hash in it still agrees, this script
+  takes the fast path in step 2, skips the rehearsal, and says "All N patches
+  are already on your backend (recorded by the last run)". That answer is
+  EARNED rather than assumed: `Test-ManifestCurrent` must pass and
+  `Test-ManifestDrift` must find nothing, so a record that disagrees with the
+  files on disk is not believed - it prints the drifted file names and runs the
+  rehearsal anyway.
+
+  What it means in practice is narrower than "a stale record fakes a pass": a
+  copy of `jarvis-backend/` has NO record (`jarvis-backend/` does not ship one),
+  so rehearsing against a fresh copy always rehearses. The trap is reusing a
+  directory an earlier run already recorded - including `$env:TEMP\hudstack`
+  from the handoff's own instructions, which a previous run leaves a record in.
+  Point the rehearsal at a NEWLY COPIED directory and the fast path cannot
+  trigger. If you are unsure, `Remove-Item` the `_jarvis-state.json` in the copy
+  first, or use `-Manifest none`.
+
 .EXAMPLE
   From the folder this repository is cloned into. -ExecutionPolicy Bypass
   lets Windows run a script file for this one command, without changing any
