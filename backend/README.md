@@ -16167,6 +16167,26 @@ That needs a first question on a turn with no tools enabled, where Jarvis
 recalls a fact, and a look at whether the answer follows the rules (for
 example "say what is a guess and what is verified").
 
+**Superseded in part, 2026-10-14 - `with_rules_first`, and the everyday model
+that had no rules at all.** `keep_rules_first` above is a REPAIR: it steps in
+only when something else would be first, and it trusts Ollama to prepend the
+Modelfile's SYSTEM block when the first message is the owner's own question.
+That trust only holds for a model that HAS such a block. The owner's everyday
+model since 2026-10-10 is `qwen3.5:9b`, a plain library pull - `ollama show
+qwen3.5:9b --system` prints nothing - so on a fresh turn on the lane he
+actually uses, the request was the question and nothing else. Measured on his
+PC that day: 271 prompt tokens with no tools offered, one question in it.
+`jarvis_agent.with_rules_first()` now puts `LANE_SYSTEM` at position 0 of every
+local turn, before trimming, in one place that both lanes and the warm-up
+share (`run_local_turn`'s `one_round` and `chat_prefix`); `keep_rules_first`
+still runs last and finds the rules already there, so nothing doubles up. No
+patch file owns `jarvis_agent.py` - it is a full module this repository ships
+whole - so nothing in the patch stack is affected. The cost, measured the same
+way: +330 prompt tokens a turn with no tools (271 -> 611) and +340 with the
+settings tool (1070 -> 1410). The false-claim effect is small and is reported
+as it measured, not as it was hoped: see "The main lane hears the rules" in
+`docs/JARVIS-API.md` and the PR body.
+
 # The app builder's workspace: `jarvis_app_workspace.py` (2026-09-28)
 
 **What it is.** Milestone A of the app builder (`docs/APP-BUILDER-DESIGN.md`).

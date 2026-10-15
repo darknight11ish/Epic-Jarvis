@@ -749,6 +749,44 @@ Without `jarvis_intake.py`, or on any error, nothing is detected and chat
 works exactly as before this patch (fail open, not fail safe - the same
 choice `schedule_command()` makes for a reminder).
 
+**The main lane hears the rules (2026-10-14; `jarvis_agent.with_rules_first`, and
+there is no patch for it - `jarvis_agent.py` is one of the modules this
+repository ships whole).** Every local turn is now sent Jarvis's own rules
+(`jarvis_agent.LANE_SYSTEM`, `backend/jarvis-primary.Modelfile`'s SYSTEM block
+word for word) as its first message, in the request, on both cards. Before
+this, the rules were sent only on a second-card lane, on the belief written at
+the constant that "the everyday model has them built in" - true of
+`jarvis-primary`, which is an `ollama create` whose Modelfile carries the
+block, but not of the owner's everyday model since 2026-10-10, `qwen3.5:9b`,
+a plain library pull with no SYSTEM of its own (`ollama show qwen3.5:9b
+--system` prints nothing on his PC). Ollama adds a Modelfile SYSTEM block only
+when the request does not already start with a system message, so a fresh
+main-lane turn was the owner's question and nothing else: the honesty rule
+("Never claim an action was taken that was not") was not in front of the model
+on the lane he actually uses. The old `keep_rules_first` is unchanged and
+still runs last - it is the repair for a leading system message, and it now
+always finds the rules already first.
+
+- **One source of truth.** `with_rules_first()` is the only thing that puts
+  the block in, and `run_local_turn`'s `one_round` and `chat_prefix` (the
+  warm-up's own start) both call it, so the two lanes, the warm-up and a
+  recalled-facts turn cannot drift. `backend/test_lane_prompt.py` holds it,
+  including the case where a recalled-facts block and an app's own system
+  message are both present: still exactly ONE rules message, never two
+  competing system turns.
+- **Before trimming**, which is the room `budget()` already held back for them
+  (`_TEMPLATE_TOKENS` = the rules' real length + 100).
+- **What it costs, measured on the owner's PC** (`qwen3.5:9b`, port 11436, the
+  RTX 2060, Ollama's own `prompt_tokens`): +340 tokens a turn with no tools
+  (271 -> 611) and +340 with `change_setting` offered (1070 -> 1410). Both
+  figures are the average over the runs in the PR body.
+- **What it does not do.** It does not make the model call a tool - PR #405's
+  own finding, re-measured here: with `change_setting` offered, the model
+  called it in 35 of 35 runs both before and after. It reduces claimed-but-
+  undone answers only slightly, and the honest count is in the PR body: 3 of
+  80 measured runs before, 1 of 80 after, which is not a difference this many
+  runs can separate from chance.
+
 **"Used in this answer"** (the owner's decision, 2026-09-25). Both apps
 read `injected_ids` - its `"mem:<id>"` entries, as numbers; `"fact:<n>"`
 (the older word list) has no id and is not listed - and under an answer
