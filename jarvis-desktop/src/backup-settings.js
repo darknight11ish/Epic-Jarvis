@@ -36,10 +36,18 @@ const $ = (id) => document.getElementById(id);
 
 const DETAIL = "Jarvis can write one locked backup file - your memory, chat history, " +
   "settings and notes, encrypted - into a folder you pick. A NordLocker or similar " +
-  "cloud-synced folder is fine: that program uploads the file, as it does anything " +
+  "cloud-synced folder is fine for that file: that program uploads it, as it does anything " +
   "else you put there, and the file itself stays locked either way. Jarvis keeps the " +
   "newest 5 backups there and deletes older ones. A backup is made only when you press " +
-  "Back up now, and each one is locked with its own recovery code, shown once.";
+  "Back up now, and each one is locked with its own recovery code, shown once. " +
+  "The folder you pick here is also where the weekly personal-data snapshots go: those are " +
+  "plain files unless you seal them, so a folder a cloud program syncs will upload them " +
+  "too. Pick a folder on this PC if you would rather it did not.";
+/** The folder the picker cannot accept, in the owner's words. The words
+ * themselves come from Rust (backup.rs destination_problem), because that is
+ * where the rule is checked - this only decides how they are shown. */
+const REFUSED_TITLE = "That folder cannot be used for backups.";
+const ASKING_ABOUT_DRIVE = "Back up into this folder?";
 const LOST_CODE_WARN = "Write this down or save it somewhere safe now. Jarvis will not " +
   "show it again, and cannot recover it. If it is lost, this backup can never be " +
   "opened again - there is no other way in.";
@@ -271,10 +279,27 @@ async function chooseFolder() {
   say("Choose a folder…");
   paint();
   try {
-    const out = await TAURI.core.invoke("set_backup_folder");
+    let out = await TAURI.core.invoke("set_backup_folder");
     if (out && out.cancelled) {
       say("");
-    } else {
+    } else if (out && out.confirm) {
+      // Checked in Rust before anything is sent: the folder is on a drive that
+      // is not the one Windows is on. The path is shown in full, and "yes"
+      // confirms the folder the picker returned - the page cannot name one.
+      say("");
+      if (window.confirm(`${ASKING_ABOUT_DRIVE}\n\n${out.path}\n\n${out.message}\n\n` +
+        "A backup on a drive that gets unplugged is a backup that stops happening.")) {
+        out = await TAURI.core.invoke("set_backup_folder", { confirm: true });
+      } else {
+        say("Left where it was - nothing was changed.");
+        busy = false;
+        paint();
+        return;
+      }
+    }
+    if (out && out.refused) {
+      say(`${REFUSED_TITLE} ${out.error}`, "bad");
+    } else if (out && !out.cancelled && !out.confirm) {
       const words = String((out && (out.message || out.error)) || "Done.");
       say(words, out && out.ok === false ? "bad" : "ok");
     }
