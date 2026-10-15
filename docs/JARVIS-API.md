@@ -749,6 +749,44 @@ Without `jarvis_intake.py`, or on any error, nothing is detected and chat
 works exactly as before this patch (fail open, not fail safe - the same
 choice `schedule_command()` makes for a reminder).
 
+**The main lane hears the rules (2026-10-14; `jarvis_agent.with_rules_first`, and
+there is no patch for it - `jarvis_agent.py` is one of the modules this
+repository ships whole).** Every local turn is now sent Jarvis's own rules
+(`jarvis_agent.LANE_SYSTEM`, `backend/jarvis-primary.Modelfile`'s SYSTEM block
+word for word) as its first message, in the request, on both cards. Before
+this, the rules were sent only on a second-card lane, on the belief written at
+the constant that "the everyday model has them built in" - true of
+`jarvis-primary`, which is an `ollama create` whose Modelfile carries the
+block, but not of the owner's everyday model since 2026-10-10, `qwen3.5:9b`,
+a plain library pull with no SYSTEM of its own (`ollama show qwen3.5:9b
+--system` prints nothing on his PC). Ollama adds a Modelfile SYSTEM block only
+when the request does not already start with a system message, so a fresh
+main-lane turn was the owner's question and nothing else: the honesty rule
+("Never claim an action was taken that was not") was not in front of the model
+on the lane he actually uses. The old `keep_rules_first` is unchanged and
+still runs last - it is the repair for a leading system message, and it now
+always finds the rules already first.
+
+- **One source of truth.** `with_rules_first()` is the only thing that puts
+  the block in, and `run_local_turn`'s `one_round` and `chat_prefix` (the
+  warm-up's own start) both call it, so the two lanes, the warm-up and a
+  recalled-facts turn cannot drift. `backend/test_lane_prompt.py` holds it,
+  including the case where a recalled-facts block and an app's own system
+  message are both present: still exactly ONE rules message, never two
+  competing system turns.
+- **Before trimming**, which is the room `budget()` already held back for them
+  (`_TEMPLATE_TOKENS` = the rules' real length + 100).
+- **What it costs, measured on the owner's PC** (`qwen3.5:9b`, port 11436, the
+  RTX 2060, Ollama's own `prompt_tokens`): +340 tokens a turn with no tools
+  (271 -> 611) and +340 with `change_setting` offered (1070 -> 1410). Both
+  figures are the average over the runs in the PR body.
+- **What it does not do.** It does not make the model call a tool - PR #405's
+  own finding, re-measured here: with `change_setting` offered, the model
+  called it in 35 of 35 runs both before and after. It reduces claimed-but-
+  undone answers only slightly, and the honest count is in the PR body: 3 of
+  80 measured runs before, 1 of 80 after, which is not a difference this many
+  runs can separate from chance.
+
 **"Used in this answer"** (the owner's decision, 2026-09-25). Both apps
 read `injected_ids` - its `"mem:<id>"` entries, as numbers; `"fact:<n>"`
 (the older word list) has no id and is not listed - and under an answer
@@ -19997,7 +20035,7 @@ and both routes are live, and the UI is not built on either app. When it is,
 it goes on BOTH, on this same store and this same card. `tools/check_parity.py`
 cannot see it: it scans the two apps' own source, so a backend route no app
 calls is outside what it decides.
-## 133. The blind credential vault: a NAME everywhere, the value at the point of use (added 2026-10-14)
+## 134. The blind credential vault: a NAME everywhere, the value at the point of use (added 2026-10-14)
 
 **The idea, in one line.** The model, the prompt, the approval card, the audit
 line, the event payload and every returned string carry an opaque handle -
@@ -20091,3 +20129,109 @@ own Credential Manager, which is more exposure for no gain.
 desktop and phone halves are simply not built yet, and `tools/check_parity.py`
 reports both routes as the backend's own until one is.
 
+
+---
+
+## 133. "Write Like Me": drafting in the owner's own voice (added 2026-10-15)
+
+`backend/jarvis_voiceprint.py`, and its drop-in folder
+`plugins/ready/voiceprint/`. Four routes, no patch, its own store.
+
+### 133.1 What this is
+
+Jarvis writes prose as the owner: email drafts, notes, messages. This engine
+makes those drafts sound like him, in three steps that are all plain code on
+this PC - find how he has written about something similar before, take the
+names and numbers out of that example, and measure the result against a
+**voiceprint**: a small set of numbers worked out from his own writing.
+Nothing is sent anywhere, no weights are changed, and the model is shown
+examples at generation time, which is the one approach that fits on this
+hardware and can be undone.
+
+### 133.2 Why this is not `jarvis_style.py`
+
+There was already an earlier version of steps one and two in
+`jarvis-backend/jarvis_style.py`. It is **delivered to nobody**: measured with
+`python -B tools/check_unmanaged_files.py`, the file is classified **NEITHER** -
+no patch the installer applies writes it and `$SHIPPED` does not carry it - and
+the repository holds exactly one copy of it. An edit there reaches no PC. The
+owner's decision (2026-10-15) was to build the engine in a new module and leave
+that file untouched, rather than promote it into `$SHIPPED`, which would make
+`apply-patches.ps1` start overwriting a file it has never managed, on every run.
+`docs/ARCHITECTURE.md` §8 carries the full reasoning and the limitation that
+comes with it. `jarvis_voiceprint` deliberately never imports `jarvis_style`,
+and does not name it in a string either; its suite asserts both.
+
+### 133.3 The store
+
+`voiceprint.db`, in the same settings folder as `goals.db` and `schedule.db`
+(`JARVIS_VOICEPRINT_DB` overrides the file, for the tests). One connection per
+call, `with closing(...)`, WAL and a busy timeout - the pattern
+`jarvis_receipts.py` uses. One table:
+
+    voiceprint_samples (id, created_at, kind, prompt, text, numbers)
+
+`kind` is `calibration`, `edit` or `sample`. `numbers` is the voiceprint worked
+out from that one sample.
+
+### 133.4 Every write is guarded, and fails closed
+
+The pattern is `jarvis_receipts.py`'s, copied on purpose: its `_scrubber()` at
+`jarvis_receipts.py:289-295` ("Fails CLOSED: no scrubber, nothing recorded")
+and its refusal at `:443-449`. Here, `_scrubber()` returning `None` means
+`add()` returns `""` and the store is **not even created**. Text is scrubbed
+BEFORE it is stored, so nothing unscrubbed is ever on disk to be listed later.
+A sample that looks like it holds a password, a key or a one-time code is
+refused (`jarvis_scrub.find_secret`), not stored, and the refusal says so in
+plain words.
+
+### 133.5 The four routes
+
+    GET  /api/voiceprint                    the samples, the voiceprint numbers
+                                            and what the engine is doing. A read.
+    POST /api/voiceprint/sample             {"text": "...", "prompt"?: "..."}
+    POST /api/voiceprint/learn_edit         {"before": "...", "after": "...",
+                                             "prompt"?: "..."}
+    POST /api/voiceprint/forget             {"id": "vp...", "confirm": true}
+
+All four go through the server's own origin and token checks, the same as every
+other route. They arrive with no patch: `plugins/ready/voiceprint/plugin.json`
+names the module and `jarvis_plugins.py` makes the call the patch would have
+made.
+
+### 133.6 The permission model, said plainly
+
+`sample` and `learn_edit` write the owner's OWN words into a store on his OWN
+PC, and raise **no approval card**. That matches the owner's decision of
+2026-09-24: facts learned from his own words are saved without a per-fact yes.
+It is a memory write, not an action on the world, and nothing leaves the PC -
+retrieval goes through `jarvis_memory`, so it trips the same taint latch every
+other memory read trips and the turn stays on the local model.
+
+`forget` is deliberately harder. The owner kept the question (2026-09-24: every
+learned thing is listed with a Forget that "asks 'are you sure?' first ...
+because forgetting cannot be undone"), so the route **refuses** a forget whose
+body does not carry `"confirm": true`, with `"needs": "confirm"` and a sentence
+saying why. That is the question, enforced in the one place a different client
+cannot skip it. A missing id and an already-forgotten id are both refused
+rather than treated as success.
+
+### 133.7 What it strips, and the guarantee
+
+`strip_entities` carries the earlier engine's eight regular expressions and its
+proper-noun walk, and closes the gaps a read-only probe measured: `_DATE` now
+runs before `_PATH` (a slash-date used to leave its day behind as
+`14[path]`), `_PHONE` accepts a leading `0` (a UK area code used to survive),
+and times, postcodes, decimals and grouped numbers are caught. It ends with a
+pass that replaces any remaining run of digits, so **no digit survives** - the
+invariant is a property of the code, and `backend/test_voiceprint.py` asserts
+it for every row of the module's docstring table and for every line of that
+docstring. One limitation is named in §8 rather than hidden: a name that OPENS
+a sentence is not replaced.
+
+### 133.8 Neither app has a screen for it yet
+
+`docs/ARCHITECTURE.md` §8 carries the row. The store and the four routes are
+built; neither app has a list or a Forget. When they are built they go on BOTH,
+on this same store and this same confirm. `tools/check_parity.py` cannot see
+it for the same reason as §132.7.

@@ -69,6 +69,8 @@ READERS = {
     "jarvis_chatbot.py": ("all", "the leak check reads saved facts to keep them OUT of a web "
                                  "chat"),
     "jarvis_search.py": ("all", "'would this search repeat a saved fact?': entities_view(all)"),
+    "jarvis_voiceprint.py": ("default", "exemplars(): store.search with the default (use), so a "
+                                       "learn_only or off topic is never a style sample"),
     "jarvis_feedback.py": ("owner", "reads one fact by id to see if it is still current"),
     "jarvis_forget_range.py": ("owner", "the owner's Forget a time frame sees every fact"),
     "jarvis_brain_reads.py": ("owner", "one fact's history, by id"),

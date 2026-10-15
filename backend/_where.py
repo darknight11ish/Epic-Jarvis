@@ -358,6 +358,11 @@ SHIPPED = (
     "jarvis_learning_switch.py",
     "jarvis_voicebank.py",
     "jarvis_voice_flow.py",
+    # "Write Like Me": how the owner writes, measured from his own words, with
+    # names and numbers stripped before anything reaches a model. Its own
+    # voiceprint.db, every write guarded by jarvis_scrub, and its routes come
+    # from plugins/ready/voiceprint - no patch
+    "jarvis_voiceprint.py",
     # the animals' mouths timed by Kokoro itself: jarvis_speech.py calls it
     "jarvis_mouth.py",
     "jarvis_chat_log.py",
