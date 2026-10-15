@@ -1515,28 +1515,6 @@ $PATCHES = @(
     # approval card (the same shape as a timer or a note). Sending a picture
     # anywhere would be a new named way out of the PC, and no route here does.
     'pictures.patch'
-    # reasoning-fallback.patch (2026-10-14). #424 added this change to BOTH the
-    # patches' target and the published base, and no patch delivered it - which
-    # broke the whole stack rather than just this feature: the rehearsal went to
-    # 102 "error:" lines and "29 patch(es) will not apply", exit 1, because one
-    # insertion in the cloud-streaming region moves the context that every later
-    # patch matches on. It is a patch now, and the base no longer carries it.
-    #
-    # It goes here, above the loader, because the rule above says every CORE
-    # patch does - and it is one: it edits jarvis_hud.py itself, unlike the
-    # drop-in folders below. It replaces two lines of the cloud-streaming loop
-    # (the plain `self.wfile.write(chunk)` / `flush()`) with the reader that
-    # relays a cloud answer whose whole cap went on hidden reasoning, so it
-    # needs that loop to be the one chat-stream.patch and speed-record.patch
-    # have already finished writing.
-    #
-    # It sits BEFORE model-lanes.patch, and either order would apply: it edits
-    # the cloud-streaming loop and model-lanes.patch appends to the install
-    # chain, so the two touch no line of each other's. It goes first because
-    # model-lanes.patch's own comment below says it is the LAST core patch and
-    # plugin-loader.patch's hunk anchors on ITS last two printed lines - so the
-    # loader's neighbour is the patch whose comment says it is.
-    'reasoning-fallback.patch'
     # "Start the local model" (the owner's decision of 2026-10-13, after both
     # of his Ollama lanes were dead for about five hours and PR #409 made the
     # apps say so but do nothing about it): GET /api/model-lanes and
