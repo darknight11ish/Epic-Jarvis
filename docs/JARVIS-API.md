@@ -20176,3 +20176,308 @@ a sentence is not replaced.
 built; neither app has a list or a Forget. When they are built they go on BOTH,
 on this same store and this same confirm. `tools/check_parity.py` cannot see
 it for the same reason as §132.7.
+
+---
+
+## 135. The skill library's other doors: four routes under `/api/skills/hub` (added 2026-10-15)
+
+`backend/jarvis_skill_hub.py`, and its drop-in folder `plugins/ready/skill-hub/`.
+Four routes, no patch. **It adds no route that already existed**: the list
+(`GET /api/skills`) and the removal (`POST /api/skills/decide`, with the "are
+you sure?" before it) are in §6's tables and stay exactly where they are. This
+section documents the four routes that are new, and nothing else.
+
+### 135.1 What this is
+
+A skill is a folder with a `SKILL.md` in it, and `jarvis_skills.py` owns
+everything about one: the frontmatter parser, the scanner that refuses the
+attack patterns the OpenClaw marketplaces really used, the quarantine, the
+~100-token card, the full body, installing, removing and writing. This module
+**re-implements none of that and calls all of it.** It adds the four things
+that were missing around it:
+
+1. **the reference manuals.** `parse_skill` already walked a skill's folder and
+   recorded every file in it, `references/<file>.md` included, in the skill's own
+   file list; nothing in the backend ever read one. A manual is now listed by
+   name and size for free, and read only when a caller asks for that one - which
+   is what keeps a large manual at zero tokens until it is wanted;
+2. **leading `/skill` and `/bundle` commands.** Up to five tokens off the FRONT
+   of a message, stopping dead at the first one that is not a known skill or
+   bundle, so `/path/to/file` is never swallowed;
+3. **a project's own skills**, at `<project folder>/.jarvis/skills`, for
+   projects the owner explicitly trusted;
+4. **`/learn`**: a four-section distillation (When to Use / Procedure /
+   Pitfalls / Verification), scrubbed, and saved only through
+   `jarvis_skills.write_skill()`.
+
+### 135.2 The four routes
+
+```
+GET  /api/skills/hub/references?skill=<name>            the manuals a skill ships
+GET  /api/skills/hub/references?skill=<name>&file=<ref>.md
+                                                        ONE manual, read now
+GET  /api/skills/hub/projects                           a trusted project's skills
+POST /api/skills/chain         {"text": "/skill-a /bundle rest of the message"}
+POST /api/skills/learn         {"topic", "steps"|"procedure", "when",
+                                "pitfalls", "verification", "name"}
+```
+
+All four are installed by the module's own `install()`, wrapped round the
+core's Handler after its own origin and token checks, exactly as
+`jarvis_receipts.py` (§132.5) does it. **No patch is involved:**
+`plugins/ready/skill-hub/plugin.json` names `jarvis_skill_hub` with
+`"install": "handler"`, and `jarvis_plugins.py` makes the call the patch would
+have made. `stack_order` is 142 - after every folder the old patch stack had
+(the highest of those is `pictures` at 141).
+
+The first route answers twice, on the same path, and the two forms report
+failure differently - one HTTP status, one payload - which a client has to know.
+With `?skill=` alone it lists: `{"ok", "name", "references": [{"reference",
+"bytes", "too_big_to_read"}], "note"}` - names and sizes, and **no text of any
+kind**. A missing `?skill=` is a 400; a skill that does not parse, or that is not
+there, is a 404. With `&file=` it reads that one manual and the answer is
+**always 200**, carrying `{"ok", "name", "reference", "text", "bytes",
+"findings", "warnings", "note"}` - a refusal is `{"ok": false, "refused": true,
+"findings": [...]}` **with no `text` key at all**, so a client that only checks
+the status code is told `ok` and must read the body. A manual is one `.md` file
+name inside the skill's own `references/` folder: a separator, a `..`, an
+absolute path, a name that is not there, or anything over 256 KB is refused with
+its reason rather than opened.
+
+The second route answers `{"ok", "skills", "quarantined", "skipped", "dirs"}`
+for every skill under every trusted project's `.jarvis/skills`. "Trusted" is
+not a second opinion invented here - it is `jarvis_projects.check_folder()`,
+the one check "Folders Jarvis may look in" already uses, asked again at use
+time because a folder can be taken off that list after a project was made. A
+project whose folder is no longer trusted is not looked in at all. 503 when
+`jarvis_skills.py` or `jarvis_projects.py` is not on this PC, which is a real
+answer rather than an empty list.
+
+The third answers `{"ok", "skills", "missing", "rest", "stopped_because"}` -
+the skill NAMES a chain asks for, the rest of the message untouched, and why
+the chain stopped. It cannot run a skill, reach a skill's body, or read a
+manual: it reads the index and returns names.
+
+The fourth is the only route here that writes anything.
+
+### 135.3 The permission model, said plainly
+
+The three reads raise **no approval card**, which is what the gate's own table
+already says: `skill_list`, `skill_load` and `skill_scan` are tier `auto`
+(`jarvis_gate.py:850`). Reading a skill, listing its manuals, looking in a
+trusted project's folder and parsing a chain are all things the owner can
+already do by opening the folder.
+
+`/api/skills/learn` is the writer, and **it reaches the write only through
+`jarvis_skills.write_skill()`**, which is the existing scanner and the existing
+card in the order that matters: it scans the body, refuses outright on a
+`block` finding, and raises ONE `modify_own_code` card **before** it writes
+(`jarvis_skills.py:799`, `:806`, `:816`). `modify_own_code` is `ask` in the
+shipped `jarvis-framework.toml` (:281), so it is ONE card and it waits for a
+person - the action does not exist unattended. Its risk row is
+`("hard", "local")` (`jarvis_gate.py:278`), and measured against the gate's own
+`risk_for()` that is `{"reversible": "hard", "reach": "local", "swipe_ok":
+false, "why": "revertible from a backup, not from here"}`: **`swipe_ok` is
+false**, so a gesture cannot approve it - the card has to be opened. **No new
+gate row was needed and none was added:** the vocabulary already had
+`skill_install` and `skill_write` mapped to `modify_own_code`
+(`jarvis_gate.py:852-853`).
+
+One thing is re-checked rather than assumed. `write_skill()` tests
+`Verdict.allowed`, and `allowed` is `True` on the tiers `notify` and `auto`
+where nobody was asked - `jarvis_skills.refine()` says exactly that about the
+gate it shares (`:853-864`). So `learn()` reads the TIER itself and refuses
+unless `modify_own_code` is `ask`, the way `jarvis_skill_discovery.offer()`
+does. A settings file that listed it as `notify` cannot turn this card into a
+rubber stamp.
+
+### 135.4 A reference manual is scanned before it is handed over
+
+A manual is text an agent will read and follow, exactly like a `SKILL.md`, so
+it earns the same scanner. It is read and then passed through
+`jarvis_skills.scan_text()` **before** it can reach a model: a `block` finding
+returns `{"ok": false, "refused": true, "findings": [...]}` and **no text at
+all**. A scanner that raises is a refusal too, not a pass - "the scanner did not
+answer" and "the scanner said no" end in the same place.
+
+The same rule covers a project's own skills, where it matters more: an
+untrusted-looking skill in the owner's own project folder is parsed, scanned,
+and **quarantined** if it fails - copied into `jarvis_skills.QUARANTINE` with
+the reason written beside it (`jarvis_skills.py:621`) - and never loaded. **The
+original is not deleted.** A skill that merely fails to parse is `skipped` with
+the reason, not quarantined, because nothing was scanned to refuse.
+
+### 135.5 What it deliberately does not do
+
+- **It does not re-document `GET /api/skills` or `POST /api/skills/decide`.**
+  Both already existed, on both apps, with a caller; this feature touches
+  neither and does not describe them again (§6).
+- **It does not install a skill from anywhere.** There is no download, no
+  import and no "install this skill" route: the only path to a new skill file
+  is `/learn` → `write_skill()` → scanner → card → write.
+- **It never deletes anything.** The one destructive-looking action is the
+  quarantine, and that only copies.
+- **It has no "yes to all".** No loop here raises a card, and there is no
+  approve-all anywhere in the module - `backend/test_skill_hub.py` asserts both
+  against the source with the comments stripped.
+- **It reads no web page, email, document or note.** `/learn` writes down what
+  its caller hands it and nothing else.
+- **A project's skills are not leading `/` tokens.** Parsing a message must
+  cost one small JSON read and must never run the scanner, so a project's own
+  skills are reached through the projects route and their project, not by a
+  bare command.
+
+### 135.6 Neither app has a screen for it yet
+
+`docs/ARCHITECTURE.md` §8 carries the row. The four routes are live and neither
+app calls any of them: no screen reads a reference manual, offers `/skill`
+completion, lists a project's skills, or offers `/learn`. When they are built
+they go on BOTH, on these same routes and this same `modify_own_code` card.
+`tools/check_parity.py` cannot see any of it - it scans the two apps' own
+source, so a backend route no app calls is outside what it decides - which is
+said here rather than read as a clean pass it did not earn.
+
+---
+
+## 136. The cost advisor: no route at all, and it decides nothing (added 2026-10-14)
+
+`backend/jarvis_auto_router.py`, and its drop-in folder
+`plugins/ready/auto-router/`.
+
+**This section exists to say that the feature added nothing to this API.** The
+same shape as §131, and for the same reason: a reader who goes looking for the
+routes of "the thing that decides whether a turn goes to the cloud" should find
+the reason there are none instead of finding nothing.
+
+### 136.1 The one sentence
+
+**This module ADVISES. `jarvis_router.choose()` DECIDES.**
+
+`choose()` (`backend/rebuilt/jarvis_router.py:590`) is the single authority on
+which lane answers a turn. Its gates run in a fixed order and every one of them
+can only move the answer *downward*, toward local - its own docstring says so
+(`jarvis_router.py:596-600`: "the order is the policy ... none of them can
+escalate past a gate that already refused"). `evaluate_route()` is a second
+opinion about COST, never a second permission. It asks `choose()` directly
+(through `_router_allows()`, with `owner_said_yes=True`), and any gate
+`choose()` refuses on becomes its answer too, so it is **strictly weaker** than
+the authority it advises about and can never open a gate that authority keeps
+shut. A parallel gate stack in this position would be the failure
+`jarvis_router.py:632-648` describes: a privacy decision with two sources of
+truth, and so a gate nobody can see.
+
+### 136.2 It serves no route, on purpose
+
+`plugins/ready/auto-router/plugin.json` sets `install: "none"`, so
+`jarvis_plugins.py` imports the module, calls `install()` **with no
+arguments**, and prints its one banner line - *"advises on cost only;
+jarvis_router.choose() still decides (no route)"*. No route is added, nothing
+about a live turn changes, and there is therefore no `tools/check_parity.py`
+row owed: a backend module with no route is outside what that tool decides.
+
+That is deliberate: nothing new is reachable, so there is no new permission
+surface to review, and the module cannot be hooked into a chat turn by
+accident. Adding a caller is a separate change with its own review.
+
+Owed anyway, and why: the callable below is a **frozen cross-module contract** -
+Project Mode step 4 is written against this signature - and a contract another
+module is built on is worth recording even when no HTTP call carries it. The
+folder's own `README.md` says no *route* entry is owed, and that stays true;
+this section records the *callable*, not a route.
+
+### 136.3 The frozen contract
+
+```
+evaluate_route(prompt, context_tokens=0, active_project=None, speed_stats=None,
+               *, last_turn=None, enabled=None) -> dict
+```
+
+**Never raises. Any input, including `None`, gives a dict.** Every key a caller
+may act on:
+
+| key | what it holds |
+|---|---|
+| `lane` | `"local"`, `"jarvis-escalate"` or `"jarvis-critic"` |
+| `recommended` | `True` only when `lane` is a cloud lane |
+| `advisory` | always `True` - this is advice, never a permission |
+| `gate` / `reason` | which rule decided; `"cost"` when advice was given |
+| `why` | the same thing in plain words, ready to show the owner |
+| `est_local_seconds` | the estimated wait on this PC (an estimate, deliberately crude) |
+| `complexity_score` | this module's own 0.0-1.0 score - **not** `jarvis_router.complexity()` |
+| `category` | the work setup `jarvis_work.match()` found, or `"general"` |
+| `tokens_per_s` / `tokens_per_s_why` | the rate used, and whether it was measured |
+| `would_send` | the **scrubbed** text - empty unless gate 4 passed |
+| `lane_if_allowed` | the lane that was under consideration |
+| `thresholds` / `gates` | the two thresholds, and which of the gates passed |
+
+A `recommended: True` result **always** carries a non-empty `would_send`, and
+that is the only text the advice covers. The raw `prompt` is never handed back
+as something to send: a caller that sends unscrubbed text has ignored this
+function rather than been misled by it.
+
+### 136.4 The four gates, then the cost question
+
+The gates are inputs to the ADVICE. `choose()` remains the decision.
+
+1. **Mode/switch** - OFF by default. On only when a caller passes
+   `enabled=True` for this call, or inside an active Project Mode workspace
+   whose `auto_route_cloud` is exactly `true`. A missing, unreadable, corrupt
+   or non-object switch file (`auto-route.json`, beside the framework config)
+   reads as **OFF** - the same answer for every one of those, because a switch
+   nobody can read has not been turned on by anybody.
+2. **Taint latch** - a HARD BLOCK, `reason="taint_latched_local_only"`. It
+   reads the ONE latch this project has (`jarvis_gate.taint_active()`) plus a
+   project whose `shareable` flag is not on, and not being able to read the
+   latch also blocks. The honest limitation, named rather than rounded off:
+   there is **one global latch, not one per topic** - `latch_taint()`'s `why`
+   argument is a label nothing reads back - so ANY active taint blocks,
+   whatever latched it.
+3. **Budget** - two separate caps, because the project has two and they answer
+   different questions: the on-disk per-minute/per-day request cap
+   (`jarvis_router.Budget`) and the owner's monthly MONEY cap
+   (`jarvis_chatbot_api.money_check()`). A cap that is exhausted **or
+   unconfigured** is a no; neither module readable is a no.
+4. **Scrubber** - the outbound text must pass `jarvis_scrub.scrub_text()`, and
+   **the scrubber being absent is itself a refusal**, as is a scrubber that
+   raises, returns nothing, or leaves a secret behind.
+
+Then, last, the shipped authority: `_router_allows()` asks the real `choose()`
+and any gate it refuses on ends the advice. Only if all of that passed does the
+COST question decide whether to say anything at all - a local wait over 25
+seconds, or a complexity score of 0.75 or more. A quick, simple turn is
+`"not_worth_it"` and says so.
+
+### 136.5 A one-file inventory
+
+Everything `backend/jarvis_auto_router.py` holds, read out of the module:
+
+| in the file | what it is |
+|---|---|
+| `LANE_ESCALATE` / `LANE_CRITIC` / `LOCAL_LANE` | the three lane names it may return |
+| `SECONDS_THRESHOLD` 25.0, `COMPLEXITY_THRESHOLD` 0.75 | when a wait is worth mentioning |
+| `CONTEXT_TOKENS_HEAVY` 3500, `DEFAULT_TOKENS_PER_S`, `CHARS_PER_TOKEN`, `ANSWER_TOKENS` 400, `REVIEW_ANSWER_TOKENS` 900 | the sizing constants; `DEFAULT_TOKENS_PER_S` is a number and not a measurement, and `measured_rate()` says which it used |
+| `SWITCH_NAME` = `auto-route.json` | the mode switch file, absent by default |
+| `W_MULTI_FILE`, `W_ARCHITECTURE`, `W_INDICATORS_CAP`, `W_HEAVY_CONTEXT`, `W_PRIOR_BAD_TURN` | the complexity weights: the two word lists together are capped at `W_INDICATORS_CAP` 0.45, so 0.45 + 0.25 + 0.30 is what makes a score of 1.0 reachable |
+| `_MULTI_FILE`, `_ARCHITECTURE`, `_REVIEW` | the three regexes behind that score, deliberately narrow |
+| `_router_module`, `_gate_module`, `_scrub_module`, `_money_module`, `_work_module`, `_speed_module` | the six neighbours, imported lazily on every call: the module imports cleanly in a clone holding none of them, and a suite can stand one in by name |
+| `_number`, `_tokens`, `_positive` | total coercers; nothing here raises |
+| `switch_path()`, `switch_state()`, `mode_on()` | gate 1 - where the switch is, what it says, and the caller's own `enabled` |
+| `taint_latched()` | gate 2 - the hard block, and its one-latch limitation |
+| `budget_allows(lane, next_chars=0)` | gate 3 - both caps |
+| `scrub_outbound(text)` | gate 4 - the text that would leave, or why nothing may |
+| `_router_allows(text, lane, budget=None, tainted=False)` | the delegation to `choose()`, which is what makes the advice never broader than the permission |
+| `_from_stats()`, `_best_from_summary()`, `measured_rate()` | the measurement: the caller's numbers, else this PC's own speed log, else a cautious default |
+| `category_of()` | which work setup the owner's words ask for, through `jarvis_work.match()` |
+| `_answer_tokens()`, `is_review()` | how long the ANSWER is expected to be, and whether this is `jarvis-critic`'s kind of task |
+| `est_local_seconds()`, `complexity_score()`, `_prior_bad_turn()` | the estimate, the score, and the one signal no reading of the question alone can produce |
+| `_local()`, `evaluate_route()` | every refusal leaves through `_local()`, so no return path can keep a cloud lane set; `evaluate_route()` is the advice itself |
+| `install()` | the loader's entry point: takes no arguments, installs nothing, returns the one banner line |
+| `__main__` demo | prints every key of one call, for a human at a terminal |
+
+### 136.6 It sends, writes, approves and logs nothing
+
+No network, no file written, no card raised, no model called, nothing logged.
+It returns a dict and stops. `docs/ARCHITECTURE.md` §8 carries the row for the
+permission model; when a caller is added it goes into BOTH apps on this same
+advisory function, and a cloud turn is still reached only when the owner says
+yes for that one question.
