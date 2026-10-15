@@ -1,5 +1,10 @@
 # Report 29 (audit), agent a8dcfcff, 2026-09-30T06:23Z
 
+> **Superseded on one point, 2026-10-15.** Finding 2 below is out of date: a
+> 16 GB or larger first card needs no preset. The rule now lives at
+> `backend/jarvis_second_card.py:2220` (`if prim is not None and prim.total_mb
+> >= 15360:`) and is checked by `docs/CLAIMS.tsv` row A25.
+
 > **What it was asked** (first 600 characters of the task): Read-only audit of /home/user/Epic-Jarvis (read CLAUDE.md, docs/MODEL-TOPOLOGY.md, docs/HARDWARE-PROFILES.md, docs/GPU-SUPPORT-RESEARCH-2026-09-27.md first). Owner: "Some single GPUs can be up to 16 or 24 GB each. Make sure Jarvis can read them and use them properly. And the FIRST (primary) card can be anywhere between 8 GB and 32 GB VRAM and should work properly too. Review these features to make sure they work well." Today Jarvis was built around an 8 GB RTX 2080 Super primary (everyday model jarvis-primary, qwen3 8B, num_ctx 16384 in backend/jarvis-primary.Modelfile, KV q8_0, etc.). Audit, 
 
 > This is a sub-agent's own report, saved word for word. It is model output: it was
