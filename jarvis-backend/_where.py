@@ -861,6 +861,7 @@ SHIPPED = (
     # action, so it raises ONE card (undo_action, tier ask) and a denied card
     # changes nothing. jarvis_goals.py records a receipt for every step tick.
     "jarvis_receipts.py",
+    "jarvis_auto_router.py",
     # The skill library's other doors (2026-10-15): a reference manual read
     # only when it is asked for, leading /skill and /bundle chains that stop at
     # the first name they do not know, a trusted project's own skills at

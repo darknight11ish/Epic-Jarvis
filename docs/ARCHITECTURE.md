@@ -2144,6 +2144,35 @@ phone". `tools/check_parity.py` cannot see it at all - it scans the two apps'
 own source, so a backend route no app calls is outside what it decides -,
 which is said plainly here rather than read as a clean pass it did not earn.
 
+**Cost advice is built, and it is in no app yet - and this one is a decision
+about the permission model rather than a screen somebody forgot**
+(2026-10-14): **the complexity/latency auto-router**
+(`backend/jarvis_auto_router.py`, `plugins/ready/auto-router/`).
+`evaluate_route()` estimates what a turn will cost on this PC - the measured
+token rate `jarvis_speed.py` keeps, the size of the conversation, and the kind
+of work `jarvis_work.match()` reads - and advises when a cloud lane would be
+quicker. **It decides nothing.** `jarvis_router.choose()`
+(`backend/rebuilt/jarvis_router.py:590`) stays the one authority on which lane
+answers a turn; this module asks it directly and can only ever advise a lane
+`choose()` would also permit, so it is strictly weaker than that authority and
+cannot open a gate the authority keeps shut. Its own four gates are inputs to
+the ADVICE, never a second permission: the mode switch (off by default in
+general chat), the one taint latch this project has
+(`jarvis_gate.taint_active()`) together with a project whose `shareable` flag
+is not on, the on-disk cloud budget plus
+`jarvis_chatbot_api.money_check()` (an exhausted OR unconfigured monthly cap is
+a no), and `jarvis_scrub.scrub_text()`, whose absence is itself a refusal.
+`plugins/ready/auto-router/plugin.json` sets `install: "none"`, so the folder
+imports the module and prints one banner line and **adds no route at all**:
+nothing new is reachable, and no app is handed an endpoint to call. That is
+what keeps a second entry point into "should this go to the cloud?" from
+becoming a second source of truth for a privacy decision - the failure
+`jarvis_router.py:632-648` describes. `tools/check_parity.py` cannot see it -
+it scans the two apps' own source, so a backend module with no route is
+outside what it decides - which is said here rather than read as a clean pass
+it did not earn. **When a caller is added it goes into BOTH apps on the same
+advisory function**, and a cloud turn is still reached only when the owner says
+yes for that one question.
 **Not on either app yet either, and again that is the scope of the slice**
 (2026-10-15): **"Write Like Me"** - Jarvis drafting in the owner's own voice
 (`backend/jarvis_voiceprint.py`, `plugins/ready/voiceprint/`, JARVIS-API §133).
