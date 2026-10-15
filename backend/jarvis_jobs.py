@@ -27,6 +27,34 @@ A job that finishes at 03:00 must not say so at 03:00. Results sit on the
 row until something collects them (see `collect`). This module has no voice
 path and no push path at all, which is the enforcement.
 
+WHO TICKS THE QUEUE, AND WHAT MAY RUN WHILE NOBODY IS THERE (2026-10-15)
+`run_due()` is the whole of the work and `tick()` is its one production
+caller. `jarvis_initiative.Engine.start()` registers that tick on the
+heartbeat the HUD already runs, so the queue rides the ONE heartbeat that
+exists; there is no thread, no timer and no `register_kind` in this file.
+Until this landed there was NO production caller at all: every suite called
+`run_due()` directly, so every check passed while the feature did nothing on
+the owner's PC. A test of a function is not a test of its wiring.
+
+The owner's decision of the same day - "FINISH WHAT I ALREADY STARTED" -
+decides who may run and who must wait, and the frozen capability set is what
+decides it:
+
+  * a job whose every step stays INSIDE the set frozen on its row when it was
+    created runs to the end, unattended. That set is the owner's own yes: a
+    call to `create()` is an owner-present call, and the caps it writes down
+    are what he agreed to. This is what lets a job he started finish;
+  * a step that needs anything OUTSIDE that set does not run. It parks the job
+    in `waiting_approval` with a one-shot `pending` grant and asks again next
+    tick; nothing here ever answers that grant. If nobody ever does, the job
+    waits for ever rather than proceeding - rule 4 is absolute;
+  * the tick never creates a job, never widens a `caps` set and never decides
+    a grant, so nothing NEW begins while he is away. Anything that does need
+    a fresh yes waits for him.
+
+ARCHITECTURE.md section 10, "The background job queue and what ticks it",
+says the same in the place a reader looks first.
+
 THE DATABASE IS THE INTERESTING PART
 Jobs are rows, so a restart loses nothing. But this database's neighbours -
 the approval queue, the memory extractor, the heartbeat - are already
@@ -898,10 +926,13 @@ def run_due(now: Optional[float] = None, limit: Optional[int] = None) -> dict:
     """One tick. Runs every job that is due, in this thread, and returns what
     happened.
 
-    Synchronous on purpose. The caller is jarvis_initiative's engine thread
-    (or a test), which exists to spend time; handing each job to a pool would
-    buy concurrency nobody asked for and cost the one property that makes
-    this testable - that when run_due returns, the tick is over. Cancellation
+    Synchronous on purpose. The caller is `tick()` below - or a test, which is
+    the ONLY other caller there is, and that is exactly why the missing
+    production caller went unnoticed for so long. `tick()` is what
+    jarvis_initiative's engine thread runs on every heartbeat; the engine
+    thread exists to spend time, so handing each job to a pool would buy
+    concurrency nobody asked for and cost the one property that makes this
+    testable - that when run_due returns, the tick is over. Cancellation
     still works mid-step, because cancel is a row the handler's context reads
     from another thread, not a flag in this one.
     """
@@ -962,6 +993,116 @@ def run_due(now: Optional[float] = None, limit: Optional[int] = None) -> dict:
         (out["cancelled"] if final and final["state"] == "cancelled"
          else out["done"]).append(jid)
     return out
+
+
+# --------------------------------------------------------------------------
+#   The ticker: what actually calls run_due() on the owner's PC
+# --------------------------------------------------------------------------
+
+def tick(limit: Optional[int] = None) -> None:
+    """One tick of the queue, for the initiative engine's heartbeat to call.
+
+    WHO CALLS THIS. `jarvis_initiative.Engine.start()` registers it under
+    `jarvis_initiative.JOBS_TICK`, and jarvis_hud.py already starts that
+    engine on the owner's PC (`_ENGINE = jarvis_initiative.build_from_config()`
+    then `_ENGINE.start()`), which beats once immediately and then every
+    `[initiative] heartbeat_minutes` - 30 minutes as shipped. So this is the
+    queue's one production caller, and the reason the feature does anything at
+    all. There is deliberately no thread, timer or `register_kind` of its own:
+    a second clock is the thing this must not become.
+
+    HOW OFTEN. As often as the heartbeat beats, and no oftener: a job due
+    before the next beat waits for it, and `[initiative] enabled = false`
+    stops the queue with the checks (one switch, said out loud in
+    ARCHITECTURE.md rather than left to be discovered).
+
+    WHAT IT MAY RUN IS NOT ITS DECISION - the frozen `caps` on each row are,
+    and `ctx.require()` is where that is enforced (see the module docstring,
+    "WHO TICKS THE QUEUE"). What is this function's business is only that it
+    never widens, never creates and never approves anything: it calls
+    `run_due()` and records what happened.
+
+    WHY IT SWALLOWS EVERYTHING. `Engine.beat()` calls this once per heartbeat
+    and counts a check that raises rather than letting it stop the others -
+    but one job body that threw must not make the whole heartbeat look
+    broken, and `run_due()` already contains a job's own exception. What is
+    left is everything around it: a database that will not open, a schema
+    that will not read. Those are recorded (audit log, and a receipt) and the
+    heartbeat carries on, because a queue that dies silently is the defect
+    this function exists to fix in the first place.
+
+    WHY IT RETURNS NOTHING. `Engine.beat()` files a truthy return as a
+    FINDING, and a finding is published to the apps (`/api/initiative`). Job
+    ids, labels and params are the owner's own material and this module's rule
+    is that none of it reaches a client that way - see "NOBODY IS LOOKING, SO
+    THE RESULT MUST NOT SPEAK" above, and `_emit`'s note. So the tick reports
+    through the jobs table and the audit log, and returns None. Read the
+    queue instead: `jobs()`, `status()`, `pending_grants()`.
+    """
+    try:
+        out = run_due(limit=limit)
+    except Exception as exc:                            # noqa: BLE001
+        _audit("jobs.tick_failed", {"error": type(exc).__name__})
+        _receipt("The background job queue could not be ticked "
+                 f"({type(exc).__name__}). Nothing was run, and nothing was "
+                 "changed by this tick.",
+                 {"ok": False, "error": type(exc).__name__})
+        return None
+    try:
+        _record_tick(out)
+    except Exception:                                   # noqa: BLE001
+        # Recording is never the reason a tick looks failed.
+        pass
+    return None
+
+
+def _record_tick(out: dict) -> None:
+    """Say what a tick did, once, where a person can find it.
+
+    The audit log gets the counts and the ids, which is the rule every record
+    in this module follows: never a label, never a param, never an error's
+    text, because those are the owner's words and the audit log is not private
+    the way `chat-history.db` is.
+
+    A tick that ran something also leaves ONE receipt, so "Jarvis was working
+    while I was away" is answerable from the apps' own receipts list
+    (`jarvis_receipts.record`, the project's record of what an action changed)
+    rather than from a log file nobody opens. No receipt is written for an
+    idle tick: the queue is looked at every heartbeat, and a receipt every 30
+    minutes saying nothing happened is the noise that hides the one saying
+    something did.
+    """
+    ran = int(out.get("ran") or 0)
+    if not ran:
+        return
+    counts = {k: len(out.get(k) or ()) for k in
+              ("done", "failed", "waiting", "cancelled")}
+    _audit("jobs.tick", {"ran": ran, **counts})
+    _receipt(
+        f"Ran {ran} background job(s) while you were away: "
+        f"{counts['done']} finished, {counts['failed']} failed, "
+        f"{counts['waiting']} waiting for you, {counts['cancelled']} cancelled.",
+        {"ran": ran, **counts,
+         "ids": {k: list(out.get(k) or ())
+                 for k in ("done", "failed", "waiting", "cancelled")}})
+
+
+def _receipt(summary: str, after: dict) -> None:
+    """One receipt for something a tick did, if the receipt store is there.
+
+    `jarvis_receipts.record()` is the project's own record of what an action
+    changed, and it never raises into its caller - the module's own rule, and
+    the reason this is safe to call from a heartbeat. A tick cannot be put
+    back, so no `undo` is offered and the apps' own `is_undoable()` refuses
+    the button rather than showing one that can only refuse. Any failure here
+    is ignored on purpose: a receipt that cannot be written must never fail
+    the work it was recording.
+    """
+    try:
+        import jarvis_receipts
+        jarvis_receipts.record("jobs.tick", summary, after=after)
+    except Exception:                                   # noqa: BLE001
+        pass
 
 
 # --------------------------------------------------------------------------

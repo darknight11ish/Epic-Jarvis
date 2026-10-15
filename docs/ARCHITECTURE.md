@@ -2604,6 +2604,90 @@ they landed):
   the owner's `jarvis_arbiter.py`, not here. Not run on the owner's PC.
   JARVIS-API §21.
 
+- **The background job queue, and exactly what ticks it** (added 2026-10-15;
+  the owner's decision of that day, "FINISH WHAT I ALREADY STARTED").
+  `jarvis_jobs.py` is "Long Fuse" - the job list `features.json` ships as
+  **Background jobs** and the Brain's Work pane reads at `GET /api/jobs`
+  (cancel at `POST /api/jobs/cancel`). It is shipped whole (it is in this
+  repository, in `backend/` and `jarvis-backend/`), and its rows live in
+  `jobs.db` in the settings folder.
+
+  **What ticks it, and how often.** `jarvis_initiative.Engine.start()` - the
+  call jarvis_hud.py already makes on the owner's PC - registers
+  `jarvis_jobs.tick()` on the initiative engine's own heartbeat. That
+  heartbeat beats **once immediately** and then every
+  **`[initiative] heartbeat_minutes`, 30 minutes as shipped**. So the queue
+  rides the ONE heartbeat that exists: there is no thread, timer or
+  `register_kind` of its own, and none may be added. A job due before the next
+  beat waits for it. One switch is the consequence, and it is said here rather
+  than left to be discovered: **`[initiative] enabled = false` stops the queue
+  along with the checks.** `status()["checks"]` counts what the heartbeat
+  runs: 1 (the events-pump watch) on a built engine, 2 once it is started,
+  because the queue ticker is attached by `start()`.
+
+  This is the fix for a real defect: until this landed `run_due()` - the
+  function that runs every due job - had **zero production call sites**. The
+  suites called it directly, which is the right way to test a function and
+  exactly why the missing caller was invisible: every check passed and no
+  queued job ever ran. `backend/test_jobs.py` tests the WIRING (the engine's
+  beat runs a job, with nothing in the test calling `run_due()`), and it fails
+  if the registration is removed. (The same missing-caller shape was found the
+  same day in `jarvis_tasks.JobList.tick()`, which is a different feature and
+  wants `jarvis_schedule.register_kind`, not this heartbeat. Not fixed here.)
+
+  **Which jobs may run while nobody is there, by name.** A call to
+  `jarvis_jobs.create()` is an owner-present call, and the `caps` it writes on
+  the row are frozen there for the job's whole life. So:
+
+  * **runs to the end, unattended** - a job whose every step stays INSIDE that
+    frozen set. That set is the owner's own yes, which is what "finish what I
+    already started" means: a step at tier `ask` that was in the set at
+    creation does not ask again, because the yes was already given. Reaching
+    the end includes surviving a park and being claimed again on a later tick.
+  * **parks and waits for him** - a step that needs an action the frozen set
+    does NOT carry. `ctx.require()` records a one-shot `pending` grant, the
+    job goes to `waiting_approval`, and it is claimed and asked again every
+    `[jobs] approval_retry_seconds` (30 s) until a human answers; until then
+    the step after the question is never reached. If nobody ever answers it
+    waits for ever rather than proceeding.
+  * **fails, and asks nobody** - a step on an action the framework sets to
+    `never`. No grant can authorise it, so no card is raised for it at all.
+  * **never starts** - a cancelled job (`cancel=0` guards every claim), and a
+    job the owner never started, because the tick creates nothing.
+
+  **Nothing here auto-approves.** The tick never creates a job, never widens a
+  `caps` set and never decides a grant; only `decide_grant()` does, and that
+  is a human's answer. A job body that raises fails that job and does not kill
+  the tick, and the tick records what it did - counts and ids in the audit log,
+  plus ONE receipt (`jarvis_receipts.record`, tool name `jobs.tick`) for a tick
+  that ran something. The receipt carries no label, no param and no error text:
+  those are the owner's words and the audit log is not private.
+
+  **Said plainly, because it is a real gap:** there is no route that CREATES a
+  job, and no route that answers a parked job's grant
+  (`GET /api/jobs` lists, `POST /api/jobs/cancel` cancels, and nothing else).
+  A job can therefore only be created by code that calls `create()`, and a
+  parked job waits for ever until a route exists. Waiting is the safe
+  direction - rule 4 is absolute - but it is not a finished feature, and the
+  person who adds the route must pass the owner's own action through
+  `create()`, which is what makes the frozen set his yes.
+
+  **Two payload mismatches on `/api/initiative` were fixed the same day**, in
+  the backend, and neither app changed: `jarvis_initiative.drain()` now mirrors
+  `level`, `check` and `message` FLAT onto each row it hands out - which is
+  where jarvis_hud.html:2591-2595 reads them, so a finding is drawn instead of
+  served-and-invisible - while keeping the nested `finding` dict exactly as it
+  was (`jarvis_hud.html` is vendored, so the shape is the backend's to fix);
+  and the route now sends the `checks` count, which is what the phone's
+  Findings note reads (BrainScreen.kt:2503-2509). The second half is
+  `backend/initiative-payload.patch`, because `jarvis_hud.py` is NOT in
+  `$SHIPPED` - it is one of the files the patch stack delivers, so an edit to
+  the copy in this repository would never reach the owner's install.
+  `backend/test_jobs.py` rehearses that patch against
+  `jarvis-backend/jarvis_hud.py` (apply, reverse, byte-for-byte).
+  `tools/check_parity.py` cannot see any of this: it scans the two apps' own
+  source, so a payload key on an existing route is outside what it decides.
+
 - **Sleep mode, as the standby schedule** (added 2026-09-25, task #55).
   Not a second standby: Standby (`jarvis_power_switch.py`, both apps'
   existing Standby control) on a timetable - "on standby from 01:00, awake
@@ -2835,8 +2919,13 @@ they landed):
 **Present, but only on the owner's PC** (not missing, and not in this
 repository either):
 
-- `jarvis_jobs`, `jarvis_undo`, `jarvis_ledger`, `jarvis_content_risk`,
-  `jarvis_watch` and `jarvis_hud`. The owner checked their backend folder on
+- `jarvis_undo` and `jarvis_hud`. Four of the six named here until
+  2026-10-15 - `jarvis_jobs`, `jarvis_ledger`, `jarvis_content_risk` and
+  `jarvis_watch` - are in this repository now, shipped whole in `backend/` and
+  `jarvis-backend/`. These two are not: `jarvis_undo` is in the published base
+  only, and `jarvis_hud.py` reaches the owner through the patch stack rather
+  than through `$SHIPPED` (both halves are in `jarvis-backend/`, so what they
+  serve can be read there). The owner checked their backend folder on
   2026-09-23 and all six files were there - checked by file presence only,
   so what is inside them, and the exact shape of the routes they serve, is
   unverified from here. The Brain's **Work** (`/api/jobs`, `/api/undo`),

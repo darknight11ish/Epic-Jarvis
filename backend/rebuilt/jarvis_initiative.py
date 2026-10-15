@@ -43,18 +43,39 @@ its own and the one failure that leaves everything else looking healthy:
                     per heartbeat, and nothing at all inside the boot grace
                     window (PUMP_GRACE_SECONDS).
 
-TWO CONSUMERS THAT CANNOT SEE IT YET, AND THEY ARE NOT THIS MODULE'S TO FIX
-(measured 2026-10-14, reported with task-8 rather than papered over):
+TWO CONSUMERS THAT COULD NOT SEE IT - BOTH FIXED 2026-10-15
 
   * the HUD's card for a heartbeat finding reads `level`, `check` and
     `message` off the QUEUE ROW (jarvis_hud.html:2591-2595), while file()
     nests the finding one level down under "finding" - so a finding filed
-    here is served and not drawn. True of every finding, and older than this
-    check; the mismatch lives in jarvis_hud.html.
-  * the phone's "Findings" note (BrainScreen.kt:2503) reads a `checks` count
-    out of the /api/initiative body, which the route above does not send - so
-    it goes on saying "no background checks have been built" whether one is
-    registered or none is. The mismatch lives in jarvis_hud.py/BrainScreen.kt.
+    here was served and never drawn. `drain()` now mirrors those three keys
+    onto the row it hands out and keeps the nested dict exactly as it was, so
+    nothing that read it there noticed. Fixed HERE rather than in the page
+    because `jarvis_hud.html` is vendored (a copy of the desktop app's own
+    file) and the row's shape is the backend's to decide.
+  * the phone's "Findings" note (BrainScreen.kt:2503-2509) reads a `checks`
+    count - top-level, or under a `status` object - out of the
+    /api/initiative body, which the route never sent, so it went on saying
+    "no background checks have been built" whether one was registered or
+    none was. The route now sends it: `backend/initiative-payload.patch`,
+    which is a patch rather than an edit to this module because the body is
+    built in jarvis_hud.py and that file is NOT shipped whole - it is one of
+    the files the patch stack delivers, so an edit to the copy in this
+    repository would never reach the owner's PC.
+
+AND IT TICKS THE JOB QUEUE (2026-10-15)
+
+`Engine.start()` registers a second entry, `JOBS_TICK` (`jobs_tick`), which
+calls `jarvis_jobs.tick()`. That is `jarvis_jobs.run_due()` - the job queue
+that "Jobs that keep going after the chat ends" promises - and until this
+landed it had NO production caller at all: the suites called the function
+directly, so every check passed and no queued job ever ran on the owner's PC.
+The queue rides this heartbeat rather than growing a clock of its own, which
+is also why it is registered in `start()` and not in `build_from_config()`:
+the built engine's own check list stays what `test_rebuilt.py` pins it to
+(the one observation above), and a heartbeat that is actually running is what
+a job needs. The owner's decision on who may run unattended, and who parks,
+is in `jarvis_jobs.py`'s docstring and in ARCHITECTURE.md section 10.
 
 WHY THAT ONE AND NOT A HUNDRED (2026-10-14, task-8). Nothing in production
 had ever called `register()`. The audit measured `status()["checks"]` as 0 on
@@ -101,6 +122,12 @@ PUMP_THREAD = "jarvis-events"
 #: a count of. Short, lower-case, no spaces - the same shape a caller's own
 #: registered name has.
 BUILTIN_CHECK = "event_pump"
+
+#: The name the background job queue's ticker registers under. Registered in
+#: `Engine.start()`, not in `build_from_config()` - see the module docstring,
+#: "AND IT TICKS THE JOB QUEUE". It is not one of this engine's CHECKS (it
+#: notices nothing and files nothing); it is work the heartbeat does.
+JOBS_TICK = "jobs"
 
 #: How long after build_from_config() the pump may still be missing. The HUD
 #: builds and starts this engine at jarvis_hud.py:6027-6028 and constructs the
@@ -163,6 +190,72 @@ def pump_watch(built_at: Optional[float] = None) -> Callable[[], Optional[dict]]
     return check
 
 
+def jobs_tick() -> None:
+    """The heartbeat's other job: run whatever the background queue has due.
+
+    One line, because the work and every rule about it live in the module that
+    owns the queue - `jarvis_jobs.tick()`. It is imported HERE rather than at
+    the top of this file on purpose: this module is imported by the HUD's boot
+    even when there is no jobs module to find, and a missing one must show up
+    as a counted error on the beat (Engine.beat does that) rather than as an
+    ImportError that stops the backend starting. It returns None, which is
+    what `jarvis_jobs.tick()` returns: a truthy return would be filed as a
+    FINDING and published to the apps, and job ids and labels are the owner's
+    own material that never goes out that way.
+    """
+    import jarvis_jobs
+    jarvis_jobs.tick()
+
+
+#: What `drain()` mirrors onto a row, from a finding a check filed. `level` is
+#: the one the HUD styles on; a finding that names none is a note, so it is
+#: still drawn rather than dropped.
+DEFAULT_LEVEL = "note"
+
+
+def _mirrored(row: dict) -> dict:
+    """`row` with `level`, `check` and `message` FLAT on it, for the HUD card.
+
+    WHY THIS EXISTS, in one line: the page reads those three off the row
+    (jarvis_hud.html:2591-2595), `file()` nests the finding one level down
+    under "finding", and a finding that is served and never drawn looks
+    exactly like a Jarvis that noticed nothing. Both shapes are kept: the
+    nested `finding` is untouched, so every reader that already used it is
+    unaffected, and `_ENGINE.drain()` rows simply carry the same thing twice.
+
+    WHAT IS MIRRORED, AND WHAT IS FILLED IN (there is a difference):
+      * `level` and `message` are the finding's own, when it is a dict and
+        has them. `message` also accepts `text`, which is the key the
+        existing tests file findings under. A finding with no level is
+        `note`; a finding with no words at all gets "" and is still drawn,
+        which is more honest than vanishing.
+      * `check` falls back to the row's own `source` - the name the check
+        registered under (`file(source, finding)`), which is precisely what
+        the page prints in that slot. Nothing is invented for it.
+      * a finding that is not a dict (a check may file a plain string, and
+        this module's own suite does) reads as its own message.
+
+    NO NEW EXPOSURE: the words were already on the row under `finding`, and
+    /api/initiative already served that. This only stops the page having to
+    guess where to look.
+    """
+    out = dict(row)
+    finding = out.get("finding")
+    if isinstance(finding, dict):
+        level = finding.get("level")
+        check = finding.get("check")
+        message = finding.get("message")
+        if message is None:
+            message = finding.get("text")
+    else:
+        level = check = None
+        message = finding if isinstance(finding, str) else None
+    out["level"] = str(level) if level else DEFAULT_LEVEL
+    out["check"] = str(check) if check else str(out.get("source") or "")
+    out["message"] = "" if message is None else str(message)
+    return out
+
+
 class Engine:
     """Runs registered checks on a heartbeat and collects what they find."""
 
@@ -193,11 +286,46 @@ class Engine:
     def start(self) -> "Engine":
         if not self.enabled or (self._thread and self._thread.is_alive()):
             return self
+        self._attach_jobs_ticker()
         self._stop.clear()
         self._thread = threading.Thread(target=self._run, name="jarvis-initiative",
                                         daemon=True)
         self._thread.start()
         return self
+
+    def _attach_jobs_ticker(self) -> None:
+        """Make the heartbeat also run the background job queue. Once.
+
+        THE DEFECT THIS CLOSES (2026-10-15): `jarvis_jobs.run_due()` - the
+        function that runs every due job, and so the whole of "Jobs that keep
+        going after the chat ends" - had ZERO production call sites. The
+        suites called it directly, which is the right way to test the function
+        and exactly why the missing caller was invisible: every check passed
+        and no queued job ever ran on the owner's PC.
+
+        WHY register() AND NOT A THREAD OR A TIMER OF ITS OWN. This engine's
+        heartbeat is the clock the HUD already starts; a second one would be a
+        second source of "when". `register()` is the engine's own plug-in
+        point, and a tick that returns None is exactly a check that finds
+        nothing - it cannot file an inbox row.
+
+        WHY HERE AND NOT IN build_from_config(). Two reasons, both about not
+        breaking something that is pinned:
+          * `build_from_config()`'s check list is the engine's own
+            observations, and `test_rebuilt.py`'s
+            `test_the_factory_arms_exactly_one_check_and_it_is_the_pump_watch`
+            pins it to exactly [BUILTIN_CHECK]. Running the queue is not an
+            observation; it is work.
+          * a queue only needs a clock once the clock is RUNNING, so the
+            honest place to attach it is the call that starts the heartbeat.
+        The price, said plainly: `status()["checks"]` reads 1 on a built
+        engine and 2 once it is started, and the phone's Findings note counts
+        what the heartbeat actually runs.
+        """
+        with self._lock:
+            if any(name == JOBS_TICK for name, _ in self.checks):
+                return
+        self.register(JOBS_TICK, jobs_tick)
 
     def stop(self, timeout: float = 2.0) -> None:
         self._stop.set()
@@ -246,14 +374,22 @@ class Engine:
         return self.checks
 
     def drain(self) -> list:
-        """Unseen findings, marked seen. jarvis_hud.py:1415 is the caller.
+        """Unseen findings, marked seen. jarvis_hud.py:3211 is the caller.
 
         Read-and-clear in one call, under one lock, because two calls would
         let a finding filed between them be marked seen without being
         returned - lost silently, which for an inbox is the worst failure.
+
+        EVERY ROW CARRIES THE FINDING BOTH WAYS (2026-10-15). `finding` stays
+        exactly what the check filed, one level down, unchanged - every
+        existing reader reads it there - and the same row also carries
+        `level`, `check` and `message` FLAT, which is where the HUD's card
+        reads them (jarvis_hud.html:2591-2595). See `_mirrored` for what is
+        mirrored and what is filled in, and the module docstring for why the
+        fix is here rather than in the vendored page.
         """
         with self._lock:
-            out = [dict(f) for f in self.findings if not f["seen"]]
+            out = [_mirrored(f) for f in self.findings if not f["seen"]]
             for f in self.findings:
                 f["seen"] = True
         return out
