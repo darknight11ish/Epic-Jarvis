@@ -800,6 +800,15 @@ def _capability_probe() -> dict:
         "power": has("jarvis_power"),
         "voice": has("jarvis_voice"),
         "persona": has("jarvis_style"),
+        # "Write Like Me" (2026-10-15): the engine that drafts in the owner's
+        # own voice, learned from his own words, with names and numbers taken
+        # out before anything reaches a model. It ships from
+        # backend/jarvis_voiceprint.py and its routes come from
+        # plugins/ready/voiceprint - NOT from jarvis_style.py, which is in no
+        # patch and in no $SHIPPED entry and so is delivered to nobody. Both
+        # names are reported: an old install can have jarvis_style and no
+        # voiceprint, and the apps should be able to tell those apart.
+        "voiceprint": has("jarvis_voiceprint"),
         # GET/POST /api/appearance (appearance.patch). The phone only syncs
         # its face when this is true, and it was never sent - so a face
         # chosen on one device never reached the other. Not an import:
