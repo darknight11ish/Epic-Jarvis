@@ -633,6 +633,34 @@ def _conv_cols(alias: str = "", *, raw: bool = False) -> str:
                      else a + c for c in CONV_COLS)
 
 
+def _active_project_id() -> Optional[str]:
+    """The project the next turn belongs to, or None - and NEVER raises.
+
+    THIS IS PROJECTS STEP 4'S MISSING WRITER. The `project` column has existed
+    since step 1 with nothing filling it ("empty until Projects step 4"). This
+    reads the active project from `jarvis_projects`, lazily, and every failure
+    - the module not installed, no state file, a file that will not parse -
+    answers None, which records the turn exactly the way every turn was
+    recorded before step 4. A turn must never fail because a project could not
+    be read, and a chat outside Project Mode must record exactly as it did.
+    """
+    try:
+        import jarvis_projects
+        return jarvis_projects.active_project_id()
+    except Exception:
+        return None
+
+
+def _fill_project(c, cid: str) -> None:
+    """Give an older chat its project, ONCE, when the owner enters Project Mode
+    in the middle of it. Never overwrites a project already recorded, and never
+    nulls one out: a chat that belonged to a project keeps belonging to it."""
+    pid = _active_project_id()
+    if pid:
+        c.execute("UPDATE conversations SET project = ? WHERE id = ? AND project IS NULL",
+                  (pid, cid))
+
+
 def _conv_named(row) -> dict:
     """The first len(CONV_COLS) values of a row read with _conv_cols, by name."""
     return dict(zip(CONV_COLS, row))
@@ -1594,9 +1622,10 @@ class ChatLog:
                 if conv is None:
                     title = CRISIS_TITLE if crisis else _title_from(rows)
                     c.execute("INSERT INTO conversations (id, title, started, updated, device,"
-                              " kind) VALUES (?,?,?,?,?,?)",
+                              " kind, project) VALUES (?,?,?,?,?,?,?)",
                               (cid, self._seal(aead, title.encode("utf-8"),
-                                               self._aad(cid, "title")), at, now, device, kind))
+                                               self._aad(cid, "title")), at, now, device, kind,
+                               _active_project_id()))
                 elif crisis:
                     # A crisis turn later in a chat: from now on the chat is
                     # titled "A difficult moment" - never the owner's words.
@@ -1634,6 +1663,10 @@ class ChatLog:
                                self._seal(aead, answer.encode("utf-8"), self._aad(cid, nxt))))
                 c.execute("UPDATE conversations SET updated=?, device=? WHERE id=?",
                           (now, device, cid))
+                # Step 4's writer for a chat that began BEFORE the owner entered
+                # Project Mode: it joins the project once, and a project already
+                # recorded is never overwritten.
+                _fill_project(c, cid)
         return {"recorded": True, "conversation_id": cid, "answer_kept": answer_kept}
 
     # -- a customer-support chat (jarvis_support.py) -------------------------
