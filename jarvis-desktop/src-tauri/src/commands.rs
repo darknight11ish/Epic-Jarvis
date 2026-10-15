@@ -1907,7 +1907,7 @@ pub async fn start_model_lane(app: AppHandle) -> Result<serde_json::Value, Strin
 /// immediate and only narrows what Jarvis does; ON is the same action the
 /// button beside it takes in the same second, so neither direction raises a
 /// card. The whole argument is in `backend/jarvis_model_lanes.py`'s header,
-/// `docs/ARCHITECTURE.md` §8 and `docs/JARVIS-API.md` §133.3.
+/// `docs/ARCHITECTURE.md` §8 and `docs/JARVIS-API.md` §134.3.
 ///
 /// One fact about this PC's one lane, and the body says nothing else: there is
 /// no lane name in it, so no client can aim this at another lane.

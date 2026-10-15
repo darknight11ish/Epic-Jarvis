@@ -2207,7 +2207,7 @@ running."), and a chat turn never waits on a restart.
   plus a queue of expired cards. It is bounded, reversible and said, it opens no
   socket that was not already open, and **nothing is auto-approved**: this path
   raises no card and answers no card, so rule 4 is untouched. Full argument in
-  `docs/ARCHITECTURE.md` §3 and `docs/JARVIS-API.md` §133.4.
+  `docs/ARCHITECTURE.md` §3 and `docs/JARVIS-API.md` §134.4.
 - **A deliberate stop cannot be told from a crash, and this does not pretend
   otherwise.** `schtasks` reports the same "Ready" whether the lane crashed or
   was closed on purpose. So there is one switch (`POST /api/model-lanes/auto`,

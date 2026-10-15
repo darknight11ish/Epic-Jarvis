@@ -869,6 +869,19 @@ SHIPPED = (
     # action, so it raises ONE card (undo_action, tier ask) and a denied card
     # changes nothing. jarvis_goals.py records a receipt for every step tick.
     "jarvis_receipts.py",
+    "jarvis_auto_router.py",
+    # The skill library's other doors (2026-10-15): a reference manual read
+    # only when it is asked for, leading /skill and /bundle chains that stop at
+    # the first name they do not know, a trusted project's own skills at
+    # <folder>/.jarvis/skills with anything that fails the scan quarantined,
+    # and /learn - a four-section distillation scrubbed through jarvis_scrub,
+    # writing NOTHING when the scrubber is absent. It re-implements none of
+    # jarvis_skills.py: the index, the body, the list, the removal and
+    # write_skill() are all CALLED, and every save goes through write_skill()
+    # so its scanner and its modify_own_code card run where they always have.
+    # Its four routes come from its own install(), called by the
+    # plugins\ready\skill-hub drop-in folder: no patch of its own.
+    "jarvis_skill_hub.py",
 )
 
 

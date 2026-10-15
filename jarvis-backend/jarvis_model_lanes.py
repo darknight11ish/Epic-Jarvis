@@ -83,7 +83,7 @@ the fact that every automatic restart is SAID - in the apps, in the backend's
 own plain words, which is what `auto_note` carries. THE RESIDUAL RISK IS REAL
 AND IS NOT HIDDEN: with the switch on, Jarvis will start a lane the owner
 stopped deliberately, and will tell him it did. `docs/ARCHITECTURE.md` §8 and
-`docs/JARVIS-API.md` §133.3 say the same thing in the same words.
+`docs/JARVIS-API.md` §134.3 say the same thing in the same words.
 
 PERMISSION - no approval card, and why. This project's one permission model
 lives in `docs/ARCHITECTURE.md` §3: plan / describe / the gate / run. The gate
@@ -1285,7 +1285,7 @@ def handle_auto_post(body=None) -> tuple:
     card - OFF only narrows what Jarvis does, and ON is the same action the
     button beside it takes in the same second. It takes no lane name and no
     "all": this is one fact about this PC's one lane, so there is nothing here
-    to aim at another lane or at both. `docs/JARVIS-API.md` §133.3 has the whole
+    to aim at another lane or at both. `docs/JARVIS-API.md` §134.3 has the whole
     argument, and the module header has the same one.
     """
     if not isinstance(body, dict):
