@@ -13,7 +13,10 @@ does, asks or remembers - only how it phrases things."
 WHAT IT CHANGES, AND ONLY THIS
   * One short system line (NOTE below) in the request THIS PC's model gets,
     placed just before the newest question - never first, so the Jarvis
-    rules block stays first (jarvis_agent.keep_rules_first), and worded so
+    rules block stays first (since 2026-10-14 that block is SENT as the
+    first message of every local turn, jarvis_agent.with_rules_first;
+    keep_rules_first still runs last as the repair for a leading system
+    message), and worded so
     it cannot loosen a rule: it names itself "wording only" and repeats that
     every rule still applies. It is added in jarvis_agent.run_local_turn,
     to the request for this PC's model and nowhere else - never to the
