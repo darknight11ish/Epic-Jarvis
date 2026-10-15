@@ -72,6 +72,16 @@ A claim that needs judgement goes in as `unverifiable` with the reason in the
 kinds is refused, because a row that names a definite check cannot be
 unverifiable.
 
+WHAT COUNTS AS "THERE". Every path a row names is judged against the TRACKED
+tree - `git ls-files` - and not against the folder this happens to run in. A
+working copy carries files no clone has: agent scratch, build output, a
+gitignored copy of a real file. Judging those answers a question about one
+machine while reading as a claim about the repository, and it is how this check
+went red at a desk while CI stayed green - an untracked file with the name a
+`no-file:` row names is "still there" here and absent everywhere else. Outside
+a git repository there is nothing to ask but the folder, so that fallback
+exists, and it is the only one.
+
 `--list` prints every row it checked, so "nothing is wrong" can be told apart
 from "nothing was looked at" (the lesson `check-tokens.py` writes down about
 its own missing files). The summary line prints the counts either way.
@@ -128,10 +138,126 @@ def relative(path: Path) -> str:
         return path.as_posix()
 
 
+# ---------------------------------------------------------------------------
+#   What this check judges: the TRACKED tree, not the folder it is sitting in
+# ---------------------------------------------------------------------------
+# A working copy carries files no clone has: agent scratch, build output, a
+# gitignored copy of a real file. Judging those answers a question about THIS
+# folder while reading as a claim about the repository, and it is how this
+# checker went red at a desk while CI stayed green - an untracked file with the
+# name a `no-file:` row names is "still there" here and absent everywhere else.
+# (It is how `dshwork/` and `.dsh-scratch/` made this file's sibling checkers
+# red too; see `.gitignore`'s note on both.)
+#
+# So a path is judged by what `git ls-files` reports. The fallback is the whole
+# folder walk, and it happens ONLY where there is no tracked tree to ask about:
+# outside a git repository, or for an absolute path that is not inside this one.
+# A plain copy of the files is a shape this check has to keep working in - a
+# register is a list of repo-relative paths, and nothing about reading one needs
+# git - and when git will not answer, the run SAYS SO rather than passing
+# quietly on a judgement it never made.
+_TRACKED: set[str] | None = None
+_TRACKED_ASKED = False
+
+
+def tracked_paths() -> set[str] | None:
+    """Every repo-relative path `git ls-files` reports, or None when there is no
+    repository here to ask.
+
+    Asked once per run. `-z` rather than newline-separated output: a path with a
+    space or a quote in it comes back quoted and unparseable without it, and a
+    path this check cannot name is a path it cannot judge.
+    """
+    global _TRACKED, _TRACKED_ASKED
+    if not _TRACKED_ASKED:
+        _TRACKED_ASKED = True
+        try:
+            done = subprocess.run(
+                ["git", "ls-files", "-z"], cwd=str(REPO), capture_output=True,
+                text=True, encoding="utf-8", errors="replace")
+            if done.returncode == 0:
+                _TRACKED = {p for p in done.stdout.split("\0") if p}
+        except OSError:
+            _TRACKED = None
+    return _TRACKED
+
+
+def tracked_entry(where: str) -> str | None:
+    """"file", "dir" or None - how the tree holds `where`.
+
+    "dir" is a folder that carries tracked files: `file:docs` is a directory,
+    not a file, and the old `is_file()`/`exists()` pair said so. A path the
+    tracked tree does not hold at all is None, whatever is lying on the disk
+    under that name.
+
+    Outside a git repository the filesystem answers instead, which is the only
+    thing there is to ask.
+    """
+    name = where.replace("\\", "/").strip("/")
+    paths = tracked_paths()
+    if paths is None or Path(where).is_absolute():
+        # No repository to ask, or a path that is not inside this one at all.
+        # The filesystem is then the only thing that can answer, and it is what
+        # this check asked before the tracked tree was consulted.
+        path = REPO / where
+        if path.is_file():
+            return "file"
+        return "dir" if path.is_dir() else None
+    if not name:
+        return "dir"
+    if name in paths:
+        return "file"
+    if any(p.startswith(name + "/") for p in paths):
+        return "dir"
+    return None
+
+
+def in_the_tree(where: str) -> bool:
+    """Is `where` part of the tracked tree at all (either kind of entry)?"""
+    return tracked_entry(where) is not None
+
+
+def tracked_files_under(path: Path) -> list[Path] | None:
+    """The tracked files under `path`, or None when `path` is outside REPO.
+
+    Same filters as the folder walk below - SKIP, MAX_BYTES, and files that are
+    not on disk here - so the two answer alike; what differs is which files
+    they are asked about.
+    """
+    try:
+        rel = path.relative_to(REPO).as_posix()
+    except ValueError:
+        return None
+    prefix = "" if rel in ("", ".") else rel.rstrip("/") + "/"
+    out = []
+    for name in sorted(tracked_paths() or ()):
+        if not name.startswith(prefix):
+            continue
+        if any(part in SKIP for part in name.split("/")[:-1]):
+            continue
+        candidate = REPO / name
+        try:
+            if not candidate.is_file() or candidate.stat().st_size > MAX_BYTES:
+                continue
+        except OSError:
+            continue
+        out.append(candidate)
+    return out
+
+
 def text_files_under(path: Path):
-    """Every file a directory `grep` reads, skipping SKIP and the oversized."""
+    """Every file a directory `grep` reads, skipping SKIP and the oversized.
+
+    Inside a repository this is the TRACKED files under `path`, so a pattern
+    that only a scratch copy carries is not read as evidence about the
+    repository, and neither is one a scratch copy has made `absent:` fail on.
+    """
     if path.is_file():
         yield path
+        return
+    tracked = tracked_files_under(path)
+    if tracked is not None:
+        yield from tracked
         return
     for candidate in sorted(path.rglob("*")):
         try:
@@ -171,7 +297,7 @@ def search(pattern: str, where: str):
     this register exists to remove.
     """
     path = REPO / where
-    if not path.exists():
+    if not in_the_tree(where):
         return None, f"no such path: {where}"
     read_any = False
     for candidate in text_files_under(path):
@@ -191,26 +317,38 @@ def search(pattern: str, where: str):
 
 
 def check_file(where: str):
-    path = REPO / where
-    if path.is_file():
+    """Is this file in the TRACKED tree? The message is unchanged; what changed
+    is who is asked (`git ls-files`, not the folder - see `tracked_entry`).
+
+    One deliberate consequence: a tracked file whose deletion is not staged in
+    the copy in front of this run still counts as present, because a clone gets
+    it. The alternative reads as a claim about the repository and answers a
+    question about one working copy, which is the defect this fixes.
+    """
+    kind = tracked_entry(where)
+    if kind == "file":
         return True, f"{where} exists"
-    if path.exists():
+    if kind == "dir":
         return False, f"{where} is a directory, not a file"
     return False, f"{where} does not exist"
 
 
 def check_no_file(where: str):
-    """The mirror of `check_file`: this file (or directory) is gone.
+    """The mirror of `check_file`: this file (or directory) is gone FROM THE TREE.
 
-    `exists()` rather than `is_file()` on purpose - a claim that something was
-    removed is not satisfied by leaving an empty directory of the same name in
-    its place. Nothing here confirms the removal was *wanted*; that is the
-    claim's business, not this check's.
+    Both kinds of entry count on purpose - a claim that something was removed is
+    not satisfied by leaving a folder of the same name behind. Nothing here
+    confirms the removal was *wanted*; that is the claim's business, not this
+    check's.
+
+    A file that is only on this disk - agent scratch, a gitignored copy - is
+    NOT the file: it is not in a clone, so a `no-file:` row about it is honest
+    and this check says the claim holds. That was the whole report: a scratch
+    file made a green register red on the machine that had the scratch.
     """
-    path = REPO / where
-    if path.exists():
-        return False, f"{where} is still there"
-    return True, f"{where} is gone"
+    if tracked_entry(where) is None:
+        return True, f"{where} is gone"
+    return False, f"{where} is still there"
 
 
 def check_grep(where: str, pattern: str, want: bool):
@@ -395,6 +533,14 @@ def main() -> int:
         print(f"::error::{relative(register)} holds no rows at all - this check "
               f"would pass having checked nothing")
         return 1
+
+    # Said once, and only when it is true: a run that could not ask git judged
+    # the folder in front of it instead of the tracked tree, and a reader has to
+    # know which question was answered. Never a silent substitution.
+    if tracked_paths() is None:
+        print("note: no git repository answered here, so every path was judged "
+              "against THIS folder rather than the tracked tree (`git ls-files`) "
+              "- the answer is about the copy in front of you, not a clone.")
 
     counts = {"built": 0, "open": 0, "unverifiable": 0}
     regressed: list[tuple[dict, str]] = []

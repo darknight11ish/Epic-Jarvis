@@ -838,9 +838,24 @@ SHIPPED = (
     # off by default, that pauses the two live lanes (proved from /api/ps), loads
     # at the largest zero-spill context measured (28,672), announces the pause
     # BEFORE it starts, and puts both lanes back exactly as they were, proved
-    # again. big-coder.patch wires its three routes; nothing downloads, every
+    # again. big-coder.patch wires its two routes; nothing downloads, every
     # call is loopback, and turning it on is one approval card.
     "jarvis_big_coder.py",
+    # Action receipts and one-click undo (2026-10-14; the owner's brief,
+    # borrowed from BasedHardware/omi). Every action that CHANGES something
+    # leaves a receipt saying what changed, with one button to put it back:
+    # `action_receipts` in its own receipts.db (WAL, a connection per call -
+    # never a table in approvals.db, which the gate must stay the only writer
+    # of). record() is called BEFORE the change and never raises into it, and
+    # never writes an unscrubbed word (no scrubber, nothing written). undo()
+    # reverses exactly once - the claim is one conditional UPDATE, so a second
+    # call refuses with "this was already undone" - and falls back to the
+    # before snapshot when the in-memory callable is gone, saying which path
+    # it took. Its two routes come from install(), which the drop-in folder
+    # plugins\ready\receipts calls: no patch of its own. Undo is a mutating
+    # action, so it raises ONE card (undo_action, tier ask) and a denied card
+    # changes nothing. jarvis_goals.py records a receipt for every step tick.
+    "jarvis_receipts.py",
 )
 
 

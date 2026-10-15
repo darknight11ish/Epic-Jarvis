@@ -116,7 +116,7 @@ import time
 import types
 import unicodedata
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Optional, Sequence
 from urllib.parse import urlsplit
 
 # ---------------------------------------------------------------------------

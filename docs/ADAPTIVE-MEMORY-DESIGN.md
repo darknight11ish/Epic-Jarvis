@@ -460,7 +460,7 @@ the short list (ships off): schemas = 1398 tokens
     n_ctx= 32768 -> budget= 29772 -> 10 of 10 turns kept
 ```
 
-The script is kept (`scratchpad/admem/budget_measure.py`) so the numbers can be
+The script is kept (`tools/measure_admem_budget.py`) so the numbers can be
 re-run rather than taken on trust. It imports `jarvis_agent`, calls the
 project's own `estimate_tokens`, `offered_tools`, `_new_offer`/`_fill_offer`
 and `fit_messages`, and prints; it writes no file and asks no model anything.

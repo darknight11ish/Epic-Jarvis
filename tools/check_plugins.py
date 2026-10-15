@@ -142,6 +142,51 @@ def main() -> int:
     check("drop-ins: every folder is there and agrees with the catalogue",
           not bad_folder, "\n".join(bad_folder))
 
+    # --- 4b. folders that replace NO patch ---------------------------------
+    # `plugins/ready/receipts` is the first (2026-10-14, action receipts and
+    # one-click undo): a feature whose whole wiring is a folder, so there is
+    # no patch for the catalogue to mirror it from and no row for it there.
+    # The generator leaves such a folder alone (`replaces_no_patch`); this is
+    # what keeps it honest - the module it names is in `backend/`, has the
+    # `install()` the loader calls, and is one `apply-patches.ps1` copies in,
+    # because a folder whose module never reaches the PC loads nothing.
+    catalogue_folders = {e["name"] for e in drop_ins}
+    shipped = set(ps1_shipped())
+    extra_bad: list[str] = []
+    ready_dir = PLUGINS / "ready"
+    for child in sorted(ready_dir.iterdir()) if ready_dir.is_dir() else []:
+        if not child.is_dir() or child.name in catalogue_folders:
+            continue
+        manifest = child / "plugin.json"
+        if not manifest.is_file():
+            extra_bad.append(f"{child.name}: plugins/ready/{child.name}/plugin.json is missing")
+            continue
+        try:
+            m = json.loads(manifest.read_text(encoding="utf-8"))
+        except Exception as exc:
+            extra_bad.append(f"{child.name}: plugin.json will not parse ({type(exc).__name__})")
+            continue
+        module = str(m.get("module") or "")
+        if not m.get("name") or not module or m.get("install") not in ("handler", "none"):
+            extra_bad.append(f"{child.name}: plugin.json needs name, module and "
+                             f"install (handler|none)")
+        elif "replaces_patch" in m:
+            extra_bad.append(f"{child.name}: it names a patch, so the catalogue should own it - "
+                             f"run: py -3 tools/gen_plugin_catalogue.py")
+        elif not (BACKEND / f"{module}.py").is_file():
+            extra_bad.append(f"{child.name}: backend/{module}.py is missing")
+        elif "def install(" not in (BACKEND / f"{module}.py").read_text(
+                encoding="utf-8", errors="replace"):
+            extra_bad.append(f"{child.name}: {module} has no install()")
+        elif not isinstance(m.get("stack_order"), int):
+            extra_bad.append(f"{child.name}: stack_order must be a whole number")
+        elif f"{module}.py" not in shipped:
+            extra_bad.append(f"{child.name}: {module}.py is not in $SHIPPED, so "
+                             f"apply-patches.ps1 never copies it to the PC and the "
+                             f"folder would load nothing")
+    check("drop-ins: a folder that replaces no patch is sound and loadable",
+          not extra_bad, "\n".join(extra_bad))
+
     # --- 5 & 6. the hook patch --------------------------------------------
     hook = BACKEND / "plugin-loader.patch"
     check("hook: backend/plugin-loader.patch is there", hook.is_file())
