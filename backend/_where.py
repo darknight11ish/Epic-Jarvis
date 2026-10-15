@@ -861,6 +861,7 @@ SHIPPED = (
     # action, so it raises ONE card (undo_action, tier ask) and a denied card
     # changes nothing. jarvis_goals.py records a receipt for every step tick.
     "jarvis_receipts.py",
+    "jarvis_auto_router.py",
 )
 
 
