@@ -32,9 +32,18 @@ WHAT IS BUILT HERE, AND WHAT IS NOT (build steps 1 and 2 only)
   * Not built: running benchmarks (the fence, build step 6), Jarvis
     changing code (`project_edit`, build steps 5 and 7 - after the 12 GB
     card is installed and measured, the owner's answer of 2026-09-28), the
-    project chat context and project-labelled facts (step 4), both apps'
-    screens (step 3), and anything the Shareable switch would one day let
-    go out (it is only a switch here; nothing is ever sent).
+    project chat CONTEXT (the `project` column on conversations, below),
+    both apps' screens (step 3), and anything the Shareable switch would
+    one day let go out (it is only a switch here; nothing is ever sent).
+  * BUILT (2026-10-15), and it is the LABEL half of project-labelled facts
+    (build step 4): a project's labelled facts - see below. The owner's
+    side decided the label lives in `projects.db`, owned by this module,
+    and NOT as `meta.project` on jarvis_memory.py's own row: that module is
+    the application target of THREE patches (memory-safety, embedding-guard,
+    bitemporal), and a fourth would fight them. What is still NOT built is
+    the other half of step 4 - a fact learned in a project chat being
+    labelled automatically, which cannot happen until /api/chat carries a
+    project id.
   * GOALS: jarvis_goals.py is on main now, and the link is HALF built
     (corrected 2026-10-13; this note started as the cohesiveness audit's
     finding of 2026-09-29). A project lists goal ids (`goals`) on THIS side,
@@ -93,6 +102,25 @@ WHAT IS KEPT, AND WHERE
 memory.db (JARVIS_PROJECTS_DB overrides it, for the tests). The audit log
 gets ids and counts only - never a name, an instruction, a note or a
 number.
+
+A PROJECT'S LABELLED FACTS (2026-10-15)
+One project can label the owner's own remembered facts - "this is why I
+know that" - and Brain lists them under the project with Forget: the owner's
+answer of 2026-09-24, which every such list follows. The LABEL is one row in
+`project_facts` here: the memory fact's id, and when it was labelled.
+**The fact's words are never copied here.** They stay in memory.db, and an
+app reads them from jarvis_memory's own existing read,
+`GET /api/memory/used?ids=<id>,<id>,...` - which already knows how to say
+"no longer in use" for a fact that was forgotten, and to leave an Off topic
+out. `MAX_FACTS` is that read's own cap (100), so one project's whole list is
+one call. Forget calls the memory module's OWN Forget - `MemoryStore.retire()`,
+the same call `POST /api/memory/forget` makes - so the fact stops being
+recalled everywhere, not only under this project. **This file removes no fact
+and wipes no words**: "Erase the words" stays the separate button the owner
+chose (2026-09-24). The "are you sure?" question before a Forget is the APP's
+and stays - forgetting cannot be undone. There is NO approval card: the
+owner's own tap on a fact they can see, the same shape as /api/memory/forget
+and /api/memory/shared.
 """
 from __future__ import annotations
 
@@ -143,6 +171,12 @@ MAX_COMMAND = 300
 MAX_RESULTS = 5000
 CHART_POINTS = 365
 CHART_POINTS_MAX = 1000
+#: How many of the owner's own facts one project may label. Deliberately
+#: jarvis_memory.USED_MAX (100): the WORDS for a project's whole list come
+#: from that module's existing read, GET /api/memory/used?ids=<id>,<id>,...
+#: which takes at most that many ids - so one project is one call, and this
+#: cap is checked against it by the suite (test_projects.py).
+MAX_FACTS = 100
 #: A number bigger than this is a typo, not a measurement.
 MAX_ABS_VALUE = 1e12
 
@@ -164,8 +198,21 @@ PC_ONLY_FOLDER = ("A project's folder is chosen on the PC only, from \"Folders J
 PC_ONLY_COMMAND = "A benchmark's command is written on the PC only."
 SHARE_WAITING = "Waiting for your yes on the approval card."
 KEEP_ON_SCREEN = "Health or money: kept on screen, never read aloud or sent anywhere."
+#: A project's labelled facts (2026-10-15). The list shows IDS only; the
+#: words come from jarvis_memory's own GET /api/memory/used.
+EMPTY_FACTS = "No facts are labelled with this project yet."
+NO_SUCH_FACT = "There is no remembered fact with that id."
+FACT_NOT_CURRENT = ("That fact has been forgotten or had its words erased, so a project "
+                    "cannot label it.")
+FACT_NOT_LABELLED = "This project does not label that fact."
+MEMORY_UNAVAILABLE = ("The memory layer is not importable here, so a project's facts "
+                      "cannot be worked out.")
 
 _ID = re.compile(r"[0-9a-f]{32}")
+#: A memory fact id as it arrives: a number in a body, the same digits as
+#: text in a path (`.../facts/7/forget`). At most 18 digits, so an id cannot
+#: be a number SQLite would have to round.
+_FACT_ID = re.compile(r"[0-9]{1,18}")
 APP_ONLY_WORDS = "This project's files are its app."
 APP_CHOSEN_WORDS = "An app is chosen when the project is made."
 APP_AND_FOLDER_WORDS = "A project has a folder or an app, not both."
@@ -177,6 +224,16 @@ class NoSuchApp(LookupError):
 
 class Unavailable(Exception):
     """git is missing or stuck: a 503 with the sentence (nothing typed was wrong)."""
+
+
+class FactGone(LookupError):
+    """A labelled fact that cannot be labelled, or a fact a project does not
+    label. `status` is 404 (no such fact, or this project does not label it)
+    or 409 (the fact is there but no longer current - already forgotten, or
+    its words were erased), so the app can say which in plain words."""
+    def __init__(self, message: str, status: int = 404):
+        super().__init__(message)
+        self.status = int(status)
 
 
 _GOAL_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
@@ -433,6 +490,128 @@ def marks(name: str, unit: str, owner, cleared) -> dict:
 
 
 # --------------------------------------------------------------------------
+#   A project's labelled facts (2026-10-15) - the bridge to jarvis_memory
+# --------------------------------------------------------------------------
+#
+# WHAT IS HERE, AND WHAT IS DELIBERATELY NOT
+#
+# The label (a fact id, and when) lives in `project_facts`, in THIS module's
+# own projects.db. The fact itself lives in memory.db, which jarvis_memory.py
+# owns - and that module is the application target of three patches
+# (memory-safety, embedding-guard, bitemporal), which is why the label is not
+# a fourth column on it.
+#
+# So this module does exactly two things with the memory layer, and neither
+# of them is reading a fact's words:
+#
+#   * `_fact_state()` asks whether one fact is THERE and still CURRENT, so a
+#     label never points at something that can no longer be recalled, and the
+#     project's Forget can tell "forgot it" from "there was nothing left".
+#   * `_forget_fact()` calls the memory module's OWN Forget -
+#     `MemoryStore.retire()`, the same call `POST /api/memory/forget` makes.
+#
+# The WORDS are never read here: the apps ask jarvis_memory's own existing
+# read, `GET /api/memory/used?ids=...`, which is the route that already knows
+# how to show a forgotten fact as "no longer in use" and to leave an Off topic
+# out. `test_topics_leaks.py`'s list of every module that reads facts still
+# says of this file "reads no fact", and a check in test_projects.py holds
+# that line: no SQL on the facts table, and no `store().search(` anywhere here.
+
+def _fact_id(value) -> int:
+    """The whole number above 0 a memory fact id is.
+
+    A string of digits is accepted too, because the project's Forget carries
+    its id in the PATH (`.../facts/7/forget`), where it is always text - the
+    body's `{"id": 7}` is a number the other way. A `True` is refused even
+    though bool is an int in Python, and `"id": true` is never a fact.
+    ValueError, in words, otherwise - the refusal jarvis_memory's `shared()`
+    makes for a non-integer id, in this file's words."""
+    if isinstance(value, bool):
+        raise ValueError("a fact id is a whole number, like 12")
+    if isinstance(value, str):
+        text = value.strip()
+    elif isinstance(value, int):
+        text = str(value)
+    else:
+        raise ValueError("a fact id is a whole number, like 12")
+    if not _FACT_ID.fullmatch(text):
+        raise ValueError("a fact id is a whole number, like 12")
+    fid = int(text)
+    if fid <= 0:
+        raise ValueError("a fact id is a whole number above 0")
+    return fid
+
+
+def _memory_store():
+    """jarvis_memory's one open store, or None when that module is not here
+    (the feature is then switched off, never broken - the shape every other
+    optional module in this file has, like jarvis_forecast).
+
+    This is the module's own `store()`: it caches the one store, so this is
+    not a fresh MemoryStore per request, and it reads memory.db where it
+    lives. Nothing here is a second memory database and nothing here writes
+    a fact."""
+    try:
+        import jarvis_memory
+        return jarvis_memory.store()
+    except Exception:
+        return None
+
+
+def _fact_state(fid: int) -> dict:
+    """{"found", "current"} for ONE fact, from jarvis_memory's own store.
+
+    `current` is the rule every reader uses (`valid_to` empty or still ahead,
+    and the words not erased) - the same test `shared()` and `used_view()`
+    make. **No words are read here**: only the two columns that decide it.
+
+    Unavailable, with the sentence, when the memory layer is not importable
+    or will not answer: there is nothing to label then, and a label that
+    pointed at nothing would be a list the owner cannot act on. Asking the
+    memory layer is the point - the owner's own fact is the thing being
+    labelled, and this module does not guess at another module's data."""
+    store = _memory_store()
+    if store is None:
+        raise Unavailable(MEMORY_UNAVAILABLE)
+    try:
+        row = store.get(int(fid))
+    except Exception as exc:
+        raise Unavailable(f"the memory layer could not be read "
+                          f"({type(exc).__name__})") from exc
+    if row is None:
+        return {"found": False, "current": False}
+    erased = row.get("erased_at")
+    valid_to = row.get("valid_to")
+    current = erased is None and (valid_to is None or float(valid_to) > time.time())
+    return {"found": True, "current": bool(current)}
+
+
+def _forget_fact(fid: int) -> bool:
+    """The memory module's OWN Forget for one fact: `MemoryStore.retire()`,
+    exactly the call `POST /api/memory/forget` makes, and the only removal
+    this file causes.
+
+    Never a delete and never a word wiped: `retire()` keeps the row and marks
+    it, which is what every "Forget" in Jarvis means (CLAUDE.md, 2026-09-24);
+    "Erase the words" is `erase()` and stays its own button. False when there
+    was nothing left to forget - an already-forgotten fact, or one whose id
+    is not there at all, which `retire()` reports as "no row matched".
+
+    Unavailable, in words, when the memory layer will not answer: the caller
+    has already taken one label off, and it must be able to say plainly that
+    the fact itself was NOT forgotten, rather than reporting a success the
+    rest of Jarvis would contradict."""
+    store = _memory_store()
+    if store is None:
+        raise Unavailable(MEMORY_UNAVAILABLE)
+    try:
+        return bool(store.retire(int(fid)))
+    except Exception as exc:
+        raise Unavailable(f"the memory layer refused to forget it "
+                          f"({type(exc).__name__})") from exc
+
+
+# --------------------------------------------------------------------------
 #   The store
 # --------------------------------------------------------------------------
 
@@ -487,6 +666,19 @@ CREATE TABLE IF NOT EXISTS balance_axes (
     label TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS bench_by_project ON benchmarks (project);
+-- A project's labelled facts (2026-10-15): the LABEL, and nothing else -
+-- the memory fact's id and when it was labelled. A fact's words are never
+-- copied here (they stay in memory.db, read through jarvis_memory's own
+-- GET /api/memory/used), nothing here is a second way to save a fact, and
+-- no reader of this table ever touches a fact's text. The pair is the key:
+-- labelling the same fact twice is one row.
+CREATE TABLE IF NOT EXISTS project_facts (
+    project TEXT NOT NULL,
+    fact INTEGER NOT NULL,
+    created REAL NOT NULL,
+    PRIMARY KEY (project, fact)
+);
+CREATE INDEX IF NOT EXISTS project_facts_by_fact ON project_facts (fact);
 """
 
 
@@ -692,6 +884,12 @@ class Projects:
             "app": _app_view(r["app"], full=full) if r["app"] else None,
         }
         if full:
+            # The labelled facts are NOT here. Their own route is
+            # GET /api/projects/<pid>/facts, and this view's exact keys are
+            # the two apps' frozen contract (projects-cases.json), which the
+            # screens' own piece owns (piece 6) - the count a screen wants
+            # comes from that route's `count`, so this file changes nothing
+            # the apps already read.
             v["instructions"] = r["instructions"]
             v["notes"] = json.loads(r["notes"] or "[]")
             v["benchmark_list"] = [self._bench_view(c, b) for b in benches]
@@ -954,6 +1152,10 @@ class Projects:
             for bid in benches:
                 c.execute("DELETE FROM results WHERE bench = ?", (bid,))
             c.execute("DELETE FROM benchmarks WHERE project = ?", (pid,))
+            # The LABELS go with the project. Nothing in memory.db is touched:
+            # the facts are the owner's, and deleting a project never forgets
+            # one - only the memory module's own Forget does that.
+            c.execute("DELETE FROM project_facts WHERE project = ?", (pid,))
             c.execute("DELETE FROM projects WHERE id = ?", (pid,))
             self._drop_axes(c, "bench", benches)
         _withdraw_share(pid)
@@ -1184,6 +1386,105 @@ class Projects:
         with self._lock, self._db() as c:
             self._project_row(c, pid)
             return self._bench_view(c, self._bench_row(c, pid, bid), points=points)
+
+    # ---- a project's labelled facts (2026-10-15) ------------------------------------
+    #
+    # See the "A project's labelled facts" note at the top of this file. In one
+    # line: the LABEL is here, the fact is jarvis_memory's, and no fact's words
+    # pass through this module.
+
+    def facts(self, pid: str) -> list:
+        """A project's labelled facts, oldest label first:
+        [{"fact": <memory fact id>, "created": <when it was labelled>}].
+
+        The LABEL only - never a fact's words. An app shows them by handing
+        these ids to jarvis_memory's own existing read,
+        `GET /api/memory/used?ids=...`, which already says "no longer in use"
+        for a forgotten fact and leaves an Off topic out. Empty when there is
+        no projects.db."""
+        if not self.exists():
+            return []
+        with self._lock, self._db() as c:
+            self._project_row(c, pid)
+            rows = c.execute("SELECT fact, created FROM project_facts WHERE project = ? "
+                             "ORDER BY created, fact", (pid,)).fetchall()
+        return [{"fact": int(r["fact"]), "created": r["created"]} for r in rows]
+
+    def label_fact(self, pid: str, fact) -> dict:
+        """Label ONE of the owner's own remembered facts with this project.
+
+        No card and no PC-only: the owner's own tap on a fact they can see,
+        the same shape as jarvis_memory's "Between us". Refused when the fact
+        is not there (404), or is no longer current - forgotten, or its words
+        erased (409) - so a label never points at something that cannot be
+        recalled. Labelling the same fact twice changes nothing (`changed` is
+        false); a project labels at most MAX_FACTS.
+
+        Reads no fact's words: the memory layer is asked whether one id is
+        there and still current, and nothing else.
+
+        The PROJECT is checked first - it is the route's own subject, so a
+        route under a project that is gone is a 404 whatever the fact is -
+        and the memory layer is asked with no lock held, because opening it
+        the first time is slow and this is the owner's tap on a phone."""
+        fid = _fact_id(fact)
+        with self._lock, self._db() as c:
+            self._project_row(c, pid)
+        state = _fact_state(fid)
+        if not state["found"]:
+            raise FactGone(NO_SUCH_FACT)
+        if not state["current"]:
+            raise FactGone(FACT_NOT_CURRENT, status=409)
+        now = self.clock()
+        with self._lock, self._db() as c:
+            self._project_row(c, pid)
+            n = c.execute("SELECT COUNT(*) FROM project_facts WHERE project = ?",
+                          (pid,)).fetchone()[0]
+            already = c.execute("SELECT 1 FROM project_facts WHERE project = ? AND fact = ?",
+                                (pid, fid)).fetchone() is not None
+            if not already and n >= MAX_FACTS:
+                raise OverflowError(f"a project labels at most {MAX_FACTS} facts")
+            cur = c.execute("INSERT OR IGNORE INTO project_facts (project, fact, created) "
+                            "VALUES (?,?,?)", (pid, fid, now))
+            changed = bool(cur.rowcount)
+            if changed:
+                c.execute("UPDATE projects SET changed = ? WHERE id = ?", (now, pid))
+            total = n + 1 if changed else n
+        _audit("projects.fact.label", {"project": pid, "fact": fid, "changed": changed})
+        return {"ok": True, "fact": fid, "changed": changed, "facts": int(total),
+                "max": MAX_FACTS}
+
+    def forget_fact(self, pid: str, fact) -> dict:
+        """The owner forgets ONE fact from this project.
+
+        The FACT goes first, through the memory module's own Forget
+        (`MemoryStore.retire()`, the same call `POST /api/memory/forget`
+        makes), and the label comes off only once that has answered: a memory
+        layer that refuses leaves the label in place, so the list still shows
+        the fact and the owner can try again - never a list that has taken a
+        fact off while the rest of Jarvis still recalls it.
+
+        No card, and no words wiped (that is "Erase the words", its own
+        button). Answers {"ok", "fact", "unlabelled", "forgot"} - `forgot` is
+        false when there was nothing left to forget, which is an already
+        forgotten fact, or an id with no fact at all.
+
+        A fact this project does not label is a 404: there is nothing here to
+        forget. The label comes off even when the fact is already gone."""
+        fid = _fact_id(fact)
+        with self._lock, self._db() as c:
+            self._project_row(c, pid)
+            if c.execute("SELECT 1 FROM project_facts WHERE project = ? AND fact = ?",
+                         (pid, fid)).fetchone() is None:
+                raise FactGone(FACT_NOT_LABELLED)
+        forgot = _forget_fact(fid)
+        now = self.clock()
+        with self._lock, self._db() as c:
+            self._project_row(c, pid)
+            c.execute("DELETE FROM project_facts WHERE project = ? AND fact = ?", (pid, fid))
+            c.execute("UPDATE projects SET changed = ? WHERE id = ?", (now, pid))
+        _audit("projects.fact.forget", {"project": pid, "fact": fid, "forgot": forgot})
+        return {"ok": True, "fact": fid, "unlabelled": True, "forgot": forgot}
 
     # ---- the quick command's side ---------------------------------------------------
 
@@ -1966,6 +2267,8 @@ def parse_route(route: str) -> Optional[tuple]:
         ("log", pid, bid)                           .../benchmarks/<bid>/log
         ("unmark", pid, bid)                        .../benchmarks/<bid>/unmark
         ("result_delete", pid, bid, rid)            .../benchmarks/<bid>/results/<rid>/delete
+        ("facts", pid)                              /api/projects/<pid>/facts
+        ("fact_forget", pid, fid)                   .../facts/<fid>/forget
     """
     if not isinstance(route, str):
         return None
@@ -1979,9 +2282,13 @@ def parse_route(route: str) -> Optional[tuple]:
     pid = p[0]
     if len(p) == 1:
         return ("project", pid)
-    if len(p) == 2 and p[1] in ("delete", "shareable", "benchmarks"):
+    if len(p) == 2 and p[1] in ("delete", "shareable", "benchmarks", "facts"):
         return ({"delete": "project_delete", "shareable": "shareable",
-                 "benchmarks": "benchmarks"}[p[1]], pid)
+                 "benchmarks": "benchmarks", "facts": "facts"}[p[1]], pid)
+    if len(p) == 4 and p[1] == "facts" and p[2] and p[3] == "forget":
+        # One fact per request, exactly as the memory routes are: there is no
+        # list form of Forget (jarvis_memory's own "used" note says the same).
+        return ("fact_forget", pid, p[2])
     if len(p) >= 3 and p[1] == "benchmarks" and p[2]:
         bid = p[2]
         if len(p) == 3:
@@ -1999,6 +2306,10 @@ def _err(exc) -> tuple:
     stack trace reaching an app."""
     if isinstance(exc, NoSuchApp):
         return 404, {"ok": False, "error": _sentence(exc)}
+    if isinstance(exc, FactGone):
+        # 404 for a fact that is not there (or that this project does not
+        # label); 409 for one that is there but no longer current.
+        return exc.status, {"ok": False, "error": _sentence(exc)}
     if isinstance(exc, Unavailable):
         return 503, {"ok": False, "error": _sentence(exc)}
     if isinstance(exc, KeyError):
@@ -2031,6 +2342,18 @@ def handle_get(route: str, query: str = "", *, store: Optional[Projects] = None)
                          "unlinked_apps": store.unlinked_apps()}
         if hit[0] == "project":
             return 200, {"ok": True, "project": store.get(hit[1])}
+        if hit[0] == "facts":
+            # The LABELS only. `words_route` is where the words come from -
+            # jarvis_memory's own existing read, which is the one place that
+            # knows how to show a forgotten fact as "no longer in use" and to
+            # leave an Off topic out - and `ids` is ready to hand to it.
+            # MAX_FACTS == that route's own cap, so this is one more call.
+            items = store.facts(hit[1])
+            return 200, {"ok": True, "available": True,
+                         "facts": items, "count": len(items), "max": MAX_FACTS,
+                         "empty": EMPTY_FACTS if not items else "",
+                         "ids": [f["fact"] for f in items],
+                         "words_route": "/api/memory/used"}
         if hit[0] == "bench":
             q = parse_qs(query or "")
             n = (q.get("points") or [CHART_POINTS])[0]
@@ -2064,6 +2387,12 @@ def handle_post(route: str, body, *, here: bool = False,
             return request_shareable(hit[1], body, store=store, **card)
         if kind == "benchmarks":
             return 200, {"ok": True, "benchmark": store.add_benchmark(hit[1], body, here=here)}
+        if kind == "facts":
+            # Label ONE of the owner's own facts with this project. No card:
+            # the owner's own tap on a fact they can see.
+            return 200, store.label_fact(hit[1], body.get("id"))
+        if kind == "fact_forget":
+            return 200, store.forget_fact(hit[1], hit[2])
         if kind == "bench":
             return 200, {"ok": True,
                          "benchmark": store.update_benchmark(hit[1], hit[2], body, here=here)}

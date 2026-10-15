@@ -1,5 +1,6 @@
 """test_projects.py - Projects, build steps 1 and 2 (jarvis_projects.py,
-projects.patch, docs/JARVIS-API.md section 88, docs/PROJECTS-DESIGN.md).
+projects.patch, docs/JARVIS-API.md section 88, docs/PROJECTS-DESIGN.md), plus
+step 4's label half (`project_facts`, 2026-10-15).
 
     python3 backend/test_projects.py
 
@@ -47,6 +48,23 @@ anything tries):
     projects limit counts them; deleting one keeps the folder and lists it
     again as an unlinked app; a save that fails removes only the folder that
     call just made;
+  - a project's LABELLED FACTS (2026-10-15, the label half of build step 4):
+    the `project_facts` table in projects.db holds a fact ID and when it was
+    labelled - never a fact's words; an older projects.db gains the table;
+    labelling twice is one row; the cap; a fact that is not there (404) or is
+    no longer current, forgotten or erased (409) cannot be labelled; Forget
+    takes the label off AND calls the memory module's OWN Forget
+    (`MemoryStore.retire()`, the call /api/memory/forget makes) so the fact
+    stops being recalled everywhere, while the row and its words stay (Erase
+    is a separate button); a memory layer that breaks leaves the LABEL in
+    place rather than reporting a half-success; deleting a project takes only
+    its labels; and a label really survives a projects.db whose rows are in
+    the `-wal` side file (the owner's own agents.db reads 0 tables without
+    its log). jarvis_projects.py reads no fact's words: the words come from
+    jarvis_memory's own GET /api/memory/used, which MAX_FACTS is capped to
+    match so a project's list is one call. The label's own half is driven
+    with a FAKE memory layer (nothing here opens the owner's real memory.db);
+    the bridge to the REAL jarvis_memory.py is proved in its own test;
   - the routes, install() and the patch on the stack of earlier patches;
   - the audit log never carries a name, a note or a number.
 
@@ -1035,6 +1053,595 @@ def t_quick_command_end_to_end():
 
 
 # --------------------------------------------------------------------------
+#   A project's labelled facts (2026-10-15)
+# --------------------------------------------------------------------------
+#
+# The owner's side decided the LABEL lives in projects.db, owned by
+# jarvis_projects.py, and not as `meta.project` on jarvis_memory.py's own row
+# (that module is the application target of three patches: memory-safety,
+# embedding-guard, bitemporal). So the tests below are careful about the
+# boundary, and each one says which side of it it is proving:
+#
+#   * jarvis_projects.py's half - the label table, the routes, the refusals -
+#     is driven with a FAKE memory layer, so nothing here opens the owner's
+#     real memory.db and no model is ever built;
+#   * the bridge itself (that this file really calls the memory module's own
+#     Forget, and really reads no fact's words) is proved against the REAL
+#     jarvis_memory.py in its own test, and by reading this file's own source.
+
+_FACT_WORDS = "a fact's own words, which jarvis_projects.py must never read"
+
+
+class FakeMemory:
+    """The little of jarvis_memory's API jarvis_projects.py is allowed to use:
+    `get()` for one fact's STATE (is it there, is it still current) and
+    `retire()` for its own Forget. It hands out no words and offers no
+    `search`/`current_facts` at all, so a future edit that started reading
+    fact text here would fail rather than pass quietly."""
+
+    def __init__(self, rows=None):
+        self.rows = {int(k): dict(v) for k, v in (rows or {}).items()}
+        self.retired = []
+        self.asked = []
+        self.broke = None
+
+    def get(self, fid):
+        self.asked.append(int(fid))
+        if self.broke is not None:
+            raise self.broke
+        return self.rows.get(int(fid))
+
+    def retire(self, fid):
+        if self.broke is not None:
+            raise self.broke
+        row = self.rows.get(int(fid))
+        if row is None or row.get("valid_to") is not None or row.get("erased_at") is not None:
+            # The real retire() reports "no row matched" as False: an
+            # already-forgotten fact, an erased one, or an id that is not
+            # there at all. Keeps the row - a Forget never deletes.
+            return False
+        self.retired.append(int(fid))
+        row["valid_to"] = time.time()
+        return True
+
+    def search(self, *a, **k):        # pragma: no cover - it must never be called
+        raise AssertionError("jarvis_projects.py must never search facts")
+
+    def __getattr__(self, name):
+        """Anything else jarvis_projects.py reaches for is a boundary it must
+        not cross - a fact's words, a search, a list of every fact - so it
+        fails HERE, loudly, instead of passing quietly."""
+        if name.startswith("__") and name.endswith("__"):
+            raise AttributeError(name)
+        raise AssertionError(f"jarvis_projects.py must not use memory.{name}: it "
+                             f"reads no fact's text (see the module's own note)")
+
+
+def current_fact(fid: int, **kw) -> dict:
+    """One current fact, the shape MemoryStore.get() returns (the text is a
+    marker: if it ever turns up in an answer, a check below says so)."""
+    row = {"id": int(fid), "text": _FACT_WORDS, "valid_to": None, "erased_at": None,
+           "created": 1.0, "meta": "{}"}
+    row.update(kw)
+    return row
+
+
+class fake_memory:
+    """`with fake_memory(store):` - point jarvis_projects at a fake memory
+    layer for the block, and put the real one back however the block ends."""
+
+    def __init__(self, store):
+        self.store = store
+        self.was = None
+
+    def __enter__(self):
+        self.was = P._memory_store
+        P._memory_store = lambda: self.store
+        return self.store
+
+    def __exit__(self, *exc):
+        P._memory_store = self.was
+        return False
+
+
+def _fact_refusal(call):
+    """(status, sentence) for a call that must be refused, or (None, "") when
+    it was not refused at all."""
+    try:
+        call()
+    except P.FactGone as exc:
+        return exc.status, str(exc)
+    return None, ""
+
+
+def t_project_facts_are_labelled_listed_and_forgotten():
+    ticks = [1000.0]
+
+    def clock():
+        ticks[0] += 1.0
+        return ticks[0]
+
+    s = fresh(clock=clock)
+    pid = s.create({"name": "Half marathon", "kind": "life"}, here=False)["id"]
+    check("a new project labels no facts", s.facts(pid) == [])
+    mem = FakeMemory({7: current_fact(7), 8: current_fact(8)})
+    with fake_memory(mem):
+        before = s.get(pid)["changed"]
+        out = s.label_fact(pid, 7)
+        check("labelling ONE fact is one row, and the answer says so",
+              out["ok"] is True and out["changed"] is True and out["fact"] == 7
+              and out["facts"] == 1 and out["max"] == P.MAX_FACTS, out)
+        check("... and the project itself is marked changed (the clock is the store's "
+              "own, so this is the label that moved it)",
+              s.get(pid)["changed"] > before, (before, s.get(pid)["changed"]))
+        listed = s.facts(pid)
+        check("it is listed by id, oldest label first, and carries NO words "
+              "(the words come from /api/memory/used)",
+              [f["fact"] for f in listed] == [7]
+              and all(set(f) == {"fact", "created"} for f in listed), listed)
+        check("the answer never carries the fact's text either",
+              _FACT_WORDS not in json.dumps(out) and _FACT_WORDS not in json.dumps(listed))
+        again = s.label_fact(pid, 7)
+        check("labelling the same fact twice changes nothing (one row)",
+              again["changed"] is False and again["facts"] == 1 and len(s.facts(pid)) == 1)
+        s.label_fact(pid, 8)
+        check("a second fact is listed beside the first",
+              [f["fact"] for f in s.facts(pid)] == [7, 8], s.facts(pid))
+        gone = s.forget_fact(pid, 7)
+        check("Forget takes the label off AND calls the memory module's own Forget "
+              "(retire(), the call /api/memory/forget makes)",
+              gone["unlabelled"] is True and gone["forgot"] is True
+              and mem.retired == [7], (gone, mem.retired))
+        check("... and only that one is gone from the list",
+              [f["fact"] for f in s.facts(pid)] == [8], s.facts(pid))
+        check("... and the fact is MARKED, not deleted (Forget keeps the row, and "
+              "no words were wiped - that is Erase, its own button)",
+              mem.rows[7]["text"] == _FACT_WORDS
+              and mem.rows[7]["valid_to"] is not None and 8 not in mem.retired)
+        status, why = _fact_refusal(lambda: s.forget_fact(pid, 7))
+        check("forgetting a fact this project does not label: 404, in words",
+              status == 404 and "does not label" in why, (status, why))
+        status, why = _fact_refusal(lambda: s.label_fact(pid, 99))
+        check("labelling a fact id that is not there: 404, in words",
+              status == 404 and "no remembered fact" in why, (status, why))
+        check("... and nothing was stored for it", len(s.facts(pid)) == 1)
+    # A string id is what the PATH carries (`.../facts/7/forget`); both
+    # spellings are the same id, and neither is a guess.
+    mem2 = FakeMemory({7: current_fact(7)})
+    with fake_memory(mem2):
+        pid2 = s.create({"name": "Garden", "kind": "life"}, here=False)["id"]
+        check("a fact id may arrive as the digits a path carries",
+              s.label_fact(pid2, "7")["fact"] == 7
+              and s.forget_fact(pid2, "7")["forgot"] is True and mem2.retired == [7])
+    for bad in (True, 0, -1, "abc", "-3", 1.5, None, "7x", 10 ** 19, ""):
+        check(f"{bad!r} is not a fact id (400, in words), and nothing is stored",
+              "fact id" in raises(lambda: s.label_fact(pid, bad), ValueError)
+              and len(s.facts(pid)) == 1)
+
+
+def t_project_facts_refuse_a_fact_that_can_no_longer_be_recalled():
+    """A label that points at a fact the rest of Jarvis will never recall
+    again is a list the owner cannot act on, so both spellings of "not
+    current" are refused: forgotten (valid_to in the past) and erased
+    (erased_at set). A lease that ends LATER is still current - the rule
+    retire()'s own docstring forbids breaking."""
+    s = fresh()
+    pid = s.create({"name": "Run", "kind": "life"}, here=False)["id"]
+    mem = FakeMemory({1: current_fact(1, valid_to=time.time() - 60),
+                      2: current_fact(2, erased_at=time.time()),
+                      3: current_fact(3, valid_to=time.time() + 86400)})
+    with fake_memory(mem):
+        status, why = _fact_refusal(lambda: s.label_fact(pid, 1))
+        check("a forgotten fact cannot be labelled: 409, in words",
+              status == 409 and "forgotten" in why, (status, why))
+        status, why = _fact_refusal(lambda: s.label_fact(pid, 2))
+        check("a fact whose words were erased cannot be labelled either: 409",
+              status == 409 and "erased" in why, (status, why))
+        check("a fact whose lease ends later IS current (nothing reads "
+              "valid_to as 'not current')",
+              s.label_fact(pid, 3)["changed"] is True and len(s.facts(pid)) == 1)
+        check("... and neither refusal stored anything",
+              [f["fact"] for f in s.facts(pid)] == [3], s.facts(pid))
+
+
+def t_project_facts_keep_the_label_when_the_memory_layer_refuses():
+    """The fact goes first and the label second, on purpose: a memory layer
+    that breaks must leave the label in place, so the owner still sees the
+    fact listed and can try again - never a list that has taken a fact off
+    while the rest of Jarvis still recalls it."""
+    s = fresh()
+    pid = s.create({"name": "Run", "kind": "life"}, here=False)["id"]
+    mem = FakeMemory({7: current_fact(7)})
+    with fake_memory(mem):
+        s.label_fact(pid, 7)
+        mem.broke = RuntimeError("the memory layer fell over")
+        try:
+            s.forget_fact(pid, 7)
+            check("a memory layer that raises is not a silent success", False,
+                  "forget_fact returned instead of raising")
+        except P.Unavailable as exc:
+            check("a memory layer that raises: Unavailable (503) in words, and the "
+                  "LABEL STAYS so the owner can try again",
+                  "refused to forget" in str(exc)
+                  and [f["fact"] for f in s.facts(pid)] == [7],
+                  (str(exc), s.facts(pid)))
+        mem.broke = None
+        check("... and once it answers again the Forget goes through",
+              s.forget_fact(pid, 7)["forgot"] is True and s.facts(pid) == [])
+    # No memory layer at all is the same refusal, never a false success.
+    s2 = fresh()
+    pid2 = s2.create({"name": "Run", "kind": "life"}, here=False)["id"]
+    with fake_memory(FakeMemory({7: current_fact(7)})):
+        s2.label_fact(pid2, 7)
+    with fake_memory(None):
+        try:
+            s2.forget_fact(pid2, 7)
+            check("no memory layer at all: nothing is reported as forgotten", False,
+                  "forget_fact returned instead of raising")
+        except P.Unavailable as exc:
+            check("no memory layer at all: the label stays and the answer says why",
+                  "not importable" in str(exc)
+                  and [f["fact"] for f in s2.facts(pid2)] == [7], str(exc))
+    # A fact that was already forgotten elsewhere is a legitimate no-op: the
+    # label comes off (the owner asked), and `forgot` is false because there
+    # was nothing left for this call to do.
+    mem2 = FakeMemory({9: current_fact(9)})
+    s3 = fresh()
+    pid3 = s3.create({"name": "Walk", "kind": "life"}, here=False)["id"]
+    with fake_memory(mem2):
+        s3.label_fact(pid3, 9)
+        # Forgotten somewhere else - another screen, another day - while the
+        # label is still there. The label is still the owner's to take off.
+        mem2.rows[9]["valid_to"] = time.time() - 60
+        out = s3.forget_fact(pid3, 9)
+        check("a fact that was already forgotten elsewhere: the label comes off, "
+              "`forgot` is false, and no second Forget is claimed",
+              out["unlabelled"] is True and out["forgot"] is False
+              and mem2.retired == [] and s3.facts(pid3) == [], (out, mem2.retired))
+
+
+def _memory_used_max():
+    """jarvis_memory.USED_MAX when that module can be imported here, else
+    None - the cap on GET /api/memory/used?ids=, which MAX_FACTS must equal so
+    one project's words are ONE call. Reading one constant opens no store and
+    builds no model."""
+    try:
+        import jarvis_memory
+        return int(jarvis_memory.USED_MAX)
+    except Exception:
+        return None
+
+
+def t_project_facts_are_a_capped_list_of_ids():
+    s = fresh()
+    pid = s.create({"name": "Run", "kind": "life"}, here=False)["id"]
+    old = P.MAX_FACTS
+    P.MAX_FACTS = 2
+    mem = FakeMemory({1: current_fact(1), 2: current_fact(2), 3: current_fact(3)})
+    try:
+        with fake_memory(mem):
+            s.label_fact(pid, 1)
+            s.label_fact(pid, 2)
+            check("the cap is kept: a third fact is refused in words",
+                  "at most 2" in raises(lambda: s.label_fact(pid, 3), OverflowError))
+            check("... and it really was not stored", len(s.facts(pid)) == 2)
+            check("the cap counts LABELS, so a fact already labelled is still fine",
+                  s.label_fact(pid, 1)["changed"] is False)
+    finally:
+        P.MAX_FACTS = old
+    check("MAX_FACTS is jarvis_memory's own USED_MAX, so a project's words are ONE "
+          "call to /api/memory/used, never two",
+          _memory_used_max() == P.MAX_FACTS, (P.MAX_FACTS, _memory_used_max()))
+
+
+def t_project_facts_a_project_delete_takes_only_the_labels():
+    """Deleting a project takes its labels with it - and NOTHING from
+    memory.db: the facts are the owner's, and only the memory module's own
+    Forget ever removes one."""
+    s = fresh()
+    pid = s.create({"name": "Run", "kind": "life"}, here=False)["id"]
+    other = s.create({"name": "Garden", "kind": "life"}, here=False)["id"]
+    mem = FakeMemory({1: current_fact(1), 2: current_fact(2)})
+    with fake_memory(mem):
+        s.label_fact(pid, 1)
+        s.label_fact(other, 2)
+        s.delete(pid)
+        check("a label for a project that is gone reads as no such project",
+              bool(raises(lambda: s.facts(pid), KeyError)))
+        with s._lock, s._db() as c:
+            left = c.execute("SELECT COUNT(*) FROM project_facts").fetchone()[0]
+        check("... and its label row really went with it (the other project's is left)",
+              left == 1, left)
+        check("... and the OTHER project's label is untouched",
+              [f["fact"] for f in s.facts(other)] == [2], s.facts(other))
+        check("... and no fact was forgotten by deleting a project",
+              mem.retired == [] and mem.rows[1]["valid_to"] is None, mem.retired)
+
+
+def t_project_facts_in_a_column_that_an_older_projects_db_gains():
+    """An existing projects.db - the owner's own, made by build steps 1 and 2 -
+    gains `project_facts` the first time this module opens it (CREATE TABLE IF
+    NOT EXISTS, in the same one-time schema pass every other table uses)."""
+    import sqlite3
+    path = _TMP / "older-projects-facts.db"
+    c = sqlite3.connect(str(path))
+    c.executescript(P._SCHEMA)
+    c.execute("DROP TABLE project_facts")
+    names = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    check("the test's old file really has no project_facts table",
+          "project_facts" not in names, sorted(names))
+    c.execute("INSERT INTO projects (id, name, kind, created, changed) VALUES "
+              "('" + "b" * 32 + "', 'Before facts', 'life', 1, 1)")
+    c.commit()
+    c.close()
+    s = P.Projects(path)
+    s.get("b" * 32)
+    c = sqlite3.connect(str(path))
+    try:
+        names = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        idx = [r[1] for r in c.execute("PRAGMA index_list(project_facts)").fetchall()]
+        cols = [r[1] for r in c.execute("PRAGMA table_info(project_facts)").fetchall()]
+    finally:
+        c.close()
+    check("... and gains the table, its columns and its index",
+          "project_facts" in names and cols == ["project", "fact", "created"]
+          and "project_facts_by_fact" in idx, (sorted(names), cols, idx))
+    mem = FakeMemory({5: current_fact(5)})
+    with fake_memory(mem):
+        check("... and it takes a label at once",
+              s.label_fact("b" * 32, 5)["fact"] == 5
+              and [f["fact"] for f in s.facts("b" * 32)] == [5])
+
+
+def t_project_facts_survive_a_database_whose_rows_are_in_the_wal_log():
+    """THE SQLITE TRAP.
+
+    The owner's own agents.db is 4,096 bytes beside a 115,392-byte `-wal` log
+    and reads 0 tables without it. In WAL mode a just-written row lives in the
+    SIDE FILE, not in `projects.db`, so anything that reads the main file
+    alone - a copy of it, an `immutable=1` opener - sees nothing. backend/
+    jarvis_backup.py documents the same care for the same reason.
+
+    So this checks the label through SQLite's own reader (a FRESH Projects
+    object on the same path, which has never seen the first), and then proves
+    the row really was in the side file: a copy of `projects.db` ALONE (no
+    -wal, no -shm) does not have it, and after an explicit checkpoint the same
+    copy DOES. That second half is what makes the first half worth anything -
+    the instrument is shown to detect presence as well as absence."""
+    import sqlite3
+    path = _TMP / "wal-projects.db"
+    s = P.Projects(path)
+    pid = s.create({"name": "WAL", "kind": "life"}, here=False)["id"]
+    with s._lock, s._db() as c:
+        c.execute("PRAGMA journal_mode=WAL")
+    check("the database really is in WAL mode (or this check would prove nothing)",
+          _journal_mode(path) == "wal", _journal_mode(path))
+    # A WAL log is checkpointed away and DELETED when the LAST connection to
+    # the file closes, so one connection is held open for the whole test -
+    # which is also what the owner's own machine looks like (agents.db reads 0
+    # tables beside its log because a process is still holding it).
+    #
+    # `sqlite3.connect` is LAZY: it opens no file until the connection is
+    # first used, so a bare connect() here held nothing and the label was
+    # checkpointed into the main file - the trap this test is about, sprung on
+    # the test itself. One statement is what actually opens it.
+    keeper = sqlite3.connect(str(path))
+    keeper.execute("SELECT COUNT(*) FROM sqlite_master").fetchone()
+    mem = FakeMemory({7: current_fact(7)})
+
+    def main_file_only() -> tuple:
+        """(tables, project_facts rows) read from a copy of the MAIN FILE
+        alone - no -wal, no -shm."""
+        copy = _TMP / f"wal-main-only-{len(_WAL_READS)}.db"
+        _WAL_READS.append(copy)
+        shutil.copyfile(path, copy)
+        c = sqlite3.connect(str(copy))
+        try:
+            names = {r[0] for r in c.execute("SELECT name FROM sqlite_master "
+                                            "WHERE type='table'")}
+            rows = (c.execute("SELECT COUNT(*) FROM project_facts").fetchone()[0]
+                    if "project_facts" in names else 0)
+            return sorted(names), int(rows)
+        finally:
+            c.close()
+
+    try:
+        with fake_memory(mem):
+            s.label_fact(pid, 7)
+        wal = Path(str(path) + "-wal")
+        check("the label went into the -wal side file, as a WAL database does",
+              wal.is_file() and wal.stat().st_size > 0, wal)
+        names, rows = main_file_only()
+        check("... so a read of projects.db ALONE really does not have it "
+              "(the trap is live, not theoretical)",
+              rows == 0, (names, rows))
+        s2 = P.Projects(path)                 # never saw the first object
+        check("... and a FRESH Projects on the same file reads the label back, because "
+              "SQLite reads the -wal itself - two SQLite readers, one file",
+              [f["fact"] for f in s2.facts(pid)] == [7], s2.facts(pid))
+    finally:
+        keeper.close()
+    with s2._lock, s2._db() as c:
+        c.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    names, rows = main_file_only()
+    check("... and after a checkpoint the same main file DOES have it, so the "
+          "check above is a real instrument and not a check that cannot fail",
+          rows == 1 and "project_facts" in names, (names, rows))
+
+
+_WAL_READS = []
+
+
+def _journal_mode(path) -> str:
+    import sqlite3
+    c = sqlite3.connect(str(path))
+    try:
+        return str(c.execute("PRAGMA journal_mode").fetchone()[0]).lower()
+    finally:
+        c.close()
+
+
+def t_project_facts_routes():
+    pr = P.parse_route
+    pid, bid = "1" * 32, "2" * 32
+    check("the fact routes are in the table, and only these shapes",
+          pr(f"/api/projects/{pid}/facts") == ("facts", pid)
+          and pr(f"/api/projects/{pid}/facts/7/forget") == ("fact_forget", pid, "7")
+          and pr(f"/api/projects/{pid}/facts/7") is None
+          and pr(f"/api/projects/{pid}/facts/7/delete") is None
+          and pr(f"/api/projects/{pid}/facts//forget") is None
+          and pr(f"/api/projects/{pid}/facts/7/forget/more") is None
+          and pr(f"/api/projects/{pid}/benchmarks/{bid}") == ("bench", pid, bid))
+    s = fresh()
+    pid = s.create({"name": "Run", "kind": "life"}, here=False)["id"]
+    mem = FakeMemory({7: current_fact(7), 8: current_fact(8)})
+    with fake_memory(mem):
+        code, out = P.handle_get(f"/api/projects/{pid}/facts", store=s)
+        check("GET .../facts on a project with no labels: 200, the empty sentence",
+              code == 200 and out["facts"] == [] and out["count"] == 0
+              and out["empty"] == P.EMPTY_FACTS and out["ids"] == []
+              and out["max"] == P.MAX_FACTS, out)
+        code, out = P.handle_post(f"/api/projects/{pid}/facts", {"id": 7}, store=s)
+        check("POST .../facts labels one fact, no card", code == 200 and out["ok"]
+              and out["changed"] is True and out["fact"] == 7, out)
+        code, out = P.handle_post(f"/api/projects/{pid}/facts", {"id": 8}, store=s)
+        code, out = P.handle_get(f"/api/projects/{pid}/facts", store=s)
+        check("GET .../facts lists both ids oldest first, and NAMES where the words "
+              "come from (jarvis_memory's own route, one call for the whole list)",
+              [f["fact"] for f in out["facts"]] == [7, 8] and out["ids"] == [7, 8]
+              and out["words_route"] == "/api/memory/used"
+              and out["empty"] == "", out)
+        check("... and the answer carries no fact's words",
+              _FACT_WORDS not in json.dumps(out))
+        code, out = P.handle_post(f"/api/projects/{pid}/facts/7/forget", {}, store=s)
+        check("POST .../facts/<id>/forget takes the label off and forgets the fact",
+              code == 200 and out["unlabelled"] is True and out["forgot"] is True
+              and mem.retired == [7], (code, out))
+        code, out = P.handle_post(f"/api/projects/{pid}/facts/7/forget", {}, store=s)
+        check("forgetting it twice: 404 with its own sentence (nothing left to take off)",
+              code == 404 and "does not label" in out["error"], (code, out))
+        code, out = P.handle_post(f"/api/projects/{pid}/facts", {"id": 99}, store=s)
+        check("labelling a fact that is not there is a 404 in words",
+              code == 404 and "no remembered fact" in out["error"], (code, out))
+        code, out = P.handle_post(f"/api/projects/{pid}/facts", {}, store=s)
+        check("a missing id is a 400 in words, not a 404 or a crash",
+              code == 400 and "fact id" in out["error"], (code, out))
+        code, out = P.handle_post(f"/api/projects/{pid}/facts", {"id": "7x"}, store=s)
+        check("an id that is not a whole number is a 400 in words",
+              code == 400 and "fact id" in out["error"], (code, out))
+        code, out = P.handle_get(f"/api/projects/{pid}/facts/7/forget", store=s)
+        check("GET on the forget route is a 405 (it is a POST)", code == 405, code)
+        code, out = P.handle_post(f"/api/projects/{'9' * 32}/facts", {"id": 7}, store=s)
+        check("a route under a project that is not there is a 404 - the PROJECT is "
+              "checked first, so this is a 404 even though fact 7 is no longer "
+              "current", code == 404, code)
+        code, out = P.handle_post(f"/api/projects/{pid}/facts", ["not", "a", "dict"],
+                                  store=s)
+        check("a body that is not an object is a 400", code == 400)
+    # No card, and no PC-only: the owner's own tap on a fact they can see, and
+    # `here` is never consulted.
+    mem2 = FakeMemory({7: current_fact(7)})
+    with fake_memory(mem2):
+        pid2 = s.create({"name": "Garden", "kind": "life"}, here=False)["id"]
+        check("labelling asks for no card and is not PC-only (it works from "
+              "anywhere, as /api/memory/forget and /api/memory/shared do)",
+              P.handle_post(f"/api/projects/{pid2}/facts", {"id": 7},
+                            here=False, store=s)[0] == 200
+              and mem2.retired == [])
+
+
+def t_project_facts_call_the_memory_modules_own_forget_and_read_no_words():
+    """The BRIDGE, proved against the real jarvis_memory.py and against this
+    file's own source.
+
+    Two things must stay true, and both are checkable:
+      1. the Forget this file causes is the memory module's OWN Forget -
+         `MemoryStore.retire()`, the call `POST /api/memory/forget` makes -
+         and never `erase()` (the separate "Erase the words" button) and
+         never a DELETE;
+      2. this file reads no fact's WORDS: no SQL against the facts table, and
+         no `store().search(` anywhere - which is what lets
+         test_topics_leaks.py's own list keep saying "reads no fact"."""
+    src = (HERE / "jarvis_projects.py").read_text(encoding="utf-8")
+    # test_topics_leaks.py's own instrument, not a second definition of
+    # "reads facts" written here: `touches` is why this file is on that list,
+    # `sql` would mean it queried the facts table itself, and `searches` would
+    # mean it ranked facts. Only the first is allowed.
+    #
+    # Loaded from THIS file's own folder by path, never by `import
+    # test_topics_leaks`: a run against a real install has BACKEND first on
+    # sys.path, and a stale copy of that module there would answer for the
+    # wrong tree - the mistake CLAUDE.md records twice over.
+    tl_path = HERE / "test_topics_leaks.py"
+    if not tl_path.is_file():
+        skip(f"test_topics_leaks.py is not beside this suite ({HERE}), so its own "
+             f"analysis of what reads facts cannot be used here")
+    else:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("_s2_topics_leaks", tl_path)
+        TL = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(TL)
+        a = TL.analyse(src)
+        check("jarvis_projects.py reads no words: no SQL of its own against the facts "
+              "table (test_topics_leaks.py's own analysis)", a["sql"] is False, a)
+        check("... and no store.search() on a memory store anywhere in it",
+              a["searches"] == [], a["searches"])
+        check("... and it does name jarvis_memory, which is why it is on that list",
+              a["touches"] is True, a)
+    check("... and it causes no delete and wipes no words: no erase() call",
+          ".erase(" not in src and "DELETE FROM facts" not in src.upper())
+    check("... and its one act on a fact is the memory module's own Forget",
+          ".retire(" in src and "MemoryStore" in src)
+    check("... and it names the route the memory module already owns for "
+          "showing one fact's words", "/api/memory/used" in src)
+    # Against the REAL module, when it is importable here (its own USED_MAX is
+    # read by a check above): the method this file calls must exist with the
+    # same name, and the real Forget route must be the same call.
+    try:
+        import jarvis_memory as M
+    except Exception as exc:                                  # pragma: no cover
+        skip(f"jarvis_memory.py is not importable here, so the bridge cannot be "
+             f"checked against it ({type(exc).__name__})")
+        return
+    check("the real MemoryStore has the retire() this file calls, and no "
+          "`forget()` that this file should have used instead",
+          hasattr(M.MemoryStore, "retire") and not hasattr(M.MemoryStore, "forget"))
+    check("the real MemoryStore.retire takes one fact id and returns whether a row "
+          "matched (the shape this file's answer is built on)",
+          list(M.MemoryStore.retire.__code__.co_varnames)[1:4] == ["fact_id",
+                                                                   "replaced_by",
+                                                                   "valid_to"])
+    check("... and the real module's own cap on showing a list of facts is the one "
+          "MAX_FACTS equals", int(M.USED_MAX) == P.MAX_FACTS, M.USED_MAX)
+    # End to end, on a throwaway memory.db and the cheapest embedder there is:
+    # a real fact, really labelled, really forgotten - and its words really
+    # still there afterwards.
+    try:
+        st = M.MemoryStore(_TMP / "facts-bridge-memory.db", embedder=M.HashEmbedder())
+    except Exception as exc:                                  # pragma: no cover
+        skip(f"a MemoryStore cannot be built here, so the bridge cannot be driven "
+             f"({type(exc).__name__})")
+        return
+    added = st.add(_FACT_WORDS, source="test")
+    fid = int(added["id"] if isinstance(added, dict) else added)
+    s = fresh()
+    pid = s.create({"name": "Bridge", "kind": "life"}, here=False)["id"]
+    with fake_memory(st):
+        check("a REAL fact is labelled through the project",
+              s.label_fact(pid, fid)["changed"] is True
+              and [f["fact"] for f in s.facts(pid)] == [fid])
+        out = s.forget_fact(pid, fid)
+        check("... and forgotten through the project: the memory module's own "
+              "retire() ran (the fact is no longer current)",
+              out["forgot"] is True and st.get(fid)["valid_to"] is not None, out)
+        check("... and its WORDS are still there (Forget is not Erase)",
+              st.get(fid)["text"] == _FACT_WORDS and st.get(fid)["erased_at"] is None)
+        check("... and the label is gone", s.facts(pid) == [])
+        check("... and a fact that is no longer current cannot be re-labelled "
+              "(409)", _fact_refusal(lambda: s.label_fact(pid, fid))[0] == 409)
+
+
+# --------------------------------------------------------------------------
 #   Routes, install, the patch, and what is never written down
 # --------------------------------------------------------------------------
 
@@ -1052,7 +1659,10 @@ def t_routes():
           and pr(f"/api/projects/{pid}/benchmarks/{bid}/unmark") == ("unmark", pid, bid)
           and pr(f"/api/projects/{pid}/benchmarks/{bid}/delete") == ("bench_delete", pid, bid)
           and pr(f"/api/projects/{pid}/benchmarks/{bid}/results/{rid}/delete")
-          == ("result_delete", pid, bid, rid))
+          == ("result_delete", pid, bid, rid)
+          and pr(f"/api/projects/{pid}/facts") == ("facts", pid)
+          and pr(f"/api/projects/{pid}/facts/7/forget") == ("fact_forget", pid, "7")
+          and pr(f"/api/projects/{pid}/facts/7") is None)
     check("anything else is not ours", pr("/api/projectsX") is None
           and pr("/api/projects/") is None and pr(f"/api/projects/{pid}/run") is None
           and pr("/api/goals") is None)
@@ -1327,6 +1937,11 @@ def t_a_project_call_does_not_leave_its_database_file_open():
         b = s.add_benchmark(p["id"], {"name": "Weight", "unit": "kg"}, here=False)
         s.log(p["id"], b["id"], 72.5)
         s.results(p["id"], b["id"])
+        with fake_memory(FakeMemory({7: current_fact(7)})):
+            q = s.create({"name": "Garden", "kind": "life"}, here=False)
+            s.label_fact(q["id"], 7)
+            s.facts(q["id"])
+            s.forget_fact(q["id"], 7)
         s.delete(p["id"])
     finally:
         P.sqlite3.connect = real
