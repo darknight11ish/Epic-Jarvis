@@ -953,6 +953,15 @@
        "title": "Keep or use a custom voice"
       },
       {
+       "action": "undo_action",
+       "fixed": false,
+       "id": "undo_action",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Put back a change it made"
+      },
+      {
        "action": "better_voice_enable",
        "fixed": false,
        "id": "better_voice_enable",
@@ -2173,6 +2182,15 @@
        "title": "Keep or use a custom voice"
       },
       {
+       "action": "undo_action",
+       "fixed": false,
+       "id": "undo_action",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Put back a change it made"
+      },
+      {
        "action": "better_voice_enable",
        "fixed": false,
        "id": "better_voice_enable",
@@ -3388,6 +3406,15 @@
        "title": "Keep or use a custom voice"
       },
       {
+       "action": "undo_action",
+       "fixed": false,
+       "id": "undo_action",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Put back a change it made"
+      },
+      {
        "action": "better_voice_enable",
        "fixed": false,
        "id": "better_voice_enable",
@@ -4598,6 +4625,15 @@
        "title": "Keep or use a custom voice"
       },
       {
+       "action": "undo_action",
+       "fixed": false,
+       "id": "undo_action",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Put back a change it made"
+      },
+      {
        "action": "better_voice_enable",
        "fixed": false,
        "id": "better_voice_enable",
@@ -5806,6 +5842,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Keep or use a custom voice"
+      },
+      {
+       "action": "undo_action",
+       "fixed": false,
+       "id": "undo_action",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Put back a change it made"
       },
       {
        "action": "better_voice_enable",
@@ -7032,6 +7077,15 @@
        "title": "Keep or use a custom voice"
       },
       {
+       "action": "undo_action",
+       "fixed": false,
+       "id": "undo_action",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Put back a change it made"
+      },
+      {
        "action": "better_voice_enable",
        "fixed": false,
        "id": "better_voice_enable",
@@ -8245,6 +8299,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Keep or use a custom voice"
+      },
+      {
+       "action": "undo_action",
+       "fixed": false,
+       "id": "undo_action",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Put back a change it made"
       },
       {
        "action": "better_voice_enable",

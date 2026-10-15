@@ -53,6 +53,7 @@ import tempfile
 import time
 import traceback
 import types
+import typing
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -189,7 +190,7 @@ class Original:
         return handler.headers.get("X-Jarvis-Token") == SHARED
 
 
-def pair(name="Pixel 9", method="qr", gate=None, peer=MESH):
+def pair(name="Pixel 9", method="qr", gate=None, peer=MESH, kind=None):
     """Run one whole pairing; returns (device_id, token, session answers)."""
     code, out = D.start({"address": "jarvis-pc.tail1234.ts.net", "port": 4719}, here=True,
                         armed=lambda: True)
@@ -203,6 +204,8 @@ def pair(name="Pixel 9", method="qr", gate=None, peer=MESH):
             "proof": D.claim_proof(k, t)}
     if method == "qr":
         body["pair_id"] = q["pair_id"]
+    if kind is not None:
+        body["kind"] = kind
     c, claimed = D.claim(body, peer=peer, gate=gate or Gate(), spawn=now_spawn)
     assert c == 202, (c, claimed)
     c, got = D.collect({"pair_id": claimed["pair_id"],
@@ -1797,6 +1800,134 @@ def t_the_apps_word_a_label_the_same_way():
     check("a label never approves anything: pair_device stays PC only, with Windows Hello",
           "pair_device" in OC.PC_ONLY_ACTIONS and D.ACTION in OC.PC_ONLY_ACTIONS
           and "devices_label" not in OC.PC_ONLY_ACTIONS)
+
+
+
+def claim_only(name="Pixel 9", kind=None, gate=None, peer=MESH):
+    """Start a pairing and stop at the claim: (code, answer).
+
+    `pair()` asserts a 202, so it cannot drive a claim that must be REFUSED."""
+    code, out = D.start({"address": "jarvis-pc.tail1234.ts.net", "port": 4719}, here=True,
+                        armed=lambda: True)
+    assert code == 200, out
+    q = D.parse_qr(out["qr"])
+    nonce = D._b64u(bytes(range(16)))
+    t = D.transcript("qr", q["pair_id"], nonce, name)
+    body = {"method": "qr", "pair_id": q["pair_id"], "phone_nonce": nonce, "name": name,
+            "proof": D.claim_proof(q["secret"], t)}
+    if kind is not None:
+        body["kind"] = kind
+    return D.claim(body, peer=peer, gate=gate or Gate(), spawn=now_spawn)
+
+
+def t_a_device_says_what_it_is():
+    """The kind comes from the CLIENT, not a hardcoded "phone" (the laptop
+    client, docs/MULTI-DEVICE-DESIGN.md). Display only: nothing authorises on
+    it, so a wrong kind changes what the list says and nothing else."""
+    fresh()
+    with Clock():
+        phone, _, _ = pair()
+        laptop, _, _ = pair(name="Work laptop", kind="laptop")
+        tablet, _, _ = pair(name="Reading tablet", kind="tablet")
+    v = D.devices_view(you="pc", here=True, armed=lambda: True)
+    kinds = {r["id"]: r["kind"] for r in v["devices"]}
+    check("a client that says nothing is a phone, exactly as before",
+          kinds.get(phone) == "phone", kinds)
+    check("a laptop is listed as a laptop, not as a phone",
+          kinds.get(laptop) == "laptop", kinds)
+    check("a tablet is listed as a tablet", kinds.get(tablet) == "tablet", kinds)
+    check("this PC's own row is the only 'pc' on the list",
+          [r["id"] for r in v["devices"] if r["kind"] == "pc"] == ["pc"], kinds)
+    rows = json.loads(D.registry_path().read_text(encoding="utf-8"))["devices"]
+    check("the registry row holds the kind the client sent",
+          {r["name"]: r["kind"] for r in rows}.get("Work laptop") == "laptop", rows)
+
+
+def t_a_device_kind_is_validated():
+    """A paired device may not claim to be a PC (that would put a second "PC" on
+    the list) and may not invent a kind. Both are refused, and nothing is paired."""
+    fresh()
+    with Clock():
+        code, out = claim_only(name="Odd client", kind="pc")
+        check("a device claiming to be a PC is refused",
+              code == 400 and out.get("reason") == "bad_kind", (code, out))
+        check("...and it says what it may be instead, in plain words",
+              "laptop" in out.get("error", "") and "Nothing was paired" in out.get("error", ""),
+              out)
+        code2, out2 = claim_only(name="Odd client", kind="toaster")
+        check("an invented kind is refused too",
+              code2 == 400 and out2.get("reason") == "bad_kind", (code2, out2))
+        path = D.registry_path()
+        reg = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"devices": []}
+        check("neither refused claim left a device behind",
+              not [r for r in reg["devices"] if r.get("name") == "Odd client"], reg)
+
+
+def t_a_label_cannot_make_two_rows_read_the_same():
+    """A label is refused, never cleaned - and now refused when it would leave
+    two rows reading the same thing, which is a trap for whoever reads the list
+    to decide what to remove (task-51's second fault). Cosmetic: a label still
+    grants and revokes nothing."""
+    fresh()
+    with Clock():
+        dev, _, _ = pair()
+        other, _, _ = pair(name="Tablet")
+    v = D.devices_view(you="pc", here=True, armed=lambda: True)
+    shown = {r["id"]: r["shown"] for r in v["devices"]}
+    code, out = D.label({"id": dev, "label": "This PC"}, you="pc")
+    check("labelling a device 'This PC' is refused",
+          code == 400 and out.get("reason") == "label_taken", (code, out))
+    check("...and the words name what is in the way", "This PC" in out.get("error", ""), out)
+    code, out = D.label({"id": dev, "label": shown[other]}, you="pc")
+    check("a label equal to another device's name is refused too",
+          code == 400 and out.get("reason") == "label_taken", (code, out))
+    code, out = D.label({"id": dev, "label": "  tHiS   pc "}, you="pc")
+    check("case and spacing do not sneak past the rule",
+          code == 400 and out.get("reason") == "label_taken", (code, out))
+    check("the refused labels left the row unlabelled",
+          next(r for r in D.devices_view(you="pc", here=True, armed=lambda: True)["devices"]
+               if r["id"] == dev)["label"] is None)
+    code, out = D.label({"id": dev, "label": "Garden phone"}, you="pc")
+    check("CONTROL: a name nothing else is using is still accepted",
+          code == 200 and out["shown"] == "Garden phone", (code, out))
+    code, out = D.label({"id": other, "label": "Tablet"}, you="pc")
+    check("CONTROL: a device may still be labelled with its own name",
+          code == 200 and out["shown"] == "Tablet", (code, out))
+    code, out = D.label({"id": dev, "label": ""}, you="pc")
+    check("CONTROL: an empty label still clears it, back to the name it sent",
+          code == 200 and out["shown"] == "Pixel 9", (code, out))
+
+
+def t_every_annotation_in_this_module_can_be_resolved():
+    """A4 of the 2026-10-07 backend audit: `key_card_text` writes
+    `Optional[Sequence[str]]` in its signature, but the module imported only
+    `Callable, Optional` from `typing`. `from __future__ import annotations`
+    keeps the module import-safe, so nothing noticed - until anything resolves
+    the annotations, which raised `NameError: name 'Sequence' is not defined`.
+
+    Nothing in this repository calls `get_type_hints()`, so the defect was
+    latent rather than live. This check is what keeps it from becoming live the
+    day a tool, a doc generator or a test does resolve them: it walks every
+    function this module defines, not just the one the audit happened to name.
+    """
+    unresolved = []
+    for name, obj in vars(D).items():
+        if name.startswith("_") or not callable(obj):
+            continue
+        if getattr(obj, "__module__", "") != D.__name__:
+            continue
+        try:
+            typing.get_type_hints(obj)
+        except NameError as exc:
+            unresolved.append(f"{name}: {exc}")
+        except Exception:
+            # A signature that cannot be resolved for some other reason is not
+            # this check's business.
+            pass
+    check("every annotation in jarvis_devices resolves to a real name",
+          not unresolved, unresolved)
+    check("CONTROL: the function the audit named is one of them",
+          callable(getattr(D, "key_card_text", None)), "key_card_text is gone")
 
 
 def main() -> int:

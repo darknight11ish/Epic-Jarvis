@@ -492,7 +492,21 @@ await check("with nothing up, Send still answers - from sample replies, and says
     window.__spoken = 0;
     if (window.speechSynthesis) window.speechSynthesis.speak = () => { window.__spoken++; };
   });
-  const banner = await page.locator("#banner-text").textContent();
+  // The standing line, not the demo banner: the PC is answering here and only
+  // its model is missing, which is its own state (lane-warning.js). It has to
+  // name what is actually missing, and it must never send the owner looking for
+  // OpenJarvis, which this setup does not run.
+  const modelLine = (await page.locator("#model-warn").textContent()) || "";
+  assert.equal(await page.locator("#model-warn").isVisible(), true,
+    "a down lane drew no standing line");
+  assert.match(modelLine, /local model isn't running/i,
+    `the standing line does not say what is wrong: ${modelLine}`);
+  assert.match(modelLine, /Ollama/, "the fix should name the program to open");
+  assert.doesNotMatch(modelLine, /jarvis serve/, "OpenJarvis is not part of this setup");
+  // And it is not the link's words: the PC is answering.
+  assert.doesNotMatch(modelLine, /isn't connected/i);
+  const banner = (await page.locator("#banner").textContent()) || "";
+  assert.doesNotMatch(banner, /not connected/i, "the demo banner is up over a live PC");
   const log = await send(page, "hi");
   const spoken = await page.evaluate(() => window.__spoken);
   await page.close();
@@ -508,8 +522,6 @@ await check("with nothing up, Send still answers - from sample replies, and says
   assert.match(sample.who, /not from jarvis/i);
   assert.match(sample.body, /^This is a sample reply, not an answer\./);
   assert.doesNotMatch(sample.body, /\bsir\b|\bI am\b|\bI will\b/, "a sample written as Jarvis speaking");
-  assert.match(banner, /Ollama/, "the banner should name what is actually missing");
-  assert.doesNotMatch(banner, /jarvis serve/, "OpenJarvis is not part of this setup");
 });
 
 /* ── The reactor is the kit face ─────────────────────────────────────────── */
