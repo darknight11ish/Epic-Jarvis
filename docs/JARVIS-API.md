@@ -20543,13 +20543,13 @@ yes for that one question.
 
 ---
 
-## 137. `skills.lock`: what a skill was scanned for, and how far it may be trusted (added 2026-10-15)
+## 138. `skills.lock`: what a skill was scanned for, and how far it may be trusted (added 2026-10-15)
 
 `backend/jarvis_skill_hub.py` (§135), one new read route, and the lock file it
 keeps. **This section is the skill library's scan and trust surface**, and it is
 the second half of the work item that added §135.
 
-### 137.1 The route
+### 138.1 The route
 
 ```
 GET /api/skills/hub/lock                         the lock, the effective trust,
@@ -20566,7 +20566,7 @@ other two, behind the server's own origin and token checks. It answers
 and `hidden_because`. No `?tool=` means nothing is hidden, because "not told"
 is not "disabled".
 
-### 137.2 The four checks, and where each one actually runs
+### 138.2 The four checks, and where each one actually runs
 
 Measured before a line of this was written: **three of the four shapes this work
 item asked for already existed in `jarvis_skills._RULES` and `scan_text`**, so
@@ -20585,7 +20585,7 @@ visible rather than asserted.
 verdict is `refuse` (`scanner_missing`), and a scanner that RAISES is a refusal
 too (`scan_failed`).
 
-### 137.3 The lock file
+### 138.3 The lock file
 
 Beside the skill folder, `skills.lock`, written whole through a temp file and a
 rename. One row per skill:
@@ -20602,7 +20602,7 @@ that is missing, unreadable or nonsense reads as `{}` - never an exception, and
 never a reason to trust anything more. A `sha256_hash` that is not 64 hex
 characters is dropped rather than stored.
 
-### 137.4 The trust ladder, MAPPED onto the one that already exists
+### 138.4 The trust ladder, MAPPED onto the one that already exists
 
 The work item named `builtin -> official -> trusted -> community`. The existing
 vocabulary is `jarvis_skills.TRUST_LEVELS = ("self", "local", "third_party")`
@@ -20620,7 +20620,7 @@ mapping of it, so the two cannot drift apart silently.
 levels, so anything moving between the two vocabularies has to say which it
 means. Nothing in this slice moves a skill between them automatically.
 
-### 137.5 A refused skill can never be given a trust level, and it is structural
+### 138.5 A refused skill can never be given a trust level, and it is structural
 
 `dangerous` is **not on the ladder at all**. That is the mechanism, not a
 comment: no code path can compute a ladder position for a refused skill, and
@@ -20642,7 +20642,7 @@ it refuses outright for a refused skill, refuses a level that is not on the
 ladder, and refuses a level that is not HIGHER than the current one. It can only
 ever move a label that a scan already bounded.
 
-### 137.6 `requires_tools`, `fallback_for_tools`, and `blueprint.schedule`
+### 138.6 `requires_tools`, `fallback_for_tools`, and `blueprint.schedule`
 
 `jarvis_skills._parse_frontmatter` is a flat `key: value` reader, so the names it
 can actually produce are `requires_tools`, `fallback_for_tools` and the literal
@@ -20666,7 +20666,7 @@ than guessed at.
   could register a job - `backend/test_skill_hub.py` asserts both against the
   source with `ast`, not against the prose.
 
-### 137.7 The permission model, and what this section does not add
+### 138.7 The permission model, and what this section does not add
 
 **Nothing here approves anything and nothing here adds a route that decides
 anything.** The one new route is a read; it is a `GET`, it raises no card, and
