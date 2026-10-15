@@ -23,12 +23,24 @@ import { fileURLToPath } from "node:url";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SRC = join(ROOT, "src");
 
-/** Inline <script> blocks each page has today. Never raise these. */
+/** Inline <script> blocks each page has today. Never raise these.
+ *
+ * RAISED ONCE, 2026-10-13, jarvis_hud.html 3 -> 4, and the reason is written
+ * down because "never" is the point of the number: the fourth block is an
+ * inline `type="module"` whose whole body is one import of the shared rule
+ * `lane-warning.js` (the "the local model isn't running" line). It cannot be a
+ * classic block: `import` is only legal in a module, and the script that
+ * carries the rule must also carry its DOM half, which the other two windows
+ * import from the same file - the alternative is the same sentence typed three
+ * times, and this project has already paid for that. Tauri hashes inline
+ * module scripts exactly as it hashes classic ones (tauri-codegen's
+ * `inject_script_hashes` walks every inline `<script>`), which is the property
+ * this file exists to protect. */
 const ALLOWED_INLINE = {
   "brain.html": 1,
   "faces.html": 1,
   "index.html": 1,
-  "jarvis_hud.html": 3,
+  "jarvis_hud.html": 4,
   "live-badge.html": 1,
   "onboarding.html": 2,
   "settings.html": 1,

@@ -75,6 +75,27 @@ await check("releasing the pointer outside the button cancels, never sends", asy
   assert.ok(!sent.some(([cmd]) => cmd === "stream_chat"), "a cancelled clip still got sent");
 });
 
+await check("Stop everything while the mic is held drops the clip and unpresses the button", async () => {
+  const page = await quickbar({ heard: K.HEARD_OWNER });
+  await page.hover("#mic");
+  await page.mouse.down();
+  await page.waitForTimeout(120);
+  // The hotkey, as Rust broadcasts it (commands.rs `stop_everything_now`).
+  await page.evaluate(() => window.__emit("stop-everything", null));
+  await page.waitForTimeout(150);
+  const pressed = await page.locator("#mic").getAttribute("aria-pressed");
+  await page.mouse.up();
+  await page.waitForTimeout(200);
+  const voice = await calls(page);
+  const sent = await invokes(page);
+  await page.close();
+  assert.ok(voice.includes("cancel"), `the held capture was not cancelled: ${JSON.stringify(voice)}`);
+  assert.ok(!voice.includes("stop"),
+    "letting go afterwards still asked the PC to stop a recording that is already closed");
+  assert.ok(!sent.some(([cmd]) => cmd === "stream_chat"), "a clip the owner stopped still got sent");
+  assert.equal(pressed, "false", "the mic button still looked pressed after Stop everything");
+});
+
 await check("a failed start leaves the button unpressed and sends nothing", async () => {
   const page = await quickbar({ captureFails: "no microphone was found" });
   await page.hover("#mic");

@@ -76,7 +76,23 @@ await check("talk-to-type is the one action that reads key-up, and Stop everythi
   assert.ok(pressedOnly > talk, "every other action must still ignore key-up, after talk-to-type is handed both");
   const rs = read("src-tauri/src/commands.rs");
   const stopNow = rs.slice(rs.indexOf("pub fn stop_everything_now("));
-  assert.match(stopNow.slice(0, stopNow.indexOf("\n}\n")), /crate::talk_type::stop\(app\)/);
+  const body = stopNow.slice(0, stopNow.indexOf("\n}\n"));
+  assert.match(body, /crate::talk_type::stop\(app\)/);
+  // And the OTHER microphone this app can have open. The hotkey used to close
+  // talk-to-type's only, so pressing it while the owner held the mic button
+  // left the cpal stream running until they let go (voice.rs
+  // `stop_push_to_talk`). Both stops must come before the backend is asked,
+  // so a PC whose Jarvis is down still closes its microphones.
+  assert.match(body, /crate::voice::stop_push_to_talk\(app\)/,
+    "Stop everything no longer closes a push-to-talk microphone");
+  const stopAt = body.indexOf("stop_push_to_talk(app)");
+  // The microphones close in the first few lines, before the event broadcast,
+  // and the PC is only asked at the very end of the body
+  // (`post_stop_all(&handle)`), so a stop that ended up after the request
+  // would put this index past the spawn.
+  const spawnAt = body.indexOf("tauri::async_runtime::spawn");
+  assert.ok(stopAt > 0 && spawnAt > stopAt,
+    "the microphone must close before the PC is asked, not after it answers");
 });
 
 await check("Stop everything is in the tray menu too, the same command, never greyed", async () => {

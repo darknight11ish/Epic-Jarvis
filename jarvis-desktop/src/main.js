@@ -272,6 +272,11 @@ import {
 // The approval clock's own second-level ticker (2026-10-08 cohesion audit,
 // finding 2: this file's `setInterval(..., 1000)` and widget.js's).
 import { clockTimer, IDLE_MS } from "./clock-timer.js";
+// The PC answering with its own model down: one rule, three windows
+// (`laneWarning`'s sentences, `paintLaneWarning`'s DOM half). The widget and
+// the HUD window import the same file, so the three cannot come to different
+// wording for one fact.
+import { paintLaneWarning, startHealthBeat } from "./lane-warning.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -1832,7 +1837,20 @@ function applyHealth(report) {  if (!report || !Array.isArray(report.services)) 
     );
   }
 
+  // The PC answering with its own model down (2026-10-13). `check_server_health`
+  // builds the Ollama row from the BACKEND's `/api/status` verdict, which is the
+  // reachability check of the address the chat itself uses - so this says the
+  // same thing an answer would, before anything is typed, and it clears itself
+  // the moment a later probe says the lane is back. Its words are the shared
+  // ones (lane-warning.js), the same the widget and the HUD window show.
+  const ollama = report.services.find((service) => service.id === "ollama");
   const core = report.services.find((service) => service.id === "jarvis");
+  paintLaneWarning(
+    document,
+    ollama ? ollama.online !== false : null,
+    core ? core.online : null,
+  );
+
   if (core && !core.online) {
     applyRoute({
       tier: "offline",
@@ -1848,19 +1866,31 @@ function applyHealth(report) {  if (!report || !Array.isArray(report.services)) 
 }
 
 /**
- * Fire-and-forget probe of the three local services.
+ * Fire-and-forget probe of the local services.
  *
  * Called when something has actually changed — the window is summoned, the
- * stream connects or drops, a request fails — and never on a timer. Ollama and
- * the cloud lane's own state are not on the event bus, so their dots still need
- * a probe;
- * Jarvis itself does not, because a live event stream *is* the proof that it is
- * up, and a better one than a request that succeeded a moment ago.
+ * stream connects or drops, a request fails — and now also on the shared slow
+ * beat ([startHealthBeat], armed at Boot). Ollama and the cloud lane's own
+ * state are not on the event bus, and a lane dying is not an event at all: on
+ * 2026-10-13 both of the owner's lanes were dead for about five hours while
+ * this window's dots stayed green, because nothing ever asked again.
+ * Jarvis itself does not need the probe, because a live event stream *is* the
+ * proof that it is up, and a better one than a request that succeeded a moment
+ * ago - but the report it comes back in is what carries the model's state.
  */
 async function refreshHealth() {
-  const report = await invoke("check_server_health");
-  if (report) applyHealth(report);
+  if (healthBusy) return;
+  healthBusy = true;
+  try {
+    const report = await invoke("check_server_health");
+    if (report) applyHealth(report);
+  } finally {
+    healthBusy = false;
+  }
 }
+
+/** One health probe at a time: the beat and an event must not stack up. */
+let healthBusy = false;
 
 /* ==========================================================================
    Attachments
@@ -5501,6 +5531,18 @@ listen("private-hidden", () => {
 listen("stop-everything", () => {
   focusStoppedAt = Date.now();
   stopSpeaking();
+  // A microphone being held is one of the things "everything" covers: Rust
+  // closes it, and this side must stop believing it is recording - otherwise
+  // the button stays pressed, the next hold is refused by the `micRecording`
+  // guard below, and letting go afterwards sends a `stop_voice_capture` for a
+  // recording that no longer exists (Rust answers "not recording", which the
+  // owner would see as an error). Same three lines as `abandonPushToTalk`,
+  // which is the other way a held clip is thrown away.
+  if (micRecording) {
+    micRecording = false;
+    dom.mic.setAttribute("aria-pressed", "false");
+    invoke("cancel_voice_capture");
+  }
 });
 
 listen("clipboard-inject", (event) => {
@@ -5593,6 +5635,10 @@ window.addEventListener("focus", () => refreshNoteTargets());
 autoGrowPrompt();
 syncWindowHeight();
 refreshHealth();
+// And asked again on the shared slow beat, because the one thing this window
+// shows that no event can report is whether the PC's own model is still
+// running. See `refreshHealth` and lane-warning.js.
+startHealthBeat(refreshHealth);
 focusInput();
 
 // One stream, owned by Rust, fanned out to all three surfaces. This window

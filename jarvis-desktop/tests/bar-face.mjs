@@ -128,8 +128,12 @@ if (!K) {
 } else {
   // A real origin, served from the app's own `src/`, because an
   // `about:blank` page has origin `null` and the face frame refuses both its
-  // messages and its own `postMessage` target origin. The stub is the bar's
-  // slot and nothing else: the frame it drives is the real one.
+  // messages and its own `postMessage` target origin. The stub below is the
+  // bar's slot and nothing else; it exists to drive the frame and read what it
+  // was told, NOT to stand in for the bar's layout - the frame's own box is
+  // measured on the real `index.html` further down, because a copy of the two
+  // rules that decide it is exactly what hid the defect this suite now checks
+  // for.
   const STUB = ".test-bar-face-stub.html";
   const stubPath = join(ROOT, "src", STUB);
   const { base, close } = await K.serve();
@@ -152,7 +156,7 @@ if (!K) {
     frame.contentWindow.postMessage(message, location.origin);
   };
   frame.addEventListener("load", () => setTimeout(() => { window.__ready = true; }, 2500));
-</script>
+<\/script>
 </body></html>
 `);
   const browser = await K.launch();
@@ -186,6 +190,50 @@ if (!K) {
     assert.ok(s.css >= 28 && s.css <= 64, `the face is drawn at ${s.css} CSS px`);
     assert.ok(/^Jarvis (is|isn't)/.test(String(s.label)), `the picture has no spoken label: ${s.label}`);
     assert.equal(errors.length, 0, `the frame logged errors: ${errors.join(" | ")}`);
+  });
+
+  // The face frame's box, measured on the REAL bar page - src/index.html and
+  // src/style.css, served as the app serves them. This cannot use the stub
+  // above: the stub writes its own copy of the two rules that decide the
+  // frame's size, so it lays out correctly whatever the shipped stylesheet
+  // says, and the copy is the one thing that must never be trusted here.
+  //
+  // It is checked because it stopped being square on 2026-10-13. `#reactor-face`
+  // is a grid item, a grid item's automatic minimum size is its content's, and
+  // the frame's own document won the argument with `height: 100%`: the frame
+  // laid out 40 x 150 in its 40 x 40 slot while the face canvas kept its square
+  // backing store, so the bar showed one bright vertical sliver, clipped top
+  // and bottom, where the orb should be (the owner: "at the far left there is
+  // only a sliver of blue glow, clipped by the edge"). style.css pins
+  // `min-height: 0` now. Width alone could never catch it - it read a correct
+  // 40 both before and after the fix.
+  await check("the bar's face frame is square in its square slot", async () => {
+    const bar = await browser.newPage({ viewport: { width: 750, height: 80 }, deviceScaleFactor: 1.5 });
+    try {
+      await bar.goto(`${base}/index.html`);
+      await bar.waitForTimeout(4000);
+      const m = await bar.evaluate(() => {
+        const box = (sel) => {
+          const el = document.querySelector(sel);
+          if (!el) return null;
+          const b = el.getBoundingClientRect();
+          return { w: Math.round(b.width), h: Math.round(b.height) };
+        };
+        return { slot: box("#reactor"), frame: box("#reactor-face"),
+                 frameH: getComputedStyle(document.querySelector("#reactor-face")).height };
+      });
+      assert.ok(m.slot && m.frame, "the bar no longer has a #reactor slot holding a #reactor-face frame");
+      assert.equal(m.slot.w, 40, `the slot is ${m.slot.w}px wide, not the CSS 40px`);
+      assert.equal(m.slot.h, m.slot.w, `the slot is ${m.slot.w} x ${m.slot.h}, not square`);
+      assert.equal(m.frame.w, m.slot.w,
+        `the face frame is ${m.frame.w}px wide in its ${m.slot.w}px slot`);
+      assert.equal(m.frame.h, m.frame.w,
+        `the face frame lays out ${m.frame.w} x ${m.frame.h} (computed height ${m.frameH}): the square face is ` +
+        `being squeezed. It needs an explicit min-height of 0 in style.css, or the frame's own document decides ` +
+        `its height and the drawing is clipped top and bottom.`);
+    } finally {
+      await bar.close();
+    }
   });
 
   await check("each state the mark used to show still reaches the face", async () => {

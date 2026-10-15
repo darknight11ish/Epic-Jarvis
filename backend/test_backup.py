@@ -1513,6 +1513,335 @@ def t_delete_older_backups_is_one_card_this_pc_only():
           __import__("inspect").getsource(B.install))
 
 
+# ============================ 8. the phone's half: status, ask, keep the code
+#
+# The owner asked for a "Back up now" button on the phone (2026-10-10) and was
+# told why there could not be one. This is it built for real (2026-10-13):
+# `GET /api/backup/status` (read-only, any paired device), `POST
+# /api/backup/prepare` (any paired device: mint this run's one-time recovery
+# code, write NOTHING) and `POST /api/backup/commit` (THIS PC ONLY: write the
+# file that code belongs to, when the owner says he has kept it).
+#
+# THE ONE OUTCOME THESE HOLD AGAINST. A new backup deletes the oldest of KEEP,
+# so a run whose code never reached the owner would not just add a file nobody
+# can open - it would push out an older backup whose own code still works. So
+# nothing is written until the code has come back, and every failure below
+# leaves the folder byte-for-byte as it was.
+
+
+def _folder_bytes(folder: Path) -> dict:
+    return {f.name: f.read_bytes() for f in Path(folder).iterdir() if f.is_file()}
+
+
+def _names(folder: Path) -> set:
+    return set(_folder_bytes(folder))
+
+
+def t_the_phone_can_read_the_state_and_never_a_code_or_a_path():
+    conf, backups = fresh_conf()
+    make_memory_db(conf)
+    B._reset_for_tests()
+
+    # A phone asking before a folder has ever been chosen: words, not a crash.
+    code, out = B.handle_get(B.STATUS_ROUTE, peer="100.64.0.7", local="100.64.0.1")
+    check("the status route answers a phone - it is not PC-only", code == 200, out)
+    check("... and says plainly that no folder is chosen yet",
+          out["verify"]["why"] == "no_folder" and out["kept"] == 0 and out["keep"] == B.KEEP,
+          out)
+    check("... naming no folder at all", out["folder"] is None, out)
+
+    B._save_settings({"folder": str(backups)})
+    code, out = B.handle_get(B.STATUS_ROUTE, peer="100.64.0.7", local="100.64.0.1")
+    check("with a folder but nothing in it: 'empty', and still no error",
+          code == 200 and out["verify"]["why"] == "empty" and out["last_backup_at"] is None, out)
+    check("the folder is named by its LAST segment, never the whole path (the owner's "
+          "Windows account is not something a phone needs)",
+          out["folder"] == backups.name and str(backups) not in json.dumps(out), out)
+
+    # A real backup, through the PC's own route, then the same read.
+    B.request_backup_now({}, here=True)
+    code, out = B.handle_get(B.STATUS_ROUTE, peer="100.64.0.7", local="100.64.0.1")
+    check("a real backup makes the phone think it verifies",
+          code == 200 and out["verify"]["ok"] is True and out["verify"]["why"] == "complete",
+          out)
+    kept_at = out["last_backup_at"]
+    B._reset_for_tests()
+    check("... and the state SURVIVES the PC's memory being cleared, because it is read "
+          "from the folder: the old `last_backup_at` was the PC's memory only and answered "
+          "null the morning after a restart with four real backups sitting in the folder",
+          B.handle_get(B.STATUS_ROUTE)[1]["last_backup_at"] == kept_at, kept_at)
+    check("'kept' counts what is in the folder and 'keep' is the PC's retention number",
+          out["kept"] == 1 and out["keep"] == B.KEEP, out)
+    check("the check is HONEST about what it cannot do: proves_open is false and the "
+          "sentence says a recovery code is needed",
+          out["verify"]["proves_open"] is False and "recovery code" in out["verify"]["limit"],
+          out)
+    check("a reader is told what a pass actually means, in words the PC wrote",
+          "complete" in out["verify"]["words"], out)
+    check("NO recovery code is anywhere in this answer, and no key of the answer is a code",
+          "recovery_code" not in json.dumps(out)
+          and "code" not in out and "recovery" not in out, sorted(out))
+
+    # A file cut short by a half-finished copy is never called complete. The
+    # PC does not count it among the kept (the same rule `_retain` uses), and
+    # the phone is told the truth about the folder either way.
+    short = backups / ("jarvis-backup-20260101-000000" + B.FILE_SUFFIX)
+    short.write_bytes(b"JBAK1")
+    code, out = B.handle_get(B.STATUS_ROUTE)
+    check("a truncated file is not counted among the kept, and the real one is still "
+          "reported on", out["kept"] == 1 and out["verify"]["ok"] is True, out)
+    for f in backups.iterdir():                # now the bad file is the only one
+        f.unlink()
+    code, out = B.handle_get(B.STATUS_ROUTE)
+    check("... and when a cut-short file is all there is, the state says the folder holds "
+          "no usable backup rather than calling it one",
+          out["kept"] == 0 and out["verify"]["ok"] is False
+          and out["verify"]["why"] == "empty", out)
+    # The same file, once it is long enough for the PC to count it, is checked
+    # by its own bytes - which is the difference between "big enough to count"
+    # and "a well-formed backup".
+    short.write_bytes(B.MAGIC + b"\x00" * 200)
+    check("a file of the right length but the wrong shape is not a backup either",
+          B.check_file(short)["why"] == "not_a_backup")
+    short.write_bytes(b"PK\x03\x04" + b"\x00" * 200)
+    check("a zip that someone renamed is refused by the magic bytes",
+          B.check_file(short)["why"] == "not_a_backup")
+    well_formed = (B.MAGIC + B._HEADER_STRUCT.pack(B.ARGON_LANES, B.ARGON_MEMORY_KIB,
+                                                   B.ARGON_ITERATIONS) + b"\x00" * 64)
+    short.write_bytes(well_formed)
+    check("the right length and the right header IS called complete - which is exactly as "
+          "far as a check that has no code can honestly go",
+          B.check_file(short)["ok"] is True and B.check_file(short)["why"] == "complete",
+          B.check_file(short))
+    check("a file that is not there says so instead of raising",
+          B.check_file(backups / "nope.jbak")["why"] == "missing")
+
+
+def t_asking_for_a_backup_from_the_phone_writes_nothing_at_all():
+    conf, backups = fresh_conf()
+    B._save_settings({"folder": str(backups)})
+    make_memory_db(conf)
+    out = B.backup_now(str(backups))                    # one real backup to protect
+    before = _folder_bytes(backups)
+
+    code, resp = B.handle_post(B.PREPARE_ROUTE, {}, peer="100.64.0.7", local="100.64.0.1")
+    check("the phone may ask, and the ask hands back a one-time code",
+          code == 200 and resp["recovery_code"] and resp["pending"] is True, resp)
+    check("ASKING WRITES NOTHING: the folder is byte-for-byte what it was",
+          _folder_bytes(backups) == before, sorted(_names(backups)))
+    check("... not even a hidden temp file, and no new name of any kind",
+          _names(backups) == {out["name"]}, sorted(_names(backups)))
+    check("... which is shaped like every other recovery code handed out here",
+          len(resp["recovery_code"]) == 23 and resp["recovery_code"].count("-") == 3
+          and all(ch in B.CODE_ALPHABET for ch in resp["recovery_code"].replace("-", "")),
+          resp["recovery_code"])
+    check("... and says what the code costs, before anything is written",
+          "will not show it again" in resp["message"] and "cannot recover" in resp["message"],
+          resp)
+    check("... and names the folder by its last segment only",
+          resp["folder"] == backups.name and str(backups) not in json.dumps(resp), resp)
+    live = B._P_STATE["pending"]["code"]
+    where = [f for f in list(backups.rglob("*")) + list(conf.rglob("*")) if f.is_file()]
+    check("the live code is in MEMORY ONLY - not in the folder, not in the settings",
+          all(live.encode() not in f.read_bytes() for f in where), [f.name for f in where])
+    check("... and it expires, so a stale screen cannot commit it later",
+          B._P_STATE["pending"]["expires_at"] - B._P_STATE["pending"]["at"] == B.PENDING_TTL_S)
+    first = B.request_prepare({}, peer="100.64.0.7")[1]
+    second = B.request_prepare({}, peer="100.64.0.7")[1]
+    check("a new ask replaces the older one, so only one code is ever live",
+          first["id"] != second["id"] and first["recovery_code"] != second["recovery_code"])
+    check("... and still nothing has been written", _folder_bytes(backups) == before)
+
+
+def t_the_code_must_come_back_before_anything_is_written():
+    conf, backups = fresh_conf()
+    B._save_settings({"folder": str(backups)})
+    make_memory_db(conf)
+    code, prep = B.request_prepare({}, peer="100.64.0.7")
+    before = _folder_bytes(backups)
+
+    # 1. A caller that is not this PC cannot write, however good its code.
+    c, out = B.handle_post(B.COMMIT_ROUTE, {"id": prep["id"], "code": prep["recovery_code"]},
+                           peer="100.64.0.7", local="100.64.0.1")
+    check("the phone ASKS; the write itself is refused from anywhere but the PC",
+          c == 403 and out["pc_only"] is True, out)
+    check("... in words that say what happened and what to do instead",
+          "nothing was written" in out["error"] and "your PC" in out["error"], out)
+    check("... and NOTHING was written for it", _folder_bytes(backups) == before,
+          sorted(_names(backups)))
+
+    # 2. A wrong code writes nothing, and the run stays open so a typo can be fixed.
+    c, out = B.handle_post(B.COMMIT_ROUTE, {"id": prep["id"], "code": "WRONG-CODE-23456"},
+                           peer="127.0.0.1", local="127.0.0.1")
+    check("a wrong code: refused, and nothing written",
+          c == 400 and _folder_bytes(backups) == before, (c, out))
+    check("... and the run is still open, so a mistyped code is not a lost backup",
+          B._P_STATE["pending"].get("id") == prep["id"], B._P_STATE)
+
+    # 3. A missing code, too.
+    c, out = B.handle_post(B.COMMIT_ROUTE, {}, peer="127.0.0.1", local="127.0.0.1")
+    check("no code at all: refused, nothing written",
+          c == 400 and _folder_bytes(backups) == before, (c, out))
+
+    # 4. No run at all (a fresh backend, or one already used): nothing written.
+    B._P_STATE["pending"].clear()
+    c, out = B.handle_post(B.COMMIT_ROUTE, {"id": "x", "code": prep["recovery_code"]},
+                           peer="127.0.0.1", local="127.0.0.1")
+    check("a run that was never started: refused, nothing written",
+          c == 409 and _folder_bytes(backups) == before, (c, out))
+    check("... in words a person can act on", "Ask for a backup again" in out["error"], out)
+
+    # 5. An EXPIRED run: refused and dropped, so a screen left open for an hour
+    #    cannot write a file whose code nobody is looking at any more.
+    B.request_prepare({}, peer="100.64.0.7")
+    B._P_STATE["pending"]["expires_at"] = time.time() - 1
+    live = B._P_STATE["pending"]["code"]
+    c, out = B.handle_post(B.COMMIT_ROUTE, {"id": "x", "code": live},
+                           peer="127.0.0.1", local="127.0.0.1")
+    check("an expired run: refused, nothing written, and the run is dropped",
+          c == 409 and not B._P_STATE["pending"] and _folder_bytes(backups) == before,
+          (c, out, B._P_STATE))
+
+    # 6. The real thing: the code comes back and the file lands - with THAT
+    #    code, so the code the owner kept is the code that opens it.
+    B.request_prepare({}, peer="100.64.0.7")
+    live, pid = B._P_STATE["pending"]["code"], B._P_STATE["pending"]["id"]
+    c, out = B.handle_post(B.COMMIT_ROUTE, {"id": pid, "code": live.replace("-", "")},
+                           peer="127.0.0.1", local="127.0.0.1")
+    check("the code typed back WITHOUT its hyphens still matches - the phone draws it in "
+          "four groups of five and either shape is the same code",
+          c == 200 and out["ok"], (c, out))
+    check("... and what comes back is the four-groups-of-five form, which is what he "
+          "writes down", out["recovery_code"] == live, (out.get("recovery_code"), live))
+    check("... and the SAME code really does open the file on disk",
+          B.decrypt_blob((backups / out["name"]).read_bytes(), out["recovery_code"]) is not None)
+    check("... the answer carries the size and the folder's last segment, so the phone "
+          "can say what landed", out["size"] > 0 and out["folder"] == backups.name, out)
+    check("... the file is counted among the kept, and the state is true right away",
+          B.status_view()["kept"] == 1
+          and B.status_view()["verify"]["ok"] is True, B.status_view())
+    check("... and the run is finished: a second commit writes nothing more",
+          not B._P_STATE["pending"]
+          and B.handle_post(B.COMMIT_ROUTE, {"id": pid, "code": live},
+                            peer="127.0.0.1", local="127.0.0.1")[0] == 409)
+    check("the commit route is in the installed wrapper's list, so a real server "
+          "answers it", "COMMIT_ROUTE" in __import__("inspect").getsource(B.install))
+
+
+def t_a_backup_that_failed_is_never_reported_as_a_success():
+    """The rule this whole feature turns on. A failure has to be visible on the
+    phone, because the alternative - a green tick and no file - is the one
+    thing that would let the owner stop checking."""
+    conf, backups = fresh_conf()
+    B._save_settings({"folder": str(backups)})
+    make_memory_db(conf)
+    B.request_prepare({}, peer="100.64.0.7")
+    live = B._P_STATE["pending"]["code"]
+    before = _folder_bytes(backups)
+
+    def broken(folder, code):
+        raise OSError("the disk is full")
+    c, out = B.request_commit({"id": "x", "code": live}, here=True, run=broken)
+    check("a write that fails: 500 and no file",
+          c == 500 and _folder_bytes(backups) == before, (c, out))
+    st = B.status_view()
+    check("... and the phone is TOLD it failed, in the answer to the next read",
+          st["last_attempt"] is not None and st["last_attempt"]["ok"] is False
+          and st["last_attempt"]["error"], st)
+    check("... with a sentence, not a traceback",
+          "could not write the backup" in st["last_attempt"]["error"], st["last_attempt"])
+    check("... and the state never claims a backup that is not there",
+          st["kept"] == 0 and st["last_backup_name"] is None and st["verify"]["ok"] is False,
+          st)
+    check("... and the failed run is dropped, so its code cannot be replayed",
+          not B._P_STATE["pending"])
+
+    B.request_prepare({}, peer="100.64.0.7")
+    live2 = B._P_STATE["pending"]["code"]
+
+    def refuses(folder, code):
+        raise B.BackupUnavailable("no cryptography on this PC")
+    c, out = B.request_commit({"id": "x", "code": live2}, here=True, run=refuses)
+    check("a refusal by the module itself: 503, no file, and remembered as a failure",
+          c == 503 and _folder_bytes(backups) == before
+          and B.status_view()["last_attempt"]["ok"] is False, (c, out))
+
+    B.request_prepare({}, peer="100.64.0.7")
+    live3 = B._P_STATE["pending"]["code"]
+    c, out = B.request_commit({"id": "x", "code": live3}, here=True)
+    st = B.status_view()
+    check("a run that works clears it: no stale failure left on the screen",
+          c == 200 and st["last_attempt"]["ok"] is True and st["kept"] == 1
+          and st["last_backup_name"] == out["name"], (c, out, st))
+    check("... and the state and the commit agree about which file is newest",
+          st["last_backup_at"] == out["at"] or abs(st["last_backup_at"] - out["at"]) <= 1.0,
+          (st["last_backup_at"], out["at"]))
+
+
+def t_the_phone_cannot_ask_for_a_backup_with_nowhere_to_put_it():
+    conf, backups = fresh_conf()
+    make_memory_db(conf)
+    B._reset_for_tests()
+    c, out = B.handle_post(B.PREPARE_ROUTE, {}, peer="100.64.0.7", local="100.64.0.1")
+    check("no folder chosen: the phone is told, and no code is minted for nothing",
+          c == 409 and not B._P_STATE["pending"] and "folder" in out["error"], out)
+    c, out = B.handle_post(B.COMMIT_ROUTE, {"id": "x", "code": "2"}, peer="127.0.0.1",
+                           local="127.0.0.1")
+    check("and committing with no folder: refused, nothing written",
+          c in (409, 400) and not _names(backups), (c, out))
+
+
+def t_the_phones_run_needs_no_approval_card_and_says_why_in_code():
+    """THE TIER DECISION, held in one place (2026-10-13).
+
+    "Back up now" raises NO approval card on either app, and this is the check
+    that keeps that a decision rather than an omission:
+
+      * it ADDS a copy and loosens nothing - it writes one more file into a
+        folder the owner already approved, and the folder route's own card is
+        where that approval was given (`change_own_config`, the same action
+        "Folders Jarvis may look in" uses). `restore_backup` is the opposite
+        direction of the same feature and IS a card, because it replaces
+        everything Jarvis knows; backup-now is the PC's own button's twin.
+      * it is NOT in jarvis_owner_check.PC_ONLY_ACTIONS for the CARD's sake -
+        the PC-only rule here is about WHO MAY WRITE the file, not about a
+        person answering anything. What the reader must not conclude is that
+        this is an ungated write:
+      * the WRITE is refused from any device but the PC, and it is held on a
+        stale link (`JarvisRuntime.commitBackup`, rule 4).
+    """
+    conf, backups = fresh_conf()
+    B._save_settings({"folder": str(backups)})
+    make_memory_db(conf)
+    check("backup-now (this PC's own route) is NOT a PC-only-ACTION: no Windows Hello, "
+          "no card, because it only adds a copy",
+          "backup_now" not in OC.PC_ONLY_ACTIONS, sorted(OC.PC_ONLY_ACTIONS))
+    check("the phone's commit is not one either - it is refused to other DEVICES, which "
+          "is a different rule and needs nobody to answer anything",
+          "commit_backup" not in OC.PC_ONLY_ACTIONS
+          and "backup_commit" not in OC.PC_ONLY_ACTIONS
+          and "backup_commit_phone" not in OC.PC_ONLY_ACTIONS, sorted(OC.PC_ONLY_ACTIONS))
+    check("... and the only backup-related action that IS PC-only-with-Windows-Hello is "
+          "restoring, which replaces everything rather than adding a copy",
+          [a for a in OC.PC_ONLY_ACTIONS if "backup" in a] == ["restore_backup"],
+          sorted(OC.PC_ONLY_ACTIONS))
+    # No card is raised in either direction: the gate is never asked.
+    asked = []
+    real_gate = B._gate
+    B._gate = lambda action, detail, prompt: asked.append(action)
+    try:
+        B.request_prepare({}, peer="100.64.0.7")
+        live = B._P_STATE["pending"]["code"]
+        B.request_commit({"id": "x", "code": live}, here=True)
+    finally:
+        B._gate = real_gate
+    check("neither the ask nor the write asks the gate for anything at all", asked == [], asked)
+    check("... and the file is what was written, with no card in between",
+          len([f for f in backups.iterdir() if f.is_file()]) == 1, sorted(_names(backups)))
+    check("the ONLY backup action that is PC-only-with-Windows-Hello is restoring",
+          "restore_backup" in OC.PC_ONLY_ACTIONS)
+
+
 def t_the_routes():
     conf, backups = fresh_conf()
 

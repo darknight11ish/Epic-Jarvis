@@ -3203,6 +3203,14 @@ mark.find-current {
   align-self: center;
 }
 
+/* The one number this page shows, and it counts down ("You have met 9 of the
+   23 lessons here. 14 to go."). Quiet on purpose: it is information, not a
+   scoreboard, and the design refuses a percentage, a streak and a nudge. */
+.tutorial-met {
+  color: var(--text-muted);
+  margin: 2px 0 10px;
+}
+
 .tutorial-pointed {
   outline: 2px solid var(--accent) !important;
   outline-offset: 3px;

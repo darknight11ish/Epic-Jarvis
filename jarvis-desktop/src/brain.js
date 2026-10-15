@@ -13761,10 +13761,13 @@ $("btn-rail-hidden-menus")?.addEventListener("click", () => {
   }
 });
 // "Chat history…" in the tray, with the Brain already open (windows.rs
-// show_brain_at): the place's name only.
+// show_brain_at): the place's name only. `"tutorials"` arrives the same way
+// since 2026-10-10 - the "Set up Jarvis" card's own "Read the FAQ" - so the
+// one Help destination opens whether or not this window was already up.
 if (IS_TAURI && TAURI.event && TAURI.event.listen) {
   TAURI.event.listen("brain-place", (event) => {
-    if (event && event.payload === HISTORY_PLACE) goToPlace(HISTORY_PLACE);
+    const place = event && event.payload;
+    if (place === HISTORY_PLACE || place === TUTORIALS_PLACE) goToPlace(place);
   });
 }
 

@@ -72,6 +72,31 @@ if (-not (Test-Path $Registry)) {
 $data = Get-Content $Registry -Raw | ConvertFrom-Json
 $dropIns = @($data.entries | Where-Object { $_.bucket -eq 'plug-in' })
 
+# A drop-in folder that replaces NO patch has no row in the registry: the
+# catalogue is generated from the patch stack, and there is no patch for it.
+# Its own plugin.json is the manifest - plugins\ready\<name>\plugin.json with
+# no "replaces_patch" - so it is read from the folder here and added the same
+# way. (plugins\ready\receipts was the first one, 2026-10-14; its README says
+# the same thing in the owner's words.)
+$handAdded = @()
+$readyRoot = Join-Path $RepoRoot 'plugins\ready'
+if (Test-Path $readyRoot) {
+    foreach ($dir in @(Get-ChildItem -Directory -Path $readyRoot)) {
+        if (@($dropIns | Where-Object { $_.name -eq $dir.Name }).Count -gt 0) { continue }
+        $manifest = Join-Path $dir.FullName 'plugin.json'
+        if (-not (Test-Path $manifest)) { continue }
+        try { $m = Get-Content $manifest -Raw | ConvertFrom-Json } catch { continue }
+        if ($null -ne $m.replaces_patch -or -not $m.module -or $null -eq $m.stack_order) { continue }
+        $handAdded += [pscustomobject]@{
+            name        = $dir.Name
+            module      = [string]$m.module
+            summary     = [string]$m.summary
+            stack_order = [int]$m.stack_order
+        }
+    }
+}
+$dropIns = @($dropIns) + @($handAdded)
+
 if (-not (Test-Path $BackendPath)) {
     Fail "No backend folder at:`n    $BackendPath`n  Pass the real one: -BackendPath ""D:\your\backend"""
 }

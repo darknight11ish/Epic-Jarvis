@@ -70,6 +70,7 @@ import jarvis_apps as A  # noqa: E402
 import jarvis_forecast as F  # noqa: E402
 import jarvis_goals as G  # noqa: E402
 import jarvis_projects as P  # noqa: E402
+import jarvis_receipts as RC  # noqa: E402
 
 DESKTOP = ROOT / "jarvis-desktop" / "tests" / "fixtures" / "projects-cases.json"
 PHONE = (ROOT / "jarvis-client" / "app" / "src" / "test" / "resources" / "contract"
@@ -503,6 +504,13 @@ def _goal_cases() -> dict:
 
     real_uuid = G.uuid
     G.uuid = _Counted()
+    # A step tick now leaves a RECEIPT (jarvis_receipts.py, 2026-10-14) and the
+    # goal it hands back carries that receipt's id. It is counted here for the
+    # same reason the goal ids are: a fixture has to come out the same on every
+    # run, and `record()` mints its id with uuid4 - the one generator that can
+    # be stood in for. Not stubbed, this file was different every run.
+    real_rc_uuid = RC.uuid
+    RC.uuid = _Counted()
     path = _CONF / "goals-cases.db"
     if path.exists():
         path.unlink()
@@ -566,6 +574,7 @@ def _goal_cases() -> dict:
     finally:
         G.get = real_get
         G.uuid = real_uuid
+        RC.uuid = real_rc_uuid
     return out
 
 

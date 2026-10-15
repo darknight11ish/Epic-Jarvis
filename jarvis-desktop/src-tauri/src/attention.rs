@@ -152,10 +152,15 @@ pub async fn set_attention_muted(app: AppHandle, muted: bool) -> Result<serde_js
 /// until it is approved; that answer comes back whole (`said`, or the card's
 /// own refusal words) and is handed to the page as it is.
 ///
-/// A PC whose Jarvis has no such route yet - the route arrives with
-/// `attention-settings.patch`, so an install that has not run
-/// `apply-patches.ps1` since - answers 404. That is said in the owner's words
-/// rather than passed on as an HTTP line.
+/// A 404 is a fact about the INSTALL and not about this app: the route arrives
+/// with `attention-settings.patch`, so the copy of Jarvis answering has a patch
+/// set older than the one that added it - never the state of a current install,
+/// whose route is reachable (until 2026-10-13 the route was in `_desktop_action`
+/// and in no dispatch tuple at all, so a 404 meant "the patch is applied and the
+/// route is still dead", and this message said to run `apply-patches.ps1` on a
+/// PC that had already run it - true of the machine and false of the code).
+/// `apply-patches.ps1` really is the fix for the 404 a person can still get, so
+/// that is said in the owner's words rather than passed on as an HTTP line.
 #[tauri::command]
 pub async fn set_attention_limits(
     app: AppHandle,

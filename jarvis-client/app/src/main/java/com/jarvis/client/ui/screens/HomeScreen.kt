@@ -1592,6 +1592,12 @@ private fun StatusLine(
     val accent = LocalAccent.current
     val thresholdPx = with(LocalDensity.current) { REVEAL_THRESHOLD.toPx() }
     val linked = state.link == LinkState.CONNECTED
+    // The PC is answering and its own model is not (2026-10-13: both of the
+    // owner's lanes were dead for about five hours and this screen said
+    // "Connected" the whole time). Its own state, never merged with the link's
+    // - see com.jarvis.client.ModelWords. Only ever drawn from the PC's own
+    // `ollama` field, never from a read that failed.
+    val modelDown = com.jarvis.client.ModelWords.isDown(state.status?.ollama)
 
     // Two different facts, never merged into one word: whether the stream is up,
     // and whether Jarvis is busy. Collapsing them is how a client ends up
@@ -1614,9 +1620,15 @@ private fun StatusLine(
     }
     // Words, not only the dot's colour: red and amber alone say nothing to
     // a colour-blind reader, and the dot is always paired with a word.
+    //
+    // A live link with a dead model gets the amber of "something is wrong,
+    // nothing is lost" rather than the green of "all is well": the dot has to
+    // disagree with "Connected" above, or the one fact this line was added for
+    // is the dot's colour alone.
     val tone = when {
         !linked -> chrome.badInk
         state.stale -> chrome.warnInk
+        modelDown -> chrome.warnInk
         else -> chrome.textHi
     }
     // The rest of the line - where requests run, what is waiting, which
@@ -1630,6 +1642,9 @@ private fun StatusLine(
             }
             if (state.pending.isNotEmpty()) add("${state.pending.size} waiting")
             state.status?.model?.let { add(it) }
+            // Last, so the one thing that needs doing is the last word on the
+            // line rather than buried in the middle of it.
+            com.jarvis.client.ModelWords.homeSuffix(state.status?.ollama)?.let { add(it) }
         }.joinToString(" · ")
     } else {
         ""

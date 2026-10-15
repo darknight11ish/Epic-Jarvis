@@ -35,13 +35,21 @@ WHAT IS BUILT HERE, AND WHAT IS NOT (build steps 1 and 2 only)
     project chat context and project-labelled facts (step 4), both apps'
     screens (step 3), and anything the Shareable switch would one day let
     go out (it is only a switch here; nothing is ever sent).
-  * GOALS: jarvis_goals.py is on main now, but the link is not built yet
-    (cohesiveness audit, 2026-09-29): a project lists goal ids (`goals`) on
-    THIS side, and no screen sets or shows them. The goals.db `project`
-    column, `GET /api/goals?project=<id>`, and a goal step's measure
-    ({"bench": ..., "target": ...}) are still to come - the design's "one
-    extra field, no second goals system" is unchanged. Until then a goal id
-    here is not checked against goals.db.
+  * GOALS: jarvis_goals.py is on main now, and the link is HALF built
+    (corrected 2026-10-13; this note started as the cohesiveness audit's
+    finding of 2026-09-29). A project lists goal ids (`goals`) on THIS side,
+    and no screen sets or shows them. **A goal step's `measure`
+    ({"project", "bench"}) is built**: jarvis_goals.py parses and validates it
+    (`clean_plan`, ~line 349), and reads the named benchmark through
+    `jarvis_projects.get().results(project, bench, 1)` (`_read_bench`,
+    ~line 461); a goal that is stopped or removed drops its own spoke from the
+    balance chart (`jarvis_projects.axes_drop_goal`, called from
+    jarvis_goals.py ~line 474). Still to come: the goals.db `project` column
+    and `GET /api/goals?project=<id>`, which is why a goal id written on a
+    project here is still not checked against goals.db. The design's "one
+    extra field, no second goals system" is unchanged. **This block said the
+    measure was "still to come" until 2026-10-13; that had stopped being
+    true.**
   * CHATS: the chat-history `project` column waits for step 4 - nothing
     can set it until /api/chat carries a project id.
 
@@ -289,7 +297,8 @@ def clean_notes(notes) -> list:
 
 def clean_goals(goals) -> list:
     """Goal ids from jarvis_goals.py. Kept as given; not yet checked against
-    goals.db (the project <-> goal link is not built; see the module note)."""
+    goals.db (the goals.db `project` column and the `GET /api/goals?project=`
+    filter are still to come; see the module note)."""
     if goals is None:
         return []
     if not isinstance(goals, list):

@@ -10,6 +10,7 @@ approval-notice.patch	approval-notice/d2db37e.patch	d2db37e80b413ab3f2e7911b410b
 apps-in-projects.patch	apps-in-projects/6769786.patch	6769786fc7f27ea2d379c8d3d417589e39e7d12f	2026-09-29T03:03:54Z	Apps in Projects: the gate patch, tier and tables, tests for the new pieces
 asks-first.patch	asks-first/0088dd5.patch	0088dd526f1f34b64638a14d5281e8a08f6ddec5	2026-09-26T03:47:42Z	Gate notice for schedule_repeat: say that each run reads the owner's own servers
 asks-first.patch	asks-first/b8a2145.patch	b8a214597e0f2a6e71a6256dd3b8e2a3f61ca554	2026-09-26T02:38:37Z	Backend: repeats without a card, lights setting, "What asks first"
+attention-settings.patch	attention-settings/e572cf8.patch	e572cf8fe152b88903569f193d5cbbaf4ed82475	2026-10-09T00:29:50-07:00	the route that makes the budget changeable, and the patch that exposes it
 auto-learn.patch	auto-learn/5a32e3a.patch	5a32e3abb26e30582e729295c455be850cb7e241	2026-09-29T00:11:03Z	Backend: continued chats re-register their own words, games stay games, hand-accepted facts keep their chat
 auto-learn.patch	auto-learn/f3b3652.patch	f3b36529eb06a32c17a51a62d1993ca02863fd56	2026-09-26T07:10:08Z	Memory review, backend half: bugs B1-B15 and B17, improvements measured
 auto-learn.patch	auto-learn/1f2f70f.patch	1f2f70f6654c9f70f2851848f65b3791868a9f7c	2026-09-24T23:00:16Z	Say what always waits for a yes: birthdays, phone numbers and email addresses too
@@ -92,6 +93,7 @@ note-capture.patch	note-capture/d37739c.patch	d37739c4ce0790869ce61aa3081983fed5
 ollama-direct.patch	ollama-direct/b2c3a98.patch	b2c3a989bd85f94967c053e5140e94b301f5d7db	2026-10-06T23:24:11-07:00	the cloud lane's resolution leaves the HUD, and the six rehearsals find their text again
 ollama-direct.patch	ollama-direct/d03bc52.patch	d03bc52361f9379928d7667a7d664340d566ef05	2026-10-06T20:32:34-07:00	The cloud lane gets a real transport, and DeepSeek is behind it
 ollama-direct.patch	ollama-direct/0fbadf7.patch	0fbadf7f0a3918c9862eae9a563c2def3697378e	2026-09-18T00:10:00Z	backend: ollama-direct.patch - local chat was calling a program that never ran
+picture-card.patch	picture-card/39c005e.patch	39c005e915c2c465e1311620914dd9da510aaff0	2026-10-11T02:17:01-07:00	picture-card.patch: anchor its install block on the owner's own lines
 picture-card.patch	picture-card/c16c2b1.patch	c16c2b14736b3d5c4938807688eb8d5b98a96650	2026-10-10T22:03:36-07:00	Give the picture-maker a card, and the chat a choice of three ways
 pictures.patch	pictures/a347e27.patch	a347e277aaff0914fd9094d95c56614306858598	2026-10-11T12:08:18-07:00	Merge main (f1d53b6a) into feat/ask-for-a-picture: the CI failures fixed, the section renumbered to 129, and two real defects the fix exposed
 pictures.patch	pictures/c94e180.patch	c94e180b71f69eddea088b7ecff56eaaa6385cc8	2026-10-10T22:01:24-07:00	Ask for a picture, and keep it (JARVIS-API section 124)

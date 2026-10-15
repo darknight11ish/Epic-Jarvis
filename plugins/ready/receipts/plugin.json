@@ -1,0 +1,7 @@
+{
+  "name": "receipts",
+  "summary": "action receipts and one-click undo: every action that CHANGES something leaves a receipt saying what changed, with one button to put it back.",
+  "module": "jarvis_receipts",
+  "install": "handler",
+  "stack_order": 143
+}
