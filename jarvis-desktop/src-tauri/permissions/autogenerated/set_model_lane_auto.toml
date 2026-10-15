@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-model-lane-auto"
+description = "Enables the set_model_lane_auto command without any pre-configured scope."
+commands.allow = ["set_model_lane_auto"]
+
+[[permission]]
+identifier = "deny-set-model-lane-auto"
+description = "Denies the set_model_lane_auto command without any pre-configured scope."
+commands.deny = ["set_model_lane_auto"]

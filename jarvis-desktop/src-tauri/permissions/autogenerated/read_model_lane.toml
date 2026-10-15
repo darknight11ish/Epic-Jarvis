@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-read-model-lane"
+description = "Enables the read_model_lane command without any pre-configured scope."
+commands.allow = ["read_model_lane"]
+
+[[permission]]
+identifier = "deny-read-model-lane"
+description = "Denies the read_model_lane command without any pre-configured scope."
+commands.deny = ["read_model_lane"]

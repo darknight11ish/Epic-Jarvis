@@ -868,6 +868,25 @@ fn main() {
             "brain_pictures_make",
             "brain_pictures_settings",
             "choose_pictures_folder",
+            // The model lane the PC's chat is pointed at (commands.rs; backend
+            // jarvis_model_lanes.py, model-lanes.patch, JARVIS-API section 133;
+            // the owner's decisions of 2026-10-13 and 2026-10-14). Three
+            // commands: read the lane's state and whether a press would really
+            // start something; ask the PC to start it; and the owner's own
+            // switch for whether Jarvis starts a lane that died by itself.
+            // Reading it starts nothing. Starting it runs the owner's OWN
+            // Windows logon task - the same one his logon already runs
+            // unattended - so it raises NO card, and the switch moves in the
+            // same second the Start button beside it takes the same action.
+            // The standing "the local model isn't running" line is drawn by the
+            // Jarvis bar and the widget, so both hold these; the HUD keeps the
+            // line and offers no button, because hud_proxy.rs gives that page
+            // exactly five reads and one POST /api/chat, and a command that
+            // starts a program on the PC is not added to that allow-list in
+            // passing (docs/ARCHITECTURE.md section 8).
+            "read_model_lane",
+            "start_model_lane",
+            "set_model_lane_auto",
         ]));
 
     // Generates `src-tauri/gen/schemas/*`, embeds the Windows resource and
