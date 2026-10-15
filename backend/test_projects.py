@@ -1590,6 +1590,121 @@ def t_the_routing_gate_needs_all_three_and_absence_means_local():
     P.set_active_project(None, store=s)
 
 
+def t_deleting_the_active_project_leaves_project_mode():
+    """A project deleted while it is the ACTIVE one must not leave a dead id in
+    the mode file.
+
+    WHY (measured on feat/project-mode-local-gate-wiring, 9a596c4f): the chat
+    path's own lane gate in backend/cloud-say-yes.patch reads the active
+    project's `shareable` flag on the `jarvis_router.choose()` call site - for
+    EVERY turn. While the mode file kept a deleted id, that read raised
+    KeyError out of Projects.get -> _project_row, which is a 500 on every chat
+    turn until the owner left Project Mode by hand. Leaving Project Mode is
+    the honest outcome: nothing here switches the owner to a cloud lane, and
+    nothing here enters another project.
+    """
+    s = fresh()
+    other = s.create({"name": "Other", "kind": "life"}, here=False)
+    p = s.create({"name": "App", "kind": "coding"}, here=True)
+    s.set_shareable_on(p["id"])
+    s.set_auto_route_cloud_on(p["id"])
+    P.set_active_project(p["id"], store=s)
+
+    # The chat path's read, on the same expression-shaped path the gate uses:
+    # jarvis_projects.get().get(jarvis_projects.active_project_id()). The
+    # suite's own store goes in the module's one-store slot for the length of
+    # this test, so `get()` is the real door and not a stand-in.
+    def _lookup_the_active_project():
+        m = P
+        return m.get().get(m.active_project_id())
+
+    def _gate_reads_shareable():
+        """What the gate is asking: is the ACTIVE project Shareable? With no
+        active project there is nothing to read, and that is a NO. The
+        `if not pid` step is the one the committed guard line is missing - see
+        the CONTROL below; it belongs to the patch, not to this file."""
+        m = P
+        pid = m.active_project_id()
+        if not pid:
+            return False
+        return bool((m.get().get(pid) or {}).get("shareable"))
+
+    before = P._ONE
+    real_router = sys.modules.get("jarvis_auto_router", "<missing>")
+    P._ONE = s
+    try:
+        check("CONTROL: with the project alive the chat-path lookup answers it",
+              _lookup_the_active_project()["id"] == p["id"])
+        check("CONTROL: ... and the flag the gate reads is really on",
+              _gate_reads_shareable() is True)
+
+        s.delete_full(other["id"])
+        check("deleting a project that is NOT active leaves Project Mode on the "
+              "active one", P.active_project_id() == p["id"])
+
+        s.delete_full(p["id"])
+        check("deleting the ACTIVE project leaves Project Mode",
+              P.active_project_id() is None, P.active_project_id())
+        check("... and the deleted row really is gone from the store",
+              raises(lambda: s.get(p["id"]), KeyError) != "")
+
+        # (b) the chat turn's read of the project's Shareable state. The read
+        # that raised was keyed on the active id; with no active id left there
+        # is no dead id to read.
+        raised, got = "", None
+        try:
+            got = _gate_reads_shareable()
+        except Exception as exc:                # noqa: BLE001 - reported, not hidden
+            raised = f"{type(exc).__name__}: {exc}"
+        check("... so the chat turn's read of the project's Shareable state "
+              "does not raise", raised == "", raised)
+        check("... and it answers NO: the turn is not cloud-eligible",
+              got is False, got)
+
+        # (c) not cloud-eligible even with a router that WOULD advise cloud.
+        mod = types.ModuleType("jarvis_auto_router")
+        mod.evaluate_route = lambda *a, **k: {
+            "lane": "jarvis-escalate", "recommended": True,
+            "would_send": "[scrubbed words]", "why": "worth leaving the PC"}
+        sys.modules["jarvis_auto_router"] = mod
+        turn = P.route_for_turn("a hard question", store=s)
+        check("all three switches WERE on, and after the delete the turn is "
+              "local and not recommended",
+              turn["lane"] == "local" and turn["recommended"] is False, turn)
+        check("... and it says why: no project is active",
+              "No project" in turn["why"], turn.get("why"))
+
+        # The bite, kept in the suite and not only in the transcript: put the
+        # dead id back by hand and the SAME read raises. That is the state the
+        # clearing in _delete removes.
+        P.mode_path().write_text(json.dumps({"active_project_id": p["id"]}),
+                                 encoding="utf-8")
+        check("CONTROL: a hand-written dead id is exactly what raises, so the "
+              "clearing in _delete is what prevents it",
+              raises(lambda: _lookup_the_active_project(), KeyError) != "")
+        _no_mode_file()
+
+        # CONTROL, reported and not hidden: the guard line as committed in
+        # 9a596c4f has no `if not pid` step - it calls get().get(None)
+        # directly - and the REAL Projects.get raises KeyError for None
+        # (measured 2026-10-15 in this tree). Clearing the active id removes
+        # the DEAD-ID raise but not the no-project one. That step belongs to
+        # backend/cloud-say-yes.patch and NOT to this file; the wiring
+        # branch's own t_lanes_can_only_be_removed does not catch it because
+        # its stub answers for ANY pid, None included.
+        check("CONTROL: the real store raises KeyError for a None id too, so "
+              "the committed guard line still needs its own no-project step "
+              "(reported to the Lead, not fixed in this file)",
+              raises(lambda: s.get(None), KeyError) != "")
+    finally:
+        P._ONE = before
+        if real_router == "<missing>":
+            sys.modules.pop("jarvis_auto_router", None)
+        else:
+            sys.modules["jarvis_auto_router"] = real_router
+        _no_mode_file()
+
+
 def t_the_project_context_is_the_project_and_never_a_private_number():
     s = fresh()
     p = s.create({"name": "App", "kind": "coding", "instructions": "Use pytest."},
