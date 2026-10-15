@@ -73,6 +73,7 @@ import jarvis_speech as S  # noqa: E402
 import jarvis_turn as T  # noqa: E402
 import jarvis_voice as V  # noqa: E402
 import jarvis_voice_enroll as E  # noqa: E402
+import jarvis_voice_flow as F  # noqa: E402
 import jarvis_kokoro as K  # noqa: E402
 import jarvis_voices as VO  # noqa: E402
 import jarvis_wakeword as W  # noqa: E402
@@ -350,6 +351,19 @@ class World:
         S._reset_wake_for_tests()
         V._reset_repeat_for_tests()
         VO._reset_for_tests()
+        # THE WARM-UP'S OWN STATE, the same call the other two voice producers
+        # make (gen_voice_status_cases.py:237, gen_phone_voice_cases.py:955) and
+        # this one was missing (2026-10-15). jarvis_voice_flow holds `_WARM` -
+        # "waiting"/null until something warms the engines, then "ready" with
+        # REAL measured milliseconds - and its "One moment." rows, both
+        # module-level. This producer's `voices` blocks read the warm state, so
+        # whatever ran earlier in the interpreter could otherwise decide what
+        # this file says: measured, the first render after one bare
+        # `jarvis_speech.status()` was 707,067 B against the committed
+        # 706,868 B. Its World also pins the model paths so that
+        # `_anything_installed()` answers false (see MISSING_MODELS_ROOT); this
+        # is the other half of the same promise.
+        F._reset_for_tests()
         with S._TIMINGS_LOCK:
             S._TIMINGS.clear()
         return self
