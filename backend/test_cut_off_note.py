@@ -8,11 +8,12 @@ newest user message. What is proven, on what really goes to the model:
 
   - the note is sent, once, just before the newest question, quoting that
     sentence - cleaned to one line and at most CUT_OFF_MAX characters;
-  - never first: on a conversation's first question the Jarvis rules go
-    first, word for word, then the note (keep_rules_first holds after it);
+  - never first: the Jarvis rules lead EVERY local turn, in the request itself
+    (jarvis_agent.with_rules_first, 2026-10-14 - not left to a Modelfile, which
+    the owner's everyday model qwen3.5:9b does not have), then the note;
   - with the spoken-style note too, both are there, neither first;
   - no `interrupted`, an empty one, a number, or one on an EARLIER message:
-    sent exactly as it came in;
+    the rules and then the conversation as it came, with no note added;
   - it is never the owner's words: it is a system line added only to the
     request for this PC's model - the caller's `messages` (what the relay
     and the learner read) are unchanged, jarvis_intake.owner_turns() finds
@@ -106,8 +107,9 @@ def t_the_note_goes_just_before_the_newest_question():
     msgs, passed = turn(HISTORY + [cut("what about the weekend", provenance="typed")])
     n = note(SAID)
     check("sent, once", msgs.count(n) == 1, json.dumps(msgs)[:500])
-    check("just before the newest question, everything else as it came",
-          msgs == passed[:-1] + [n, passed[-1]], json.dumps(msgs)[:500])
+    check("just before the newest question, everything else as it came after "
+          "the rules",
+          msgs == [BLOCK] + passed[:-1] + [n, passed[-1]], json.dumps(msgs)[:500])
     check("it quotes the sentence the owner heard", SAID in n["content"])
 
 
@@ -121,25 +123,28 @@ def t_never_first():
           and SPOKEN in msgs and note(SAID) in msgs and msgs[0] not in (SPOKEN, note(SAID)),
           json.dumps(msgs)[:500])
     msgs, passed = turn(HISTORY + [cut("the weekend")])
-    check("spoken, with history: both notes just before the question, neither first",
-          msgs[:len(passed) - 1] == passed[:-1] and msgs[-1] == passed[-1]
-          and set(json.dumps(m) for m in msgs[len(passed) - 1:-1])
+    check("spoken, with history: the rules, then the history and the question as "
+          "they came, both notes between them and neither first",
+          msgs[0] == BLOCK and msgs[1:len(passed)] == passed[:-1]
+          and msgs[-1] == passed[-1]
+          and set(json.dumps(m) for m in msgs[len(passed):-1])
           == {json.dumps(SPOKEN), json.dumps(note(SAID))}, json.dumps(msgs)[-600:])
 
 
-def t_nothing_to_say_sends_it_unchanged():
+def t_nothing_to_say_adds_no_note():
     for name, last in (("no field", {"role": "user", "content": "next"}),
                        ("empty", cut("next", said="", provenance=None)),
                        ("spaces", cut("next", said="   \n ", provenance=None)),
                        ("a number", cut("next", said=12, provenance=None)),
                        ("a list", cut("next", said=["a"], provenance=None))):
         msgs, passed = turn(HISTORY[:1] + [HISTORY[1], last])
-        check(f"{name}: sent exactly as it came in", msgs == passed, json.dumps(msgs)[:300])
+        check(f"{name}: no cut-off note - the rules, then the turn as it came",
+              msgs == [BLOCK] + passed, json.dumps(msgs)[:300])
     earlier = [cut("first", provenance="typed"), {"role": "assistant", "content": "ok"},
                {"role": "user", "content": "second"}]
     msgs, passed = turn(earlier)
-    check("on an earlier message only: nothing (it was for that turn)", msgs == passed,
-          json.dumps(msgs)[:300])
+    check("on an earlier message only: nothing (it was for that turn)",
+          msgs == [BLOCK] + passed, json.dumps(msgs)[:300])
 
 
 def t_the_sentence_is_cleaned():
@@ -179,7 +184,7 @@ def t_the_note_says_what_happened():
 if __name__ == "__main__":
     for fn in (t_the_note_goes_just_before_the_newest_question,
                t_never_first,
-               t_nothing_to_say_sends_it_unchanged,
+               t_nothing_to_say_adds_no_note,
                t_the_sentence_is_cleaned,
                t_it_is_never_the_owners_words,
                t_the_note_says_what_happened):

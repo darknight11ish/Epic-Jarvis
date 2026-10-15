@@ -1918,7 +1918,13 @@ def t_hooks_are_no_ops_when_off():
     # saying exactly that rather than sent to something that would silently
     # ignore it (owner kept the note, 2026-10-04). The turn itself still goes to
     # this PC's main model, with the tools it always had.
-    parts = [p for p in sent[0][1]["messages"][0]["content"] if isinstance(p, dict)]
+    # The picture travels as the parts of ONE user message, and since
+    # 2026-10-14 that message is no longer index 0: every local turn now starts
+    # with the Jarvis rules (jarvis_agent.with_rules_first), so the check finds
+    # the message that carries the parts rather than trusting a position - the
+    # same shape the check below already uses.
+    parts = [p for m in sent[0][1]["messages"] if isinstance(m.get("content"), list)
+             for p in m["content"] if isinstance(p, dict)]
     check("a picture, second card off: this PC's main model gets the turn, tools and all",
           sent[0][0].startswith("http://127.0.0.1:11434") and sent[0][1]["model"] == "qwen3:8b"
           and "tools" in sent[0][1])
