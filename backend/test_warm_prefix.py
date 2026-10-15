@@ -124,6 +124,16 @@ class Fake:
                 with fake.lock:
                     fake.posts.append((self.path, raw))
                 body = json.loads(raw or b"{}")
+                if self.path == "/api/generate":
+                    # OLLAMA ANSWERS THIS ONE WITH JSON, NOT A STREAM - it is
+                    # the preload ("load with an empty prompt"), and
+                    # warm_everyday reads it with _get_json. This fake answered
+                    # it with a chat stream until 2026-10-15, so the parse
+                    # always failed and warm_everyday ALWAYS returned False
+                    # here: nothing asserted its success path, so nothing
+                    # noticed. A real Ollama sends done_reason "load".
+                    return self._json({"model": body.get("model"), "response": "",
+                                       "done": True, "done_reason": "load"})
                 if fake.hold and body.get("max_tokens") == 1:
                     fake.warm_in.set()
                     sock = self.connection
@@ -803,6 +813,54 @@ def t_what_the_patch_does():
             sys.modules["jarvis_agent"] = saved
 
 
+def t_live_warms_the_prefix_as_well_as_loading_the_model():
+    """Loading the model is only HALF of what Live's first answer waits for.
+
+    Measured on this PC (2026-10-15): the first request after a load takes
+    10.49 s and the next two take 0.03 s, and most of the 10.49 s is reading
+    Jarvis's rules and tool list from nothing - 3,838 tokens. That is llama.cpp
+    #29513, whose own title names the RTX 2060 / sm_75, the owner's card.
+    `warm_everyday` used to load the model and return, so Live's first question
+    paid all of it; it now warms the prefix as well, the way the waking path
+    already does (jarvis_power_switch.warm_up -> warm_prefix).
+
+    Nothing here is on a request path: jarvis_live._default_warm starts this on
+    its own thread ("jarvis-live-warm"), which is why `warm_everyday` is
+    allowed to block for the length of a warm-up.
+    """
+    fake = Fake()
+    try:
+        # MODEL, not a name of my own: the fake's /api/ps reports MODEL as
+        # loaded, and warm_prefix refuses to warm a model that is not - which
+        # is the guard working, not a warm-up that failed.
+        ok = AG.warm_everyday(fake.url, model=MODEL)
+        warm = [json.loads(raw) for raw in fake.chats()]
+        check("the model is loaded AND the prefix is warmed, in one call",
+              ok is True and len(warm) == 1, (ok, [p for p, _ in fake.posts]))
+        body = warm[-1] if warm else {}
+        check("the warm-up asks the one warm word, so it carries no conversation",
+              any(m.get("content") == AG.WARM_WORD for m in body.get("messages", [])),
+              body.get("messages"))
+        check("... against the model that was just loaded, at the same address",
+              body.get("model") == MODEL, body.get("model"))
+        want_tools = AG.chat_prefix(AG.enabled_tools_for_turn(), ollama_url=fake.url,
+                                    model=MODEL)[1]
+        check("... with the tool list a REAL turn sends, from the same one source",
+              body.get("tools") == (want_tools or None), (body.get("tools"), want_tools))
+        check("... and it is the same head a real first question is sent (the rules)",
+              bool(body.get("messages")) and any(
+                  m.get("role") == "system" for m in body.get("messages", [])),
+              body.get("messages"))
+        # THE OTHER HALF: a load that did not happen must not warm anything.
+        before = len(fake.posts)
+        fake.no_ctx = True
+        ok2 = AG.warm_everyday(fake.url, model="mystery:9b")
+        check("a load that cannot happen warms NOTHING - no request of either kind",
+              ok2 is False and len(fake.posts) == before, (ok2, fake.posts[before:]))
+    finally:
+        fake.close()
+
+
 if __name__ == "__main__":
     try:
         for fn in (t_the_same_bytes_as_a_real_turn, t_a_real_question_starts_the_same_way,
@@ -810,6 +868,7 @@ if __name__ == "__main__":
                    t_the_off_switch_reads_only_a_real_false, t_after_learning, t_after_waking,
                    t_live_warms_the_model_chat_uses,
                    t_a_live_warm_never_goes_out_without_a_context,
+                   t_live_warms_the_prefix_as_well_as_loading_the_model,
                    t_a_question_is_never_kept_waiting, t_a_turn_that_raises_is_still_uncounted,
                    t_its_place_in_the_stack, t_what_the_patch_does):
             print(f"\n--- {fn.__name__} ---")
