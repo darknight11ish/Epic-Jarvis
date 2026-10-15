@@ -459,7 +459,19 @@ def main() -> int:
             print(f"  kept   ready/{child.name} (a drop-in with no patch of its own)")
     for path, text in owned:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, encoding="utf-8")
+        # newline="\n" is not decoration: this repository is LF everywhere
+        # (.gitattributes, `* text=auto eol=lf`), and the default newline=None
+        # translates every "\n" to os.linesep on the way out - so on Windows
+        # this wrote 50 files as CRLF. Measured 2026-10-14 on 4d1812b7: a second
+        # run with no source change converted all 50 (registry.json 984 lines,
+        # README.md 188) to CRLF and left `git status` showing every one of them
+        # modified, while `--check` stayed GREEN - because path.read_text() at
+        # the comparison above translates CRLF back to "\n" too, so the two
+        # normalise to the same string and the drift is invisible. The same
+        # defect was already fixed once in tools/gen_picture_card_patch.py,
+        # whose comment says it in one line: "LF, not CRLF: this repository is
+        # LF everywhere (.gitattributes says so)".
+        path.write_text(text, encoding="utf-8", newline="\n")
 
     print(f"wrote plugins/registry.json - {data['patch_count']} patches: "
           f"{data['counts']['plug-in']} drop-in, {data['counts']['core']} core"
