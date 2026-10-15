@@ -10,9 +10,9 @@ folder (or run `scripts\add-plugin.ps1 -Name voiceprint`) and restart Jarvis.
 
 - Module the loader calls: `jarvis_voiceprint.install()` (takes the core's Handler)
 - The patch this replaces: none - this is not a feature that used to be a patch
-- Position in the loader's order: 144, after every folder the old patch stack had
-  (`receipts` is 143), so its four paths are checked in the order they were
-  added rather than in the middle of somebody else's
+- Position in the loader's order: 146, after every folder the old patch stack had
+  (`receipts` is 143, `auto-router` 144, `vault` 145), so its four paths are
+  checked last rather than in the middle of somebody else's
 
 The module itself is one of the ones this repository ships
 (`backend/jarvis_voiceprint.py`), copied into the backend by

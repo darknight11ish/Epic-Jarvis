@@ -7,11 +7,14 @@ were found in the drop-in folders' `stack_order` numbers, and every one of them
 came from the same hole: `plugins/ready/` is ordered by a number each folder
 writes for itself, and NOTHING checked those numbers against each other.
 
-  * `skill-hub` and `voiceprint` BOTH carry `stack_order: 142` on main. The
-    loader sorts by `(stack_order, name)`, so the pair is still loaded in a
-    fixed order - by the letter of the folder name, which nobody chose. Silent,
-    and it changes the order of two SHIPPED plugins.
-  * `voiceprint/README.md` says 144 while its own `plugin.json` says 142.
+  * `skill-hub` and `voiceprint` BOTH carried `stack_order: 142` on main until
+    2026-10-15, when the decision was made on its own: skill-hub keeps 142 and
+    voiceprint moved to 146. The loader sorts by `(stack_order, name)`, so the
+    pair was loaded in an order decided by the letter of the folder name, which
+    nobody chose. Nothing else moved, and those two still load in that same
+    relative order - the tie is gone, not the order.
+  * `voiceprint/README.md` said 144 while its own `plugin.json` said 142. Both
+    say 146 now.
   * `backend/test_receipts.py` judged the receipts folder's position against
     `registry.json`'s catalogued folders only, so every folder that replaces no
     patch was invisible to it - the check passed by not looking.
@@ -42,12 +45,15 @@ That is what keeps this suite green on a main that carries two known defects
 WITHOUT hiding them, and what stops the record rotting: a recorded defect that
 is gone is itself a failure.
 
-DO NOT FIX THE RECORDED DEFECTS HERE. Which of `skill-hub` and `voiceprint`
-keeps 142 changes the load order of two shipped plugins; that is one decision,
-made deliberately, on its own - not smuggled in beside a test.
+THAT DECISION HAS SINCE BEEN MADE, ON ITS OWN (2026-10-15), so both records
+below are now EMPTY and the two defects are gone. Which of `skill-hub` and
+`voiceprint` kept 142 changed the load order of two shipped plugins, so it was
+one decision, made deliberately - not smuggled in beside a test. The records
+are kept (empty) because the machinery is what matters: a NEW collision fails
+at once, and putting a record back for a defect that is gone fails too.
 
-WHAT IT CANNOT SEE. Only four of the 28 folders' READMEs state a position at
-all, so (5) covers those four. The others say nothing, which is not a pass and
+WHAT IT CANNOT SEE. Only five of the 29 folders' READMEs state a position at
+all, so (5) covers those five. The others say nothing, which is not a pass and
 not a failure - it is printed as a coverage line so the number is never assumed.
 """
 from __future__ import annotations
@@ -69,33 +75,22 @@ READY = REPO / "plugins" / "ready"
 REGISTRY = REPO / "plugins" / "registry.json"
 
 #: A floor on how many folders must be present, so a moved or renamed
-#: `plugins/ready/` fails LOUDLY instead of passing over an empty glob. 28
+#: `plugins/ready/` fails LOUDLY instead of passing over an empty glob. 29
 #: folders on 2026-10-15; the floor is deliberately below that and above zero.
 MIN_FOLDERS = 20
 
-#: KNOWN, RECORDED COLLISIONS - AWAITING A DECISION, NOT FIXED HERE.
+#: KNOWN, RECORDED COLLISIONS - EMPTY since 2026-10-15, when the decision was
+#: made: skill-hub keeps 142 and voiceprint moved to 146. The machinery stays,
+#: so a NEW collision fails at once and a record that outlives its defect fails
+#: in `t_the_recorded_collision_is_still_real`.
 #: (the shared number, the folders that share it, why it is recorded)
-KNOWN_COLLISIONS = [
-    (142, ("skill-hub", "voiceprint"),
-     "BOTH SHIPPED FOLDERS CARRY 142 on main (2026-10-15). The loader sorts by "
-     "(stack_order, name), so they load skill-hub then voiceprint - decided by "
-     "the letter 's', which nobody chose. Which of the two keeps 142 changes "
-     "the load order of two shipped plugins, so it is ONE deliberate decision "
-     "on its own, not a fix smuggled in beside a test. Recorded here so the "
-     "suite is green while the defect stays printed on every run."),
-]
+KNOWN_COLLISIONS = []
 
-#: KNOWN, RECORDED DOCUMENT/MANIFEST MISMATCHES - same rules as above.
+#: KNOWN, RECORDED DOCUMENT/MANIFEST MISMATCHES - EMPTY since 2026-10-15, when
+#: voiceprint's manifest and its README were both brought to 146. Same rules as
+#: above: a NEW mismatch fails at once, and a stale record fails too.
 #: folder -> (the manifest's number, the number its README states, why recorded)
-KNOWN_README_MISMATCHES = {
-    "voiceprint": (
-        142, 144,
-        "voiceprint/README.md says \"Position in the loader's order: 144\" while "
-        "its own plugin.json says 142 (2026-10-15). The README is wrong or the "
-        "manifest is; deciding which is the same decision as the 142 collision "
-        "above, so it waits with it. Recorded so this suite is green while the "
-        "mismatch stays printed on every run."),
-}
+KNOWN_README_MISMATCHES = {}
 
 
 def check(name, cond, detail=""):
@@ -451,8 +446,12 @@ def t_the_recorded_readme_mismatch_is_still_real():
 
 def _print_records():
     print()
-    print("RECORDED DEFECTS - KNOWN, PRINTED EVERY RUN, AWAITING A DECISION.")
-    print("This suite is green with them and fails the moment one changes.")
+    if KNOWN_COLLISIONS or KNOWN_README_MISMATCHES:
+        print("RECORDED DEFECTS - KNOWN, PRINTED EVERY RUN, AWAITING A DECISION.")
+        print("This suite is green with them and fails the moment one changes.")
+    else:
+        print("NO RECORDED DEFECTS: every folder's stack_order is unique, and "
+              "every README that states a position agrees with its manifest.")
     for number, folders, why in KNOWN_COLLISIONS:
         print(f"  * stack_order {number} is held by BOTH {list(folders)}")
         for line in _wrap(why):
