@@ -10,7 +10,7 @@ you drop in and take out.
 
 - **25 drop-in modules**, in [`ready/`](ready/) -
   one folder each, no core change.
-- **120 core patches**, which still go on through
+- **119 core patches**, which still go on through
   `scripts/apply-patches.ps1` in its own order.
 
 ## The drop-in modules
@@ -41,7 +41,7 @@ you drop in and take out.
 | 138 | `card-prefs` | how much of an approval card is shown at first, and the setting that decides it, kept where BOTH apps can read it. | `card-prefs.patch` |
 | 139 | `picture-card` | "which card draws the pictures, and what the chat does about it". | `picture-card.patch` |
 | 141 | `pictures` | "ask for a picture, and keep it" (the owner's decision of 2026-09-27: *"12 GB card: longer conversations with picture understanding first, and making pictures too (swapped in when asked, since both ca | `pictures.patch` |
-| 143 | `model-lanes` | the button that starts the model lane that is down. | `model-lanes.patch` |
+| 142 | `model-lanes` | the button that starts the model lane that is down. | `model-lanes.patch` |
 
 ## What stays in the core
 
@@ -169,7 +169,6 @@ stack's order and cannot be moved into a folder.
 | `uncensored-optins.patch` | also adds 2 entry/entries to the approval gate's own tables, which decide whether the action needs a card |
 | `gate-touches.patch` | edits lines the core already has; it cannot be applied out of order |
 | `big-coder.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
-| `reasoning-fallback.patch` | edits lines the core already has; it cannot be applied out of order |
 | `plugin-loader.patch` | the loader itself: the ONE startup call that makes every other drop-in folder possible. It is what replaces the patches, so it can never be replaced by a folder. |
 
 ## Adding and removing one
