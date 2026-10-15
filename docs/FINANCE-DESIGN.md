@@ -144,11 +144,19 @@ Banks export "last 90 days", so March appears in two files. When the owner asks
 about a *set* of files (a folder or "all files for this account"), rows are
 combined like this:
 
-- The key of a row is (date, amount in cents, cleaned description).
-- **Within one file, identical keys are kept** (two 2.50 coffees the same day
-  are real). Across files, for each key **the larger count of any single file is
-  used, not the sum.** So a row that is in both files counts once, and the two
-  coffees still count twice.
+- The key of a row is its **fingerprint**: (date, amount in whole cents, the
+  normalised description, and which identical row of that day it is). The
+  normalisation is documented in `normalise_description`: control characters and
+  runs of whitespace, letter case, full/half-width forms, accents and
+  punctuation are all folded, and after that the only comparison is equality -
+  no edit distance, no stemming, so "COSTA" can never be read as "COSTCO".
+- **Within one file, identical rows are kept** (two 2.50 coffees the same day
+  are real: they are occurrence 0 and 1 of that day's row). Across files a row
+  whose fingerprint was already counted is a duplicate and adds nothing, so a
+  row that is in both files counts once - while two coffees in each of the two
+  exports are still occurrence 0 and 1 in both, and still count twice. Ingesting
+  the same file twice is a no-op the second time. `RowLedger` is where this is
+  remembered, one fingerprint per row and never a row's own words.
 - The answer says how many rows were counted once because they were in more
   than one file. It is a visible line, not a silent fix.
 - **Known weak spot:** a bank that rewrites a description between a "pending"
@@ -306,6 +314,20 @@ Answer, always in this shape:
 - **Inputs shown back** in a "What I used" list; anything the owner did not state
   is marked "assumed" (returns, spread, plan-to age). The model may not fill a
   missing number silently; it asks the owner.
+- **Two optional rates, for a caller that wants them (added 2026-10-14).**
+  `run(..., inflation_rate=0.0, safe_withdrawal_rate=0.0)`. Both default to 0.0
+  and at 0.0 the result is exactly what it was before they existed - not one
+  figure, not one key - which is what the existing suite is the control for.
+  The model above is in **today's money** (the real return is taken out), so the
+  balances are already purchasing power. `inflation_rate` (a fraction a year)
+  adds a `terms` block holding those same figures as `real` beside the `nominal`
+  ones - the money of the plan-to year, real * (1 + rate) ** years.
+  `safe_withdrawal_rate` (a fraction a year) adds a `safe_withdrawal` block:
+  that rate times the middle case's balance at the plan-to age, in both sets of
+  money, so the yearly figure is exactly the rate times the balance it names.
+  Both are plain arithmetic on figures that already exist; the one sentence each
+  is added by code, like every other sentence in the answer. With no spending in
+  retirement there is no balance to project, so neither block is added.
 
 ### 6.2 monteplan or Jarvis's own numpy: compared
 
@@ -887,6 +909,13 @@ p50 12000 / p90 1800000, `poor_case` `{"lasts": false, "age": 78}`, `runs_out_be
 2. If yearly returns are 1 point lower, that becomes about 31 of 100; 1 point higher, about 71 of 100.
 3. In a poor case (1 in 10) the money runs out at about age 78.
 4. The middle case leaves about 12,000 at age 95; a good case (1 in 10) about 1,800,000.
+
+The two optional rates above are **`run()`'s own keyword parameters, not body
+keys**: this route passes the form's fields only, so a body carrying
+`inflation_rate` is refused as an unknown field, and the route's response never
+holds a `terms` or `safe_withdrawal` block. A caller that wants them calls
+`jarvis_retirement.run(numbers, inflation_rate=..., safe_withdrawal_rate=...)`
+itself; nothing in either app does yet.
 
 **What the app draws, in this order:** the `summary` sentences as a short list or paragraph
 (exactly as sent, the app never edits, rounds or re-words a figure); the `disclaimer` on its own

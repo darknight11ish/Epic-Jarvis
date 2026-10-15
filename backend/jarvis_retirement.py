@@ -39,6 +39,28 @@ THE PITFALL THIS FILE MUST NOT REPEAT
   runs out is `None`, tested first, by `first_true()` and by the loop's own
   sentinel. `test_retirement.py` keeps the regression.
 
+THE TWO OPTIONAL RATES (a caller's parameters, not fields of the form)
+  `run(..., inflation_rate=0.0, safe_withdrawal_rate=0.0)`. BOTH default to
+  0.0, and at 0.0 the answer is exactly the answer this file has always given -
+  not one figure changed, not one key added - so every existing caller and every
+  existing test is the control that proves it.
+
+  The model above is in TODAY'S MONEY: the real return is (1 + nominal) /
+  (1 + inflation) - 1, so the balances it produces are already purchasing power.
+  That is what `inflation_rate` is the other half of. A caller who passes it
+  (a fraction a year) gets a `terms` block holding the same futures twice: the
+  REAL figures - which are the module's own, unchanged - beside the NOMINAL
+  ones, the money of the plan-to year, which are real * (1 + rate) ** years.
+  And `safe_withdrawal_rate` (a fraction a year) adds a `safe_withdrawal`
+  block: that rate times the middle case's balance at the plan-to age, in both
+  sets of money, so the yearly figure is exactly the rate times the balance it
+  names. Both are plain arithmetic on figures that already exist: nothing is
+  cached, written or sent, no model writes a word of it, and no card is raised
+  (a calculation is not an action).
+
+  With no spending in retirement there is no balance to project, so neither
+  block is added whatever the rates are - the answer already says why.
+
 WHAT THE MODEL MAY DO
   Nothing about the answer's words. The owner (2026-09-30) chose that the chat
   door shows CODE-WRITTEN text only: the model only passes the numbers the
@@ -106,6 +128,21 @@ MAX_MONEY = 1_000_000_000
 MIN_RETURN, MAX_RETURN = -5.0, 15.0
 MIN_SPREAD, MAX_SPREAD = 0.0, 40.0
 MIN_INFLATION, MAX_INFLATION = 0.0, 15.0
+
+#: The two OPTIONAL rate parameters of run() - fractions a year, never the form's
+#: percents. They only bound what a caller may ask for; 0.0, the default, means
+#: "add no such block at all", which is why the bounds start there.
+MIN_RATE = 0.0
+MAX_INFLATION_RATE = 0.15        # 15% a year
+MAX_WITHDRAWAL_RATE = 0.25       # 25% a year
+TERMS_NOTE = ("The figures above are in today's money. At {rate}% a year the same balances are "
+              "about {nominal} in the money of age {plan} - the real middle figure {real} "
+              "carried forward, not a second simulation.")
+SAFE_WITHDRAWAL_NOTE = ("Taking {rate}% of the middle case's balance at age {plan} is about "
+                        "{yearly} a year in today's money (about {yearly_nominal} in the money "
+                        "of age {plan}).")
+SAFE_WITHDRAWAL_NOTE_REAL = ("Taking {rate}% of the middle case's balance at age {plan} is about "
+                             "{yearly} a year.")
 
 # The fields, in the order a form shows them. `default` None = the owner must
 # type it. `placeholder` = a made-up value the answer marks "assumed".
@@ -258,6 +295,17 @@ def parse_percent(key: str, value) -> float:
 
 
 _PARSERS = {"age": parse_age, "money": parse_money, "percent": parse_percent}
+
+
+def _rate(name: str, value, hi: float) -> float:
+    """One of run()'s two OPTIONAL rates, as a fraction a year, or
+    InputError('bad_rate'). A number only: text is refused rather than parsed,
+    because "2.5" here would be a percent written where a fraction belongs. The
+    error never repeats the value typed."""
+    x = _finite_number(value)
+    if x is None or not math.isfinite(x) or x < MIN_RATE or x > hi:
+        raise _bad("bad_rate", "", f"{name} must be a fraction a year from 0 to {hi:g}.")
+    return float(x)
 
 
 def _blank(value) -> bool:
@@ -422,7 +470,8 @@ def _share(ok: int, n: int) -> dict:
     return {"per_100": pct, "label": f"about {pct} of 100", "all": False, "none": False}
 
 
-def _used_list(v: dict, assumed: list, paths: int) -> list:
+def _used_list(v: dict, assumed: list, paths: int, inflation_rate: float = 0.0,
+               safe_withdrawal_rate: float = 0.0) -> list:
     rows = []
 
     def add(key, text):
@@ -440,24 +489,81 @@ def _used_list(v: dict, assumed: list, paths: int) -> list:
     add("expected_return_percent", f"{v['expected_return_percent']:g}%")
     add("volatility_percent", f"{v['volatility_percent']:g}%")
     add("inflation_percent", f"{v['inflation_percent']:g}%")
+    # run()'s own two optional rates, listed only when a caller actually gave one,
+    # so the answer can be read back knowing which money each figure is in.
+    if inflation_rate > 0.0:
+        rows.append({"key": "inflation_rate", "label": "Inflation (a fraction a year)",
+                     "value": f"{inflation_rate * 100:g}% a year", "assumed": False})
+    if safe_withdrawal_rate > 0.0:
+        rows.append({"key": "safe_withdrawal_rate", "label": "Safe withdrawal rate",
+                     "value": f"{safe_withdrawal_rate * 100:g}% a year", "assumed": False})
     rows.append({"key": "paths", "label": "Simulated futures", "value": f"{paths:,}", "assumed": False})
     rows.append({"key": "seed", "label": "Random seed (the same every time)", "value": str(SEED),
                  "assumed": False})
     return rows
 
 
-def run(raw: dict, *, paths: int = PATHS, clock=time.monotonic, budget: float = TIME_BUDGET) -> dict:
+def _terms(v: dict, end_bal: dict, plan: int, rate: float) -> dict:
+    """The same futures twice: the REAL figures (this module's own, unchanged) and
+    the NOMINAL ones - those balances in the money of the plan-to year. Every
+    money figure is a whole number, in the module's own unit (see `_money_text`)."""
+    years = plan - v["current_age"]
+    factor = (1.0 + rate) ** years
+    real = {k: end_bal[k] for k in ("p10", "p50", "p90")}
+    nominal = {k: _round_sig(real[k] * factor) for k in real}
+    return {"inflation_rate": rate, "years": years, "factor": factor,
+            "real": dict(real, age=plan, text={k: _money_text(real[k]) for k in real}),
+            "nominal": dict(nominal, age=plan,
+                            text={k: _money_text(nominal[k]) for k in nominal}),
+            "note": TERMS_NOTE.format(rate=f"{rate * 100:g}", plan=plan,
+                                      real=_money_text(real["p50"]),
+                                      nominal=_money_text(nominal["p50"]))}
+
+
+def _withdrawal(end_bal: dict, plan: int, rate: float, terms: Optional[dict] = None) -> dict:
+    """That rate of the middle case's balance at the plan-to age, in today's money
+    and (when a `terms` block was asked for) in the plan year's money. The yearly
+    figure IS the rate times the balance it names, to the whole unit."""
+    real_bal = end_bal["p50"]
+    real_year = int(round(rate * real_bal))
+    out = {"rate": rate, "on": "p50", "age": plan,
+           "real": {"balance": real_bal, "yearly": real_year, "text": _money_text(real_year)},
+           "nominal": None}
+    if terms is not None:
+        nominal_bal = terms["nominal"]["p50"]
+        nominal_year = int(round(rate * nominal_bal))
+        out["nominal"] = {"balance": nominal_bal, "yearly": nominal_year,
+                          "text": _money_text(nominal_year)}
+        out["note"] = SAFE_WITHDRAWAL_NOTE.format(rate=f"{rate * 100:g}", plan=plan,
+                                                  yearly=_money_text(real_year),
+                                                  yearly_nominal=_money_text(nominal_year))
+    else:
+        out["note"] = SAFE_WITHDRAWAL_NOTE_REAL.format(rate=f"{rate * 100:g}", plan=plan,
+                                                       yearly=_money_text(real_year))
+    return out
+
+
+def run(raw: dict, *, paths: int = PATHS, clock=time.monotonic, budget: float = TIME_BUDGET,
+        inflation_rate=0.0, safe_withdrawal_rate=0.0) -> dict:
     """Validate and play out the futures. Returns the result block (see the
     frozen contract in docs/FINANCE-DESIGN.md). Raises InputError for a bad
-    number, TimeoutError when the run is stopped for time."""
+    number, TimeoutError when the run is stopped for time.
+
+    `inflation_rate` and `safe_withdrawal_rate` are OPTIONAL and both default to
+    0.0: at 0.0 the answer is exactly what this function returned before they
+    existed. A rate above 0 adds one block each (`terms`, `safe_withdrawal`); see
+    the module docstring for what they hold and why the existing figures are the
+    real ones."""
     if not isinstance(paths, int) or isinstance(paths, bool) or paths < MIN_PATHS or paths > PATHS:
         paths = PATHS
+    infl = _rate("inflation_rate", inflation_rate, MAX_INFLATION_RATE)
+    safe = _rate("safe_withdrawal_rate", safe_withdrawal_rate, MAX_WITHDRAWAL_RATE)
     clean = validate(raw)
     v, assumed = clean["values"], clean["assumed"]
     plan = v["plan_to_age"]
     base = {"ok": True, "kind": "retirement", "version": 1, "title": TITLE,
             "paths": paths, "seed": SEED,
-            "used": _used_list(v, assumed, paths),
+            "used": _used_list(v, assumed, paths, infl, safe),
             "todays_money": TODAYS_MONEY,
             "placeholder_note": PLACEHOLDER_NOTE,
             "disclaimer": DISCLAIMER,
@@ -495,6 +601,12 @@ def run(raw: dict, *, paths: int = PATHS, clock=time.monotonic, budget: float = 
     base.update({"state": state, "reason": None, "share": share, "bands": bands,
                  "end_balance": end_bal, "poor_case": poor, "runs_out_between": between,
                  "middle_lasts_to": median_age})
+    # The two optional rates, each adding its block only when a caller asked for
+    # it. With neither, the block above is exactly what it was before they existed.
+    if infl > 0.0:
+        base["terms"] = _terms(v, end_bal, plan, infl)
+    if safe > 0.0:
+        base["safe_withdrawal"] = _withdrawal(end_bal, plan, safe, base.get("terms"))
     base["summary"] = _summary(base, plan)
     base["text"] = _join_text(base["summary"])
     return base
@@ -546,6 +658,12 @@ def _summary(r: dict, plan: int) -> list:
         out.append(f"In the middle case the money runs out at about age {r['middle_lasts_to']}.")
     if r["used"] and any(u["key"] == "other_income" for u in r["used"]):
         out.append("Other income only covers spending; any extra is not saved.")
+    # The two optional rates' own sentences, written here like every other one
+    # (the model writes none of them). Absent unless a caller asked for them.
+    if r.get("terms"):
+        out.append(r["terms"]["note"])
+    if r.get("safe_withdrawal"):
+        out.append(r["safe_withdrawal"]["note"])
     return out
 
 
