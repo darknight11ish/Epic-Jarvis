@@ -747,6 +747,33 @@ LAST_WORDS = {
     "failed": "Nothing was stored - something went wrong on the PC.",
 }
 
+#: How long the route waits for the gate, ON TOP of the gate's own deadline.
+#: The gate stops waiting at `approval_timeout_seconds` (600 as shipped) and
+#: answers timed_out; this only covers the moment between that and the thread
+#: returning its verdict.
+_WAIT_AFTER_GATE = 30.0
+
+#: What the gate waits when its own setting cannot be read. The shipped
+#: `approval_timeout_seconds` - `backend/test_approval_contract.py:60` says
+#: "2026-10-13: 180 -> 600, ten minutes".
+_GATE_TIMEOUT_FALLBACK = 600.0
+
+
+def _gate_timeout() -> float:
+    """How long jarvis_gate.check() will wait, read FROM the gate.
+
+    Not a number of this module's own: the whole point is that this route must
+    not give up before the card does, so that a person who takes their time and
+    then says yes is obeyed rather than told "nothing was stored" for an answer
+    they did give. Falls back to the shipped value when the gate is not here -
+    and the vault only ever runs on a backend that has one."""
+    try:
+        import jarvis_gate
+        seconds = float(getattr(jarvis_gate, "APPROVAL_TIMEOUT", 0) or 0)
+        return seconds if seconds > 0 else _GATE_TIMEOUT_FALLBACK
+    except Exception:
+        return _GATE_TIMEOUT_FALLBACK
+
 
 def _gate(action: str, detail: dict, prompt: str):
     """jarvis_gate.check(), failing CLOSED on any error - the same shape
@@ -781,11 +808,19 @@ def _person_said_yes(v) -> bool:
 def _card_says_yes(body: dict, gate, tier_of, spawn) -> tuple:
     """(True, "") only on a person's yes. (False, outcome) otherwise.
 
-    The card is raised on a thread of its own: jarvis_gate.check() waits for a
-    person, and the HTTP handler must not hold the connection open for the
-    whole wait. The route then reads the outcome and stores NOTHING until it
-    says approved - "nothing may be stored before the answer", including while
-    the answer is outstanding.
+    The card is raised on a thread of its own, because jarvis_gate.check() has
+    its own signature and its own waiting loop and the route needs to be able
+    to put a deadline on it. THIS CALL DOES BLOCK THE REQUEST until the card is
+    answered or the gate gives up - the same as every other route whose action
+    waits for a person, and said plainly here rather than described as
+    non-blocking.
+
+    The deadline is the GATE'S OWN, read from it, plus `_WAIT_AFTER_GATE`
+    seconds. A shorter deadline of this module's own was a real bug in the
+    first draft (300 seconds, written before anyone checked): the gate waits
+    `approval_timeout_seconds`, TEN MINUTES as shipped, so an owner who read
+    the card for six minutes and then approved it met a route that had already
+    given up and reported "nothing was stored" - a no that was never said.
     """
     name = str(body.get("name") or "")
     detail = {
@@ -808,7 +843,7 @@ def _card_says_yes(body: dict, gate, tier_of, spawn) -> tuple:
         spawn(ask)
     except Exception:
         return False, "refused"
-    deadline = time.time() + 300.0
+    deadline = time.time() + _gate_timeout() + _WAIT_AFTER_GATE
     while "verdict" not in box and "error" not in box and time.time() < deadline:
         time.sleep(0.02)
     if "error" in box or "verdict" not in box:

@@ -775,8 +775,21 @@ def t_the_plugin_folder_and_the_module_agree():
         other = repo / "plugins" / "ready" / name / "plugin.json"
         if other.is_file():
             orders.append((json.loads(other.read_text(encoding="utf-8")).get("stack_order"), name))
-    check("... and its loader position is last, after every folder the old stack had",
-          max(orders)[1] == "receipts", str(sorted(orders)[-3:]))
+    # REWRITTEN 2026-10-14, by the branch that added `plugins/ready/vault`
+    # (feat/blind-credential-vault, PR #433). This used to read
+    # `max(orders)[1] == "receipts"` - "receipts is the LAST folder" - which is
+    # a claim about every feature added after it as much as about this one, so
+    # the next patch-free folder broke it while nothing about receipts had
+    # changed. What the claim was for, and what it says now: receipts sits
+    # AFTER every folder the old patch stack wrote. 141 is `pictures`, the
+    # highest position in `plugins/registry.json`; everything at or below it
+    # came from a patch, and receipts is above all of them. A future folder
+    # lands after receipts and this stays true.
+    from_patches = [(o, n) for o, n in orders if isinstance(o, int) and o <= 141]
+    check("... and its loader position is after every folder the old patch stack had",
+          bool(from_patches) and max(from_patches)[0] < data.get("stack_order", 0),
+          f"receipts at {data.get('stack_order')}, the highest from the stack is "
+          f"{max(from_patches) if from_patches else None}")
 
 
 def main():

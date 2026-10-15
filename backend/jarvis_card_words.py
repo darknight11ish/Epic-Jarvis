@@ -239,6 +239,11 @@ TITLES = {
     "app_merge_change": "add its change to one of your apps",
     # --- action receipts (2026-10-14): putting one recorded change back
     "undo_action": "put back a change it made",
+    # --- the blind credential vault (2026-10-14): keeping ONE secret under a
+    # name, in Windows Credential Manager. Without a row here the fallback
+    # builds the title from the action's own name - 'Jarvis wants your OK for
+    # "vault put"' - on the one card whose whole job is to be understood.
+    "vault_put": "keep a secret for you",
     # --- helpers and anything else a tool asks for
     "agent_spawn": "start a helper task",
     "agent_kill": "stop a helper task",
@@ -393,6 +398,8 @@ SUMMARY = {
     "app_merge_change": "add its change to one of your apps",
     # --- action receipts (2026-10-14): putting one recorded change back
     "undo_action": "put back the change shown",
+    # --- the blind credential vault (2026-10-14)
+    "vault_put": "keep a secret for you",
     # --- helpers and anything else a tool asks for
     "agent_spawn": "start a helper task",
     "agent_kill": "stop a helper task",
