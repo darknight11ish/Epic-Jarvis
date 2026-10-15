@@ -5,11 +5,14 @@ What is proven, on what really goes to the model:
 
   - a turn whose NEWEST user message was spoken (`provenance: "voice"` on
     the request as it arrived) gets the note, once, on every round;
-  - a typed turn - or one where only an earlier message was spoken - is
-    sent exactly as it came in;
-  - the note is never the first message, so Ollama still puts the
-    Modelfile's SYSTEM block in front; on a conversation's first question
-    that block goes first itself, word for word;
+  - a typed turn - or one where only an earlier message was spoken - gets no
+    spoken note: it is the Jarvis rules and then the conversation as it came;
+  - the note is never the first message. Since 2026-10-14 the rules block is
+    sent as the first message of EVERY local turn, in the request itself
+    (jarvis_agent.with_rules_first), so this no longer relies on what a model
+    was built with: the owner's everyday model, qwen3.5:9b, is a plain library
+    pull with no SYSTEM of its own, and "left to the Modelfile" meant no rules
+    at all on the lane he actually uses;
   - on the second card, the Jarvis block is not doubled;
   - the note never reaches the caller's `messages` (the relay's copy, the
     only road to a cloud model), and the relay's cut when a turn leaves this
@@ -95,26 +98,29 @@ def t_a_spoken_question_gets_the_note_just_before_it():
     msgs = sent[0]["messages"]
     check("the note is sent", NOTE in msgs, json.dumps(msgs)[:400])
     check("exactly once", msgs.count(NOTE) == 1)
-    check("just before the newest user message, everything else as it came",
-          msgs == passed[:-1] + [NOTE, passed[-1]], json.dumps(msgs)[:400])
+    check("just before the newest user message, everything else as it came "
+          "after the rules",
+          msgs == [BLOCK] + passed[:-1] + [NOTE, passed[-1]], json.dumps(msgs)[:400])
     check("not first", msgs[0] != NOTE)
 
 
-def t_a_typed_question_is_sent_unchanged():
+def t_a_typed_question_adds_no_note():
     for name, last in (("typed", typed("what is the weather tomorrow")),
                        ("no provenance", {"role": "user", "content": "what is the weather"}),
                        ("pasted", {"role": "user", "content": "x", "provenance": "pasted"}),
                        ("unknown value", {"role": "user", "content": "x", "provenance": "Voice"})):
         sent, _, passed = turn(HISTORY + [last])
-        check(f"{name}: sent exactly as it came in", sent[0]["messages"] == passed,
+        check(f"{name}: no spoken note - the rules, then the turn as it came",
+              sent[0]["messages"] == [BLOCK] + passed,
               json.dumps(sent[0]["messages"])[:300])
 
 
 def t_only_the_newest_message_counts():
     sent, _, passed = turn([voice("hello"), {"role": "assistant", "content": "Hi."},
                             typed("now a typed one")])
-    check("an earlier spoken message does not make a typed turn spoken",
-          sent[0]["messages"] == passed, json.dumps(sent[0]["messages"])[:300])
+    check("an earlier spoken message does not make a typed turn spoken, "
+          "so no note is added",
+          sent[0]["messages"] == [BLOCK] + passed, json.dumps(sent[0]["messages"])[:300])
 
 
 def t_the_first_question_keeps_the_jarvis_rules_first():
@@ -194,7 +200,7 @@ def t_the_note_says_what_the_owner_decided():
 
 if __name__ == "__main__":
     for fn in (t_a_spoken_question_gets_the_note_just_before_it,
-               t_a_typed_question_is_sent_unchanged,
+               t_a_typed_question_adds_no_note,
                t_only_the_newest_message_counts,
                t_the_first_question_keeps_the_jarvis_rules_first,
                t_the_second_card_does_not_get_the_block_twice,
