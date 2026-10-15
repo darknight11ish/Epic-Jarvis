@@ -414,6 +414,102 @@ def t_a_value_goes_only_to_the_host_it_is_bound_to():
           == {"exa": "api.exa.ai", "plainkey": ""}, str(V.handles()))
 
 
+def t_a_put_whose_binding_cannot_be_written_is_refused():
+    """A value in the store with NO host binding resolves for ANY host. So a
+    binding that could not be written must not be half a save: `put()` is a
+    `False`, the store entry goes back out, and nothing is left to resolve.
+
+    The fixture needs a directory that cannot be made. Where the machine will
+    not let the suite create it (a read-only temp area, a sandbox), that is a
+    SKIP with the reason and never a pass."""
+    path = reset()
+    blocked = path.parent / "not-a-folder"
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        blocked.write_text("a file, so a folder cannot be made here", encoding="utf-8")
+    except Exception as exc:
+        skip(f"cannot build the unwritable-name-list fixture here: {type(exc).__name__}")
+        return
+    was = V.vault_path
+    V.vault_path = lambda: blocked / "vault.json"
+    try:
+        check("the binding really cannot be written",
+              V._remember("exa", for_host="api.exa.ai") is False)
+        check("put() is REFUSED rather than reported saved",
+              V.put("exa", FAKE_KEY, for_host="api.exa.ai") is False)
+        check("... and the value does not stay in the store",
+              V.get("exa") is None, str(sorted(FakeStore.DATA)))
+        check("... nor in the values this run hands to redact()",
+              FAKE_KEY not in bytes_of(V._VALUES), str(V._VALUES))
+        check("... and the refusal names the name, never the value",
+              any(e == "vault.put_refused" and d.get("name") == "exa"
+                  and FAKE_KEY not in bytes_of(d) for e, d in AUDIT), str(AUDIT))
+        for host in ("api.exa.ai", "evil.example", None):
+            out = V.resolve("k={{vault:exa}}", host=host)
+            check(f"resolve() substitutes it for NO host ({host!r})",
+                  out == "k={{vault:exa}}", out)
+    finally:
+        V.vault_path = was
+        try:
+            blocked.unlink()
+        except Exception:
+            pass
+
+
+def t_resolve_fails_closed_when_the_name_list_cannot_be_read():
+    """The binding is read back out of the document, so a document that cannot
+    be READ is not the same thing as a document with no bindings. Substituting
+    anyway is how a key saved for one service reaches a request to another.
+
+    The fixture is a DIRECTORY where vault.json should be, and that is measured
+    rather than picked: on Windows a path whose PARENT is a file comes back as
+    `FileNotFoundError`, which `_read()` treats as "there is no file at all" -
+    the genuinely-absent case, and deliberately not this one. A directory at the
+    path raises `PermissionError`, which is the unreadable case."""
+    path = reset()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists():
+            path.unlink()
+        path.mkdir()
+    except Exception as exc:
+        skip(f"cannot build the unreadable-name-list fixture here: {type(exc).__name__}")
+        return
+    was = V.vault_path
+    V.vault_path = lambda: path
+    try:
+        check("_read() says the document could not be used", V._read()[1] != "")
+        for host in ("api.exa.ai", "evil.example", "api.exa.ai.evil.example", "", None):
+            out = V.resolve("k={{vault:exa}}", host=host)
+            check(f"NOTHING resolves while the list is unreadable ({host!r})",
+                  out == "k={{vault:exa}}", out)
+            check(f"... and the value is not in that answer ({host!r})",
+                  FAKE_KEY not in out, out)
+        check("... the refusal is audited by NAME only",
+              any(e == "vault.resolve_refused" and d.get("name") == "exa"
+                  and FAKE_KEY not in bytes_of(d) for e, d in AUDIT), str(AUDIT))
+    finally:
+        V.vault_path = was
+        try:
+            path.rmdir()
+        except Exception:
+            pass
+
+    # The binding DOES work while the document is readable - the fix must not be
+    # "refuse everything".
+    reset()
+    V.put("exa", FAKE_KEY, for_host="api.exa.ai")
+    check("the binding is still honoured while the document can be read",
+          V.resolve("k={{vault:exa}}", host="api.exa.ai") == f"k={FAKE_KEY}")
+
+    # A CORRUPT document is the other way the read fails, and it needs no fixture.
+    V.vault_path().write_text("{not json", encoding="utf-8")
+    check("a corrupt name list also fails closed",
+          V.resolve("k={{vault:exa}}", host="evil.example") == "k={{vault:exa}}"
+          and V.resolve("k={{vault:exa}}", host="api.exa.ai") == "k={{vault:exa}}")
+    check("... and _read() is what says so", V._read()[1] != "")
+
+
 # --------------------------------------------------------------------------
 #   4. The route: one card at tier ask, and a denial stores nothing
 # --------------------------------------------------------------------------

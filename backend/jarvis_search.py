@@ -1039,14 +1039,6 @@ def _json(body: bytes, who: str):
 
 _TAG = re.compile(r"<[^>]{0,200}>")
 
-#: The most of one provider's answer the scrubber is run over. A key echoed
-#: back is near the start of a document, not at the end of a 20 MB one, and
-#: `jarvis_scrub` reads its pattern table once per call - so the cost stays
-#: bounded on the path in front of the owner. What is scrubbed is only the
-#: SEARCH for a leak; the reply itself is parsed from the whole body.
-_SCRUB_CHARS = 100_000
-
-
 def _clean_return(body) -> bytes:
     """Bytes on the way back from a provider that was sent a key.
 
@@ -1058,7 +1050,18 @@ def _clean_return(body) -> bytes:
     (jarvis_scrub, ARCHITECTURE.md section 3's one log-scrubber) catches
     anything else that looks like a credential. Falls back to the body
     unchanged when the vault is not here, which is the state every
-    installation was in before it."""
+    installation was in before it.
+
+    THE WHOLE BODY, and this is what the caller PARSES. It used to stop at a
+    `_SCRUB_CHARS` (100,000) cap, and the caller then parsed that shortened
+    text: a valid answer only a little larger than the cap was cut mid-JSON and
+    came back to the owner as "Exa answered, but not with search results Jarvis
+    can read". Measured 2026-10-15: a 101,656-byte answer with its results last
+    raised; the whole body parses to them. A cap can never redact the part it
+    did not read either, so the cost of covering every byte that is parsed is
+    one pass of the scrubber over one reply - a bounded, one-off cost on the
+    request in front of the owner, against a credential reaching a tool result
+    through the part that was skipped."""
     if not body:
         return body
     v = _vault()
@@ -1066,7 +1069,7 @@ def _clean_return(body) -> bytes:
         return body
     try:
         text = body if isinstance(body, str) else body.decode("utf-8", "replace")
-        cleaned = v.redact(text[:_SCRUB_CHARS])
+        cleaned = v.redact(text)
         return cleaned.encode("utf-8") if isinstance(body, bytes) else cleaned
     except Exception:
         return body

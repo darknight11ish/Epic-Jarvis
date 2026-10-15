@@ -2136,6 +2136,22 @@ phone". `tools/check_parity.py` cannot see it at all - it scans the two apps'
 own source, so a backend route no app calls is outside what it decides -,
 which is said plainly here rather than read as a clean pass it did not earn.
 
+**Not on either app yet, for the same reason and by the same decision**
+(2026-10-14): **the blind credential vault** (`backend/jarvis_vault.py`,
+`plugins/ready/vault/`, JARVIS-API §133). Its two routes are built -
+`GET /api/vault/handles` (every name, the handle, the host it is bound to, when
+it was last used and whether a value is really there - never a value, never a
+masked prefix of one, never a length) and `POST /api/vault/put` (ONE secret,
+after ONE card at tier `ask`) - and neither app calls either of them yet, and
+neither holds a vault screen. That is one decision, not two: a value is typed on
+the PC and the real key reaches its one service from the PC, so there is nothing
+for a phone to carry. **When a screen is built it goes on BOTH apps**, and
+`GET /api/vault/handles` is the route an app may read because it carries no
+value; the value is never sent to an app at all. Nothing here is kept off one app
+on purpose, and `tools/check_parity.py` cannot see either route - it scans the
+two apps' own source, so a backend route no app calls is outside what it decides
+-, which is said plainly here rather than read as a clean pass it did not earn.
+
 **On the desktop, kept off the phone:**
 
 | what | why |

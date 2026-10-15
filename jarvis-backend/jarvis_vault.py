@@ -379,6 +379,11 @@ def put(name: str, value: Any, *, for_host: str = "") -> bool:
     identical: a store that silently truncates a key must not look like a
     successful save. The value is never logged, never returned, never put in an
     audit line and never written to any file. The audit line carries the NAME.
+
+    It is also a `False`, with the store entry removed again, when the HOST
+    BINDING could not be written down: `resolve()` reads that binding back out
+    of the document, so a value the vault cannot confine to one host is a value
+    that would resolve for ANY host. Half a save is not a save; it is refused.
     """
     n = _clean_name(name)
     if not n:
@@ -405,11 +410,28 @@ def put(name: str, value: Any, *, for_host: str = "") -> bool:
     if (back if isinstance(back, str) else "") != v:
         _audit("vault.put_refused", {"name": n, "why": "read back did not match"})
         return False
-    _register_with_scrubber(v)
     host = _clean_host(for_host)
+    if not _remember(n, for_host=host):
+        # The row written here is the ONLY thing that keeps this value to the
+        # one service it authenticates against - `resolve()` reads it back out
+        # of the document - and a value sitting in the store without one
+        # resolves for ANY host. So a binding that could not be written is not
+        # a partial save: the store entry goes back out, `_VALUES` is emptied so
+        # `redact()` holds no copy of it either, and this is a refusal, which is
+        # what the caller is told. On the NAME only - never the value, never its
+        # length, never a prefix of it.
+        try:
+            st.delete()
+        except Exception:
+            pass
+        with _LOCK:
+            _VALUES.pop(n, None)
+        _audit("vault.put_refused",
+               {"name": n, "why": "the vault's own list of names could not be written"})
+        return False
+    _register_with_scrubber(v)
     with _LOCK:
         _VALUES[n] = v
-    _remember(n, for_host=host)
     # The NAME. Never the value, never a length, never a prefix of it.
     _audit("vault.put", {"name": n, "for_host": host})
     return True
@@ -548,6 +570,11 @@ def resolve(text: Any, *, host: Any = None) -> str:
     * A handle that names nothing, or a value the store will not hand over:
       left as the literal handle. Failing to a placeholder the caller can see
       beats failing to an empty string that quietly authenticates wrong.
+    * The document of names could not be READ - unreadable, or present but
+      corrupt: NOTHING resolves, whatever host is named. A binding that cannot
+      be read is not the same thing as no binding, and substituting anyway is
+      how a key saved for one service reaches a request to another. This is
+      what `_read()`'s own reason is kept for; `_names()` throws it away.
     * A handle bound to a host resolves ONLY for that host (`host=` the host
       the request is going to). A handle bound to a host that is not given, or
       given as another host, does NOT resolve: rule 3's "sent only to the one
@@ -563,10 +590,23 @@ def resolve(text: Any, *, host: Any = None) -> str:
         if "{{vault:" not in s:
             return s
         want = _clean_host(host)
-        bound = _names()
+        # `_read()` says WHY it could not be used, and that is not the same
+        # thing as "no binding": a document that cannot be read may well hold a
+        # host binding, and substituting anyway would send a key saved for one
+        # service to whatever host this call happens to name. Unreadable
+        # therefore means NO substitution at all - the handle travels and the
+        # service refuses it, which is a visible failure rather than a silent
+        # wrong destination.
+        doc, why = _read()
+        names = doc.get("names")
+        bound = names if isinstance(names, dict) else {}
 
         def one(m) -> str:
             name = m.group(1)
+            if why:
+                _audit("vault.resolve_refused",
+                       {"name": name, "why": "the name list could not be read"})
+                return m.group(0)
             row = bound.get(name)
             bound_host = _clean_host(row.get("for_host")) if isinstance(row, dict) else ""
             if bound_host and bound_host != want:
