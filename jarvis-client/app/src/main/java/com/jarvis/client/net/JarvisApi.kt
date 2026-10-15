@@ -1686,6 +1686,44 @@ class JarvisApi(
             }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }
 
+    /**
+     * A POST whose answer is an ANSWER either way - `{"ok": true, ...}` or
+     * `{"ok": false, "error": "<plain words>"}` - rather than a job record or
+     * a status code to be translated. [postForJob] cannot be used for this:
+     * its "an explained refusal is an answer" branch keys on `state`, which a
+     * job record carries and this shape does not, so a 403 or a 409 would
+     * arrive at the screen as a bare number - and the whole point of these
+     * routes' refusals is the sentence in them.
+     *
+     * Used by the phone's two BACKUP calls ([Backup.PREPARE_PATH] and
+     * [Backup.COMMIT_PATH], `jarvis_backup.py`): the PC's own words are what
+     * the screen shows, exactly as it does for every other card and refusal in
+     * this app.
+     */
+    private suspend fun postExplained(path: String, json: String): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val target = url(path) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    when {
+                        obj != null && obj.containsKey("ok") -> ApiResult.Ok(obj)
+                        resp.isSuccessful && obj != null -> ApiResult.Ok(obj)
+                        resp.code == 401 || resp.code == 403 -> ApiResult.Failed(ApiError.BadToken)
+                        resp.code == 404 -> ApiResult.Failed(ApiError.NotFound)
+                        resp.code == 503 -> ApiResult.Failed(ApiError.NotAvailable)
+                        else -> ApiResult.Failed(ApiError.Server(resp.code, text.take(200)))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
     // ----------------------------------------------------- chat history ----
     // docs/JARVIS-API.md section 18 (2026-09-24). See [ChatLog] for the
     // shapes, the words and the rules; these only carry them.
@@ -2053,9 +2091,35 @@ class JarvisApi(
     suspend fun reach(): ApiResult<JsonObject> = probe(Reach.PATH)
 
     /**
-     * `GET /api/backup` - "Backups": read-only on the phone
-     * ([Backup.parse]); the full flow (choosing a folder, backing up,
-     * restoring) is the PC's alone. A read. A 404 is an older backend
+     * `GET /api/backup/status` - "Backups" on the phone ([Backup.Status]): the
+     * folder's last segment, how many are kept, when the last one was made and
+     * whether the newest file is complete. Read-only, any paired device, and it
+     * carries no recovery code. A read; a 404 is an older backend
+     * ([Backup.missing]).
+     */
+    suspend fun backupStatus(): ApiResult<JsonObject> = probe(Backup.STATUS_PATH)
+
+    /**
+     * `POST /api/backup/prepare {}` - ask the PC for a backup. WRITES NOTHING
+     * on the PC; the answer carries this run's one-time recovery code, which
+     * [BackupPlate] shows and the owner must keep before anything is written.
+     * See [Backup.prepareBody].
+     */
+    suspend fun backupPrepare(): ApiResult<JsonObject> =
+        postExplained(Backup.PREPARE_PATH, Backup.prepareBody())
+
+    /**
+     * `POST /api/backup/commit {"id","code"}` - say the code is kept. THIS is
+     * the call that writes the file, on the PC; the PC refuses it from any
+     * device but itself. See [Backup.commitBody].
+     */
+    suspend fun backupCommit(id: String, code: String): ApiResult<JsonObject> =
+        postExplained(Backup.COMMIT_PATH, Backup.commitBody(id, code))
+
+    /**
+     * `GET /api/backup` - the PC's own view, used by the phone only for the
+     * one line it has always supported ("Last backup: ..."). The folder's
+     * state is read from [backupStatus]. A read. A 404 is an older backend
      * ([Backup.missing]).
      */
     suspend fun backup(): ApiResult<JsonObject> = probe(Backup.PATH)

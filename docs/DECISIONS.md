@@ -2207,7 +2207,7 @@ running."), and a chat turn never waits on a restart.
   plus a queue of expired cards. It is bounded, reversible and said, it opens no
   socket that was not already open, and **nothing is auto-approved**: this path
   raises no card and answers no card, so rule 4 is untouched. Full argument in
-  `docs/ARCHITECTURE.md` §3 and `docs/JARVIS-API.md` §132.4.
+  `docs/ARCHITECTURE.md` §3 and `docs/JARVIS-API.md` §133.4.
 - **A deliberate stop cannot be told from a crash, and this does not pretend
   otherwise.** `schtasks` reports the same "Ready" whether the lane crashed or
   was closed on purpose. So there is one switch (`POST /api/model-lanes/auto`,
@@ -2238,3 +2238,159 @@ written after them, and `test_uncensored_optins.py` plus
 anchor line. Each was run on `feat/start-the-lane` **unmodified** first and
 failed there identically, so this is the branch's own state, not something this
 work broke. All seven are green now.
+
+Decided 2026-10-13, the owner's three answers after being asked the multi-device
+questions as short multiple choice (`docs/MULTI-DEVICE-DESIGN.md` section 4, and
+`.dsh-scratch/multi-device-questions.md`; the worked questions were task-51):
+
+- **The laptop / other-PC client: START IT NOW** as the main piece of the
+  multi-device work. It is the largest item in that design - a client mode in the
+  desktop app, a second credential store on the other machine, its own pairing
+  screen - and a client cannot approve risky cards, because Windows Hello on that
+  machine proves nothing to this PC. **The client mode itself is NOT built yet**;
+  what this change lands is the backend half it needs (below), so a non-phone
+  client is no longer recorded as a phone.
+- **Who may approve a new device - a LOOSENING, with his explicit yes:** a phone
+  that already signs approvals may also approve a *new* device. It is recorded as
+  a loosening because it is one: until now `pair_device` is in
+  `jarvis_owner_check.PC_ONLY_ACTIONS` and a device can never approve a device.
+  **It is NOT built, and must not be built before the phone signing half is
+  proved on a real phone** (a fresh fingerprint per risky approval, and the four
+  words matched against the card - `docs/MULTI-DEVICE-DESIGN.md` section 1 says
+  that last mile has never been proved on hardware). Nothing in this change
+  touches that gate; the PC-only rule stands until that proof exists, and the
+  proof is a later, separate piece of work.
+- **Nothing else per-device, for now** - no per-device notifications and no
+  "quiet this device" switch. Only the animal's sharpness and frame rate are
+  per-device (`jarvis_animal.py`), and that stays. **Written down for whenever it
+  is revisited: quieting one device must never hide an approval card.** A card is
+  how Jarvis asks, and a device the owner has quieted is still a device he must
+  be able to answer on.
+
+Decided 2026-10-13, after he asked whether a cloud model could "take over
+Jarvis's brain": **the cloud lanes are for background work and genuinely hard
+questions only - `jarvis-escalate`, `jarvis-critic` and `jarvis-bulk`, the three
+he already has configured in `~/.openjarvis/litellm-proxy.yaml` (OpenRouter's
+free tier). Ordinary conversation stays on this PC, and rule 1 remains a
+guarantee for it.** His question and this decision are deliberately NOT the same
+thing: what is being switched on is a lane a hard question may be *offered* to,
+not a cloud replacement for the everyday model. The everyday chat, the voice
+turns and the approvals are untouched by it.
+
+**What this replaces:** nothing was previously switched on at all. Until this
+entry the whole lane was inert - `ARCHITECTURE.md` recorded cloud use as "per
+use, with permission ... No standing grant", and the router has always refused to
+escalate on its own (its gate 6, the owner's decision of 2026-09-24: *"any long,
+non-private question went to the first cloud lane, and the owner saw a Cloud
+badge afterwards"* was the old behaviour that was removed). So this narrows
+nothing and widens nothing in what may leave the PC; it only makes the existing
+offer reachable, which it was not.
+
+Decided 2026-10-13, the precondition the code itself demanded: **Jarvis stops
+injecting the owner's saved facts into every request.** His words, asked exactly
+that: *"Yes - stop injecting my facts into every request."* He was told plainly
+that this changes his everyday chat, and agreed knowing it.
+
+**Why it was required, in the code's own words** (`backend/cloud-say-yes.patch`,
+lines 10-12): *"While Jarvis injects memory itself we cannot escalate safely: it
+would attach your facts to a free-tier cloud request."* That is why
+`jarvis_hud.py` passed `lanes=[]` and every cloud lane was hard-disabled while
+`[agent] context_from_memory = true` - and his own routing log said so on every
+turn, `gate: "privacy"`, `reason: "escalation off while Jarvis injects memory
+itself"`.
+
+**What this replaces, said plainly because it is a real change to his chat:**
+the setting he had, `context_from_memory = true`, was **switching the memory
+block OFF**. The name reads the other way round and that misled the brief for
+this work; the code is `if decision.inject_memory and ROUTING and not
+jarvis_side_memory:` (`jarvis_hud.py:4819`), so `true` meant "Jarvis is injecting
+it itself" and the block was skipped. Changing it to `false` therefore **turns
+his saved facts back on for local answers** - it does not take them away. That is
+the opposite of a regression, but it is a behaviour change and it is recorded as
+one. **Measured 2026-10-13 on his PC:** the same question returned
+`gate: "privacy"` before the change and `gate: "complexity"` after, which is the
+gate moving past the memory check.
+
+**One honest limit on that measurement.** His memory store holds **0 facts**
+(`~/.openjarvis/memory.db`, `SELECT COUNT(*) FROM facts` -> 0), so
+`injected_facts` was 0 both before and after. The change is proven to have
+**enabled the path** (the gate moved); it could not be shown to **change an
+answer**, because there is nothing saved to recall. When he saves facts, this is
+where they will appear.
+
+Decided 2026-10-14, from the field test that measured it
+(`docs/FIELD-TEST-CLOUD-ESCALATION-2026-10-14.md`, its section 6, and the same
+day's four escalated calls): **when a cloud answer comes back empty and the
+reply carries the model's own working-out, Jarvis shows that working-out under
+one line that says what it is - rather than raising the answer cap or turning
+his thinking off.**
+
+* **The measurement that forced the choice.** Four escalated turns driven
+  through the live `/api/chat` (two `stream: false`, two `stream: true`): all
+  four `finish_reason: "length"`, `len(content) == 0`, and 2048 of 2048
+  completion tokens spent on `reasoning_tokens`. Read back off the live SSE
+  stream: *"chunks with visible content: 0, chunks with reasoning only: 2048"*.
+  DeepSeek's thinking mode is ON BY DEFAULT, its thinking is billed INSIDE
+  `max_tokens`, `max_tokens` defaults to 2048, and nothing in the program read
+  `reasoning_content` at all - `git grep -n reasoning_content` matched nothing
+  on that day's `main`. So the hardest questions, the only ones that earn an
+  offer, bought a blank card: **$0.0099 for four blank answers.**
+* **The two changes he did NOT choose, and why that is the point.** Raising the
+  cap for a cloud lane and turning thinking off for `deepseek-flash` were both
+  on the table, and both change what he is billed for or what the model does.
+  He chose to leave the request exactly as it is and show what came back.
+* **What it is not.** Not a replacement, and not silent. A reply with any
+  visible text is passed through **byte for byte**; a reply whose only text is
+  the working-out is shown under one line naming it
+  (`REASONING_NOT_ANSWER`), so it cannot be read as a finished answer; a turn
+  with neither says so in one plain sentence (`NO_ANSWER_AT_ALL`) instead of
+  rendering an empty card; and anything unreadable is passed through untouched,
+  because a filter that lost an answer would be worse than the blank it fixes.
+* **Where it lives.** The rule is in `jarvis_chatbot_api.py` and its
+  byte-identical twin `jarvis-backend/jarvis_chatbot_api.py`: `CloudAnswer`
+  rewrites a streamed or whole-JSON cloud reply, and `reasoning_answer()` is the
+  same law where a whole reply is parsed (`ApiChatbot._parse`). The wire is
+  `jarvis-backend/jarvis_hud.py`'s cloud relay, which now runs the service's
+  bytes through it and still hands `jarvis_speed`'s meter the **service's own
+  bytes, in the same order** - so what the turn is recorded as spending cannot
+  move because of this.
+* **Deliberately unchanged:** the request itself (model, cap,
+  `reasoning_effort`), the local lane (jarvis_agent has its own `<think>`
+  handling), the money (`_count_money` counts the ORIGINAL text, so a guessed
+  token count cannot become the working-out's length), and every client - the
+  added line is text, so the HUD page, the desktop window and the phone need no
+  change. A flag in the reply's headers was the alternative and was turned down:
+  on a streamed reply the headers are on the wire before the first byte of the
+  body, so the flag could not be known at the moment it would have to be
+  written.
+* **One thing this does contradict, said plainly:** `jarvis_thinking.py`'s
+  docstring says "Thinking text is never shown, saved or learned from." That
+  stands for every ordinary turn - thinking is still switched off per model and
+  never reaches a client - but a cloud reply that wrote nothing else is now
+  shown, marked, because an empty card is not an answer either. The working-out
+  is not saved as a fact and never reaches the event bus.
+
+Decided 2026-10-14, found while fixing the above and settled the same day:
+**`docs/DATA-BACKUP.md` stays ONE filename carrying BOTH backup pages, each
+under its own clear heading, and whoever merges second combines them.**
+
+* **The state this is about, checked rather than assumed.** The path is on no
+  branch of `main` (`git cat-file -e origin/main:docs/DATA-BACKUP.md` exits
+  128). **Four** open pull requests add it, and they are two different documents:
+  #403, #406 and #407 are three versions of ONE page, the weekly SQLite snapshot,
+  titled `# Your Jarvis data, and the copy that now exists`; **#414** is a
+  different page entirely, the app's own encrypted `.jbak` backup, titled
+  `# The app's own backup: what it covers now` (123 lines). Whichever family
+  merges second hits an add/add collision on that one path.
+* **The headings to use, so the combining is mechanical.** The page that merges
+  first keeps its own `# ` title as the page's title. The second one's `# ` title
+  becomes a `## ` section heading - `## The app's own backup: what it covers now`
+  - with its own `## ` subheadings demoted to `### `. Every fact from both
+  documents stays and nothing new is added. (Naming one top title for the pair
+  and demoting both halves to `## ` is equally acceptable; what is not is
+  dropping either half, or renaming the file.)
+* **Why not two filenames.** Both documents are about the same subject - the
+  copies of his data - and a reader looking for "the backup page" should find
+  both tools and what each one covers. It is also the smaller change: the four
+  PRs already carry links to this path.
+

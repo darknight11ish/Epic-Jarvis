@@ -598,7 +598,7 @@ def t_listed_and_applies():
     # The anchor moved twice, and this patch is not at fault either time: the
     # "ask for a picture" patch (pictures.patch, section 129) joined the install
     # CHAIN between this patch's block and the loader on 2026-10-11, and "Start
-    # the local model" (model-lanes.patch, section 132) joined it after that
+    # the local model" (model-lanes.patch, section 133) joined it after that
     # block on 2026-10-13 - so the loader's hunk now finds model-lanes.patch's
     # last two printed lines. Which patch it must anchor on is derived from the
     # patch text by tools/check_plugins.py, which fails if the two ever disagree

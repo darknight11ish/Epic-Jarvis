@@ -2627,13 +2627,106 @@ object JarvisRuntime {
     suspend fun reach(): ApiResult<JsonObject> = api.reach()
 
     // ------------------------------------------------------------- backups -----
-    // The owner's decision of 2026-09-27 - see [com.jarvis.client.net.Backup]
-    // and ui/screens/BackupPlate.kt. Read-only here on purpose: choosing a
-    // folder, backing up and restoring all happen on the PC, in Jarvis
-    // Desktop's Settings (docs/ARCHITECTURE.md section 8).
+    // The owner's decision of 2026-09-27 for the feature, and his question of
+    // 2026-10-10 - "a Back up now button on the phone" - answered for real on
+    // 2026-10-13. See [com.jarvis.client.net.Backup] and
+    // ui/screens/BackupPlate.kt. The ARCHIVE lives on the PC and only on the
+    // PC: the phone reads the folder's state, asks the PC to make a backup,
+    // and shows the one-time code the PC minted. The PC writes the file. What
+    // is still the PC's alone: choosing the folder, restoring, and deleting
+    // older copies (docs/ARCHITECTURE.md section 8).
 
-    /** `GET /api/backup`. A read: never held. */
+    /**
+     * Bumped once a backup has really landed on the PC, so ui/screens/
+     * BackupPlate.kt re-reads the folder without the owner pressing Refresh.
+     * The same shape `_projectsTick` uses.
+     */
+    private val _backupTick = MutableStateFlow(0)
+
+    /** Goes up by one after a backup from this phone, so the plate reads itself again. */
+    val backupTick: StateFlow<Int> = _backupTick.asStateFlow()
+
+    /**
+     * `GET /api/backup/status` - the folder's last segment, how many are kept,
+     * when the last backup was made and whether the newest file is complete.
+     * A read: never held (rule 4 is about actions, and this is not one).
+     */
+    suspend fun backupStatus(): ApiResult<JsonObject> = api.backupStatus()
+
+    /**
+     * `GET /api/backup`. A read: never held. Kept for the one line the phone
+     * has always supported from it, so an older PC still says something true.
+     */
     suspend fun backup(): ApiResult<JsonObject> = api.backup()
+
+    /**
+     * `POST /api/backup/prepare` - ask the PC to make a backup.
+     *
+     * NOT held on a stale link, and that is not a loophole: this call writes
+     * NOTHING anywhere. It mints a code and answers with it, and it is not an
+     * action in rule 4's sense at all. The write is [commitBackup], which IS
+     * held, and that is where the stale-link rule belongs.
+     *
+     * @return the PC's [com.jarvis.client.net.Backup.Asked] - the code to show,
+     *   or the PC's own sentence for why it would not start one.
+     */
+    suspend fun prepareBackup(): com.jarvis.client.net.Backup.Asked =
+        when (val r = api.backupPrepare()) {
+            is ApiResult.Ok -> com.jarvis.client.net.Backup.asked(r.value)
+            is ApiResult.Failed -> com.jarvis.client.net.Backup.Asked.Refused(
+                when {
+                    com.jarvis.client.net.Backup.missing(r.error) ->
+                        com.jarvis.client.net.Backup.MISSING
+                    com.jarvis.client.net.Backup.describeRefusal(r.error).isNotBlank() ->
+                        com.jarvis.client.net.Backup.describeRefusal(r.error)
+                    else -> describe(r.error)
+                },
+            )
+        }
+
+    /**
+     * `POST /api/backup/commit {"id","code"}` - the owner says the code is
+     * kept, and the PC writes the file. HELD ON A STALE LINK: this is the call
+     * that writes into a folder on the PC, and rule 4 holds every action of
+     * that shape.
+     *
+     * @return the PC's sentence - what landed, or why nothing did. Never an
+     *   empty string on a failure.
+     */
+    suspend fun commitBackup(id: String, code: String): String {
+        actionBlocker()?.let { return it }
+        return when (val r = api.backupCommit(id, code)) {
+            is ApiResult.Ok -> {
+                val w = com.jarvis.client.net.Backup.written(r.value)
+                val said = com.jarvis.client.net.Backup.refusalWords(r.value)
+                when {
+                    w != null -> {
+                        _backupTick.update { n -> n + 1 }
+                        val size = w.size?.let { " (${humanSize(it)})" }.orEmpty()
+                        val where = w.folder?.let { " in $it" }.orEmpty()
+                        "Your PC wrote ${w.name}$size$where."
+                    }
+                    // `ok: false` with a sentence - the PC's own words.
+                    said != null -> said
+                    else -> com.jarvis.client.net.Backup.RUN_GONE
+                }
+            }
+            is ApiResult.Failed ->
+                com.jarvis.client.net.Backup.describeRefusal(r.error).ifBlank {
+                    describe(r.error)
+                }
+        }
+    }
+
+    /**
+     * A byte count in words, for the one line under the code.
+     */
+    private fun humanSize(bytes: Long): String = when {
+        bytes >= 1024L * 1024 * 1024 -> "%.1f GB".format(bytes / 1024.0 / 1024.0 / 1024.0)
+        bytes >= 1024L * 1024 -> "%.1f MB".format(bytes / 1024.0 / 1024.0)
+        bytes >= 1024L -> "%.0f KB".format(bytes / 1024.0)
+        else -> "$bytes bytes"
+    }
 
     // ------------------------------------------------------ what asks first ----
     // The owner's decisions of 2026-09-26 - see [com.jarvis.client.net.AsksFirst]

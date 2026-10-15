@@ -87,6 +87,21 @@ def err(raw, **kw):
     return None
 
 
+def rate_err(**kw):
+    """The InputError one of run()'s two optional rates raises, or None."""
+    try:
+        R.run(base(), paths=100, **kw)
+    except R.InputError as e:
+        return e
+    return None
+
+
+def rate_code(**kw):
+    """That InputError's code, or None when the rate was accepted."""
+    e = rate_err(**kw)
+    return None if e is None else e.code
+
+
 # ============================================================ 1. worked by hand
 
 def t_worked_by_hand():
@@ -143,6 +158,97 @@ def t_worked_by_hand():
                    yearly_spending=20000), paths=100)
     check("worked: already retired ignores the yearly saving (5 years of 20,000 = 100,000, lasts)",
           r["state"] == "never_runs_out", r["state"])
+
+
+# ============================================================ 1b. the two optional rates
+
+def t_real_and_nominal_and_safe_withdrawal():
+    """run(inflation_rate=..., safe_withdrawal_rate=...): both default to 0.0 and
+    at 0.0 nothing changes; a rate adds the real and nominal sets of money and a
+    safe-withdrawal figure that IS the rate times the balance it names."""
+    plain = R.run(base(), paths=FAST)
+    zero = R.run(base(), paths=FAST, inflation_rate=0.0, safe_withdrawal_rate=0.0)
+    check("inflation_rate=0.0 with safe_withdrawal_rate=0.0 reproduces the old answer exactly",
+          json.dumps(plain, sort_keys=True) == json.dumps(zero, sort_keys=True))
+    check("... not one key added, and neither block is there",
+          set(plain) == set(zero) and "terms" not in plain and "safe_withdrawal" not in plain,
+          sorted(set(zero) ^ set(plain)))
+    # Worked by hand: no growth, no randomness. 300,000 at 65, spending 20,000 a
+    # year to age 75 leaves exactly 100,000. Ten years at 2.5% is 1.025**10.
+    worked = flat(current_age=65, retirement_age=65, plan_to_age=75, savings=300000,
+                  yearly_saving=0, yearly_spending=20000)
+    r0 = R.run(worked, paths=100)
+    check("worked: 300,000 less ten years of 20,000 leaves 100,000",
+          r0["state"] == "never_runs_out" and r0["end_balance"]["p50"] == 100000, r0["end_balance"])
+    r = R.run(worked, paths=100, inflation_rate=0.025, safe_withdrawal_rate=0.04)
+    t = r["terms"]
+    check("the real figures ARE the ones this module always produced (nothing re-based)",
+          (t["real"]["p10"], t["real"]["p50"], t["real"]["p90"])
+          == (r["end_balance"]["p10"], r["end_balance"]["p50"], r["end_balance"]["p90"]),
+          (t["real"], r["end_balance"]))
+    check("ten years at 2.5%: 100,000 in today's money is about 130,000 in the money of age 75",
+          t["years"] == 10 and t["nominal"]["p50"] == 130000 and t["nominal"]["age"] == 75
+          and abs(t["factor"] - 1.025 ** 10) < 1e-12, {k: t[k] for k in ("years", "nominal", "factor")})
+    check("the nominal figures are the same futures in the plan year's money, and never lower",
+          t["nominal"]["p10"] >= t["real"]["p10"] and t["nominal"]["p50"] > t["real"]["p50"]
+          and t["nominal"]["p90"] >= t["real"]["p90"], (t["real"], t["nominal"]))
+    w = r["safe_withdrawal"]
+    check("4% of the middle balance is exactly the rate times the balance it names",
+          w["rate"] == 0.04 and w["on"] == "p50" and w["age"] == 75
+          and w["real"]["balance"] == 100000 and w["real"]["yearly"] == 4000
+          and w["nominal"]["balance"] == 130000 and w["nominal"]["yearly"] == 5200, w)
+    check("... and the rate times that balance, worked out here, is the same figure",
+          w["real"]["yearly"] == int(round(w["rate"] * w["real"]["balance"]))
+          and w["nominal"]["yearly"] == int(round(w["rate"] * w["nominal"]["balance"])))
+    check("every money figure in the new blocks is a whole number, in the module's own unit",
+          all(isinstance(x, int) for x in (
+              t["real"]["p10"], t["real"]["p50"], t["real"]["p90"],
+              t["nominal"]["p10"], t["nominal"]["p50"], t["nominal"]["p90"],
+              w["real"]["balance"], w["real"]["yearly"],
+              w["nominal"]["balance"], w["nominal"]["yearly"])))
+    check("both sentences are code-written, in the answer's own words",
+          any(x.startswith("The figures above are in today's money.") and "130,000" in x
+              for x in r["summary"])
+          and any(x.startswith("Taking 4% of the middle case's balance at age 75") and "5,200" in x
+                  for x in r["summary"]), r["summary"][-2:])
+    check("the rates a caller gave are listed in what I used",
+          any(u["key"] == "inflation_rate" and u["value"] == "2.5% a year" for u in r["used"])
+          and any(u["key"] == "safe_withdrawal_rate" and u["value"] == "4% a year" for u in r["used"]),
+          [u for u in r["used"] if "rate" in u["key"]])
+    check("a rate nobody gave is not listed", not any(
+        u["key"] in ("inflation_rate", "safe_withdrawal_rate") for u in plain["used"]))
+    only_safe = R.run(worked, paths=100, safe_withdrawal_rate=0.04)
+    check("the safe-withdrawal rate on its own needs no inflation rate",
+          "terms" not in only_safe and only_safe["safe_withdrawal"]["nominal"] is None
+          and only_safe["safe_withdrawal"]["real"]["yearly"] == 4000
+          and "in the money of age" not in " ".join(only_safe["summary"]),
+          only_safe["summary"][-1])
+    only_infl = R.run(worked, paths=100, inflation_rate=0.025)
+    check("the inflation rate on its own adds the two sets of money and no withdrawal figure",
+          "safe_withdrawal" not in only_infl and only_infl["terms"]["nominal"]["p50"] == 130000,
+          sorted(only_infl))
+    nothing = R.run(base(yearly_spending=0), paths=100, inflation_rate=0.025,
+                    safe_withdrawal_rate=0.04)
+    check("with nothing to project, neither block is added and it still says why",
+          nothing["state"] == "not_enough_to_say" and "terms" not in nothing
+          and "safe_withdrawal" not in nothing
+          and R.NOT_ENOUGH_NO_SPENDING in nothing["summary"], sorted(nothing))
+    # The bounds. A fraction a year, a number only, and the error says no value.
+    check("a negative rate is refused", rate_code(inflation_rate=-0.01) == "bad_rate"
+          and rate_code(safe_withdrawal_rate=-0.1) == "bad_rate")
+    check("a rate above its bound is refused", rate_code(inflation_rate=0.16) == "bad_rate"
+          and rate_code(safe_withdrawal_rate=0.26) == "bad_rate")
+    check("the bounds themselves are allowed",
+          rate_err(inflation_rate=R.MAX_INFLATION_RATE) is None
+          and rate_err(safe_withdrawal_rate=R.MAX_WITHDRAWAL_RATE) is None)
+    check("text, a boolean or a list where a rate belongs is refused, never parsed",
+          rate_code(inflation_rate="2.5") == "bad_rate" and rate_code(safe_withdrawal_rate=True)
+          == "bad_rate" and rate_code(inflation_rate=[1]) == "bad_rate"
+          and rate_code(safe_withdrawal_rate=None) == "bad_rate")
+    e = rate_err(inflation_rate=0.16)
+    check("a refused rate's message is a plain sentence and never repeats the value typed",
+          e is not None and e.message.endswith(".") and "0.16" not in e.message
+          and e.field == "", None if e is None else (e.code, e.field, e.message))
 
 
 # ============================================================ 2. the states, in words

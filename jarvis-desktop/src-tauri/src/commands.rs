@@ -1907,7 +1907,7 @@ pub async fn start_model_lane(app: AppHandle) -> Result<serde_json::Value, Strin
 /// immediate and only narrows what Jarvis does; ON is the same action the
 /// button beside it takes in the same second, so neither direction raises a
 /// card. The whole argument is in `backend/jarvis_model_lanes.py`'s header,
-/// `docs/ARCHITECTURE.md` §8 and `docs/JARVIS-API.md` §132.3.
+/// `docs/ARCHITECTURE.md` §8 and `docs/JARVIS-API.md` §133.3.
 ///
 /// One fact about this PC's one lane, and the body says nothing else: there is
 /// no lane name in it, so no client can aim this at another lane.
@@ -3083,8 +3083,9 @@ pub async fn stop_task(app: AppHandle) -> Result<serde_json::Value, String> {
 /// "Stop everything" (the owner's decision of 2026-09-25; the hotkey,
 /// `Alt+Shift+X` by default). Speech stops HERE first - every window that
 /// speaks is told at once, before the backend is asked, so a dead link never
-/// keeps Jarvis talking - then `POST /api/stop_all` stops the running task,
-/// the answer's remaining tools and every registered stopper
+/// keeps Jarvis talking - and so does any microphone this app has open
+/// (talk-to-type's and push-to-talk's), then `POST /api/stop_all` stops the
+/// running task, the answer's remaining tools and every registered stopper
 /// (`backend/jarvis_stop_all.py`). A notification says what was stopped.
 ///
 /// Never held: not on a stale stream (rule 4 blocks ACTING, and this is the
@@ -3097,6 +3098,11 @@ pub fn stop_everything_now(app: &AppHandle) {
     // Talk-to-type: the microphone closes and nothing still on its way is
     // typed (talk_type.rs `stop`).
     crate::talk_type::stop(app);
+    // Push-to-talk: the same, for the other microphone this app can have open.
+    // Holding the mic button while the hotkey is pressed used to leave the
+    // `cpal` stream running until the button was let go (voice.rs
+    // `stop_push_to_talk`).
+    crate::voice::stop_push_to_talk(app);
     crate::emit_all(app, crate::events::STOP_EVERYTHING, ());
     // The HUD window is the backend's own page and speaks through the
     // browser's speech engine; a fixed line, no payload.

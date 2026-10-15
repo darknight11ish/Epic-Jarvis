@@ -5682,6 +5682,18 @@ listen("private-hidden", () => {
 listen("stop-everything", () => {
   focusStoppedAt = Date.now();
   stopSpeaking();
+  // A microphone being held is one of the things "everything" covers: Rust
+  // closes it, and this side must stop believing it is recording - otherwise
+  // the button stays pressed, the next hold is refused by the `micRecording`
+  // guard below, and letting go afterwards sends a `stop_voice_capture` for a
+  // recording that no longer exists (Rust answers "not recording", which the
+  // owner would see as an error). Same three lines as `abandonPushToTalk`,
+  // which is the other way a held clip is thrown away.
+  if (micRecording) {
+    micRecording = false;
+    dom.mic.setAttribute("aria-pressed", "false");
+    invoke("cancel_voice_capture");
+  }
 });
 
 listen("clipboard-inject", (event) => {

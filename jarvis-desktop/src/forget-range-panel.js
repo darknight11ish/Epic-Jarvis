@@ -263,7 +263,13 @@ export function takeAnyPlace(freshMs = 60_000) {
   if (!left || Date.now() - Number(left.at) >= freshMs) return "";
   // "topics": "switch off my work topic" (topics.js TOPICS_PLACE) - the
   // picker for `topic_id`, a whole number checked again by the Brain.
-  if (left.place === PLACE || left.place === HISTORY_PLACE || left.place === "topics") {
+  // "tutorials": the Set up Jarvis card's own "Read the FAQ"
+  // (first-run-settings.js), which leaves this place and then opens the Brain -
+  // the same one Help destination the palette's Help row uses (tutorials.js
+  // TUTORIALS_PLACE). Named here as a literal, the way "topics" is, so this
+  // file does not import the tutorials panel to learn one word.
+  if (left.place === PLACE || left.place === HISTORY_PLACE || left.place === "topics"
+      || left.place === "tutorials") {
     lastLeft = left;
     return left.place;
   }

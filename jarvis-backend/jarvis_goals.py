@@ -660,15 +660,33 @@ class Goals:
                     names = {st["id"]: st["step"] for st in plan}
                     raise Locked(WORDS["locked_refusal"].format(
                         step=_short(names.get(info["waiting_on"][0], ""))), info["waiting_on"])
+            # The plan exactly as the row still holds it - the before-snapshot
+            # a receipt needs, taken before this tick touches anything.
+            before_plan = json.dumps(plan)
             if bool(done):
                 if not step["done"]:
                     step["done"], step["done_at"] = True, self.now()
             else:
                 step["done"], step["done_at"] = False, None
             now = self.now()
+            # The receipt, BEFORE the row changes (jarvis_receipts.py's own
+            # rule): the before-snapshot is the whole row as it stands, which
+            # is what Undo writes back. It may be "" - the module is optional,
+            # and a receipt that cannot be written must never fail the tick.
+            prior = {"id": goal_id, "plan": before_plan,
+                     "status": row["status"], "changed": row["changed"],
+                     "checkin_job": row["checkin_job"]}
+            receipt_id = _record_step_receipt(
+                goal_id, row["text"], step, bool(done), prior,
+                {"id": goal_id, "plan": json.dumps(plan),
+                 "status": row["status"], "changed": now,
+                 "checkin_job": row["checkin_job"]})
             c.execute("UPDATE goals SET plan = ?, changed = ? WHERE id = ?",
                       (json.dumps(plan), now, goal_id))
-        return self.get(goal_id)
+        out = self.get(goal_id)
+        if out is None:                     # pragma: no cover - the row just read
+            return out
+        return dict(out, receipt_id=(receipt_id or None))
 
     def stop(self, goal_id: str) -> dict:
         """Immediate, one tap - the same rule every "stop tracking this"
@@ -787,6 +805,87 @@ class Goals:
                 fw.audit_log(event, detail)
         except Exception:
             pass
+
+
+# --------------------------------------------------------------------------
+#   Action receipts: what one tick changed, and how it is put back
+# --------------------------------------------------------------------------
+# Ticking a step is the everyday change this module makes - no card, one tap,
+# often by voice, and the easiest one to do by accident. jarvis_receipts.py
+# gives it a receipt, so the tick leaves a record of what changed and an Undo
+# that puts the plan back exactly as it was (the same step, the same done_at,
+# not a fresh timestamp). The receipt is written BEFORE the row changes, as
+# that module's own rule says; if the write then fails, the receipt still
+# holds the row's own before-snapshot, so pressing Undo is an exact restore of
+# what is on disk either way.
+#
+# Nothing here may fail the tick: jarvis_receipts is optional (this repository
+# ships it, but a backend folder that has not run apply-patches.ps1 again does
+# not have it), so every call is lazy and wrapped - the same shape every other
+# optional module in this file uses.
+
+#: The name a receipt records for a tick, and the name its restorer is
+#: registered under. jarvis_receipts.py treats it as a name and nothing else -
+#: never as a path, and never as importable code.
+TOOL_STEP = "goals.mark_step"
+
+
+def restore_row(snapshot) -> None:
+    """Put one goals row back exactly as a receipt's before snapshot has it.
+
+    jarvis_receipts.py calls this on the SNAPSHOT path - after a restart, when
+    the zero-argument callable it held is gone - so it must work from the
+    snapshot alone. It writes only the columns such a snapshot carries, for
+    the one id it names, through this module's own db_path() (so a test's
+    JARVIS_GOALS_DB is honoured). Raises on a snapshot it cannot use; the
+    caller reports that in plain words and changes nothing."""
+    if not isinstance(snapshot, dict):
+        raise ValueError("this is not a goals receipt snapshot")
+    goal_id = str(snapshot.get("id") or "")
+    plan = snapshot.get("plan")
+    if not goal_id or not isinstance(plan, str):
+        raise ValueError("this goals receipt snapshot has no id or plan")
+    store = Goals()                      # no scheduler: nothing here touches a job
+    with store._lock, store._db() as c:
+        if store._row(c, goal_id) is None:
+            raise KeyError("no such goal")
+        c.execute("UPDATE goals SET plan = ?, status = ?, changed = ?, checkin_job = ?"
+                  " WHERE id = ?",
+                  (plan, str(snapshot.get("status") or "active"),
+                   float(snapshot.get("changed") or 0.0), snapshot.get("checkin_job"), goal_id))
+
+
+def register_receipts() -> bool:
+    """Tell jarvis_receipts.py how a tick is put back from its snapshot.
+
+    Called once at import, below: a restorer only exists in a process whose
+    module was imported, and jarvis_receipts deliberately keeps no list of its
+    own. False (never an exception) when jarvis_receipts is not installed."""
+    try:
+        import jarvis_receipts
+        return bool(jarvis_receipts.register_restorer(TOOL_STEP, restore_row))
+    except Exception:
+        return False
+
+
+def _record_step_receipt(goal_id: str, goal_text: str, step: dict, done: bool,
+                         before: dict, after: dict) -> str:
+    """One receipt for one tick, or "" - never an exception into the tick."""
+    try:
+        import jarvis_receipts
+    except Exception:
+        return ""
+    try:
+        verb = "Ticked" if done else "Unticked"
+        summary = (f'{verb} the step "{_short(step.get("step", ""))}" on the goal '
+                   f'"{_short(goal_text, 60)}"')
+        return jarvis_receipts.record(TOOL_STEP, summary, before=before, after=after,
+                                      undo=lambda: restore_row(before))
+    except Exception:
+        return ""
+
+
+register_receipts()
 
 
 # --------------------------------------------------------------------------

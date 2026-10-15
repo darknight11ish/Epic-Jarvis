@@ -94,6 +94,7 @@ note-capture.patch	note-capture/d37739c.patch	d37739c4ce0790869ce61aa3081983fed5
 ollama-direct.patch	ollama-direct/b2c3a98.patch	b2c3a989bd85f94967c053e5140e94b301f5d7db	2026-10-06T23:24:11-07:00	the cloud lane's resolution leaves the HUD, and the six rehearsals find their text again
 ollama-direct.patch	ollama-direct/d03bc52.patch	d03bc52361f9379928d7667a7d664340d566ef05	2026-10-06T20:32:34-07:00	The cloud lane gets a real transport, and DeepSeek is behind it
 ollama-direct.patch	ollama-direct/0fbadf7.patch	0fbadf7f0a3918c9862eae9a563c2def3697378e	2026-09-18T00:10:00Z	backend: ollama-direct.patch - local chat was calling a program that never ran
+picture-card.patch	picture-card/39c005e.patch	39c005e915c2c465e1311620914dd9da510aaff0	2026-10-11T02:17:01-07:00	picture-card.patch: anchor its install block on the owner's own lines
 picture-card.patch	picture-card/c16c2b1.patch	c16c2b14736b3d5c4938807688eb8d5b98a96650	2026-10-10T22:03:36-07:00	Give the picture-maker a card, and the chat a choice of three ways
 pictures.patch	pictures/a347e27.patch	a347e277aaff0914fd9094d95c56614306858598	2026-10-11T12:08:18-07:00	Merge main (f1d53b6a) into feat/ask-for-a-picture: the CI failures fixed, the section renumbered to 129, and two real defects the fix exposed
 pictures.patch	pictures/c94e180.patch	c94e180b71f69eddea088b7ecff56eaaa6385cc8	2026-10-10T22:01:24-07:00	Ask for a picture, and keep it (JARVIS-API section 124)
