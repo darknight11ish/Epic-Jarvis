@@ -402,6 +402,25 @@ a picture the owner attaches to a chat is cleaned the same way before any model 
 owner's "Yes, clean them too"), and one that cannot be checked is withheld;
 like the others, a pattern list never recognises everything.
 
+**A key is not in the string at all: the blind credential vault**
+(2026-10-14, `jarvis_vault.py`, JARVIS-API §134). Every redactor above is a
+filter on text that already holds the secret - they reduce what a leak costs,
+they do not stop the secret being one `repr()` away. The vault changes the
+shape instead: a caller writes a HANDLE, `{{vault:github}}`, where the value
+goes, and `resolve()` puts the real value in exactly once, on the one line that
+builds the outbound request, and **only for the host the value is bound to** -
+so rule 3's "sent only to the one service it authenticates against" is the
+function's own property, not something each caller has to remember. Anything
+that comes back goes through `redact()`, which puts this turn's own values back
+behind their handles and then runs `jarvis_scrub`. The values live in Windows
+Credential Manager through `jarvis_token_store`, the same store the pairing
+token and the search keys already use; `vault.json` holds the names, their host
+binding and their times and never a value. The model, the card, the audit line
+and the event carry the NAME. It is wired at one call site today - the Exa,
+Tavily and Brave search keys, whose destination host is fixed in code - and
+deliberately **not** into `jarvis_browser_control`'s `secrets(name, host)` hook,
+because a browsing turn can be pointed at any site (§3, above).
+
 **The protected-file rule reads what an action TOUCHES, not the words on its
 card** (2026-10-10, `gate-touches.patch`; `backend/README.md`, "The gate reads
 what an action touches"). `check()`'s first rule - the one above the tier
@@ -2173,6 +2192,23 @@ outside what it decides - which is said here rather than read as a clean pass
 it did not earn. **When a caller is added it goes into BOTH apps on the same
 advisory function**, and a cloud turn is still reached only when the owner says
 yes for that one question.
+
+**Not on either app yet, for the same reason and by the same decision**
+(2026-10-14): **the blind credential vault** (`backend/jarvis_vault.py`,
+`plugins/ready/vault/`, JARVIS-API §134). Its two routes are built -
+`GET /api/vault/handles` (every name, the handle, the host it is bound to, when
+it was last used and whether a value is really there - never a value, never a
+masked prefix of one, never a length) and `POST /api/vault/put` (ONE secret,
+after ONE card at tier `ask`) - and neither app calls either of them yet, and
+neither holds a vault screen. That is one decision, not two: a value is typed on
+the PC and the real key reaches its one service from the PC, so there is nothing
+for a phone to carry. **When a screen is built it goes on BOTH apps**, and
+`GET /api/vault/handles` is the route an app may read because it carries no
+value; the value is never sent to an app at all. Nothing here is kept off one app
+on purpose, and `tools/check_parity.py` cannot see either route - it scans the
+two apps' own source, so a backend route no app calls is outside what it decides
+-, which is said plainly here rather than read as a clean pass it did not earn.
+
 **Not on either app yet either, and again that is the scope of the slice**
 (2026-10-15): **"Write Like Me"** - Jarvis drafting in the owner's own voice
 (`backend/jarvis_voiceprint.py`, `plugins/ready/voiceprint/`, JARVIS-API §133).
