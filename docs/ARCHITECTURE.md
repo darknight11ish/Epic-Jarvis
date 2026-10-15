@@ -2144,6 +2144,61 @@ phone". `tools/check_parity.py` cannot see it at all - it scans the two apps'
 own source, so a backend route no app calls is outside what it decides -,
 which is said plainly here rather than read as a clean pass it did not earn.
 
+**Not on either app yet either, and again that is the scope of the slice**
+(2026-10-15): **"Write Like Me"** - Jarvis drafting in the owner's own voice
+(`backend/jarvis_voiceprint.py`, `plugins/ready/voiceprint/`, JARVIS-API §133).
+The store and its four routes are built: `GET /api/voiceprint` (the learned
+samples, the voiceprint numbers and what the engine is doing),
+`POST /api/voiceprint/sample`, `POST /api/voiceprint/learn_edit` (his final
+version of a draft, as a gold sample) and `POST /api/voiceprint/forget`, which
+refuses unless the body carries `"confirm": true`. Neither app has a screen
+yet: no list and no Forget on the desktop or the phone. This is the same
+decision as the receipts slice above and is recorded here for the same reason -
+"not built yet" is not "kept off the phone". **When the screens are built they
+go on BOTH apps, on the same store and the same confirm**, and
+`tools/check_parity.py` cannot see any of it for the same structural reason: it
+scans the two apps' own source, and a backend route no app calls is outside
+what it decides. Said plainly rather than read as a clean pass it did not earn.
+
+**The engine is `jarvis_voiceprint.py`, and `jarvis_style.py` is left exactly
+as it is.** There was already an earlier version of this idea in
+`jarvis-backend/jarvis_style.py` (`strip_entities`, `exemplars`,
+`prompt_block`), and the owner's decision of 2026-10-15 was to build the engine
+in a new module rather than in that file, because **that file is delivered to
+nobody**: measured, the repository holds exactly one copy
+(`jarvis-backend/jarvis_style.py`; there is no `backend/jarvis_style.py` and no
+`backend/rebuilt/jarvis_style.py`), no patch the installer applies writes it,
+and `$SHIPPED` does not carry it -
+`python -B tools/check_unmanaged_files.py` classifies it **NEITHER**. An edit
+there reaches no PC. Promoting it into `$SHIPPED` instead would make
+`apply-patches.ps1` start **overwriting a file it has never managed**, on every
+run, with no way to know whether the owner had edited it - so it was refused as
+a change of behaviour that is his to approve, not a formality. Two consequences
+are deliberate and recorded rather than left to be discovered:
+
+  - the new module is **self-contained and never imports `jarvis_style`**. That
+    is a rule, not tidiness: `jarvis_style.py` IS present on the owner's PC, so
+    a `try: import jarvis_style` fallback would silently run the OLD code on
+    the one machine that matters. `backend/test_voiceprint.py` asserts the
+    module does not name it. The old file keeps its callsite-less career:
+    `rebuilt/jarvis_events.py` reports it as the `persona` capability and
+    `selftest.py` lists it, so an existing install still shows it. The new
+    engine is reported separately as `voiceprint` (`jarvis_events.py`, beside
+    `persona`), so the two can be told apart.
+  - the earlier engine's stripping had real leaks - a slash-date left its day
+    behind (`_PATH` ran before `_DATE`), a UK area code survived (`_PHONE`
+    needed a 3-4 digit group first), and bare numbers, decimals, postcodes and
+    times passed through untouched. The owner asked for all of them closed, and
+    they are: `jarvis_voiceprint.strip_entities` ends with a pass that replaces
+    any remaining run of digits, so **no digit survives** - asserted for every
+    row of that module's own docstring table by its suite.
+  - **One limitation, named:** the proper-noun walk keeps its inherited rule
+    and does not replace a capitalised word that OPENS a sentence, because the
+    first word is capitalised whether or not it is a name. So "Priya's number
+    is ..." keeps the name. Numbers are unaffected. Changing it would delete
+    the first word of every sentence from every exemplar, which is the shape of
+    the writing the feature exists to preserve.
+
 **On the desktop, kept off the phone:**
 
 | what | why |
