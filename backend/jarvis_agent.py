@@ -7932,7 +7932,27 @@ def warm_everyday(ollama_url: Optional[str] = None, model: Optional[str] = None)
     `_lane_context`/jarvis_power_switch.lane_context. When nothing can say
     which context the lane is set to, NOTHING is sent and this returns False:
     leaving the model as it is, so the first question loads it at the lane's
-    own setting, beats preloading it at a smaller one."""
+    own setting, beats preloading it at a smaller one.
+
+    THE PREFIX IS WARMED TOO (2026-10-15). Loading the model is only half of
+    what the first answer waits for. Measured on this PC: the first request
+    after a load takes 10.49 s and the next two take 0.03 s, and most of the
+    10.49 s is reading Jarvis's rules and tool list from nothing - 3,838 tokens
+    (llama.cpp #29513, whose own title names the RTX 2060 / sm_75, the owner's
+    card). The waking path already pays that at load time
+    (jarvis_power_switch.warm_up -> warm_after_waking -> warm_prefix); this one
+    loaded the model and returned, so Live's first question still read the
+    start from nothing.
+
+    warm_prefix is called DIRECTLY, not through warm_after_waking: that one
+    skips when there is no last turn to copy the settings from
+    (`_last_turn()`), and a cold Live start - exactly when the owner is waiting
+    - is the case with no last turn. The tool list comes from
+    enabled_tools_for_turn(), the one source jarvis_hud.py passes a real turn
+    (test_tool_calling_wiring.py pins that), so the warm-up sends the same
+    bytes a Live question sends. `why="live"` so WARM_LAST says which path
+    warmed. warm_prefix never raises and never loads a model, so this can only
+    turn a slow first answer into a fast one."""
     url = (ollama_url or os.environ.get("OLLAMA_URL") or "http://127.0.0.1:11434").rstrip("/")
     name = model or _chat_model_now() or "jarvis-primary"
     try:
@@ -7943,9 +7963,19 @@ def warm_everyday(ollama_url: Optional[str] = None, model: Optional[str] = None)
             return False
         _get_json(f"{url}/api/generate",
                   {"model": name, "options": {"num_ctx": int(ctx)}}, timeout=120.0)
-        return True
     except Exception:
         return False
+    # Loaded, and only now: a path where the load failed must not warm, and a
+    # warm-up never loads a model itself. This is the same step the waking path
+    # takes (jarvis_power_switch.warm_up), done here rather than in
+    # jarvis_live.py because THIS function is what resolved the real `url` and
+    # `name` - jarvis_live's caller passes a model that may be None and never
+    # learns the fallback. It runs on the caller's thread, and jarvis_live's
+    # _default_warm starts that thread ("jarvis-live-warm"), so nothing here is
+    # on the HTTP handler's path.
+    warm_prefix(name, ollama_url=url, enabled_tools=enabled_tools_for_turn(),
+                why="live")
+    return True
 
 
 def with_spoken_note(msgs: list) -> list:
