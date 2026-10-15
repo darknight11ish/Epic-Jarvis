@@ -769,9 +769,20 @@ def t_the_plugin_folder_and_the_module_agree():
           "replaces_patch" not in data, str(sorted(data)))
     check("the module it names really has install()",
           callable(getattr(R, "install", None)))
-    ready = [d.name for d in (repo / "plugins" / "ready").iterdir() if d.is_dir()]
+    # THE FOLDERS THAT REPLACE A PATCH are "every folder the old patch stack
+    # had", and `pictures` at 141 is the highest of them. A folder that replaces
+    # NO patch is deliberately added later, and sorts later on purpose - this
+    # feature's own README: "the order they were added rather than in the middle
+    # of somebody else's". So the claim is the one the README makes, "after every
+    # folder the old patch stack had" - and NOT "the highest number in the
+    # folder", which the old reading of this check asserted and which broke the
+    # moment a later no-patch folder existed. `plugins/ready/auto-router` (144)
+    # is that folder (2026-10-14), and Stream 4's was next.
+    registry = json.loads((repo / "plugins" / "registry.json").read_text(encoding="utf-8"))
+    catalogued = {e.get("name") for e in registry.get("entries", [])
+                  if e.get("bucket") == "plug-in"}
     orders = []
-    for name in ready:
+    for name in catalogued:
         other = repo / "plugins" / "ready" / name / "plugin.json"
         if other.is_file():
             orders.append((json.loads(other.read_text(encoding="utf-8")).get("stack_order"), name))

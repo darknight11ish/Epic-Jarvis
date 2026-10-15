@@ -16,19 +16,58 @@ The config says what it is for:
     # Every finding or event that turns into an ACTION still goes through the
     # autonomy gate. A proactive Jarvis is not a Jarvis with fewer rules.
 
-THE CHECKS THEMSELVES ARE NOT REBUILT, AND THAT IS DELIBERATE.
+THE ORIGINAL CHECKS ARE NOT REBUILT, AND THAT IS DELIBERATE - BUT ONE IS.
 
 This engine's job is to run checks on a timer and file what they find. WHICH
-checks is not recoverable - the config points at a `HEARTBEAT.md` in the
-config directory that "lists the checks in plain words", and that file is not
-on the machine either. Inventing a set of background checks would mean a
-rebuilt Jarvis doing unattended things nobody chose, which is the opposite of
-what this project is about.
+checks the original had is not recoverable - the config points at a
+`HEARTBEAT.md` in the config directory that "lists the checks in plain
+words", and that file is not on the machine either. Inventing a set of
+background checks would mean a rebuilt Jarvis doing unattended things nobody
+chose, which is the opposite of what this project is about.
 
-So: the engine runs, the timer ticks, the finding queue works, and the
-check list is EMPTY until someone registers one. The HUD starts cleanly, the
-pump gets its engine, and nothing happens on its own that was not asked for.
-`status()["checks"]` being 0 is the honest signal that this is a shell.
+So the list is not invented; it is ONE. `build_from_config()` registers the
+events-pump watch (`pump_watch`), the one observation this module can make on
+its own and the one failure that leaves everything else looking healthy:
+
+    WHAT IT READS   threading.enumerate(), looking for the thread name that
+                    jarvis_events.Pump.start() gives its poller thread
+                    ("jarvis-events", rebuilt/jarvis_events.py:657). Nothing
+                    else: no file, no database, no network, no fact, no model.
+    WHAT IT DOES    returns one finding when that thread is not there, and
+                    None when it is: {"level": "alert", "check": "event
+                    stream", "message": "..."}. file() puts it in the queue
+                    `/api/initiative` serves (jarvis_hud.py:3210-3211), and it
+                    never acts: anything that turns into an ACTION still goes
+                    through the autonomy gate.
+    WHAT IT COSTS   nothing on a healthy machine. One `threading.enumerate()`
+                    per heartbeat, and nothing at all inside the boot grace
+                    window (PUMP_GRACE_SECONDS).
+
+TWO CONSUMERS THAT CANNOT SEE IT YET, AND THEY ARE NOT THIS MODULE'S TO FIX
+(measured 2026-10-14, reported with task-8 rather than papered over):
+
+  * the HUD's card for a heartbeat finding reads `level`, `check` and
+    `message` off the QUEUE ROW (jarvis_hud.html:2591-2595), while file()
+    nests the finding one level down under "finding" - so a finding filed
+    here is served and not drawn. True of every finding, and older than this
+    check; the mismatch lives in jarvis_hud.html.
+  * the phone's "Findings" note (BrainScreen.kt:2503) reads a `checks` count
+    out of the /api/initiative body, which the route above does not send - so
+    it goes on saying "no background checks have been built" whether one is
+    registered or none is. The mismatch lives in jarvis_hud.py/BrainScreen.kt.
+
+WHY THAT ONE AND NOT A HUNDRED (2026-10-14, task-8). Nothing in production
+had ever called `register()`. The audit measured `status()["checks"]` as 0 on
+every boot: the engine started, ticked, and could not have filed anything,
+for ever. The pump is the check because a dead pump is invisible every other
+way - jarvis_hud.py prints "PUMP DID NOT START" to a console nobody reads and
+nothing else ever mentions it - and the cost was recorded when it was fixed:
+a gate raised while the desktop sat idle produced no toast and no tray badge
+for up to an hour. This engine can see that, and only that, without inventing
+a single thing.
+
+`status()["note"]` still says the ORIGINAL check list is not recoverable, at
+every count: one honest check is not the list that was lost.
 """
 from __future__ import annotations
 
@@ -49,6 +88,79 @@ def _cfg(key: str, default=None):
         return fw.load_framework().get("initiative", {}).get(key, default)
     except Exception:
         return default
+
+
+#: The thread name jarvis_events.Pump.start() gives its poller thread:
+#:     threading.Thread(target=self._run, name="jarvis-events", daemon=True)
+#: (rebuilt/jarvis_events.py:657). A rename there needs this line updated -
+#: nothing else in the two modules is shared, and the check below is the one
+#: thing in the backend that notices the pump is not running.
+PUMP_THREAD = "jarvis-events"
+
+#: The name the one built-in check registers under, and what status() reports
+#: a count of. Short, lower-case, no spaces - the same shape a caller's own
+#: registered name has.
+BUILTIN_CHECK = "event_pump"
+
+#: How long after build_from_config() the pump may still be missing. The HUD
+#: builds and starts this engine at jarvis_hud.py:6027-6028 and constructs the
+#: pump around thirty lines later (:6064), and `Engine.start()` beats once
+#: immediately - so a beat inside this window says nothing about the pump at
+#: all. Two minutes is many times the gap between those two lines.
+PUMP_GRACE_SECONDS = 120.0
+
+
+def pump_running() -> bool:
+    """Is the events pump's poller thread alive? READ-ONLY: it asks Python for
+    the thread list and looks for PUMP_THREAD. It opens nothing, reads no
+    file, touches no database and imports nothing that could have a side
+    effect on first import."""
+    return any(t.name == PUMP_THREAD for t in threading.enumerate())
+
+
+def pump_finding(now: Optional[float] = None, built_at: Optional[float] = None,
+                 alive: Optional[bool] = None) -> Optional[dict]:
+    """The pump is not running -> one finding; it is -> None. The whole check,
+    as a function of its inputs, so a test can drive it without a clock, a
+    thread or a running Jarvis.
+
+    `built_at` is when the engine was built (0.0 or None means "no grace
+    window", which is what tests want). `alive` is the probe; left out, it is
+    `pump_running()`.
+    """
+    now = time.time() if now is None else float(now)
+    if built_at and now - float(built_at) < PUMP_GRACE_SECONDS:
+        return None
+    if alive is None:
+        alive = pump_running()
+    if alive:
+        return None
+    return {"level": "alert", "check": "event stream",
+            "message": ("The event stream is not running, so approvals, power "
+                        "changes and persona changes will not reach your apps "
+                        "until Jarvis is restarted.")}
+
+
+def pump_watch(built_at: Optional[float] = None) -> Callable[[], Optional[dict]]:
+    """The check `build_from_config()` registers: `pump_finding` with the
+    grace window measured from when the engine was built, and said ONCE per
+    death - a heartbeat every 30 minutes would otherwise file the same broken
+    pump into the inbox all day. If the pump comes back and dies again, it
+    says so again.
+    """
+    t0 = time.time() if built_at is None else float(built_at)
+    said = {"dead": False}
+
+    def check() -> Optional[dict]:
+        if pump_running():
+            said["dead"] = False
+            return None
+        if said["dead"]:
+            return None
+        said["dead"] = True
+        return pump_finding(built_at=t0, alive=False)
+
+    return check
 
 
 class Engine:
@@ -219,21 +331,35 @@ class Engine:
 
     def status(self) -> dict:
         with self._lock:
+            # The caveat is carried at EVERY count, not only at zero: the one
+            # check above is not the list that was lost, and a reader who sees
+            # `checks: 1` must not think the original list was recovered.
+            note = ("the original check list is not recoverable, see the "
+                    "module docstring")
             return {"enabled": self.enabled, "running": self.running,
                     "heartbeat_minutes": round(self.heartbeat / 60, 1),
                     "checks": len(self.checks), "beats": self.beats,
                     "errors": self.errors, "findings": len(self.findings),
                     "unseen": len([f for f in self.findings if not f["seen"]]),
-                    "note": ("no checks are registered - the original check "
-                             "list is not recoverable, see the module docstring")
-                            if not self.checks else ""}
+                    "note": ("no checks are registered - " + note)
+                            if not self.checks else note}
 
 
 def build_from_config() -> Engine:
     """The engine the HUD starts. Never raises: a bad config must not stop
-    the backend booting, and `enabled=false` is a legitimate answer."""
+    the backend booting, and `enabled=false` is a legitimate answer.
+
+    It also registers this module's ONE check - the events-pump watch
+    (`pump_watch`), explained in the module docstring. Registered HERE rather
+    than in the HUD because this is the call the HUD makes
+    (jarvis_hud.py:6027) and the write scope of the change that wired it, and
+    because nothing had ever registered anything: the audit measured
+    `status()["checks"]` as 0 on every boot.
+    """
     try:
         beats = float(_cfg("heartbeat_minutes", 30) or 30)
     except (TypeError, ValueError):
         beats = 30.0
-    return Engine(heartbeat_minutes=beats, enabled=bool(_cfg("enabled", True)))
+    eng = Engine(heartbeat_minutes=beats, enabled=bool(_cfg("enabled", True)))
+    eng.register(BUILTIN_CHECK, pump_watch())
+    return eng

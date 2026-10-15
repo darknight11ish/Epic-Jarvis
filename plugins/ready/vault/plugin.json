@@ -3,5 +3,5 @@
   "summary": "a secret is kept in Windows Credential Manager and everything else carries its NAME - a handle, {{vault:github}} - never the value.",
   "module": "jarvis_vault",
   "install": "handler",
-  "stack_order": 144
+  "stack_order": 145
 }

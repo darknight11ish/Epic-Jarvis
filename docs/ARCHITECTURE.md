@@ -2163,6 +2163,36 @@ phone". `tools/check_parity.py` cannot see it at all - it scans the two apps'
 own source, so a backend route no app calls is outside what it decides -,
 which is said plainly here rather than read as a clean pass it did not earn.
 
+**Cost advice is built, and it is in no app yet - and this one is a decision
+about the permission model rather than a screen somebody forgot**
+(2026-10-14): **the complexity/latency auto-router**
+(`backend/jarvis_auto_router.py`, `plugins/ready/auto-router/`).
+`evaluate_route()` estimates what a turn will cost on this PC - the measured
+token rate `jarvis_speed.py` keeps, the size of the conversation, and the kind
+of work `jarvis_work.match()` reads - and advises when a cloud lane would be
+quicker. **It decides nothing.** `jarvis_router.choose()`
+(`backend/rebuilt/jarvis_router.py:590`) stays the one authority on which lane
+answers a turn; this module asks it directly and can only ever advise a lane
+`choose()` would also permit, so it is strictly weaker than that authority and
+cannot open a gate the authority keeps shut. Its own four gates are inputs to
+the ADVICE, never a second permission: the mode switch (off by default in
+general chat), the one taint latch this project has
+(`jarvis_gate.taint_active()`) together with a project whose `shareable` flag
+is not on, the on-disk cloud budget plus
+`jarvis_chatbot_api.money_check()` (an exhausted OR unconfigured monthly cap is
+a no), and `jarvis_scrub.scrub_text()`, whose absence is itself a refusal.
+`plugins/ready/auto-router/plugin.json` sets `install: "none"`, so the folder
+imports the module and prints one banner line and **adds no route at all**:
+nothing new is reachable, and no app is handed an endpoint to call. That is
+what keeps a second entry point into "should this go to the cloud?" from
+becoming a second source of truth for a privacy decision - the failure
+`jarvis_router.py:632-648` describes. `tools/check_parity.py` cannot see it -
+it scans the two apps' own source, so a backend module with no route is
+outside what it decides - which is said here rather than read as a clean pass
+it did not earn. **When a caller is added it goes into BOTH apps on the same
+advisory function**, and a cloud turn is still reached only when the owner says
+yes for that one question.
+
 **Not on either app yet, for the same reason and by the same decision**
 (2026-10-14): **the blind credential vault** (`backend/jarvis_vault.py`,
 `plugins/ready/vault/`, JARVIS-API §134). Its two routes are built -
@@ -2178,6 +2208,7 @@ value; the value is never sent to an app at all. Nothing here is kept off one ap
 on purpose, and `tools/check_parity.py` cannot see either route - it scans the
 two apps' own source, so a backend route no app calls is outside what it decides
 -, which is said plainly here rather than read as a clean pass it did not earn.
+
 **Not on either app yet either, and again that is the scope of the slice**
 (2026-10-15): **"Write Like Me"** - Jarvis drafting in the owner's own voice
 (`backend/jarvis_voiceprint.py`, `plugins/ready/voiceprint/`, JARVIS-API §133).
@@ -2419,6 +2450,8 @@ neither: nothing safe to build it on exists yet (§10).
 **The headless browser (Obscura) runs on the PC only, and both apps only show and set it** (2026-09-29, JARVIS-API §97). The program runs in the PC's backend; the desktop (Settings, "Headless browser") and the phone (Settings, "Headless browser (Obscura)") read the same setting and switch it through `/api/browser/engine` with the same words (`contract/browser-engine-cases.json`), and neither ever runs a browser, sees a web page or holds a proxy or an address for it. **The chatbot driver, the customer-support chats and "Solve it here" keep using the visible browser on purpose**: each must hand a captcha, a sign-in or an "are you a bot?" question to the owner in a window, Obscura has no window, and their own rules say the window is a real, visible browser (Jarvis writes no fingerprint-spoofing for it; the old "driven openly" rule was reversed on 2026-09-29, the visible browser was kept). The headless engine cannot hand anything over: reaching a captcha or sign-in page there stops the run and tells the owner, in words, to ask again with the visible browser.
 
 **The form picture is on the Jarvis bar's card and the phone's card only** (2026-09-30, JARVIS-API §98). The second card of a filled-in web form carries one picture of the form, and it is shown where the card is decided in full: the desktop's Jarvis bar and the phone's Home. The desktop's widget, its toasts and the HUD page, every notification and the phone's home-screen widget stay title-only, like every card - a picture of the owner's name, phone and email does not belong on a lock screen or a widget. It is hidden under App lock and under "Hide memory lists and chat history" on both apps. The desktop has no equivalent of the phone's screenshot block, so there is nothing to match there. **It is the one screen picture NOT run through `jarvis_screen.clean_picture`** (owner, 2026-09-30): the owner must read their own details to check them, and the picture never reaches a model, is held in memory only, and is dropped when the card is decided. Every other screen picture still passes that door. Not a new way out of the PC: the form's words go out through browser control's existing `control_browser` way out, to the site the plan named.
+
+**The skill library's four new doors are on the backend only, and that is the scope of this slice rather than a one-sided decision** (2026-10-15): `jarvis_skill_hub.py` (`plugins/ready/skill-hub/`) serves `GET /api/skills/hub/references`, `GET /api/skills/hub/projects`, `POST /api/skills/chain` and `POST /api/skills/learn`. No screen calls any of them yet - reading a skill's own reference manual, opening a message with `/skill`, looking in a trusted project's `.jarvis/skills`, and `/learn` are all things no app offers today. **This slice adds no route that already existed**: the list (`GET /api/skills`) and the removal (`POST /api/skills/decide`, with the "are you sure?" before it) are unchanged and are still on BOTH apps. `tools/check_parity.py` cannot see any of this - it scans the two apps' own source, so a backend route no app calls is outside what it decides - which is said plainly here rather than read as a clean pass it did not earn. **When a screen is built it goes on BOTH apps, on the same routes and the same card**: `/learn` saves only through `jarvis_skills.write_skill()`, which runs the scanner and raises the existing `modify_own_code` card itself, and it writes nothing at all when `jarvis_scrub` is absent.
 
 ---
 
