@@ -1791,8 +1791,9 @@ are architectural rather than configuration:
 - **The recalled-facts block goes late, never at index 0.** At index 0 it
   invalidates the KV prefix cache for the whole conversation every turn, *and*
   suppresses the Modelfile's `SYSTEM` block — which is where the persona
-  invariants live. Both from one line. If delimiters are ever added around
-  recalled facts, they go on that message, not around the list.
+  invariants live, for a model that has one. Both from one line. If delimiters
+  are ever added around recalled facts, they go on that message, not around the
+  list.
 - **The rules block always goes first; everything added to a turn goes after
   it.** The spoken-style note, the "you were interrupted" note, the owner's
   manner line (warm or plain, `jarvis_manner.py`, 2026-09-25) and the crisis
@@ -1809,6 +1810,25 @@ are architectural rather than configuration:
   is appended after the answer, or sent alone if the model fails - the one
   place in this codebase where the backend, not the model, adds words to a
   reply. Neither approves or acts (rule 4): both only change what is said.
+- **The rules are SENT, not assumed, on every local turn (2026-10-14;
+  `with_rules_first`, `backend/jarvis_agent.py`).** This is the correction to
+  the line above: `keep_rules_first` only repairs a request in which something
+  else would be first, and then trusts Ollama to prepend the Modelfile's
+  `SYSTEM` block - which only happens for a model that HAS one. The owner's
+  everyday model since 2026-10-10, `qwen3.5:9b`, is a plain library pull with
+  no `SYSTEM` of its own, so on a fresh main-lane turn the request was the
+  question and nothing else: the persona invariants, including "Never claim an
+  action was taken that was not", were not in front of the model on the lane he
+  actually uses. Every local turn is now sent `LANE_SYSTEM` as its first
+  message, before trimming (the room `budget()` already reserved for it via
+  `_TEMPLATE_TOKENS`), from ONE function that the main lane, the second card
+  and the warm-up's `chat_prefix` all call - so a recalled-facts turn or an
+  app's own leading system message cannot end up with two competing system
+  turns. Cost, measured on his PC: +340 prompt tokens a turn. What it does NOT
+  fix, measured: tool-call rates (35 of 35 calls both before and after, with
+  `change_setting` offered) and, at this sample size, the rate of claimed-but-
+  undone answers. `backend/test_lane_prompt.py`, `docs/JARVIS-API.md`
+  ("The main lane hears the rules") and the PR that landed it have the numbers.
 - **The character block** (feasibility I129, 2026-09-27,
   `docs/CUTTING-EDGE-2026-09-26-round4-character.md` section 1): a short,
   named-trait paragraph - "Who you are: Jarvis... Honest before agreeable...
@@ -1844,9 +1864,16 @@ are architectural rather than configuration:
   covers them, the key phrases are there, and no existing rule is weakened.
   `selftest.py`'s "model" preflight step reads `/api/show` for
   `jarvis-primary` and WARNs, with the exact `ollama create` line, when the
-  model's own stored rules do not match `LANE_SYSTEM` - a stale model would
-  otherwise mix an old block with the new one on whichever turns
-  `keep_rules_first` does not fire.
+  model's own stored rules do not match `LANE_SYSTEM`. Since 2026-10-14 the
+  rules are in EVERY local request (`with_rules_first`), so the mix this warns
+  about is now two copies of the rules - Ollama's own collation keeps one
+  system block - rather than the old block surviving on the turns
+  `keep_rules_first` did not fire. The warning is kept: a model whose stored
+  block is stale is still a model built from an older Modelfile, and the
+  `/api/show` check is the one place that is visible. **It does not cover the
+  owner's everyday model at all** - it is keyed on the name `jarvis-primary`,
+  and `qwen3.5:9b` has no stored block to compare, which is exactly how the
+  2026-10-14 fault went unseen.
 - **Style rules for every fixed line** (feasibility I135, 2026-09-27): a
   card title, a quick answer (`jarvis_quick.py`, `jarvis_sayable.py`,
   `jarvis_reach.py`, `jarvis_identity.py`), a focus callout
