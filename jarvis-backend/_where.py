@@ -896,6 +896,19 @@ SHIPPED = (
     # card, no file written, nothing downloaded. Standard library only, and
     # no patch - jarvis_skill_hub.py calls it.
     "jarvis_tool_schema.py",
+    # One bounded, revocable lease over a run of steps (the task-lease work
+    # order, Slice 1): what a lease is, who may open one - `jarvis_gate.check()`
+    # at tier "ask", failing CLOSED when the gate cannot be reached - and the
+    # deterministic check that answers "is this step inside it?". A lease names
+    # one surface, the sites or the (pid, hwnd) windows it may touch, the
+    # actions it may take, a TTL (300 seconds by default, 900 hard, longer
+    # requests CLAMPED) and a step budget; and it refuses with `step_up_ask`
+    # on Jarvis's own window or HUD page, a password field, a card or file
+    # control, a high-consequence verb on the target, the TTL, the budget or
+    # revocation. Leases live in memory and die with the process: no route, no
+    # patch, no file, no database, and nothing imports it yet. Standard
+    # library only, and `jarvis_gate` is imported lazily inside one function.
+    "jarvis_task_lease.py",
     # Verify a GGUF by its LISTING, before any download (2026-10-15, 3B
     # piece 2). It answers four questions from the repo's file list alone:
     # what is in it by name and size, with the vision projector reported

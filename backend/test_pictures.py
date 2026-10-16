@@ -771,7 +771,18 @@ def t_the_api_document_has_the_section_and_it_matches_this_code():
 #: writes down that they meant to. That is the price of a check that bites, and
 #: it is why the failure message below spells out the difference instead of
 #: saying "the document changed".
-EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 137))   # 129 ..= 136
+EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 137)) + (138,)   # 129 ..= 136, then 138
+#: 137 is a real gap in `docs/JARVIS-API.md` on `main`, not a lost section: §137
+#: (`skills.lock`, from PR #455) is not in the document, and §138 is. The two
+#: checks below read this list in opposite directions - `missing` demands every
+#: entry is present, and `extra` is "anything present ABOVE the list's last
+#: element" - so the list has to name exactly the sections that exist AND end on
+#: the highest one. `range(129, 137) + (138,)` does both; `range(129, 139)` would
+#: demand 137 and fail on a section this commit cannot invent.
+#:
+#: An earlier draft of this fix used `range(129, 139)`, which fails the `missing`
+#: check for 137. Measured, not reasoned: `grep -c '^## 137\.' docs/JARVIS-API.md`
+#: is 0 while `^## 138\.` matches.
 
 
 def t_every_section_from_129_up_is_still_in_the_document():
