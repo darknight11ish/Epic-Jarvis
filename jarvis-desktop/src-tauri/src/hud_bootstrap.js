@@ -624,18 +624,103 @@
   }
 
   /* ---------------------------------------------------------------- *
-   * 2e. Spoken replies: this computer's voices only
+   * 2e. Spoken replies: kept on screen when the answer is private, and
+   *     this computer's voices only
    *
-   * The page reads every answer aloud with the browser's speech
-   * synthesis, picking a British voice by name and falling back to ANY
-   * en-GB voice. In WebView2 that list includes Microsoft's "Online
-   * (Natural)" voices, which send the text to Microsoft to be spoken - so
-   * an answer quoting an email or a file could leave the machine as
-   * speech-to-be. Each voice says which kind it is (`localService`), so
-   * the page is shown only the local ones, and an utterance that would
-   * use anything else is given a local voice or not spoken at all.
+   * The page reads every answer aloud with the browser's speech synthesis.
+   * Two rules stand in front of it. Neither is a new permission path and
+   * neither adds a setting: they are the rules the other windows already
+   * run, read off the one fact this page already has - the route its own
+   * chat header carried (`HudReply.route`, the same `X-Jarvis-Route` the
+   * page draws the lane and the gate from).
+   *
+   * 1. **An answer that used a sensitive saved fact stays on screen**, and
+   *    so does one the PC gated as private (`gate: "private"`). This is the
+   *    Jarvis bar's rule for a spoken answer - private-speech.js
+   *    `mayReadAloud`, whose FIRST line is the sensitive check, and the
+   *    owner's decision of 2026-09-24 - applied to the one surface that
+   *    rule was missing. Read the scope honestly: the documented rule was
+   *    written for a VOICE answer, and a TYPED question is otherwise
+   *    allowed to be read aloud; the HUD is the only window that speaks
+   *    typed answers at all, so **on the owner's instruction of
+   *    2026-10-16 - "Gate it - keep sensitive answers on screen in the HUD
+   *    too" - that exception is removed HERE and nowhere else.** It is a
+   *    decision, not an oversight: the bar, the widget and the phone are
+   *    unchanged, and the one fixed line below is the bar's own sentence.
+   *    A route this window does not have (an older PC, a chat that failed)
+   *    gates nothing, which is the same reading the bar makes of a missing
+   *    route.
+   *
+   * 2. **Only this computer's voices.** In WebView2 that list includes
+   *    Microsoft's "Online (Natural)" voices, which send the text to
+   *    Microsoft to be spoken - so an answer quoting an email or a file
+   *    could leave the machine as speech-to-be. Each voice says which kind
+   *    it is (`localService`), so the page is shown only the local ones, and
+   *    an utterance that would use anything else is given a local voice or
+   *    not spoken at all.
    * ---------------------------------------------------------------- */
-  (function localVoicesOnly() {
+
+  /** What the HUD shows instead of reading a private answer aloud: the bar's
+   *  own sentence, word for word (private-speech.js `PRIVATE_LINE`), so the
+   *  two windows cannot come to two ways of saying one thing. Shown, not
+   *  spoken - this is the window the owner is looking at. */
+  var KEPT_ON_SCREEN_LINE = "It's on your screen.";
+
+  /** The route of the answer on screen now, from its own chat header (2c,
+   *  `shellChat`). Null until one arrives. */
+  var answerRoute = null;
+
+  /** Every chat's head frame says this answer's route, or says nothing - in
+   *  which case nothing is gated, as the page shows no lane for it either. */
+  function noteAnswerRoute(raw) {
+    answerRoute = null;
+    if (typeof raw !== "string" || !raw) return;
+    try {
+      var parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") answerRoute = parsed;
+    } catch (err) {
+      /* not a route: gate nothing */
+    }
+  }
+
+  /** A whole number from a route field, or null when it is not one. */
+  function routeCount(value) {
+    var n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  /** Does the answer on screen have to stay on screen? The bar's rule, in
+   *  this file's words (private-speech.js `usedSensitiveFact`, plus the
+   *  `gate: "private"` refusal in `mayReadAloud`). tests/hud.mjs lifts this
+   *  function out and holds it against that module route by route, so the
+   *  two cannot drift. */
+  function keptOnScreen(route) {
+    if (!route || typeof route !== "object") return false;
+    if (String(route.gate || "").trim().toLowerCase() === "private") return true;
+    var sensitive = routeCount(route.injected_sensitive);
+    if (sensitive !== null) return sensitive > 0;
+    // A PC that does not say how many were sensitive, with facts in: fail
+    // closed, because they may all be sensitive. The bar reads it the same.
+    var facts = routeCount(route.injected_facts);
+    return facts !== null && facts > 0;
+  }
+
+  /** The line under the answer, once per answer. */
+  function showKeptOnScreen() {
+    var log = document.getElementById("log");
+    if (!log) return;
+    var answers = log.querySelectorAll(".msg.jarvis");
+    var node = answers.length ? answers[answers.length - 1] : log;
+    var old = node.querySelector ? node.querySelector(".jarvis-kept") : null;
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+    var line = document.createElement("p");
+    line.className = "jarvis-kept";
+    line.setAttribute("role", "status");
+    line.textContent = KEPT_ON_SCREEN_LINE;
+    node.appendChild(line);
+  }
+
+  (function spokenReplies() {
     var synth = window.speechSynthesis;
     if (!synth || typeof synth.getVoices !== "function" || typeof synth.speak !== "function") return;
     var allVoices = synth.getVoices.bind(synth);
@@ -649,6 +734,14 @@
       synth.getVoices = localVoices;
       synth.speak = function (utterance) {
         if (!utterance) return undefined;
+        if (keptOnScreen(answerRoute)) {
+          // Decision 13, and the owner's instruction of 2026-10-16: this
+          // answer used something sensitive he saved, so the room does not
+          // hear it. The line says so on screen, in the bar's own words.
+          console.info("[jarvis] this answer is kept on screen, so it is not spoken");
+          showKeptOnScreen();
+          return undefined;
+        }
         if (utterance.voice && utterance.voice.localService !== true) utterance.voice = null;
         if (!utterance.voice) {
           var mine = localVoices();
@@ -845,6 +938,9 @@
         if (!frame) return;
         if (frame.kind === "head" && !headed) {
           headed = true;
+          // This answer's route, for the spoken-reply gate (2e): the same
+          // header the page reads the lane and the gate from.
+          noteAnswerRoute(frame.route);
           resolve(
             new Response(stream, {
               status: okStatus(frame.status),

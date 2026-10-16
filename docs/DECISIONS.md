@@ -2434,3 +2434,37 @@ never through a second permission path.** What that means concretely:
   carries `raised`) is refused with words too. A card that is not on screen -
   Esc puts one aside without deciding it - is never answered from a typed word.
 
+## 2026-10-16 - a sensitive answer stays on screen in the HUD too
+
+Put to him the same day, with the finding that the HUD window - the one
+surface that reads a **typed** answer aloud - ran none of the private-answer
+rules, and his answer was:
+
+> "Gate it - keep sensitive answers on screen in the HUD too."
+
+**Decided: the HUD stops speaking an answer that used a sensitive saved fact,
+and one the PC gated as private, and shows the bar's own line instead.**
+What that means, and what it does not:
+
+* **It is the bar's rule, not a second one.** `hud_bootstrap.js` (section 2e)
+  wraps the HUD page's own `speechSynthesis.speak` and refuses when the route
+  the page already has - the `X-Jarvis-Route` its chat header carries - says
+  `injected_sensitive` above 0 or `gate: "private"`. That is step 3 of
+  `docs/JARVIS-API.md` §16 read off the same fact, and the missing route
+  case gates nothing, exactly as the bar reads it.
+* **What he sees is the existing sentence**, `"It's on your screen."` - the
+  bar's own `PRIVATE_LINE` (`private-speech.js`), drawn under the answer.
+  No new wording was written for this.
+* **It removes one exception, in one window.** The documented rule was
+  written for a **voice** answer, and a typed question is otherwise allowed
+  to be read aloud (`jarvis_voice.may_speak(private, origin="typed")`). The
+  HUD is the only window that speaks typed answers, so that exception is
+  removed there and nowhere else: the bar, the widget and the phone are
+  unchanged. This is a decision, not an oversight, and `tests/hud.mjs`
+  drives the real window once per route to hold the gate against
+  `usedSensitiveFact` so the two cannot drift.
+* **The local-voices-only rule stays.** That wrapper already refused
+  Microsoft's "Online (Natural)" voices, which send the text to Microsoft to
+  be spoken; this gate stands in front of the same call, it does not replace
+  it.
+
