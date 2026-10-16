@@ -1,0 +1,7 @@
+{
+  "name": "notion-obsidian",
+  "summary": "bring a Notion export into an Obsidian vault: ids off the names, properties as frontmatter, databases as a note and a .base, links rewritten, attachments moved, with one-click Undo.",
+  "module": "jarvis_notion_obsidian",
+  "install": "handler",
+  "stack_order": 148
+}

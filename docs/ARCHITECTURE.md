@@ -3079,6 +3079,7 @@ Do not relitigate these without new evidence.
 | Structured output | Ollama's native `format: <schema>` — GBNF at the sampler. **Not** `outlines`, which cannot constrain Ollama. |
 | Sandbox | Git worktrees, not Docker - for keeping the app builder's changes apart until a card approves them (`jarvis_app_workspace.py`, 2026-09-28; and since 2026-09-29 the merge card reaches it from Projects, `jarvis_apps.py`). A worktree is NOT a sandbox for running programs: `shell_exec` and any build command run with the owner's full permissions, which is why each one asks with the exact command (`docs/APP-BUILDER-DESIGN.md`). |
 | Extraction | `ast-grep` — measured 54,490 → 1,088 bytes, 0 VRAM. |
+| Bringing a Notion export into an Obsidian vault (2026-10-16, `/api/notion/preview` and `/api/notion/import`, `plugins/ready/notion-obsidian`) | **The backend is built; NEITHER app is wired yet, deliberately, in this pass.** The import needs two things chosen on the PC - the export file and the vault folder - and the phone has no view of the PC's folders at all (the same reason `/api/folders/add` is the PC alone, above); the desktop has the file picker that fits it and is not built here. So nothing reads the route from either app yet, `tools/check_parity.py` reports no drift, and the approval card is raised by the backend route itself. |
 
 **Rejected, with reasons, so they stay rejected:** screenpipe (relicensed,
 captures keystrokes and the a11y tree, telemetry on by default) · moshi

@@ -961,6 +961,24 @@ SHIPPED = (
     # model, and fails closed when jarvis_scrub is absent. Standard library
     # only.
     "jarvis_self_improve.py",
+    # A Notion export, tidied into an Obsidian vault (2026-10-16): ids off the
+    # file and folder names with collisions decided deterministically, page
+    # properties lifted into YAML frontmatter (notion_id kept, so a second
+    # import is idempotent), each exported CSV database merged into its rows'
+    # notes with an index note of [[wikilinks]] and a .base beside it, HTML
+    # turned into Markdown (callouts, toggles, checklists, fenced code with
+    # its language, pipe tables), Notion's relative links rewritten through
+    # the cleaned-name map, and pictures and documents moved into the vault's
+    # attachments folder. Plan -> describe -> gate -> run, one atomic move,
+    # and one reversible entry in jarvis_receipts so Undo takes it back off.
+    # It writes only inside the vault it is pointed at. It does NOT unpack a
+    # zip with a guard of its own: it imports jarvis_documents.safe_parts,
+    # .protected and .ImportRefused, because that module already refuses
+    # zip-slip, caps the size, unpacks Part-N.zip and moves the result into
+    # place in one step - and a second extractor is the duplicate feature
+    # this project's audits look for. Standard library only, and no patch:
+    # plugins/ready/notion-obsidian calls its install().
+    "jarvis_notion_obsidian.py",
 )
 
 
