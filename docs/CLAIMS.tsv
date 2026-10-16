@@ -80,7 +80,7 @@ A29	multi-model failover to the main card when a lane fails is built	grep:backen
 A30	the bigger model reviews tool plans and code (the queue's "checker") is built	no definite check: the queue names "a checker" without saying what code or route would mark it built; `failover` (A29) has no hits in backend/ and no module does this, but there is no phrase a check can look for that would not be this register guessing the design	unverifiable	docs/DECISIONS.md:1741
 A31	local compare (ask several AIs the same question, one summary) is built	file:backend/jarvis_chatbot_compare.py	built	docs/DECISIONS.md:1742
 A32	a per-lane measured log is built	no definite check: backend/jarvis_speed.py writes one row per answer keyed by the model's name and its graphics-card share (_NUMBER_FIELDS, _NAME_FIELDS), and it has no lane field; nothing in the tree says whether "per-lane" means the lane's name or the lane's model, so both a pass and a fail here would be this register choosing for the project	unverifiable	docs/DECISIONS.md:1743
-A33	test hardening: a per-patch "reads original text" ratchet exists	grep:tools:reads original text	open	docs/DECISIONS.md:1744
+A33	test hardening: a per-patch "reads original text" ratchet exists	test:backend/test_patch_original_text.py	built	docs/DECISIONS.md:1744
 A34	the suite runner counts a skipped check as a skip, never as a pass	grep:backend/run_suites.py:no longer lands in its	built	docs/DECISIONS.md:1744
 A35	"Restore to before" for an app merge is built	grep:tools:Restore to before	open	docs/DECISIONS.md:1745
 A36	a stale-area check after every big merge is built	grep:tools:stale-area	open	docs/DECISIONS.md:1746
