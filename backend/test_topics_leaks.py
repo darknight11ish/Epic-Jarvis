@@ -85,6 +85,13 @@ READERS = {
                                         "proves it rather than taking it on trust: this module "
                                         "has no .search() of the store. Found by CI's "
                                         "backend-windows job on PR #485."),
+    "jarvis_self_improve.py": ("mentions", "Phases 3-4 of the self-improvement design: it reads "
+                                           "the PROGRAM's own source, never a fact. It names "
+                                           "jarvis_memory once, in the list of modules that hold "
+                                           "private material (so a question about one latches "
+                                           "taint), and calls no store search - which the "
+                                           "'mentions' check below proves rather than takes on "
+                                           "trust. Found by CI on PR #481, not by a person."),
     "jarvis_goals.py": ("mentions", "goals.db sits beside memory.db; reads no fact"),
     "jarvis_projects.py": ("owner", "one fact's state by id (erased_at / valid_to) and the "
                                     "memory module's own Forget - PR #465's label table, "

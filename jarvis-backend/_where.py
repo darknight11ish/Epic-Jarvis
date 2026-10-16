@@ -948,6 +948,19 @@ SHIPPED = (
     # nothing at all: no file, no cache, no state, no audit row, no timer and
     # no background job. Standard library only, no patch, no call site yet.
     "jarvis_hf_inspect.py",
+    # Read-only self-diagnosis, and drafting with no way to apply it
+    # (2026-10-16, self-improvement phases 3 and 4). Retrieval over the
+    # program's own text files selects the lines that answer a question; the
+    # local model explains them, and every answer either cites a real
+    # file:line - re-read from disk - or says plainly that it could not
+    # establish it, so a paraphrase can never be reported as a fact. `draft()`
+    # produces a code diff and a separate new-file test diff for the OWNER to
+    # apply by hand, and refuses any diff touching jarvis_gate.py, a tier or
+    # risk table, a test file or the three SHIPPED lists. It applies nothing,
+    # writes nothing, opens no route, reaches no network but the loopback
+    # model, and fails closed when jarvis_scrub is absent. Standard library
+    # only.
+    "jarvis_self_improve.py",
 )
 
 
