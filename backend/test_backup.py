@@ -399,10 +399,12 @@ def t_what_is_backed_up_and_what_is_excluded():
             continue
         opened |= set(_re.findall(r"[\"']([A-Za-z0-9_-]+\.db)[\"']",
                                   mod.read_text(encoding="utf-8")))
-    # Nothing is written down as "not backed up" any more: study.db (review decks,
-    # jarvis_decks.py) joined the locked backup on 2026-09-30, the owner's decision,
-    # with its own key carried the way the chat-history key is.
-    NOT_BACKED_UP = set()
+    # The module's OWN register of deliberate exclusions, so a new database is
+    # accounted for in one place. study.db (review decks, jarvis_decks.py)
+    # joined the locked backup on 2026-09-30, the owner's decision; the search
+    # index joined the exclusions on 2026-10-16 (derived, rebuilt from the files
+    # it describes, and holding no document text).
+    NOT_BACKED_UP = set(B.NOT_BACKED_UP)
     check("every .db a backend module names is backed up (or written down here)",
           opened - NOT_BACKED_UP <= set(B.SOURCE_DBS), sorted(opened - NOT_BACKED_UP - set(B.SOURCE_DBS)))
     check("study.db (review decks) is on the list of databases backed up",
@@ -569,7 +571,7 @@ def t_the_newly_covered_databases_and_named_files_really_go_in():
         conn.execute("INSERT INTO sample (text) VALUES (?)", (f"{name} content",))
         conn.commit()
         conn.close()
-    # The five that stay out, each with a table, so their absence from the
+    # Every database that stays out, each with a table, so its absence from the
     # archive is a decision and not "the file happened not to be there".
     for name in B.NOT_BACKED_UP:
         conn = sqlite3.connect(str(conf / name))
@@ -601,14 +603,16 @@ def t_the_newly_covered_databases_and_named_files_really_go_in():
     # 16, not the 14 this branch first counted: this branch adds knowledge.db and
     # traces.db (14 -> 16 at the time), and main then added receipts.db (#432,
     # the action receipts and their Undo snapshots) and voiceprint.db (#436,
-    # "Write Like Me"). Both numbers are asserted rather than derived, on
-    # purpose - the point is that adding a database is a decision somebody has
-    # to make here as well as in the module, and this is the line that asks.
+    # "Write Like Me"). 6 exclusions since 2026-10-16, when the derived search
+    # index (documents-index.db) joined the five.
+    # Both numbers are asserted rather than derived, on purpose - the point is
+    # that adding a database is a decision somebody has to make here as well as
+    # in the module, and this is the line that asks.
     check("every covered database is in SOURCE_DBS or in NOT_BACKED_UP",
           not ({n for n in B.SOURCE_DBS} & {n for n in B.NOT_BACKED_UP}),
           "a database is in both lists")
-    check("the databases of the owner's install, split 16 + 5, are all accounted for",
-          len(B.SOURCE_DBS) == 16 and len(B.NOT_BACKED_UP) == 5,
+    check("the databases of the owner's install, split 16 + 6, are all accounted for",
+          len(B.SOURCE_DBS) == 16 and len(B.NOT_BACKED_UP) == 6,
           f"{len(B.SOURCE_DBS)} backed up, {len(B.NOT_BACKED_UP)} excluded")
 
 

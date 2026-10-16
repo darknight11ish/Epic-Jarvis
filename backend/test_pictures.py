@@ -833,6 +833,49 @@ def t_every_section_from_129_up_is_still_in_the_document():
           f"know about; add them to that list in this commit")
 
 
+def t_the_sections_after_129_run_without_a_gap_or_a_repeat():
+    """Every number from 129 to the highest is present exactly once.
+
+    Ported from the branch `test/jarvis-api-section-completeness`, whose own
+    docstring records why it was written: *"On 2026-10-15, merging main into a
+    stale branch deleted section 135 and 136 (305 lines) with NO conflict shown,
+    and this file's order check stayed green."*
+
+    Two checks above already look at this document and neither closes this hole:
+
+    * `t_every_section_from_129_up_is_still_in_the_document` catches a GAP,
+      because it demands every number in `EXPECTED_SECTIONS_FROM_129` is present
+      - but it can only speak for the numbers that list names, so a section
+      added above it reports as `extra` until a person edits the list.
+    * the order check catches a section that appears BELOW 129 and asserts the
+      tail ascends. `tail == sorted(tail)` is true of a tail holding a repeated
+      number, and `api.count("\\n## 129.") == 1` guards only 129 itself.
+
+    So this asserts the RUN, independent of any pinned list: every number from
+    129 to the highest present, none missing, **none twice**. Adding a section
+    does not need this edited; deleting one fails it; numbering two sections the
+    same fails it - which is the case nobody was watching.
+
+    Why it matters beyond tidiness: `docs/JARVIS-API.md` is what the desktop and
+    Android apps are written against. A missing section is a route with no
+    contract written down; a duplicate number is worse, because two different
+    contracts then share one citation.
+    """
+    api = (REPO / "docs" / "JARVIS-API.md").read_text(encoding="utf-8")
+    numbered = [int(m.group(1)) for m in re.finditer(r"\n## (\d+)\.", api)]
+    if 129 not in numbered:
+        check("the sections after 129 run without a gap or a repeat", False,
+              "there is no section 129, so the run cannot be checked")
+        return
+    tail = numbered[numbered.index(129):]
+    expected = list(range(129, max(tail) + 1))
+    missing = [n for n in expected if n not in tail]
+    repeated = sorted({n for n in tail if tail.count(n) > 1})
+    check("the sections after 129 run without a gap or a repeat",
+          not missing and not repeated,
+          f"missing {missing}, repeated {repeated}, tail {tail}")
+
+
 def t_the_settings_route_changes_one_named_thing_and_only_on_the_pc():
     """The switch, the drawing program and the folder. ONE named change at a
     time, and never from the phone: where a picture is written and which
@@ -950,6 +993,7 @@ def main() -> int:
                t_install_wraps_the_handler_and_leaves_every_other_request_alone,
                t_no_picture_is_sent_anywhere_and_no_model_can_reach_this,
                t_the_api_document_has_the_section_and_it_matches_this_code,
+               t_the_sections_after_129_run_without_a_gap_or_a_repeat,
                t_every_section_from_129_up_is_still_in_the_document):
         print(f"\n--- {fn.__name__} ---")
         try:

@@ -697,9 +697,11 @@
    *   - POST /api/chat goes to `hud_chat`, streamed back over a channel and
    *     rebuilt into a streaming Response, so the page reads the answer as
    *     it always has. Its AbortController still stops it (`hud_chat_cancel`).
-   *   - /api/approve and /api/deny are refused here, stale link or not:
-   *     approvals are answered in the Jarvis bar or the widget, through
-   *     decide_approval, with Windows Hello and the stale check (section 5).
+   *   - /api/approve and /api/deny are refused here, stale link or not: a
+   *     decision goes through `decide_approval` (section 5), which is the one
+   *     command that carries Windows Hello, the stale check and the App-lock
+   *     rule. This shim is what stops the page's own POST from becoming a
+   *     second, unchecked approval path.
    *   - memory writes are refused (the Brain decides memory);
    *   - anything else under /api/ is refused.
    *
@@ -894,11 +896,16 @@
         });
       }
       if (APPROVAL.test(path)) {
+        // The page's own POST is never the path, on any link: a decision goes
+        // through `decide_approval` (section 5), which adds the token in Rust,
+        // asks Windows Hello when the card needs it, and refuses a stale link
+        // and a locked PC. This shim is what keeps the page's own fetch from
+        // becoming a second, unchecked approval path.
         return jsonReply(403, {
           ok: false,
           error:
-            "approvals are answered in the Jarvis bar or the widget, not in this " +
-            "window - nothing was sent",
+            "an approval is answered through Jarvis's own approval command, not " +
+            "by this page - nothing was sent",
         });
       }
       if (method === "GET" && !isRequest) return shellGet(path);
@@ -1058,22 +1065,36 @@
   else document.addEventListener("DOMContentLoaded", localFonts, { once: true });
 
   /* ---------------------------------------------------------------- *
-   * 5. The approval cards: shown here, answered elsewhere
+   * 5. The approval cards: shown AND answered here
    *
-   * (apps security audit M2, 2026-09-25.) The page draws each waiting
-   * approval with its own Approve and Deny. On the desktop they are
-   * removed: approvals are answered in the Jarvis bar or the widget, where
-   * `decide_approval` asks Windows Hello and refuses on a stale link. The
-   * page's own buttons posted to a relative /api/approve that never reached
-   * Jarvis, and a later "fix" pointing them at the backend would have been
-   * an approval path with neither check.
+   * (apps security audit M2, 2026-09-25; the owner's ask of 2026-10-16:
+   * "i should also be able to approve any card from the jarvis hud directly
+   * on my desktop and not need the jarvis widget or jarvis bar to do so".)
    *
-   * Three layers, none of which decides anything: the stylesheet
-   * (hud-link.css, a file, so neither CSP objects) hides the buttons and
-   * says where to answer; a capture-phase listener stops any click on them
-   * before the page's own handler runs; and the fetch shim (2c) refuses
-   * /api/approve and /api/deny. The card itself - what is being asked,
-   * and how long is left - stays, so the owner sees it here too.
+   * The page draws each waiting approval with its own Approve and Deny. Those
+   * buttons are real now, and they are NOT a second permission path: they go
+   * through the SAME Tauri command the Jarvis bar and the widget call,
+   * `decide_approval`, so every check written for that command applies
+   * unchanged - the stale-link refusal and the cut-off refusal (commands.rs),
+   * Windows Hello for the card the settings say needs it (lock.rs), and the
+   * App-lock rule (a window the lock covers approves nothing; the bar opens
+   * and asks there instead). Nothing in this file decides anything, and
+   * nothing in this file talks to /api/approve.
+   *
+   * Three layers, and only the middle one changed:
+   *   - the stylesheet (hud-link.css, a file, so neither CSP objects) shows
+   *     the buttons;
+   *   - this capture-phase listener stops the page's own onclick - which
+   *     posts to a relative /api/approve that never reached Jarvis, an
+   *     approval path with none of those checks - and sends the decision
+   *     through `decide_approval` instead;
+   *   - the fetch shim (2c) still refuses /api/approve and /api/deny, so a
+   *     later copy of the page that brings its own buttons back still cannot
+   *     post one behind the command's back.
+   *
+   * A stale link is not second-guessed here: the command refuses it and the
+   * card shows the command's own sentence, which says more than a button that
+   * quietly stops working.
    * ---------------------------------------------------------------- */
   function staleSheet() {
     if (document.getElementById("jarvis-hud-link-css")) return;
@@ -1086,15 +1107,66 @@
   if (document.head) staleSheet();
   else document.addEventListener("DOMContentLoaded", staleSheet, { once: true });
 
+  /* What the command answered when it refused, on the card itself. Rust's
+   * sentence is the honest one - it names Windows Hello, the stale link or App
+   * lock - so it is shown as it came, the same way the bar's own hint carries
+   * it. Never a control: there is nothing to press in it. */
+  function sayOnCard(card, text) {
+    var why = card.querySelector(".why");
+    if (!why) {
+      why = document.createElement("p");
+      why.className = "why";
+      var btns = card.querySelector(".btns");
+      if (btns && btns.parentNode) btns.parentNode.insertBefore(why, btns.nextSibling);
+      else card.appendChild(why);
+    }
+    why.textContent = String(text);
+  }
+
+  /* One decision, sent the one way: the command the bar uses. `id` is the
+   * card's own id, from the queue this page read - the command re-reads no
+   * queue of its own, so the id must be the one on screen. */
+  function answerApproval(id, approved, card) {
+    card.classList.add("settled");
+    var buttons = card.querySelectorAll("button");
+    buttons.forEach(function (b) { b.disabled = true; });
+    shellInvoke("decide_approval", { id: id, approved: approved }).then(
+      function () {
+        // The queue is the record, so the card goes when the server says it
+        // has: asking again now is what makes that land on this beat.
+        setTimeout(function () { card.remove(); apprPoll(); }, 400);
+      },
+      function (err) {
+        var why = String((err && err.message) || err);
+        card.classList.remove("settled");
+        buttons.forEach(function (b) { b.disabled = false; });
+        sayOnCard(card, why);
+        // "Already decided" (the server's 409, or a timeout) means the card is
+        // not waiting any more; anything else leaves it standing so the owner
+        // can read what happened and decide again.
+        if (/already|409/i.test(why)) {
+          setTimeout(function () { card.remove(); apprPoll(); }, 1200);
+        }
+      }
+    );
+  }
+
   document.addEventListener(
     "click",
     function (event) {
       var target = event.target;
       if (!target || !target.closest) return;
-      if (!target.closest("#approvals .appr .btns button")) return;
+      var button = target.closest("#approvals .appr .btns button");
+      if (!button) return;
+      // The page's own handler first: it must not run at all. The decision is
+      // the command's to send, never a fetch from this page.
       event.preventDefault();
       event.stopPropagation();
       if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+      var card = button.closest(".appr");
+      var id = card && card.dataset ? String(card.dataset.id || "") : "";
+      if (!card || !id || button.disabled) return;
+      answerApproval(id, button.className.indexOf("yes") >= 0, card);
     },
     true
   );

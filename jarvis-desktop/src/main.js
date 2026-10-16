@@ -109,6 +109,9 @@ import {
   linkWords,
   riskLine,
   expiryWords,
+  quickActionable,
+  typedDecision,
+  typedMaybe,
   setMuted,
   stopTask,
   followTheme,
@@ -3120,6 +3123,72 @@ async function decideApproval(approved, optionId = null) {
 }
 
 /**
+ * Answers the card from a message the owner typed, when the whole message was
+ * the decision itself (`typedDecision`).
+ *
+ * Returns true when the message was consumed: a decision was sent, or the card
+ * cannot be answered this way and the screen now says which one to press.
+ * False means "not a decision after all", and the caller sends it as an
+ * ordinary prompt.
+ *
+ * **It decides nothing on its own.** The decision goes to `decideApproval` -
+ * the same function the two buttons call - so the one-decision latch, the
+ * stale-link refusal and the Windows Hello check (in `decide_approval`) all
+ * apply to it unchanged.
+ *
+ * Two things are deliberately not done here:
+ *
+ * * **An APPROVE on a card a fast path may not touch is refused**, for the
+ *   same reason `quickActionable` refuses one: the card carries `raised`, so
+ *   it is on screen *because* something tried to rush the reader, and the one
+ *   response that must not be quick is the fast one. The words say which
+ *   button to press instead. A **DENY is never held** - refusing costs a
+ *   retry - which is the same split the command makes for a cut-off card.
+ * * **A card that is not on screen is not answered.** Esc puts a card aside
+ *   without deciding it, so a queue can be waiting with nothing to answer;
+ *   picking one of those from a typed word would be a guess at *which* card
+ *   the owner meant, and the answer to that is to say so.
+ */
+function answerTypedDecision(approved) {
+  const approval = state.approval;
+  if (!approval) {
+    const waiting = currentQueue().items.length;
+    if (!waiting) return false;
+    noteToFeed(waiting === 1
+      ? "One approval is waiting, but it is not on the card. Open it, then press Deny or Approve - typing it here decides nothing."
+      : `${waiting} approvals are waiting, but none is on the card. Open one, then press Deny or Approve - typing it here decides nothing.`);
+    return true;
+  }
+  if (approved && !quickActionable(approval)) {
+    const why = approval.raised
+      ? "Press Approve. Something in this card tried to rush you, so the decision takes the button, not a typed word."
+      : "Press Approve. This card is not one Jarvis marked safe to answer in a hurry, so it takes the button, not a typed word.";
+    dom.approvalHint.textContent = why;
+    announce(why);
+    return true;
+  }
+  // The same guard the buttons have, so a typed "deny" after an answer cannot
+  // send a second decision for a card that has already been decided here.
+  if (state.decided === approval.id || state.deciding) return true;
+  decideApproval(approved);
+  return true;
+}
+
+/**
+ * Clears the box after a message was consumed as an answer to a card.
+ *
+ * Like a sent prompt, and deliberately unlike one in the one way that matters:
+ * it does NOT go into the Up-arrow recall. "i approve" is not a question the
+ * owner will want to ask again - it was an answer to the card in front of him -
+ * and a recall list holding it would be a one-key way to type a decision again.
+ */
+function clearConsumedPrompt() {
+  dom.prompt.value = "";
+  state.boxTag = boxTagAfter(state.boxTag, "clear");
+  autoGrowPrompt();
+}
+
+/**
  * Appends a line to the answer feed and makes sure the card is visible to
  * show it — this window's only status surface, the same one
  * `decideApproval` above already writes its own outcome into (there is no
@@ -5257,6 +5326,28 @@ function submitCurrentPrompt() {
   // must go through, and it refuses anything carrying `raised`.
   const value = dom.prompt.value;
   if (!value.trim()) return;
+  // A card is waiting and this message IS the decision ("approve", "i approve
+  // it", "deny") - the owner's report of 2026-10-16 was that typing exactly
+  // that did nothing at all, with no way to find out why. It now does the same
+  // thing the button does, through the same `decideApproval`, and anything
+  // less than a whole-message match is answered with words instead of a
+  // guess (`typedDecision` in jarvis-link.js says why the match is exact).
+  const typed = typedDecision(value);
+  if (typed !== null && answerTypedDecision(typed)) {
+    clearConsumedPrompt();
+    return;
+  }
+  // ...and a message that only SOUNDS like an answer ("yes", "ok", "go ahead")
+  // is answered with words while a card is on screen: deciding it would be the
+  // inference rule 4 forbids, and sending it to the model is what made the
+  // owner say "i have no idea what happens".
+  if (state.approval && typedMaybe(value)) {
+    const why = "Nothing was decided. To answer the card, press Approve or Deny on it.";
+    dom.approvalHint.textContent = why;
+    announce(why);
+    clearConsumedPrompt();
+    return;
+  }
   const tag = state.boxTag;
   pushPromptHistory(value.trim(), tag);
   dom.prompt.value = "";
