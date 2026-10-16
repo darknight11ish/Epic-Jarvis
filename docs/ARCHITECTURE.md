@@ -2211,8 +2211,9 @@ one-sided decision** (2026-10-14): **action receipts with one-click undo**
 (`backend/jarvis_receipts.py`, `plugins/ready/receipts/`, JARVIS-API §132).
 The store and its two routes are built: `GET /api/receipts` (the recent list)
 and `POST /api/receipts/<receipt_id>/undo`, which raises ONE `undo_action`
-card - the shipped `jarvis-framework.toml` gives that action no tier, so it
-takes `unknown_action_tier`, which is "ask" - and the reversal runs only on
+card - the shipped `jarvis-framework.toml` gives that action "ask" of its own
+(2026-10-16; before the line existed it took `unknown_action_tier`, which is
+also "ask", so the card is the same one) - and the reversal runs only on
 the gate's own answer. What neither app has yet is a screen - no receipts list
 and no Undo button on the desktop's Jarvis bar or Brain, none on the phone.
 That is one decision, not two: this slice is the backend half, and the change
