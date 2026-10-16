@@ -607,6 +607,21 @@ app_merge_change          = "ask"
 # 2026-10-04 - because until then it had no line at all and quietly took
 # unknown_action_tier ("ask"). The value is the one it already resolved to.
 phone_notifications_read = "ask"
+
+# Undo and the credential vault (2026-10-16), the same shape as the line above:
+# two gate actions that had NO line here and so took unknown_action_tier, which
+# is "ask". A name with no line is one `test_gate_names.py` reports as an action
+# the live gate cannot resolve, and it takes the tier from a setting that can be
+# loosened later. The value below is the one each ALREADY resolved to, so no
+# card changes: neither is given a `_RISK` row, so both stay risky cards
+# (Windows Hello on the PC, the screen lock on the phone).
+#   undo_action - jarvis_receipts.py puts ONE recorded change back per card; the
+#     module reads this table for its list route and never decides the tier.
+#   vault_put - jarvis_vault.py keeps ONE secret per card, and its route refuses
+#     any tier but "ask" (jarvis_vault._person_said_yes).
+undo_action              = "ask"
+vault_put                = "ask"
+
 [self_modification]
 enabled = true
 # All must pass before a change is even offered to you for approval. Any
