@@ -583,3 +583,181 @@ def voice_lines(words) -> list:
                 waiting = False
                 out.append(VOICE[word])
     return out
+
+
+# ==========================================================================
+#   The 1-3-1 contract for a decision brief (Upgrade 3B, 2026-10-15)
+# ==========================================================================
+#
+# WHAT A DECISION BRIEF IS. A choice put to the owner: ONE problem sentence,
+# THREE options each carrying its own pros and cons, ONE clear recommendation,
+# and a plan that executes the option recommended. It is the shape the owner
+# asked for ("give me multiple choice"): a decision, not a document with radio
+# buttons. Nothing here writes a brief - it only says whether one holds, in
+# plain words, so a card, a skill or a chat answer cannot quietly ship a brief
+# with two problems, four options, no recommendation, or a plan for a
+# different option than the one it recommends.
+#
+# THE 1024-CHARACTER ALLOWANCE IS THE SKILL SPEC'S, NOT THIS MODULE'S.
+# `jarvis_skills.py` refuses a skill description longer than 1024 characters
+# (`jarvis-backend/jarvis_skills.py:218`, "1024 the spec allows") and truncates
+# to it at :789. A brief that carries a `skill_description` must therefore be
+# measured against THAT allowance and no smaller one of this module's own -
+# `backend/test_card_words.py` pins the two numbers together, so this file
+# cannot drift away from the spec it defers to.
+#
+# PURE, LIKE THE REST OF THIS FILE: standard library only, no I/O, no clock,
+# no model. `brief_problems()` is a function of the brief it is handed.
+#
+# THE SHAPE IT READS
+#     {"problem": "one sentence",
+#      "options": [{"what": "...", "pros": ["..."], "cons": ["..."]}, ...],
+#      "recommendation": 1 | "<one option's what>",
+#      "plan_for": 1 | "<one option's what>",     # which option the plan runs
+#      "plan": ["step", ...] | "text",
+#      "skill_description": "..."}                # optional, <= 1024 chars
+# A brief may carry other keys; nothing here reads them.
+
+#: 1-3-1, spelled out: one problem sentence, three options, one recommendation.
+PROBLEM_SENTENCES = 1
+OPTION_COUNT = 3
+RECOMMENDATIONS = 1
+
+#: The skill spec's own description allowance, cited above. Kept here so a
+#: brief's `skill_description` is measured against the spec and not against
+#: something smaller invented in this module.
+SKILL_DESCRIPTION_MAX = 1024
+
+#: The three keys every option must carry, each with something in it.
+OPTION_KEYS = ("what", "pros", "cons")
+
+
+def sentences(text) -> list:
+    """The sentence-ish pieces of plain text, in order.
+
+    Deliberately simple, and deliberately ONLY a splitter: a boundary is a
+    `.`, `!` or `?` followed by whitespace and then something that looks like
+    a new sentence (a capital letter, a digit, or an opening quote/bracket).
+    That keeps "Use the e.g. sample." one sentence while "First. Second."
+    is two, which is the whole job: tell one problem sentence from two.
+    """
+    flat = " ".join(str(text or "").split())
+    if not flat:
+        return []
+    return [p.strip() for p in re.split(r'(?<=[.!?])\s+(?=[A-Z0-9"\'(])', flat) if p.strip()]
+
+
+def _text(value) -> str:
+    """One thing said in words: a string, or one item of a list, flattened."""
+    if isinstance(value, (list, tuple)):
+        return " ".join(str(v) for v in value if str(v or "").strip()).strip()
+    return " ".join(str(value or "").split())
+
+
+def _has_something(value) -> bool:
+    """Whether a pros/cons/what slot carries anything at all - a list with at
+    least one real item, or text with at least one real word."""
+    if isinstance(value, (list, tuple)):
+        return any(str(v or "").strip() for v in value)
+    return bool(str(value or "").strip())
+
+
+def _option_index(choice, options) -> "int | None":
+    """Which option `choice` picks: its 0-based index, or the option's own
+    `what` words (case and spacing ignored). None when it picks nothing - so
+    "recommends option 1" and "recommends <its words>" resolve to the SAME
+    option and can be compared with each other."""
+    if isinstance(choice, bool):
+        return None
+    if isinstance(choice, int):
+        return choice if 0 <= choice < len(options) else None
+    said = _text(choice).lower()
+    if not said:
+        return None
+    for i, option in enumerate(options):
+        if isinstance(option, dict) and said == _text(option.get("what")).lower():
+            return i
+    return None
+
+
+def _names_option(choice, options) -> bool:
+    """Whether `choice` picks one of `options`."""
+    return _option_index(choice, options) is not None
+
+
+def brief_problems(brief) -> list:
+    """Every way `brief` breaks the 1-3-1 contract, in order, in plain words.
+
+    An empty list means the brief holds. This NEVER raises and never guesses:
+    a brief that is not a mapping, an option that is not a mapping and a slot
+    with nothing in it are each one named problem, so a caller can show them.
+    """
+    problems = []
+    if not isinstance(brief, dict):
+        return ["a decision brief must be a set of named parts, not %s" % type(brief).__name__]
+
+    # ONE problem sentence.
+    problem = _text(brief.get("problem"))
+    parts = sentences(problem)
+    if not problem:
+        problems.append("the brief has no problem sentence")
+    elif len(parts) != PROBLEM_SENTENCES:
+        problems.append("the brief's problem must be one sentence; this one reads as %d"
+                        % len(parts))
+
+    # THREE options, each with pros and cons of its own.
+    options = brief.get("options")
+    if not isinstance(options, (list, tuple)) or isinstance(options, str):
+        problems.append("the brief has no options list")
+        options = []
+    else:
+        options = list(options)
+        if len(options) != OPTION_COUNT:
+            problems.append("a decision brief offers exactly %d options; this one offers %d"
+                            % (OPTION_COUNT, len(options)))
+    for i, option in enumerate(options):
+        where = "option %d" % (i + 1)
+        if not isinstance(option, dict):
+            problems.append("%s is not a set of parts" % where)
+            continue
+        if not _has_something(option.get("what")):
+            problems.append("%s says nothing about what it is" % where)
+        for key in ("pros", "cons"):
+            if not _has_something(option.get(key)):
+                problems.append("%s has no %s" % (where, key))
+
+    # ONE clear recommendation, and it must be one of the three options.
+    recommendation = brief.get("recommendation")
+    if not _has_something(recommendation) and not isinstance(recommendation, int):
+        problems.append("the brief makes no recommendation")
+    elif options and not _names_option(recommendation, options):
+        problems.append("the recommendation does not name one of the brief's options")
+
+    # A plan, and it must execute the option being recommended.
+    plan = brief.get("plan")
+    if not _has_something(plan):
+        problems.append("the brief has no plan")
+    plan_for = brief.get("plan_for")
+    if plan_for is None and isinstance(plan, dict):
+        plan_for = plan.get("option")
+    recommended = _option_index(recommendation, options) if options else None
+    carried_out = _option_index(plan_for, options) if options else None
+    if plan_for is None:
+        problems.append("the plan does not say which option it carries out")
+    elif options and carried_out is None:
+        problems.append("the plan names something that is not one of the brief's options")
+    elif recommended is not None and carried_out != recommended:
+        problems.append("the plan carries out a different option than the one recommended")
+
+    # The skill spec's allowance, not one of this module's own.
+    description = brief.get("skill_description")
+    if description is not None and len(_text(description)) > SKILL_DESCRIPTION_MAX:
+        problems.append("the skill description is %d characters; the spec allows %d"
+                        % (len(_text(description)), SKILL_DESCRIPTION_MAX))
+    return problems
+
+
+def holds_one_three_one(brief) -> bool:
+    """Whether `brief` holds the 1-3-1 contract. The yes/no form of
+    `brief_problems()`, which is where the reasons live."""
+    return not brief_problems(brief)

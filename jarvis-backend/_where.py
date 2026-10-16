@@ -921,6 +921,18 @@ SHIPPED = (
     # compared anywhere (jarvis_hardware.py:912). Writes nothing, loads
     # nothing, opens no route, and has no call site yet.
     "jarvis_ollama_contract.py",
+    # Verify a GGUF by its LISTING, before any download (2026-10-15, 3B
+    # piece 2). It answers four questions from the repo's file list alone:
+    # what is in it by name and size, with the vision projector reported
+    # SEPARATELY from the model GGUF; the exact quant labels the repo uses,
+    # verbatim; the KV cache a hybrid model really grows, counted only over
+    # the layers that grow one; and what is missing. ONE HTTPS GET to
+    # huggingface.co/api/models/<owner>/<name>/tree/main?recursive=true - the
+    # repo id is the whole request, with no token, cookie, key, local file
+    # name or chat word in it, and no weight is ever fetched. It writes
+    # nothing at all: no file, no cache, no state, no audit row, no timer and
+    # no background job. Standard library only, no patch, no call site yet.
+    "jarvis_hf_inspect.py",
 )
 
 

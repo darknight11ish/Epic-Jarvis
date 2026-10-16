@@ -186,6 +186,110 @@ def t_the_file_both_apps_read_is_current():
               have == doc)
 
 
+# ==========================================================================
+#   The 1-3-1 contract for a decision brief (Upgrade 3B, 2026-10-15)
+# ==========================================================================
+
+def _brief(**over):
+    """A decision brief that HOLDS 1-3-1, with one part replaced per test."""
+    good = {
+        "problem": "The app crashes when the folder is missing.",
+        "options": [
+            {"what": "Fix it in place", "pros": ["small change"], "cons": ["touches the loader"]},
+            {"what": "Add a guard", "pros": ["contained"], "cons": ["hides the fault"]},
+            {"what": "Leave it alone", "pros": ["no risk tonight"], "cons": ["it still crashes"]},
+        ],
+        "recommendation": 1,
+        "plan_for": "Add a guard",
+        "plan": ["write the guard", "test it against the missing folder"],
+    }
+    good.update(over)
+    return good
+
+
+def t_the_one_three_one_contract_holds_and_every_break_is_named():
+    """One problem sentence, three options with pros and cons of their own,
+    one clear recommendation, and a plan that carries THAT option out. Each
+    way of breaking it must be reported - a brief that cannot fail this check
+    is how a card ships with two problems and four options."""
+    check("a brief that holds 1-3-1 reports no problems",
+          W.brief_problems(_brief()) == [] and W.holds_one_three_one(_brief()),
+          W.brief_problems(_brief()))
+
+    two = {k: v for k, v in _brief(problem="First. Second.").items()}
+    check("two problem sentences are reported",
+          any("problem" in p and "sentence" in p for p in W.brief_problems(two)),
+          W.brief_problems(two))
+    check("a missing problem is reported",
+          any("no problem sentence" in p for p in W.brief_problems(_brief(problem=""))),
+          W.brief_problems(_brief(problem="")))
+
+    base_options = _brief()["options"]
+    for n, wanted in ((2, True), (4, True), (3, False)):
+        b = _brief(options=(base_options * 2)[:n])
+        got = any("exactly 3 options" in p for p in W.brief_problems(b))
+        check(f"{n} options is {'reported' if wanted else 'accepted'}", got == wanted,
+              W.brief_problems(b))
+    for key in ("pros", "cons"):
+        b = _brief(options=[dict(base_options[0], **{key: []})] + base_options[1:])
+        check(f"an option with no {key} is reported",
+              any(f"no {key}" in p for p in W.brief_problems(b)), W.brief_problems(b))
+
+    check("no recommendation is reported",
+          any("no recommendation" in p for p in W.brief_problems(_brief(recommendation=None))),
+          W.brief_problems(_brief(recommendation=None)))
+    check("a recommendation naming no option is reported",
+          any("does not name one" in p for p in W.brief_problems(_brief(recommendation="do nothing"))),
+          W.brief_problems(_brief(recommendation="do nothing")))
+    check("no plan is reported",
+          any("no plan" in p for p in W.brief_problems(_brief(plan=[]))),
+          W.brief_problems(_brief(plan=[])))
+    check("a plan that does not say which option it carries out is reported",
+          any("does not say which option" in p
+              for p in W.brief_problems({k: v for k, v in _brief().items() if k != "plan_for"})),
+          W.brief_problems({k: v for k, v in _brief().items() if k != "plan_for"}))
+    check("a plan carrying out a DIFFERENT option is reported",
+          any("different option" in p for p in W.brief_problems(_brief(plan_for=0))),
+          W.brief_problems(_brief(plan_for=0)))
+
+    # The two halves may be said either way round: by index or by the option's
+    # own words. They must resolve to the SAME option and NOT be reported -
+    # comparing the raw values would call this a mismatch.
+    check("recommendation by index with the plan by words matches",
+          W.holds_one_three_one(_brief(recommendation=1, plan_for="Add a guard")))
+    check("recommendation by words with the plan by index matches",
+          W.holds_one_three_one(_brief(recommendation="Add a guard", plan_for=1)))
+    check("a brief that is not a set of named parts is reported",
+          W.brief_problems(["x"]) != [], W.brief_problems(["x"]))
+
+    # The splitter underneath: one sentence stays one.
+    check("an abbreviation does not end a sentence",
+          W.sentences("Use the e.g. sample. Then stop.") == ["Use the e.g. sample.", "Then stop."],
+          W.sentences("Use the e.g. sample. Then stop."))
+
+
+def t_the_skill_description_allowance_is_the_spec_s_own_1024():
+    """`jarvis_skills.py` refuses a skill description longer than 1024
+    characters - "1024 the spec allows" - and truncates to it at :789. The
+    brief validator measures against THAT number and no smaller one of its
+    own: a 1024-character description is legitimate and must pass, 1025 must
+    not, and the two files must be pinned to the same figure."""
+    check("the validator's allowance is the spec's 1024",
+          W.SKILL_DESCRIPTION_MAX == 1024, W.SKILL_DESCRIPTION_MAX)
+    check("a 1024-character skill description passes",
+          W.holds_one_three_one(_brief(skill_description="x" * 1024)),
+          W.brief_problems(_brief(skill_description="x" * 1024)))
+    check("a 1025-character skill description is reported",
+          any("spec allows 1024" in p
+              for p in W.brief_problems(_brief(skill_description="x" * 1025))),
+          W.brief_problems(_brief(skill_description="x" * 1025)))
+    spec = (HERE.parent / "jarvis-backend" / "jarvis_skills.py").read_text(encoding="utf-8")
+    found = re.search(r"if len\(desc\) > (\d+):", spec)
+    check("jarvis_skills.py enforces the same 1024 this validator cites",
+          bool(found) and int(found.group(1)) == W.SKILL_DESCRIPTION_MAX,
+          "jarvis_skills.py says %s" % (found.group(1) if found else "nothing"))
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):
