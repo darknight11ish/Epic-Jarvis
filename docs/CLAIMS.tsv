@@ -82,8 +82,8 @@ A31	local compare (ask several AIs the same question, one summary) is built	file
 A32	a per-lane measured log is built	no definite check: backend/jarvis_speed.py writes one row per answer keyed by the model's name and its graphics-card share (_NUMBER_FIELDS, _NAME_FIELDS), and it has no lane field; nothing in the tree says whether "per-lane" means the lane's name or the lane's model, so both a pass and a fail here would be this register choosing for the project	unverifiable	docs/DECISIONS.md:1743
 A33	test hardening: a per-patch "reads original text" ratchet exists	test:backend/test_patch_original_text.py	built	docs/DECISIONS.md:1744
 A34	the suite runner counts a skipped check as a skip, never as a pass	grep:backend/run_suites.py:no longer lands in its	built	docs/DECISIONS.md:1744
-A35	"Restore to before" for an app merge is built	grep:tools:Restore to before	open	docs/DECISIONS.md:1745
-A36	a stale-area check after every big merge is built	grep:tools:stale-area	open	docs/DECISIONS.md:1746
+A35	"Restore to before" for an app merge is built	grep:tools:Restore to before	open	docs/DECISIONS.md:1746
+A36	a stale-area check after every big merge is built	grep:tools:stale-area	open	docs/DECISIONS.md:1747
 A37	the desktop has a "Delete older backups now" button	grep:jarvis-desktop/src/settings.html:Delete older backups now	built	docs/DECISIONS.md:1692
 A38	the phone has a "Delete older backups now" button	grep:jarvis-client:Delete older backups now	open	docs/DECISIONS.md:1698
 B01	the phone's read-only past-approvals list is built (an audit report said so on 2026-09-29)	grep:jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/InboxScreen.kt:Activity	built	docs/audit-reports-2026-09-29-30/49-audit-a1ef1de0.md:53

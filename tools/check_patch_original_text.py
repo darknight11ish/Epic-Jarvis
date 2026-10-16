@@ -12,8 +12,8 @@ stand-in walk (`backend/_stack.py`), and how many LINES of that pre-image.
 
 A hunk whose context is not in the stand-in yet is context this repository
 cannot account for: it is text of the owner's own file, which this repository
-does not hold. That is what "reads original text" means here, and it is pinned
-per patch. The pin may only go DOWN.
+does not hold. That is what the phrase "reads the owner's original text" means
+here, and it is pinned per patch. The pin may only go DOWN.
 
 WHY IT EXISTS - the bug class, and what it cost (2026-10-16)
 
@@ -103,6 +103,7 @@ Standard library and git only. No network.
 import argparse
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 #: patch -> (hunks, lines) the stand-in walk had to invent for it, measured on
@@ -180,16 +181,34 @@ def targets_of(stack):
     return out
 
 
-def measure(stack, targets, replace=None):
-    """{patch: {'hunks', 'lines', 'targets'}} for one walk of `targets`."""
+def measure(stack, targets, replace=None, patches=None):
+    """{patch: {'hunks', 'lines', 'targets'}} for one walk of `targets`.
+
+    The targets are independent of one another - each walk gets its own scratch
+    folder from `_stack.stand_in`, and `_gitapply` holds no state - so they are
+    walked TOGETHER rather than one after another. Measured on the five targets
+    of 2f85d772: 26s in series, 8s together, and identical counts either way.
+    The aggregation below still runs in `targets` order, so the report reads the
+    same however the threads interleave.
+    """
+    def walk(target):
+        stats = {}
+        text, log = stack.stand_in(target, replace=replace, stats=stats,
+                                   patches=patches)
+        return target, stats, text, log
+
+    if len(targets) > 1:
+        with ThreadPoolExecutor(max_workers=len(targets)) as pool:
+            results = list(pool.map(walk, targets))
+    else:
+        results = [walk(t) for t in targets]
+
     totals = {}
 
     def slot(name):
         return totals.setdefault(name, {"hunks": 0, "lines": 0, "targets": []})
 
-    for target in targets:
-        stats = {}
-        text, log = stack.stand_in(target, replace=replace, stats=stats)
+    for target, stats, text, log in results:
         if text is None:
             return None, "%s: the stand-in could not be built: %s" % (target, log[-1])
         for name, n in stats["by_patch"].items():
@@ -232,13 +251,18 @@ def main():
         raise SystemExit("_stack.RATCHET pins %s, which the stack no longer patches - "
                          "this tool would have skipped it" % missing)
 
+    patches = None
     if instead:
         # A rehearsal only has to walk the file(s) the rehearsed patch touches:
         # the patches for any other file cannot change its pre-image.
         touched = _names_in(Path(stack.HERE) / instead)
         targets = [t for t in targets if t in touched] or targets
+        # ... and it can stop AT the rehearsed patch. Its pre-image is built by
+        # the patches before it and by nothing after them, so stopping there
+        # gives the same count for it - and skips every later hunk.
+        patches = order[:order.index(instead) + 1]
 
-    totals, why = measure(stack, targets, replace=replace)
+    totals, why = measure(stack, targets, replace=replace, patches=patches)
     if totals is None:
         print("CANNOT RUN: %s" % why)
         return 2

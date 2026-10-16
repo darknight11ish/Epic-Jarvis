@@ -159,32 +159,43 @@ def t_the_broken_patch_is_caught():
         check("... and the run says FAIL", "FAIL" in out, out[-400:])
 
 
-def t_the_fixed_patch_is_not_caught():
+def t_the_rehearsal_path_can_pass():
     """The control. Without it, a checker that failed every rehearsal - or a
     rehearsal that never substituted the text at all - would pass the proof
-    above while proving nothing."""
-    code, out = once("--rehearse", "cloud-say-yes.patch=backend/cloud-say-yes.patch")
-    check("rehearsing the committed (fixed) text passes", code == 0,
+    above while proving nothing.
+
+    It rehearses the COMMITTED text of a cheap patch rather than of the one the
+    proof uses: the rehearsal path is the same code for every patch, and this
+    walks `jarvis_skills.py` (2 hunks) instead of `jarvis_hud.py` (254), which
+    is about twelve seconds of the suite for no extra proof. The committed
+    cloud-say-yes text is measured at its pin by the clean run above, which only
+    exits 0 when every patch is at or under its pin."""
+    code, out = once("--rehearse", "skill-notes.patch=backend/skill-notes.patch")
+    check("rehearsing a patch's own committed text passes", code == 0,
           f"exit {code}, expected 0\n{out[-1200:]}")
     m = REHEARSAL.search(out)
-    check("... and it is the same patch, measured at the pin", bool(m) and
-          m.group(1) == "cloud-say-yes.patch" and m.group(3) == m.group(5),
+    check("... and it is measured at its pin", bool(m) and
+          m.group(1) == "skill-notes.patch" and m.group(3) == m.group(5),
           f"REHEARSAL line: {m.group(0) if m else 'absent'}")
 
 
 def t_the_two_forms_agree_on_hunks_and_differ_on_lines():
     """Why the pin carries LINES: the broken form is one hunk, like the fixed
-    one, so a hunk-only ratchet is blind to this break."""
+    one, so a hunk-only ratchet is blind to this break. The fixed form's numbers
+    come from the clean run, which applies exactly that text."""
+    _, clean_out = once()
     _, broken_out = once("--rehearse", f"cloud-say-yes.patch={BROKEN}")
-    _, fixed_out = once("--rehearse", "cloud-say-yes.patch=backend/cloud-say-yes.patch")
-    b, f = REHEARSAL.search(broken_out), REHEARSAL.search(fixed_out)
-    if not (b and f):
-        check("both rehearsals printed their measurement", False, "a REHEARSAL line is absent")
+    b = REHEARSAL.search(broken_out)
+    f = next((row for row in PATCH_LINE.findall(clean_out)
+              if row[0] == "cloud-say-yes.patch"), None)
+    if not b or not f:
+        check("both forms were measured", False,
+              "the broken rehearsal or the clean run printed no measurement")
         return
     check("both forms are the same number of hunks (so hunks alone cannot tell them "
-          "apart)", b.group(2) == f.group(2), f"broken {b.group(2)}, fixed {f.group(2)}")
+          "apart)", b.group(2) == f[2], f"broken {b.group(2)}, fixed {f[2]}")
     check("... and the line counts differ, which is what the pin catches",
-          b.group(3) != f.group(3), f"broken {b.group(3)}, fixed {f.group(3)}")
+          b.group(3) != f[4], f"broken {b.group(3)}, fixed {f[4]}")
 
 
 def t_a_rehearsal_of_a_patch_not_in_the_stack_is_refused():
@@ -202,7 +213,7 @@ if __name__ == "__main__":
                t_every_patch_the_walk_found_is_pinned,
                t_the_late_patches_are_pinned_and_not_new,
                t_the_broken_patch_is_caught,
-               t_the_fixed_patch_is_not_caught,
+               t_the_rehearsal_path_can_pass,
                t_the_two_forms_agree_on_hunks_and_differ_on_lines,
                t_a_rehearsal_of_a_patch_not_in_the_stack_is_refused):
         print(f"\n--- {fn.__name__} ---")

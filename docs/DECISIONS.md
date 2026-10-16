@@ -1742,9 +1742,10 @@ notification, card, quick-access and coverage audits (one pull request):
   compare built**, `jarvis_chatbot_compare.py`), each off by default and measured
   first, plus a per-lane measured log; (8) test hardening (a per-patch "reads
   original text" ratchet, skips no longer count as passes - **the skip half is
-  built**, `run_suites.py`); (9) "Restore to before" for an app merge (with the
-  app builder, after the 12 GB card); (10) a stale-area check after every big
-  merge.
+  built**, `run_suites.py`; **the ratchet half is built 2026-10-16**,
+  `tools/check_patch_original_text.py`); (9) "Restore to before" for an app
+  merge (with the app builder, after the 12 GB card); (10) a stale-area check
+  after every big merge.
 - **Rejected this session (ideas only):** Xinference, LocalAI, GPUStack, Triton,
   a llama-server supervisor, screenpipe (stays rejected), Outlines, STORM, MCP
   filesystem/git servers, Zebar, yasb, tauri-plugin-decorum, json-to-compose
