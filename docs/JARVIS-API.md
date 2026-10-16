@@ -19996,8 +19996,8 @@ Handler after its own origin and token checks, exactly as `jarvis_news.py`,
 `jarvis_sources.py` and `jarvis_goals.py` do it. **No patch is involved:**
 `plugins/ready/receipts/plugin.json` names `jarvis_receipts` with
 `"install": "handler"`, and `jarvis_plugins.py` makes the call the patch would
-have made. `stack_order` is 143 - after every folder the old patch stack had
-(the highest is `pictures` at 141).
+have made. `stack_order` is 145 - after every folder the old patch stack had
+(the highest is `model-lanes` at 142).
 
 The list answers `{"ok", "receipts", "count", "limit", "undo_action",
 "undo_tier", "waiting", "last", "words"}`. Each receipt carries its own
@@ -20321,8 +20321,8 @@ core's Handler after its own origin and token checks, exactly as
 `jarvis_receipts.py` (§132.5) does it. **No patch is involved:**
 `plugins/ready/skill-hub/plugin.json` names `jarvis_skill_hub` with
 `"install": "handler"`, and `jarvis_plugins.py` makes the call the patch would
-have made. `stack_order` is 142 - after every folder the old patch stack had
-(the highest of those is `pictures` at 141).
+have made. `stack_order` is 143 - after every folder the old patch stack had
+(the highest of those is `model-lanes` at 142).
 
 The first route answers twice, on the same path, and the two forms report
 failure differently - one HTTP status, one payload - which a client has to know.

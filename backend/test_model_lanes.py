@@ -38,12 +38,25 @@ stopped. `t_nothing_real_is_ever_run` reads the module's own source and proves
 the real functions cannot be reached from a test run: the suite would fail if
 someone removed the seams.
 
+THE SAME SUITE RUNS ON WINDOWS AND ON THE UBUNTU CI RUNNER. `start()`'s own
+host guard (`_host_reason`) refuses off Windows, in words and before it reads
+this PC's task list, because there is no `schtasks` to run there - so the
+checks that want to see what `start()` does with a down lane, with no such
+task, or with a task the Task Scheduler already calls running lend themselves
+a Windows host for their length (`windows_host()` below). Their assertions are
+unchanged and they run on both platforms. The guard is not left untested: it
+has a check of its own, `t_the_host_guard_answers_each_machine_honestly`,
+which asks whichever machine is running the suite for its own honest answer.
+Nothing here is skipped on either platform, and the rules that come BEFORE the
+guard are deliberately left to run against the real one.
+
 Standard library only. No network beyond 127.0.0.1 (and none at all: the one
 check that uses a real socket uses a throwaway one this file opened).
 """
 from __future__ import annotations
 
 import ast
+import contextlib
 import io
 import json
 import os
@@ -123,6 +136,45 @@ def clean():
     L.reset()
 
 
+_LENT_HOST = []
+
+
+@contextlib.contextmanager
+def windows_host():
+    """Lend `start()` a Windows host for one check, and give it back after.
+
+    `start()`'s second rule is the host guard (`jarvis_model_lanes.py:735-737`,
+    `_host_reason`): off Windows it answers 503 in words and runs NOTHING,
+    before it reads this PC's task list or looks for the task. That guard is
+    right - there is no `schtasks` off Windows - but it is also the one thing
+    about `start()` a test cannot inject a seam for, so without this the checks
+    that need to see what `start()` does past the guard would fail on the Ubuntu
+    CI runner while passing on the owner's PC, which is a platform dependency
+    the suite never declared.
+
+    The guard is swapped out for the length of those checks, exactly as
+    `t_the_command_it_really_runs_is_schtasks_run_with_that_task_name` swaps
+    `_run` to see the real argv: no assertion is relaxed, and they still run on
+    both platforms. The guard keeps a check of its own -
+    `t_the_host_guard_answers_each_machine_honestly` - which asks whichever
+    machine this is for its own honest answer, so lending it here leaves
+    nothing untested.
+    """
+    real = L._host_reason
+    if real() and not _LENT_HOST:
+        # Said once, and only where it is true: on Windows nothing is lent.
+        _LENT_HOST.append(True)
+        print("      (not Windows here: the checks that follow run against a "
+              "lent Windows host, so they test start()'s own logic.\n"
+              "       The guard itself is checked by "
+              "t_the_host_guard_answers_each_machine_honestly.)")
+    L._host_reason = lambda: ""
+    try:
+        yield
+    finally:
+        L._host_reason = real
+
+
 # ---------------------------------------------------------------------------
 #   Which lane, and how it is found
 # ---------------------------------------------------------------------------
@@ -173,13 +225,43 @@ def t_the_lane_table_matches_the_read_only_checker():
 #   Direction 1: a lane that is DOWN offers exactly one action
 # ---------------------------------------------------------------------------
 
-def t_a_down_lane_can_be_started_and_runs_his_own_task():
+def t_the_host_guard_answers_each_machine_honestly():
+    """The platform difference itself, asked on whichever machine this is.
+
+    It is the FIRST rule that can stop a press - before this PC's task list is
+    read, before `schtasks` is anywhere near - so it is checked with the REAL
+    guard and the real functions, and the answer that is honest is different on
+    each platform. On Windows it must be silent and let the press through to
+    this PC's own task; anywhere else it must refuse in plain words and run
+    nothing. The checks that lend themselves a Windows host below rely on this
+    one to keep the guard covered.
+    """
     clean()
     lane = L.LANES[0]
     probe, runner = Up(up=False), Runner()
     code, out = L.start(lane, probe_fn=probe, run_fn=runner,
                         tasks_fn=lambda: REAL_TASKS, running_fn=lambda name: False,
                         watch=False)
+    if os.name == "nt":
+        check("on Windows the host guard is silent, so the press reaches this "
+              "PC's own task", code == 202 and runner.calls == [REAL_TASKS[0]],
+              (L._host_reason(), code, runner.calls))
+    else:
+        check("off Windows the press is refused (503) in plain words, and "
+              "NOTHING is run",
+              code == 503 and out.get("ok") is False and runner.calls == []
+              and "not Windows" in str(out.get("error")), (code, out, runner.calls))
+    clean()
+
+
+def t_a_down_lane_can_be_started_and_runs_his_own_task():
+    clean()
+    lane = L.LANES[0]
+    probe, runner = Up(up=False), Runner()
+    with windows_host():
+        code, out = L.start(lane, probe_fn=probe, run_fn=runner,
+                            tasks_fn=lambda: REAL_TASKS, running_fn=lambda name: False,
+                            watch=False)
     check("a down lane answers 202 ('starting'), not 200", code == 202,
           f"{code} {out}")
     check("... and it really started a task, exactly once", len(runner.calls) == 1,
@@ -225,6 +307,10 @@ def t_the_command_it_really_runs_is_schtasks_run_with_that_task_name():
 
 
 def t_a_lane_that_is_up_is_never_started():
+    """Rule 1 runs against the REAL host guard, on purpose: an answering lane
+    must be answered 200 on every platform, so this check is a Linux check as
+    much as a Windows one - it fails if the host guard is ever moved above the
+    "it is answering" rule, which would refuse a press that has nothing to do."""
     clean()
     lane = L.LANES[0]
     probe, runner = Up(up=True), Runner()
@@ -309,9 +395,10 @@ def t_a_task_the_pc_says_is_running_is_not_started_again():
     clean()
     lane = L.LANES[0]
     probe, runner = Up(up=False), Runner()
-    code, out = L.start(lane, probe_fn=probe, run_fn=runner,
-                        tasks_fn=lambda: REAL_TASKS, running_fn=lambda name: True,
-                        watch=False)
+    with windows_host():
+        code, out = L.start(lane, probe_fn=probe, run_fn=runner,
+                            tasks_fn=lambda: REAL_TASKS, running_fn=lambda name: True,
+                            watch=False)
     check("a task the Task Scheduler says is running is NOT started again",
           runner.calls == [], runner.calls)
     check("... and the answer is 202 'waiting', not a refusal",
@@ -325,15 +412,17 @@ def t_a_second_press_while_the_first_is_watched_starts_nothing():
     lane = L.LANES[0]
     probe, runner = Up(up=False), Runner()
     tasks, running = (lambda: REAL_TASKS), (lambda name: False)
-    code1, out1 = L.start(lane, probe_fn=probe, run_fn=runner,
-                          tasks_fn=tasks, running_fn=running, watch=False)
+    with windows_host():
+        code1, out1 = L.start(lane, probe_fn=probe, run_fn=runner,
+                              tasks_fn=tasks, running_fn=running, watch=False)
     check("the first press starts it", code1 == 202 and len(runner.calls) == 1,
           (code1, runner.calls))
     # Put the module back into the state a real start leaves behind (a watched
     # one, which the real `start` arms before it returns).
     L._begin(lane, REAL_TASKS[0], __import__("time").time(), running=False)
-    code2, out2 = L.start(lane, probe_fn=probe, run_fn=runner,
-                          tasks_fn=tasks, running_fn=running, watch=False)
+    with windows_host():
+        code2, out2 = L.start(lane, probe_fn=probe, run_fn=runner,
+                              tasks_fn=tasks, running_fn=running, watch=False)
     check("a second press while that one is still being watched starts NOTHING",
           len(runner.calls) == 1, runner.calls)
     check("... and is refused with the reason, as a 409",
@@ -346,9 +435,10 @@ def t_a_task_that_is_not_on_this_pc_is_refused_and_nothing_runs():
     clean()
     lane = L.LANES[0]
     probe, runner = Up(up=False), Runner()
-    code, out = L.start(lane, probe_fn=probe, run_fn=runner,
-                        tasks_fn=lambda: ("Some Other Program's Task",),
-                        running_fn=lambda name: False, watch=False)
+    with windows_host():
+        code, out = L.start(lane, probe_fn=probe, run_fn=runner,
+                            tasks_fn=lambda: ("Some Other Program's Task",),
+                            running_fn=lambda name: False, watch=False)
     check("with no such task the answer is a refusal, not a start",
           code == 409 and out.get("ok") is False, (code, out))
     check("... and schtasks was NEVER run", runner.calls == [], runner.calls)
@@ -360,9 +450,10 @@ def t_the_pc_refusing_to_start_it_is_reported_honestly():
     clean()
     lane = L.LANES[0]
     probe, runner = Up(up=False), Runner(result=1)
-    code, out = L.start(lane, probe_fn=probe, run_fn=runner,
-                        tasks_fn=lambda: REAL_TASKS, running_fn=lambda name: False,
-                        watch=False)
+    with windows_host():
+        code, out = L.start(lane, probe_fn=probe, run_fn=runner,
+                            tasks_fn=lambda: REAL_TASKS, running_fn=lambda name: False,
+                            watch=False)
     check("schtasks failing is a 502, not a cheerful success",
           code == 502 and out.get("ok") is False, (code, out))
     check("... and it says the lane is still down",
@@ -1176,6 +1267,7 @@ if __name__ == "__main__":
     for fn in (t_the_lane_is_the_one_the_chat_uses,
                t_the_task_is_found_by_the_half_a_rename_does_not_touch,
                t_the_lane_table_matches_the_read_only_checker,
+               t_the_host_guard_answers_each_machine_honestly,
                t_a_down_lane_can_be_started_and_runs_his_own_task,
                t_the_command_it_really_runs_is_schtasks_run_with_that_task_name,
                t_a_lane_that_is_up_is_never_started,

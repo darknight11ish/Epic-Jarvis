@@ -7,11 +7,12 @@ were found in the drop-in folders' `stack_order` numbers, and every one of them
 came from the same hole: `plugins/ready/` is ordered by a number each folder
 writes for itself, and NOTHING checked those numbers against each other.
 
-  * `skill-hub` and `voiceprint` BOTH carry `stack_order: 142` on main. The
-    loader sorts by `(stack_order, name)`, so the pair is still loaded in a
-    fixed order - by the letter of the folder name, which nobody chose. Silent,
-    and it changes the order of two SHIPPED plugins.
-  * `voiceprint/README.md` says 144 while its own `plugin.json` says 142.
+  * `skill-hub` and `voiceprint` BOTH carried `stack_order: 142` on main, and on
+    2026-10-16 a third folder joined them: `model-lanes`, whose number is not a
+    choice at all but its patch's position in the stack. That is RESOLVED, and
+    how is worth keeping - see the note under the (now empty) records below.
+  * `voiceprint/README.md` said 144 while its own `plugin.json` said 142 - also
+    resolved on 2026-10-16, and `voiceprint`'s own README said 144 all along.
   * `backend/test_receipts.py` judged the receipts folder's position against
     `registry.json`'s catalogued folders only, so every folder that replaces no
     patch was invisible to it - the check passed by not looking.
@@ -38,13 +39,27 @@ stack is described by, and that a README does not contradict.
 WHY THE RECORDS, RATHER THAN A RED RUN. `tools/check_unmanaged_files.py` set
 this pattern for the project: a defect that is KNOWN and RECORDED is allowed,
 printed loudly, and fails the moment it changes - while a NEW one fails at once.
-That is what keeps this suite green on a main that carries two known defects
-WITHOUT hiding them, and what stops the record rotting: a recorded defect that
-is gone is itself a failure.
+That is what kept this suite green on a main that carried two known defects
+WITHOUT hiding them, and what stops a record rotting: a recorded defect that is
+gone is itself a failure. Both records are empty now because both defects are
+FIXED, and this file says so rather than leaving a stale list behind.
 
-DO NOT FIX THE RECORDED DEFECTS HERE. Which of `skill-hub` and `voiceprint`
-keeps 142 changes the load order of two shipped plugins; that is one decision,
-made deliberately, on its own - not smuggled in beside a test.
+HOW THE 142 COLLISION WAS RESOLVED, 2026-10-16, because the shape of it will
+recur. A folder that replaces a patch does NOT choose its number: it is the
+patch's index in `$PATCHES` (`tools/gen_plugin_catalogue.py` writes
+`"stack_order": entry["order"]`, and `gen_plugin_catalogue.py --check` is what
+says the committed file is that and nothing else). `model-lanes.patch` sits
+between `pictures.patch` and `plugin-loader.patch`, which must stay last, so its
+index - and therefore that folder's number - is 142, full stop. So the collision
+could only be resolved on the hand-numbered side, and `skill-hub`'s own README
+said which way: it wanted "the first free slot after every folder the old patch
+stack had". `model-lanes` pushed that slot from 142 to 143, and the whole
+hand-numbered block moved up one place with it - `skill-hub` 142 -> 143,
+`voiceprint` 142 -> 144, `receipts` 143 -> 145, `auto-router` 144 -> 146,
+`vault` 145 -> 147 - while keeping their ORDER. The loader's sequence is
+therefore byte-for-byte what it was, and no shipped feature's load order
+changed: only the labels did. That is why this did not need the deliberate
+decision the old record was waiting for.
 
 WHAT IT CANNOT SEE. Only four of the 28 folders' READMEs state a position at
 all, so (5) covers those four. The others say nothing, which is not a pass and
@@ -75,27 +90,24 @@ MIN_FOLDERS = 20
 
 #: KNOWN, RECORDED COLLISIONS - AWAITING A DECISION, NOT FIXED HERE.
 #: (the shared number, the folders that share it, why it is recorded)
-KNOWN_COLLISIONS = [
-    (142, ("skill-hub", "voiceprint"),
-     "BOTH SHIPPED FOLDERS CARRY 142 on main (2026-10-15). The loader sorts by "
-     "(stack_order, name), so they load skill-hub then voiceprint - decided by "
-     "the letter 's', which nobody chose. Which of the two keeps 142 changes "
-     "the load order of two shipped plugins, so it is ONE deliberate decision "
-     "on its own, not a fix smuggled in beside a test. Recorded here so the "
-     "suite is green while the defect stays printed on every run."),
-]
+#: EMPTY since 2026-10-16: the one record this list ever held was
+#: `(142, ("skill-hub", "voiceprint"), ...)`, and both defects are fixed - see
+#: "HOW THE 142 COLLISION WAS RESOLVED" in the docstring. An empty list is not a
+#: disabled check: `t_no_two_folders_share_a_number` still fails on ANY
+#: collision, and the mechanism stays here for the next one that cannot be
+#: fixed on the spot. A fixed record may never be left behind - that is what
+#: `t_the_recorded_collision_is_still_real` is for, and it has nothing to
+#: compare now, which is the honest state.
+KNOWN_COLLISIONS = []
 
 #: KNOWN, RECORDED DOCUMENT/MANIFEST MISMATCHES - same rules as above.
 #: folder -> (the manifest's number, the number its README states, why recorded)
-KNOWN_README_MISMATCHES = {
-    "voiceprint": (
-        142, 144,
-        "voiceprint/README.md says \"Position in the loader's order: 144\" while "
-        "its own plugin.json says 142 (2026-10-15). The README is wrong or the "
-        "manifest is; deciding which is the same decision as the 142 collision "
-        "above, so it waits with it. Recorded so this suite is green while the "
-        "mismatch stays printed on every run."),
-}
+#: EMPTY since 2026-10-16 for the same reason: `voiceprint`'s README said 144
+#: while its manifest said 142, and `voiceprint` is now at 144, so the README was
+#: right all along and the manifest was wrong. Nothing is recorded here and
+#: `t_a_readme_that_states_a_position_states_the_manifest_s` still fails on any
+#: new disagreement.
+KNOWN_README_MISMATCHES = {}
 
 
 def check(name, cond, detail=""):
@@ -450,17 +462,29 @@ def t_the_recorded_readme_mismatch_is_still_real():
 # ==========================================================================
 
 def _print_records():
+    """The records, printed on EVERY run.
+
+    With none recorded, the heading is not printed over an empty list: saying
+    "KNOWN, PRINTED EVERY RUN, AWAITING A DECISION" above nothing would be a
+    claim about a defect that is not there. The coverage line is printed either
+    way, because how many READMEs state a position is the number this suite
+    does NOT check (see the docstring's WHAT IT CANNOT SEE).
+    """
     print()
-    print("RECORDED DEFECTS - KNOWN, PRINTED EVERY RUN, AWAITING A DECISION.")
-    print("This suite is green with them and fails the moment one changes.")
-    for number, folders, why in KNOWN_COLLISIONS:
-        print(f"  * stack_order {number} is held by BOTH {list(folders)}")
-        for line in _wrap(why):
-            print(f"      {line}")
-    for folder, (manifest_number, readme_number, why) in KNOWN_README_MISMATCHES.items():
-        print(f"  * {folder}/README.md says {readme_number}, its plugin.json says {manifest_number}")
-        for line in _wrap(why):
-            print(f"      {line}")
+    if KNOWN_COLLISIONS or KNOWN_README_MISMATCHES:
+        print("RECORDED DEFECTS - KNOWN, PRINTED EVERY RUN, AWAITING A DECISION.")
+        print("This suite is green with them and fails the moment one changes.")
+        for number, folders, why in KNOWN_COLLISIONS:
+            print(f"  * stack_order {number} is held by BOTH {list(folders)}")
+            for line in _wrap(why):
+                print(f"      {line}")
+        for folder, (manifest_number, readme_number, why) in KNOWN_README_MISMATCHES.items():
+            print(f"  * {folder}/README.md says {readme_number}, its plugin.json says {manifest_number}")
+            for line in _wrap(why):
+                print(f"      {line}")
+    else:
+        print("NO RECORDED DEFECTS: no two folders under plugins/ready/ share a "
+              "stack_order, and no README contradicts its own manifest.")
     stated = _readme_positions()
     print(f"  coverage: {len(stated)} of {len(_folders())} folders' READMEs state a "
           f"loader position ({', '.join(sorted(stated)) or 'none'}); the rest state "
