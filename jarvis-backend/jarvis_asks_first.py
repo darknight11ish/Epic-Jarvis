@@ -538,17 +538,18 @@ GROUPS = (
         # changed it. It sits in this group with the other actions over the
         # owner's own data on this PC (`memory_forget_range` is the nearest
         # neighbour), because that is what it acts on. It raises no tier of its
-        # own: the shipped settings file has no line for it, so it takes
-        # unknown_action_tier, which is "ask" - one card per undo. The page must
-        # name it because a card can.
+        # own: `[autonomy.tiers]` says "ask" (a line of its own since
+        # 2026-10-16; the `unknown_action_tier` it took before that is also
+        # "ask") - one card per undo. The page must name it because a card can.
         "undo_action",
         # The blind credential vault (jarvis_vault.py, 2026-10-14): keeping ONE
         # secret under a name, in Windows Credential Manager. It sits in this
         # group because what it acts on is the owner's own accounts and keys on
-        # this PC. Like `undo_action` it raises no tier of its own: the shipped
-        # settings file has no line for it, so it takes unknown_action_tier,
-        # which is "ask" - ONE card per secret, and a denied, timed-out or
-        # refused card stores nothing. The page must name it because a card can.
+        # this PC. Like `undo_action` it raises no tier of its own:
+        # `[autonomy.tiers]` says "ask" (its own line since 2026-10-16; the
+        # `unknown_action_tier` it took before that is also "ask") - ONE card per
+        # secret, and a denied, timed-out or refused card stores nothing. The
+        # page must name it because a card can.
         "vault_put",
         "better_voice_enable", "watch_notifications_enable", "phone_notifications_read",
         "topic_loosen", "chat_tags_suggest_on", "chat_tag_suggest",

@@ -764,11 +764,13 @@ headers_of = _headers_of
 PATH = "/api/vault/handles"
 PUT_PATH = "/api/vault/put"
 
-#: The gate action POST /api/vault/put is asked under. It has no tier row in
-#: jarvis-framework.toml, so it lands on the gate's own UNKNOWN default, which
-#: is tier "ask" and risk ("no", "outbound") - a card, and a heavy one. The
-#: route refuses anything that is not tier "ask" (see _card_says_yes), so a
-#: later loosening of that default cannot make this store a value unasked.
+#: The gate action POST /api/vault/put is asked under. `[autonomy.tiers]` gives
+#: it "ask" - a line of its own since 2026-10-16, and the `unknown_action_tier`
+#: fall-through it took before that is also "ask", so the card is unchanged. It
+#: has no `_RISK` row, so that card stays the gate's own heavy one, risk
+#: ("no", "outbound"). The route refuses anything that is not tier "ask" (see
+#: _card_says_yes), so neither a later loosening of `unknown_action_tier` nor an
+#: edited tier line can make this store a value unasked.
 ACTION_PUT = "vault_put"
 
 #: What the card says. Written here, never assembled from the body.
