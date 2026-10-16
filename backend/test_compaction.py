@@ -349,6 +349,137 @@ def t_the_digest_fails_closed_without_the_scrubber():
     check("no scrubber, no recall", recall is None, recall)
 
 
+def t_a_digest_is_never_folded_into_the_next_digest():
+    """WHAT MAKES THIS SAFE: our own output is never taken for input again.
+
+    The digest is re-derived from the full conversation every round and is never
+    appended to `convo`, so in today's hot path this cannot arise. It CAN the
+    moment a caller hands back what was sent - a retry, or a wiring that stores
+    the request - and then three things would go wrong at once: the old digest's
+    anchors would be copied into the new digest, the recall would quote the old
+    digest back verbatim, and the prompt would carry two digests.
+    """
+    budget = 400
+    messages = _msgs(4, filler=300)
+    clean = A.compact_messages(messages, budget, question="port 8765")
+    digest = _digest_of(clean)
+    check("the pipeline builds a digest to fold back in", bool(digest), clean)
+
+    # Hand the pipeline its OWN earlier answer, as a retry would.
+    again = A.compact_messages(clean, budget, question="port 8765")
+    digests = [m for m in again
+               if str(m.get("content", "")).startswith(C.DIGEST_HEADER)]
+    recalls = [m for m in again
+               if str(m.get("content", "")).startswith(C.RECALL_HEADER)]
+    check("... the prompt still carries exactly ONE digest", len(digests) == 1, len(digests))
+    check("... and exactly ONE recall", len(recalls) == 1, len(recalls))
+    check("... and it is byte-for-byte the same digest", digests == [digest],
+          (digest.get("content", "")[:80], [d.get("content", "")[:80] for d in digests]))
+    check("... so the second pass changes nothing at all", again == clean,
+          [m.get("role") for m in again] == [m.get("role") for m in clean])
+
+    # The same property at the level of the pure functions: an own message is
+    # not evidence, so it cannot change what is written.
+    _k, evicted, _at = A.fit_messages_detailed(messages, budget)
+    evicted = [m for m in evicted if isinstance(m, dict)]
+    with_old = list(evicted) + [digest]
+    check("the digest ignores an own message in the evicted list",
+          C.digest_text(evicted) == C.digest_text(with_old),
+          (C.digest_text(with_old) or "")[:160])
+    check("... and the key does not count one either",
+          C.digest_key(evicted) == C.digest_key(with_old),
+          (C.digest_key(evicted), C.digest_key(with_old)))
+    body = C.recall_text("port 8765", with_old)
+    check("the recall never quotes an own message back",
+          bool(body) and digest["content"] not in body, (body or "")[:160])
+
+
+def t_the_own_message_guard_bites():
+    """BITE: with `is_own_message` blinded, our own output DOES come back in.
+
+    Two cases, and they are not equally load-bearing - said plainly rather than
+    dressed up:
+
+      * THE ONE THAT REALLY HAPPENS. A stale digest in the list the pipeline is
+        handed - a retry, or a caller that stores what it sent. `fit_messages`
+        never drops a system message, so it survives AND a fresh one is added:
+        the prompt carries two digests and two recalls. This is what
+        `compact_messages`'s own filter is for, and it bites.
+      * THE DEFENSIVE ONE. The pure functions called directly with an own
+        message in the MIDDLE of a list, where the turn counting would read its
+        exact lines as evidence from a turn they never came from. In today's
+        pipeline a digest is a system message and is never evicted, so this
+        cannot arise through `fit_messages_detailed`; it is belt and braces for
+        a caller, and it bites too.
+    """
+    budget = 400
+    messages = _msgs(4, filler=300)
+    clean = A.compact_messages(messages, budget, question="port 8765")
+    # Captured BEFORE anything is patched: `_digest_of` itself uses the guard,
+    # and the first version of this test captured it INSIDE the patch - so the
+    # "stale digest" it injected was `{}` and the bite proved nothing.
+    stale, stale_recall = _digest_of(clean), _recall_of(clean)
+    check("the pipeline's own output really does carry a digest", bool(stale), clean)
+    check("... and a recall", bool(stale_recall), clean)
+    old = C.digest_message([{"role": "user", "content": "which port does the desk server use?"},
+                            {"role": "assistant",
+                             "content": "port 8765 - see jarvis_gate.py for the check"}])
+    check("... and a digest of turns that are now gone carries their exact lines",
+          "port 8765" in old["content"], old["content"])
+    middle = [{"role": "user", "content": "something else entirely"},
+              {"role": "assistant", "content": "noted"},
+              old,
+              {"role": "user", "content": "another unrelated thing"},
+              {"role": "assistant", "content": "fine"}]
+
+    handback = list(messages) + [stale, stale_recall]
+    guarded = A.compact_messages(handback, budget, question="port 8765")
+    check("handed its own output back, the guarded pipeline keeps ONE digest",
+          sum(1 for m in guarded
+              if str(m.get("content", "")).startswith(C.DIGEST_HEADER)) == 1,
+          [str(m.get("content", ""))[:40] for m in guarded])
+    check("... and ONE recall",
+          sum(1 for m in guarded
+              if str(m.get("content", "")).startswith(C.RECALL_HEADER)) == 1)
+
+    real = C.is_own_message
+    C.is_own_message = lambda message: False
+    try:
+        blinded = A.compact_messages(list(messages) + [stale, stale_recall], budget,
+                                     question="port 8765")
+        folded = C.digest_text(middle)
+        asked = C.recall_text("port 8765", middle)
+    finally:
+        C.is_own_message = real
+    check("BITE: with the guard off, the prompt carries two digests",
+          sum(1 for m in blinded
+              if str(m.get("content", "")).startswith(C.DIGEST_HEADER)) == 2,
+          sum(1 for m in blinded
+              if str(m.get("content", "")).startswith(C.DIGEST_HEADER)))
+    check("BITE: ... and two recalls",
+          sum(1 for m in blinded
+              if str(m.get("content", "")).startswith(C.RECALL_HEADER)) == 2,
+          sum(1 for m in blinded
+              if str(m.get("content", "")).startswith(C.RECALL_HEADER)))
+    check("BITE: ... and the stale ones are still there, word for word",
+          stale in blinded and stale_recall in blinded, [m.get("role") for m in blinded])
+    check("BITE: with the guard off, the old digest's exact lines are read as a turn's own",
+          folded is not None and "port 8765" in folded, (folded or "")[:200])
+    check("BITE: ... labelled with a turn they never came from",
+          folded is not None and re.search(r"- turn \d+: port 8765", folded) is not None,
+          (folded or "")[:240])
+    check("BITE: ... and the recall quotes the old digest back",
+          asked is not None and C.DIGEST_HEADER in asked, (asked or "")[:200])
+
+    check("... and with the guard on the old lines stay out of the digest",
+          "port 8765" not in (C.digest_text(middle) or ""),
+          (C.digest_text(middle) or "")[:200])
+    check("... and the recall does not quote it back",
+          C.DIGEST_HEADER not in (C.recall_text("port 8765", middle) or ""),
+          C.recall_text("port 8765", middle))
+    check("... and the guard is the real one again", C.is_own_message is real)
+
+
 # --------------------------------------------------------------------------
 #   Recall of evicted turns
 # --------------------------------------------------------------------------
@@ -583,6 +714,8 @@ if __name__ == "__main__":
         t_the_prefix_stays_intact_while_nothing_new_is_evicted,
         t_the_digest_is_bounded_even_for_a_huge_conversation,
         t_the_digest_fails_closed_without_the_scrubber,
+        t_a_digest_is_never_folded_into_the_next_digest,
+        t_the_own_message_guard_bites,
         t_recall_picks_the_evicted_turn_nearest_the_question,
         t_recall_says_nothing_when_nothing_is_relevant,
         t_recall_sits_after_the_cached_prefix,

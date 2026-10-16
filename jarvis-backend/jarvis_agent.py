@@ -3796,7 +3796,14 @@ def compact_messages(messages: list, budget: int, *, question: str = "") -> list
     if compaction is None:
         return kept
     try:
-        out = list(kept)
+        out = [m for m in kept
+               if not (isinstance(m, dict) and compaction.is_own_message(m))]
+        # ^ ONE DIGEST, EVER. `fit_messages` never drops a system message, so a
+        # caller that hands back what was sent - a retry, or a wiring that
+        # stores the request - would otherwise keep the stale digest AND get a
+        # fresh one, and the prompt would carry two. The fresh one is
+        # byte-identical while the evicted set is unchanged, so dropping the
+        # stale one cannot move the prefix.
         digest = compaction.digest_message(evicted)
         if digest is not None:
             after_systems = next((i for i, m in enumerate(out)

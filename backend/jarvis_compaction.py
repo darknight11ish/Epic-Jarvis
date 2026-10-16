@@ -328,9 +328,15 @@ def _content(message) -> str:
 def is_own_message(message) -> bool:
     """Is this message one of ours (a digest or a recall line)?
 
-    A message is checked by its first line, so a digest that has been given back
-    to us is never folded into the next one (which would double it) and never
-    mistaken for something the owner said.
+    Checked by its FIRST LINE. THIS IS THE GUARD THAT STOPS A DIGEST FOLDING
+    INTO THE NEXT ONE, and it is applied everywhere a message's text is read
+    back (`digest_text`, `user_constraints`, `recall_text`) and again in
+    `jarvis_agent.compact_messages`, which drops a stale one before writing the
+    fresh one. Without it, a caller that hands back what was sent - a retry, or
+    a wiring that stores the request - would have the old digest's anchors
+    copied into the new digest and the old digest quoted verbatim by the recall,
+    and the prompt would carry two digests. Measured in
+    `backend/test_compaction.py::t_a_digest_is_never_folded_into_the_next_digest`.
     """
     content = _content(message).lstrip()
     return content.startswith(DIGEST_HEADER) or content.startswith(RECALL_HEADER)
@@ -357,6 +363,8 @@ def user_constraints(evicted: Sequence[dict], *, limit: int = 6) -> Tuple[str, .
     out: List[str] = []
     for message in evicted:
         if not isinstance(message, dict) or message.get("role") != "user":
+            continue
+        if is_own_message(message):
             continue
         body = _content(message)
         for sentence in re.split(r"(?<=[.!?])\s+|\n+", body):
@@ -390,6 +398,9 @@ def _turn_endings(evicted: Sequence[dict]) -> List[str]:
     outcome = ""
     for message in evicted:
         if not isinstance(message, dict):
+            continue
+        if is_own_message(message):
+            # A digest of an EARLIER compaction is not a turn and has no outcome.
             continue
         role = message.get("role")
         if role == "user":
@@ -460,6 +471,12 @@ def digest_text(evicted: Sequence[dict], *, max_tokens: int = DIGEST_TOKENS) -> 
     turn = 0
     for message in evicted:
         if not isinstance(message, dict):
+            continue
+        if is_own_message(message):
+            # OUR OWN earlier digest or recall is not evidence: it holds no turn
+            # of the owner's and its exact lines are already in the table it
+            # came from. Skipped BEFORE the turn count, so a stale digest in the
+            # list cannot even shift the turn numbers.
             continue
         if message.get("role") == "user":
             turn += 1
@@ -555,6 +572,11 @@ def recall_text(question: str, evicted: Sequence[dict], *,
     current: List[dict] = []
     for message in evicted:
         if not isinstance(message, dict):
+            continue
+        if is_own_message(message):
+            # Never quoted back, and never a block boundary: a recall that
+            # recited an earlier digest would spend its 400 tokens saying what
+            # the digest it already follows says.
             continue
         if message.get("role") == "user" and current:
             blocks.append(current)
