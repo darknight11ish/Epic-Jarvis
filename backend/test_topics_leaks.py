@@ -80,7 +80,9 @@ READERS = {
     "jarvis_owned_tables.py": ("mentions", "which tables Epic-Jarvis made in memory.db"),
     "jarvis_chat_log.py": ("mentions", "a docstring names jarvis_memory.erase()"),
     "jarvis_goals.py": ("mentions", "goals.db sits beside memory.db; reads no fact"),
-    "jarvis_projects.py": ("mentions", "projects.db; reads no fact"),
+    "jarvis_projects.py": ("owner", "one fact's state by id (erased_at / valid_to) and the "
+                                    "memory module's own Forget - PR #465's label table, "
+                                    "not on main yet"),
     "jarvis_schedule.py": ("mentions", "schedule.db; reads no fact"),
     "jarvis_settings_registry.py": ("mentions", "calls jarvis_topics.set_mode"),
     "import_history.py": ("mentions", "writes proposals through jarvis_extract"),

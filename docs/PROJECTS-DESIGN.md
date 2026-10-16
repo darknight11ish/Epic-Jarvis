@@ -80,11 +80,22 @@ such as `.git` stay unread.
   (ARCHITECTURE §5). Project files, test and benchmark output and Gemini's
   replies are **outside text**: never learned, and reading them marks the
   chat, so note writes and web searches ask first as today.
-- **A fact learned in a project chat gets a project label**
-  (`meta.project = <id>`), like the "between us" label
-  (`memory-shared.patch`), not a new way into `facts`. It is recalled only in
-  that project's chats. Brain lists it under the project with Forget, Erase
-  the words, and "Move to personal memory".
+- **A fact learned in a project chat gets a project label.** The label is one
+  row in a `project_facts` table in `projects.db` - the memory fact's id, and
+  when it was labelled - added by `backend/jarvis_projects.py` on the branch
+  `feat/project-facts-label-table` (PR #465, not merged into `main` yet). It is
+  deliberately NOT `meta.project` on the memory fact's own row, the way the
+  "between us" label works (`memory-shared.patch`): `jarvis_memory.py` is
+  already the application target of three patches (memory-safety,
+  embedding-guard, bitemporal), and a fourth would fight them. The fact's own
+  words are never copied into the label - the apps read them through
+  `jarvis_memory`'s own `GET /api/memory/used`, so a forgotten fact shows as no
+  longer in use. It is recalled only in that project's chats. Brain lists it
+  under the project with Forget (the memory module's own Forget, so the fact
+  stops being recalled everywhere), Erase the words, and "Move to personal
+  memory". The other half of step 4 - a fact learned in a project chat being
+  labelled by itself - is not built: it waits for `/api/chat` to carry a
+  project id.
 - **Project notes** are the owner's own pinned lines for one project ("the
   server uses port 8080") - like "Always keep in mind", per project, small,
   no card (the owner writes them).

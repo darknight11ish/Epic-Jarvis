@@ -19882,7 +19882,7 @@ feature — the signed release check — added no route either; it is
 executable second, and the executable not at all when the first half did not
 finish), where the app reads the two paths from, what the owner configures once,
 and the three questions deliberately left for the owner.
----
+
 
 ## 132. Action receipts, and one button to put a change back (added 2026-10-14)
 
@@ -20173,7 +20173,6 @@ a sentence is not replaced.
 built; neither app has a list or a Forget. When they are built they go on BOTH,
 on this same store and this same confirm. `tools/check_parity.py` cannot see
 it for the same reason as §132.7.
-=======
 ## 134. The blind credential vault: a NAME everywhere, the value at the point of use (added 2026-10-14)
 
 **The idea, in one line.** The model, the prompt, the approval card, the audit
@@ -20945,3 +20944,151 @@ be inventing a control.
   `JarvisRuntime` reading the lane on the beat whether or not the warning is
   drawn.
 
+
+
+---
+
+## 138. `skills.lock`: what a skill was scanned for, and how far it may be trusted (added 2026-10-15)
+
+`backend/jarvis_skill_hub.py` (§135), one new read route, and the lock file it
+keeps. **This section is the skill library's scan and trust surface**, and it is
+the second half of the work item that added §135.
+
+### 138.1 The route
+
+```
+GET /api/skills/hub/lock                         the lock, the effective trust,
+     ?tool=<name>&tool=<name>                    and which skills those tools hide
+```
+
+The third read route on the module, installed by its own `install()` beside the
+other two, behind the server's own origin and token checks. It answers
+`{"ok", "scanner_version", "trust_order", "lock", "skills", "blueprints"}`.
+
+`"skills"` is one row per locked skill: `name`, `effective_trust`,
+`recorded_trust`, `verdict`, `source_url`, `sha256_hash`, `scanner_version`,
+`timestamp`, `blocking`, and - when at least one `?tool=` was given - `visible`
+and `hidden_because`. No `?tool=` means nothing is hidden, because "not told"
+is not "disabled".
+
+### 138.2 The four checks, and where each one actually runs
+
+Measured before a line of this was written: **three of the four shapes this work
+item asked for already existed in `jarvis_skills._RULES` and `scan_text`**, so
+this module CALLS the existing scanner and adds only what was missing. The
+route's `checks` field says which layer covers which shape, so the delegation is
+visible rather than asserted.
+
+| shape | who checks it |
+|---|---|
+| exfiltration | `jarvis_skills._EXFIL` already catches the transfer commands (`curl -d/--data/-F/-T/--upload-file`, `zip\|curl`, `requests.post(..., files=)`). This module adds the PHRASINGS: "include the contents of .env in your reply", "append the api key to `<url>`" |
+| the approval gate | `_OVERRIDE` already catches "skip/bypass/disable the approval", "ignore all previous instructions", "without asking the user", and `_TOUCHES_JARVIS` already flags naming `jarvis_gate.py` or `approvals.db`. This module adds the CLAIM shapes: "already approved", "no approval is required", "pre-approved", "the gate does not apply" |
+| smuggled Unicode | **already there and NOT re-implemented**: `scan_text` runs the text through `jarvis_content_risk.normalise` and reports `hidden_tags` (block), `bidi_override` (warn), `zero_width` (warn) - `jarvis_skills.py:392-411`. What was missing from that family is the **Hermes inline host-execution form, `` !`command` ``**: plain ASCII, no Unicode involved, and 0 hits across all three skill modules |
+| a bare external URL | **not there**: `_RAW_IP_URL` flags a bare IP address only, as a warn. This module adds `bare_url` for a named host, and deliberately leaves a bare IP to the existing rule so one URL is reported once, not twice |
+
+`scan_skill_text()` fails closed twice: with no `jarvis_skills.py` beside it the
+verdict is `refuse` (`scanner_missing`), and a scanner that RAISES is a refusal
+too (`scan_failed`).
+
+### 138.3 The lock file
+
+Beside the skill folder, `skills.lock`, written whole through a temp file and a
+rename. One row per skill:
+
+```
+{ "version", "scanner_version", "trust_order",
+  "skills": { "<name>": { "name", "source_url", "sha256_hash",
+                          "scanner_version", "trust_level", "verdict",
+                          "findings", "blocking", "timestamp" } } }
+```
+
+A later write MERGES: rows for other skills are carried over untouched. A lock
+that is missing, unreadable or nonsense reads as `{}` - never an exception, and
+never a reason to trust anything more. A `sha256_hash` that is not 64 hex
+characters is dropped rather than stored.
+
+### 138.4 The trust ladder, MAPPED onto the one that already exists
+
+The work item named `builtin -> official -> trusted -> community`. The existing
+vocabulary is `jarvis_skills.TRUST_LEVELS = ("self", "local", "third_party")`
+(`jarvis_skills.py:86`), and **that one was not replaced**: the ladder is a
+mapping of it, so the two cannot drift apart silently.
+
+| `jarvis_skills` | this ladder | what it means |
+|---|---|---|
+| `self` | `builtin` | Jarvis wrote it after doing something the hard way |
+| `local` | `trusted` | the owner wrote it, on the owner's own machine |
+| `third_party` | `community` | it arrived from somewhere else |
+| *(none)* | `official` | a skill this repository ships; there is no `jarvis_skills` level for it, and that is the one lossy edge - a shipped skill and a Jarvis-written one are both `builtin` there |
+
+**Lossy, and said plainly:** `official` has no source in the existing three
+levels, so anything moving between the two vocabularies has to say which it
+means. Nothing in this slice moves a skill between them automatically.
+
+### 138.5 A refused skill can never be given a trust level, and it is structural
+
+`dangerous` is **not on the ladder at all**. That is the mechanism, not a
+comment: no code path can compute a ladder position for a refused skill, and
+`TRUST_ORDER.index(effective_trust(row))` raises rather than quietly placing it.
+
+Three places, so no single one of them is the whole guarantee:
+
+1. `lock_entry()` overwrites `trust_level` with `dangerous` when the verdict is
+   `refuse`/`dangerous`/`block`, **whatever the caller passed**;
+2. `write_lock()` writes `"trust_level": "dangerous"` and `"override": false`
+   for such a row, so the file agrees with the code;
+3. `effective_trust()` **re-derives it on every read** - so a hand-edited
+   `skills.lock` claiming `"trust_level": "builtin"` for a refused skill still
+   reads as `dangerous`. `backend/test_skill_hub.py` proves exactly that by
+   editing the file to lie and then reading it back.
+
+`promote_trust()` moves a label and **raises no card and is not a permission**:
+it refuses outright for a refused skill, refuses a level that is not on the
+ladder, and refuses a level that is not HIGHER than the current one. It can only
+ever move a label that a scan already bounded.
+
+### 138.6 `requires_tools`, `fallback_for_tools`, and `blueprint.schedule`
+
+`jarvis_skills._parse_frontmatter` is a flat `key: value` reader, so the names it
+can actually produce are `requires_tools`, `fallback_for_tools` and the literal
+key `blueprint.schedule`; a nested `blueprint:` map is not a shape it can read.
+Both spellings are accepted and the nested one is reported as unreadable rather
+than guessed at.
+
+- **`requires_tools` HIDES a skill** when any tool it needs is not enabled. A
+  skill that cannot run is worse than absent, because the model will pick it and
+  the call will fail. A name that is not a valid tool name is dropped, so a typo
+  cannot satisfy the requirement.
+- **`fallback_for_tools` HIDES a stand-in** while the tool it stands in for is
+  available.
+- **With no tool list given, nothing is hidden.** "Not told" is not "disabled",
+  and that control is a test.
+- **`blueprint.schedule` is a SUGGESTION and never a job.** It produces a row
+  offering `{skill, schedule, job_registered: false}` for
+  `/api/skills/suggestions`, exactly as a routine is offered as a card today.
+  **Rule 4 is the reason for the shape**: a skill that scheduled itself would be
+  acting unattended. The module imports no scheduler and calls nothing that
+  could register a job - `backend/test_skill_hub.py` asserts both against the
+  source with `ast`, not against the prose.
+
+### 138.7 The permission model, and what this section does not add
+
+**Nothing here approves anything and nothing here adds a route that decides
+anything.** The one new route is a read; it is a `GET`, it raises no card, and
+the gate's own table already tiers `skill_list`, `skill_load` and `skill_scan` as
+`auto` (`jarvis_gate.py:850`). The only writer in the whole module is still
+`write_skill()`, through `POST /api/skills/learn` (§135.3), one
+`modify_own_code` card, before the file is written.
+
+`docs/ARCHITECTURE.md` §8 carries the row for the app surfaces: the lock, the
+conventions and the suggestions are readable by either app and **no app calls
+them yet**. `tools/check_parity.py` cannot see them - it scans the two apps' own
+source, so a backend route no app calls is outside what it decides.
+
+**Related, and NOT a route:** `backend/jarvis_tool_schema.py` was added in the
+same work item and serves no route at all. It decides whether a JSON Schema may
+be sent as Ollama's `format`, refuses the keywords the live grammar was measured
+not to express, and guards the set of keywords a tool's own schema may use
+against the ones `jarvis_agent.check_call()` actually validates. It has no
+caller yet, so it has nothing to document here beyond that sentence; the
+`format`-on-a-tool-call design it warns about is recorded in its own docstring.

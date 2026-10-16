@@ -39,6 +39,9 @@ WHAT IS COVERED
     that is not one of our ids (no traversal, no other file type);
   - "a picture is never sent anywhere": this module holds no email, upload or
     chat path, and no model path imports it;
+  - the whole tail of `docs/JARVIS-API.md` is still there: every section from
+    129 up is checked against a list kept OUTSIDE the document, so a merge that
+    silently drops the end of the file fails here and names the missing number;
   - install() wraps a handler, passes every other request through, and refuses
     a request that fails the server's own origin or token check.
 """
@@ -751,6 +754,71 @@ def t_the_api_document_has_the_section_and_it_matches_this_code():
           repr(tail))
 
 
+#: EVERY numbered section of `docs/JARVIS-API.md` from 129 up, written out by
+#: hand so the check below has something INDEPENDENT to compare against.
+#:
+#: WHY A HAND-WRITTEN LIST AND NOT A DERIVED ONE. Any rule that derives its
+#: expectation from the document itself - "the numbers are contiguous", "each
+#: number is one more than the last" - has to derive its END from the document
+#: too, and that end is the very thing a lost tail changes. The intact document
+#: reads 129..136 and a tail-deleted one reads 129..134: contiguous both times,
+#: so the derived rule agrees with the deletion. That is the check that CANNOT
+#: FAIL, and it is exactly how 135 and 136 went missing. The expectation has to
+#: live outside the file being watched, and this list is that outside.
+#:
+#: WHAT IT COSTS. Adding a section, or deliberately removing one, means editing
+#: this list in the same commit - one visible line, and the person doing it
+#: writes down that they meant to. That is the price of a check that bites, and
+#: it is why the failure message below spells out the difference instead of
+#: saying "the document changed".
+EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 139))   # 129 ..= 138
+
+
+def t_every_section_from_129_up_is_still_in_the_document():
+    """The whole tail of `docs/JARVIS-API.md`, not just its order.
+
+    THE FAILURE THIS CATCHES. A stale-branch merge once deleted sections 135 and
+    136 - 305 lines, two whole features - with NO conflict shown. The check above
+    stayed green, and correctly so: what survived was still present exactly once,
+    still above 129, still in ascending order. Order among the survivors says
+    nothing about a section that is simply gone. This one compares the document
+    against a list kept outside it, so a missing section fails the suite and the
+    output NAMES the missing number.
+
+    It deliberately does NOT assert that 129 is the highest section, or that the
+    document holds no other gaps. The run reads ... 101, 102, 110, 103 ... on
+    main already (section 110 sits before 103), 66-69, 76 and 111 were never
+    written, and new sections are added above 136 all the time. Each of those is
+    a fact about the document that this feature does not own, and a check that
+    failed on them would be turned off within a week.
+    """
+    api = (REPO / "docs" / "JARVIS-API.md").read_text(encoding="utf-8")
+    # `\n## N.` is the same shape the check above reads, so a number with a
+    # `### N.M` subsection is not misread as a section of its own.
+    present = {int(m.group(1)) for m in re.finditer(r"\n## (\d+)\.", api)}
+
+    # A sanity anchor, so a broken read cannot make the check below vacuous: if
+    # the headings ever stop being `## N.` this fails loudly rather than passing
+    # over an empty set.
+    check("the document still has numbered sections to check at all",
+          len(present) > 128,
+          f"only {len(present)} numbered headings were read")
+
+    missing = [n for n in EXPECTED_SECTIONS_FROM_129 if n not in present]
+    extra = sorted(n for n in present if n > EXPECTED_SECTIONS_FROM_129[-1])
+    check("every section from 129 up is still in docs/JARVIS-API.md",
+          not missing,
+          f"missing section(s): {missing}. The document jumps "
+          f"{sorted(n for n in present if n >= 129)} - a merge that dropped the "
+          f"tail of the file leaves no other trace. If 129-up really did change "
+          f"on purpose, update EXPECTED_SECTIONS_FROM_129 to the new set in the "
+          f"same commit, so the change is visible to a reader.")
+    check("... and no section above the list has been added without saying so",
+          not extra,
+          f"the document has {extra}, which EXPECTED_SECTIONS_FROM_129 does not "
+          f"know about; add them to that list in this commit")
+
+
 def t_the_settings_route_changes_one_named_thing_and_only_on_the_pc():
     """The switch, the drawing program and the folder. ONE named change at a
     time, and never from the phone: where a picture is written and which
@@ -867,7 +935,8 @@ def main() -> int:
                t_it_owns_nothing_under_picture_card,
                t_install_wraps_the_handler_and_leaves_every_other_request_alone,
                t_no_picture_is_sent_anywhere_and_no_model_can_reach_this,
-               t_the_api_document_has_the_section_and_it_matches_this_code):
+               t_the_api_document_has_the_section_and_it_matches_this_code,
+               t_every_section_from_129_up_is_still_in_the_document):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
