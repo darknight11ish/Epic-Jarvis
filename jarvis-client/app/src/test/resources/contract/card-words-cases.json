@@ -187,6 +187,10 @@
       "title": "Jarvis wants to check your smart home"
     },
     {
+      "action": "import_notion_export",
+      "title": "Jarvis wants to bring your Notion export into your vault"
+    },
+    {
       "action": "learning_auto_enable",
       "title": "Jarvis wants to turn on automatic learning"
     },
@@ -945,6 +949,18 @@
       "notice": {
         "title": "Jarvis wants to check your smart home",
         "summary": "Jarvis wants to check your smart home.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "import_notion_export",
+      "notice": {
+        "title": "Jarvis wants to bring your Notion export into your vault",
+        "summary": "Jarvis wants to bring your Notion export in.",
         "full": "not classified, so treated as the worst case. nothing has happened yet.",
         "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",
