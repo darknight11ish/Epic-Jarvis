@@ -894,7 +894,10 @@ SHIPPED = (
     # declared schema BEFORE anything uses it, so a malformed one is refused
     # in plain words rather than acted on. It validates only: no route, no
     # card, no file written, nothing downloaded. Standard library only, and
-    # no patch - jarvis_skill_hub.py calls it.
+    # no patch. It has NO CALLER YET, and docs/JARVIS-API.md says the same;
+    # its own docstring records why - putting a tool's schema in `format` on
+    # a call that also offers `tools` corrupted the arguments on the live
+    # Ollama, so the schema belongs on a call with no `tools` at all.
     "jarvis_tool_schema.py",
     # One bounded, revocable lease over a run of steps (the task-lease work
     # order, Slice 1): what a lease is, who may open one - `jarvis_gate.check()`
@@ -906,8 +909,12 @@ SHIPPED = (
     # on Jarvis's own window or HUD page, a password field, a card or file
     # control, a high-consequence verb on the target, the TTL, the budget or
     # revocation. Leases live in memory and die with the process: no route, no
-    # patch, no file, no database, and nothing imports it yet. Standard
-    # library only, and `jarvis_gate` is imported lazily inside one function.
+    # patch, no file, no database. It IS wired on the consumer side -
+    # `jarvis_browser_control.py` imports it in its one integration point, and
+    # `run_steps()` checks each step against it when a caller names a lease -
+    # but no production caller opens one yet: `create()` is called only from
+    # `test_task_lease.py`. Standard library only, and `jarvis_gate` is
+    # imported lazily inside one function.
     "jarvis_task_lease.py",
     # The Ollama compatibility probe (2026-10-15, self-improvement phase 1).
     # One read-only POST /api/show, at start-up and on every model change,
