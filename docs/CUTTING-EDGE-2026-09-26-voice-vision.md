@@ -336,7 +336,28 @@ day or so, M = a few days, L = a week or more.
   watches is a standing sensor with no single approval. Focus sessions already
   set the pattern: watch the screen, keep counts only.
 - **Porcupine** wake word (already rejected: online licence check).
-  **Supertonic 3** (repo archived 2026-09-09, no voice copying, OpenRAIL-M weights).
+  **Supertonic 3** (repo archived 2026-09-09, no voice copying, OpenRAIL-M
+  weights). CORRECTED 2026-10-15: "archived" is true of the GitHub repo only,
+  and it was being read as "this model is dead", which is not what the
+  evidence says. `supertone-inc/supertonic` now redirects to the
+  `supertone-oss-archive` org with `"archived": true` and its last push
+  2026-09-09 - but the weights are still published model releases
+  (`Supertone/supertonic-3`, OpenRAIL, 31 languages, released 2026-04-29) and
+  sherpa-onnx already ships an INT8 export of them
+  (`sherpa-onnx-supertonic-3-tts-int8-2026-05-11`: 145.3 MB across
+  `duration_predictor` / `text_encoder` / `vector_estimator` / `vocoder`
+  `.int8.onnx`, plus `tts.json`, `unicode_indexer.bin` and `voice.bin`), so
+  adopting it needs no new engine, only a folder. Two different conclusions
+  fall out, and the archive tag is not a reason to reject either: it is
+  **not** a ZipVoice replacement - its voices are PRESET styles chosen with
+  `--sid`/`voice.bin` and neither the sherpa-onnx CLI nor the `supertonic`
+  SDK takes a reference recording, so there is nothing to clone from - but it
+  **is** a live candidate for a second BUILT-IN voice beside Kokoro, which is
+  the same shape as the Kokoro decision and not a clash with ZipVoice. NOT
+  VERIFIED HERE: the answer in the model repo's own "Supports voice cloning?"
+  thread (it could not be read), and Supertone's separate paid "Voice Builder"
+  service, which does turn a voice into deployable TTS and is not these open
+  weights.
 
 ### If a camera is ever used
 
