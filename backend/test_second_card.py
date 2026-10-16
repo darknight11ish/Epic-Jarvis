@@ -2025,10 +2025,26 @@ def t_learning_on_a_lane_that_does_not_answer():
 def t_hooks_when_on():
     msgs = _long_history()
     sent = _turn(msgs, lane_for=lambda f: LANE14 if f == "long_context" else None)
+    # THE HISTORY IS COMPARED CANONICALISED, NOT RAW (2026-10-15). Every
+    # assistant message this fixture builds ends in a trailing space
+    # (f"answer {i} " + "word " * 120), and jarvis_agent.tidy_assistant_whitespace
+    # takes exactly that off on the way out - llama.cpp #30357, where a byte
+    # that renders differently invalidates the prefix cache and a hybrid model
+    # pays for it with a full re-prefill. The claim this check exists for is
+    # unchanged: the history is sent WHOLE - no message dropped - and the two
+    # checks below say that the only difference is trailing whitespace, so a
+    # future edit cannot make the canonicalisation hide a real loss.
+    canon = AG.tidy_assistant_whitespace(msgs)
+    check("this fixture really does carry trailing whitespace for the guard to strip",
+          canon != msgs, "the guard's own case is not exercised here")
+    check("...and the guard changed nothing but each message's trailing whitespace",
+          len(canon) == len(msgs) and all(
+              str(a.get("content") or "").rstrip() == str(b.get("content") or "").rstrip()
+              and a.get("role") == b.get("role") for a, b in zip(canon, msgs)))
     check("long history, long_context working: sent to the second card, whole",
           sent[0][0] == "http://127.0.0.1:11435/v1/chat/completions"
           and sent[0][1]["model"] == "qwen3:14b"
-          and sent[0][1]["messages"] == [{"role": "system", "content": AG.LANE_SYSTEM}] + msgs)
+          and sent[0][1]["messages"] == [{"role": "system", "content": AG.LANE_SYSTEM}] + canon)
     short = [{"role": "user", "content": "hi"}]
     sent = _turn(short, lane_for=lambda f: LANE14 if f == "long_context" else None)
     check("a short conversation stays on the main card", sent[0][0].startswith("http://127.0.0.1:11434"))

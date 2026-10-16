@@ -95,6 +95,7 @@ import json
 import os
 import re
 import sys
+import time
 from pathlib import Path
 from typing import Any, Callable, Optional
 from urllib.parse import parse_qs, urlsplit
@@ -148,7 +149,8 @@ SECTIONS = ("When to Use", "Procedure", "Pitfalls", "Verification")
 #: Routes this module answers. Nothing here duplicates `GET /api/skills` or
 #: `POST /api/skills/decide` - those already exist and already have a caller in
 #: both apps.
-GET_ROUTES = ("/api/skills/hub/references", "/api/skills/hub/projects")
+GET_ROUTES = ("/api/skills/hub/references", "/api/skills/hub/projects",
+              "/api/skills/hub/lock")
 POST_ROUTES = ("/api/skills/chain", "/api/skills/learn")
 
 _NO_SKILLS = ("jarvis_skills.py is not beside this file, so there is no skill "
@@ -817,6 +819,494 @@ def learn(topic: str, *, steps="", when: str = "", pitfalls: str = "",
 
 
 # --------------------------------------------------------------------------
+#   5. The four extra checks, the lock file, and the Hermes conventions
+#
+#   PREMISE_ASSERT, MEASURED BEFORE A LINE OF THIS WAS WRITTEN (2026-10-15).
+#   The work item asked for four checks. Three of the four already exist in
+#   `jarvis_skills._RULES` and `scan_text`, and building them a second time
+#   would have been a second place for the same judgement to drift:
+#
+#     * exfiltration            - `("block", "exfiltration", _EXFIL)` already
+#                                 catches `curl -d/--data/-F/-T/--upload-file`,
+#                                 `zip|curl`, and `requests.post(..., files=)`.
+#                                 What it needs is a TRANSFER COMMAND, so this
+#                                 module adds the PHRASINGS that ask for the same
+#                                 thing in words ("include the contents of .env
+#                                 in your reply", "append the api key to <url>").
+#     * approval-gate bypass    - `("block", "override_rules", _OVERRIDE)` already
+#                                 catches "skip/bypass/disable the approval",
+#                                 "ignore all previous instructions" and "without
+#                                 asking the user", and `_TOUCHES_JARVIS` already
+#                                 flags naming `jarvis_gate.py` or `approvals.db`.
+#                                 This module adds the CLAIM shapes: "already
+#                                 approved", "no approval is required",
+#                                 "pre-approved", "the gate can be ignored".
+#     * smuggled Unicode        - ALREADY THERE, and this module does not
+#                                 re-implement it: `scan_text` runs the text
+#                                 through `jarvis_content_risk.normalise` and
+#                                 reports `hidden_tags` (block), `bidi_override`
+#                                 (warn) and `zero_width` (warn)
+#                                 (jarvis_skills.py:392-411). What is genuinely
+#                                 missing from that family is the **Hermes inline
+#                                 host-execution form, `` !`command` ``** - it is
+#                                 not Unicode, it is plain ASCII, and nothing in
+#                                 this repository matched it (0 hits for `` !` ``
+#                                 across jarvis_skills.py, jarvis_skill_hub.py and
+#                                 jarvis_skill_discovery.py).
+#     * bare external URL       - NOT there: `_RAW_IP_URL` flags a bare IP
+#                                 address only, as a warn. A skill that links or
+#                                 fetches from a named host was invisible.
+#
+#   `scan_skill_text()` below CALLS `jarvis_skills.scan_text` and adds only those
+#   missing shapes, and its `checks` field says which layer found what, so the
+#   delegation is visible rather than asserted.
+# --------------------------------------------------------------------------
+
+#: Bumped when the checks change, and recorded in every lock entry so an old
+#: record can be told from a new one. 1 was "jarvis_skills alone"; 2 is this.
+SCANNER_VERSION = 2
+
+#: The trust ladder, lowest last. A skill is never MORE trusted than the lowest
+#: of its source and the scanner's verdict.
+TRUST_ORDER = ("builtin", "official", "trusted", "community")
+
+#: The one value that is deliberately NOT on that ladder. It is not "less
+#: trusted than community" - it is OUT OF THE RUNNING, so no code path can
+#: return a ladder position for it and `TRUST_ORDER.index()` would raise if one
+#: tried. That is what makes "a refused skill can never be overridden"
+#: structural rather than a comment somebody can forget.
+DANGEROUS = "dangerous"
+
+#: jarvis_skills' own three levels (jarvis_skills.py:86), mapped ONTO the ladder
+#: rather than replacing them: `self` is Jarvis's own writing, `local` is the
+#: owner's own machine, `third_party` arrived from elsewhere. `official` has no
+#: equivalent there and is used for a skill this repository ships.
+TRUST_FROM_SKILLS = {"self": "builtin", "local": "trusted",
+                     "third_party": "community"}
+
+#: Verdicts no caller may raise a trust level past. A frozenset, so a caller
+#: cannot slip through with a different case or a stray space.
+_NEVER_OVERRIDABLE = frozenset({"refuse", "dangerous", "block"})
+
+#: Hermes' inline host-execution form: `!` followed by a backticked command.
+_HERMES_EXEC = re.compile(r"!\s*`[^`\n]{1,300}`")
+
+#: Reading a local secret and putting it INTO an outbound reply or URL, said in
+#: words rather than as a transfer command.
+_EXFIL_PHRASING = re.compile(
+    r"\b(?:include|append|attach|embed|add|paste|put|send|forward|upload|post|"
+    r"reveal|echo|print|output)\b[^\n]{0,80}?"
+    r"\b(?:contents?|values?|text|data)\s+of\b[^\n]{0,60}?"
+    r"(?:\.env\b|\.ssh\b|id_rsa\b|\.aws\b|\.netrc\b|credential|secret|token|"
+    r"password|passphrase|keychain|wallet|api[ _-]?key|private[ _-]?key)"
+    r"|\b(?:include|append|attach|embed|add|paste|put|send|forward|upload|post)\b"
+    r"[^\n]{0,60}?\b(?:api[ _-]?key|access[ _-]?token|token|password|passphrase|"
+    r"secret|credential)s?\b[^\n]{0,40}?\b(?:in|into|to|with|inside)\b"
+    r"[^\n]{0,40}?(?:https?://|\brepl(?:y|ies)\b|\bresponses?\b|\banswers?\b|"
+    r"\bmessages?\b|\boutput\b)",
+    re.I)
+
+#: Text that CLAIMS the approval gate is already satisfied, or may be ignored.
+_GATE_CLAIM = re.compile(
+    r"\bpre[ _-]?approved\b"
+    r"|\b(?:approval|permission|authorisation|authorization|consent|confirmation|"
+    r"the gate|jarvis_gate)\b[^\n]{0,40}?\b(?:already\s+)?(?:approved|granted|"
+    r"given|satisfied|obtained|waived|bypassed|disabled|not\s+required|"
+    r"unnecessary)\b"
+    r"|\bno\s+(?:approval|permission|authorisation|authorization|consent|"
+    r"confirmation)\s+(?:is\s+)?(?:needed|required|necessary)\b"
+    r"|\b(?:does\s+not|doesn't|need\s+not)\s+(?:apply|require\s+approval)\b",
+    re.I)
+
+#: A bare external URL. The negative lookahead leaves a bare IP address to
+#: jarvis_skills' own `raw_ip_url` warn, so one URL is reported once.
+_BARE_URL = re.compile(
+    r"https?://(?!\d{1,3}(?:\.\d{1,3}){3}\b)[^\s\)\]\"'<>`,]+", re.I)
+
+#: The four checks, each `(severity, code, regex, message, layer)`.
+_EXTRA_RULES = (
+    ("block", "hermes_exec", _HERMES_EXEC,
+     "runs a host command inline with the `!`command`` syntax - Hermes' "
+     "execution form, which needs no shell wrapper to be a shell", "hub"),
+    ("block", "exfil_phrasing", _EXFIL_PHRASING,
+     "asks for a local file's or a credential's contents to be put into an "
+     "outbound reply or URL", "hub"),
+    ("block", "gate_bypass_claim", _GATE_CLAIM,
+     "claims the approval gate is already satisfied, or that it may be ignored "
+     "- the gate is not a thing a file can speak for", "hub"),
+    ("warn", "bare_url", _BARE_URL,
+     "names an external address; a skill that links or fetches out is worth "
+     "reading before it is trusted", "hub"),
+)
+
+#: The four shapes the work item named, and WHERE each one is checked. Printed
+#: by `scan_skill_text()` so the delegation is visible rather than claimed.
+CHECK_LAYERS = {
+    "exfiltration_phrasing": "jarvis_skills _EXFIL (transfer commands) + hub "
+                             "_EXFIL_PHRASING (the same thing in words)",
+    "approval_gate": "jarvis_skills _OVERRIDE and _TOUCHES_JARVIS + hub "
+                     "_GATE_CLAIM (the claim shapes)",
+    "smuggled_unicode": "jarvis_skills scan_text via jarvis_content_risk "
+                        "(hidden_tags/bidi/zero-width, NOT re-implemented) + hub "
+                        "_HERMES_EXEC (the ASCII ``!`cmd` `` form)",
+    "bare_external_url": "hub _BARE_URL only - jarvis_skills flags a bare IP "
+                         "address and nothing else",
+}
+
+
+def scan_skill_text(text: str, where: str = "SKILL.md") -> dict:
+    """Every finding for `text`: `jarvis_skills.scan_text` CALLED, plus the four
+    shapes it does not cover.
+
+    FAIL CLOSED TWICE. With no `jarvis_skills.py` beside this file there is no
+    scanner at all, so the verdict is `refuse` - an unscanned skill is not a
+    skill. And a base scanner that RAISES is a refusal, not a pass: "the scanner
+    did not answer" and "the scanner said no" have to end in the same place.
+    """
+    findings, blocks = [], []
+    sk = _skills()
+    if sk is None:
+        base_err = ("jarvis_skills.py is not beside this file, so no skill text "
+                    "can be scanned")
+        findings.append({"severity": "block", "code": "scanner_missing",
+                         "message": base_err, "where": where, "excerpt": ""})
+    else:
+        try:
+            findings = [f.as_dict() for f in sk.scan_text(text, where)]
+        except Exception as exc:
+            findings = [{"severity": "block", "code": "scan_failed",
+                         "message": (f"the scanner raised {type(exc).__name__}, so "
+                                     f"this text was never cleared"),
+                         "where": where, "excerpt": ""}]
+
+    s = text if isinstance(text, str) else ""
+    for severity, code, rx, message, _layer in _EXTRA_RULES:
+        try:
+            m = rx.search(s)
+        except Exception:
+            m = None
+        if m is None:
+            continue
+        line_no = s.count("\n", 0, m.start()) + 1
+        frag = s[max(0, m.start() - 30): m.end() + 40].replace("\n", " ").strip()
+        findings.append({"severity": severity, "code": code, "message": message,
+                         "where": f"{where} line {line_no}", "excerpt": frag[:160]})
+
+    blocks = [f for f in findings if f.get("severity") == "block"]
+    warns = [f for f in findings if f.get("severity") == "warn"]
+    verdict = "refuse" if blocks else ("review" if warns else "clean")
+    return {"where": where, "verdict": verdict, "findings": findings,
+            "blocking": len(blocks), "warnings": len(warns),
+            "scanner_version": SCANNER_VERSION,
+            "checks": dict(CHECK_LAYERS),
+            "note": ("The first findings are jarvis_skills.scan_text's, called and "
+                     "not copied. `checks` says which layer covers which shape.")}
+
+
+# --------------------------------------------------------------------------
+#   6. `skills.lock` - what was scanned, when, and how far it may be trusted
+# --------------------------------------------------------------------------
+
+LOCK_NAME = "skills.lock"
+
+
+def lock_path(*, skills_dir=None) -> Path:
+    return _root(skills_dir) / LOCK_NAME
+
+
+def read_lock(*, skills_dir=None) -> dict:
+    """The lock, or `{}`. A missing, unreadable or nonsense file is `{}` - not
+    an exception, and never a reason to trust anything more."""
+    try:
+        raw = json.loads(lock_path(skills_dir=skills_dir).read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    rows = raw.get("skills")
+    return rows if isinstance(rows, dict) else {}
+
+
+def _lock_shape() -> dict:
+    return {"version": 1, "scanner_version": SCANNER_VERSION,
+            "trust_order": list(TRUST_ORDER), "skills": {}}
+
+
+def lock_entry(name: str, *, source_url: str = "", sha256_hash: str = "",
+               trust_level: str = "community", report: Optional[dict] = None,
+               now: Optional[float] = None) -> dict:
+    """One lock row: WHERE it came from, WHAT was scanned, WHAT it said, and how
+    far it may be trusted.
+
+    `trust_level` is clamped to the ladder - a caller cannot write a word that is
+    not on it - and a `refuse` verdict OVERWRITES it with `dangerous`, so a row
+    written for a refused skill cannot carry a trust level at all, whatever the
+    caller passed.
+    """
+    sk = _skills()
+    verdict = "unknown"
+    if isinstance(report, dict):
+        verdict = str(report.get("verdict") or "unknown")
+    findings = []
+    if isinstance(report, dict):
+        findings = [{"severity": f.get("severity"), "code": f.get("code"),
+                     "where": f.get("where"), "excerpt": f.get("excerpt")}
+                    for f in (report.get("findings") or [])
+                    if isinstance(f, dict)][:40]
+    level = str(trust_level or "").strip().lower()
+    if level not in TRUST_ORDER:
+        level = "community"
+    if verdict in _NEVER_OVERRIDABLE:
+        level = DANGEROUS              # structural: not reachable by argument
+    return {
+        "name": str(name or ""),
+        "source_url": str(source_url or "")[:500],
+        "sha256_hash": (str(sha256_hash or "").lower()
+                        if re.fullmatch(r"[0-9a-fA-F]{64}", str(sha256_hash or ""))
+                        else ""),
+        "scanner_version": SCANNER_VERSION,
+        "trust_level": level,
+        "verdict": verdict,
+        "findings": findings,
+        "blocking": int((report or {}).get("blocking") or 0)
+        if isinstance(report, dict) else 0,
+        "timestamp": float(now if now is not None else time.time()),
+        "skills_module": bool(sk is not None),
+    }
+
+
+def write_lock(entries, *, skills_dir=None) -> dict:
+    """Merge rows into `skills.lock`, whole-file, through a temp file and a
+    rename. Existing rows for other skills are carried over untouched.
+
+    A row whose verdict is `refuse` is written with `trust_level: "dangerous"`
+    AND with `"override": false`, so the two agree on disk as well as in code.
+    """
+    rows = read_lock(skills_dir=skills_dir)
+    added = []
+    for entry in (entries if isinstance(entries, (list, tuple)) else [entries]):
+        if not isinstance(entry, dict) or not entry.get("name"):
+            continue
+        row = dict(entry)
+        if str(row.get("verdict") or "").lower() in _NEVER_OVERRIDABLE:
+            row["trust_level"] = DANGEROUS
+            row["override"] = False
+        rows[str(row["name"])] = row
+        added.append(str(row["name"]))
+    if not added:
+        return {"ok": False, "reason": "no usable lock entries", "written": False}
+    root = _root(skills_dir)
+    doc = _lock_shape()
+    doc["skills"] = rows
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        target = root / LOCK_NAME
+        tmp = target.with_name(target.name + ".tmp")
+        tmp.write_text(json.dumps(doc, indent=2, sort_keys=True), encoding="utf-8")
+        os.replace(tmp, target)
+    except Exception as exc:
+        return {"ok": False, "written": False,
+                "reason": f"could not write the lock ({type(exc).__name__}: {exc})"}
+    return {"ok": True, "written": True, "names": added, "path": str(root / LOCK_NAME)}
+
+
+def effective_trust(entry) -> str:
+    """How far a lock row may actually be trusted, whatever it says.
+
+    THE FLOOR IS THE VERDICT, AND IT IS STRUCTURAL. A row whose `verdict` is
+    `refuse` (or `dangerous`, or `block`) returns `DANGEROUS`, which is not on
+    `TRUST_ORDER` at all - so a hand-edited `skills.lock` claiming
+    `"trust_level": "builtin"` for a refused skill still reads as dangerous, and
+    `TRUST_ORDER.index(effective_trust(row))` raises rather than quietly placing
+    it. Nothing here raises on its own; the point is that no caller can compute a
+    ladder position for a refused skill.
+    """
+    if not isinstance(entry, dict):
+        return "community"
+    verdict = str(entry.get("verdict") or "").strip().lower()
+    if verdict in _NEVER_OVERRIDABLE:
+        return DANGEROUS
+    if entry.get("override") is True and verdict and verdict != "clean":
+        # An override may lift `review` to a named level, never past a block -
+        # and a block already returned above, so this cannot be reached for one.
+        pass
+    want = str(entry.get("trust_level") or "").strip().lower()
+    return want if want in TRUST_ORDER else "community"
+
+
+def promote_trust(entry, to: str) -> dict:
+    """Raise one lock row's trust level, and REFUSE for a refused skill.
+
+    This is not a permission and it raises no card: it moves a LABEL in a JSON
+    file, and the label it may move is bounded by the scan that already ran. The
+    one thing it cannot do is give a refused skill a place on the ladder.
+    """
+    if not isinstance(entry, dict) or not entry.get("name"):
+        return {"ok": False, "changed": False, "reason": "not a lock entry"}
+    verdict = str(entry.get("verdict") or "").strip().lower()
+    if verdict in _NEVER_OVERRIDABLE:
+        return {"ok": False, "changed": False, "trust_level": DANGEROUS,
+                "reason": ("the scanner refused this skill, so it has no trust "
+                           "level to raise - the verdict is the floor, and this "
+                           "is not a way round it")}
+    want = str(to or "").strip().lower()
+    if want not in TRUST_ORDER:
+        return {"ok": False, "changed": False,
+                "reason": f"{to!r} is not one of {list(TRUST_ORDER)}"}
+    now = effective_trust(entry)
+    # TRUST_ORDER is most-trusted first, so a RAISE moves to a SMALLER index.
+    if TRUST_ORDER.index(want) >= TRUST_ORDER.index(now):
+        return {"ok": False, "changed": False, "trust_level": now,
+                "reason": f"{want} is not higher than {now}"}
+    out = dict(entry)
+    out["trust_level"] = want
+    out["override"] = True
+    return {"ok": True, "changed": True, "trust_level": want, "entry": out,
+            "reason": f"{entry['name']} raised to {want}"}
+
+
+# --------------------------------------------------------------------------
+#   7. The frontmatter conventions: requires_tools, fallback_for_tools,
+#      blueprint.schedule
+#
+#   `jarvis_skills._parse_frontmatter` is a flat `key: value` reader, so the
+#   names it can actually produce are `requires_tools`, `fallback_for_tools` and
+#   the literal key `blueprint.schedule` (a nested `blueprint:` map is not a
+#   shape it can read - measured, not assumed). Both spellings are accepted here
+#   and the nested one is reported as unreadable rather than guessed at.
+# --------------------------------------------------------------------------
+
+def _tools_list(value) -> list:
+    """A list of tool names from a frontmatter value: a `- item` list, a
+    space/comma separated string, or a single name. Anything else is []."""
+    if isinstance(value, (list, tuple)):
+        items = [str(v).strip() for v in value]
+    elif isinstance(value, str):
+        items = [p.strip() for p in re.split(r"[,\s]+", value)]
+    else:
+        return []
+    return [i for i in items if i and _NAME_OK_TOOL.match(i)]
+
+
+#: A tool name as `jarvis_agent.TOOLS` spells them (`_TOOL_NAME`,
+#: jarvis_skill_discovery.py:122). A name that is not one is dropped, so a
+#: required-tool gate cannot be satisfied by a typo.
+_NAME_OK_TOOL = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+
+
+def skill_conventions(name: str, *, skills_dir=None) -> dict:
+    """`requires_tools`, `fallback_for_tools` and `blueprint.schedule` for one
+    installed skill, read from its own SKILL.md. Never raises."""
+    sk = _skills()
+    if sk is None:
+        return {"ok": False, "reason": _NO_SKILLS}
+    try:
+        dest = _under(_root(skills_dir), name)
+        skill = sk.parse_skill(dest)
+    except Exception as exc:
+        return {"ok": False, "reason": f"{name} could not be read ({type(exc).__name__})"}
+    extra = dict(getattr(skill, "extra_fields", {}) or {})
+    nested = extra.get("blueprint")
+    schedule = extra.get("blueprint.schedule")
+    if schedule is None and isinstance(nested, str) and "schedule" in nested:
+        schedule = nested.split(":", 1)[-1].strip()
+    return {"ok": True, "name": name,
+            "requires_tools": _tools_list(extra.get("requires_tools")),
+            "fallback_for_tools": _tools_list(extra.get("fallback_for_tools")),
+            "blueprint_schedule": (str(schedule).strip() if schedule else ""),
+            "nested_blueprint_unreadable": isinstance(nested, dict)}
+
+
+def visible_skills(enabled_tools=None, *, skills_dir=None,
+                   aliases=None) -> dict:
+    """Which skills may be offered, and why the others may not.
+
+    `requires_tools` HIDES a skill when any tool it needs is not enabled: a skill
+    that cannot run is worse than absent, because the model will pick it and the
+    call will fail. `fallback_for_tools` hides a skill while the tool it stands
+    in for IS available. With no `enabled_tools` given, nothing is hidden for a
+    missing tool - "not told" is not "disabled".
+    """
+    sk = _skills()
+    if sk is None:
+        return {"ok": False, "reason": _NO_SKILLS, "visible": [], "hidden": []}
+    # The NAMES come from the folder's own index, so this works for a named
+    # folder exactly as `known_names()` does; the TRUST comes from the lock,
+    # which is the only place a trust level is recorded.
+    names_all = sorted(_index_names(_root(skills_dir)))
+    rows = read_lock(skills_dir=skills_dir)
+    have = None
+    if enabled_tools is not None:
+        have = {str(t) for t in enabled_tools}
+    if isinstance(aliases, dict):
+        names_all = [aliases.get(n, n) for n in names_all]
+    visible, hidden = [], []
+    for name in names_all:
+        if not name:
+            continue
+        conv = skill_conventions(name, skills_dir=skills_dir)
+        need = conv.get("requires_tools") or []
+        stands_in_for = conv.get("fallback_for_tools") or []
+        why = ""
+        if have is not None and need and not set(need).issubset(have):
+            missing = sorted(set(need) - have)
+            why = ("needs " + ", ".join(missing)
+                   + (", which is not enabled" if len(missing) == 1
+                      else ", which are not enabled"))
+        elif have is not None and stands_in_for and set(stands_in_for) & have:
+            why = ("stands in for " + ", ".join(sorted(set(stands_in_for) & have))
+                   + ", which is enabled")
+        row = {"name": name, "requires_tools": need,
+               "fallback_for_tools": stands_in_for,
+               "trust_level": effective_trust(rows.get(name)), "why": why}
+        (hidden if why else visible).append(row)
+    return {"ok": True, "visible": visible, "hidden": hidden,
+            "note": ("A skill whose required tools are not enabled is hidden, and a "
+                     "stand-in is hidden while the tool it replaces is there. "
+                     "Nothing here enables, disables or approves anything.")}
+
+
+def blueprint_suggestions(*, skills_dir=None, now: Optional[float] = None) -> dict:
+    """A skill's `blueprint.schedule` as a SUGGESTION row - and nothing else.
+
+    RULE 4 IS THE WHOLE POINT OF THIS FUNCTION'S SHAPE. A skill that scheduled
+    its own job would be acting unattended, which this project forbids; so this
+    reads the frontmatter and returns a row for `/api/skills/suggestions` to
+    show, exactly as `jarvis_skill_discovery` offers a routine as a card the
+    owner answers. **This function imports no scheduler and registers no job** -
+    `jarvis_schedule` is never imported here, and a test asserts that against the
+    source. Turning a suggestion into a job is a separate, card-raising change.
+    """
+    sk = _skills()
+    if sk is None:
+        return {"ok": False, "reason": _NO_SKILLS, "suggestions": []}
+    rows = read_lock(skills_dir=skills_dir)
+    when = float(now if now is not None else time.time())
+    out = []
+    for name in sorted(_index_names(_root(skills_dir))):
+        if not name:
+            continue
+        conv = skill_conventions(name, skills_dir=skills_dir)
+        schedule = conv.get("blueprint_schedule") or ""
+        if not conv.get("ok") or not schedule:
+            continue
+        out.append({
+            "kind": "skill_blueprint",
+            "skill": name,
+            "schedule": schedule,
+            "trust_level": effective_trust(rows.get(name)),
+            "offered": False,           # nothing is offered; the view decides
+            "job_registered": False,    # structural: no scheduler is reached
+            "words": (f"{name} suggests running on {schedule}. Nothing is "
+                      f"scheduled: a job is made only by an approval card."),
+            "at": when,
+        })
+    return {"ok": True, "suggestions": out, "count": len(out),
+            "note": ("Suggestions only. No job is registered and no scheduler is "
+                     "imported: rule 4 forbids acting unattended.")}
+
+
+# --------------------------------------------------------------------------
 #   The routes - only the ones that did not already exist
 # --------------------------------------------------------------------------
 
@@ -838,6 +1328,43 @@ def handle_get(route: str, query: str = "") -> tuple:
     if route == "/api/skills/hub/projects":
         out = project_skills()
         return (200 if out.get("ok") else 503), out
+    if route == "/api/skills/hub/lock":
+        try:
+            enabled = [t for t in (args.get("tool") or []) if t]
+        except Exception:                                   # pragma: no cover
+            enabled = []
+        rows = read_lock()
+        out = {
+            "ok": True,
+            "scanner_version": SCANNER_VERSION,
+            "trust_order": list(TRUST_ORDER),
+            "lock": rows,
+            "skills": [],
+            "blueprints": blueprint_suggestions(),
+            "note": ("What was scanned, when, and how far it may be trusted. A "
+                     "skill the scanner refused reads as 'dangerous', which is not "
+                     "on the trust ladder at all, whatever the lock file says."),
+        }
+        vis = visible_skills(enabled if enabled else None)
+        hidden = {h["name"]: h["why"] for h in vis.get("hidden", [])}
+        visible_names = {v["name"] for v in vis.get("visible", [])}
+        for name, row in sorted(rows.items()):
+            if not isinstance(row, dict):
+                continue
+            out["skills"].append({
+                "name": name,
+                "effective_trust": effective_trust(row),
+                "recorded_trust": row.get("trust_level", ""),
+                "verdict": row.get("verdict", ""),
+                "source_url": row.get("source_url", ""),
+                "sha256_hash": row.get("sha256_hash", ""),
+                "scanner_version": row.get("scanner_version", ""),
+                "timestamp": row.get("timestamp", 0),
+                "blocking": row.get("blocking", 0),
+                "visible": (name in visible_names) if enabled else None,
+                "hidden_because": hidden.get(name, ""),
+            })
+        return 200, out
     return 404, {"error": "no such read"}
 
 

@@ -6719,6 +6719,78 @@ def warm_prefix_on() -> bool:
     return WARM_PREFIX_DEFAULT
 
 
+# --------------------------------------------------------------------------
+#   The model's own earlier words, made canonical before they go back
+#   (llama.cpp #30357, 2026-10-15)
+# --------------------------------------------------------------------------
+#
+# WHY. On a Qwen3.5 model the reply the model gives us is not always the text
+# it had in its own context: the chat template and the reasoning/content split
+# between them can add or drop trailing whitespace, so the string we store and
+# send back is not byte-identical to what the model actually produced. The
+# engine notices: it keeps the tokens it has already read of the previous
+# prompt and reuses them while the next prompt starts the same way, and a
+# single byte that renders differently is enough to invalidate the whole
+# prefix. On a HYBRID model - Qwen3.5's 8 attention and 24 Gated DeltaNet
+# recurrent layers - that is not a cheap miss: the recurrent state has no KV
+# cache to fall back on, so the request re-prefills from the start.
+#
+# This is llama.cpp issue #30357, "server: reasoning/content whitespace is not
+# round-trippable for Qwen3.5+ chat templates -> prefix-cache invalidation
+# (full re-prefill on hybrid models) when the model emits non-canonical
+# whitespace" (read 2026-10-15). Its own fix, "chat : strip trailing whitespace
+# from parsed reasoning and content" (PR #30557), is in flight in llama.cpp and
+# reaches us only when Ollama ships a newer engine. Until then this does the
+# same thing on OUR side of the wire, so the prompt we send is canonical
+# whatever the engine does.
+#
+# WHAT, AND WHAT IT DELIBERATELY DOES NOT. TRAILING whitespace only, on
+# ASSISTANT messages only, and only on the fields that carry the model's own
+# words. Leading and interior whitespace is the model's prose - a reply that
+# opens with a blank line, or a list indented on purpose - and changing it
+# would be changing the answer. A user, system or tool message is never
+# touched: those are the owner's words and other programs' output, and they
+# were never the ones being re-rendered.
+#
+# WHERE IT MUST RUN. In dress_messages, which is the one place both
+# run_local_turn and warm_prefix build their messages through - the same
+# reason the two share chat_body. A guard that ran on one path and not the
+# other would give them different prefixes, which is the very thing it exists
+# to prevent.
+#
+#: The fields of an assistant message that carry the model's own words back to
+#: it on the next turn. `content` is what every model returns; the other three
+#: are the reasoning channel under the names the engines use for it.
+_ASSISTANT_WORD_FIELDS = ("content", "reasoning_content", "reasoning", "thinking")
+
+
+def tidy_assistant_whitespace(msgs: list) -> list:
+    """`msgs` with trailing whitespace taken off every assistant message.
+
+    A NEW list, and a message is copied only when it actually changes, so the
+    caller's messages are never touched (test_spoken_style.py asserts that of a
+    whole turn). Anything that is not an assistant message, and any field that
+    is not a string, is passed through as it is. Never raises: a message that
+    is not a dict is left alone.
+    """
+    out = []
+    for m in msgs or []:
+        if not isinstance(m, dict) or m.get("role") != "assistant":
+            out.append(m)
+            continue
+        fixed = m
+        for k in _ASSISTANT_WORD_FIELDS:
+            v = m.get(k)
+            if isinstance(v, str):
+                t = v.rstrip()
+                if t != v:
+                    if fixed is m:
+                        fixed = dict(m)
+                    fixed[k] = t
+        out.append(fixed)
+    return out
+
+
 def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
                    next_time: str = "", spoken: bool = False, live: bool = False,
                    cut_off: str = "", crisis: bool = False) -> list:
@@ -6727,9 +6799,13 @@ def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
     the newest user message - and then keep_rules_first, last, so the rules
     stay first. A new list; `msgs` is not changed. run_local_turn and the
     warm-up both call this."""
+    # FIRST, before any note: the model's own earlier words, made canonical.
+    # See the block above tidy_assistant_whitespace - the warm-up and the real
+    # turn must both go through here, or their prefixes differ.
+    out = tidy_assistant_whitespace(msgs)
     # The owner's manner (warm or plain): wording only, never first, and
     # before the spoken note so that one is nearer the question.
-    out = with_manner_note(msgs, manner)
+    out = with_manner_note(out, manner)
     if focus:
         # I144: additive on top of manner, never instead of it - nearer
         # the question than manner, further than spoken/cut-off/crisis.
