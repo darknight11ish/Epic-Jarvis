@@ -129,7 +129,7 @@ stack's order and cannot be moved into a folder.
 | `answer-sources.patch` | also changes 1 line(s) of the core's own code, beyond calling the module |
 | `second-card-suggest.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `rules-first-relay.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
-| `cloud-say-yes.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
+| `cloud-say-yes.patch` | edits lines the core already has; it cannot be applied out of order |
 | `plan-gate.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `phone-notifications.patch` | also adds 1 entry/entries to the approval gate's own tables, which decide whether the action needs a card |
 | `warm-prefix.patch` | edits lines the core already has; it cannot be applied out of order |

@@ -16,6 +16,14 @@ voice check and the "hey Jarvis" verifier. What it proves:
      no header, logs nothing.
   4. The clients send it: the phone's JarvisApi.utterance and the desktop's
      voice.rs post_utterance.
+
+It pins the two inputs that are facts about the MACHINE rather than about the
+code: whether a voice print exists for the mic, and the minimum command
+length. Left unpinned, a 1.0 s clip on a PC that has a print is refused as
+"too short to be sure it was you" before jarvis_voice.verify is reached - so
+the suite passed in CI, where no print exists, and failed on the owner's PC
+(2026-10-15: 9 passed, 5 failed). The print is pinned as EXISTING on purpose;
+see t_hear_passes_the_microphone for why pinning it absent would be an evasion.
 """
 import shutil
 import subprocess
@@ -74,40 +82,70 @@ def t_hear_passes_the_microphone():
         seen["verify"] = mic
         return V.Verdict(False, score=0.1, threshold=0.4, reason="no", voice_print=mic or "general")
 
-    with mock.patch.object(S, "_speech_span", return_value="skip"), \
-            mock.patch.object(V, "verify", verify):
-        for sent, want in (("phone", "phone"), ("desktop", "desktop"), ("tablet", ""),
-                           ("", ""), ("PHONE", "phone")):
-            seen.clear()
-            h = S.hear(tone(), mic=sent)
-            check(f"mic={sent!r} reaches the voice check as {want!r}",
-                  seen.get("verify") == want and h.voice_print == (want or "general"),
-                  (seen, h.voice_print))
+    # The two inputs that decide whether hear() ever reaches the owner check
+    # are properties of THIS MACHINE, not of the code under test, so they are
+    # pinned here: `_has_print` reads the voice prints in the owner's store,
+    # and `_min_command_seconds` reads the configured strictness (2.0 on this
+    # PC, 0.0 in broad mode, 0.0 for a jarvis_voice.py older than the
+    # minimum). Unpinned, the 1.0 s clip below is shorter than 2.0 s, so on a
+    # PC that has a print hear() returns "too short to be sure it was you"
+    # BEFORE jarvis_voice.verify is called - which is why this suite failed on
+    # the owner's PC (9 passed, 5 failed) and passed in CI, where no print
+    # exists.
+    #
+    # A print is pinned as EXISTING, never absent. Pinning it absent would pass
+    # by keeping the mic out of the branch it has to survive, which is the
+    # evasion this pin exists to stop.
+    with mock.patch.object(S, "_has_print", return_value=True), \
+            mock.patch.object(S, "_min_command_seconds", return_value=0.5):
+        with mock.patch.object(S, "_speech_span", return_value="skip"), \
+                mock.patch.object(V, "verify", verify):
+            for sent, want in (("phone", "phone"), ("desktop", "desktop"), ("tablet", ""),
+                               ("", ""), ("PHONE", "phone")):
+                seen.clear()
+                h = S.hear(tone(), mic=sent)
+                check(f"mic={sent!r} reaches the voice check as {want!r}",
+                      seen.get("verify") == want and h.voice_print == (want or "general"),
+                      (seen, h.voice_print))
 
-    def old_verify(audio, embedder=None, sample_rate=None):     # before mic existed
-        return V.Verdict(False, score=0.1, threshold=0.4, reason="no")
-    with mock.patch.object(S, "_speech_span", return_value="skip"), \
-            mock.patch.object(V, "verify", old_verify):
-        try:
+        # ...and the branch those pins step around is still there, decided by
+        # the pinned minimum: a clip shorter than it, with a print, is refused
+        # before the owner check. A fix that reached the checks above by
+        # deleting this gate would fail here instead.
+        seen.clear()
+        with mock.patch.object(S, "_min_command_seconds", return_value=2.0), \
+                mock.patch.object(S, "_speech_span", return_value="skip"), \
+                mock.patch.object(V, "verify", verify):
             h = S.hear(tone(), mic="phone")
-            ok = h.is_owner is False and h.voice_print == ""
-        except TypeError as exc:
-            ok, h = False, exc
-    check("an older jarvis_voice.verify (no mic) is still called, without it", ok, h)
+        check("a 1.0 s clip with a print, under a 2.0 s minimum, is still "
+              "refused before the owner check",
+              "verify" not in seen and h.too_short is True,
+              (seen, h.too_short, h.reason))
 
-    spotted = {}
+        def old_verify(audio, embedder=None, sample_rate=None):     # before mic existed
+            return V.Verdict(False, score=0.1, threshold=0.4, reason="no")
+        with mock.patch.object(S, "_speech_span", return_value="skip"), \
+                mock.patch.object(V, "verify", old_verify):
+            try:
+                h = S.hear(tone(), mic="phone")
+                ok = h.is_owner is False and h.voice_print == ""
+            except TypeError as exc:
+                ok, h = False, exc
+        check("an older jarvis_voice.verify (no mic) is still called, without it", ok, h)
 
-    def spot(samples, sample_rate=16000, mic=""):
-        spotted["mic"] = mic
-        return W.Spot(True, heard=False, score=0.0)
-    with mock.patch.object(S, "_speech_span", return_value="skip"), \
-            mock.patch.object(S, "_wake_enabled", return_value=True), \
-            mock.patch.object(S, "_take_awake", return_value=False), \
-            mock.patch.object(W, "spot", spot):
-        S.hear(tone(), source="wake_word", mic="desktop")
-    check("a wake-word clip's microphone reaches the verifier too",
-          spotted.get("mic") == "desktop", spotted)
-    check("jarvis_speech says it takes mic (voice-mic.patch checks this)", S.TAKES_MIC is True)
+        spotted = {}
+
+        def spot(samples, sample_rate=16000, mic=""):
+            spotted["mic"] = mic
+            return W.Spot(True, heard=False, score=0.0)
+        with mock.patch.object(S, "_speech_span", return_value="skip"), \
+                mock.patch.object(S, "_wake_enabled", return_value=True), \
+                mock.patch.object(S, "_take_awake", return_value=False), \
+                mock.patch.object(W, "spot", spot):
+            S.hear(tone(), source="wake_word", mic="desktop")
+        check("a wake-word clip's microphone reaches the verifier too",
+              spotted.get("mic") == "desktop", spotted)
+        check("jarvis_speech says it takes mic (voice-mic.patch checks this)", S.TAKES_MIC is True)
 
 
 def _added(patch):
