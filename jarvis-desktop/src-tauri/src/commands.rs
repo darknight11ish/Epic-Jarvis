@@ -2865,11 +2865,25 @@ async fn answer_approval(
     // Hello first - and the owner approves there. Deny still works from the
     // widget, as it does from the phone's. Checked here, in the command,
     // not only by the widget's button.
+    //
+    // The HUD is held to the same rule since it gained its own Approve and
+    // Deny (2026-10-16, the owner's ask: "i should also be able to approve
+    // any card from the jarvis hud directly"). It answers through this same
+    // command, so Windows Hello and the stale check already apply to it; App
+    // lock also covers that window (`lock::Covered::Hud`, hidden while the
+    // lock is on), and a lock that has covered a window must not be answered
+    // from it. Belt and braces on the command, exactly as the widget's is.
     if approved {
         if let AnsweredFrom::Window(window) = &from {
-            if window.label() == windows::WIDGET_LABEL && crate::lock::current(&app).app_lock {
+            let label = window.label();
+            let covered = label == windows::WIDGET_LABEL || label == crate::HUD_LABEL;
+            if covered && crate::lock::current(&app).app_lock {
                 show_approval_in_quickbar(&app);
-                return Err(crate::lock::WIDGET_APPROVES_IN_BAR.to_string());
+                return Err(if label == crate::HUD_LABEL {
+                    crate::lock::HUD_APPROVES_IN_BAR.to_string()
+                } else {
+                    crate::lock::WIDGET_APPROVES_IN_BAR.to_string()
+                });
             }
         }
     }

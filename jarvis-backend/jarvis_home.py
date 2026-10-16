@@ -59,6 +59,27 @@ own, as before. The plan carries a digest of exactly the requests the card
 listed, and `run()` refuses a plan whose requests no longer match it, so
 nothing can be added after the card was approved.
 
+WHAT "IT WORKED" MEANS, AND WHY A 200 IS NOT IT (2026-10-16)
+Home Assistant answers `POST /api/services/...` with 200 as soon as it has
+accepted the call - it does not wait for the device. A light that is unplugged,
+a Zigbee device that has dropped off the mesh and an entity that was renamed in
+HA all answer 200 and change nothing. So every service-call plan carries a
+SECOND, read-only request beside each call: the paired `GET /api/states/<eid>`,
+built here at plan time and placed INSIDE `p.queries` - so the card lists it,
+the plan's digest covers it, and `run()`'s own "the plan's requests are not the
+ones it was made with" check refuses a plan whose pairing was changed. Nothing
+is added at run time: there is no request in this module that the card did not
+list.
+
+After a call is accepted, `run()` sends that call's readback and reads the
+`state` it answers with. `unavailable` and `unknown` mean the entity did not
+respond; the answer is then `ok: False` carrying that state - never a success.
+Any other state is what the device now reports, returned as `state_after` with
+`verified: True`. A readback that fails, or answers with no state at all, is
+also NOT a success: the change was accepted and its result is unknown, and this
+module says so rather than guessing. "The call was accepted" and "the light came
+on" are two different sentences, and only the second one is worth saying.
+
 Both still go through the same `describe()`/`run()` shape, and `run()` still
 refuses without `approved=True` - a module that can act on the physical
 world must not be one call away from doing it by accident, more than any
@@ -256,6 +277,78 @@ def _digest(queries) -> str:
                           .encode("utf-8")).hexdigest()
 
 
+def _states_url(base: str, eid: str) -> str:
+    """The one read of one entity's state - the same address `plan_states`
+    builds, so a readback is a read this module already makes and knows how
+    to quote."""
+    return f"{base.rstrip('/')}/api/states/{urllib.parse.quote(eid, safe='')}"
+
+
+def _readback_query(base: str, eid: str) -> Query:
+    """The read-only readback paired with a service call on `eid`. Marked
+    `verify=True` so `service_queries()` can tell it from the call."""
+    return Query(url=_states_url(base, eid), method="GET",
+                 why=f"check {eid}'s state after the change",
+                 entity_id=eid, verify=True)
+
+
+def service_queries(p: Plan) -> list:
+    """The requests in this plan that ACT on the house: every request that is
+    not the read-only readback paired with a call. A service-call plan's
+    `queries` holds both, in the order they are sent - the call, then that
+    call's readback - because both are what the card listed and both are
+    covered by the plan's digest."""
+    return [q for q in (getattr(p, "queries", None) or [])
+            if not getattr(q, "verify", False)]
+
+
+def _readback_for(p: Plan, eid: str) -> Optional[Query]:
+    """The readback paired with the call on `eid`, or None."""
+    for q in (getattr(p, "queries", None) or []):
+        if getattr(q, "verify", False) and str(q.entity_id or "") == str(eid or ""):
+            return q
+    return None
+
+
+def _readback_problem(p: Plan) -> str:
+    """"" when every service call in this plan has exactly one read-only
+    readback paired with it, and there is no readback without a call - else
+    why not. Belt and braces beside the digest: a call nobody reads back could
+    never be checked, and a readback nothing called checks nothing, so neither
+    is a plan this module runs."""
+    calls = service_queries(p)
+    if not calls:
+        return "this plan holds no service call"
+    backs = [q for q in (getattr(p, "queries", None) or [])
+             if getattr(q, "verify", False)]
+    for q in calls:
+        eid = str(q.entity_id or "")
+        mine = [b for b in backs if str(b.entity_id or "") == eid]
+        if len(mine) != 1:
+            return (f"the call on {eid or 'an unnamed device'} has no single readback "
+                    "paired with it")
+        b = mine[0]
+        if b.method != "GET" or not str(b.url or "").endswith(_states_url("", eid)):
+            return (f"the readback paired with {eid or 'an unnamed device'} is not a "
+                    "read of that entity's state")
+    if len(backs) != len(calls):
+        return "this plan holds a readback with no call to check"
+    return ""
+
+
+def _exc_words(exc: BaseException) -> str:
+    """One legible line about a failed request, for a reason a person reads."""
+    if isinstance(exc, urllib.error.HTTPError):
+        return f"HTTP {exc.code}"
+    return f"{type(exc).__name__}: {exc}"
+
+
+#: What Home Assistant answers for an entity that is not really there. A
+#: service call on such an entity is ACCEPTED - the 200 means "I took it", not
+#: "it happened" - which is the whole reason the readback exists.
+NOT_RESPONDING = ("unavailable", "unknown")
+
+
 # --------------------------------------------------------------------------
 #   The plan - one or more requests, worked out locally, sent to no one yet
 # --------------------------------------------------------------------------
@@ -267,6 +360,11 @@ class Query:
     why: str = ""
     entity_id: str = ""
     body: Optional[dict] = None
+    #: True for the read-only readback paired with a service call - the GET
+    #: that decides whether the call did anything. It is part of `queries`,
+    #: and so part of the digest, on purpose: a plan's requests are exactly
+    #: what its card listed.
+    verify: bool = False
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -327,7 +425,7 @@ def plan_states(entity_ids: list) -> Plan:
                      authenticated=authenticated(), reason_empty=insecure)
 
     queries = [
-        Query(url=f"{base.rstrip('/')}/api/states/{urllib.parse.quote(eid, safe='')}",
+        Query(url=_states_url(base, eid),
               method="GET",
               why=f"read the current state of {eid}", entity_id=eid)
         for eid in ids
@@ -413,9 +511,14 @@ def plan_service(domain: str, service: str, entity_id: str,
              f"{quoted(domain, safe='')}/{quoted(service, safe='')}"),
         method="POST",
         why=f"call {domain}.{service} on {entity_id}", entity_id=entity_id, body=body)
-    return Plan(kind="call_service", queries=[query], heavy=heavy,
+    # The readback rides BESIDE the call, inside the same plan and the same
+    # digest: the card lists it, and nothing can add a request after the card.
+    # Without it a 200 from HA is the only evidence there is, and a 200 means
+    # "I took the call", not "the light came on".
+    queries = [query, _readback_query(base, entity_id)]
+    return Plan(kind="call_service", queries=queries, heavy=heavy,
                 if_refused=if_refused, authenticated=authenticated(),
-                digest=_digest([query]))
+                digest=_digest(queries))
 
 
 def _unique(ids) -> list:
@@ -493,9 +596,15 @@ def plan_services(domain: str, service: str, entity_ids,
            f"{quoted(domain, safe='')}/{quoted(service, safe='')}")
     # entity_id written LAST in each body, as in plan_service; group_problem
     # has already refused a `data` that names an entity, area or device.
-    queries = [Query(url=url, method="POST", why=f"call {domain}.{service} on {eid}",
-                     entity_id=eid, body={**dict(data or {}), "entity_id": eid})
-               for eid in ids]
+    # Each device's call is followed immediately by ITS OWN readback, so the
+    # plan's order is the order the requests are sent and the card's numbering
+    # reads as call/check, call/check.
+    queries = []
+    for eid in ids:
+        queries.append(Query(url=url, method="POST",
+                             why=f"call {domain}.{service} on {eid}",
+                             entity_id=eid, body={**dict(data or {}), "entity_id": eid}))
+        queries.append(_readback_query(base, eid))
     return Plan(kind="call_service", queries=queries, heavy=False,
                 if_refused=if_refused, authenticated=authenticated(),
                 digest=_digest(queries))
@@ -530,7 +639,13 @@ def everyday_problem(p: Plan) -> str:
         return "not a change Jarvis could check"
     if p.heavy:
         return "it includes a lock, alarm, door or cover"
-    for q in p.queries:
+    # Only the requests that ACT are weighed. The read-only readback beside
+    # each call goes to `/api/states/`, not `/api/services/`, and is not a
+    # change to anything - but the pairing itself is part of "could Jarvis
+    # check this", so a plan missing one is not an everyday change either.
+    if _readback_problem(p):
+        return "not a change Jarvis could check"
+    for q in service_queries(p):
         tail = str(q.url or "").rsplit("/api/services/", 1)
         parts = tail[1].split("/") if len(tail) == 2 else []
         if len(parts) != 2:
@@ -609,7 +724,7 @@ def weather_entity() -> str:
 def _forecast_queries(base: str, entity_id: str, kind: str) -> list:
     b = base.rstrip("/")
     return [
-        Query(url=f"{b}/api/states/{urllib.parse.quote(entity_id, safe='')}", method="GET",
+        Query(url=_states_url(b, entity_id), method="GET",
               why=f"read the weather now, from {entity_id}", entity_id=entity_id),
         Query(url=b + FORECAST_URL_TAIL, method="POST",
               why=f"read the {kind.replace('_', ' ')} forecast of {entity_id}",
@@ -738,6 +853,12 @@ def describe(p: Plan) -> str:
     if p.reason_empty:
         verb = "read" if p.kind in ("get_states", "get_forecast") else "control"
         return f"Jarvis would like to {verb} Home Assistant, but {p.reason_empty}. Nothing would be sent."
+    if p.kind == "call_service" and p.queries and not service_queries(p):
+        # Every request in it is a readback, so there is nothing to call. No
+        # builder here makes that plan and run() refuses it - this is here so
+        # a card can never be drawn for a plan that would act on nothing.
+        return ("Jarvis cannot describe this Home Assistant call: it holds no "
+                "service call, so nothing would be sent.")
 
     auth_line = (
         "Authenticated: this will send the configured Home Assistant access "
@@ -770,27 +891,37 @@ def describe(p: Plan) -> str:
             if q.body is not None:
                 lines.append(f"     body: {json.dumps(q.body, ensure_ascii=False)}")
             lines.append("")
-    elif len(p.queries) > 1:
-        n = len(p.queries)
-        action = p.queries[0].why.split(" on ", 1)[0].replace("call ", "", 1)
+    elif len(service_queries(p)) > 1:
+        calls = service_queries(p)
+        n = len(calls)
+        action = calls[0].why.split(" on ", 1)[0].replace("call ", "", 1)
         lines = [
             f"Jarvis would like to call {action} on {n} Home Assistant devices: "
-            + ", ".join(q.entity_id for q in p.queries) + ".",
+            + ", ".join(q.entity_id for q in calls) + ".",
             "",
             f"One decision about exactly these {n} devices, each listed below with "
             "its exact request. Nothing is added after you approve, and it gives "
             "no permission for anything later.",
             "",
+            "After each device's call, Jarvis reads that device back to check it "
+            "really responded: a call Home Assistant merely accepted is not proof, "
+            "so a device it reports as unavailable or unknown is reported as not "
+            "done.",
+            "",
             auth_line,
             "",
         ]
-        for i, q in enumerate(p.queries, 1):
+        for i, q in enumerate(calls, 1):
+            back = _readback_for(p, q.entity_id)
             lines += [f"  {i}. {q.entity_id}: {action}",
                       f"     POST {q.url}",
                       f"     body: {json.dumps(q.body, ensure_ascii=False)}"]
+            if back is not None:
+                lines.append(f"     then GET {back.url}")
         lines.append("")
     else:
-        q = p.queries[0]
+        q = service_queries(p)[0]
+        back = _readback_for(p, q.entity_id)
         heavy_line = (
             "This is marked HEAVY: it changes a lock, an alarm, a door, a "
             "cover, a valve or a siren, which is a materially bigger "
@@ -799,6 +930,13 @@ def describe(p: Plan) -> str:
         lines = [
             f"Jarvis would like to call the Home Assistant service on "
             f"\"{q.entity_id}\": {q.why}.",
+        ]
+        if back is not None:
+            lines.append(
+                f"Then it will read {q.entity_id} back to check the change really "
+                "happened - a call Home Assistant merely accepted is not proof, so "
+                "the state it reports is what decides whether this worked.")
+        lines += [
             "",
             auth_line,
         ]
@@ -808,9 +946,11 @@ def describe(p: Plan) -> str:
             "",
             f"  POST {q.url}",
             f"     body: {json.dumps(q.body, ensure_ascii=False)}",
-            "",
         ]
-    several = p.kind == "call_service" and len(p.queries) > 1
+        if back is not None:
+            lines += ["", f"  GET {back.url}", f"     why: {back.why}"]
+        lines.append("")
+    several = p.kind == "call_service" and len(service_queries(p)) > 1
     lines += [
         (f"What leaves this machine: exactly the {len(p.queries)} requests above, and "
          "the access token if configured - all to that one Home Assistant server. "
@@ -881,6 +1021,56 @@ def _default_fetch(q: Query) -> dict:
         return json.loads(raw) if raw.strip() else {}
 
 
+def _after_the_call(out: dict, p: Plan, call: Query, getter) -> dict:
+    """Send the readback paired with `call` and say what Home Assistant really
+    reports. Called ONLY after the service call was accepted.
+
+    A 200 to `POST /api/services/...` means Home Assistant took the call. It
+    does not mean the device did anything: an unplugged light, a device that
+    has dropped off the mesh and an entity the owner renamed all answer 200.
+    So this reads the entity back and lets the STATE decide:
+
+      * `unavailable` / `unknown` -> `ok: False`, with the state it found and a
+        sentence a person can read. Never a success.
+      * any other state -> that state as `state_after`, plus `verified: True`.
+      * a readback that fails, or answers with no state at all -> `ok: False`
+        as well. The change was accepted and the result is unknown; this
+        module says that rather than guessing, because a false "done" is the
+        one answer that costs the owner real trust.
+
+    Never raises: every failure becomes a reason.
+    """
+    eid = str(call.entity_id or "")
+    out["state_after"] = None
+    back = _readback_for(p, eid)
+    if back is None:
+        out["ok"] = False
+        out["reason"] = (f"there is no readback paired with the call on {eid}, so "
+                         "whether it worked is unknown")
+        return out
+    try:
+        raw = getter(back)
+    except Exception as exc:
+        out["ok"] = False
+        out["reason"] = (f"{eid}'s state could not be read back after the change "
+                         f"({_exc_words(exc)}), so it is not reported as done")
+        return out
+    state = raw.get("state") if isinstance(raw, dict) else None
+    state = str(state).strip() if state is not None else ""
+    if not state:
+        out["ok"] = False
+        out["reason"] = (f"Home Assistant answered the readback of {eid} with no state "
+                         "at all, so it is not reported as done")
+        return out
+    out["state_after"] = state
+    if state.lower() in NOT_RESPONDING:
+        out["ok"] = False
+        out["reason"] = f"{eid} is {state} in Home Assistant, so it did not respond"
+        return out
+    out["verified"] = True
+    return out
+
+
 def run(p: Plan, *, fetch: Optional[Callable[[Query], dict]] = None,
         approved: bool = False) -> dict:
     """Execute an approved plan, one query at a time. `approved` has no
@@ -927,29 +1117,41 @@ def run(p: Plan, *, fetch: Optional[Callable[[Query], dict]] = None,
         return {"ok": False,
                 "reason": "the plan's requests are not the ones it was made with, so "
                           "nothing was sent"}
-    if len(p.queries) == 1:
-        q = p.queries[0]
+    calls = service_queries(p)
+    pairing = _readback_problem(p)
+    if pairing:
+        return {"ok": False, "reason": f"{pairing}, so nothing was sent"}
+    if len(calls) == 1:
+        q = calls[0]
         try:
             raw = getter(q)
         except Exception as exc:
             return {"ok": False,
                     "reason": f"the service call failed: {type(exc).__name__}: {exc}"}
-        return {"ok": True, "entity_id": q.entity_id, "response": raw}
+        return _after_the_call({"ok": True, "entity_id": q.entity_id, "response": raw},
+                               p, q, getter)
     # Several devices, one at a time, in the card's order. A device that
     # fails does not stop the others - each was approved, by name - and the
-    # answer says which worked.
+    # answer says which worked. Each device's readback follows ITS OWN call,
+    # so a device that was never sent is never read back and never verified.
     results = []
-    for q in p.queries:
+    for q in calls:
         try:
-            results.append({"entity_id": q.entity_id, "ok": True, "response": getter(q)})
+            raw = getter(q)
         except Exception as exc:
             results.append({"entity_id": q.entity_id, "ok": False,
                             "reason": f"the service call failed: {type(exc).__name__}: {exc}"})
+            continue
+        results.append(_after_the_call(
+            {"entity_id": q.entity_id, "ok": True, "response": raw}, p, q, getter))
     out = {"ok": all(r["ok"] for r in results), "results": results}
     if not out["ok"]:
-        failed = [r["entity_id"] for r in results if not r["ok"]]
+        failed = [r for r in results if not r["ok"]]
         out["reason"] = (f"{len(failed)} of {len(results)} did not work: "
-                         + ", ".join(failed))
+                         + ", ".join(r["entity_id"] for r in failed))
+        said = [r.get("reason") for r in failed if r.get("reason")]
+        if said:
+            out["reason"] += " - " + "; ".join(said)
     return out
 
 
