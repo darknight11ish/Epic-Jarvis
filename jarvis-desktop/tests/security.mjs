@@ -516,20 +516,37 @@ await check("App lock covers the HUD on every way it is shown (apps security aud
   assert.match(tray, /ID_SHOW_HUD => \{\s*if let Err\(err\) = windows::show_hud\(app\)/);
 });
 
-await check("App lock: the widget approves nothing, in Rust (apps security audit M3)", () => {
+await check("App lock: the widget and the HUD approve nothing, in Rust (apps security audit M3; the HUD added 2026-10-16)", () => {
   const cmd = read("src-tauri/src/commands.rs");
   const answer = fnBody(cmd, "async fn answer_approval(");
-  const gate = answer.indexOf("window.label() == windows::WIDGET_LABEL && crate::lock::current(&app).app_lock");
-  assert.ok(gate > 0, "answer_approval does not refuse the widget's Approve under App lock");
-  assert.ok(gate < answer.indexOf("crate::lock::check_approval"), "the widget refusal comes after Windows Hello");
-  assert.ok(gate < answer.indexOf(".post("), "the widget refusal comes after the request");
-  assert.match(answer.slice(gate, gate + 400), /show_approval_in_quickbar\(&app\);\s*return Err\(crate::lock::WIDGET_APPROVES_IN_BAR/);
+  // The two windows App lock covers that can also raise an Approve of their
+  // own: the widget (on the desktop, outside the lock, by design) and the HUD
+  // (given its own Approve and Deny on 2026-10-16 at the owner's ask). Both
+  // refuse an APPROVE while the lock is on, and both are refused here in the
+  // COMMAND rather than only by their buttons - any window holding the
+  // capability can call it.
+  const gate = answer.indexOf("let covered = label == windows::WIDGET_LABEL || label == crate::HUD_LABEL;");
+  assert.ok(gate > 0, "answer_approval no longer names the two windows App lock covers");
+  assert.ok(gate < answer.indexOf("crate::lock::check_approval"), "the lock refusal comes after Windows Hello");
+  assert.ok(gate < answer.indexOf(".post("), "the lock refusal comes after the request");
+  const refusal = answer.slice(gate, gate + 700);
+  assert.match(refusal, /show_approval_in_quickbar\(&app\);/,
+    "an approval refused under App lock no longer opens the bar that can ask");
+  assert.match(refusal, /crate::lock::WIDGET_APPROVES_IN_BAR\.to_string\(\)/);
+  assert.match(refusal, /crate::lock::HUD_APPROVES_IN_BAR\.to_string\(\)/);
+  assert.match(refusal, /crate::lock::current\(&app\)\.app_lock/,
+    "the refusal no longer reads App lock");
   // Only Approve: Deny is not inside `if approved`.
-  assert.match(answer.slice(0, gate), /if approved \{\s*if let AnsweredFrom::Window\(window\) = &from \{\s*if\s*$/);
+  assert.match(answer.slice(0, gate),
+    /if approved \{\s*if let AnsweredFrom::Window\(window\) = &from \{\s*let label = window\.label\(\);\s*$/);
   const rules = read("src-tauri/src/lock/rules.rs");
-  const said = /WIDGET_APPROVES_IN_BAR: &str = "([\s\S]*?)";/.exec(rules)[1];
   // main.js and widget.js read "already" as "someone else answered it".
-  assert.doesNotMatch(said, /already/i);
+  for (const name of ["WIDGET_APPROVES_IN_BAR", "HUD_APPROVES_IN_BAR"]) {
+    const said = new RegExp(`${name}: &str = "([\\s\\S]*?)";`).exec(rules)[1];
+    assert.doesNotMatch(said, /already/i, name);
+  }
+  // ...and each names the window the owner actually pressed, not the other one.
+  assert.match(/HUD_APPROVES_IN_BAR: &str = "([\s\S]*?)";/.exec(rules)[1], /not the Jarvis HUD/);
   // The two commands are the widget's, and read or decide nothing more.
   const toml = read("src-tauri/permissions/surfaces.toml");
   const set = toml.slice(toml.indexOf('identifier = "approvals"'));
