@@ -16,6 +16,19 @@ Everything was read-only, from the repository at commit
 against the files. The windows were drawn in a browser on a copy, with test
 data, **not** on Windows and **not** on a phone.
 
+## Built since this was written (checked 2026-10-16)
+
+This audit is the record of 2026-09-27 and **nothing below is rewritten** - its
+status column was true when it was written. Items that have landed since,
+checked by file on 2026-10-16:
+
+* **The "Things you can say" list and the speaking-speed control are both built.**
+  The list is `backend/jarvis_sayable.py` (`TITLE = "Things you can say"`),
+  shipped whole and wired by `sayable.patch`, with `backend/test_sayable.py`
+  behind it; the speaking-speed control is `/api/voice/voices/speed`, which
+  `tools/check_parity.py` lists as **ported**, in both apps.
+* The rest of the table is not re-checked here.
+
 ---
 
 ## 1. Summary, with scores

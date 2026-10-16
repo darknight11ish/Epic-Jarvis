@@ -2577,9 +2577,11 @@ patch. `apply-patches.ps1` copies them in.
 
 ## 10. Things that do not exist
 
-Say so rather than designing around imagined code. This list was last checked
-against the repository on 2026-09-24; an item moves off it only when the file
-that makes it true is named.
+Say so rather than designing around imagined code. Every file this list names was
+checked against the repository on 2026-10-16: each one exists where the text says
+it does, and the two marked "only on the owner's PC" are still absent from
+`backend/`. An item moves off this list only when the file that makes it true is
+named.
 
 **No longer missing** (this section used to list them, and was wrong once
 they landed):

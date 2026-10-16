@@ -142,22 +142,22 @@ C33	the agent brief no longer calls Goals and the plan card unmerged	absent:.cla
 C34	the plan card module is in this tree	file:backend/jarvis_plan.py	built	.claude/agents/JARVIS-TODAY.md:150
 C35	the third-card lane is in this tree too	grep:backend/jarvis_second_card.py:second_card_third_assign	built	.claude/agents/JARVIS-TODAY.md:190
 C36	reading phone notifications is in this tree too	grep:jarvis-client:CapturedNotification	built	.claude/agents/JARVIS-TODAY.md:196
-C37	JARVIS-API section 106's heading says what the section holds, not only the button's words	absent:docs/JARVIS-API.md:## 106. New section here	open	docs/FEATURE-REVIEW-2026-10-04.md:541
+C37	JARVIS-API section 106's heading says what the section holds, not only the button's words	absent:docs/JARVIS-API.md:## 106. New section here	built	docs/FEATURE-REVIEW-2026-10-04.md:541
 C38	JARVIS-API section 111 is written, as the GitHub-tools design reserved it	grep:docs/JARVIS-API.md:## 111.	open	docs/GITHUB-TOOLS-DESIGN.md:7
 C39	the desktop YouTube screens are built	file:jarvis-desktop/src-tauri/src/brain/youtube.rs	built	docs/FEATURE-REVIEW-2026-10-04.md:542
 C40	the desktop cloud-grade screens are built	file:jarvis-desktop/src-tauri/src/brain/quiz_cloud.rs	built	docs/FEATURE-REVIEW-2026-10-04.md:542
-C41	the build queue no longer says the desktop YouTube screens are not built	absent:docs/BUILD-QUEUE-2026-09-30.md:desktop YouTube screens not built	open	docs/FEATURE-REVIEW-2026-10-04.md:542
-C42	the build queue no longer says the cloud-grade screens are not built	absent:docs/BUILD-QUEUE-2026-09-30.md:cloud-grade phone + desktop screens not built	open	docs/FEATURE-REVIEW-2026-10-04.md:542
-C43	the build queue no longer says menu visibility's backend and desktop are not done	absent:docs/BUILD-QUEUE-2026-09-30.md:backend and desktop not done	open	docs/FEATURE-REVIEW-2026-10-04.md:542
-C44	the 2026-09-30 handoff no longer says the desktop YouTube quiz is not built	absent:docs/HANDOFF-2026-09-30.md:**desktop not built**	open	docs/HANDOFF-2026-09-30.md:40
-C45	the 2026-09-30 handoff no longer says the cloud-grade grade has no app screens	absent:docs/HANDOFF-2026-09-30.md:no app screens yet	open	docs/HANDOFF-2026-09-30.md:41
-C46	ARCHITECTURE section 10's checked date is no longer two weeks behind the tree	absent:docs/ARCHITECTURE.md:against the repository on 2026-09-24	open	docs/FEATURE-REVIEW-2026-10-04.md:543
-C47	CHANGELOG.md has an entry for the 2026-09-30 features	grep:CHANGELOG.md:menu visibility	open	docs/FEATURE-REVIEW-2026-10-04.md:540
-C48	VERSION names something newer than 0.2.0, the 26 September version	absent:VERSION:0.2.0	open	docs/FEATURE-REVIEW-2026-10-04.md:540
+C41	the dated 2026-09-30 build queue carries a 'built since' note recording that the desktop YouTube screens have been built since it was written	grep:docs/BUILD-QUEUE-2026-09-30.md:desktop YouTube screens: built	built	docs/BUILD-QUEUE-2026-09-30.md:9
+C42	the dated 2026-09-30 build queue carries a 'built since' note recording that the cloud-grade phone and desktop screens have been built since it was written	grep:docs/BUILD-QUEUE-2026-09-30.md:cloud-grade phone + desktop screens: built	built	docs/BUILD-QUEUE-2026-09-30.md:9
+C43	the dated 2026-09-30 build queue carries a 'built since' note recording that menu visibility's backend and desktop halves have been built since it was written	grep:docs/BUILD-QUEUE-2026-09-30.md:menu visibility - backend and desktop: built	built	docs/BUILD-QUEUE-2026-09-30.md:9
+C44	the dated 2026-09-30 handoff carries a 'built since' note recording that the desktop YouTube screens have been built since it was written	grep:docs/HANDOFF-2026-09-30.md:desktop YouTube screens: built	built	docs/HANDOFF-2026-09-30.md:26
+C45	the dated 2026-09-30 handoff carries a 'built since' note recording that the cloud-grade app screens have been built since it was written	grep:docs/HANDOFF-2026-09-30.md:cloud-grade screens: built	built	docs/HANDOFF-2026-09-30.md:26
+C46	ARCHITECTURE section 10's checked date is no longer two weeks behind the tree	absent:docs/ARCHITECTURE.md:against the repository on 2026-09-24	built	docs/FEATURE-REVIEW-2026-10-04.md:543
+C47	CHANGELOG.md has an entry for the 2026-09-30 features	grep:CHANGELOG.md:menu visibility	built	docs/FEATURE-REVIEW-2026-10-04.md:540
+C48	VERSION names the major.minor both release jobs build a published version from, so 0.2.0 there is the hand-built baseline and not a stale build number - the last part is replaced by the CI run number	grep:.github/workflows/jarvis-client.yml:${base%.*}.$GITHUB_RUN_NUMBER	built	.github/workflows/jarvis-client.yml:1106
 C49	the docs index covers the current load-bearing documents	grep:docs/README.md:BUILD-QUEUE-2026-09-30	built	docs/FEATURE-REVIEW-2026-10-04.md:534
 C50	the docs index mentions the audit-reports directory at all	grep:docs/README.md:audit-reports-2026-09-29-30	built	docs/FEATURE-REVIEW-2026-10-04.md:534
 C51	"Things you can say" is built in the desktop's empty Jarvis bar	grep:jarvis-desktop/src/sayable.js:Things you can say	built	docs/EASE-OF-USE-AUDIT-2026-09-27.md:29
-C52	the ease-of-use audit no longer calls the built "Things you can say" list not built	absent:docs/EASE-OF-USE-AUDIT-2026-09-27.md:I116 "Things you can say", I28 speaking speed	open	docs/EASE-OF-USE-AUDIT-2026-09-27.md:144
+C52	the dated 2026-09-27 ease-of-use audit carries a 'built since' note recording that the Things you can say list and the speaking-speed control are both built	grep:docs/EASE-OF-USE-AUDIT-2026-09-27.md:Things you can say" list and the speaking-speed control are both built	built	docs/EASE-OF-USE-AUDIT-2026-09-27.md:19
 C53	the documents page prints the command that measures its own count	grep:docs/README.md:Get-ChildItem docs -Recurse -Filter *.md	built	docs/README.md:10
 C54	the phone holds the neutral animal pose on the wellbeing event	no definite check: the phone reads the crisis help line from the X-Jarvis-Route header under the same word "wellbeing" (jarvis-client/.../net/Wellbeing.kt), so a grep for it cannot tell the event from the header, and the register will not invent the marker the phone would use; ARCHITECTURE.md:1699 now says the phone's half is still to build	unverifiable	docs/ARCHITECTURE.md:1699
 D01	the source bundle really is gone from the tree, as the documents page recorded	no-file:docs/SOURCE-BUNDLE.md	built	docs/README.md:127

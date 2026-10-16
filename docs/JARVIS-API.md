@@ -17235,7 +17235,7 @@ it runs in (the tests pass a zone in); the phone's Compose screens (no local
 Android build; `ProgressTest` runs the pure Kotlin only, and CI compiles the
 rest).
 
-## 106. New section here (added 2026-09-30; backend and both apps built)
+## 106. "New section here": mark where a new section starts in a chat (added 2026-09-30; backend and both apps built)
 
 The owner's decision (2026-09-30, `docs/OVERNIGHT-TAGS-DESIGN.md` section 5; shared with the Galaxy panel, `docs/GALAXY-PANEL-DESIGN.md`): in an opened chat in History, once it has **10 or more turns**, every message the owner sent gets a **New section here** button that draws a divider above it. **The owner's answer: it is only a divider** - Jarvis still reads the whole chat the same way; nothing about what it reads or remembers changes, and a marker reaches no model, learner, memory or index. No card (the owner's own layout of a chat already kept); held on a stale link.
 

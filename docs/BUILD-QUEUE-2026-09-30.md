@@ -6,6 +6,27 @@ both apps where it makes sense, then given its own feature audit. API section
 numbers are reserved here so parallel builders do not collide (next free after
 98 = quiz).
 
+## Built since this was set (checked 2026-10-16)
+
+This page is the record of the night of 2026-09-30 and **none of it below is
+rewritten** - the status lines were true when they were written. What has landed
+since, checked by file on 2026-10-16:
+
+* **menu visibility - backend and desktop: built.** `backend/jarvis_menus.py`
+  (shipped whole) carries the backend half; the desktop has
+  `jarvis-desktop/src/menu-catalog.js`, `menu-visibility-settings.js` and
+  `menu-visibility.js`. The phone's `net/MenuVisibility.kt` and
+  `ui/screens/MenuVisibilityPlate.kt` are in the repository too; whether the
+  phone half is finished is not judged here.
+* **desktop YouTube screens: built.** `jarvis-desktop/src-tauri/src/brain/youtube.rs`,
+  and `tools/check_parity.py` lists all four `/api/youtube` routes as **ported**.
+* **cloud-grade phone + desktop screens: built.**
+  `jarvis-desktop/src-tauri/src/brain/quiz_cloud.rs` and
+  `jarvis-client/app/src/main/java/com/jarvis/client/net/QuizCloud.kt`.
+* **GitHub tools: still not built**, exactly as the line below says -
+  `docs/GITHUB-TOOLS-DESIGN.md` still reads "designed, not built".
+* The "Keep-on-outside-quiz" owner question is not checked here.
+
 | # | Item | Design doc | JARVIS-API § | Needs first |
 |---|---|---|---|---|
 | 0 | Quiz audit fixes (in progress) | STUDY-FROM-TEXT-DESIGN | 98 | - |
