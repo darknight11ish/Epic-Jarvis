@@ -28,6 +28,7 @@
   "app_denied": {
    "ok": true,
    "project": {
+    "active": false,
     "app": {
      "git_ok": true,
      "main": {
@@ -63,6 +64,10 @@
      "title": "Notes app",
      "type": "web"
     },
+    "auto_route_cloud": false,
+    "auto_route_last": null,
+    "auto_route_waiting": false,
+    "auto_route_waiting_words": "",
     "benchmark_list": [],
     "benchmarks": 0,
     "changed": 1790000000.0,
@@ -80,6 +85,8 @@
     },
     "name": "Notes app",
     "notes": [],
+    "routing": "Local-Only",
+    "routing_why": "Not Shareable, so nothing from this project is ever offered to a cloud lane.",
     "shareable": false,
     "shareable_last": null,
     "shareable_waiting": false,
@@ -93,6 +100,7 @@
   "app_fresh": {
    "ok": true,
    "project": {
+    "active": false,
     "app": {
      "git_ok": true,
      "main": {
@@ -111,6 +119,10 @@
      "title": "Notes app",
      "type": "web"
     },
+    "auto_route_cloud": false,
+    "auto_route_last": null,
+    "auto_route_waiting": false,
+    "auto_route_waiting_words": "",
     "benchmark_list": [],
     "benchmarks": 0,
     "changed": 1790000000.0,
@@ -128,6 +140,8 @@
     },
     "name": "Notes app",
     "notes": [],
+    "routing": "Local-Only",
+    "routing_why": "Not Shareable, so nothing from this project is ever offered to a cloud lane.",
     "shareable": false,
     "shareable_last": null,
     "shareable_waiting": false,
@@ -141,6 +155,7 @@
   "app_merged": {
    "ok": true,
    "project": {
+    "active": false,
     "app": {
      "git_ok": true,
      "main": {
@@ -176,6 +191,10 @@
      "title": "Notes app",
      "type": "web"
     },
+    "auto_route_cloud": false,
+    "auto_route_last": null,
+    "auto_route_waiting": false,
+    "auto_route_waiting_words": "",
     "benchmark_list": [],
     "benchmarks": 0,
     "changed": 1790000000.0,
@@ -193,6 +212,8 @@
     },
     "name": "Notes app",
     "notes": [],
+    "routing": "Local-Only",
+    "routing_why": "Not Shareable, so nothing from this project is ever offered to a cloud lane.",
     "shareable": false,
     "shareable_last": null,
     "shareable_waiting": false,
@@ -206,6 +227,7 @@
   "app_no_git": {
    "ok": true,
    "project": {
+    "active": false,
     "app": {
      "git_ok": false,
      "main": null,
@@ -219,6 +241,10 @@
      "title": "Notes app",
      "type": "web"
     },
+    "auto_route_cloud": false,
+    "auto_route_last": null,
+    "auto_route_waiting": false,
+    "auto_route_waiting_words": "",
     "benchmark_list": [],
     "benchmarks": 0,
     "changed": 1790000000.0,
@@ -236,6 +262,8 @@
     },
     "name": "Notes app",
     "notes": [],
+    "routing": "Local-Only",
+    "routing_why": "Not Shareable, so nothing from this project is ever offered to a cloud lane.",
     "shareable": false,
     "shareable_last": null,
     "shareable_waiting": false,
@@ -249,6 +277,7 @@
   "app_tasks": {
    "ok": true,
    "project": {
+    "active": false,
     "app": {
      "git_ok": true,
      "main": {
@@ -290,6 +319,10 @@
      "title": "Notes app",
      "type": "web"
     },
+    "auto_route_cloud": false,
+    "auto_route_last": null,
+    "auto_route_waiting": false,
+    "auto_route_waiting_words": "",
     "benchmark_list": [],
     "benchmarks": 0,
     "changed": 1790000000.0,
@@ -307,6 +340,8 @@
     },
     "name": "Notes app",
     "notes": [],
+    "routing": "Local-Only",
+    "routing_why": "Not Shareable, so nothing from this project is ever offered to a cloud lane.",
     "shareable": false,
     "shareable_last": null,
     "shareable_waiting": false,
@@ -320,6 +355,7 @@
   "app_waiting": {
    "ok": true,
    "project": {
+    "active": false,
     "app": {
      "git_ok": true,
      "main": {
@@ -361,6 +397,10 @@
      "title": "Notes app",
      "type": "web"
     },
+    "auto_route_cloud": false,
+    "auto_route_last": null,
+    "auto_route_waiting": false,
+    "auto_route_waiting_words": "",
     "benchmark_list": [],
     "benchmarks": 0,
     "changed": 1790000000.0,
@@ -378,6 +418,8 @@
     },
     "name": "Notes app",
     "notes": [],
+    "routing": "Local-Only",
+    "routing_why": "Not Shareable, so nothing from this project is ever offered to a cloud lane.",
     "shareable": false,
     "shareable_last": null,
     "shareable_waiting": false,
@@ -579,7 +621,12 @@
   "coding": {
    "ok": true,
    "project": {
+    "active": false,
     "app": null,
+    "auto_route_cloud": false,
+    "auto_route_last": null,
+    "auto_route_waiting": false,
+    "auto_route_waiting_words": "",
     "benchmark_list": [
      {
       "better": "higher",
@@ -652,6 +699,8 @@
     },
     "name": "Jarvis Desktop",
     "notes": [],
+    "routing": "Local-Only",
+    "routing_why": "Not Shareable, so nothing from this project is ever offered to a cloud lane.",
     "shareable": false,
     "shareable_last": null,
     "shareable_waiting": false,
@@ -665,7 +714,12 @@
   "life": {
    "ok": true,
    "project": {
+    "active": false,
     "app": null,
+    "auto_route_cloud": false,
+    "auto_route_last": null,
+    "auto_route_waiting": false,
+    "auto_route_waiting_words": "",
     "benchmark_list": [
      {
       "better": "higher",
@@ -809,6 +863,8 @@
      "Long runs on Sundays",
      "Knee: stop if it hurts"
     ],
+    "routing": "Local-Only",
+    "routing_why": "Not Shareable, so nothing from this project is ever offered to a cloud lane.",
     "shareable": false,
     "shareable_last": null,
     "shareable_waiting": false,
@@ -822,7 +878,12 @@
   "life_answered": {
    "ok": true,
    "project": {
+    "active": false,
     "app": null,
+    "auto_route_cloud": false,
+    "auto_route_last": null,
+    "auto_route_waiting": false,
+    "auto_route_waiting_words": "",
     "benchmark_list": [
      {
       "better": "higher",
@@ -971,6 +1032,8 @@
      "Long runs on Sundays",
      "Knee: stop if it hurts"
     ],
+    "routing": "Local-Only",
+    "routing_why": "Not Shareable, so nothing from this project is ever offered to a cloud lane.",
     "shareable": false,
     "shareable_last": {
      "at": 1790000000.0,
@@ -989,7 +1052,12 @@
   "life_waiting": {
    "ok": true,
    "project": {
+    "active": false,
     "app": null,
+    "auto_route_cloud": false,
+    "auto_route_last": null,
+    "auto_route_waiting": false,
+    "auto_route_waiting_words": "",
     "benchmark_list": [
      {
       "better": "higher",
@@ -1133,6 +1201,8 @@
      "Long runs on Sundays",
      "Knee: stop if it hurts"
     ],
+    "routing": "Local-Only",
+    "routing_why": "Not Shareable, so nothing from this project is ever offered to a cloud lane.",
     "shareable": false,
     "shareable_last": null,
     "shareable_waiting": true,
@@ -1150,12 +1220,17 @@
    "ok": true,
    "projects": [
     {
+     "active": false,
      "app": {
       "merge_waiting": false,
       "name": "notes-app",
       "tasks": 1,
       "type": "web"
      },
+     "auto_route_cloud": false,
+     "auto_route_last": null,
+     "auto_route_waiting": false,
+     "auto_route_waiting_words": "",
      "benchmarks": 0,
      "changed": 1790000000.0,
      "created": 1790000000.0,
@@ -1164,6 +1239,8 @@
      "id": "00000000000000000000000000000001",
      "kind": "coding",
      "name": "Notes app",
+     "routing": "Local-Only",
+     "routing_why": "Not Shareable, so nothing from this project is ever offered to a cloud lane.",
      "shareable": false,
      "shareable_last": null,
      "shareable_waiting": false,
@@ -1174,12 +1251,17 @@
      }
     },
     {
+     "active": false,
      "app": {
       "merge_waiting": false,
       "name": "old-notes",
       "tasks": 0,
       "type": "android"
      },
+     "auto_route_cloud": false,
+     "auto_route_last": null,
+     "auto_route_waiting": false,
+     "auto_route_waiting_words": "",
      "benchmarks": 0,
      "changed": 1790000000.0,
      "created": 1790000000.0,
@@ -1188,6 +1270,8 @@
      "id": "00000000000000000000000000000002",
      "kind": "coding",
      "name": "Old notes",
+     "routing": "Local-Only",
+     "routing_why": "Not Shareable, so nothing from this project is ever offered to a cloud lane.",
      "shareable": false,
      "shareable_last": null,
      "shareable_waiting": false,
@@ -1208,12 +1292,17 @@
    "ok": true,
    "projects": [
     {
+     "active": false,
      "app": {
       "merge_waiting": false,
       "name": "old-notes",
       "tasks": 0,
       "type": "android"
      },
+     "auto_route_cloud": false,
+     "auto_route_last": null,
+     "auto_route_waiting": false,
+     "auto_route_waiting_words": "",
      "benchmarks": 0,
      "changed": 1790000000.0,
      "created": 1790000000.0,
@@ -1222,6 +1311,8 @@
      "id": "00000000000000000000000000000002",
      "kind": "coding",
      "name": "Old notes",
+     "routing": "Local-Only",
+     "routing_why": "Not Shareable, so nothing from this project is ever offered to a cloud lane.",
      "shareable": false,
      "shareable_last": null,
      "shareable_waiting": false,
@@ -1232,7 +1323,12 @@
      }
     },
     {
+     "active": false,
      "app": null,
+     "auto_route_cloud": false,
+     "auto_route_last": null,
+     "auto_route_waiting": false,
+     "auto_route_waiting_words": "",
      "benchmarks": 0,
      "changed": 1790000000.0,
      "created": 1790000000.0,
@@ -1241,6 +1337,8 @@
      "id": "00000000000000000000000000000005",
      "kind": "life",
      "name": "Half marathon",
+     "routing": "Local-Only",
+     "routing_why": "Not Shareable, so nothing from this project is ever offered to a cloud lane.",
      "shareable": false,
      "shareable_last": null,
      "shareable_waiting": false,
@@ -1267,12 +1365,17 @@
    "ok": true,
    "projects": [
     {
+     "active": false,
      "app": {
       "merge_waiting": false,
       "name": "notes-app",
       "tasks": 0,
       "type": "web"
      },
+     "auto_route_cloud": false,
+     "auto_route_last": null,
+     "auto_route_waiting": false,
+     "auto_route_waiting_words": "",
      "benchmarks": 0,
      "changed": 1790000000.0,
      "created": 1790000000.0,
@@ -1281,6 +1384,8 @@
      "id": "00000000000000000000000000000001",
      "kind": "coding",
      "name": "Notes app",
+     "routing": "Local-Only",
+     "routing_why": "Not Shareable, so nothing from this project is ever offered to a cloud lane.",
      "shareable": false,
      "shareable_last": null,
      "shareable_waiting": false,
@@ -1316,7 +1421,12 @@
    "ok": true,
    "projects": [
     {
+     "active": false,
      "app": null,
+     "auto_route_cloud": false,
+     "auto_route_last": null,
+     "auto_route_waiting": false,
+     "auto_route_waiting_words": "",
      "benchmarks": 4,
      "changed": 1790000000.0,
      "created": 1790000000.0,
@@ -1325,6 +1435,8 @@
      "id": "00000000000000000000000000000001",
      "kind": "life",
      "name": "Half marathon",
+     "routing": "Local-Only",
+     "routing_why": "Not Shareable, so nothing from this project is ever offered to a cloud lane.",
      "shareable": false,
      "shareable_last": null,
      "shareable_waiting": false,
@@ -1335,7 +1447,12 @@
      }
     },
     {
+     "active": false,
      "app": null,
+     "auto_route_cloud": false,
+     "auto_route_last": null,
+     "auto_route_waiting": false,
+     "auto_route_waiting_words": "",
      "benchmarks": 2,
      "changed": 1790000000.0,
      "created": 1790000000.0,
@@ -1349,6 +1466,8 @@
      "id": "0000000000000000000000000000000d",
      "kind": "coding",
      "name": "Jarvis Desktop",
+     "routing": "Local-Only",
+     "routing_why": "Not Shareable, so nothing from this project is ever offered to a cloud lane.",
      "shareable": false,
      "shareable_last": null,
      "shareable_waiting": false,
@@ -3232,6 +3351,7 @@
    "body": {
     "ok": true,
     "project": {
+     "active": false,
      "app": {
       "git_ok": true,
       "main": {
@@ -3250,6 +3370,10 @@
       "title": "Old notes",
       "type": "android"
      },
+     "auto_route_cloud": false,
+     "auto_route_last": null,
+     "auto_route_waiting": false,
+     "auto_route_waiting_words": "",
      "benchmark_list": [],
      "benchmarks": 0,
      "changed": 1790000000.0,
@@ -3267,6 +3391,8 @@
      },
      "name": "Old notes",
      "notes": [],
+     "routing": "Local-Only",
+     "routing_why": "Not Shareable, so nothing from this project is ever offered to a cloud lane.",
      "shareable": false,
      "shareable_last": null,
      "shareable_waiting": false,
@@ -3283,6 +3409,7 @@
    "body": {
     "ok": true,
     "project": {
+     "active": false,
      "app": {
       "git_ok": false,
       "main": null,
@@ -3296,6 +3423,10 @@
       "title": "Notes app",
       "type": "web"
      },
+     "auto_route_cloud": false,
+     "auto_route_last": null,
+     "auto_route_waiting": false,
+     "auto_route_waiting_words": "",
      "benchmark_list": [],
      "benchmarks": 0,
      "changed": 1790000000.0,
@@ -3313,6 +3444,8 @@
      },
      "name": "Notes app",
      "notes": [],
+     "routing": "Local-Only",
+     "routing_why": "Not Shareable, so nothing from this project is ever offered to a cloud lane.",
      "shareable": false,
      "shareable_last": null,
      "shareable_waiting": false,
@@ -3404,6 +3537,7 @@
    "body": {
     "ok": true,
     "project": {
+     "active": false,
      "app": {
       "git_ok": true,
       "main": {
@@ -3422,6 +3556,10 @@
       "title": "Notes app",
       "type": "web"
      },
+     "auto_route_cloud": false,
+     "auto_route_last": null,
+     "auto_route_waiting": false,
+     "auto_route_waiting_words": "",
      "benchmark_list": [],
      "benchmarks": 0,
      "changed": 1790000000.0,
@@ -3439,6 +3577,8 @@
      },
      "name": "Notes app",
      "notes": [],
+     "routing": "Local-Only",
+     "routing_why": "Not Shareable, so nothing from this project is ever offered to a cloud lane.",
      "shareable": false,
      "shareable_last": null,
      "shareable_waiting": false,
@@ -3462,7 +3602,12 @@
    "body": {
     "ok": true,
     "project": {
+     "active": false,
      "app": null,
+     "auto_route_cloud": false,
+     "auto_route_last": null,
+     "auto_route_waiting": false,
+     "auto_route_waiting_words": "",
      "benchmark_list": [],
      "benchmarks": 0,
      "changed": 1790000000.0,
@@ -3485,6 +3630,8 @@
      },
      "name": "Jarvis Desktop",
      "notes": [],
+     "routing": "Local-Only",
+     "routing_why": "Not Shareable, so nothing from this project is ever offered to a cloud lane.",
      "shareable": false,
      "shareable_last": null,
      "shareable_waiting": false,
@@ -3501,7 +3648,12 @@
    "body": {
     "ok": true,
     "project": {
+     "active": false,
      "app": null,
+     "auto_route_cloud": false,
+     "auto_route_last": null,
+     "auto_route_waiting": false,
+     "auto_route_waiting_words": "",
      "benchmark_list": [],
      "benchmarks": 0,
      "changed": 1790000000.0,
@@ -3522,6 +3674,8 @@
       "Long runs on Sundays",
       "Knee: stop if it hurts"
      ],
+     "routing": "Local-Only",
+     "routing_why": "Not Shareable, so nothing from this project is ever offered to a cloud lane.",
      "shareable": false,
      "shareable_last": null,
      "shareable_waiting": false,
@@ -3538,7 +3692,12 @@
    "body": {
     "ok": true,
     "project": {
+     "active": false,
      "app": null,
+     "auto_route_cloud": false,
+     "auto_route_last": null,
+     "auto_route_waiting": false,
+     "auto_route_waiting_words": "",
      "benchmark_list": [],
      "benchmarks": 0,
      "changed": 1790000000.0,
@@ -3556,6 +3715,8 @@
      },
      "name": "Half marathon",
      "notes": [],
+     "routing": "Local-Only",
+     "routing_why": "Not Shareable, so nothing from this project is ever offered to a cloud lane.",
      "shareable": false,
      "shareable_last": null,
      "shareable_waiting": false,
@@ -3836,7 +3997,12 @@
     "message": "Shareable is off. Nothing from this project can be shared.",
     "ok": true,
     "project": {
+     "active": false,
      "app": null,
+     "auto_route_cloud": false,
+     "auto_route_last": null,
+     "auto_route_waiting": false,
+     "auto_route_waiting_words": "",
      "benchmark_list": [
       {
        "better": "higher",
@@ -3980,6 +4146,8 @@
       "Long runs on Sundays",
       "Knee: stop if it hurts"
      ],
+     "routing": "Local-Only",
+     "routing_why": "Not Shareable, so nothing from this project is ever offered to a cloud lane.",
      "shareable": false,
      "shareable_last": null,
      "shareable_waiting": false,
@@ -3997,7 +4165,12 @@
     "message": "Waiting for your approval. Shareable stays off unless you approve the card.",
     "ok": true,
     "project": {
+     "active": false,
      "app": null,
+     "auto_route_cloud": false,
+     "auto_route_last": null,
+     "auto_route_waiting": false,
+     "auto_route_waiting_words": "",
      "benchmark_list": [
       {
        "better": "higher",
@@ -4141,6 +4314,8 @@
       "Long runs on Sundays",
       "Knee: stop if it hurts"
      ],
+     "routing": "Local-Only",
+     "routing_why": "Not Shareable, so nothing from this project is ever offered to a cloud lane.",
      "shareable": false,
      "shareable_last": null,
      "shareable_waiting": true,

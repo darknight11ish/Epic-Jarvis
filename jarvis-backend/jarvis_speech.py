@@ -119,6 +119,23 @@ recognised by its files, so the install is "put the files in the folder":
         -> SenseVoice (smaller, multilingual)
     `sherpa_stt_kind` under [voice] overrides the guess.
 
+A SECOND, MULTILINGUAL PARAKEET. `csukuangfj/sherpa-onnx-nemo-parakeet-tdt-
+0.6b-v3-int8` is the same NeMo transducer shape - encoder.int8.onnx,
+decoder.int8.onnx, joiner.int8.onnx, tokens.txt, 670.5 MB for those four
+files - so the loader above reads it with no new code, only a name to find it
+by. With `[voice] sherpa_stt_parakeet_v3 = true` the same glob looks in
+`voice-models/stt/parakeet-tdt-0.6b-v3/` instead. OFF by default: the English
+model stays the default and today's accuracy does not move, and
+`sherpa_stt_dir` still overrides both. Its test clips include Spanish
+(`test_wavs/es.wav`), which is the part the English model cannot do.
+
+NOTHING HERE DOWNLOADS IT and these weights are not in this repository, so
+this switch is UNTESTED end to end against real v3 files. What test_speech.py
+proves is that the folder and the fallbacks are chosen correctly - not that
+v3 transcribes well, and not that it is faster. The licence and the language
+count came from the work order and were NOT verified here; check both before
+any of it ships (THIRD-PARTY-NOTICES.txt is where the credit would go).
+
 THE WAKE-WORD SWITCH IS AN APPROVAL CARD, since 2026-09-23. Turning it ON
 widens where Jarvis listens - `change_own_config`, tier "ask" - so
 `set_wake_enabled(True)` raises one card through `jarvis_gate.check()` on a
@@ -313,8 +330,42 @@ def _stt_engine_name() -> str:
     return str(_cfg("stt_engine", STT_ENGINE) or STT_ENGINE).strip()
 
 
+#: The second speech-to-text model lives in this folder BESIDE the default
+#: one, so switching to it cannot disturb the English model already on disk.
+#: Lower-case because it is a directory name, and it is the name the
+#: sherpa-onnx tarball unzips to.
+PARAKEET_V3_DIR_NAME = "parakeet-tdt-0.6b-v3"
+
+
+def _stt_v3_wanted() -> bool:
+    """`[voice] sherpa_stt_parakeet_v3` - OFF unless it really says true.
+
+    A string is read as words rather than by `bool()`, because `bool("false")`
+    is True and a switch that turns ON when it is set to false is worse than
+    no switch at all. Nothing downloads the model; this only names a folder.
+    """
+    v = _cfg("sherpa_stt_parakeet_v3", False)
+    if isinstance(v, str):
+        return v.strip().lower() in ("1", "true", "on", "yes")
+    return v is True
+
+
 def _stt_dir() -> Path:
-    return Path(str(_cfg("sherpa_stt_dir", "") or (_models_dir() / "stt")))
+    """Where the speech-to-text files are looked for.
+
+    `sherpa_stt_dir` wins outright, as it always has. Otherwise the v3 folder
+    is used only while `sherpa_stt_parakeet_v3` is on; with it off - the
+    default, and what the shipped TOML says - this returns exactly what it
+    returned before the switch existed, so the model Jarvis loads today is
+    still the model it loads today.
+    """
+    named = str(_cfg("sherpa_stt_dir", "") or "").strip()
+    if named:
+        return Path(named)
+    base = _models_dir() / "stt"
+    if _stt_v3_wanted():
+        return base / PARAKEET_V3_DIR_NAME
+    return base
 
 
 def _first(d: Path, *names: str) -> str:

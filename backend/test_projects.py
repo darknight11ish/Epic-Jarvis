@@ -93,6 +93,11 @@ require_shipped("jarvis_projects.py", "jarvis_quick.py", "jarvis_schedule.py",
                 "jarvis_documents.py", "jarvis_sensitive.py")
 
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-projects-"))
+#: Every project edit in this suite now leaves a receipt. Pointed at this
+#: suite's own temporary folder BEFORE jarvis_receipts is imported, so a test
+#: run can never write into the owner's real one (the same shape as
+#: test_receipts.py's own SCRATCH).
+os.environ["JARVIS_RECEIPTS_DB"] = str(_TMP / "receipts.db")
 _AUDIT = []
 fw = types.ModuleType("jarvis_framework")
 fw.CONFIG_DIR = _TMP
@@ -1985,6 +1990,316 @@ def t_a_project_call_does_not_leave_its_database_file_open():
     check("... so the folder holding it can be removed at once, the way a suite's "
           "temporary folder is removed (on Windows an open handle refuses this)",
           removed, why)
+
+
+# --------------------------------------------------------------------------
+#   Project Mode (design step 4): the active project, the Auto-Route card, the
+#   context a turn is given, the routing gate, and the writer that was missing
+# --------------------------------------------------------------------------
+
+def _no_mode_file():
+    """Every one of these starts with no project active."""
+    try:
+        P.mode_path().unlink()
+    except FileNotFoundError:
+        pass
+
+
+class _Card:
+    def __init__(self, allowed, outcome, tier="ask"):
+        self.allowed, self.outcome, self.tier = allowed, outcome, tier
+
+
+def _gate_says(cards, verdict):
+    def g(action, detail, prompt):
+        cards.append((action, detail, prompt))
+        return verdict
+    return g
+
+
+def t_the_active_project_is_never_a_guess():
+    s = fresh()
+    p = s.create({"name": "Tea shop", "kind": "life"}, here=False)
+    _no_mode_file()
+    check("no project is active to begin with", P.active_project_id() is None)
+    check("entering Project Mode answers the id",
+          P.set_active_project(p["id"], store=s) == p["id"])
+    check("... the file says so", P.active_project_id() == p["id"])
+    check("... and the project's own view says it is the active one",
+          s.get(p["id"])["active"] is True)
+    check("leaving is instant", P.set_active_project(None, store=s) is None
+          and P.active_project_id() is None)
+    check("an id that is not an id is refused, not written",
+          raises(lambda: P.set_active_project("../../etc/passwd", store=s)) != ""
+          and P.active_project_id() is None)
+    check("a project that does not exist is refused",
+          raises(lambda: P.set_active_project("0" * 32, store=s)) != ""
+          and P.active_project_id() is None)
+    P.mode_path().write_text("{ this is not json at all", encoding="utf-8")
+    check("a state file that will not parse answers None, never raises",
+          P.active_project_id() is None)
+    P.mode_path().write_text('{"active_project_id": "not-an-id"}', encoding="utf-8")
+    check("an id-shaped check is applied to what is read back",
+          P.active_project_id() is None)
+    _no_mode_file()
+
+
+def t_auto_route_off_is_instant_and_on_is_one_card():
+    s = fresh()
+    p = s.create({"name": "App", "kind": "coding"}, here=True)
+    check("Auto-Route starts off", s.get(p["id"])["auto_route_cloud"] is False)
+    check("an ordinary edit cannot turn it on",
+          "asks you first" in raises(lambda: s.update(
+              p["id"], {"auto_route_cloud": True}, here=True)))
+    cards = []
+    def _no_card(*a):
+        raise AssertionError("OFF raised a card")
+    code, _ = P.request_auto_route(p["id"], {"on": False}, store=s,
+                                   gate=_no_card, tier_of=lambda a: "ask",
+                                   spawn=lambda fn: fn())
+    check("OFF is instant and raises NO card", code == 200 and cards == [], code)
+    check("... and it is off", s.get(p["id"])["auto_route_cloud"] is False)
+    code, out = P.request_auto_route(p["id"], {"on": True}, store=s,
+                                     gate=_gate_says(cards, _Card(True, "approved")),
+                                     tier_of=lambda a: "ask", spawn=lambda fn: fn())
+    check("ON while the project is NOT Shareable is refused, and no card is raised",
+          code == 409 and cards == [] and "Shareable first" in out["error"], out)
+    s.set_shareable_on(p["id"])
+    code, _ = P.request_auto_route(p["id"], {"on": True}, store=s,
+                                   gate=_gate_says(cards, _Card(False, "denied")),
+                                   tier_of=lambda a: "ask", spawn=lambda fn: fn())
+    check("ON raises exactly ONE change_own_config card",
+          code == 202 and len(cards) == 1 and cards[0][0] == "change_own_config",
+          (code, cards))
+    check("the card names the question, and says every send is carded too",
+          "cloud lane" in cards[0][2] and "never automatic" in cards[0][2]
+          and "health or money" in cards[0][2] and "nothing changes" in cards[0][2],
+          cards[0][2])
+    check("a NO leaves it off, and says so",
+          s.get(p["id"])["auto_route_cloud"] is False
+          and s.get(p["id"])["auto_route_last"]["outcome"] == "denied")
+    P.request_auto_route(p["id"], {"on": True}, store=s,
+                         gate=_gate_says(cards, _Card(False, "timed_out")),
+                         tier_of=lambda a: "ask", spawn=lambda fn: fn())
+    check("a timed-out card leaves it off", s.get(p["id"])["auto_route_cloud"] is False)
+    P.request_auto_route(p["id"], {"on": True}, store=s,
+                         gate=_gate_says(cards, _Card(True, "approved", tier="auto")),
+                         tier_of=lambda a: "ask", spawn=lambda fn: fn())
+    check("CONTROL: a yes at the WRONG tier is not a person saying yes - rule 4",
+          s.get(p["id"])["auto_route_cloud"] is False
+          and s.get(p["id"])["auto_route_last"]["outcome"] == "refused")
+    P.request_auto_route(p["id"], {"on": True}, store=s,
+                         gate=_gate_says(cards, _Card(True, "approved")),
+                         tier_of=lambda a: "ask", spawn=lambda fn: fn())
+    check("a real yes turns it on", s.get(p["id"])["auto_route_cloud"] is True)
+    check("a second ON says it is already on, and raises no card",
+          P.request_auto_route(p["id"], {"on": True}, store=s, gate=_no_card,
+                               tier_of=lambda a: "ask",
+                               spawn=lambda fn: fn())[0] == 200)
+    check("the gate's own tier must be 'ask', or it refuses rather than carding",
+          P.request_auto_route(p["id"], {"on": False}, store=s, gate=_no_card,
+                               tier_of=lambda a: "ask",
+                               spawn=lambda fn: fn())[0] == 200
+          and P.request_auto_route(p["id"], {"on": True}, store=s, gate=_no_card,
+                                   tier_of=lambda a: "auto",
+                                   spawn=lambda fn: fn())[0] == 503)
+    P.request_auto_route(p["id"], {"on": False}, store=s, gate=_no_card,
+                         tier_of=lambda a: "ask", spawn=lambda fn: fn())
+    check("... and OFF after all that is instant again",
+          s.get(p["id"])["auto_route_cloud"] is False)
+    check("a body that is not true/false is refused",
+          P.request_auto_route(p["id"], {"on": "yes"}, store=s, gate=_no_card,
+                               tier_of=lambda a: "ask", spawn=lambda fn: fn())[0] == 400)
+
+
+def t_the_routing_gate_needs_all_three_and_absence_means_local():
+    s = fresh()
+    p = s.create({"name": "App", "kind": "coding"}, here=True)
+    _no_mode_file()
+    check("no active project: local, and it says so",
+          P.route_for_turn("hello", store=s)["lane"] == "local"
+          and "No project" in P.route_for_turn("hello", store=s)["why"])
+    P.set_active_project(p["id"], store=s)
+    check("active but NOT Shareable: local",
+          P.route_for_turn("hello", store=s)["lane"] == "local")
+    check("... and it names Shareable as the reason",
+          "not Shareable" in P.route_for_turn("hello", store=s)["why"])
+    s.set_shareable_on(p["id"])
+    got = P.route_for_turn("hello", store=s)
+    check("Shareable but Auto-Route OFF: local", got["lane"] == "local", got)
+    check("... and the pill is still Local-Only", got["routing"] == "Local-Only", got)
+    s.set_auto_route_cloud_on(p["id"])
+
+    real = sys.modules.get("jarvis_auto_router", "<missing>")
+    sys.modules["jarvis_auto_router"] = None      # `import` now raises
+    try:
+        got = P.route_for_turn("hello", store=s)
+    finally:
+        if real == "<missing>":
+            del sys.modules["jarvis_auto_router"]
+        else:
+            sys.modules["jarvis_auto_router"] = real
+    check("ALL THREE on but the router is not installed: LOCAL, not a crash",
+          got["lane"] == "local" and got["recommended"] is False, got)
+    check("... and it says the router is not available",
+          "not available" in got["why"], got.get("why"))
+
+    mod = types.ModuleType("jarvis_auto_router")
+    calls = {}
+
+    def advises(prompt, context_tokens=0, active_project=None, **kw):
+        calls.update(prompt=prompt, tokens=context_tokens, project=active_project)
+        return {"lane": "jarvis-escalate", "recommended": True,
+                "would_send": "[scrubbed words]", "why": "worth leaving the PC"}
+    mod.evaluate_route = advises
+    sys.modules["jarvis_auto_router"] = mod
+    try:
+        got = P.route_for_turn("a hard question", context_tokens=1234, store=s)
+    finally:
+        if real == "<missing":
+            del sys.modules["jarvis_auto_router"]
+        else:
+            sys.modules["jarvis_auto_router"] = real
+    check("all three on and the router advises: the lane it named",
+          got["lane"] == "jarvis-escalate" and got["recommended"] is True, got)
+    check("... called exactly the frozen contract",
+          calls.get("prompt") == "a hard question" and calls.get("tokens") == 1234
+          and isinstance(calls.get("project"), dict), calls)
+    check("... and the pill says Auto-Route to Cloud",
+          got["routing"] == "Local / Auto-Route to Cloud", got)
+
+    mod.evaluate_route = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))
+    sys.modules["jarvis_auto_router"] = mod
+    try:
+        got = P.route_for_turn("hello", store=s)
+    finally:
+        if real == "<missing":
+            del sys.modules["jarvis_auto_router"]
+        else:
+            sys.modules["jarvis_auto_router"] = real
+    check("a router that RAISES still means local", got["lane"] == "local", got)
+
+    mod.evaluate_route = lambda *a, **k: "not a dict"
+    sys.modules["jarvis_auto_router"] = mod
+    try:
+        got = P.route_for_turn("hello", store=s)
+    finally:
+        if real == "<missing":
+            del sys.modules["jarvis_auto_router"]
+        else:
+            sys.modules["jarvis_auto_router"] = real
+    check("advice this cannot read still means local", got["lane"] == "local", got)
+
+    mod.evaluate_route = lambda *a, **k: {"lane": "jarvis-escalate",
+                                          "recommended": False, "why": "too easy"}
+    sys.modules["jarvis_auto_router"] = mod
+    try:
+        got = P.route_for_turn("hello", store=s)
+    finally:
+        if real == "<missing":
+            del sys.modules["jarvis_auto_router"]
+        else:
+            sys.modules["jarvis_auto_router"] = real
+    check("a lane named without `recommended` is advice, not permission",
+          got["lane"] == "local", got)
+    P.set_active_project(None, store=s)
+
+
+def t_the_project_context_is_the_project_and_never_a_private_number():
+    s = fresh()
+    p = s.create({"name": "App", "kind": "coding", "instructions": "Use pytest."},
+                 here=True)
+    s.update(p["id"], {"notes": ["Pinned one"], "goals": ["step-1"]}, here=True)
+    s.add_benchmark(p["id"], {"name": "Tests passing", "kind": "number",
+                              "unit": "", "better": "higher"}, here=True)
+    s.add_benchmark(p["id"], {"name": "Weight", "kind": "number", "unit": "kg"},
+                    here=True)
+    first = s.get(p["id"])["benchmark_list"][0]["id"]
+    s.log(p["id"], first, 12)
+    P.set_active_project(p["id"], store=s)
+    ctx = P.project_context(store=s)
+    check("the active project's own instructions are in it",
+          ctx["active"] is True and ctx["instructions"] == "Use pytest.", ctx)
+    check("... its pinned notes and goals too",
+          ctx["pinned_notes"] == ["Pinned one"] and ctx["goals"] == ["step-1"], ctx)
+    names = [b["name"] for b in ctx["benchmarks"]]
+    check("... and its benchmarks, by name", "Tests passing" in names, names)
+    check("a PRIVATELY marked benchmark is NOT put in front of a model",
+          "Weight" not in names and ctx["held_back"] == 1, ctx)
+    check("... and the sentence says one was held back",
+          "private" in ctx["benchmarks_words"], ctx["benchmarks_words"])
+    check("the pill is Local-Only while Shareable is off",
+          ctx["routing"] == "Local-Only", ctx["routing"])
+    s.set_shareable_on(p["id"])
+    check("... still Local-Only with Auto-Route off",
+          P.project_context(store=s)["routing"] == "Local-Only")
+    s.set_auto_route_cloud_on(p["id"])
+    check("... and Auto-Route to Cloud only when BOTH switches are on",
+          P.project_context(store=s)["routing"] == "Local / Auto-Route to Cloud")
+    P.set_active_project(None, store=s)
+    off = P.project_context(store=s)
+    check("no active project: no context at all, and it says why",
+          off["active"] is False and off["instructions"] == ""
+          and "No project" in off["why"], off)
+
+
+def t_a_project_edit_leaves_a_receipt_and_undo_cannot_flip_a_switch():
+    s = fresh()
+    p = s.create({"name": "App", "kind": "coding"}, here=True)
+    s.set_shareable_on(p["id"])
+    s.set_auto_route_cloud_on(p["id"])
+    s.update(p["id"], {"instructions": "First"}, here=True)
+    try:
+        import jarvis_receipts as R
+    except Exception as exc:                    # pragma: no cover
+        skip(f"jarvis_receipts is not importable here ({type(exc).__name__})")
+        return
+    row = next((r for r in (R.recent(limit=40) or [])
+                if r.get("tool_name") == "project_edit"), None)
+    check("an edit leaves a project_edit receipt", row is not None, row)
+    if row is None:
+        return
+    check("... naming the project edited", "App" in json.dumps(row), json.dumps(row)[:200])
+    s.update(p["id"], {"instructions": "Second"}, here=True)
+    P.restore_project(p["id"], {"name": "App", "instructions": "First", "notes": [],
+                                "goals": [], "work_list": None, "folder": None}, store=s)
+    now = s.get(p["id"])
+    check("Undo puts the words back", now["instructions"] == "First", now["instructions"])
+    check("... and CANNOT turn Shareable back on through Undo (rule 4)",
+          now["shareable"] is True)
+    check("... nor Auto-Route", now["auto_route_cloud"] is True)
+    check("... because neither switch is an undoable field",
+          "shareable" not in P.UNDOABLE_FIELDS
+          and "auto_route_cloud" not in P.UNDOABLE_FIELDS, P.UNDOABLE_FIELDS)
+
+
+def t_the_writer_that_was_missing_is_in_the_conversation_insert():
+    """Step 4's own bug: the `project` column has existed since step 1 with
+    nothing filling it. This is the source check that the writer is there, and
+    that it reads the ACTIVE project rather than a value passed down from a
+    caller this repository does not own (jarvis_hud.py is the owner's)."""
+    import jarvis_chat_log as C
+    _no_mode_file()
+    check("with no project active the writer's own reader answers None",
+          C._active_project_id() is None)
+    s = fresh()
+    p = s.create({"name": "App", "kind": "coding"}, here=True)
+    P.set_active_project(p["id"], store=s)
+    check("with one active it reads that project",
+          C._active_project_id() == p["id"])
+    P.mode_path().write_text("{oops", encoding="utf-8")
+    check("a broken state file means NO project, never a raise",
+          C._active_project_id() is None)
+    _no_mode_file()
+    flat = " ".join((HERE / "jarvis_chat_log.py").read_text(
+        encoding="utf-8").replace('"', " ").split())
+    check("the conversation INSERT carries `project`",
+          "INSERT INTO conversations (id, title, started, updated, device,"
+          " kind, project) VALUES" in flat)
+    check("... and fills it from the active project",
+          "_active_project_id()))" in flat)
+    check("... and an older chat joins the project once, never overwritten",
+          "project IS NULL" in flat and "_fill_project(c, cid)" in flat)
 
 
 def main():

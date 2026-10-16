@@ -480,6 +480,7 @@ def read_register(register: Path = REGISTER):
     if not register.is_file():
         return rows, [f"{relative(register)} does not exist"]
     seen: dict[str, int] = {}
+    seen_bodies: dict[tuple, int] = {}
     for number, raw in enumerate(
             register.read_text(encoding="utf-8").splitlines(), start=1):
         if not raw.strip() or raw.lstrip().startswith("#"):
@@ -504,6 +505,23 @@ def read_register(register: Path = REGISTER):
                             f"{row['id']!r} was already used on line "
                             f"{seen[row['id']]}")
         seen[row["id"]] = number
+        # A row repeated under a DIFFERENT id is one claim counted twice, so
+        # the register reads as two claims and the summary counts two - and the
+        # id check just above cannot see it, because the ids differ. That is how
+        # it shipped: on 2026-10-14 `a348f6e8` inserted a byte-identical copy of
+        # E04 as E05 - 743 characters each, differing only in the id - and this
+        # tool exited 0 while reporting one claim as two. The count it prints is
+        # the number a reader trusts, so this is the more dangerous miss.
+        # EVERY column must match, the id aside: a row differing only in its
+        # source is still one claim counted twice.
+        body = tuple(parts[1:])
+        if body in seen_bodies:
+            problems.append(
+                f"{relative(register)}:{number}  {row['id']} repeats the claim "
+                f"on line {seen_bodies[body]} - every column but the id is "
+                f"identical, so the register counts one claim twice")
+        else:
+            seen_bodies[body] = number
         if row["state"] == "unverifiable":
             first = row["check"].split(":", 1)[0].strip()
             if first in KINDS:
