@@ -1534,6 +1534,33 @@ $PATCHES = @(
     # approval card (the same shape as a timer or a note). Sending a picture
     # anywhere would be a new named way out of the PC, and no route here does.
     'pictures.patch'
+    # The two payload mismatches on /api/initiative - the half that needs the
+    # ROUTE's own body changed (2026-10-15). The phone's "Findings" note reads
+    # a `checks` count out of that body (jarvis-client BrainScreen.kt:2503-2509,
+    # top-level or under "status"), and the route never sent one, so it said
+    # "no background checks have been built" whether the engine had a check
+    # registered or none. ONE hunk in jarvis_hud.py, on the route's own return
+    # line, and no other line: it adds `"checks": len(_ENGINE.watchers) if
+    # _ENGINE else 0` beside the `available` and `items` that route already
+    # sends. The other half of the same pair is in rebuilt/jarvis_initiative.py
+    # (drain() mirrors level/check/message flat onto each row), which is
+    # $SHIPPED, so that half needs no patch.
+    #
+    # WHY A PATCH AT ALL: jarvis_hud.py is NOT in $SHIPPED - it is one of the
+    # files this stack delivers - so an edit to the copy in the repository
+    # (jarvis-backend/jarvis_hud.py, the published base) would never reach the
+    # owner's install.
+    #
+    # Its context is the /api/initiative route block, which no patch in this
+    # list writes (memory-pane.patch edits the path-LIST line above it, not
+    # this block), so it is order-independent among the core patches; it sits
+    # immediately BEFORE plugin-loader.patch, which must stay LAST OF ALL
+    # (test_gate_touches.py, test_uncensored_optins.py): every core patch goes
+    # above the loader, and only drop-in folders come after it. It ships no
+    # module (so no $SHIPPED entry), adds no route, touches no gate list and
+    # wires no startup call. backend/test_jobs.py rehearses it against
+    # jarvis-backend/jarvis_hud.py: apply, reverse, byte for byte.
+    'initiative-payload.patch'
     'plugin-loader.patch'
 )
 

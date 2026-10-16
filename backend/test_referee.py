@@ -782,7 +782,15 @@ def t_the_patch_and_the_lists():
              # big-coder.patch (2026-10-11) is appended after it, before
              # plugin-loader.patch: two ADDED route blocks in jarvis_hud.py, no
              # gate list, no tier row and no _RISK row.
-             "big-coder.patch"}
+             "big-coder.patch",
+             # initiative-payload.patch (2026-10-15) is appended after it, before
+             # plugin-loader.patch: ONE hunk in jarvis_hud.py, on the
+             # /api/initiative route's own return line, adding the `checks` count
+             # the phone's "Findings" note reads. It removes and adds that one
+             # line and touches jarvis_gate.py not at all - no gate list entry,
+             # no tier row, no _RISK row - so it rewrites nothing referee.patch
+             # wrote.
+             "initiative-payload.patch"}
     check("referee.patch is the last patch in apply-patches.ps1's list, bar the ones written after it",
           [n for n in order if n not in later][-1] == "referee.patch", order[-3:])
     gate, log = _stack.stand_in("jarvis_gate.py")

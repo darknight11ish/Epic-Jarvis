@@ -716,7 +716,16 @@ def t_the_patch_is_registered_and_carries_the_change():
              # plugin-loader.patch, and it touches jarvis_gate.py not at all
              # (ONE hunk, in jarvis_hud.py, ADDING one install block at the end
              # of the chain), so it rewrites nothing this patch wrote.
-             "pictures.patch"}
+             "pictures.patch",
+             # initiative-payload.patch (2026-10-15) takes the same advice: it
+             # is appended between pictures.patch and plugin-loader.patch (so,
+             # before the loader too), and it touches jarvis_gate.py not at all
+             # - ONE hunk, in jarvis_hud.py, on the /api/initiative route's own
+             # return line, which no patch in this list writes. It rewrites
+             # nothing this patch wrote: gate-touches.patch's two hunks are
+             # under `_PROTECTED`/`_PROTECTED_RE` and at check()'s own
+             # `hit = _touches_protected(...)` call, hundreds of lines away.
+             "initiative-payload.patch"}
     others = [n for n in names if n not in later]
     check("it is LAST in the stack, bar the ones written after it, and bar "
           "plugin-loader.patch (which must be last of all)",

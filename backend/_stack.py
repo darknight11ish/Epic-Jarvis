@@ -220,7 +220,43 @@ RATCHET = {
     #     (`attention-settings.patch` 2, `limits-settings.patch` absent) - the new
     #     hunk costs one and the limits patch gives one back. A ratchet: it may
     #     still only go down.
-    "jarvis_hud.py": 51,
+    # RAISED 2026-10-15, 51 -> 52, for `initiative-payload.patch`'s ONLY hunk, and
+    # it is honest rather than drift - the patch is in `by_patch` at 1:
+    #
+    #   * The phone's "Findings" note reads a `checks` count out of the
+    #     `/api/initiative` body, and the route never sent one. The patch's one
+    #     hunk replaces that route's own return line -
+    #     `return self._send(200, {"available": bool(_ENGINE), "items": items})` -
+    #     with the same body plus `"checks": (len(_ENGINE.watchers) if _ENGINE
+    #     else 0)`, and does nothing else in the file.
+    #   * That return line, and the `pass` / `if card:` / `items.append(card)`
+    #     block above it that the hunk carries as context, are the OWNER's text:
+    #     no patch in this walk writes a line of that region. Every other match
+    #     for `/api/initiative` in `backend/*.patch` is a CONTEXT line of the
+    #     path-LIST line ~140 lines above - `memory-pane.patch` is the only one
+    #     that REWRITES anything there, and it stops at the list's own
+    #     continuation line. So the walk cannot rebuild this context and invents
+    #     its pre-image, which is the honest case this pin exists to record
+    #     rather than the drift it exists to catch.
+    #   * There is no anchor to move to, which is why the patch is not
+    #     re-anchored instead: the `/api/initiative` route block has no
+    #     patch-written line in it at all, and the nearest patched region is
+    #     `memory-pane.patch`'s path-list edit above it. Materialising is the
+    #     same cost `retrieve-count.patch` and `limits-read.patch` already pay
+    #     for the same reason.
+    #   * What it costs, said plainly: the walk cannot verify this hunk against
+    #     the owner's file. `jarvis-backend/jarvis_hud.py` - this repository's
+    #     copy of the state the whole stack leaves - holds the very line the
+    #     hunk anchors on, and `backend/test_jobs.py` rehearses the patch against
+    #     it (apply, reverse, byte for byte), which is the check this walk
+    #     cannot make - the same pairing `_stack.py`'s note above records for
+    #     `retrieve-count.patch`.
+    #   * Measured, not argued: `_stack.materialised("jarvis_hud.py")` reads 51
+    #     with the patch off the list and 52 with it on, and `by_patch` names
+    #     `initiative-payload.patch: 1`. A ratchet: it may still only go down,
+    #     and the pin has to move with a RAISING too - test_picture_card.py and
+    #     test_retrieve_count.py assert this number EQUALS what the walk measures.
+    "jarvis_hud.py": 52,
     #: 23, raised from 22 on 2026-10-06. PR #80's `gate-risk-rows.patch` is the
     #: one new patch this walk adds for this file, and its single hunk's context
     #: is text only the owner's PC holds: the short `"delete it and it is gone"`
