@@ -116,9 +116,13 @@ cannot be undone - and one card is raised at a time.
 WHICH TIER, AND WHY THIS MODULE DOES NOT DECIDE IT
 
 The tier comes from the owner's own settings file, read by `jarvis_gate`.
-`undo_action` is deliberately absent from `[autonomy.tiers]` in the shipped
-`jarvis-framework.toml`, so it takes `unknown_action_tier`, which is **"ask"**:
-one card per undo, by default, which is what this feature is for.
+`undo_action` has a line of its own there - `"ask"`, one card per undo, which is
+what this feature is for. It was a fall-through until 2026-10-16: with no line
+it took `unknown_action_tier`, which the shipped file also sets to "ask", so the
+card is the same one either way and the line only pins it. That is why the line
+exists rather than being left out: a fall-through depends on a setting that can
+be loosened later, and a name with no line anywhere is what `test_gate_names.py`
+reports as an action the gate cannot resolve.
 
 This module does NOT read that table itself and does not force the tier, and
 that is deliberate rather than an omission. `jarvis_gate.py` carries a list,
@@ -191,10 +195,12 @@ MAX_CALLABLES = 200
 #: on the phone, a heavy card) - stricter than the action it undoes, which is
 #: the safe direction to be wrong in.
 #:
-#: It is also absent from `[autonomy.tiers]`, so it takes
-#: `unknown_action_tier` - "ask", one card per undo. That absence is on
-#: purpose too: the module must not force the tier itself (see this file's
-#: docstring, "WHICH TIER, AND WHY THIS MODULE DOES NOT DECIDE IT").
+#: It also has a line of its own in the shipped `[autonomy.tiers]` - "ask", one
+#: card per undo (2026-10-16). With no line it took `unknown_action_tier`, which
+#: the same file sets to "ask", so the card is unchanged; the line pins it. The
+#: module still must not force the tier itself (see this file's docstring, "WHICH
+#: TIER, AND WHY THIS MODULE DOES NOT DECIDE IT") - the line is the settings
+#: file's decision, and the gate is the one reader that acts on it.
 UNDO_ACTION = "undo_action"
 
 LIST_PATH = "/api/receipts"
@@ -689,13 +695,15 @@ def _tier(action: str) -> str:
     reader that decides (see the file's docstring, "WHICH TIER, AND WHY THIS
     MODULE DOES NOT DECIDE IT"). What an app reads here is whether tapping
     Undo will put a card up, which in the shipped configuration it will:
-    `undo_action` is absent from `[autonomy.tiers]`, so it takes
-    `unknown_action_tier` - "ask". An unreadable settings file reads as "ask",
-    and the gate then decides for itself on its own fail-closed rule."""
-    try:
-        return str(fw.action_tier(action)) if fw is not None else "ask"
-    except Exception:
-        return "ask"
+    `[autonomy.tiers]` gives `undo_action` "ask" - a line of its own since
+    2026-10-16, and the `unknown_action_tier` fall-through it took before that is
+    also "ask". An unreadable settings file reads as "ask", and the gate then
+    decides for itself on its own fail-closed rule.
+
+    The try/except below was written twice, byte for byte, with the second copy
+    left unreachable behind the first `return` (removed 2026-10-16: dead code a
+    reader has to check twice is a small tax on every reader after that).
+    """
     try:
         return str(fw.action_tier(action)) if fw is not None else "ask"
     except Exception:
