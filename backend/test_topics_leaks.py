@@ -79,6 +79,12 @@ READERS = {
     "jarvis_data_health.py": ("mentions", "checks the file exists"),
     "jarvis_owned_tables.py": ("mentions", "which tables Epic-Jarvis made in memory.db"),
     "jarvis_chat_log.py": ("mentions", "a docstring names jarvis_memory.erase()"),
+    "jarvis_documents.py": ("mentions", "hybrid search: it imports jarvis_memory for the ONE "
+                                        "embedder (jarvis_documents.py:1345) and reads no fact - "
+                                        "documents are files on disk. The 'mentions' check below "
+                                        "proves it rather than taking it on trust: this module "
+                                        "has no .search() of the store. Found by CI's "
+                                        "backend-windows job on PR #485."),
     "jarvis_self_improve.py": ("mentions", "Phases 3-4 of the self-improvement design: it reads "
                                            "the PROGRAM's own source, never a fact. It names "
                                            "jarvis_memory once, in the list of modules that hold "
