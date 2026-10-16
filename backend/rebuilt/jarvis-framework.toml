@@ -621,6 +621,18 @@ phone_notifications_read = "ask"
 #     any tier but "ask" (jarvis_vault._person_said_yes).
 undo_action              = "ask"
 vault_put                = "ask"
+# A Notion export into an Obsidian vault (jarvis_notion_obsidian.py,
+# 2026-10-16). The SAME shape as the two lines above, and the first one this
+# check caught in CI rather than at the desk: the module raises a card for the
+# import and writes nothing until a person says yes, so the value here is the
+# tier it must resolve to - not a fall-through the owner could loosen.
+#
+# Why it needs a line of its own when /api/folders/import has none: that route
+# raises no card AT ALL, and its own docstring says why - the folder it writes
+# into was approved when it was put on the "Folders Jarvis may look in" list.
+# This importer writes a NEW tree of files into a vault that is on no list, so
+# there is nothing already approved to lean on and it asks.
+import_notion_export     = "ask"
 
 [self_modification]
 enabled = true
