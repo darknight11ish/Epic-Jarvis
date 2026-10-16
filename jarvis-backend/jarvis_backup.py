@@ -146,16 +146,17 @@ EXPLICITLY NOT BACKED UP (CLAUDE.md rule 3; the owner's own words)
     in-memory approval stamp, jarvis_owner_check.stamp, is gone the moment
     the backend restarts, so nothing written into approvals.db by a restore
     can forge an approval).
-  * FIVE more databases that were measured on 2026-10-13 and left out on
-    purpose - agents.db, audit.db, digest.db, sync_state.db and telemetry.db,
-    the five of the nineteen in the settings folder that are neither in
-    SOURCE_DBS nor approvals.db. Each one's reason is written beside it in
+  * SIX more databases that were measured on 2026-10-13 (five of them) and
+    2026-10-16 (the search index) and left out on purpose - agents.db,
+    audit.db, digest.db, sync_state.db and telemetry.db, plus
+    documents-index.db. Each one's reason is written beside it in
     `NOT_BACKED_UP` above, so the decision is recorded rather than inferred
     from its absence. In one line each: agents.db and digest.db are empty
     template tables the modules recreate, audit.db is a security trail rather
     than memory, sync_state.db holds sync cursors whose staleness loses data,
-    and telemetry.db is measurements of the machine with its writer switched
-    off by design.
+    telemetry.db is measurements of the machine with its writer switched off
+    by design, and documents-index.db is a derived ranking rebuilt from the
+    files it describes, holding no document text.
   * The `-wal`, `-shm` and `-journal` files beside a database: never copied,
     and never needed. The online backup API above reads one consistent view
     and folds the log into the snapshot, so the rows that live only in the log
@@ -503,12 +504,29 @@ SOURCE_DBS = ("memory.db", "chat-history.db", "schedule.db", "feedback.db", "pro
 #:             write it is switched off on purpose (jarvis_child_env.py,
 #:             test_telemetry_off.py; docs/FEATURE-REVIEW-2026-10-04.md calls it
 #:             a "Template telemetry store ... no writer found").
+#: documents-index.db  the search index behind `search` in jarvis_documents.py
+#:             (2026-10-16). There is nothing in it to restore: it is rebuilt
+#:             from the folders the owner listed on the next search, and it
+#:             holds no document text at all (its FTS5 table is contentless -
+#:             the words are indexed, the text is not stored). A restored copy
+#:             could only be a stale ranking of files that have moved on, which
+#:             is the same call digest.db gets below. The files themselves are
+#:             the source of truth, and those are the owner's own folders,
+#:             backed up by whatever he keeps them in - not by this.
+#:
+#:             `notes-index.db` was here for a day and is NOT: the Obsidian
+#:             vault search it would have served (jarvis_notes.py) keeps its
+#:             documented "every word must match" contract, and `bm25` ranks by
+#:             ANY matching word, so an index there would have changed what a
+#:             vault search returns. That change was made and reverted; see
+#:             backend/test_obsidian_notes.py, which caught it.
 NOT_BACKED_UP = {
     "agents.db": "template tables the modules recreate; empty today (0 rows)",
     "audit.db": "a security trail, not memory; restoring a stale one misleads",
     "digest.db": "generated digests, re-made from data that is backed up",
     "sync_state.db": "sync cursors; a restored old cursor loses un-fetched items",
     "telemetry.db": "machine measurements, not the owner's data; writer off",
+    "documents-index.db": "derived word index; rebuilt from the folders on the next search",
 }
 
 #: The settings files the `*.json` glob cannot reach, because their extension is
