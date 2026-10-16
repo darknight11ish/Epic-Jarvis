@@ -747,7 +747,26 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # and no gate list, no tier row and no _RISK row - it adds
                                 # no action to the gate at all - so it cannot rewrite a
                                 # line devices.patch wrote either.
-                                "model-lanes.patch"}
+                                "model-lanes.patch",
+                                # initiative-payload.patch (2026-10-15) is the phone
+                                # half of the /api/initiative payload fix: ONE hunk in
+                                # jarvis_hud.py, on the route's own
+                                # `return self._send(200, {"available": bool(_ENGINE),
+                                # "items": items})` line, which it replaces with the same
+                                # body plus a `checks` count. It removes and adds that ONE
+                                # line and nothing else in the file, and it touches
+                                # jarvis_gate.py not at all - no gate list entry, no risk
+                                # row, no _TOOL_ACTIONS line, and in particular none of the
+                                # three actions devices.patch registers (pair_device,
+                                # unretire_shared_key, register_approval_key) - so it
+                                # cannot rewrite a line devices.patch wrote. Its context is
+                                # the /api/initiative route block, which no other patch in
+                                # this list writes: memory-pane.patch edits the path-LIST
+                                # line above it and stops there, and every other match for
+                                # "/api/initiative" in backend/*.patch is a CONTEXT line of
+                                # that same list. The later_rewriting() half below proves
+                                # the other half of that.
+                                "initiative-payload.patch"}
           and not _stack.later_rewriting("devices.patch", "register_approval_key"), order[-3:])
     text, log = _stack.stand_in("jarvis_hud.py")
     check("the stacked jarvis_hud.py builds", text is not None, "\n".join(log[-3:]))

@@ -1,0 +1,23 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -3216,7 +3216,19 @@
+                         pass
+                     if card:
+                         items.append(card)
+-                    return self._send(200, {"available": bool(_ENGINE), "items": items})
++                    # The phone's "Findings" note reads a `checks` count out of
++                    # this body - top-level, or under a "status" object
++                    # (jarvis-client BrainScreen.kt:2503-2509) - and it never
++                    # found one, so it went on saying "no background checks
++                    # have been built" whether the engine had one registered
++                    # or none. `watchers` is the engine's own list of checks
++                    # (`Engine.checks`), the same length the boot banner
++                    # prints. Nothing else about the body changes: the HUD
++                    # already draws `items`, and only the note was wrong.
++                    return self._send(200, {"available": bool(_ENGINE),
++                                            "checks": (len(_ENGINE.watchers)
++                                                       if _ENGINE else 0),
++                                            "items": items})
+                 if path == "/api/compute":
+                     return self._send(200, jarvis_compute.plan().as_dict())
+             except Exception as exc:

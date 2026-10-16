@@ -917,6 +917,18 @@ SHIPPED = (
     # patch, no file, no database, and nothing imports it yet. Standard
     # library only, and `jarvis_gate` is imported lazily inside one function.
     "jarvis_task_lease.py",
+    # The Ollama compatibility probe (2026-10-15, self-improvement phase 1).
+    # One read-only POST /api/show, at start-up and on every model change,
+    # sorted into exactly three outcomes: understood; a capability name Jarvis
+    # has never heard of (logged ONCE, never an error, because an extra name
+    # cannot take tools or vision away); or a capability Jarvis uses that the
+    # model's own answer plainly shows it has while the capabilities list does
+    # not name it, reported flatly as Jarvis about to under-use the model.
+    # Ollama not answering is none of the three - it is no verdict at all,
+    # logged once, so it can never read as understood. No version is read or
+    # compared anywhere (jarvis_hardware.py:912). Writes nothing, loads
+    # nothing, opens no route, and has no call site yet.
+    "jarvis_ollama_contract.py",
 )
 
 

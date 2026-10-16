@@ -365,6 +365,17 @@ check(
 // ("the patch is LAST, after plugin-loader.patch"), which is exactly how the
 // branch went red in CI; the position is now the real one, and the loader's own
 // "last of all" is asserted beside it rather than assumed.
+//
+// It used to assert ADJACENCY as well - that pictures.patch was the loader's
+// immediate predecessor - and that is a fact about the list's shape which
+// nothing depends on: this patch's block is anchored on progress.patch's own,
+// not on the loader's, so any core patch may sit between the two. That is
+// exactly what happened on 2026-10-15, when initiative-payload.patch (the
+// phone's `checks` count on /api/initiative) was appended in front of the
+// loader and pushed pictures.patch up one: the backend suites that pin order
+// read POSITION, and test_uncensored_optins.py says in as many words why
+// ("Asserting adjacency would be asserting a fact about the list's shape that
+// nothing depends on"). This check reads the same way now.
 const patchBlock = apply.slice(
   apply.indexOf("$PATCHES = @("),
   apply.indexOf("\n)", apply.indexOf("$PATCHES = @(")),
@@ -374,19 +385,13 @@ const patchNames = patchBlock
   .map((line) => (line.match(/^\s*'([^']+\.patch)'\s*$/) || [])[1])
   .filter(Boolean);
 check(
-  "... and it sits immediately BEFORE plugin-loader.patch, which stays last of all",
+  "... and it sits BEFORE plugin-loader.patch, which stays last of all",
   patchNames.length > 1
     && patchNames[patchNames.length - 1] === "plugin-loader.patch"
-    // The entry immediately above the loader is the patch whose install block
-    // the loader's own hunk anchors on. That was pictures.patch until
-    // 2026-10-13, when "Start the local model" (model-lanes.patch) was inserted
-    // between the two: the rule and the position are unchanged, with a different
-    // patch in the slot, and pictures.patch is still above the loader. This
-    // check named pictures.patch alone, and so went red on `feat/start-the-lane`
-    // for a stack that is correct - fixed here, 2026-10-14.
-    && patchNames[patchNames.indexOf("plugin-loader.patch") - 1] === "model-lanes.patch"
+    && patchNames.indexOf("pictures.patch") >= 0
     && patchNames.indexOf("pictures.patch") < patchNames.indexOf("plugin-loader.patch"),
-  `the stack ends: ${patchNames.slice(-4).join(", ")}`,
+  `the stack ends: ${patchNames.slice(-3).join(", ")}, pictures.patch at `
+    + `${patchNames.indexOf("pictures.patch")} of ${patchNames.length}`,
 );
 // This branch's own section moved 124 -> 126 on 2026-10-11: main's 124 is the
 // picture-CARD module and 125 the uncensored opt-ins, so the next free number

@@ -626,7 +626,12 @@ def t_the_patch_order_allow_lists_carry_it():
     """Each suite that pins the patch order must be told that this patch may
     come after its own - that is the trap that bit #248. There are FIVE, not
     four: test_gate_touches.py is the one that says plugin-loader.patch must
-    stay last of all, and it has its own shortlist."""
+    stay last of all, and it has its own shortlist.
+
+    This names THIS patch, which is no longer the newest one. The check below
+    it asks the same question of whatever is newest, read from
+    `_stack.order()` - so the trap this one was written for is caught for the
+    next patch too, rather than once per release."""
     for name in ("test_devices.py", "test_referee.py", "test_gate_risk_rows.py",
                  "test_screen_attach.py", "test_gate_touches.py"):
         p = HERE / name
@@ -636,6 +641,42 @@ def t_the_patch_order_allow_lists_carry_it():
         text = p.read_text(encoding="utf-8")
         check(f"{name} allows big-coder.patch after its own", '"big-coder.patch"' in text
               or "'big-coder.patch'" in text)
+
+
+def t_the_patch_order_allow_lists_carry_the_newest_patch_too():
+    """The same trap, one release later: a patch appended after every other
+    core patch must be named in all five order-pinning suites' allow-lists, or
+    each of them goes red - which is exactly how #450's `backend` job failed on
+    2026-10-15, with `initiative-payload.patch` (the phone's `checks` count on
+    /api/initiative) missing from all five.
+
+    Naming the FOUR FILES rather than "every file in backend" is on purpose.
+    Four suites pin the newest core patch, read from `_stack.order()` rather
+    than from a hand-written list - so the day another patch is appended last
+    this check fails and says which files need the new name. `test_uncensored_optins.py`
+    reads POSITION, not the newest entry, and says in its own words that
+    asserting adjacency would assert a fact about the list's shape that nothing
+    depends on; it is checked from the other side there, so it is not named here."""
+    try:
+        import _stack
+        order = _stack.order()
+    except Exception as exc:  # a checkout without backend/_stack.py
+        skip(f"_stack.order() could not be read here: {exc}")
+        return
+    if not order or order[-1] != "plugin-loader.patch":
+        skip("plugin-loader.patch is not last here, so the newest core patch "
+             "cannot be worked out from the list")
+        return
+    newest = Path(order[-2]).name
+    for name in ("test_devices.py", "test_referee.py", "test_gate_risk_rows.py",
+                 "test_screen_attach.py", "test_gate_touches.py"):
+        p = HERE / name
+        if not p.is_file():
+            skip(f"{name} is not in this checkout")
+            continue
+        text = p.read_text(encoding="utf-8")
+        check(f"{name} allows {newest} (the last core patch) after its own",
+              f'"{newest}"' in text or f"'{newest}'" in text)
 
 
 def t_the_both_cards_server_is_the_one_this_mode_owns():
@@ -670,6 +711,7 @@ def main() -> int:
                t_the_patch_applies_to_the_published_base,
                t_the_delivery_lists_carry_it,
                t_the_patch_order_allow_lists_carry_it,
+               t_the_patch_order_allow_lists_carry_the_newest_patch_too,
                t_the_both_cards_server_is_the_one_this_mode_owns):
         fn()
     print()

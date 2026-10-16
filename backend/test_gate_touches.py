@@ -718,14 +718,24 @@ def t_the_patch_is_registered_and_carries_the_change():
              # of the chain), so it rewrites nothing this patch wrote.
              "pictures.patch",
              # model-lanes.patch (2026-10-13, "Start the local model") is that
-             # same shape once more, and it now sits immediately BEFORE
+             # same shape once more, and it sits immediately BEFORE
              # plugin-loader.patch (the loader's hunk was re-anchored onto ITS
-             # block): it touches jarvis_gate.py not at all - the automatic
-             # lane restart raises no card and answers no card, so it adds no
-             # action to the gate - and its ONE hunk in jarvis_hud.py ADDS an
-             # install block at the end of the chain, so it rewrites nothing
-             # this patch wrote.
-             "model-lanes.patch"}
+             # block; initiative-payload.patch was appended between the two on
+             # 2026-10-15 and is listed below): it touches jarvis_gate.py not at
+             # all - the automatic lane restart raises no card and answers no
+             # card, so it adds no action to the gate - and its ONE hunk in
+             # jarvis_hud.py ADDS an install block at the end of the chain, so it
+             # rewrites nothing this patch wrote.
+             "model-lanes.patch",
+             # initiative-payload.patch (2026-10-15) takes the same advice: it
+             # is appended between pictures.patch and plugin-loader.patch (so,
+             # before the loader too), and it touches jarvis_gate.py not at all
+             # - ONE hunk, in jarvis_hud.py, on the /api/initiative route's own
+             # return line, which no patch in this list writes. It rewrites
+             # nothing this patch wrote: gate-touches.patch's two hunks are
+             # under `_PROTECTED`/`_PROTECTED_RE` and at check()'s own
+             # `hit = _touches_protected(...)` call, hundreds of lines away.
+             "initiative-payload.patch"}
     others = [n for n in names if n not in later]
     check("it is LAST in the stack, bar the ones written after it, and bar "
           "plugin-loader.patch (which must be last of all)",

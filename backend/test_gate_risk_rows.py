@@ -199,7 +199,15 @@ def t_the_patch_is_registered_last():
              # list, no tier row and no _RISK row - it adds no action to the gate
              # at all - so it rewrites nothing the two stale rows this patch
              # removes.
-             "model-lanes.patch"}
+             "model-lanes.patch",
+             # initiative-payload.patch (2026-10-15) is appended after it, before
+             # plugin-loader.patch: ONE hunk in jarvis_hud.py, on the
+             # /api/initiative route's own return line, adding the `checks` count
+             # the phone's "Findings" note reads. It removes and adds that one
+             # line, touches jarvis_gate.py not at all - no gate list entry, no
+             # risk row, no _TOOL_ACTIONS line - so it cannot rewrite the two
+             # stale rows this patch removes.
+             "initiative-payload.patch"}
     check("it is LAST, like every new patch here, bar the ones written after it",
           [n for n in names if n not in later][-1] == "gate-risk-rows.patch",
           names[-3:] if names else names)

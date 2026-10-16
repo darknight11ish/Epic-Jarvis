@@ -22,8 +22,10 @@ docstring, "What it cannot say").
 So this patch was written against the owner's real file, sent to this
 session by hand (2026-09-27) as fifteen lines of real, verified context
 around `jarvis_hud.py:2560` - not derived, not guessed. `t_the_patch`
-below round-trips the patch against exactly THOSE fifteen lines, quoted
-here as a literal fixture, rather than against a `_stack` reconstruction.
+below round-trips the patch against exactly that pre-image, quoted here as
+a literal fixture, rather than against a `_stack` reconstruction. The
+fixture's SIZE is load-bearing and is explained under "WHY THE PRE-IMAGE IS
+SIXTEEN LINES AGAIN" below.
 That is a weaker guarantee than the usual test - it proves the patch is
 internally consistent and does what it claims to THAT snapshot, not that
 the snapshot still matches the owner's file today. Re-verify against the
@@ -39,6 +41,41 @@ and a second `.patch` file costs registration in three lists plus a
 catalogue regeneration. `t_the_patch` re-applies it to the real pre-image and
 reverses it; `t_the_patch_counts_match` keeps the `@@` header honest, which
 is what `git apply` refuses the whole file over.
+
+WHY THE PRE-IMAGE IS SIXTEEN LINES AGAIN (2026-10-16), AND THE STUCK PC
+
+This patch has two lives. The 2026-09-27 original (recorded at
+`backend/patch-history/cloud-say-yes/3583bf0.patch`) has the plain
+`lanes=[] if jarvis_side_memory else lanes,` line and NO `owner_said_yes`
+block, and it ADDS that block. The 2026-10-15 rewrite (21146d37, PR #468) put
+the Project Mode gate into the same hunk, and its own context then REACHED the
+`owner_said_yes` lines this repository had added the day before: its pre-image
+became the state the original leaves - twenty-seven lines - and it added the
+gate alone.
+
+Two texts like that do not commute, and that is what stuck the owner's PC.
+`apply-patches.ps1` finds an older text on a backend by reversing the patch
+(`git apply --reverse`), and a backend updated before an edit still carries
+the older text. On his, it found the 2026-09-27 text - rightly, that is what
+he had - took it off, which REMOVED the `owner_said_yes` block, and then could
+not put the current text on, because that text NEEDS the block as context.
+Measured on a byte-verified copy of his backend: `2 patch(es) will not apply:
+cloud-say-yes.patch, screen.patch`, and screen.patch only because it too
+anchors on the block the strip took off.
+
+So this patch is ONE hunk whose pre-image is the TRUE pre-patch text - the
+plain `lanes=` line and no `owner_said_yes` block - and which adds BOTH the
+Project Mode gate AND the `owner_said_yes` block. Strip the 2026-09-27 text,
+land on that pre-image, apply this; and a backend that already carries this
+text takes itself off with no history at all, because the text it reverses is
+its own. Two checks keep it that way:
+
+  * `t_the_patch_is_self_contained` - `owner_said_yes` must be a line this
+    patch ADDS, never one it expects to find. That one rule is the whole fix.
+  * `t_the_strip_and_reapply_round_trip` - the owner's exact sequence, run
+    here with real `git apply`: old text on, old text OFF, this patch on. It
+    also rebuilds the 2026-10-15 shape and shows the same sequence REFUSING
+    for it, so the check has a bite rather than a story.
 
 THE INSTRUMENT WAS BROKEN AND THIS FILE PASSED OVER A 500 ON THE COMMON
 PATH. As first committed (9a596c4f), the guard called
@@ -110,14 +147,17 @@ def check(name, cond, detail=""):
 
 #: The exact real lines this patch was written against (jarvis_hud.py,
 #: around 2557 on the owner's PC) - see the module docstring for why this is a
-#: literal fixture rather than a `_stack` stand-in. This is the PRE-image: the
-#: file as it is just before the patch applies, which already carries the
-#: `owner_said_yes` block this same patch added earlier. It was SIXTEEN lines
-#: (2557-2572) until 2026-10-15, when the Project Mode gate was added to this
-#: same hunk: the hunk's context now reaches the `owner_said_yes` lines, so a
-#: fixture that stopped at `budget=budget,` no longer matched the patch and
-#: `git apply` refused it. The fixture is the patch's own pre-image, checked
-#: against the patch by `t_the_patch`'s round trip.
+#: literal fixture rather than a `_stack` stand-in.
+#:
+#: THIS IS THE TRUE PRE-IMAGE, and it is sixteen lines because the patch is
+#: SELF-CONTAINED: the plain `lanes=` line, and no `owner_said_yes` block. It
+#: was sixteen lines until 2026-10-15, when the Project Mode gate was added to
+#: this same hunk and the context grew to twenty-seven lines (reaching the
+#: `owner_said_yes` block), and it is sixteen again from 2026-10-16 - see the
+#: module docstring's "WHY THE PRE-IMAGE IS SIXTEEN LINES AGAIN" for the stuck
+#: PC that cost, and why the round trip below is the check that keeps it
+#: honest. The fixture is the patch's own pre-image, checked against the patch
+#: by `t_the_patch`'s round trip.
 _PRE = '''\
         if ROUTING and body.get("auto", True):
             budget = jarvis_router.Budget.load()
@@ -131,28 +171,18 @@ _PRE = '''\
                 has_image=bool(body.get("has_image")),
                 conversation_tainted=tainted,
                 budget=budget,
-                # cloud-say-yes.patch: the owner's yes for THIS ONE
-                # question - the app's "Try the cloud model" button, shown
-                # only after choose() itself already offered a lane with
-                # gate "offer" (docs/JARVIS-API.md, "`offer` in
-                # `X-Jarvis-Route`"). Absent or false reads exactly as
-                # before this patch. Every gate above still runs first, in
-                # the same order, so a yes can never pull a private,
-                # tainted or picture turn out - it only ever turns gate 6
-                # from "offer" into "escalate" for a question that had
-                # already cleared every other gate on its own merits.
-                owner_said_yes=bool(body.get("cloud_yes")),
             )
             if jarvis_side_memory and decision.gate == "unavailable":
                 decision.reason = "escalation off while Jarvis injects memory itself"
                 decision.gate = "privacy"
 '''
 
-#: The same fifteen lines with the Project Mode gate now INSIDE the existing
-#: `lanes=` line, which is what applying the patch to _PRE must produce. It is
-#: deliberately NOT a second `lanes=` argument: a repeated keyword argument is a
-#: SyntaxError ("keyword argument repeated"), so the backend would not start at
-#: all - `t_the_patch`s own "still valid Python" check is what catches that.
+#: The same real lines with the `owner_said_yes` block AND the Project Mode
+#: gate now in them, which is what applying the patch to `_PRE` must produce.
+#: The gate is deliberately NOT a second `lanes=` argument: a repeated keyword
+#: argument is a SyntaxError ("keyword argument repeated"), so the backend
+#: would not start at all - `t_the_patch`s own "still valid Python" check is
+#: what catches that.
 _POST = '''\
         if ROUTING and body.get("auto", True):
             budget = jarvis_router.Budget.load()
@@ -374,6 +404,107 @@ def t_the_patch_counts_match():
           sum(1 for l in lines if l[:1] == "-" and "lanes=" in l) == 1
           and sum(1 for l in lines if l[:1] == "+" and l[1:].strip().startswith("lanes=")) == 1,
           "a second `lanes=` argument would be a SyntaxError in jarvis_hud.py")
+
+
+def _context_owner_said_yes(patch_text: str) -> str:
+    """The 2026-10-15 shape of this patch, rebuilt from the current one: the
+    `owner_said_yes` block back as CONTEXT, which is the shape that could not
+    follow its own strip. Used only by the bite check in
+    `t_the_strip_and_reapply_round_trip`, so that check can fail if the fix is
+    ever undone. `_apply_patch_text` recomputes the `@@` counts, so this copy
+    cannot fail for the wrong reason (a stale header)."""
+    lines = _one_hunk(patch_text)
+    out, in_yes = [lines[0]], False
+    for line in lines[1:]:
+        if line[:1] == "+" and "the owner's yes for THIS ONE" in line:
+            in_yes = True
+        if in_yes and line[:1] == "+":
+            line = " " + line[1:]
+            if "owner_said_yes=bool" in line:
+                in_yes = False
+        out.append(line)
+    return "\n".join(out) + "\n"
+
+
+def t_the_patch_is_self_contained():
+    """THE ONE RULE THAT KEEPS A BACKEND UNSTUCK: this patch must carry its own
+    pre-image.
+
+    `apply-patches.ps1` finds the text already on a backend by REVERSING the
+    patch, and an older text it finds there is taken off before the current
+    text goes on. So the current text must be applicable to whatever taking an
+    older text off leaves behind. `owner_said_yes` is a line the 2026-09-27
+    text ADDS; if this patch ever expects it as CONTEXT again - the shape the
+    2026-10-15 rewrite had - then stripping that older text removes the block
+    and this patch refuses a file it just created. That is the two-patch
+    failure measured on the owner's backend on 2026-10-16; see the module
+    docstring."""
+    body = _one_hunk(_patch_text())[1:]
+    ctx = [l for l in body if l[:1] == " " and "owner_said_yes" in l]
+    added = [l for l in body if l[:1] == "+" and "owner_said_yes" in l]
+    check("owner_said_yes is ADDED by this patch, never expected as context",
+          not ctx and len(added) == 1, f"context={ctx} added={added}")
+    check("... and the plain lanes= line is REMOVED, so the pre-image is the true one",
+          len([l for l in body if l[:1] == "-" and "lanes=" in l]) == 1,
+          [l for l in body if l[:1] == "-"])
+    check("... and the fixture above really has no owner_said_yes in it",
+          "owner_said_yes" not in _PRE, "the fixture still carries the block")
+
+
+def t_the_strip_and_reapply_round_trip():
+    """THE SEQUENCE THAT FAILED ON THE OWNER'S PC, run here with real git apply.
+
+    His backend carried the 2026-09-27 text. The script took that off - which
+    removed the `owner_said_yes` block - and then could not put the current
+    text back on, because the current text needed that block as context. So:
+    the older text on, the older text OFF, then THIS patch on, and the result
+    must be `_POST`.
+
+    BITE: the same three applies are run again with the 2026-10-15 shape of
+    the patch (the block as context, rebuilt by `_context_owner_said_yes`) and
+    must REFUSE. Without that half this would be a story about a bug rather
+    than a check on the fix."""
+    git = shutil.which("git")
+    if not git:
+        check("git is here to apply it", False)
+        return
+    hist = HERE / "patch-history" / "cloud-say-yes" / "3583bf0.patch"
+    if not hist.is_file():
+        check("the recorded 2026-09-27 text is in backend/patch-history", False,
+              f"no {hist}")
+        return
+    patch = _patch_text()
+    d = Path(tempfile.mkdtemp(prefix="jarvis-cloud-say-yes-roundtrip-"))
+    try:
+        (d / "old.patch").write_bytes(hist.read_bytes())
+        (d / "p.patch").write_text(_apply_patch_text(patch), encoding="utf-8", newline="")
+        (d / "broken.patch").write_text(
+            _apply_patch_text(_context_owner_said_yes(patch)), encoding="utf-8", newline="")
+
+        (d / "jarvis_hud.py").write_text(_PRE, encoding="utf-8", newline="\n")
+        on = subprocess.run([git, "apply", "old.patch"], cwd=d, capture_output=True, text=True)
+        check("the 2026-09-27 text goes on to the true pre-image (his state)",
+              on.returncode == 0, on.stderr)
+        off = subprocess.run([git, "apply", "-R", "old.patch"], cwd=d, capture_output=True, text=True)
+        stripped = (d / "jarvis_hud.py").read_text(encoding="utf-8")
+        check("... taking it off lands back on the true pre-image, byte for byte",
+              off.returncode == 0 and stripped == _PRE, (off.stderr, stripped[:200]))
+        r = subprocess.run([git, "apply", "p.patch"], cwd=d, capture_output=True, text=True)
+        after = (d / "jarvis_hud.py").read_text(encoding="utf-8")
+        check("... and THIS patch then applies to what the strip left",
+              r.returncode == 0, r.stderr)
+        check("... producing exactly the post-image fixture", after == _POST,
+              "the patch and _POST have drifted apart")
+
+        (d / "jarvis_hud.py").write_text(_PRE, encoding="utf-8", newline="\n")
+        subprocess.run([git, "apply", "old.patch"], cwd=d, capture_output=True, text=True)
+        subprocess.run([git, "apply", "-R", "old.patch"], cwd=d, capture_output=True, text=True)
+        rb = subprocess.run([git, "apply", "broken.patch"], cwd=d, capture_output=True, text=True)
+        check("BITE: with the owner_said_yes block as CONTEXT the same sequence refuses",
+              rb.returncode != 0,
+              "the old shape applied, so this check could not have caught the bug")
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
 
 
 def t_the_patch():
@@ -771,7 +902,9 @@ def t_cloud_yes_is_read_as_a_plain_bool():
 
 
 if __name__ == "__main__":
-    for fn in (t_the_patch, t_the_patch_counts_match, t_the_guard_is_the_patch_s_own,
+    for fn in (t_the_patch, t_the_patch_counts_match, t_the_patch_is_self_contained,
+               t_the_strip_and_reapply_round_trip,
+               t_the_guard_is_the_patch_s_own,
                t_lanes_can_only_be_removed, t_an_id_shaped_pointer_with_no_row,
                t_the_ordinary_turn_does_not_raise,
                t_the_stub_the_old_suite_used_could_not_see_it,

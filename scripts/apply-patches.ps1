@@ -1543,15 +1543,18 @@ $PATCHES = @(
     # "up", and a lane that does not come up leaves the warning standing.
     # One lane, the one Jarvis talks to (OLLAMA_URL's port), never both.
     #
-    # Last of the core patches, immediately BEFORE plugin-loader.patch, and
-    # that is the order the loader itself requires: every core patch goes
+    # It is no longer the ONLY patch above plugin-loader.patch: the merge of
+    # 2026-10-16 kept initiative-payload.patch (2026-10-15) as well, and the
+    # older entry stays first - the same rule the rest of this stack follows.
+    # The order the loader itself requires is unchanged: every core patch goes
     # above the loader, and only drop-in folders come after it
     # (tools/check_plugins.py checks both halves of that). Its own context is
     # the install block pictures.patch wrote, and plugin-loader.patch's hunk
-    # now anchors on THIS block's last two lines - so this one needs the whole
-    # stack above it and the loader needs this one. It adds ONE block of the
-    # same shape, calling jarvis_model_lanes.install(), and touches no other
-    # line of jarvis_hud.py. It cannot be applied on its own.
+    # still anchors on THIS block's last two lines - that is a fact about the
+    # TEXT, not about the list, so a core patch may sit after this one. It
+    # adds ONE block of the same shape, calling jarvis_model_lanes.install(),
+    # and touches no other line of jarvis_hud.py. It cannot be applied on its
+    # own.
     #
     # No gate file is touched, on purpose: it starts the same task the owner's
     # own logon already runs unattended, with no card and no question, so a
@@ -1559,6 +1562,33 @@ $PATCHES = @(
     # jarvis_model_lanes.py's "PERMISSION" section, and docs/ARCHITECTURE.md
     # section 3).
     'model-lanes.patch'
+    # The two payload mismatches on /api/initiative - the half that needs the
+    # ROUTE's own body changed (2026-10-15). The phone's "Findings" note reads
+    # a `checks` count out of that body (jarvis-client BrainScreen.kt:2503-2509,
+    # top-level or under "status"), and the route never sent one, so it said
+    # "no background checks have been built" whether the engine had a check
+    # registered or none. ONE hunk in jarvis_hud.py, on the route's own return
+    # line, and no other line: it adds `"checks": len(_ENGINE.watchers) if
+    # _ENGINE else 0` beside the `available` and `items` that route already
+    # sends. The other half of the same pair is in rebuilt/jarvis_initiative.py
+    # (drain() mirrors level/check/message flat onto each row), which is
+    # $SHIPPED, so that half needs no patch.
+    #
+    # WHY A PATCH AT ALL: jarvis_hud.py is NOT in $SHIPPED - it is one of the
+    # files this stack delivers - so an edit to the copy in the repository
+    # (jarvis-backend/jarvis_hud.py, the published base) would never reach the
+    # owner's install.
+    #
+    # Its context is the /api/initiative route block, which no patch in this
+    # list writes (memory-pane.patch edits the path-LIST line above it, not
+    # this block), so it is order-independent among the core patches; it sits
+    # immediately BEFORE plugin-loader.patch, which must stay LAST OF ALL
+    # (test_gate_touches.py, test_uncensored_optins.py): every core patch goes
+    # above the loader, and only drop-in folders come after it. It ships no
+    # module (so no $SHIPPED entry), adds no route, touches no gate list and
+    # wires no startup call. backend/test_jobs.py rehearses it against
+    # jarvis-backend/jarvis_hud.py: apply, reverse, byte for byte.
+    'initiative-payload.patch'
     'plugin-loader.patch'
 )
 
@@ -1881,6 +1911,8 @@ $SHIPPED = @(
     'jarvis_tool_schema.py'      # The schema a `format` field may carry, and the guard around it: a skill's own format is validated against a declared schema BEFORE anything uses it, so a malformed one is refused in plain words rather than acted on. It validates only - no route, no card, no file written, nothing downloaded. Standard library only, no patch: jarvis_skill_hub.py calls it, and test_tool_schema.py proves it
     # --- One bounded, revocable lease over a run of steps (the task-lease work order, Slice 1) ---
     'jarvis_task_lease.py'       # A lease is not an "approve all": it names ONE surface (browser, desktop or android), the sites or the (pid, hwnd) windows it may touch, the actions it may take, a TTL and a step budget, and it is checked step by step by a deterministic circuit-breaker. OPENING one needs a person: jarvis_gate.check() at tier ask, and anything but a real ask-tier "approved" - denied, timed out, notify, auto - opens nothing; with no jarvis_gate importable it fails CLOSED. Every step then comes back either allow_under_lease or step_up_ask, never "no" and never a quiet allow: a host outside the allowed sites, a window nobody named, Jarvis's OWN window, HUD page or com.jarvis.* package, a password field, a card or payment field, a file upload/download control, a high-consequence verb on the target (submit, pay, checkout, delete, publish, send email, ...), the 900-second ceiling (a longer TTL is CLAMPED, not honoured), the step budget, or revocation. Leases live in memory and die with the process - no route, no patch, no file, no database, and nothing imports it yet. Standard library only, and jarvis_gate is imported lazily inside one function, so the module loads on a machine with no gate and then refuses to open anything
+    # --- The Ollama compatibility probe (2026-10-15, self-improvement phase 1) ---
+    'jarvis_ollama_contract.py'  # One read-only POST /api/show at start-up and on every model change, sorted into exactly three outcomes: understood; a capability name Jarvis has never heard of, logged ONCE and never an error, because an extra name cannot take tools or vision away; or a capability Jarvis uses that the model's own answer plainly shows it has while the capabilities list does not name it, reported flatly as Jarvis about to under-use the owner's model. Ollama not answering is NOT one of the three - it is reported as no verdict and logged once, so an unreadable answer can never read as understood. No version is read or compared anywhere (jarvis_hardware.py:912). It downloads, loads, unloads and writes nothing, opens no route, raises no card, and has no call site yet. Standard library only - no patch
 )
 
 # The settings file. Installed only where none exists; never overwritten.
