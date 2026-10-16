@@ -3,6 +3,13 @@ more carefully - calls one Home Assistant service. Proves `plan_states()`/
 `plan_service()` open no socket, `run()` cannot be tricked into acting
 without approval, and a lock/alarm/cover action is marked heavy.
 
+It also proves the thing that makes a service call's answer worth reading at
+all: Home Assistant answers `POST /api/services/...` with 200 as soon as it
+has ACCEPTED the call, so every service-call plan carries the paired
+read-only `GET /api/states/<eid>` (inside `p.queries`, inside the digest) and
+`run()` lets the STATE decide - `unavailable`/`unknown` is `ok: False` with
+the state it found, never a success.
+
     python3 test_home_control.py
 """
 import os
@@ -175,20 +182,51 @@ with with_env(url="https://ha.local:8123", token="tok123"):
     check("a failure mid-read is reported, not raised", failed["ok"] is False)
     check("the failure names which entity failed", "light.kitchen" in failed["reason"])
 
-# ── run(): call_service, exactly one request ──────────────────────────────
+# ── run(): call_service - the call AND the readback that decides it ───────
+#
+# A 200 to `POST /api/services/...` means Home Assistant TOOK the call. It
+# does not mean the device did anything: an unplugged light, a device that
+# has dropped off the mesh and an entity the owner renamed all answer 200.
+# So the plan carries the paired `GET /api/states/<eid>` beside each call and
+# the STATE decides - `unavailable`/`unknown` is a failure carrying the state,
+# anything else is `verified: True` carrying the state it reported.
 
 with with_env(url="https://ha.local:8123", token="tok123"):
     p = H.plan_service("lock", "unlock", "lock.front_door")
+    check("a service-call plan carries the call AND its readback, in that order",
+          [(q.method, q.entity_id, q.verify) for q in p.queries]
+          == [("POST", "lock.front_door", False), ("GET", "lock.front_door", True)],
+          [(q.method, q.entity_id, q.verify) for q in p.queries])
+    check("the readback is a GET of that entity's own state, with no body",
+          p.queries[1].url == "https://ha.local:8123/api/states/lock.front_door"
+          and p.queries[1].body is None, p.queries[1])
+    check("only the call is a service query - the readback is not",
+          [q.method for q in H.service_queries(p)] == ["POST"], H.service_queries(p))
+    check("ZERO UN-HASHED REQUESTS: the digest covers the readback too, so taking "
+          "it out changes the digest",
+          p.digest == H._digest(p.queries)
+          and H._digest(H.service_queries(p)) != p.digest, p.digest)
+    check("describe() says in plain words that the state is checked afterwards",
+          "read lock.front_door back to check the change really happened" in H.describe(p)
+          and "GET https://ha.local:8123/api/states/lock.front_door" in H.describe(p),
+          H.describe(p))
+
     calls = []
 
     def fake_fetch(query):
-        calls.append(query)
-        return [{"entity_id": "lock.front_door", "state": "unlocked"}]
+        calls.append((query.method, query.url))
+        if query.method == "GET":
+            return {"state": "locked", "attributes": {}}
+        return [{"entity_id": "lock.front_door", "state": "locked"}]
 
     out = H.run(p, fetch=fake_fetch, approved=True)
-    check("run() calls fetch exactly once for a service call", len(calls) == 1)
-    check("the service call succeeds when fetch succeeds", out["ok"] is True)
-    check("the response is returned verbatim", out["response"][0]["state"] == "unlocked")
+    check("run() sends the call first, then its readback - two requests, in order",
+          [m for m, _ in calls] == ["POST", "GET"], calls)
+    check("the service call succeeds and the readback verifies it",
+          out.get("ok") is True and out.get("verified") is True, out)
+    check("the response is returned verbatim", out["response"][0]["state"] == "locked")
+    check("and the state Home Assistant reported comes back with it",
+          out.get("state_after") == "locked", out)
 
     def failing_service_fetch(query):
         raise RuntimeError("HTTP 401 Unauthorized")
@@ -196,6 +234,66 @@ with with_env(url="https://ha.local:8123", token="tok123"):
     failed = H.run(p, fetch=failing_service_fetch, approved=True)
     check("a failed service call is reported, not raised", failed["ok"] is False)
     check("the failure reason is legible", "401" in failed["reason"])
+
+    # BITES. Before this change the answer here was {"ok": True}: the only
+    # evidence was HA's 200 to the service call, and HA answers 200 to a lock
+    # that is not there just as readily as to one that is.
+    def accepted_but_dead(query):
+        if query.method == "GET":
+            return {"state": "unavailable", "attributes": {}}
+        return [{"entity_id": "lock.front_door", "state": "unavailable"}]
+
+    dead = H.run(p, fetch=accepted_but_dead, approved=True)
+    check("BITES: the service call is accepted and the entity is unavailable -> NOT ok",
+          dead.get("ok") is False, dead)
+    check("... with the reason a person needs, naming the entity and its state",
+          dead.get("reason") == ("lock.front_door is unavailable in Home Assistant, so it "
+                                 "did not respond"), dead.get("reason"))
+    check("... and the state it found is carried back, never guessed",
+          dead.get("state_after") == "unavailable" and "verified" not in dead, dead)
+
+    def accepted_and_unknown(query):
+        if query.method == "GET":
+            return {"state": "unknown"}
+        return [{"entity_id": "lock.front_door", "state": "unknown"}]
+
+    unknown = H.run(p, fetch=accepted_and_unknown, approved=True)
+    check("BITES: 'unknown' is refused the same way as 'unavailable'",
+          unknown.get("ok") is False
+          and "is unknown in Home Assistant" in unknown.get("reason", "")
+          and unknown.get("state_after") == "unknown", unknown)
+
+    def accepted_but_unreadable(query):
+        if query.method == "GET":
+            raise TimeoutError("no route to host")
+        return [{"entity_id": "lock.front_door", "state": "locked"}]
+
+    unreadable = H.run(p, fetch=accepted_but_unreadable, approved=True)
+    check("BITES: a readback that fails is not a success either",
+          unreadable.get("ok") is False
+          and "not reported as done" in unreadable.get("reason", "")
+          and unreadable.get("state_after") is None, unreadable)
+
+    def accepted_but_silent(query):
+        if query.method == "GET":
+            return {}
+        return [{"entity_id": "lock.front_door", "state": "locked"}]
+
+    silent = H.run(p, fetch=accepted_but_silent, approved=True)
+    check("BITES: a readback that answers with no state at all is not a success",
+          silent.get("ok") is False and "no state" in silent.get("reason", ""), silent)
+
+    # PASS - and the CONTROL for all of the above: a state that is not one of
+    # those two words is what the device really reports, and it is verified.
+    def accepted_and_alive(query):
+        if query.method == "GET":
+            return {"state": "unlocked", "attributes": {}}
+        return [{"entity_id": "lock.front_door", "state": "unlocked"}]
+
+    alive = H.run(p, fetch=accepted_and_alive, approved=True)
+    check("PASS: the same plan, a device that answered, is ok and verified",
+          alive.get("ok") is True and alive.get("verified") is True
+          and alive.get("state_after") == "unlocked", alive)
 
 # ── heavy is decided by the ENTITY too, not only the service domain ───────
 
