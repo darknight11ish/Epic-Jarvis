@@ -83,7 +83,7 @@ A32	a per-lane measured log is built	no definite check: backend/jarvis_speed.py 
 A33	test hardening: a per-patch "reads original text" ratchet exists	grep:tools:reads original text	open	docs/DECISIONS.md:1744
 A34	the suite runner counts a skipped check as a skip, never as a pass	grep:backend/run_suites.py:no longer lands in its	built	docs/DECISIONS.md:1744
 A35	"Restore to before" for an app merge is built	grep:tools:Restore to before	open	docs/DECISIONS.md:1745
-A36	a stale-area check after every big merge is built	grep:tools:stale-area	open	docs/DECISIONS.md:1746
+A36	a stale-area check after every big merge is built	file:tools/check_stale_area.py	built	docs/DECISIONS.md:1746
 A37	the desktop has a "Delete older backups now" button	grep:jarvis-desktop/src/settings.html:Delete older backups now	built	docs/DECISIONS.md:1692
 A38	the phone has a "Delete older backups now" button	grep:jarvis-client:Delete older backups now	open	docs/DECISIONS.md:1698
 B01	the phone's read-only past-approvals list is built (an audit report said so on 2026-09-29)	grep:jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/InboxScreen.kt:Activity	built	docs/audit-reports-2026-09-29-30/49-audit-a1ef1de0.md:53

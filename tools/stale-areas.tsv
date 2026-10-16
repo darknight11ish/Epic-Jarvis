@@ -1,0 +1,76 @@
+# tools/stale-areas.tsv - the areas of this repository, and when each was last audited.
+#
+# READ BY tools/check_stale_area.py. That tool's docstring says why this file
+# exists, what a row means, and why the answer is "areas and dates", never
+# "documents and sentences".
+#
+# WHERE THESE AREAS COME FROM. Queue item 10 (docs/HANDOFF-AFTER-PR39.md:300)
+# says "list areas changed since their last audit; the coverage map from this
+# session is the template". The template is
+# docs/audit-reports-2026-09-29-30/37-audit-a84616c6.md, a meta-audit asked
+# "What are we missing? Which areas have not been audited for a long time, or
+# ever?". THE AREAS BELOW ARE THAT REPORT'S AREAS, in its order. Its own Key is
+# the verdict column's vocabulary:
+#
+#     NEVER = no report names it. STALE = audited, but the code changed since.
+#
+# ITS GLOBS ARE THIS FILE'S TRANSCRIPTION, and they are meant to be edited: the
+# coverage map's areas are prose ("Phone screens (about 60 Plates)", "Backend
+# chatbot driver and support (about 15 modules)") and a checker cannot read
+# prose. Where a row below says "never", no report has ever named that area -
+# the report's own words, not this file's opinion.
+#
+# HOW TO KEEP IT HONEST. A row goes quiet when its area has not changed since
+# `last_audited`. When an audit happens, move that date forward and put the
+# report that did it in `evidence`. Moving a date WITHOUT an audit is the one
+# thing this file must never carry: it is the difference between a record and a
+# way to make a checker green. `last_audited` is the date of the newest report
+# that AUDITED the area - a report that examined it and said what it found. A
+# page that merely names a file (docs/JARVIS-API.md, docs/ARCHITECTURE.md) is
+# not an audit and must never set a date here; that was checked, and using such
+# a mention would have cleared nearly every row below on no evidence at all.
+#
+# TWO ROWS WERE CORRECTED ON 2026-10-16, AND THE REASON IS THE POINT:
+#   * `phone-screen-watch-avatar` said "never". The coverage map wrote that on
+#     2026-09-30, and both files were audited afterwards -
+#     docs/BUG-AUDIT-2026-10-05.md names both, and
+#     docs/audit-2026-10-07/C-android-kotlin.md names ScreenWatchService.kt
+#     again at three separate findings. Both files' newest change is
+#     2026-09-30 (ceaf1db6), so the row is now QUIET, and it is the one row here
+#     that proves the tool can go green. The map was stale, not the code.
+#   * `videos` was listed "NEVER (fine)" and is NOT a row at all: 222 files, a
+#     change on 2026-10-07 (505118ad, "the launch videos move to a release"),
+#     and nothing in a video to audit. A row for it would be a false positive
+#     every time it was read, which is how a checker teaches people to ignore it.
+#     The report's "NEVER (fine)" is kept here, which is where a dismissal
+#     belongs.
+#
+# COLUMNS, tab-separated, five of them, one row per area:
+#     area          a short name, unique in this file
+#     globs         comma-separated git pathspecs; a directory covers its tree
+#     last_audited  YYYY-MM-DD, or "never" when no report names the area
+#     verdict       the coverage map's own word for the area as it recorded it
+#     evidence      the report that did the audit, or "-" when there is none
+#
+# A row whose globs match no tracked file is reported as a broken row, never as
+# a pass. Adding an area is one line; removing one is a decision, so say why.
+#
+area	globs	last_audited	verdict	evidence
+phone-notifications	jarvis-client/app/src/main/java/com/jarvis/client/service/*Notifier.kt	2026-09-26	stale; never as a whole	docs/audit-reports-2026-09-29-30/37-audit-a84616c6.md
+phone-screen-watch-avatar	jarvis-client/app/src/main/java/com/jarvis/client/service/ScreenWatchService.kt, jarvis-client/app/src/main/java/com/jarvis/client/service/AvatarOverlayService.kt	2026-10-05	never as a whole at 2026-09-30; both audited 2026-10-05, ScreenWatchService again 2026-10-07	docs/BUG-AUDIT-2026-10-05.md
+phone-live-wake-word	jarvis-client/app/src/main/java/com/jarvis/client/service/LiveService.kt, jarvis-client/app/src/main/java/com/jarvis/client/service/WakeWordService.kt, jarvis-client/app/src/main/java/com/jarvis/client/audio	2026-09-28	covered (partly stale)	docs/studio-2026-09-28/live-review-phone.md
+phone-screens	jarvis-client/app/src/main/java/com/jarvis/client/ui/screens	2026-09-28	stale	docs/BUG-AUDIT-2026-09-27-phone.md
+desktop-windows	jarvis-desktop/src/*.html	2026-09-28	stale	docs/BUG-AUDIT-2026-09-27-desktop-js.md
+desktop-rust	jarvis-desktop/src-tauri/src	2026-09-28	stale	docs/BUG-AUDIT-2026-09-27-desktop-rust.md
+desktop-toasts-tray	jarvis-desktop/src-tauri/src/winrt_toast.rs, jarvis-desktop/src-tauri/src/tray.rs, jarvis-desktop/src-tauri/src/notifications.rs	2026-09-26	stale	docs/BUG-AUDIT-2026-09-26-desktop.md
+backend-memory-learning	backend/rebuilt/jarvis_memory.py, backend/rebuilt/jarvis_recall.py, backend/jarvis_auto_learn.py, backend/jarvis_learning_switch.py, jarvis-backend/jarvis_extract.py	2026-09-27	covered (measured)	docs/MEMORY-REVIEW-2026-09-27.md
+backend-gate-approvals-cards	backend/*gate*.patch, backend/*approval*.patch, backend/jarvis_owner_check.py, backend/jarvis_asks_first.py, backend/jarvis_card*.py, jarvis-backend/jarvis_gate.py	2026-09-28	stale (highest risk)	docs/APPROVALS-AUDIT-2026-09-26.md
+backend-chatbot-support	backend/jarvis_chatbot*.py, backend/jarvis_support*.py	2026-09-28	stale, never run for real	docs/studio-2026-09-28/chat-audit-system.md
+backend-email-calendar-notes	backend/jarvis_email*.py, backend/jarvis_calendar.py, backend/jarvis_notes.py, backend/jarvis_inbox_tidy.py	2026-09-28	stale	docs/audit-2026-09-28/01-bugs-backend.md
+backend-screen-ocr-secrets	backend/jarvis_screen*.py, backend/jarvis_ocr.py, backend/jarvis_secret*.py, backend/jarvis_secrets.py	never	never audited after build	docs/audit-reports-2026-09-29-30/37-audit-a84616c6.md
+backend-projects-apps-plan-mcp	backend/jarvis_projects.py, backend/jarvis_app*.py, backend/jarvis_plan.py, backend/jarvis_mcp.py	never	never (designs only)	docs/audit-reports-2026-09-29-30/37-audit-a84616c6.md
+backend-pairing-devices	backend/jarvis_devices.py, backend/jarvis_token_store.py, jarvis-backend/jarvis_owner_check.py	2026-09-28	stale (highest risk)	docs/audit-2026-09-28/04-security.md
+tools-and-scripts	tools, scripts	2026-09-28	stale	docs/audit-2026-09-28/01-bugs-backend.md
+ci-workflows	.github/workflows	2026-09-28	stale	docs/DEPS-TESTS-CI-AUDIT-2026-09-26.md
+docs	docs	2026-09-28	stale	docs/audit-2026-09-28/11-docs.md
+frozen-old-apps	jarvis-android, server, keystore	2026-09-26	the map said "covered by being frozen" on 2026-09-30; the tree disagrees - jarvis-android changed 2026-10-07 (15f1d860) and keystore 2026-10-09 (c493fa49)	docs/audit-reports-2026-09-29-30/37-audit-a84616c6.md

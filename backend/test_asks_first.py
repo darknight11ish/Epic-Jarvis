@@ -551,6 +551,18 @@ def t_what_counts_as_named_and_everyday():
         for label, plan, want in cases:
             got = H.everyday_problem(plan)
             check(f"{label}: {'no card' if not want else 'a card'}", bool(got) == bool(want), got)
+        everyday = H.plan_services("light", "turn_off", ["light.kitchen", "light.hall"])
+        check("the everyday check weighs only the CALLS: the readback each one carries "
+              "is a read, not a change, so the no-card path still qualifies",
+              H.everyday_problem(everyday) == ""
+              and [q.method for q in H.service_queries(everyday)] == ["POST", "POST"]
+              and [q.method for q in everyday.queries] == ["POST", "GET", "POST", "GET"],
+              H.everyday_problem(everyday))
+        unpaired = H.plan_services("light", "turn_off", ["light.kitchen"])
+        unpaired.queries = H.service_queries(unpaired)
+        check("... but a call with NO readback paired is not an everyday change either - "
+              "it fails closed to a card",
+              H.everyday_problem(unpaired) != "", H.everyday_problem(unpaired))
 
 
 # ======================================================== 7. the chat loop
@@ -573,6 +585,9 @@ def _turn(args, gate, *, words="turn off the kitchen and hall lights", prov="typ
                               enabled_tools={"home_control"}, request=request)
     finally:
         AG._tier_of = real_tier
+    # What the MODEL was told about the call - the same shape test_home_several's
+    # turn() returns, so a check can read the answer the tool gave back.
+    return [m["content"] for m in bodies[-1]["messages"] if m.get("role") == "tool"]
 
 
 def t_the_loop_switches_named_lights_without_a_card():
@@ -584,7 +599,7 @@ def t_the_loop_switches_named_lights_without_a_card():
     with Env(), Recorder() as rec:
         _turn(lights, gate)
     check("setting off (the default): a card, as before", len(gate.asked) == 1 and
-          len(rec.sent) == 2)
+          len(rec.calls) == 2 and len(rec.readbacks) == 2, rec.sent)
     AF.set_lights(True)
     try:
         audit = []
@@ -595,12 +610,33 @@ def t_the_loop_switches_named_lights_without_a_card():
             _turn(lights, gate)
         AF._audit = keep
         check("setting on, named lights, a clean typed turn: NO card, both switched",
-              gate.asked == [] and [b["entity_id"] for _, _, b in rec.sent]
+              gate.asked == [] and [b["entity_id"] for _, _, b in rec.calls]
               == ["light.kitchen", "light.hall"], (gate.asked, rec.sent))
-        check("... and the audit log names the devices and the service",
+        check("... and the no-card path carries each device's readback too, so a 200 "
+              "from Home Assistant is still never the whole answer",
+              [u for _, u, _ in rec.readbacks]
+              == ["https://ha.local:8123/api/states/light.kitchen",
+                  "https://ha.local:8123/api/states/light.hall"], rec.sent)
+        check("... and the audit log names each device ONCE, and the service - not a "
+              "readback",
               audit and audit[-1][0] == "asks_first.lights.no_card"
               and audit[-1][1]["entities"] == ["light.kitchen", "light.hall"]
               and audit[-1][1]["service"] == "light/turn_off", audit)
+        # The no-card path is verified the same way the carded one is. Home
+        # Assistant takes both calls with a 200 and says both entities are
+        # unavailable; the model must be told they did not respond, not that
+        # the lights went off.
+        dead_gate = Gate(Verdict(True, "ask", "approved"))
+        with Env(), Recorder(state_of={"light.kitchen": "unavailable",
+                                       "light.hall": "unavailable"}) as dead_rec:
+            told_dead = _turn(lights, dead_gate)
+        check("... and a no-card light Home Assistant says is unavailable is reported "
+              "as NOT done, never as switched",
+              bool(told_dead) and "did not respond" in told_dead[-1]
+              and "light.kitchen is unavailable in Home Assistant" in told_dead[-1],
+              told_dead[-1] if told_dead else told_dead)
+        check("... with both calls still sent and both readbacks sent after them",
+              len(dead_rec.calls) == 2 and len(dead_rec.readbacks) == 2, dead_rec.sent)
         for label, args, kw in (
                 ("a lock", {"domain": "lock", "service": "unlock",
                             "entity_id": "lock.front_door"}, {"words": "unlock the front door"}),
