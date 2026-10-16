@@ -1504,6 +1504,23 @@ jobs:
       # passing, and an `open` row whose gap has CLOSED, which means the
       # register is stale rather than the code. Without that second half the
       # register rots exactly like the prose it replaced.
+      # check_claims.py RUNS the suite a `test:` row names, so this job has to be
+      # able to run it - and it could not. Row E06 names
+      # `test:backend/test_backup.py`, which drives the encrypted backup's
+      # AES-GCM/Argon2id path, and `backend/jarvis_backup.py:321-323` imports
+      # `cryptography` to do it. On a job that installed nothing the suite ended
+      # "159 passed, 32 failed" and the step below told the owner a true `built`
+      # claim had stopped holding. It had not - the `backend` job installs this
+      # same package (its own step, above) and passes the identical tree, which
+      # is the whole difference between the two jobs.
+      #
+      # THIS LIST IS "WHAT THE SUITES A CLAIM NAMES NEED", not a copy of the
+      # backend job's. It holds one package because one row's suite needs one.
+      # A commit that adds a row naming a suite with another dependency adds it
+      # here too, or that row will read as a broken claim rather than as a job
+      # that cannot run its check.
+      - name: The package the suites a claim names need
+        run: python3 -m pip install --disable-pip-version-check cryptography==50.0.1
       - name: Every claim in docs/CLAIMS.tsv still holds, and every open gap is still open
         run: python3 ../../tools/check_claims.py
       # docs/DEFECT-REGISTER.md and docs/defect-register.tsv are the board the

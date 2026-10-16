@@ -51,6 +51,13 @@ compare what the suites say against what the owner's PC runs.
   4. The repository's own shipped `[autonomy.tiers]` names nothing the live
      table does not have.
 
+  5. THE OFFLINE HALF OF 2, and the one that would have caught the 2026-10-16
+     finding. Every action a suite names has a line in the SHIPPED
+     `[autonomy.tiers]`, or is a name the gate's own tables carry without one.
+     A name with neither is answered as an unknown action, by fall-through, on
+     a setting the owner can loosen - which is what `undo_action` and
+     `vault_put` did until they were given their own "ask" lines.
+
 THE ONE THING THIS SUITE DOES NOT DO
 
 It does not read the live tier table's VALUES. A policy question ("is
@@ -60,7 +67,10 @@ exists, so it fails for exactly one reason.
 
 Runs on the owner's PC (set JARVIS_BACKEND) and in the dev container (unset:
 BACKEND is this folder, where the modules are symlinked, and a name that
-cannot be found is an honest SKIP, never a silent pass).
+cannot be found is an honest SKIP, never a silent pass). Checks 1 to 4 need the
+owner's `jarvis_gate.py` and his own settings file, so in CI they SKIP; check 5
+needs neither, so it RUNS THERE - which matters, because CI is where the
+failure it was written for had never been seen.
 """
 import ast
 import os
@@ -164,8 +174,15 @@ RECORDED_FALL_THROUGHS = {
     "control_phone",
     "research_authenticated",
     "run_plan",
-    "phone_notifications_read", # jarvis_phone_notifications.py's own ACTION; OPEN FINDING,
-                                # see the audit note - no toml line anywhere in either copy
+    "phone_notifications_read", # jarvis_phone_notifications.py's own ACTION. It HAS a
+                                # line now - rebuilt/jarvis-framework.toml, "ask", the
+                                # audit 05 fix of 2026-10-04 - so on a reconciled PC it
+                                # no longer falls through at all. (This entry read "no
+                                # toml line anywhere in either copy" until 2026-10-16,
+                                # which was false: the line is at jarvis-framework.toml
+                                # in the shipped copy and check 4 prints it as shared
+                                # with the live one. Kept so a live file that still
+                                # lacks it does not go red.)
     "unclassified_tool",        # not an action at all: the fallback name itself
 }
 
@@ -182,6 +199,18 @@ _ACTION_NAME = re.compile(r"^[a-z][a-z0-9_]{2,40}$")
 #: A module records the action it acts under in a constant whose NAME says so:
 #: `ACTION`, `CARD_ACTION`, `RESTORE_ACTION`, `DRAFT_EMAIL_ACTION`, ...
 _ACTION_CONST = re.compile(r"ACTION")
+
+#: The four words a tier may be: `jarvis_gate._VALID_TIERS` is `frozenset(_RANK)`,
+#: where `_RANK = {"auto": 0, "notify": 1, "ask": 2, "never": 3}`. Check 4 accepts
+#: the same four in a live file.
+TIER_WORDS = frozenset({"auto", "notify", "ask", "never"})
+
+#: The gate's own tables, as THIS REPOSITORY carries them. `jarvis_gate.py` is the
+#: owner's file and is not in `backend/`, so away from his PC there is nothing
+#: live to read. `jarvis-backend/jarvis_gate.py` is this repository's published
+#: copy of it - the base an installer starts from, kept in step by
+#: tools/check_stale_twins.py - and it is what check 5 reads a name out of.
+BASE_GATE = REPO / "jarvis-backend" / "jarvis_gate.py"
 
 
 def _import_gate():
@@ -430,6 +459,53 @@ def _gate_member_actions(gate):
     return found
 
 
+def _strings_in(node):
+    """Every string constant under one AST node."""
+    return {n.value for n in ast.walk(node)
+            if isinstance(n, ast.Constant) and isinstance(n.value, str)}
+
+
+def _base_gate_names():
+    """(the names the published base gate resolves, why-not) - read offline.
+
+    The stand-in for `_gate_member_actions(gate)` and for the lookup names
+    `action_for_tool` accepts, for the run where there is no live gate to ask. A
+    name in any of the gate's own tables is one the running gate can answer with
+    no `[autonomy.tiers]` line of its own: `_TOOL_ACTIONS` maps a tool name to an
+    action OR to a tier literal (both are kept - that is what
+    `_resolves_as_a_tool` asks the live gate about), and `_RISK` and
+    `_NO_RULE_FROM_DENIAL` name actions directly.
+
+    Parsed, never imported: this is the owner's module, and importing it is what
+    checks 1 to 3 SKIP to avoid. A missing file is a state worth a SKIP rather
+    than a pass, because then a tool name could not be told from an action.
+    """
+    if not BASE_GATE.is_file():
+        return None, (f"{BASE_GATE} is not here, so the gate's own tables could not "
+                      f"be read without the owner's own backend")
+    try:
+        tree = ast.parse(BASE_GATE.read_text(encoding="utf-8", errors="replace"))
+    except SyntaxError as exc:
+        return None, f"{BASE_GATE} would not parse ({exc!r})"
+    names = set()
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            targets = [t.id for t in node.targets if isinstance(t, ast.Name)]
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            targets = [node.target.id]
+        else:
+            continue
+        for target in targets:
+            if target in ("_TOOL_ACTIONS", "_RISK") and isinstance(node.value, ast.Dict):
+                names |= {k.value for k in node.value.keys
+                          if isinstance(k, ast.Constant) and isinstance(k.value, str)}
+                names |= {v.value for v in node.value.values
+                          if isinstance(v, ast.Constant) and isinstance(v.value, str)}
+            elif target == "_NO_RULE_FROM_DENIAL":
+                names |= _strings_in(node.value)
+    return {n for n in names if _ACTION_NAME.match(n)}, ""
+
+
 # --------------------------------------------------------------------------
 # 1. every tool resolves to a real action
 # --------------------------------------------------------------------------
@@ -611,11 +687,76 @@ def t_the_shipped_tier_table_names_nothing_the_live_one_lacks():
           f"{len(set(live) & set(shipped))} in both)")
 
 
+# --------------------------------------------------------------------------
+# 5. every action a suite names has a SHIPPED tier line (this one runs in CI)
+# --------------------------------------------------------------------------
+
+def t_every_action_a_suite_names_has_a_shipped_tier_line():
+    """The OFFLINE half of check 2, and the one that would have caught the
+    2026-10-16 finding.
+
+    Checks 1 to 3 read the owner's `jarvis_gate.py` and his own settings file, so
+    away from his PC they SKIP - and a SKIP is honest but it is not coverage. Two
+    actions (`undo_action`, `vault_put`) were named by their own modules, were in
+    no tier table anywhere, and were reported by nothing at all, for as long as
+    they fell through silently. This reads only files THIS REPOSITORY carries, so
+    it runs in CI.
+
+    A name the shipped table has no line for, and that the gate's own tables do
+    not carry either, is a name the running gate answers as an unknown action:
+    `jarvis_gate.check()` does `tiers.get(action, UNKNOWN_TIER)`, and
+    `UNKNOWN_TIER` is `[autonomy] unknown_action_tier`. That is fail-safe - "ask"
+    as shipped - and it is still wrong twice over: the action is invisible to the
+    one policy table, and which card it raises depends on a setting that can be
+    loosened. Both were given a line of their own at the tier they ALREADY
+    resolved to, which is the only value that cannot loosen anything.
+    """
+    shipped_path = _shipped_tier_path()
+    tiers, why = _load_toml(shipped_path)
+    if tiers is None:
+        return skip("every action a suite names has a shipped tier line", why)
+    gate_names, why = _base_gate_names()
+    if gate_names is None:
+        return skip("every action a suite names has a shipped tier line", why)
+
+    named = _suite_named_actions()
+    broken = sorted(n for n in named if n.startswith("<") and n.endswith(">"))
+    check("every backend/test_*.py parses, so the scan really saw it",
+          not broken, "\n        ".join(broken))
+    real = {n: w for n, w in named.items() if not n.startswith("<")}
+    check("the scan found the suites' action names (not an empty list by a broken "
+          "pattern)",
+          len(real) >= 20,
+          f"only {len(real)} names found: {sorted(real)}")
+
+    missing = {n: w for n, w in real.items()
+               if n not in tiers and n not in TIER_WORDS
+               and n not in gate_names
+               and n not in FABRICATED_BY_A_SUITE
+               and n not in (UNCLASSIFIED, "unclassified_action")}
+    check("every action a suite names has a line in the shipped [autonomy.tiers], "
+          "or is a name the gate's own tables resolve without one",
+          not missing,
+          "a name with neither is answered as an unknown action, by fall-through, "
+          "on a setting the owner can loosen. Add the line to "
+          "backend/rebuilt/jarvis-framework.toml AT THE TIER IT ALREADY RESOLVES "
+          "TO, and to jarvis-backend/jarvis-framework.toml (the same file - "
+          "tools/check_stale_twins.py compares them). scripts/apply-patches.ps1 "
+          "puts it into the owner's own file on the next run, through "
+          "backend/_apply_toml_tiers.py:\n        "
+          + "\n        ".join(f"{n}  (named at {', '.join(w[:3])})"
+                              for n, w in sorted(missing.items())))
+    print(f"        ({len(real)} action names named by the suites, "
+          f"{len(tiers)} lines in {shipped_path}, "
+          f"{len(gate_names)} names in the gate's own tables)")
+
+
 def main():
     for fn in (t_every_tool_resolves_to_a_real_action,
                t_every_action_a_suite_names_has_a_live_tier_line,
                t_every_action_the_live_gate_resolves_has_a_live_tier_line,
-               t_the_shipped_tier_table_names_nothing_the_live_one_lacks):
+               t_the_shipped_tier_table_names_nothing_the_live_one_lacks,
+               t_every_action_a_suite_names_has_a_shipped_tier_line):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
