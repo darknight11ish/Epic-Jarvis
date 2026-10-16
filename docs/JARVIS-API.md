@@ -20017,12 +20017,16 @@ plain 409 with no card. One card at a time, like every other card in this
 project. The route answers 202 and the reversal runs on its own thread: a card
 can wait fifteen minutes and an HTTP request must not.
 
-**Which tier, and why the module does not decide it.** `undo_action` is
-deliberately absent from `[autonomy.tiers]` in the shipped
-`jarvis-framework.toml`, so it takes `unknown_action_tier`, which that file
-says is **"ask"**: one card per undo, by default, which is what this feature is
-for. The module does **not** read that table and does **not** force the tier,
-and that is deliberate rather than an omission. `jarvis_gate.py` carries
+**Which tier, and why the module does not decide it.** The shipped
+`jarvis-framework.toml` gives `undo_action` a line of its own: **"ask"**, one
+card per undo, which is what this feature is for. Until 2026-10-16 it had none
+and took `unknown_action_tier`, which that file also says is "ask", so the card
+is the same one either way and the line only pins it. It was added because a
+fall-through is invisible - `backend/test_gate_names.py` reports a name with no
+line anywhere as an action the running gate cannot resolve - and because which
+card this raises should not depend on a setting that can be loosened. The
+module does **not** force the tier, and that is deliberate rather than an
+omission. `jarvis_gate.py` carries
 `_NO_RULE_FROM_DENIAL`, the list of actions whose always-ask, button-started
 "no" must not become a proposed standing rule; `backend/test_gate_denial_rule.py`
 reads every module that refuses to act on any tier but `ask` and requires its
@@ -20031,8 +20035,9 @@ the files this feature is forbidden to touch, and a patch is the thing the
 drop-in folder exists to avoid - so this module takes the tier the gate gives
 it, exactly as `jarvis_media.py` and `jarvis_news.py` do, and the tier table
 stays the single policy with one reader. The consequence, said plainly: if the
-owner ever writes a tier for `undo_action` in their own settings file, that is
-what happens; the shipped file has no such line, so today it is one card.
+owner writes a different tier for `undo_action` in their own settings file, his
+file is what the gate reads - "ask" is the shipped default, and it is the value
+this action already had.
 
 **`undo_action` is deliberately not in `jarvis_gate.py`'s `_RISK` table**, and
 this feature adds no row for it: a row means patching the gate, and the

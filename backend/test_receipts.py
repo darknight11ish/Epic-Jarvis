@@ -28,9 +28,10 @@ scratch folder (nothing here needs the owner's PC):
     not reverse anything either (allowed is not "a human decided"), while a
     tier the GATE answers for is obeyed, because the shipped settings file is
     the one policy and this module reads no tier table of its own;
-  - the shipped `jarvis-framework.toml` gives `undo_action` no line, so it
-    takes `unknown_action_tier` - which that file says is "ask" - read out of
-    the file itself rather than asserted about a stub;
+  - the shipped `jarvis-framework.toml` gives `undo_action` a line of its own,
+    "ask" - read out of the file itself rather than asserted about a stub - and
+    the tier it took before that line existed (`unknown_action_tier`) is "ask"
+    too, so the card is the same one either way;
   - install() wraps the core's Handler: GET /api/receipts answers, the POST is
     behind the origin and token checks, every other path reaches the core
     untouched, and a second install() does not double-wrap.
@@ -529,18 +530,27 @@ def t_the_undo_card_is_raised_once_and_a_denied_card_changes_nothing():
 
 def t_the_shipped_settings_ask_for_one_card_per_undo():
     """One card per undo, read out of the SHIPPED settings file rather than
-    asserted about a stub: `undo_action` has no line in `[autonomy.tiers]`, so
-    it takes `[autonomy] unknown_action_tier`, which the same file says is
-    "ask". The MODULE must not force that tier (jarvis_gate.py's
-    `_NO_RULE_FROM_DENIAL` rule, and this file's own docstring says why), so
-    the shipped behaviour is pinned here instead."""
+    asserted about a stub.
+
+    `undo_action` had NO line in `[autonomy.tiers]` until 2026-10-16 and took
+    `[autonomy] unknown_action_tier` instead - which the same file sets to
+    "ask", so the card was the same one either way. The line was added so the
+    name is one the gate RESOLVES rather than one it silently falls through on
+    (see `test_gate_names.py`, which reports a name with no line anywhere as an
+    action the running gate cannot answer). Both halves are held here, so a
+    later edit to either the line or the fall-through cannot change the card
+    without failing this check. The MODULE must not force that tier
+    (jarvis_gate.py's `_NO_RULE_FROM_DENIAL` rule, and this file's own docstring
+    says why), so the shipped behaviour is pinned here instead."""
     import tomllib
     cfg = tomllib.loads((HERE / "rebuilt" / "jarvis-framework.toml").read_text(encoding="utf-8"))
     auto = cfg.get("autonomy", {})
     tiers = auto.get("tiers", {})
-    check("undo_action is deliberately absent from [autonomy.tiers] in the shipped file",
-          "undo_action" not in tiers)
-    check("... so it takes unknown_action_tier, and the shipped file says that is 'ask'",
+    check("the shipped file gives undo_action a line of its own at 'ask'",
+          str(tiers.get("undo_action", "")).strip().lower() == "ask",
+          f"undo_action = {tiers.get('undo_action')!r}")
+    check("... and the fall-through it took before that line existed "
+          "(unknown_action_tier) is 'ask' too, so the card is the same one",
           str(auto.get("unknown_action_tier", "")).strip().lower() == "ask",
           f"unknown_action_tier = {auto.get('unknown_action_tier')!r}")
     check("... and the module does NOT read that table itself, so a changed setting is "
@@ -572,9 +582,9 @@ def t_allowed_is_not_a_person_saying_yes():
 
     # And the tier itself is the GATE's to decide, not this module's: a gate
     # that answers `allowed` for a tier of its own is obeyed, because there is
-    # one policy reader and it is the gate. The shipped configuration has no
-    # line for undo_action at all, which is "ask" (the check above), so this is
-    # about what happens if the owner ever writes one.
+    # one policy reader and it is the gate. The shipped configuration gives
+    # undo_action "ask" of its own (the check above), so this is about what
+    # happens if the owner ever writes a different tier into his own file.
     R._reset_for_tests()
     w2 = World()
     gid2 = w2.goal()["id"]
