@@ -259,7 +259,21 @@ def main(argv=None) -> int:
                     help="strict: exit 1 on debt and 2 when there is nothing to "
                          "check. The desk's mode; CI runs without it on purpose.")
     ap.add_argument("--map", default=MAP, help=f"the area map (default: {MAP})")
-    ap.add_argument("--root", default=".", help="the checkout to check (default: .)")
+    #: The default root is the checkout THIS SCRIPT lives in, not the working
+    #: directory. CI runs it from `jarvis-desktop/src-tauri` (the step's own
+    #: `python3 ../../tools/...` says so), and a working-directory default made
+    #: it look for `jarvis-desktop/src-tauri/tools/stale-areas.tsv` and die with
+    #: a MapUnreadable - which is exactly what happened on PR #486's first run:
+    #:
+    #:   stale-area: the area map could not be read: [Errno 2] No such file or
+    #:   directory: '.../jarvis-desktop/src-tauri/tools/stale-areas.tsv'
+    #:
+    #: A checker whose answer depends on where it was invoked is the same class
+    #: of defect as a test that silently skips: it reports on the wrong thing.
+    #: `--root` still overrides it for a deliberate run against another checkout.
+    here = Path(__file__).resolve().parent.parent
+    ap.add_argument("--root", default=str(here),
+                    help="the checkout to check (default: the one this script lives in)")
     ap.add_argument("--list", action="store_true",
                     help="print every area and its state, so 'nothing is wrong' can "
                          "be told apart from 'nothing was looked at'")
