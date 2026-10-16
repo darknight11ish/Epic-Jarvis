@@ -416,6 +416,80 @@ the settings' names and the one line that renames the file.
 Trying other chat models, and other memory-search models, is
 `tools/model_tryout/README.md`.
 
+## The Qwen3.5-9B profile, and what was measured (2026-10-15)
+
+Upgrade 3C adds a ready-to-build profile for **qwen3.5:9b**:
+`tools/model_tryout/Modelfile.jarvis-qwen35-9b`. It sits in
+`tools/model_tryout/` rather than a new `models/` folder because that folder is
+where Modelfiles-for-models-being-tried already live (the tryout writes them
+there), it needs no `$SHIPPED` entry and no `jarvis-backend/` twin, and
+`backend/` is the patch directory where a second Modelfile would raise exactly
+those questions. **Nothing points at it and nothing was switched** - the
+backend keeps using what it uses.
+
+**Everything the work order claimed about the model, checked against the
+installed one rather than accepted:**
+
+| claim | what was measured | verdict |
+|---|---|---|
+| installed under `.lmstudio\models\manifests\...` | present at `...\manifests\registry.ollama.ai\library\qwen3.5\9b`, and `qwen3.5:9b` is in `/api/tags` (6.55 GB, Q4_K_M, family qwen35) | **right** |
+| 5.24 GB weights + 0.86 GB projector = 6.10 GB | the manifest's own layers: 5,629,109,120 B = **5.243 GiB**, projector 921,704,832 B = **0.858 GiB**, total **6.101 GiB** = 6.55 GB | **right - the unit is GiB** |
+| 8 full-attention + 24 Gated DeltaNet recurrent layers | `qwen35.block_count` 32, `full_attention_interval` 4, and `attention.recurrent_layers` is True,True,True,False eight times -> 24 recurrent, 8 full attention | **right** |
+| 0.27 GiB KV cache at 16K | 2 x 4 kv heads x 256 x **8 attention layers only** x 16384 tokens x 1.0625 B (q8_0) = 285,212,672 B = **0.266 GiB** | **right, at q8_0** |
+| native vision + tools + thinking | `/api/show` capabilities `completion, vision, tools, thinking`, and a projector layer is present | **right** |
+| `presence_penalty` default is 1.5 | `/api/show` parameters: `presence_penalty 1.5`, `temperature 1`, `top_k 20`, `top_p 0.95` | **right** |
+
+Two things the work order did not say, both worth having:
+
+- **A recurrent layer keeps no KV cache at all.** Counting all 32 blocks - what
+  a dense model's arithmetic would do - gives 1.07 GiB at 16K, four times the
+  real figure. That is why 0.27 GiB looks too small for a 9B model and is not.
+- **`qwen3.5:9b` was installed and configured, but not resident.** While these
+  were measured, `/api/ps` listed `qwen3:0.6b` on 11434 and
+  `jarvis-primary:latest` (5.85 GiB) on the everyday lane's own Ollama at
+  11436. The backend's `/api/models` "current" is a setting, not what is on a
+  card. qwen3.5:9b itself was loaded nowhere.
+
+### The measured line (2026-10-15T14:12:03)
+
+`python tools/model_tryout/chat_tryout.py --speed-only`, with NEITHER engine
+setting on (`LLAMA_ARG_CACHE_RAM` and `LLAMA_ARG_SPEC_TYPE` both null), so this
+is the baseline row the two settings above are compared against:
+
+    jarvis-primary: first word 10.49/0.03/0.03 s (1st/2nd/3rd request after
+    loading), 29.0 words/s, 41.6 tokens/s, tidying a note 46.5 tokens/s,
+    100% on the graphics card (5.85 GB)
+
+The prompt was 3,838 tokens - Jarvis's rules and tool list, the "3,000-4,000"
+quoted above - and the load itself was 7.58 s of that 10.49 s.
+
+**The first request after loading takes 10.5 s and the next two take 0.03 s.**
+That is llama.cpp issue #29513 exactly - *"Qwen3.5-4B: first request after load
+is extremely slow (CUDA backend), warm performance is fine (**RTX 2060 /
+sm_75**, b11206)"* - seen on this PC's own 2060, here on `jarvis-primary`
+rather than on a Qwen3.5 model. It is the reason `jarvis_agent.warm_prefix`
+exists, and the reason nothing had to be added for Upgrade 3C item 3: it
+already runs once the model is loaded (`jarvis_power_switch.warm_up`, the path
+that loads it, `jarvis_power_switch.py:521-526`).
+
+The recorded line, verbatim:
+
+```json
+{"requests": [{"first_word_s": 10.49, "load_s": 7.58, "tokens_per_s": 41.4, "words_per_s": 28.9, "prompt_tokens": 3838}, {"first_word_s": 0.03, "load_s": 0.01, "tokens_per_s": 41.9, "words_per_s": 29.2, "prompt_tokens": 3838}, {"first_word_s": 0.03, "load_s": 0.01, "tokens_per_s": 41.4, "words_per_s": 28.9, "prompt_tokens": 3838}], "first_word_s": [10.49, 0.03, 0.03], "tokens_per_s": 41.6, "words_per_s": 29.0, "rewrite_tokens_per_s": 46.5, "prompt_tokens": 3838, "on_card_pct": 100, "size_gb": 5.85, "at": "2026-10-15T14:12:03", "model": "jarvis-primary", "settings_in_this_window": {"LLAMA_ARG_CACHE_RAM": null, "LLAMA_ARG_SPEC_TYPE": null}}
+```
+
+**What the measurement changed on the machine**, so nobody has to guess: the
+timing loads `jarvis-primary` into the main Ollama (11434) and leaves it there,
+which is the tool's own end state. GPU 0 (the 2060) went from 7,731 MiB to
+11,917 MiB of 12,288. The everyday lane's own copy on 11436 was not disturbed,
+and no setting and no model choice was changed. The result file landed in
+`%TEMP%\jarvis-model-tryout\speed-only.jsonl` rather than the usual
+`C:\Users\pcadmin\jarvis-model-tryout\`: that folder is outside the writable
+area of the session that ran it, so `chat_tryout.run(..., out_root=...)` was
+called instead of the command line. The same tool, the same measurement, a
+different place for the line - and the command line to add it to the owner's
+own file is the one printed in `tools/model_tryout/README.md`.
+
 ---
 
 ## The planned second card: RTX 2060 12 GB

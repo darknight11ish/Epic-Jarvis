@@ -889,6 +889,13 @@ SHIPPED = (
     # or refused card stores nothing). The names, their host binding and their
     # times live in vault.json; NO VALUE IS EVER IN THAT FILE.
     "jarvis_vault.py",
+    # The schema a skill's `format` may carry, and the guard around it
+    # (2026-10-15, Upgrade 3A). A skill's own format is validated against a
+    # declared schema BEFORE anything uses it, so a malformed one is refused
+    # in plain words rather than acted on. It validates only: no route, no
+    # card, no file written, nothing downloaded. Standard library only, and
+    # no patch - jarvis_skill_hub.py calls it.
+    "jarvis_tool_schema.py",
     # The Ollama compatibility probe (2026-10-15, self-improvement phase 1).
     # One read-only POST /api/show, at start-up and on every model change,
     # sorted into exactly three outcomes: understood; a capability name Jarvis

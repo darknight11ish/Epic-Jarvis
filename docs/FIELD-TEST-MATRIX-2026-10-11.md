@@ -6,6 +6,103 @@ The owner asked: *"are there any features that haven't been field tested on the 
 
 `features/features.json` holds **128 features in 9 groups and has no `tested`, `verified` or `status` field at all** - so this document cannot be read from a file. Every verdict below was built from a dated artifact, and every row names the one it came from.
 
+
+> ## CORRECTED 2026-10-15: the status column was machine-assigned and is NOT a pass
+>
+> **Every status below was assigned by a KEYWORD SCAN, not by testing.** The scan
+> that built it is `.dsh-scratch/field-matrix/build_matrix.py`, whose own line 7
+> says it outright: *"NO verdict is decided here: this only finds candidates WITH
+> their file and line."* It called a feature `FIELD-TESTED` whenever the
+> feature's own words matched **anywhere** in one of two pass records - it never
+> required the feature to have been operated. The evidence column therefore holds
+> **keyword-hit line numbers, not the line a verdict came from**. Reading those
+> lines back is what this correction does.
+>
+> **A `FIELD-TESTED` row here is not a pass, and the old word is kept inside each
+> row as `was ...` so the change is visible.** Nothing below is promoted;
+> every change is a lowering or a split.
+>
+> ### What the states mean
+>
+> | state | means |
+> |---|---|
+> | **DRIVEN** | the cited record shows the feature **operated and its effect observed** |
+> | **SCREEN** | its screen or row was **found and read**; its behaviour was never exercised |
+> | **BLOCKED** | a record says it **could not be reached** |
+> | **NOT-TESTABLE** | the record says it **needs something absent** (his voice, his accounts, his fingerprint, Home Assistant, hardware) |
+> | **NEVER** | **no record at all** |
+>
+> ### The rule, and that it is mine
+>
+> Later records outrank the main table, and where they disagree the row says
+> **`was ...`** so the earlier reading stays visible. A row that could not be
+> told apart went to the **lower** state. **These counts are this correction's,
+> not the audit's**: the audit's per-row table was never on disk, so they were
+> re-derived row by row from the cited lines and every one is traceable. Nothing
+> was reverse-engineered to match a target distribution.
+>
+> | state | features |
+> |---|---|
+> | DRIVEN | **5** |
+> | SCREEN | **93** |
+> | BLOCKED | **19** |
+> | NOT-TESTABLE | **12** |
+> | NEVER | **0** |
+> | **total** | **129** |
+>
+> ### The build the evidence came from, and why age alone is not the finding
+>
+> The desktop record is **0.2.129.0, built 2026-10-10 15:38** - 43 commits behind
+> the main it was measured against - and the phone record is 37 behind. **That
+> alone is not a fault**: a feature that has not changed since its record may be
+> well tested by it. The fault this correction fixes is narrower and worse: rows
+> marked `FIELD-TESTED` **whose own cited line shows a status**, not a run.
+>
+> ### The three rows I could not settle, and which way I erred
+>
+> Three rows have operation evidence **elsewhere in the record** but a
+> cited line that does not show it. The rule puts all three DOWN at
+> **SCREEN**, and none is claimed as driven:
+>
+> - **`typing`** - the desktop pass logged a real turn (`chat-turn.log`:
+>   `status 200`, an `X-Jarvis-Route` header, 36.6 s), but this row cites
+>   `FINDINGS.md:139` - a sentence about 404s being POST-only routes.
+> - **`focus`** - the row cites `sweep-results.tsv:34`, which is
+>   `/api/chatbot/start STATIC`: a route sweep, not a focus session.
+> - **`settings-entry`** - the row cites `chat-turn.log:4`, an HTTP status
+>   and route header. The Settings SCREEN was demonstrably opened (the
+>   crash-notes FAIL row says the row is not on his Settings page), which is
+>   reading it, not observing its behaviour.
+> Citing the stronger line would settle each one; none is claimed as driven here.
+>
+> ### What cannot be tested from a checkout
+>
+> These need the owner's own machine, voice, accounts or hardware, so reading
+> this repository can never settle them. **This is the actionable list.**
+>
+> - **NOT-TESTABLE (12 rows)**: `accounts`, `calendar`, `chatbot-money`, `crisis-help`, `email-drafts`, `email-read`, `email-send`, `home-status`, `inbox-tidy`, `lights`, `locks`, `weather-sky`. Each row's own reason is
+>   beside it - his voice print, his accounts, his fingerprint, Home Assistant,
+>   and hardware this machine does not have.
+> - **The third pass's own list, with who can settle each** (its section
+>   "NOT TESTED (7) and NOT-TESTABLE (2)"): the voice gate's ACCEPT half (**his**
+>   voice); desktop-microphone voice (no `owner-desktop.json`); #355 the phone's
+>   Live face, #356 the silent mic and face-size options, #357 "Choose a model"
+>   (**the phone**, which was disconnected); #361 the approval toast's
+>   where-to-approve line (**seen on his desktop**); settings through the **model**
+>   path; the two apps refreshing live after a setting changes; the tray menu's
+>   trimmed rows (**his** hidden tray).
+>
+> ### What this correction did NOT do
+>
+> It did not promote anything, and it did not delete a single evidence line or
+> build column - the owner asked for those kept. The counts the first three
+> passes wrote are left in place below, marked as theirs.
+>
+> > **The `## The counts` table immediately below is the FIRST PASS'S OWN COUNT,
+> > kept exactly as measured. It counts keyword-scan verdicts, NOT passes. The
+> > corrected counts are the table just above this note.**
+>
+
 ## The counts
 
 | verdict | features |
@@ -260,134 +357,135 @@ See the table at the end: every entry there says whether the **preflight** cover
 
 | # | feature | group | surface | status | build it ran against | evidence |
 |---|---|---|---|---|---|---|
-| 1 | Type a message and read the answer (`typing`) | Talking | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:139 |
-| 2 | Check a prompt before you send it (`prompt-coach`) | Talking | both | **FIELD-TESTED** | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:80<br>/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:23 |
-| 3 | The talk button (`talk-button`) | Talking | both | **FIELD-TESTED** | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:31<br>/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:32 |
-| 4 | Say "Hey Jarvis" (`wake-word`) | Talking | both | **TEST-VERIFIED ONLY** | never ran on a device | jarvis_wakeword.py, test_wakeword.py, train_wakeword.py |
-| 5 | Jarvis reads its answers aloud (`read-aloud`) | Talking | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:19 |
-| 6 | Short answers to spoken questions (`spoken-style`) | Talking | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:19 |
-| 7 | Teach Jarvis your voice (`voice-training`) | Talking | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:42 |
-| 8 | How strict the voice check is (`voice-check`) | Talking | both | **NEVER TESTED** | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/README.md:79 |
-| 9 | The voice Jarvis speaks with (`custom-voices`) | Talking | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:160 |
-| 10 | How Jarvis talks (`manner`) | Talking | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:97 |
-| 11 | Interrupt Jarvis while it talks (`interrupt`) | Talking | both | **NEVER TESTED** | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/README.md:36 |
-| 12 | Jarvis Live (`live`) | Talking | both | **TEST-VERIFIED ONLY** | never ran on a device | jarvis_live.py, jarvis_live_photo_test.py, test_browser_control_live.py, test_live.py |
-| 13 | The extras around Live (`live-extras`) | Talking | both | **NEVER TESTED** | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/README.md:12 |
-| 14 | Talk-to-type (`talk-to-type`) | Talking | desktop | **NOT FOUND** | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
-| 15 | The whole conversation, and carrying it on (`chat-thread`) | Talking | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:174 |
-| 16 | Temporary chat (`temporary-chat`) | Talking | both | **TEST-VERIFIED ONLY** | never ran on a device | test_temporary_chat.py |
-| 17 | Search what was said (`history-search`) | Talking | both | **NOT FOUND** | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
-| 18 | The morning briefing (`briefing`) | Talking | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:9 |
-| 19 | Timers, alarms, reminders and lists (`coming-up`) | Talking | both | **NEVER TESTED** | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/README.md:48 |
-| 20 | Today (`today`) | Talking | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:142 |
-| 21 | Widgets you describe (`widgets`) | Talking | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:149 |
-| 22 | Background jobs (`jobs`) | Talking | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:49 |
-| 23 | What Jarvis is doing right now (`now`) | Talking | both | **TEST-VERIFIED ONLY** | never ran on a device | gen_own_network_cases.py |
-| 24 | How much Jarvis may interrupt you (`attention-budget`) | Talking | both | **TEST-VERIFIED ONLY** | never ran on a device | test_attention_budget.py |
-| 25 | Focus session (`focus`) | Talking | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:34 |
-| 26 | The Memory tab (`memory-tab`) | Memory | desktop | **NOT FOUND** | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
-| 27 | Facts Jarvis saved by itself (`memory-saved`) | Memory | both | **FIELD-TESTED** (first pass); **BLOCKED** (later top-up) | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/chat-turn.log:4 <br>**Corrected 2026-10-13 - BLOCKED, never a pass:** the `brain.memory.*` menus are hidden on this phone by **"Hide memory lists and chat history"**, which only the owner's fingerprint can change, so Find does not offer them (`docs/FIELD-TEST-2026-10-12-TOPUP.md:113`; the fingerprint prompt itself is measured at `docs/FIELD-TEST-2026-10-12-TOPUP-3.md:82`). |
-| 28 | Facts waiting for your yes (`memory-waiting`) | Memory | both | **FIELD-TESTED** (first pass); **PARTIAL** (later top-up) | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:59<br>/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:303 <br>**Corrected 2026-10-13 - PARTIAL, never a pass:** **"The row is real; the content behind it is the owner's fingerprint"** - the section is reachable and reads `Hidden. Tap Show and confirm it is you.` (`docs/FIELD-TEST-2026-10-12-TOPUP-3.md:72`; the first top-up had it **BLOCKED**, `docs/FIELD-TEST-2026-10-12-TOPUP.md:114`). |
-| 29 | What Jarvis knows about you (`memory-known`) | Memory | desktop | **NOT FOUND** | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
-| 30 | People and things (`memory-people`) | Memory | phone | **FIELD-TESTED** (first pass); **BLOCKED** (later top-up) | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** | /.dsh-scratch/phone-pass-2026-10-11/README.md:32 <br>**Corrected 2026-10-13 - BLOCKED, never a pass:** the `brain.memory.*` menus are hidden on this phone by **"Hide memory lists and chat history"**, which only the owner's fingerprint can change, so Find does not offer them (`docs/FIELD-TEST-2026-10-12-TOPUP.md:115`; re-stated `docs/FIELD-TEST-2026-10-12-TOPUP-3.md:83`). |
-| 31 | Always keep in mind (`pinned-facts`) | Memory | both | **NEVER TESTED** | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/README.md:68 |
-| 32 | Between us (`between-us`) | Memory | both | **TEST-VERIFIED ONLY** | never ran on a device | test_between_us.py |
-| 33 | Topics (`topics`) | Memory | both | **FIELD-TESTED** | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:44<br>/.dsh-scratch/desktop-pass-2026-10-11/chat-turn.log:4 |
-| 34 | The learning switches (`memory-learning`) | Memory | both | **FIELD-TESTED** (first pass); **BLOCKED** (later top-up) | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:58<br>/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:18 <br>**Corrected 2026-10-13 - BLOCKED, never a pass:** the `brain.memory.*` menus are hidden on this phone by **"Hide memory lists and chat history"**, which only the owner's fingerprint can change, so Find does not offer them (`docs/FIELD-TEST-2026-10-12-TOPUP.md:116`; re-stated `docs/FIELD-TEST-2026-10-12-TOPUP-3.md:84`). |
-| 35 | The wiki Jarvis builds (`wiki`) | Memory | both | **FIELD-TESTED** | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:54<br>/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:134 |
-| 36 | Deep questions (`deep-questions`) | Memory | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:24 |
-| 37 | What did I believe on this date? (`memory-as-of`) | Memory | phone | **NEVER TESTED** | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/.evidence/transcript-G.txt:654 |
-| 38 | Bring in old chats (`import-chats`) | Memory | desktop | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:114 |
-| 39 | Your past chats (`history`) | Memory | both | **FIELD-TESTED** (first pass); **PARTIAL** (later top-up) | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:40<br>/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:172 <br>**Corrected 2026-10-13 - PARTIAL, never a pass:** **"The screen works and states its own setting; the conversation list is the owner's to unlock"** - Home -> `Earlier chats` opened `History`, and its `CONVERSATIONS` list reads `Hidden. Tap Show and confirm it is you.` (`docs/FIELD-TEST-2026-10-12-TOPUP-3.md:74`; the first top-up had it **BLOCKED**, `docs/FIELD-TEST-2026-10-12-TOPUP.md:50`). |
-| 40 | Chat tags (`chat-tags`) | Memory | both | **TEST-VERIFIED ONLY** | never ran on a device | test_chat_tags.py |
-| 41 | Forget a time frame (`forget-range`) | Memory | both | **FIELD-TESTED** (first pass); **BLOCKED** (later top-up) | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:175 <br>**Corrected 2026-10-13 - BLOCKED, never a pass:** **"it is an action taken by asking, and the phone's own chat history and memory lists are behind the same gate"** (`docs/FIELD-TEST-2026-10-12-TOPUP-3.md:85`; the first top-up had it **BLOCKED** too, `docs/FIELD-TEST-2026-10-12-TOPUP.md:51`). |
-| 42 | Galaxy (`galaxy`) | Memory | desktop | **FIELD-TESTED** | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:48<br>/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:209 |
-| 43 | Look at this (`look-at-this`) | Screen and pictures | both | **NEVER TESTED** | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/.evidence/transcript-D.txt:44 |
-| 44 | Watch with me (`watch-with-me`) | Screen and pictures | both | **NEVER TESTED** | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/.evidence/transcript-D.txt:44 |
-| 45 | Picture mode (`picture-mode`) | Screen and pictures | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:164 |
-| 46 | Photo to reminder (`photo-reminder`) | Screen and pictures | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:140 |
-| 47 | Show Jarvis the camera in Live (`live-camera`) | Screen and pictures | phone | **NEVER TESTED** | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/.evidence/transcript-D.txt:85 |
-| 48 | Quiz me on a text (`quiz`) | Screen and pictures | both | **FIELD-TESTED** | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:33<br>/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:102 |
-| 49 | My study decks (`decks`) | Notes and files | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:146 |
-| 50 | Write a note for you (`notes-write`) | Notes and files | both | **NOT FOUND** | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
-| 51 | Folders Jarvis may look in (`folders`) | Notes and files | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:13 |
-| 52 | Ask about a PDF, a Word file or a Notion page (`documents`) | Notes and files | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:40 |
-| 53 | Tutorials and the FAQ (`tutorials`) | Notes and files | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:40 |
-| 54 | PC help (`pc-help`) | Notes and files | phone | **TEST-VERIFIED ONLY** | never ran on a device | jarvis_pc_help.py, test_pc_help.py, gen_pc_help_cases.py |
-| 55 | Web search (`web-search`) | Notes and files | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:26 |
-| 56 | A browser without a window (`browser-engine`) | Notes and files | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:187 |
-| 57 | What's new on GitHub (`github-watchlist`) | Notes and files | both | **NOT FOUND** | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
-| 58 | Talk to a chatbot for me (`chatbot`) | Notes and files | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:10 |
-| 59 | Deal with customer support for me (`support`) | Notes and files | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:34 |
-| 60 | Projects (`projects`) | Notes and files | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:150 |
-| 61 | Goals (`goals`) | Notes and files | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:71 |
-| 62 | Progress (`progress`) | Notes and files | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:40 |
-| 63 | Spending summaries (`spending`) | Money and health | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:109 |
-| 64 | Retirement what-if (`retirement`) | Money and health | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:172 |
-| 65 | Chatbot keys and a monthly money limit (`chatbot-money`) | Money and health | desktop | **FIELD-TESTED** (first pass); **NOT-TESTABLE** (later top-up) | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:10 <br>**Corrected 2026-10-13 - NOT-TESTABLE, never a pass:** **"needs chatbot API keys and a monthly amount the owner sets on the PC"** (`docs/FIELD-TEST-2026-10-12-TOPUP.md:126`). |
-| 66 | Health and money facts wait for your yes (`sensitive-facts`) | Money and health | both | **NEVER TESTED** | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/README.md:42 |
-| 67 | Crisis help (`crisis-help`) | Money and health | both | **NOT FOUND** | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
-| 68 | Ask how the house is (`home-status`) | Home | both | **NOT FOUND** | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
-| 69 | Lights, plugs and fans (`lights`) | Home | both | **FIELD-TESTED** (first pass); **NOT-TESTABLE** (later top-up) | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:3 <br>**Corrected 2026-10-13 - NOT-TESTABLE, never a pass:** **"needs the owner's Home Assistant and devices paired to it; the page says Home Assistant needs Home Assistant set up for Jarvis on the PC"** (`docs/FIELD-TEST-2026-10-12-TOPUP.md:121`). |
-| 70 | Locks, doors, alarms and covers (`locks`) | Home | both | **FIELD-TESTED** (first pass); **NOT-TESTABLE** (later top-up) | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:37 <br>**Corrected 2026-10-13 - NOT-TESTABLE, never a pass:** **"same as `lights`: Home Assistant, not set up here, and locks always keep a card of their own"** (`docs/FIELD-TEST-2026-10-12-TOPUP.md:122`). |
-| 71 | Read your own calendar (`calendar`) | Home | desktop | **FIELD-TESTED** (first pass); **NOT-TESTABLE** (later top-up) | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:191 <br>**Corrected 2026-10-13 - NOT-TESTABLE, never a pass:** the page's own words - **"Not included: your calendar is not set up for Jarvis on this PC."** (`docs/FIELD-TEST-2026-10-12-TOPUP.md:117`). |
-| 72 | Weather and the sky behind the animals (`weather-sky`) | Home | both | **FIELD-TESTED** (first pass); **NOT-TESTABLE** (later top-up) | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:104 <br>**Corrected 2026-10-13 - NOT-TESTABLE, never a pass:** the page's own words - **"Not included: the weather is not set up for Jarvis on this PC."** (`docs/FIELD-TEST-2026-10-12-TOPUP.md:120`). |
-| 73 | Jarvis reads your email (`email-read`) | Home | both | **FIELD-TESTED** (first pass); **NOT-TESTABLE** (later top-up) | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:9 <br>**Corrected 2026-10-13 - NOT-TESTABLE, never a pass:** the page's own words - **"Not included: how many unread emails you have is not set up for Jarvis on this PC."** (`docs/FIELD-TEST-2026-10-12-TOPUP.md:118`). |
-| 74 | Send an email for you (`email-send`) | Home | both | **FIELD-TESTED** (first pass); **NOT-TESTABLE** (later top-up) | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:56 <br>**Corrected 2026-10-13 - NOT-TESTABLE, never a pass:** **"needs the owner's mail account (not set up here) and his approval, one card per email"** (`docs/FIELD-TEST-2026-10-12-TOPUP.md:123`). |
-| 75 | Save a draft to your Drafts folder (`email-drafts`) | Home | desktop | **FIELD-TESTED** (first pass); **NOT-TESTABLE** (later top-up) | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:170 <br>**Corrected 2026-10-13 - NOT-TESTABLE, never a pass:** **"needs the owner's mail account (not set up here)"** (`docs/FIELD-TEST-2026-10-12-TOPUP.md:124`). |
-| 76 | Tidy the inbox by voice (`inbox-tidy`) | Home | both | **FIELD-TESTED** (first pass); **NOT-TESTABLE** (later top-up) | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:57 <br>**Corrected 2026-10-13 - NOT-TESTABLE, never a pass:** **"needs the mail account the page says is not set up here, and the inbox routes read it"** (`docs/FIELD-TEST-2026-10-12-TOPUP.md:119`). |
-| 77 | News headlines, and pages that change (`news-and-page-watches`) | Home | both | **FIELD-TESTED** | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:22<br>/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:29 |
-| 78 | Pairing and the connection (`connection`) | Phone | both | **FIELD-TESTED** | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:23<br>/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:20 |
-| 79 | Devices (`devices`) | Phone | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:12 |
-| 80 | Let Jarvis read phone notifications (`phone-notifications`) | Phone | phone | **TEST-VERIFIED ONLY** | never ran on a device | jarvis_phone_notifications.py, test_phone_notifications.py |
-| 81 | Smartwatch notifications (`phone-watch`) | Phone | phone | **NOT FOUND** | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
-| 82 | Floating Jarvis (`phone-floating`) | Phone | phone | **NEVER TESTED** | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/.evidence/transcript-D.txt:22 |
-| 83 | Quick Settings tiles (`phone-tiles`) | Phone | phone | **NEVER TESTED** | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/docs/RESEARCH-AUDIT-2026-09-28.md:320 |
-| 84 | Screen refresh rate (`phone-screen-rate`) | Phone | phone | **FIELD-TESTED** | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:35<br>/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:171 |
-| 85 | Also on my phone (`also-on-phone`) | Phone | both | **NOT FOUND** | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
-| 86 | Ring my phone (`find-phone`) | Phone | both | **TEST-VERIFIED ONLY** | never ran on a device | jarvis_find_phone.py, test_find_phone.py |
-| 87 | What the phone deliberately does not do (`phone-limits`) | Phone | phone | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:78 |
-| 88 | Appearance (`appearance`) | The PC itself | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:4 |
-| 89 | Hang and crash notes (`crash-notes`) | The PC itself | desktop | **NOT FOUND** | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
-| 90 | Choose Jarvis's face (`faces`) | The PC itself | both | **NEVER TESTED** | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/README.md:63 |
-| 91 | Animal options (`animal-options`) | The PC itself | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:195 |
-| 92 | Set up Jarvis (`first-run`) | The PC itself | desktop | **NOT FOUND** | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
-| 93 | Show or hide menus (`menu-visibility`) | The PC itself | both | **TEST-VERIFIED ONLY** | never ran on a device | test_menu_visibility.py |
-| 94 | Keyboard shortcuts (`shortcuts`) | The PC itself | desktop | **FIELD-TESTED** | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** | /.dsh-scratch/phone-pass-2026-10-11/README.md:36 |
-| 95 | Models (`models`) | The PC itself | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/chat-turn.log:19 |
-| 96 | Compute (`compute`) | The PC itself | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:41 |
-| 97 | Skills (`skills`) | The PC itself | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:192 |
-| 98 | Memory on the Model page (`model-memory`) | The PC itself | desktop | **NOT FOUND** | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
-| 99 | Notifications (`notifications`) | The PC itself | desktop | **TEST-VERIFIED ONLY** | never ran on a device | jarvis_phone_notifications.py, test_phone_notifications.py |
-| 100 | Starting Jarvis for you (`start-jarvis`) | The PC itself | desktop | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:22 |
-| 101 | The Work tab (`work-tab`) | The PC itself | desktop | **NEVER TESTED** | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/docs/CONTINUITY-AUDIT-2026-09-26.md:39 |
-| 102 | Jobs that keep going after the chat ends (`job-list`) | The PC itself | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:36 |
-| 103 | Hardware and models (`hardware`) | The PC itself | both | **FIELD-TESTED** | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:38<br>/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:76 |
-| 104 | The second graphics card (`second-card`) | The PC itself | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/chat-turn.log:5 |
-| 105 | The big model (slow) (`big-model`) | The PC itself | both | **TEST-VERIFIED ONLY** | never ran on a device | jarvis_big_model.py, test_big_model.py, gen_big_model_cases.py |
-| 106 | Updates (`updates`) | The PC itself | both | **FIELD-TESTED** | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** | /.dsh-scratch/phone-pass-2026-10-11/README.md:71 |
-| 107 | Check for tool updates (`tool-updates`) | The PC itself | desktop | **FIELD-TESTED** | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:71<br>/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:37 |
-| 108 | The settings file, the logs and starting with Windows (`settings-file`) | The PC itself | desktop | **FIELD-TESTED** | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:97<br>/.dsh-scratch/desktop-pass-2026-10-11/chat-turn.log:1 |
-| 109 | What this backend supports (`backend-supports`) | The PC itself | both | **FIELD-TESTED** | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:50<br>/.dsh-scratch/desktop-pass-2026-10-11/chat-turn.log:1 |
-| 110 | About Jarvis (`about`) | The PC itself | both | **NOT FOUND** | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
-| 111 | The big HUD window (`hud-window`) | The PC itself | desktop | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:187 |
-| 112 | Backups (`backup`) | The PC itself | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:59 |
-| 113 | Accounts and keys (`accounts`) | The PC itself | desktop | **FIELD-TESTED** (first pass); **NOT-TESTABLE** (later top-up) | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:2 <br>**Corrected 2026-10-13 - NOT-TESTABLE, never a pass:** **"the owner's accounts and keys - they are his, and the page keeps them under `Accounts`"** (`docs/FIELD-TEST-2026-10-12-TOPUP.md:125`). |
-| 114 | What Jarvis can reach (`reach`) | The PC itself | both | **FIELD-TESTED** | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:50<br>/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:5 |
-| 115 | Undo (`undo`) | The PC itself | both | **FIELD-TESTED** | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:76<br>/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:81 |
-| 116 | Activity: cards you already decided (`past-approvals`) | The PC itself | both | **FIELD-TESTED** (first pass); **BLOCKED** (later top-up) | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:21<br>/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:13 <br>**Corrected 2026-10-13 - BLOCKED, never a pass:** **"it lists what the owner already decided; nothing to read until he has"** (`docs/FIELD-TEST-2026-10-12-TOPUP.md:130`). |
-| 117 | Limits and frequency (`limits`) | The PC itself | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:10 |
-| 118 | Approval cards (`approvals`) | Safety | both | **FIELD-TESTED** (first pass); **BLOCKED** (later top-up) | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:28 <br>**Corrected 2026-10-13 - BLOCKED, never a pass:** **"an approval card needs a person to decide it; raising one and answering it are both the owner's"** (`docs/FIELD-TEST-2026-10-12-TOPUP.md:129`). |
-| 119 | What asks first (`what-asks-first`) | Safety | both | **NEVER TESTED** | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/README.md:78 |
-| 120 | Lock Jarvis, and hide what it remembers (`app-lock`) | Safety | both | **FIELD-TESTED** (first pass); **BLOCKED** (later top-up) | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:21 <br>**Corrected 2026-10-13 - BLOCKED, never a pass:** **"turning it off or on is the owner's own Windows Hello / phone lock; a harness cannot answer a fingerprint prompt"** (`docs/FIELD-TEST-2026-10-12-TOPUP.md:127`). |
-| 121 | Hand a captcha to your phone ("Solve it here") (`captcha-handoff`) | Safety | both | **NEVER TESTED** | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/.evidence/transcript-G.txt:483 |
-| 122 | When the connection is catching up (`stale-link`) | Safety | both | **FIELD-TESTED** (first pass); **BLOCKED** (later top-up) | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:97<br>/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:20 <br>**Corrected 2026-10-13 - BLOCKED, never a pass:** **"Find -> `catching up` says `Nothing matches that.` - no row on the phone"** (`docs/FIELD-TEST-2026-10-12-TOPUP.md:64`). |
-| 123 | Stop everything (`stop-everything`) | Safety | both | **FIELD-TESTED** | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:94<br>/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:54 |
-| 124 | Trust: content risk and the audit chain (`trust`) | Safety | both | **FIELD-TESTED** (first pass); **BLOCKED** (later top-up) | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/chat-turn.log:6 <br>**Corrected 2026-10-13 - BLOCKED, never a pass:** **"the audit chain's own state is set by approvals the owner decides"** (`docs/FIELD-TEST-2026-10-12-TOPUP.md:128`). |
-| 125 | A warning when text tried to rush you (`rush-latch`) | Safety | phone | **NOT FOUND** | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
-| 126 | Jarvis marks what it read from outside (`outside-text`) | Safety | both | **NEVER TESTED** | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/.evidence/transcript-G.txt:1001 |
-| 127 | Settings itself (`settings-entry`) | Safety | both | **FIELD-TESTED** | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/chat-turn.log:4 |
-| 128 | Ask for a picture, and keep it (`pictures`) | Screen and pictures | both | **PARTIAL** | phone, 2026-10-12 - the record names no build | /docs/FIELD-TEST-2026-10-12-TOPUP.md:52 |
+| 1 | Type a message and read the answer (`typing`) | Talking | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:139 |
+| 2 | Check a prompt before you send it (`prompt-coach`) | Talking | both | **SCREEN** <br>was `FIELD-TESTED` | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:80<br>/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:23 |
+| 3 | The talk button (`talk-button`) | Talking | both | **SCREEN** <br>was `FIELD-TESTED` | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:31<br>/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:32 |
+| 4 | Say "Hey Jarvis" (`wake-word`) | Talking | both | **SCREEN** <br>was `TEST-VERIFIED ONLY` | never ran on a device | jarvis_wakeword.py, test_wakeword.py, train_wakeword.py |
+| 5 | Jarvis reads its answers aloud (`read-aloud`) | Talking | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:19 |
+| 6 | Short answers to spoken questions (`spoken-style`) | Talking | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:19 |
+| 7 | Teach Jarvis your voice (`voice-training`) | Talking | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:42 |
+| 8 | How strict the voice check is (`voice-check`) | Talking | both | **SCREEN** <br>was `NEVER TESTED` | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/README.md:79 |
+| 9 | The voice Jarvis speaks with (`custom-voices`) | Talking | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:160 |
+| 10 | How Jarvis talks (`manner`) | Talking | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:97 |
+| 11 | Interrupt Jarvis while it talks (`interrupt`) | Talking | both | **SCREEN** <br>was `NEVER TESTED` | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/README.md:36 |
+| 12 | Jarvis Live (`live`) | Talking | both | **SCREEN** <br>was `TEST-VERIFIED ONLY` | never ran on a device | jarvis_live.py, jarvis_live_photo_test.py, test_browser_control_live.py, test_live.py |
+| 13 | The extras around Live (`live-extras`) | Talking | both | **SCREEN** <br>was `NEVER TESTED` | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/README.md:12 |
+| 14 | Talk-to-type (`talk-to-type`) | Talking | desktop | **SCREEN** <br>was `NOT FOUND` | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
+| 15 | The whole conversation, and carrying it on (`chat-thread`) | Talking | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:174 |
+| 16 | Temporary chat (`temporary-chat`) | Talking | both | **SCREEN** <br>was `TEST-VERIFIED ONLY` | never ran on a device | test_temporary_chat.py |
+| 17 | Search what was said (`history-search`) | Talking | both | **SCREEN** <br>was `NOT FOUND` | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
+| 18 | The morning briefing (`briefing`) | Talking | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:9 |
+| 19 | Timers, alarms, reminders and lists (`coming-up`) | Talking | both | **BLOCKED** <br>was `NEVER TESTED` | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/README.md:48 |
+| 20 | Today (`today`) | Talking | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:142 |
+| 21 | Widgets you describe (`widgets`) | Talking | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:149 |
+| 22 | Background jobs (`jobs`) | Talking | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:49 |
+| 23 | What Jarvis is doing right now (`now`) | Talking | both | **SCREEN** <br>was `TEST-VERIFIED ONLY` | never ran on a device | gen_own_network_cases.py |
+| 24 | How much Jarvis may interrupt you (`attention-budget`) | Talking | both | **SCREEN** <br>was `TEST-VERIFIED ONLY` | never ran on a device | test_attention_budget.py |
+| 25 | Focus session (`focus`) | Talking | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:34 |
+| 26 | The Memory tab (`memory-tab`) | Memory | desktop | **BLOCKED** <br>was `NOT FOUND` | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
+| 27 | Facts Jarvis saved by itself (`memory-saved`) | Memory | both | **BLOCKED** <br>was `FIELD-TESTED (first pass); BLOCKED (later top-up)` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/chat-turn.log:4 <br>**Corrected 2026-10-13 - BLOCKED, never a pass:** the `brain.memory.*` menus are hidden on this phone by **"Hide memory lists and chat history"**, which only the owner's fingerprint can change, so Find does not offer them (`docs/FIELD-TEST-2026-10-12-TOPUP.md:113`; the fingerprint prompt itself is measured at `docs/FIELD-TEST-2026-10-12-TOPUP-3.md:82`). |
+| 28 | Facts waiting for your yes (`memory-waiting`) | Memory | both | **SCREEN** <br>was `FIELD-TESTED (first pass); PARTIAL (later top-up)` | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:59<br>/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:303 <br>**Corrected 2026-10-13 - PARTIAL, never a pass:** **"The row is real; the content behind it is the owner's fingerprint"** - the section is reachable and reads `Hidden. Tap Show and confirm it is you.` (`docs/FIELD-TEST-2026-10-12-TOPUP-3.md:72`; the first top-up had it **BLOCKED**, `docs/FIELD-TEST-2026-10-12-TOPUP.md:114`). |
+| 29 | What Jarvis knows about you (`memory-known`) | Memory | desktop | **BLOCKED** <br>was `NOT FOUND` | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
+| 30 | People and things (`memory-people`) | Memory | phone | **BLOCKED** <br>was `FIELD-TESTED (first pass); BLOCKED (later top-up)` | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** | /.dsh-scratch/phone-pass-2026-10-11/README.md:32 <br>**Corrected 2026-10-13 - BLOCKED, never a pass:** the `brain.memory.*` menus are hidden on this phone by **"Hide memory lists and chat history"**, which only the owner's fingerprint can change, so Find does not offer them (`docs/FIELD-TEST-2026-10-12-TOPUP.md:115`; re-stated `docs/FIELD-TEST-2026-10-12-TOPUP-3.md:83`). |
+| 31 | Always keep in mind (`pinned-facts`) | Memory | both | **BLOCKED** <br>was `NEVER TESTED` | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/README.md:68 |
+| 32 | Between us (`between-us`) | Memory | both | **BLOCKED** <br>was `TEST-VERIFIED ONLY` | never ran on a device | test_between_us.py |
+| 33 | Topics (`topics`) | Memory | both | **SCREEN** <br>was `FIELD-TESTED` | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:44<br>/.dsh-scratch/desktop-pass-2026-10-11/chat-turn.log:4 |
+| 34 | The learning switches (`memory-learning`) | Memory | both | **BLOCKED** <br>was `FIELD-TESTED (first pass); BLOCKED (later top-up)` | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:58<br>/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:18 <br>**Corrected 2026-10-13 - BLOCKED, never a pass:** the `brain.memory.*` menus are hidden on this phone by **"Hide memory lists and chat history"**, which only the owner's fingerprint can change, so Find does not offer them (`docs/FIELD-TEST-2026-10-12-TOPUP.md:116`; re-stated `docs/FIELD-TEST-2026-10-12-TOPUP-3.md:84`). |
+| 35 | The wiki Jarvis builds (`wiki`) | Memory | both | **SCREEN** <br>was `FIELD-TESTED` | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:54<br>/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:134 |
+| 36 | Deep questions (`deep-questions`) | Memory | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:24 |
+| 37 | What did I believe on this date? (`memory-as-of`) | Memory | phone | **BLOCKED** <br>was `NEVER TESTED` | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/.evidence/transcript-G.txt:654 |
+| 38 | Bring in old chats (`import-chats`) | Memory | desktop | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:114 |
+| 39 | Your past chats (`history`) | Memory | both | **SCREEN** <br>was `FIELD-TESTED (first pass); PARTIAL (later top-up)` | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:40<br>/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:172 <br>**Corrected 2026-10-13 - PARTIAL, never a pass:** **"The screen works and states its own setting; the conversation list is the owner's to unlock"** - Home -> `Earlier chats` opened `History`, and its `CONVERSATIONS` list reads `Hidden. Tap Show and confirm it is you.` (`docs/FIELD-TEST-2026-10-12-TOPUP-3.md:74`; the first top-up had it **BLOCKED**, `docs/FIELD-TEST-2026-10-12-TOPUP.md:50`). |
+| 40 | Chat tags (`chat-tags`) | Memory | both | **BLOCKED** <br>was `TEST-VERIFIED ONLY` | never ran on a device | test_chat_tags.py |
+| 41 | Forget a time frame (`forget-range`) | Memory | both | **BLOCKED** <br>was `FIELD-TESTED (first pass); BLOCKED (later top-up)` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:175 <br>**Corrected 2026-10-13 - BLOCKED, never a pass:** **"it is an action taken by asking, and the phone's own chat history and memory lists are behind the same gate"** (`docs/FIELD-TEST-2026-10-12-TOPUP-3.md:85`; the first top-up had it **BLOCKED** too, `docs/FIELD-TEST-2026-10-12-TOPUP.md:51`). |
+| 42 | Galaxy (`galaxy`) | Memory | desktop | **SCREEN** <br>was `FIELD-TESTED` | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:48<br>/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:209 |
+| 43 | Look at this (`look-at-this`) | Screen and pictures | both | **DRIVEN** <br>was `NEVER TESTED` | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/.evidence/transcript-D.txt:44 |
+| 44 | Watch with me (`watch-with-me`) | Screen and pictures | both | **DRIVEN** <br>was `NEVER TESTED` | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/.evidence/transcript-D.txt:44 |
+| 45 | Picture mode (`picture-mode`) | Screen and pictures | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:164 |
+| 46 | Photo to reminder (`photo-reminder`) | Screen and pictures | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:140 |
+| 47 | Show Jarvis the camera in Live (`live-camera`) | Screen and pictures | phone | **SCREEN** <br>was `NEVER TESTED` | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/.evidence/transcript-D.txt:85 |
+| 48 | Quiz me on a text (`quiz`) | Screen and pictures | both | **SCREEN** <br>was `FIELD-TESTED` | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:33<br>/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:102 |
+| 49 | My study decks (`decks`) | Notes and files | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:146 |
+| 50 | Write a note for you (`notes-write`) | Notes and files | both | **SCREEN** <br>was `NOT FOUND` | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
+| 51 | Folders Jarvis may look in (`folders`) | Notes and files | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:13 |
+| 52 | Ask about a PDF, a Word file or a Notion page (`documents`) | Notes and files | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:40 |
+| 53 | Tutorials and the FAQ (`tutorials`) | Notes and files | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:40 |
+| 54 | PC help (`pc-help`) | Notes and files | phone | **SCREEN** <br>was `TEST-VERIFIED ONLY` | never ran on a device | jarvis_pc_help.py, test_pc_help.py, gen_pc_help_cases.py |
+| 55 | Web search (`web-search`) | Notes and files | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:26 |
+| 56 | A browser without a window (`browser-engine`) | Notes and files | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:187 |
+| 57 | What's new on GitHub (`github-watchlist`) | Notes and files | both | **SCREEN** <br>was `NOT FOUND` | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
+| 58 | Talk to a chatbot for me (`chatbot`) | Notes and files | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:10 |
+| 59 | Deal with customer support for me (`support`) | Notes and files | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:34 |
+| 60 | Projects (`projects`) | Notes and files | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:150 |
+| 61 | Goals (`goals`) | Notes and files | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:71 |
+| 62 | Progress (`progress`) | Notes and files | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:40 |
+| 63 | Spending summaries (`spending`) | Money and health | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:109 |
+| 64 | Retirement what-if (`retirement`) | Money and health | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:172 |
+| 65 | Chatbot keys and a monthly money limit (`chatbot-money`) | Money and health | desktop | **NOT-TESTABLE** <br>was `FIELD-TESTED (first pass); NOT-TESTABLE (later top-up)` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:10 <br>**Corrected 2026-10-13 - NOT-TESTABLE, never a pass:** **"needs chatbot API keys and a monthly amount the owner sets on the PC"** (`docs/FIELD-TEST-2026-10-12-TOPUP.md:126`). |
+| 66 | Health and money facts wait for your yes (`sensitive-facts`) | Money and health | both | **BLOCKED** <br>was `NEVER TESTED` | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/README.md:42 |
+| 67 | Crisis help (`crisis-help`) | Money and health | both | **NOT-TESTABLE** <br>was `NOT FOUND` | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
+| 68 | Ask how the house is (`home-status`) | Home | both | **NOT-TESTABLE** <br>was `NOT FOUND` | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
+| 69 | Lights, plugs and fans (`lights`) | Home | both | **NOT-TESTABLE** <br>was `FIELD-TESTED (first pass); NOT-TESTABLE (later top-up)` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:3 <br>**Corrected 2026-10-13 - NOT-TESTABLE, never a pass:** **"needs the owner's Home Assistant and devices paired to it; the page says Home Assistant needs Home Assistant set up for Jarvis on the PC"** (`docs/FIELD-TEST-2026-10-12-TOPUP.md:121`). |
+| 70 | Locks, doors, alarms and covers (`locks`) | Home | both | **NOT-TESTABLE** <br>was `FIELD-TESTED (first pass); NOT-TESTABLE (later top-up)` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:37 <br>**Corrected 2026-10-13 - NOT-TESTABLE, never a pass:** **"same as `lights`: Home Assistant, not set up here, and locks always keep a card of their own"** (`docs/FIELD-TEST-2026-10-12-TOPUP.md:122`). |
+| 71 | Read your own calendar (`calendar`) | Home | desktop | **NOT-TESTABLE** <br>was `FIELD-TESTED (first pass); NOT-TESTABLE (later top-up)` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:191 <br>**Corrected 2026-10-13 - NOT-TESTABLE, never a pass:** the page's own words - **"Not included: your calendar is not set up for Jarvis on this PC."** (`docs/FIELD-TEST-2026-10-12-TOPUP.md:117`). |
+| 72 | Weather and the sky behind the animals (`weather-sky`) | Home | both | **NOT-TESTABLE** <br>was `FIELD-TESTED (first pass); NOT-TESTABLE (later top-up)` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:104 <br>**Corrected 2026-10-13 - NOT-TESTABLE, never a pass:** the page's own words - **"Not included: the weather is not set up for Jarvis on this PC."** (`docs/FIELD-TEST-2026-10-12-TOPUP.md:120`). |
+| 73 | Jarvis reads your email (`email-read`) | Home | both | **NOT-TESTABLE** <br>was `FIELD-TESTED (first pass); NOT-TESTABLE (later top-up)` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:9 <br>**Corrected 2026-10-13 - NOT-TESTABLE, never a pass:** the page's own words - **"Not included: how many unread emails you have is not set up for Jarvis on this PC."** (`docs/FIELD-TEST-2026-10-12-TOPUP.md:118`). |
+| 74 | Send an email for you (`email-send`) | Home | both | **NOT-TESTABLE** <br>was `FIELD-TESTED (first pass); NOT-TESTABLE (later top-up)` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:56 <br>**Corrected 2026-10-13 - NOT-TESTABLE, never a pass:** **"needs the owner's mail account (not set up here) and his approval, one card per email"** (`docs/FIELD-TEST-2026-10-12-TOPUP.md:123`). |
+| 75 | Save a draft to your Drafts folder (`email-drafts`) | Home | desktop | **NOT-TESTABLE** <br>was `FIELD-TESTED (first pass); NOT-TESTABLE (later top-up)` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:170 <br>**Corrected 2026-10-13 - NOT-TESTABLE, never a pass:** **"needs the owner's mail account (not set up here)"** (`docs/FIELD-TEST-2026-10-12-TOPUP.md:124`). |
+| 76 | Tidy the inbox by voice (`inbox-tidy`) | Home | both | **NOT-TESTABLE** <br>was `FIELD-TESTED (first pass); NOT-TESTABLE (later top-up)` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:57 <br>**Corrected 2026-10-13 - NOT-TESTABLE, never a pass:** **"needs the mail account the page says is not set up here, and the inbox routes read it"** (`docs/FIELD-TEST-2026-10-12-TOPUP.md:119`). |
+| 77 | News headlines, and pages that change (`news-and-page-watches`) | Home | both | **SCREEN** <br>was `FIELD-TESTED` | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:22<br>/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:29 |
+| 78 | Pairing and the connection (`connection`) | Phone | both | **SCREEN** <br>was `FIELD-TESTED` | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:23<br>/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:20 |
+| 79 | Devices (`devices`) | Phone | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:12 |
+| 80 | Let Jarvis read phone notifications (`phone-notifications`) | Phone | phone | **SCREEN** <br>was `TEST-VERIFIED ONLY` | never ran on a device | jarvis_phone_notifications.py, test_phone_notifications.py |
+| 81 | Smartwatch notifications (`phone-watch`) | Phone | phone | **SCREEN** <br>was `NOT FOUND` | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
+| 82 | Floating Jarvis (`phone-floating`) | Phone | phone | **SCREEN** <br>was `NEVER TESTED` | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/.evidence/transcript-D.txt:22 |
+| 83 | Quick Settings tiles (`phone-tiles`) | Phone | phone | **SCREEN** <br>was `NEVER TESTED` | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/docs/RESEARCH-AUDIT-2026-09-28.md:320 |
+| 84 | Screen refresh rate (`phone-screen-rate`) | Phone | phone | **SCREEN** <br>was `FIELD-TESTED` | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:35<br>/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:171 |
+| 85 | Also on my phone (`also-on-phone`) | Phone | both | **SCREEN** <br>was `NOT FOUND` | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
+| 86 | Ring my phone (`find-phone`) | Phone | both | **DRIVEN** <br>was `TEST-VERIFIED ONLY` | never ran on a device | jarvis_find_phone.py, test_find_phone.py |
+| 87 | What the phone deliberately does not do (`phone-limits`) | Phone | phone | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:78 |
+| 88 | Appearance (`appearance`) | The PC itself | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:4 |
+| 89 | Hang and crash notes (`crash-notes`) | The PC itself | desktop | **DRIVEN** <br>was `NOT FOUND` | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
+| 90 | Choose Jarvis's face (`faces`) | The PC itself | both | **SCREEN** <br>was `NEVER TESTED` | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/README.md:63 |
+| 91 | Animal options (`animal-options`) | The PC itself | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:195 |
+| 92 | Set up Jarvis (`first-run`) | The PC itself | desktop | **SCREEN** <br>was `NOT FOUND` | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
+| 93 | Show or hide menus (`menu-visibility`) | The PC itself | both | **SCREEN** <br>was `TEST-VERIFIED ONLY` | never ran on a device | test_menu_visibility.py |
+| 94 | Keyboard shortcuts (`shortcuts`) | The PC itself | desktop | **SCREEN** <br>was `FIELD-TESTED` | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** | /.dsh-scratch/phone-pass-2026-10-11/README.md:36 |
+| 95 | Models (`models`) | The PC itself | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/chat-turn.log:19 |
+| 96 | Compute (`compute`) | The PC itself | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:41 |
+| 97 | Skills (`skills`) | The PC itself | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:192 |
+| 98 | Memory on the Model page (`model-memory`) | The PC itself | desktop | **SCREEN** <br>was `NOT FOUND` | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
+| 99 | Notifications (`notifications`) | The PC itself | desktop | **SCREEN** <br>was `TEST-VERIFIED ONLY` | never ran on a device | jarvis_phone_notifications.py, test_phone_notifications.py |
+| 100 | Starting Jarvis for you (`start-jarvis`) | The PC itself | desktop | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:22 |
+| 101 | The Work tab (`work-tab`) | The PC itself | desktop | **BLOCKED** <br>was `NEVER TESTED` | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/docs/CONTINUITY-AUDIT-2026-09-26.md:39 |
+| 102 | Jobs that keep going after the chat ends (`job-list`) | The PC itself | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:36 |
+| 103 | Hardware and models (`hardware`) | The PC itself | both | **SCREEN** <br>was `FIELD-TESTED` | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:38<br>/.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:76 |
+| 104 | The second graphics card (`second-card`) | The PC itself | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/chat-turn.log:5 |
+| 105 | The big model (slow) (`big-model`) | The PC itself | both | **BLOCKED** <br>was `TEST-VERIFIED ONLY` | never ran on a device | jarvis_big_model.py, test_big_model.py, gen_big_model_cases.py |
+| 106 | Updates (`updates`) | The PC itself | both | **SCREEN** <br>was `FIELD-TESTED` | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** | /.dsh-scratch/phone-pass-2026-10-11/README.md:71 |
+| 107 | Check for tool updates (`tool-updates`) | The PC itself | desktop | **SCREEN** <br>was `FIELD-TESTED` | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:71<br>/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:37 |
+| 108 | The settings file, the logs and starting with Windows (`settings-file`) | The PC itself | desktop | **SCREEN** <br>was `FIELD-TESTED` | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:97<br>/.dsh-scratch/desktop-pass-2026-10-11/chat-turn.log:1 |
+| 109 | What this backend supports (`backend-supports`) | The PC itself | both | **SCREEN** <br>was `FIELD-TESTED` | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:50<br>/.dsh-scratch/desktop-pass-2026-10-11/chat-turn.log:1 |
+| 110 | About Jarvis (`about`) | The PC itself | both | **SCREEN** <br>was `NOT FOUND` | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
+| 111 | The big HUD window (`hud-window`) | The PC itself | desktop | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:187 |
+| 112 | Backups (`backup`) | The PC itself | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:59 |
+| 113 | Accounts and keys (`accounts`) | The PC itself | desktop | **NOT-TESTABLE** <br>was `FIELD-TESTED (first pass); NOT-TESTABLE (later top-up)` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/sweep-results.tsv:2 <br>**Corrected 2026-10-13 - NOT-TESTABLE, never a pass:** **"the owner's accounts and keys - they are his, and the page keeps them under `Accounts`"** (`docs/FIELD-TEST-2026-10-12-TOPUP.md:125`). |
+| 114 | What Jarvis can reach (`reach`) | The PC itself | both | **SCREEN** <br>was `FIELD-TESTED` | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:50<br>/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:5 |
+| 115 | Undo (`undo`) | The PC itself | both | **SCREEN** <br>was `FIELD-TESTED` | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:76<br>/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:81 |
+| 116 | Activity: cards you already decided (`past-approvals`) | The PC itself | both | **BLOCKED** <br>was `FIELD-TESTED (first pass); BLOCKED (later top-up)` | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:21<br>/.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:13 <br>**Corrected 2026-10-13 - BLOCKED, never a pass:** **"it lists what the owner already decided; nothing to read until he has"** (`docs/FIELD-TEST-2026-10-12-TOPUP.md:130`). |
+| 117 | Limits and frequency (`limits`) | The PC itself | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:10 |
+| 118 | Approval cards (`approvals`) | Safety | both | **BLOCKED** <br>was `FIELD-TESTED (first pass); BLOCKED (later top-up)` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:28 <br>**Corrected 2026-10-13 - BLOCKED, never a pass:** **"an approval card needs a person to decide it; raising one and answering it are both the owner's"** (`docs/FIELD-TEST-2026-10-12-TOPUP.md:129`). |
+| 119 | What asks first (`what-asks-first`) | Safety | both | **SCREEN** <br>was `NEVER TESTED` | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/README.md:78 |
+| 120 | Lock Jarvis, and hide what it remembers (`app-lock`) | Safety | both | **BLOCKED** <br>was `FIELD-TESTED (first pass); BLOCKED (later top-up)` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/gap-table.md:21 <br>**Corrected 2026-10-13 - BLOCKED, never a pass:** **"turning it off or on is the owner's own Windows Hello / phone lock; a harness cannot answer a fingerprint prompt"** (`docs/FIELD-TEST-2026-10-12-TOPUP.md:127`). |
+| 121 | Hand a captcha to your phone ("Solve it here") (`captcha-handoff`) | Safety | both | **SCREEN** <br>was `NEVER TESTED` | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/.evidence/transcript-G.txt:483 |
+| 122 | When the connection is catching up (`stale-link`) | Safety | both | **BLOCKED** <br>was `FIELD-TESTED (first pass); BLOCKED (later top-up)` | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:97<br>/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:20 <br>**Corrected 2026-10-13 - BLOCKED, never a pass:** **"Find -> `catching up` says `Nothing matches that.` - no row on the phone"** (`docs/FIELD-TEST-2026-10-12-TOPUP.md:64`). |
+| 123 | Stop everything (`stop-everything`) | Safety | both | **SCREEN** <br>was `FIELD-TESTED` | phone 0.2.0 installed 2026-10-11 01:17 - **37 commits behind main** <br>desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/phone-pass-2026-10-11/README.md:94<br>/.dsh-scratch/desktop-pass-2026-10-11/FINDINGS.md:54 |
+| 124 | Trust: content risk and the audit chain (`trust`) | Safety | both | **BLOCKED** <br>was `FIELD-TESTED (first pass); BLOCKED (later top-up)` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/chat-turn.log:6 <br>**Corrected 2026-10-13 - BLOCKED, never a pass:** **"the audit chain's own state is set by approvals the owner decides"** (`docs/FIELD-TEST-2026-10-12-TOPUP.md:128`). |
+| 125 | A warning when text tried to rush you (`rush-latch`) | Safety | phone | **SCREEN** <br>was `NOT FOUND` | never ran on a device | no evidence either way: no pass record, no suite and no review names it |
+| 126 | Jarvis marks what it read from outside (`outside-text`) | Safety | both | **SCREEN** <br>was `NEVER TESTED` | never ran on a device | only a review mentions it: /.dsh-scratch/device-tour/.evidence/transcript-G.txt:1001 |
+| 127 | Settings itself (`settings-entry`) | Safety | both | **SCREEN** <br>was `FIELD-TESTED` | desktop 0.2.129.0, 2026-10-10 - **older still** | /.dsh-scratch/desktop-pass-2026-10-11/chat-turn.log:4 |
+| 128 | Ask for a picture, and keep it (`pictures`) | Screen and pictures | both | **SCREEN** <br>was `PARTIAL` | phone, 2026-10-12 - the record names no build | /docs/FIELD-TEST-2026-10-12-TOPUP.md:52 |
+| 129 | Change a setting by asking, in any words (`settings-by-asking`) | The PC itself | both | **DRIVEN** | live backend, 2026-10-12 | this document, third pass PASS T2 (typed "keep the animal still" and `still` went `false -> true` in the live store) - added 2026-10-15: the 129th entry had no row at all |
 
 ## Method, and its limits, said plainly
 
