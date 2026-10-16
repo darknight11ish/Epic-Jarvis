@@ -1212,6 +1212,22 @@ class Projects:
             c.execute("DELETE FROM project_facts WHERE project = ?", (pid,))
             c.execute("DELETE FROM projects WHERE id = ?", (pid,))
             self._drop_axes(c, "bench", benches)
+        # The row is gone as of that commit. If it was the ACTIVE project the
+        # mode file must stop naming it: otherwise active_project_id() keeps
+        # answering a dead id, and every reader of it is handed a project that
+        # is not there. The chat path's own lane gate in
+        # backend/cloud-say-yes.patch is one such reader - for EVERY turn - and
+        # a KeyError out of Projects.get there is a 500 on every chat turn
+        # until the owner leaves Project Mode by hand. Leaving Project Mode is
+        # the honest outcome: this never enters another project, and it never
+        # makes a turn cloud-eligible. Done here, right after the commit and
+        # BEFORE the withdrawals below, so a withdrawal that raises cannot
+        # leave the dead id behind. `set_active_project(None)` is the one
+        # audited door for leaving, the same call the route uses. A mode file
+        # that cannot be written raises out of here on purpose: a delete that
+        # cannot clear the dead id must not report success while the 500 stays.
+        if active_project_id() == pid:
+            set_active_project(None, store=self)
         _withdraw_share(pid)
         for bid in benches:
             _withdraw_unmark(bid)
