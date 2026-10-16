@@ -1600,6 +1600,40 @@ jobs:
       # job through run_suites.py, is the proof that this checker bites.
       - name: Every .py in the published base is delivered, or recorded as not
         run: python3 ../../tools/check_unmanaged_files.py
+      # ---------------------------------------------------------------------
+      # THE ONE STEP IN THIS JOB THAT REPORTS WITHOUT FAILING, on purpose.
+      #
+      # Queue item 10 ("a stale-area check after every big merge", docs/
+      # HANDOFF-AFTER-PR39.md:300) is about audit COVERAGE, not about a
+      # document contradicting the tree: of the areas a change touched, which
+      # have moved since the last time anybody audited them. Its map is
+      # tools/stale-areas.tsv, seeded from the coverage map that item names.
+      #
+      # Every other step above exits non-zero the moment it finds something.
+      # This one must not, and the reason is the number. Measured on 2f85d772:
+      # 17 of the 18 areas have moved since they were last audited - the map's
+      # audits are all 2026-09-24..09-30 and the tree is 2026-10-16. A step
+      # that went red for that would be red on every pull request for debt no
+      # pull request caused, and CLAUDE.md's own rule is that a red `audit` is
+      # a signal to fix main's state, never a reason to hold a PR. So it PRINTS
+      # the debt and exits 0, which is how it gets RUN on every PR instead of
+      # being switched off in a week. A tool nobody runs is a document.
+      #
+      # `audit` is already informational and not one of the six required
+      # checks, so nothing here can block a merge either way.
+      #
+      # The gate is at the desk: `python -B tools/check_stale_area.py --all
+      # --check` exits 1 on debt and 2 when there is nothing to check at all.
+      # A map row whose globs match no tracked file fails in BOTH modes - a row
+      # nobody can evaluate is a row nobody checked, and that must never look
+      # like a clean run.
+      #
+      # The bite proof is the tool's own; the human number is in the row's
+      # commit. Nothing here is cleared by editing this file: a row goes quiet
+      # when an audit is recorded in tools/stale-areas.tsv.
+      # ---------------------------------------------------------------------
+      - name: Which audited areas have moved since their last audit
+        run: python3 ../../tools/check_stale_area.py --all
 
   python-advisories:
     # The backend's Python packages, next to `cargo deny` above (feasibility
