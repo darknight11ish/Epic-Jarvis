@@ -103,13 +103,30 @@ body {
   display: flex;
   flex-direction: column;
   width: 100%;
-  /* The window is clamped to 720px by `resize_quickbar`. Each region below is
-     individually bounded, but the STACK was not and nothing scrolled at shell
-     level: bar + attention panel + a gate with a long diff reached the clamp
-     before the answer card existed, and Approve/Deny went past the cut —
-     clipped, not scrolled, so there was no way to reach them at all.
-     `max-height` here plus the scroller below keeps the stack inside the clamp. */
-  max-height: 100vh;
+  /* The tallest the bar may ever be: the SAME 720 `resize_quickbar` clamps
+     every height to on the Rust side (`windows.rs`, QUICKBAR_MAX_HEIGHT), and
+     `tests/approval-reachable.mjs` reads both files and holds them together.
+
+     It must not be `100vh`, and that one word is why a card below the input
+     row could not be reached. `syncWindowHeight` (main.js) asks Rust to size
+     the window to what this element MEASURES, and `max-height: 100vh` made
+     that measurement the window's own height the moment the content was
+     taller than the window: the page reported the height it already had,
+     Rust set the window to exactly that, and the loop stopped. The bar could
+     therefore never grow past one input row — and Rust collapses it to
+     `QUICKBAR_BASE_HEIGHT` every time it is summoned from hidden
+     (`show_quickbar_unlocked`), so a card opened from a notification landed
+     under an 80px window with its Approve and Deny outside it, unreachable
+     by scrolling too (the stack scroller had no height to scroll in).
+
+     With the window's own clamp here instead, this element IS its content
+     until the content is taller than any window may be — and past that the
+     stack below scrolls inside the clamp while the sticky
+     `.approval-actions` stays at the bottom edge, which is what the cap was
+     added for in the first place: `bar + attention panel + a gate with a long
+     diff` must never push Approve and Deny past the cut with nothing
+     scrolling. */
+  max-height: 720px;
   border-radius: var(--radius-shell);
   background: linear-gradient(
       180deg,

@@ -2445,3 +2445,44 @@ box"*. That was replaced on 2026-10-06.
   concurrency setting or by a runner fault, and presses Merge in the order that
   costs the fewest fix-ups. This replaces the 2026-09-26 note that the owner
   presses Merge; he can still press it himself whenever he wants.
+
+## 2026-10-16 - the card is answered where it is shown
+
+Asked by the owner the same day, in his own words, as his top priority:
+
+> "when i click open the card from the notification, it opens the jarvis bar
+> with no additional information. it should open the card itself. i should also
+> be able to approve any card from the jarvis hud directly on my desktop and
+> not need the jarvis widget or jarvis bar to do so"
+>
+> "also after i click open the card and type into the jarvis bar that i
+> approve, nothing happens. i have no idea what happens"
+
+**Decided: all three are real and all three are fixed, and the HUD answers a
+card through the SAME `decide_approval` the Jarvis bar and the widget call -
+never through a second permission path.** What that means concretely:
+
+* **The bar grows to the card a notification opened it for.** The quickbar is
+  collapsed to its base height every time it is summoned from hidden, and the
+  page sizes the window to what it measures; the stylesheet capped that
+  measurement at the window's own height, so the loop could never close and the
+  card - with Approve and Deny - sat outside an 80px window with no scroller
+  height to reach it through. The cap is now the window's own clamp, held to
+  `windows.rs`'s `QUICKBAR_MAX_HEIGHT` by a test.
+* **The HUD's card has real Approve and Deny**, granted as one command
+  (`hud-approvals` -> `allow-decide-approval`). Windows Hello, the stale-link
+  refusal, the cut-off refusal and the App-lock rule apply there unchanged, and
+  the page's own `fetch` still cannot post a decision: `hud_bootstrap.js`
+  refuses `/api/approve` and `/api/deny` whatever the link is doing. This
+  supersedes the 2026-09-25 rule that the HUD shows cards and answers none
+  (apps security audit M2) - that rule existed because the page's own POST had
+  none of those checks, and it still has none, which is why the command is the
+  only door.
+* **Typing the decision works, and nothing is inferred.** Only a message that
+  IS the decision ("approve", "i approve it", "deny") decides, and it goes
+  through the same `decideApproval` the two buttons call. A message that only
+  sounds like one ("yes", "ok", "go ahead") is answered with words saying which
+  button to press, and an APPROVE on a card `quickActionable()` refuses (it
+  carries `raised`) is refused with words too. A card that is not on screen -
+  Esc puts one aside without deciding it - is never answered from a typed word.
+

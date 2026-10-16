@@ -84,6 +84,27 @@ identifier = "open-card"
 description = "Open the Jarvis bar on a waiting approval card. Decides nothing."
 permissions = ["allow-open-approval-in-quickbar"]
 
+# The HUD's own Approve and Deny (2026-10-16; the owner's ask: "i should also
+# be able to approve any card from the jarvis hud directly on my desktop and
+# not need the jarvis widget or jarvis bar to do so").
+#
+# One command, and NOT a permission path of its own: `decide_approval` is the
+# same command the Jarvis bar and the widget call, so every check written for
+# it applies to this window unchanged - the stale-link refusal, the cut-off
+# refusal (commands.rs), Windows Hello for the card the settings say needs it,
+# and the App-lock rule (a window the lock covers approves nothing; the bar
+# opens and asks there). The page's own POST to /api/approve stays refused by
+# the fetch shim in hud_bootstrap.js, so this grant is the only way a decision
+# can leave that page.
+#
+# What it cannot do, deliberately: amend a card (that is `approvals` above and
+# needs a note field this page does not draw), answer more than the one card
+# whose id is on screen, or answer anything with a stale link.
+[[set]]
+identifier = "hud-approvals"
+description = "Answer ONE waiting approval card from the HUD, through the same decide_approval the Jarvis bar and the widget use. Deny works on any card; Approve is held by Windows Hello where the settings ask for it, refused while the link is stale, and refused while App lock covers this window."
+permissions = ["allow-decide-approval"]
+
 # Pause, resume or stop the turn Jarvis is running right now, and annotate it.
 # Granted to the two windows that actually draw those controls - the quickbar
 # and the widget - and to nothing else, the same reasoning `approvals` above

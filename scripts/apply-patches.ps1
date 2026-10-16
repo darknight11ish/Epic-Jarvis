@@ -1915,6 +1915,16 @@ $SHIPPED = @(
     'jarvis_ollama_contract.py'  # One read-only POST /api/show at start-up and on every model change, sorted into exactly three outcomes: understood; a capability name Jarvis has never heard of, logged ONCE and never an error, because an extra name cannot take tools or vision away; or a capability Jarvis uses that the model's own answer plainly shows it has while the capabilities list does not name it, reported flatly as Jarvis about to under-use the owner's model. Ollama not answering is NOT one of the three - it is reported as no verdict and logged once, so an unreadable answer can never read as understood. No version is read or compared anywhere (jarvis_hardware.py:912). It downloads, loads, unloads and writes nothing, opens no route, raises no card, and has no call site yet. Standard library only - no patch
     # --- Verify a GGUF by its listing, before any download (2026-10-15, Upgrade 3B piece 2) ---
     'jarvis_hf_inspect.py'       # Answers four questions from the file LISTING of a Hugging Face repo and nothing else: what is in it by name and size, with the vision projector reported separately from the model GGUF; the exact quant labels the repo uses, verbatim; the KV cache a hybrid model really grows, counted only over the layers that grow one; and what is missing. ONE HTTPS GET to huggingface.co/api/models/<owner>/<name>/tree/main?recursive=true - the repo id is the whole request, with no token, cookie, key or local file name in it, and no weight is ever fetched. It writes nothing at all: no file, no cache, no state, no audit row, no timer, no job. Standard library only, no patch, no call site yet
+# --- Read-only self-diagnosis and drafting, phases 3 and 4 of the
+# self-improvement design (2026-10-16). Retrieval over the program's own text
+# files picks the lines that answer a question, and the local model explains
+# them; every answer cites a real file:line, re-read from disk, or says plainly
+# it could not establish it. draft() produces a code diff and a separate
+# new-file test diff for the OWNER to apply by hand, and refuses any diff
+# touching jarvis_gate.py, a tier/risk table, a test file or the three SHIPPED
+# lists. It applies nothing, writes nothing, opens no route, reaches no network
+# but the loopback model, and fails closed when jarvis_scrub is absent.
+'jarvis_self_improve.py'     # Diagnosis with citations; drafts a diff, applies nothing
 )
 
 # The settings file. Installed only where none exists; never overwritten.
