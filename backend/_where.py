@@ -846,6 +846,14 @@ SHIPPED = (
     # again. big-coder.patch wires its two routes; nothing downloads, every
     # call is loopback, and turning it on is one approval card.
     "jarvis_big_coder.py",
+    # "Start the local model" (2026-10-13, the owner's decision; model-lanes.patch):
+    # the button on the standing "the local model isn't running" line both apps
+    # draw. It runs HIS OWN Windows logon task - found on this PC with
+    # `schtasks`, matched by the stable half of its name - and then watches that
+    # lane's /api/tags until it answers, so "starting" is never reported as
+    # "up". One lane, the one Jarvis talks to (OLLAMA_URL's port), never both.
+    # No approval card: his own logon task already runs this command unattended.
+    "jarvis_model_lanes.py",
     # Action receipts and one-click undo (2026-10-14; the owner's brief,
     # borrowed from BasedHardware/omi). Every action that CHANGES something
     # leaves a receipt saying what changed, with one button to put it back:

@@ -1192,6 +1192,18 @@ class MainActivity : FragmentActivity() {
         }
         val status by JarvisRuntime.status.collectAsState()
         val version by JarvisRuntime.version.collectAsState()
+        // The lane the PC's chat uses, and the one action the standing model
+        // line offers (the owner's decision of 2026-10-13). Collected here and
+        // carried in HomeState, like every other value the screen draws.
+        val modelLane by JarvisRuntime.modelLane.collectAsState()
+        val laneStartingNow by JarvisRuntime.laneStarting.collectAsState()
+        val laneFailureNow by JarvisRuntime.laneFailure.collectAsState()
+        // And the switch beside that line (the owner's decision of 2026-10-14:
+        // "Also restart the lane automatically when it dies"): the only place
+        // the owner can say that a lane he stopped on purpose was stopped on
+        // purpose, since a dead process cannot say so itself.
+        val laneAutoBusyNow by JarvisRuntime.laneAutoBusy.collectAsState()
+        val laneAutoFailureNow by JarvisRuntime.laneAutoFailure.collectAsState()
         val pending by JarvisRuntime.pending.collectAsState()
         // Collected here, and carried in HomeState below, for two reasons.
         //
@@ -3149,6 +3161,17 @@ class MainActivity : FragmentActivity() {
                             faceSerious = faceSerious,
                             power = power,
                             status = status,
+                            // The lane the PC's chat uses, the one action beside
+                            // the standing model line (the owner's decision of
+                            // 2026-10-13), and what Jarvis did about a dead lane
+                            // by itself with the switch that turns that off
+                            // (2026-10-14). Read on the same beat as
+                            // `/api/status`; see JarvisRuntime.
+                            modelLane = modelLane,
+                            laneStarting = laneStartingNow,
+                            laneFailure = laneFailureNow,
+                            laneAutoBusy = laneAutoBusyNow,
+                            laneAutoFailure = laneAutoFailureNow,
                             pending = pending,
                             attention = attention,
                             notice = notice,
@@ -3288,6 +3311,25 @@ class MainActivity : FragmentActivity() {
                                     draft = it
                                 },
                                 onDropShared = { sharedHeld = null },
+                                // The standing model line's ONE action
+                                // (2026-10-13): ask the PC to run its own
+                                // Windows task for the lane the chat uses, then
+                                // watch that lane until it answers. Nothing is
+                                // cleared here - the warning goes only when the
+                                // lane really answers (JarvisRuntime).
+                                onStartModelLane = {
+                                    scope.launch { JarvisRuntime.startModelLane() }
+                                },
+                                // And the switch beside it (2026-10-14): turn
+                                // the PC's automatic restarting of a dead lane
+                                // off, or back on. Immediate both ways and no
+                                // card - it only decides what Jarvis does about
+                                // a lane that is already down, and a dead
+                                // process cannot say whether it crashed or was
+                                // stopped on purpose.
+                                onSetLaneAuto = { on ->
+                                    scope.launch { JarvisRuntime.setLaneAuto(on) }
+                                },
                                 onForgetLook = { com.jarvis.client.net.ScreenLook.drop() },
                                 onStopWatching = { JarvisRuntime.stopScreenWatch() },
                                 onStartPhoneWatch = { startPhoneWatch() },

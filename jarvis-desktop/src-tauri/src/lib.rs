@@ -1237,6 +1237,14 @@ pub fn run() {
             commands::get_deep,
             commands::ask_deep,
             commands::check_server_health,
+            // The standing "the local model isn't running" line's one action
+            // (2026-10-13, the owner's decision): read the state of the lane
+            // the PC's chat uses, and ask the PC to start it. Both go through
+            // the backend, which is the only thing that knows the address the
+            // chat is really on and the name of this PC's own task.
+            commands::read_model_lane,
+            commands::start_model_lane,
+            commands::set_model_lane_auto,
             commands::hide_quickbar,
             commands::resize_quickbar,
             commands::set_quickbar_pinned,

@@ -90,6 +90,7 @@ memory-prefix.patch	memory-prefix/3040b3d.patch	3040b3dc0803600ff1ccd92e8ed6460c
 memory-safety.patch	memory-safety/3d8df73.patch	3d8df73437d50b3b98382c87bd41012e637e0cb4	2026-09-19T17:53:10Z	fix(backend): the audit's Python findings
 memory-safety.patch	memory-safety/fcdba5d.patch	fcdba5d698e7c6c0e21f224cb87734a9a0961058	2026-09-15T01:20:34Z	Master audit: the worst finding was a cloud lane nobody re-filtered
 memory-safety.patch	memory-safety/6ccc6e0.patch	6ccc6e015278a0ef2d9a1798426112d43fd288ad	2026-09-14T23:42:51Z	Memory: stop the destructive paths, and start the event pump
+model-lanes.patch	model-lanes/723780a.patch	723780a74b61bf5fd23a1f41c0bd6102440f6440	2026-10-14T01:35:16-07:00	feat(status): the dead-lane warning offers one button, and it runs his own task
 note-capture.patch	note-capture/92fa868.patch	92fa8686833d4ef1bf6240f51c8877f1ac0fdd4e	2026-09-24T01:51:49Z	Backend: Obsidian as a note target (#obs) and its vault searched as a folder
 note-capture.patch	note-capture/d37739c.patch	d37739c4ce0790869ce61aa3081983fed57908a2	2026-09-23T23:03:28Z	Logseq and Joplin notes that are really filed
 ollama-direct.patch	ollama-direct/b2c3a98.patch	b2c3a989bd85f94967c053e5140e94b301f5d7db	2026-10-06T23:24:11-07:00	the cloud lane's resolution leaves the HUD, and the six rehearsals find their text again
@@ -99,6 +100,7 @@ picture-card.patch	picture-card/39c005e.patch	39c005e915c2c465e1311620914dd9da51
 picture-card.patch	picture-card/c16c2b1.patch	c16c2b14736b3d5c4938807688eb8d5b98a96650	2026-10-10T22:03:36-07:00	Give the picture-maker a card, and the chat a choice of three ways
 pictures.patch	pictures/a347e27.patch	a347e277aaff0914fd9094d95c56614306858598	2026-10-11T12:08:18-07:00	Merge main (f1d53b6a) into feat/ask-for-a-picture: the CI failures fixed, the section renumbered to 129, and two real defects the fix exposed
 pictures.patch	pictures/c94e180.patch	c94e180b71f69eddea088b7ecff56eaaa6385cc8	2026-10-10T22:01:24-07:00	Ask for a picture, and keep it (JARVIS-API section 124)
+plugin-loader.patch	plugin-loader/e8d837d.patch	e8d837d609c8bcb522dd83afd56d71551054c764	2026-10-11T14:40:50-07:00	#266: pictures.patch joins the install chain (#290's placement), so the loader stays the last block before the socket
 plugin-loader.patch	plugin-loader/ff4ee28.patch	ff4ee2880fa1880279aadfc4cd34f02f276ee8c2	2026-10-11T13:51:26-07:00	#266: re-anchor plugin-loader.patch on pictures.patch, and regenerate the plug-in catalogue
 plugin-loader.patch	plugin-loader/f2077b5.patch	f2077b51f724257747ab8d8b2f0aa1e9f345549a	2026-10-11T05:50:49-07:00	finish the uncensored opt-ins: off by default, on is one card, and a way in (#253)
 plugin-loader.patch	plugin-loader/d258b98.patch	d258b980ae95e1c19b121095cce7f5301a9823ae	2026-10-10T02:43:26-07:00	a feature whose only wiring was one start-up call is now a folder

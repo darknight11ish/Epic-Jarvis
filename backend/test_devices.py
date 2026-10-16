@@ -741,6 +741,13 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # before plugin-loader.patch: two ADDED route blocks in
                                 # jarvis_hud.py, no gate list, no tier row, no _RISK row.
                                 "big-coder.patch",
+                                # model-lanes.patch (2026-10-13, "Start the local model")
+                                # is appended after that, still before plugin-loader.patch:
+                                # ONE ADDED install block at the end of the install chain,
+                                # and no gate list, no tier row and no _RISK row - it adds
+                                # no action to the gate at all - so it cannot rewrite a
+                                # line devices.patch wrote either.
+                                "model-lanes.patch",
                                 # initiative-payload.patch (2026-10-15) is the phone
                                 # half of the /api/initiative payload fix: ONE hunk in
                                 # jarvis_hud.py, on the route's own

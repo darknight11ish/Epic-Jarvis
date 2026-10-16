@@ -320,6 +320,30 @@ page in both apps shows every action's tier, makes one stricter at once, and
 (`jarvis_owner_check.PC_ONLY_ACTIONS`). Each one is a place where no card is
 RAISED, by the owner's choice; none is a card answered for them.
 
+**The automatic restart of a dead model lane needs no card, and that is argued
+rather than assumed** (2026-10-14: *"Also restart the lane automatically when it
+dies"*; `jarvis_model_lanes.py`, `docs/JARVIS-API.md` §134.3). The rule that
+governs a service start here is the one this project already wrote down for
+Docker - *"starting a service gives Jarvis more, so it asks"*
+(`docker_service_start = "ask"`) - and this is deliberately **not** that case.
+What is started is not a new grant: it is the lane the chat is pointed at, the
+one this PC already starts by itself at every logon, unattended, with no card and
+nobody asked, so a card would be stricter than the machine's own behaviour. A
+card also could not be answered when it is needed: the lane dies at 08:19 with
+nobody at a screen, an `ask` card would sit for its 900-second timeout and
+expire, the lane would stay dead, and the next attempt would raise another one -
+the defect itself, plus a queue of expired cards. The act is bounded (three
+automatic attempts per episode, then the plain warning), reversible (OFF is one
+immediate press from either app) and said (every restart is spoken about in both
+apps, in words written by the backend). **And nothing is auto-approved:** this
+path raises no card and answers no card - rule 4 forbids *answering* a card, and
+there is no card on this path to answer. It calls the same `start()` the owner's
+own button calls, so it can reach no action his press could not, it starts only
+the lane the chat is on and never both, and it clears no latch. So there is no
+new tier line to loosen, in either direction of the switch: turning it back on is
+the same action the button beside it takes in the same second, with no card of
+its own.
+
 **A second DOOR to the same gates, never a second gate** (`jarvis_settings_
 registry.py`, the owner's decision of 2026-09-27, "open"/"adjust" any
 setting by voice or chat): "turn on background learning" calls the exact
@@ -2136,6 +2160,45 @@ owns the code do the diagnosing.** Fetching the other branch catches a stale
 file. It does nothing about a claim that was never verified — and confidence
 added in transit is indistinguishable, at the far end, from evidence.
 
+### Who restarts a dead model lane, and what every client does about it
+
+Added 2026-10-14, with the owner's decision *"Also restart the lane automatically
+when it dies."* The BACKEND owns it (`backend/jarvis_model_lanes.py`, armed in
+the install block `model-lanes.patch` adds): one daemon thread, one loopback
+`/api/tags` probe of the lane the chat uses every 30 s, no model call, and a
+restart through the same `start()` the button uses - the owner's own Windows
+logon task, looked up on that PC by the stable half of its name, as argv, never a
+shell. `docs/JARVIS-API.md` §137.3 has the route, the numbers and what happens at
+the cap.
+
+**Both apps, and nothing one-sided.** The Jarvis bar and the widget draw it from
+one file (`jarvis-desktop/src/lane-auto.js`), through Rust
+(`set_model_lane_auto`); the phone draws it on Home's status line (`net/ModelLane.kt`,
+`JarvisRuntime.setLaneAuto`). All three read `/api/model-lanes` on the beat that
+already reads `/api/status`, **whether or not the standing warning is drawn** -
+the sentence is news about a lane that has come BACK, which is exactly when that
+warning has cleared. The words are the backend's own (`auto_note`), drawn
+verbatim: no client composes a sentence out of fields, so the three cannot come
+to three ways of saying one fact. `tools/check_parity.py` carries
+`/api/model-lanes/auto` as `ported`.
+
+**The HUD window (`jarvis-desktop/src/jarvis_hud.html`) keeps only the standing
+line** - no button, no automatic line, no switch - for the reason it already had
+no button: it is vendored from the backend and runs under `hud_proxy.rs`, which
+allows it exactly five reads and one `POST /api/chat`, and widening that
+allow-list for routes that start a program on the PC or change a setting is a
+separate decision. Both windows that carry the action are one keystroke away.
+
+**THE RESIDUAL RISK, STATED PLAINLY.** An automatic restart cannot tell "it
+crashed" from "I meant to turn it off": a dead process carries no intent, and
+`schtasks` reports the same "Ready" either way. So with the switch ON - which is
+the default, because that is what the owner asked for - **Jarvis will start a
+lane that was stopped deliberately, and will say so in both apps.** The switch
+(section 3 has the permission argument: no card, in either direction) is the only
+honest answer, because he is the only one who can say which it was. Nothing is
+hidden about this: it is in the module's own header, in `JARVIS-API.md` §137.3,
+and in this paragraph.
+
 ### One-sided on purpose
 
 The two apps are meant to do the same things. These are the exceptions, each
@@ -2451,6 +2514,7 @@ neither: nothing safe to build it on exists yet (§10).
 
 **The form picture is on the Jarvis bar's card and the phone's card only** (2026-09-30, JARVIS-API §98). The second card of a filled-in web form carries one picture of the form, and it is shown where the card is decided in full: the desktop's Jarvis bar and the phone's Home. The desktop's widget, its toasts and the HUD page, every notification and the phone's home-screen widget stay title-only, like every card - a picture of the owner's name, phone and email does not belong on a lock screen or a widget. It is hidden under App lock and under "Hide memory lists and chat history" on both apps. The desktop has no equivalent of the phone's screenshot block, so there is nothing to match there. **It is the one screen picture NOT run through `jarvis_screen.clean_picture`** (owner, 2026-09-30): the owner must read their own details to check them, and the picture never reaches a model, is held in memory only, and is dropped when the card is decided. Every other screen picture still passes that door. Not a new way out of the PC: the form's words go out through browser control's existing `control_browser` way out, to the site the plan named.
 
+**"Start the local model" is on the Jarvis bar, the widget and the phone's Home, and deliberately NOT on the HUD window** (2026-10-13, JARVIS-API §137; the owner's decision after both of his Ollama lanes were dead for about five hours). The standing "the local model isn't running" line is drawn in all four places, and three of them now offer the one action that starts the lane the chat uses - by running **his own** Windows logon task, found on that PC by the half of its name a rename does not touch. **The HUD page is the one that keeps the line and offers no button**, and the reason is the proxy rather than the picture: `jarvis_hud.html` is vendored from the backend and runs under `hud_proxy.rs`, which allows it exactly five reads and one `POST /api/chat` precisely so that a script running in that page cannot call anything else. A route that starts a program on the PC is not something to add to that allow-list in passing - it is its own decision with its own review. Nothing is lost by it: the HUD's line still names the PC's own task, and the Jarvis bar (one summon away, and the window the owner chats in) carries the button. `tools/check_parity.py` is unaffected either way, because it reads the RUST commands and the JavaScript, and the bar's own `start_model_lane` is a desktop caller of both routes - so both are `ported`, and no other row in this section is needed for them.
 **The skill library's four new doors are on the backend only, and that is the scope of this slice rather than a one-sided decision** (2026-10-15): `jarvis_skill_hub.py` (`plugins/ready/skill-hub/`) serves `GET /api/skills/hub/references`, `GET /api/skills/hub/projects`, `POST /api/skills/chain` and `POST /api/skills/learn`. No screen calls any of them yet - reading a skill's own reference manual, opening a message with `/skill`, looking in a trusted project's `.jarvis/skills`, and `/learn` are all things no app offers today. **This slice adds no route that already existed**: the list (`GET /api/skills`) and the removal (`POST /api/skills/decide`, with the "are you sure?" before it) are unchanged and are still on BOTH apps. `tools/check_parity.py` cannot see any of this - it scans the two apps' own source, so a backend route no app calls is outside what it decides - which is said plainly here rather than read as a clean pass it did not earn. **When a screen is built it goes on BOTH apps, on the same routes and the same card**: `/learn` saves only through `jarvis_skills.write_skill()`, which runs the scanner and raises the existing `modify_own_code` card itself, and it writes nothing at all when `jarvis_scrub` is absent.
 
 ---

@@ -920,14 +920,45 @@
 
                Its own state, NOT "Jarvis isn't connected": the PC is fine here,
                only answers are. Same words as the widget and the HUD window
-               (lane-warning.js). Nothing here acts - there is no button, no
-               card and no restart: the owner starts his lanes, and this says
-               whether they answered. -->
+               (lane-warning.js).
+
+               ONE ACTION since the owner's decision of 2026-10-13: "Start the
+               local model" asks the PC to run its OWN Windows logon task for
+               the lane the chat uses (lane-start.js), and then asks again until
+               the lane really answers. Starting a task is not the model
+               arriving, so the press does NOT clear this line; only the lane
+               answering does. A start that does not come up says so, in the PC's
+               own words, and this line stays standing. -->
           <div class="model-notice" id="model-warn" hidden>
             <b id="model-warn-text"></b>
             <span id="model-warn-fix"></span>
             <span id="model-warn-host" hidden></span>
+            <button class="btn btn-quiet" type="button" id="model-warn-start" hidden></button>
+            <span id="model-warn-start-note" hidden></span>
           </div>
+
+          <!-- What JARVIS did about it, by itself (lane-auto.js; the owner's
+               decision of 2026-10-14: "Also restart the lane automatically when
+               it dies").
+
+               Its OWN element, deliberately, and not a line inside the notice
+               above: that one is hidden the moment the lane answers, and "the
+               local model went down and Jarvis started it again" is news about
+               a lane that is now WORKING. The words are the backend's own
+               sentence, carried in `auto_note` - this window draws that string
+               and composes nothing, so the bar, the widget and the phone cannot
+               come to three ways of saying one fact.
+
+               The button is what tells an automatic restart apart from a
+               deliberate stop: a dead process carries no intent, so the owner
+               is the only one who can say which it was. Off is immediate and
+               only narrows what Jarvis does; turning it back on is the same
+               action the button above takes in the same second, so neither
+               direction raises a card. -->
+          <p class="model-notice model-auto" id="model-auto" hidden>
+            <span id="model-auto-text"></span>
+            <button class="btn btn-quiet" type="button" id="model-auto-switch" hidden></button>
+          </p>
 
           <footer class="card-foot">
             <span class="services" id="services" title="Local service health">

@@ -537,6 +537,13 @@ def t_hygiene():
              # plugin-loader.patch: two ADDED route blocks in jarvis_hud.py, no
              # gate list, no tier row and no _RISK row.
              "big-coder.patch",
+             # model-lanes.patch (2026-10-13, "Start the local model") is appended
+             # after that, still before plugin-loader.patch: ONE ADDED install
+             # block at the end of jarvis_hud.py's chain - nowhere near the
+             # POST /api/screen route this patch's wrapper takes over - and no
+             # gate list, no tier row and no _RISK row, so the request body is
+             # still read once, and still by this wrapper.
+             "model-lanes.patch",
              # initiative-payload.patch (2026-10-15) is appended after it, before
              # plugin-loader.patch: ONE hunk in jarvis_hud.py, on the
              # /api/initiative route's own return line - nowhere near the POST

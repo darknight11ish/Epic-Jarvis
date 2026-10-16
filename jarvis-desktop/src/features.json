@@ -1663,6 +1663,28 @@
     "covers": []
   },
   {
+    "id": "start-the-model-lane",
+    "group": "The PC itself",
+    "title": "Start the local model when it is not running",
+    "what": "When Jarvis can answer but its local model server is not running, both apps draw a standing line saying so - and now offer ONE button on it, \"Start the local model\". The button does not start a program of its own: it asks the PC to run the owner's OWN Windows logon task for the lane the chat uses, found on that PC by the half of its name a rename does not touch. Then it watches that lane until it really answers, and says so.",
+    "where": "PC: the Jarvis bar's notice under the input, and the widget's model row. Phone: the status line at the top of Home. Both show the button only while the lane is down AND the PC says a press would really start something.",
+    "asks": "No card. It runs the same task the owner's own logon already runs unattended, so a card would only be stricter than the thing it duplicates; pressing the button is itself the owner's explicit act. One lane, the one Jarvis talks to - never both.",
+    "limit": "Only the lane the chat is pointed at, and only when this PC has such a task. Starting a task is not the model arriving: the line is cleared only when the lane actually answers, and a start that does not come up says so and leaves the warning standing.",
+    "surface": "both",
+    "covers": []
+  },
+  {
+    "id": "restart-the-model-lane",
+    "group": "The PC itself",
+    "title": "Jarvis starts the local model again by itself when it dies",
+    "what": "When the local model server stops answering, Jarvis itself starts it again - on the PC, in the background, with nobody pressing anything. It runs the SAME one action the button above runs: the owner's own Windows logon task for the lane the chat uses. It looks every 30 seconds, the look is one small question to the lane on this PC (no model call, nothing spent), and when the lane is back both apps say so in plain words: \"Jarvis started the local model again at 08:19, because it was not running.\"",
+    "where": "Nothing to press: the line appears by itself in the Jarvis bar and the widget on the PC, and on Home's status line on the phone. It carries one button, \"Don't restart it for me\", which turns the automatic restarting off at once - and \"Restart it automatically again\" while it is off.",
+    "asks": "No card, in either direction. It runs the same task the owner's own logon already runs unattended, so a card would only be stricter than the thing it duplicates; turning it back on is the same action the Start button beside it takes in the same second. The owner asked for it in these words on 2026-10-14: \"Also restart the lane automatically when it dies.\"",
+    "limit": "Bounded, and it stops rather than hammering: a minute of being down before the first try, at most 3 tries in one episode, 5 minutes and then 10 between them, and then it gives up - only the standing warning remains, with the Start button still there. It never starts a second copy while one is starting, and never touches a lane that is answering. A lane stopped on purpose cannot be told from one that crashed: if Jarvis starts it again, it says so, and the button is how the owner says \"not that one\".",
+    "surface": "both",
+    "covers": []
+  },
+  {
     "id": "approvals",
     "group": "Safety",
     "title": "Approval cards",

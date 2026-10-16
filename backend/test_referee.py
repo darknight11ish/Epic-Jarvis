@@ -783,6 +783,13 @@ def t_the_patch_and_the_lists():
              # plugin-loader.patch: two ADDED route blocks in jarvis_hud.py, no
              # gate list, no tier row and no _RISK row.
              "big-coder.patch",
+             # model-lanes.patch (2026-10-13, "Start the local model") is appended
+             # after that, still before plugin-loader.patch: ONE ADDED install
+             # block in jarvis_hud.py, and no gate list, no tier row and no _RISK
+             # row - the automatic lane restart raises no card and answers no
+             # card, so it adds no action to the gate - and it therefore rewrites
+             # nothing referee.patch wrote.
+             "model-lanes.patch",
              # initiative-payload.patch (2026-10-15) is appended after it, before
              # plugin-loader.patch: ONE hunk in jarvis_hud.py, on the
              # /api/initiative route's own return line, adding the `checks` count

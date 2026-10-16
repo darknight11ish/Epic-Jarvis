@@ -1709,3 +1709,30 @@ permissions = ["allow-handoff-mode"]
 identifier = "handoff-front"
 description = "What a captcha does about the browser window it is blocking: read it, choose \"Leave it where it is\" at once, or ask to bring that one window to the front (one approval card on this PC). Settings only; it raises no window itself and never pictures it."
 permissions = ["allow-handoff-front"]
+
+# The model lane the PC's chat is pointed at (commands.rs; backend
+# jarvis_model_lanes.py, model-lanes.patch, JARVIS-API section 133; the owner's
+# decisions of 2026-10-13 and 2026-10-14). Read what the standing "the local
+# model isn't running" line would say AND whether a press would really start
+# something (a read - it starts nothing); ask the PC to start it (that runs the
+# owner's OWN Windows logon task, the same one his logon already runs
+# unattended, so NO approval card); and the owner's own switch for whether
+# Jarvis starts a lane that died by itself, where OFF is immediate and only
+# narrows what Jarvis does.
+#
+# The Jarvis bar and the widget hold all three: they are the two windows that
+# draw that standing line, and the bar's own Start button is a desktop caller
+# of both routes (tools/check_parity.py counts them `ported`). The HUD
+# deliberately holds NONE of them: it keeps the line and offers no button, and
+# the reason is the proxy rather than the picture - hud_proxy.rs gives
+# jarvis_hud.html exactly five reads and one POST /api/chat so that a script in
+# that page can call nothing else, and a route that starts a program on the PC
+# is not added to that allow-list in passing (docs/ARCHITECTURE.md section 8).
+[[set]]
+identifier = "model-lane"
+description = "The local model lane: read whether it is running and whether starting it would do anything, start it (the owner's own Windows logon task - no approval card), and switch the automatic restart on or off. The Jarvis bar and the widget only; the HUD keeps the standing line and offers no button."
+permissions = [
+  "allow-read-model-lane",
+  "allow-start-model-lane",
+  "allow-set-model-lane-auto",
+]

@@ -1,0 +1,8 @@
+{
+  "name": "model-lanes",
+  "summary": "the button that starts the model lane that is down.",
+  "module": "jarvis_model_lanes",
+  "install": "handler",
+  "replaces_patch": "model-lanes.patch",
+  "stack_order": 142
+}

@@ -1534,6 +1534,34 @@ $PATCHES = @(
     # approval card (the same shape as a timer or a note). Sending a picture
     # anywhere would be a new named way out of the PC, and no route here does.
     'pictures.patch'
+    # "Start the local model" (the owner's decision of 2026-10-13, after both
+    # of his Ollama lanes were dead for about five hours and PR #409 made the
+    # apps say so but do nothing about it): GET /api/model-lanes and
+    # POST /api/model-lanes/start. It runs HIS OWN Windows logon task, looked
+    # up on this PC by the stable half of its name, and then watches the
+    # lane's own /api/tags until it answers - "starting" is never reported as
+    # "up", and a lane that does not come up leaves the warning standing.
+    # One lane, the one Jarvis talks to (OLLAMA_URL's port), never both.
+    #
+    # It is no longer the ONLY patch above plugin-loader.patch: the merge of
+    # 2026-10-16 kept initiative-payload.patch (2026-10-15) as well, and the
+    # older entry stays first - the same rule the rest of this stack follows.
+    # The order the loader itself requires is unchanged: every core patch goes
+    # above the loader, and only drop-in folders come after it
+    # (tools/check_plugins.py checks both halves of that). Its own context is
+    # the install block pictures.patch wrote, and plugin-loader.patch's hunk
+    # still anchors on THIS block's last two lines - that is a fact about the
+    # TEXT, not about the list, so a core patch may sit after this one. It
+    # adds ONE block of the same shape, calling jarvis_model_lanes.install(),
+    # and touches no other line of jarvis_hud.py. It cannot be applied on its
+    # own.
+    #
+    # No gate file is touched, on purpose: it starts the same task the owner's
+    # own logon already runs unattended, with no card and no question, so a
+    # card here would only be stricter than the thing it duplicates (see
+    # jarvis_model_lanes.py's "PERMISSION" section, and docs/ARCHITECTURE.md
+    # section 3).
+    'model-lanes.patch'
     # The two payload mismatches on /api/initiative - the half that needs the
     # ROUTE's own body changed (2026-10-15). The phone's "Findings" note reads
     # a `checks` count out of that body (jarvis-client BrainScreen.kt:2503-2509,
@@ -1869,6 +1897,8 @@ $SHIPPED = @(
     'jarvis_pictures.py'         # /api/pictures, /api/pictures/file and POST /api/pictures: a prompt the owner typed, drawn by a program ON THIS PC (ComfyUI or stable-diffusion.cpp, a setting with named values, never guessed at), saved as a PNG in a folder on this PC (Pictures\Jarvis by default, PC-only) with a sidecar holding the prompt, the seed, the model and the settings so it can be made again. Nothing leaves the PC; no route sends a picture anywhere, so making one needs NO approval card. Nothing is deleted on a timer. The switch ("Making pictures") is OFF by default - the second card is shared with the everyday model - and with nothing configured the owner gets ONE plain sentence naming both programs to install, never a crash. Not a tool in jarvis_agent.py, so no model turn can fill in a prompt
     # --- The 30B coder, both cards (2026-10-11) ---
     'jarvis_big_coder.py'        # One model the owner asked for by name (qwen3-coder-30b-a3b-ud-q3-k-xl): the best coder and the fastest writer measured on this PC (10/10 coding, ~101/76.5/76.3 tok/s, no thinking mode), and the only model here that needs BOTH cards - it cannot sit beside anything. An OPT-IN mode, off by default, that pauses the two live lanes, proves from /api/ps that both went, loads at the largest zero-spill context measured (28,672), announces the pause BEFORE it starts, and puts both lanes back exactly as they were, proved again. Turning it on is ONE card (change_own_config, ask); the pause goes through power_manage. Nothing downloads; every call is loopback. big-coder.patch wires its two routes
+    # --- Start the local model (2026-10-13, the owner's decision; model-lanes.patch) ---
+    'jarvis_model_lanes.py'      # GET /api/model-lanes and POST /api/model-lanes/start: the button on the standing "the local model isn't running" line both apps already draw (PR #409). The one action runs HIS OWN Windows logon task - found on this PC with `schtasks`, matched by the stable half of its name, never a name typed from memory and never `ollama serve` - and then watches that lane's `/api/tags` every few seconds for up to 90 s, so "starting" is never reported as "up": a lane that does not come up leaves the warning standing, in plain words. One lane, the one Jarvis talks to (OLLAMA_URL's port - 11436 on his PC), never both, and nothing is started twice: not while it answers, not while a watched start is in flight, not while the PC's own Task Scheduler says that task is running. No approval card, on purpose - his own logon task already runs this command unattended, so a card would only be stricter than the thing it duplicates (see the module's PERMISSION section). Standard library only, no shell, one external program (`schtasks`), no network beyond 127.0.0.1
     # --- Action receipts and one-click undo (2026-10-14) ---
     'jarvis_receipts.py'         # a receipt for every action that CHANGES something: what changed, the before and after snapshots, and the code that can put it back, in its own receipts.db (WAL, one connection per call). record() must never raise into the action it records from and never writes an unscrubbed word; undo() is idempotent - a second call refuses with "this was already undone" - and falls back to the before snapshot when the in-memory callable is gone, saying plainly which path it took. GET /api/receipts and POST /api/receipts/<id>/undo come from its install(), called by the plugins\ready\receipts folder: NO patch, which is what the loader is for. Undo raises ONE card (undo_action, tier ask) and a denied card changes nothing. jarvis_goals.py records a receipt for every step tick
     # --- Cost advice, and the four gates that bound it (2026-10-14) ---

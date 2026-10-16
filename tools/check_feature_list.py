@@ -127,6 +127,8 @@ LESSON_EXEMPT = {
     "support": "one button that starts a support session, and a log to send",
     "settings-by-asking": "saying a setting in words; the reply names the setting",
     "settings-entry": "the way into Settings; the tray row and Ctrl+K say where",
+    "start-the-model-lane": "one button on the standing line, which names the lane that is down and says what pressing it does",
+    "restart-the-model-lane": "automatic and nothing to press; the line says what Jarvis did, in its own words",
 }
 
 

@@ -771,18 +771,21 @@ def t_the_api_document_has_the_section_and_it_matches_this_code():
 #: writes down that they meant to. That is the price of a check that bites, and
 #: it is why the failure message below spells out the difference instead of
 #: saying "the document changed".
-EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 137)) + (138,)   # 129 ..= 136, then 138
-#: 137 is a real gap in `docs/JARVIS-API.md` on `main`, not a lost section: §137
-#: (`skills.lock`, from PR #455) is not in the document, and §138 is. The two
-#: checks below read this list in opposite directions - `missing` demands every
-#: entry is present, and `extra` is "anything present ABOVE the list's last
-#: element" - so the list has to name exactly the sections that exist AND end on
-#: the highest one. `range(129, 137) + (138,)` does both; `range(129, 139)` would
-#: demand 137 and fail on a section this commit cannot invent.
+EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 139))   # 129 ..= 138
+#: 137 is a REAL section in this tree, not a gap: `## 137. Starting the local
+#: model when it is not running` is this branch's own model-lanes section, and it
+#: is in `docs/JARVIS-API.md` here, so the tail reads 129 ..= 138 with no hole.
 #:
-#: An earlier draft of this fix used `range(129, 139)`, which fails the `missing`
-#: check for 137. Measured, not reasoned: `grep -c '^## 137\.' docs/JARVIS-API.md`
-#: is 0 while `^## 138\.` matches.
+#: On `main` alone the tail is 129 ..= 136 and then 138 - `range(129, 137) +
+#: (138,)` - because 137 was reserved for `skills.lock` (PR #455) and that
+#: section landed as 138. Merging this branch fills that gap, so 137 has to be
+#: named here too. Main's form would still PASS on this tree (`missing` only
+#: demands the numbers the list names, and `extra` only looks above the list's
+#: last element) but it would stop watching 137 - and watching the whole tail is
+#: the one thing this check exists for.
+#:
+#: Measured in this worktree, not reasoned: `^## 137\.` matches once, `^## 138\.`
+#: matches once, the highest section is 138, and both lists below come out empty.
 
 
 def t_every_section_from_129_up_is_still_in_the_document():

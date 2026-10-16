@@ -717,6 +717,16 @@ def t_the_patch_is_registered_and_carries_the_change():
              # (ONE hunk, in jarvis_hud.py, ADDING one install block at the end
              # of the chain), so it rewrites nothing this patch wrote.
              "pictures.patch",
+             # model-lanes.patch (2026-10-13, "Start the local model") is that
+             # same shape once more, and it sits immediately BEFORE
+             # plugin-loader.patch (the loader's hunk was re-anchored onto ITS
+             # block; initiative-payload.patch was appended between the two on
+             # 2026-10-15 and is listed below): it touches jarvis_gate.py not at
+             # all - the automatic lane restart raises no card and answers no
+             # card, so it adds no action to the gate - and its ONE hunk in
+             # jarvis_hud.py ADDS an install block at the end of the chain, so it
+             # rewrites nothing this patch wrote.
+             "model-lanes.patch",
              # initiative-payload.patch (2026-10-15) takes the same advice: it
              # is appended between pictures.patch and plugin-loader.patch (so,
              # before the loader too), and it touches jarvis_gate.py not at all

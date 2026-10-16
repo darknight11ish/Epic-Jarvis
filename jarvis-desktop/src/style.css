@@ -1514,6 +1514,17 @@ html[data-state="error"] .pulse {
 .model-notice b { color: var(--warn); font-weight: 600; }
 .model-notice #model-warn-host { color: var(--text-faint); }
 
+/* What Jarvis did by itself (lane-auto.js): the model was down and Jarvis
+   started it again - or it is not doing that, because the owner turned it off.
+   The SAME calm box as the warning above it, because it is news about the lane
+   rather than a second fault, with the accent edge instead of the warn one so a
+   good outcome never reads as a problem. The button is the whole reason this
+   line exists: a dead process carries no intent, and only the owner can say
+   whether the lane was stopped on purpose. */
+.model-auto { border-left-color: var(--accent); background: var(--accent-faint); }
+.model-auto #model-auto-text { color: var(--text-muted); }
+.model-auto #model-auto-switch { margin-left: 8px; }
+
 /* Temporary chat (2026-09-25): a marker for the whole chat - the strip at
    the top of the stack, and a dashed edge round the bar - so it is never
    the toggle's colour alone that says so. */

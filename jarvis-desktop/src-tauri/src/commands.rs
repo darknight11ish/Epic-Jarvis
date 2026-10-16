@@ -1801,6 +1801,154 @@ fn ollama_status(field: Option<bool>, latency_ms: u128) -> ServiceStatus {
     }
 }
 
+/// The state of the model lane the PC's chat uses - `GET /api/model-lanes`.
+///
+/// WHAT THIS IS FOR. The standing "the local model isn't running" line the bar
+/// and the widget draw (PR #409) used to do nothing at all. The owner has
+/// decided it should offer ONE action: start the lane that is down. This reads
+/// what that action would do - whether the lane answers, whether this PC even
+/// has the task, and, while a start is in flight, how long it has been and how
+/// long is left.
+///
+/// Read through Rust, not from the window, for the same reason every other call
+/// is: the page holds no token (`hud_proxy.rs`), and the desktop's windows are
+/// not the backend's origin.
+///
+/// A backend too old to have the route answers 404, and that is reported as
+/// "unknown" rather than as a fault: an app that treated a missing route as "the
+/// lane is down" would draw a warning out of nothing, which is the rule
+/// `lane-warning.js` already follows for an absent field.
+#[tauri::command]
+pub async fn read_model_lane(app: AppHandle) -> Result<serde_json::Value, String> {
+    const PATH: &str = "/api/model-lanes";
+    require_base_allowed(&app)?;
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(HEALTH_TIMEOUT))?
+        .get(format!("{base}{PATH}"))
+        .headers(jarvis_headers(&app)?)
+        .send()
+        .await
+        .map_err(|e| crate::plain_errors::unreachable_words(e.is_connect(), e.is_timeout()))?;
+    let status = response.status();
+    let detail = response.text().await.unwrap_or_default();
+    if status.is_success() {
+        return Ok(serde_json::from_str(&detail).unwrap_or(serde_json::Value::Null));
+    }
+    if status.as_u16() == 404 {
+        return Err(format!(
+            "this Jarvis backend has no `{PATH}` route - apply the backend \
+             patches (model-lanes.patch) to turn it on"
+        ));
+    }
+    Err(server_sentence(status.as_u16(), PATH, &detail))
+}
+
+/// Ask the PC to start the model lane that is down - `POST
+/// /api/model-lanes/start`.
+///
+/// THE ONE ACTION RUNS THE OWNER'S OWN WINDOWS TASK, and the PC is what runs
+/// it: this sends an empty body and nothing else. There is no command line
+/// here, no `ollama serve`, and no task name - the backend looks the task up on
+/// that PC, by the half of its name a rename does not touch, so a lane on
+/// another port or a renamed task is still started correctly.
+///
+/// A 202 IS NOT SUCCESS. The backend says "starting" and then watches the lane
+/// until it answers or runs out of time; the caller reads
+/// [`read_model_lane`] until it settles. Treating this reply as "it is up"
+/// would be exactly the button that reports success and changes nothing.
+#[tauri::command]
+pub async fn start_model_lane(app: AppHandle) -> Result<serde_json::Value, String> {
+    const PATH: &str = "/api/model-lanes/start";
+    require_base_allowed(&app)?;
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(HEALTH_TIMEOUT))?
+        .post(format!("{base}{PATH}"))
+        .headers(jarvis_headers(&app)?)
+        // An empty object: the route deliberately takes no options, so no
+        // client can start a lane the chat is not on, and nothing can start
+        // both lanes at once.
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .map_err(|e| crate::plain_errors::unreachable_words(e.is_connect(), e.is_timeout()))?;
+    let status = response.status();
+    let detail = response.text().await.unwrap_or_default();
+    let body: serde_json::Value = serde_json::from_str(&detail).unwrap_or(serde_json::Value::Null);
+    if status.is_success() {
+        return Ok(body);
+    }
+    if status.as_u16() == 404 {
+        return Err(format!(
+            "this Jarvis backend has no `{PATH}` route - apply the backend \
+             patches (model-lanes.patch) to turn it on"
+        ));
+    }
+    // A refusal (409) and a task the PC would not start (502) both carry the
+    // backend's own plain sentence, which is what the owner is shown: it says
+    // why, and the warning stays standing either way.
+    if let Some(said) = body
+        .get("error")
+        .or_else(|| body.get("message"))
+        .and_then(|v| v.as_str())
+    {
+        if !said.trim().is_empty() {
+            return Err(said.to_string());
+        }
+    }
+    Err(server_sentence(status.as_u16(), PATH, &detail))
+}
+
+/// Whether Jarvis starts the model lane itself when it finds it down - `POST
+/// /api/model-lanes/auto`.
+///
+/// THIS IS THE OWNER'S OWN SWITCH, and it is the answer to the one thing an
+/// automatic restart cannot know: a dead process carries no intent, so "it
+/// crashed" and "I closed it on purpose" look exactly alike from here. OFF is
+/// immediate and only narrows what Jarvis does; ON is the same action the
+/// button beside it takes in the same second, so neither direction raises a
+/// card. The whole argument is in `backend/jarvis_model_lanes.py`'s header,
+/// `docs/ARCHITECTURE.md` §8 and `docs/JARVIS-API.md` §137.3.
+///
+/// One fact about this PC's one lane, and the body says nothing else: there is
+/// no lane name in it, so no client can aim this at another lane.
+#[tauri::command]
+pub async fn set_model_lane_auto(app: AppHandle, on: bool) -> Result<serde_json::Value, String> {
+    const PATH: &str = "/api/model-lanes/auto";
+    require_base_allowed(&app)?;
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(HEALTH_TIMEOUT))?
+        .post(format!("{base}{PATH}"))
+        .headers(jarvis_headers(&app)?)
+        .json(&serde_json::json!({ "on": on }))
+        .send()
+        .await
+        .map_err(|e| crate::plain_errors::unreachable_words(e.is_connect(), e.is_timeout()))?;
+    let status = response.status();
+    let detail = response.text().await.unwrap_or_default();
+    let body: serde_json::Value = serde_json::from_str(&detail).unwrap_or(serde_json::Value::Null);
+    if status.is_success() {
+        return Ok(body);
+    }
+    if status.as_u16() == 404 {
+        return Err(format!(
+            "this Jarvis backend has no `{PATH}` route - apply the backend \
+             patches (model-lanes.patch) to turn it on"
+        ));
+    }
+    // The backend's own sentence, when it sent one: it says what happened, and
+    // the switch is left exactly as it was.
+    if let Some(said) = body
+        .get("error")
+        .or_else(|| body.get("message"))
+        .and_then(|v| v.as_str())
+    {
+        if !said.trim().is_empty() {
+            return Err(said.to_string());
+        }
+    }
+    Err(server_sentence(status.as_u16(), PATH, &detail))
+}
+
 /// The counts and the one-line summary. An optional service (the cloud
 /// escalation lane) is counted only when it answers; when it does not, the
 /// summary says so in a separate, calm sentence instead of listing it as
