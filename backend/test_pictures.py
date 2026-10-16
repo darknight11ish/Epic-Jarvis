@@ -771,7 +771,21 @@ def t_the_api_document_has_the_section_and_it_matches_this_code():
 #: writes down that they meant to. That is the price of a check that bites, and
 #: it is why the failure message below spells out the difference instead of
 #: saying "the document changed".
-EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 137))   # 129 ..= 136
+EXPECTED_SECTIONS_FROM_129 = (129, 130, 131, 132, 133, 134, 135, 136, 138,
+                              # 137 is ABSENT ON PURPOSE, and it is written down
+                              # here rather than left as a gap for a reader to
+                              # notice, which is the whole point of keeping this
+                              # list outside the document.
+                              #
+                              # 138 is `skills.lock` (#455). 137 is the model
+                              # lanes section (#440) and it is not on main yet,
+                              # so the document runs 136 then 138. #440 carries
+                              # 137 and 138 together, so when it lands this
+                              # becomes range(129, 139) again - one line, and
+                              # the person doing it writes down that they meant
+                              # to. That is the price this check charges, and it
+                              # is why its message spells out the difference.
+                              )
 
 
 def t_every_section_from_129_up_is_still_in_the_document():
