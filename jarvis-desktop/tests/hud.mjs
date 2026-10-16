@@ -101,6 +101,7 @@ async function openHud(browser, status, pageOptions = {}) {
   const problems = [];
   const chats = [];
   const marks = [];
+  const decisions = [];
   const memoryReads = [];
   const memoryWrites = [];
   // Requests that reached the backend WITHOUT the token the shell adds - so
@@ -118,7 +119,7 @@ async function openHud(browser, status, pageOptions = {}) {
   // does, with no __TAURI__ at all; `tauriInvoke: "fail"` makes the mic's
   // command refused.
   if (!status.noShell) {
-    await page.addInitScript(({ mode, backend, hangs }) => {
+    await page.addInitScript(({ mode, backend, hangs, decideFails }) => {
       // Captured before the bootstrap replaces window.fetch.
       const origFetch = window.fetch.bind(window);
       const shellHeaders = { "X-Jarvis-Client": "hud", "X-Jarvis-Token": "test-token" };
@@ -166,11 +167,30 @@ async function openHud(browser, status, pageOptions = {}) {
             if (!r.ok) throw new Error(`the server answered HTTP ${r.status}`);
             return r.json();
           }
+          // The card's own Approve and Deny (2026-10-16, the owner's ask):
+          // ONE command, the same one the Jarvis bar and the widget call,
+          // granted to this window by surfaces.toml's `hud-approvals`. Rust
+          // adds the token, asks Windows Hello where the settings say so, and
+          // refuses a stale link - stood in for here by the same POST made
+          // with the shell's headers, which is why a decision that reached the
+          // backend without them is still a failure.
+          case "decide_approval": {
+            if (decideFails) throw new Error(decideFails);
+            const r = await origFetch(backend + (args.approved ? "/api/approve" : "/api/deny"), {
+              method: "POST",
+              headers: { ...shellHeaders, "Content-Type": "application/json" },
+              body: JSON.stringify({ id: args.id, by: "desktop_spotlight" }),
+            });
+            const body = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(body.error || `the server answered HTTP ${r.status}`);
+            return body;
+          }
           default:
             throw new Error(`Command ${cmd} not allowed by ACL`);
         }
       } } };
-    }, { mode: status.tauriInvoke || "ok", backend: BACKEND, hangs: Boolean(status.chatHangs) });
+    }, { mode: status.tauriInvoke || "ok", backend: BACKEND, hangs: Boolean(status.chatHangs),
+         decideFails: status.decideFails || "" });
   }
   // A browser's voice list, with one online voice and one local one, and
   // an utterance class that accepts them (the real one only takes real
@@ -252,6 +272,13 @@ async function openHud(browser, status, pageOptions = {}) {
           ? route.fulfill({ status: 404, headers: cors, json: { error: "not found" } })
           : route.fulfill({ status: 200, headers: cors, json: { ok: true } });
       }
+      // A decision that came out of the HUD's own buttons: the shell's
+      // `decide_approval` is what posts this, with the token (audit M2).
+      if ((url.pathname === "/api/approve" || url.pathname === "/api/deny")
+          && req.method() === "POST") {
+        decisions.push({ path: url.pathname, body: JSON.parse(req.postData() || "{}") });
+        return route.fulfill({ status: 200, headers: cors, json: { ok: true } });
+      }
       return route.fulfill({ status: 404, headers: cors, json: { error: "not in this test" } });
     }
     if (url.origin === ORIGIN) return serveStatic(route, url);
@@ -259,7 +286,7 @@ async function openHud(browser, status, pageOptions = {}) {
   });
   await page.goto(`${ORIGIN}/jarvis_hud.html`);
   await page.waitForTimeout(800);
-  return { page, problems, chats, marks, memoryReads, memoryWrites, direct };
+  return { page, problems, chats, marks, decisions, memoryReads, memoryWrites, direct };
 }
 
 /**
@@ -840,39 +867,63 @@ await check("a window in its no-server state waits for the owner's words, then p
   await page.close();
 });
 
-await check("a HUD approval card is shown but never answered in the HUD, stale or not (audit M2)", async () => {
-  // Approvals are answered in the Jarvis bar or the widget, through
-  // decide_approval, with Windows Hello and the stale check. The page's own
-  // Approve and Deny are hidden, their click is stopped, and the request is
-  // refused before it leaves the page - on a live link as much as a stale one.
-  const { page, problems, direct } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
-  for (const stale of [true, false]) {
-    await page.evaluate((stale) => {
-      const box = document.getElementById("approvals");
-      box.hidden = false;
-      box.innerHTML = '<div class="appr" data-id="7"><div class="det">send it</div>'
-        + '<div class="btns"><button class="yes">Approve</button><button class="no">Deny</button></div></div>';
-      window.__clicked = 0;
-      box.querySelector(".yes").onclick = () => { window.__clicked++; };
-      box.querySelector(".no").onclick = () => { window.__clicked++; };
-      window.__jarvisFeed("link", { connected: true, stale });
-    }, stale);
-    // Hidden, so not clickable by a person; a script can still click it.
-    await page.evaluate(() => {
-      document.querySelector("#approvals .yes").click();
-      document.querySelector("#approvals .no").click();
-    });
-    const out = await page.evaluate(() => ({
-      clicked: window.__clicked,
-      shown: getComputedStyle(document.querySelector("#approvals .yes")).display,
-      where: getComputedStyle(document.querySelector("#approvals .btns"), "::after").content,
-      card: document.querySelector("#approvals .appr .det").textContent,
-    }));
-    assert.equal(out.clicked, 0, `the page's own Approve or Deny ran (stale: ${stale})`);
-    assert.equal(out.shown, "none", "the HUD still shows an Approve button");
-    assert.match(out.where, /Jarvis bar or the widget/);
-    assert.equal(out.card, "send it", "the card itself should stay");
-  }
+await check("a HUD approval card is answered HERE, through the shell's own decide_approval", async () => {
+  // The owner's ask of 2026-10-16: "i should also be able to approve any card
+  // from the jarvis hud directly on my desktop and not need the jarvis widget
+  // or jarvis bar to do so". The card's own Approve and Deny are shown, and
+  // they go through the SAME command the Jarvis bar and the widget call - so
+  // Windows Hello, the stale-link refusal, the cut-off refusal and the
+  // App-lock rule apply to this window unchanged. It is not a second
+  // permission path: the page's own handler still does not run, and no
+  // decision reaches the backend without the token Rust adds.
+  const { page, problems, direct, decisions } = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false });
+  const place = () => page.evaluate(() => {
+    const box = document.getElementById("approvals");
+    box.hidden = false;
+    box.innerHTML = '<div class="appr" data-id="7"><div class="det">send it</div>'
+      + '<div class="btns"><button class="no">Deny</button><button class="yes">Approve</button></div></div>';
+    window.__clicked = 0;
+    box.querySelector(".yes").onclick = () => { window.__clicked++; };
+    box.querySelector(".no").onclick = () => { window.__clicked++; };
+  });
+
+  await place();
+  const shown = await page.evaluate(() => ({
+    yes: getComputedStyle(document.querySelector("#approvals .yes")).display,
+    no: getComputedStyle(document.querySelector("#approvals .no")).display,
+    note: getComputedStyle(document.querySelector("#approvals .btns"), "::after").content,
+    card: document.querySelector("#approvals .appr .det").textContent,
+  }));
+  assert.notEqual(shown.yes, "none", "the HUD still hides its own Approve");
+  assert.notEqual(shown.no, "none", "the HUD still hides its own Deny");
+  assert.ok(!/Jarvis bar or the widget/.test(shown.note || ""),
+    `the card still sends the owner elsewhere to answer: ${shown.note}`);
+  assert.equal(shown.card, "send it", "the card itself should stay");
+
+  await page.evaluate(() => document.querySelector("#approvals .yes").click());
+  await page.waitForTimeout(500);
+  const approved = await page.evaluate(() => ({
+    clicked: window.__clicked,
+    decided: window.__invokes.filter((c) => c[0] === "decide_approval").map((c) => c[1]),
+  }));
+  assert.equal(approved.clicked, 0, "the page's own Approve handler ran after all");
+  assert.deepEqual(approved.decided, [{ id: "7", approved: true }],
+    `the decision did not go through decide_approval: ${JSON.stringify(approved.decided)}`);
+  assert.deepEqual(decisions.map((d) => [d.path, d.body.id, d.body.by]),
+    [["/api/approve", "7", "desktop_spotlight"]],
+    "the command did not send the decision the bar's own command sends");
+
+  await place();
+  await page.evaluate(() => document.querySelector("#approvals .no").click());
+  await page.waitForTimeout(500);
+  const denied = await page.evaluate(() =>
+    window.__invokes.filter((c) => c[0] === "decide_approval").map((c) => c[1]));
+  assert.deepEqual(denied, [{ id: "7", approved: true }, { id: "7", approved: false }],
+    "Deny did not go through the same command as Approve");
+
+  // The page's own fetch is still refused, whatever the buttons do: a script
+  // in this page cannot post a decision behind the command's back.
   const refused = await page.evaluate(async () => {
     const out = [];
     for (const path of ["/api/approve", "/api/deny"]) {
@@ -888,9 +939,41 @@ await check("a HUD approval card is shown but never answered in the HUD, stale o
   await page.close();
   for (const [url, code, error] of refused) {
     assert.equal(code, 403, `${url} was not refused`);
-    assert.match(error, /Jarvis bar or the widget/);
+    assert.match(error, /approval command/, `the refusal does not say how a decision is sent: ${error}`);
   }
-  assert.deepEqual(direct.filter((d) => /approve|deny/.test(d)), [], "an approval reached the backend");
+  assert.deepEqual(direct.filter((d) => /approve|deny/.test(d)), [],
+    "a decision reached the backend without the token the shell adds");
+  assert.deepEqual(problems, []);
+});
+
+await check("a refused HUD decision says so on the card, in the command's own words", async () => {
+  // Windows Hello not set up, a stale link, App lock: the command refuses and
+  // writes the sentence. The card must carry it rather than the button going
+  // quiet, which is the "i have no idea what happens" the owner reported.
+  const refusal = "App lock is on, so approvals are made in the Jarvis bar, not the Jarvis HUD. "
+    + "The Jarvis bar is opening - approve it there";
+  const { page, problems } = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false, decideFails: refusal });
+  await page.evaluate(() => {
+    const box = document.getElementById("approvals");
+    box.hidden = false;
+    box.innerHTML = '<div class="appr" data-id="7"><div class="det">send it</div>'
+      + '<div class="btns"><button class="no">Deny</button><button class="yes">Approve</button></div></div>';
+  });
+  await page.evaluate(() => document.querySelector("#approvals .yes").click());
+  await page.waitForTimeout(400);
+  const out = await page.evaluate(() => ({
+    why: document.querySelector("#approvals .appr .why")?.textContent || "",
+    settled: document.querySelector("#approvals .appr")?.classList.contains("settled"),
+    yesDisabled: document.querySelector("#approvals .yes").disabled,
+    stillThere: Boolean(document.querySelector("#approvals .appr")),
+  }));
+  await page.close();
+  assert.match(out.why, /App lock is on/, `the card said "${out.why}"`);
+  assert.match(out.why, /not the Jarvis HUD/, "the card did not say which window refused");
+  assert.equal(out.settled, false, "the card is still dimmed after a refusal");
+  assert.equal(out.yesDisabled, false, "Approve stayed dead after a refusal, so it cannot be retried");
+  assert.equal(out.stillThere, true, "a refused card was taken off screen");
   assert.deepEqual(problems, []);
 });
 
@@ -1067,7 +1150,7 @@ await check("a refused or missing shell says where the mic is, instead of doing 
   }
 });
 
-await check("the HUD holds the mic's command and its reads, chat and mark - and cannot record or approve", async () => {
+await check("the HUD holds the mic's command, its reads, chat and mark - and answers a card through one command only", async () => {
   const cap = JSON.parse(readFileSync(join(HERE, "..", "src-tauri", "capabilities", "hud.json"), "utf8"));
   assert.deepEqual(cap.permissions,
     ["core:app:default", "core:event:allow-listen", "core:event:allow-unlisten",
@@ -1077,11 +1160,21 @@ await check("the HUD holds the mic's command and its reads, chat and mark - and 
       // question 2 of docs/BARS-AND-SETTINGS-AUDIT-2026-10-10.md): the same
       // navigation-only `open_fix_place` the bar's gear and the widget's gear
       // hold. It opens or focuses the Settings window at a named place, changes
-      // no setting and approves nothing, so the sentence this test is really
-      // about - no record, no approve, no deny - is unchanged.
-      "open-fix-place"]);
+      // no setting and approves nothing.
+      "open-fix-place",
+      // The card's own Approve and Deny, which the OWNER ASKED FOR on
+      // 2026-10-16: ONE command, `decide_approval`, the same one the bar and
+      // the widget call - so Windows Hello, the stale-link refusal, the
+      // cut-off refusal and the App-lock rule apply to this window too. What
+      // this set is NOT is as load-bearing as what it is: no amend, no
+      // bulk, nothing the card's own two buttons do not need.
+      "hud-approvals"]);
   assert.match(cap.description, /holds NO pairing token/);
   assert.doesNotMatch(cap.description, /worst any drop of that page can do with it is open a window/);
+  assert.match(cap.description, /hud-approvals/,
+    "the capability does not say what the HUD's approve grant is");
+  assert.match(cap.description, /App lock is on/,
+    "the capability does not say that App lock refuses an approval from here");
   const surfaces = readFileSync(join(HERE, "..", "src-tauri", "permissions", "surfaces.toml"), "utf8");
   const link = surfaces.slice(surfaces.indexOf('identifier = "hud-link"'));
   const linkPerms = link.slice(link.indexOf("permissions = ["), link.indexOf("]") + 1);
@@ -1090,6 +1183,13 @@ await check("the HUD holds the mic's command and its reads, chat and mark - and 
       // Two yes/no answers (App lock, "Hide memory lists"): its face never
       // nods at a saved fact while either is on (face-moments.js).
       "allow-get-lock-flags"]);
+  // ...and the approve grant is its own set, holding one command: the card's
+  // two buttons. An amend or a bulk decide has no business in a window whose
+  // page draws neither control.
+  const hudApprove = surfaces.slice(surfaces.indexOf('identifier = "hud-approvals"'));
+  const approvePerms = hudApprove.slice(hudApprove.indexOf("permissions = ["),
+    hudApprove.indexOf("]") + 1);
+  assert.deepEqual(approvePerms.match(/allow-[a-z-]+/g), ["allow-decide-approval"]);
   // The token is never put in the page.
   const lib = readFileSync(join(HERE, "..", "src-tauri", "src", "lib.rs"), "utf8");
   assert.doesNotMatch(BOOT, /__JARVIS_TOKEN__/);

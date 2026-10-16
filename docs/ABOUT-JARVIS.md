@@ -234,9 +234,9 @@ the working tree was dirty, and the script committed anyway."*
 ### The checkers
 
 Because a claim in a document is cheap, this project keeps **checkers** —
-small programs that read the repository and fail when it stops being true. 22
+small programs that read the repository and fail when it stops being true. 26
 of them are named `check_*.py` under `tools/` (`Get-ChildItem tools/check_*.py`
-→ 22), and a census of what runs them is itself a document
+→ 26), and a census of what runs them is itself a document
 (`docs/CHECKER-CENSUS-2026-10-12.md`), because two of them were once *"named in
 `ci.yml` but never run by it"* (line 5).
 
@@ -244,7 +244,7 @@ The checkers that gate changes include:
 
 - `tools/check_claims.py` — *"one row per thing this project says about itself,
   with a check a machine runs"* (`docs/CLAIMS.tsv`, 140 rows). On the tree this
-  page was written from it reports **140 claims: 111 built, 21 still open, 8
+  page was written from it reports **140 claims: 112 built, 20 still open, 8
   unverifiable** — *"and every `open` one is still a real gap."*
 - `tools/check_parity.py` — did a feature land in both apps, or is one side
   deliberately left out?
@@ -523,7 +523,7 @@ The register is not a museum: on the tree this page was written from,
 `docs/defect-register.tsv` holds **12 rows, 10 closed and 2 open** — DEF-002 (a
 measured 4,598 ms against 9 ms, `docs/DEFECT-REGISTER.md:107`) and DEF-012
 (a latent defect *"unreachable today and not exploited"*, recorded rather than
-claimed as fixed, `docs/DEFECT-REGISTER.md:108`). And 21 of the 140 claims in
+claimed as fixed, `docs/DEFECT-REGISTER.md:108`). And 20 of the 140 claims in
 `docs/CLAIMS.tsv` are still marked open.
 
 ---
@@ -545,8 +545,12 @@ rather than trusting the number.
 | Desktop test suites | **184** `.mjs` files | `Get-ChildItem jarvis-desktop/tests/*.mjs` |
 | Phone test files | **218** `*Test.kt` | `Get-ChildItem jarvis-client -Recurse -Filter *Test.kt` |
 | Documents | **379** markdown files, about 9.3 MB | `Get-ChildItem docs -Recurse -Filter *.md`; the page's own figures are checked by `tools/check_docs_map.py` |
+<<<<<<< HEAD
 | Checkers named `check_*` | **22** | `Get-ChildItem tools/check_*.py` |
-| Claims about itself, each with a machine check | **140 rows**, 111 built / 21 open / 8 unverifiable | `python -B tools/check_claims.py` |
+=======
+| Checkers named `check_*` | **26** | `Get-ChildItem tools/check_*.py` |
+>>>>>>> origin/main
+| Claims about itself, each with a machine check | **140 rows**, 112 built / 20 open / 8 unverifiable | `python -B tools/check_claims.py` |
 | Defect register | **12 rows**, 10 closed / 2 open | `docs/defect-register.tsv` |
 | Launch videos kept | **6** numbered versions, v1–v6, never replaced | `videos/README.md`; the owner's rule of 2026-09-24 (`CLAUDE.md`) |
 
@@ -564,7 +568,7 @@ required status checks are expected."*).
 
 - `python -B tools/check_docs_map.py` — `docs map OK: 379 documents, 9,292,745 bytes, and README.md agrees`
 - `python -B tools/check_feature_list.py` — `129 entries in 9 groups; 122 of 139 route sections and menu ids covered` / `5 passed, 0 failed`
-- `python -B tools/check_claims.py` — `140 claim(s) checked ... 111 built, 21 still open, 8 unverifiable`
+- `python -B tools/check_claims.py` — `140 claim(s) checked ... 112 built, 20 still open, 8 unverifiable`
 - `python -B tools/check_vacuous_checks.py` — `320 suite file(s) read, 21735 check() call(s) looked at: no check is a fake skip`
 - `python -B tools/check_parity.py` — `No undecided drift.` (with three `planned` warnings, which it prints rather than hides)
 

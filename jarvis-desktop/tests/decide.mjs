@@ -94,6 +94,117 @@ await check("CONTROL: a different gate can still be answered", async () => {
   assert.notEqual(sent[0].id, sent[1].id);
 });
 
+/* ── What the owner types into the bar ───────────────────────────────────── */
+
+/**
+ * The owner's report of 2026-10-16: "after i click open the card and type into
+ * the jarvis bar that i approve, nothing happens. i have no idea what happens".
+ * He was right - there was no typed path at all. There is one now, and these
+ * checks hold it to the three rules it has to obey: it decides only when the
+ * whole message is the decision, it decides through the button's own
+ * `decideApproval`, and it never guesses at an ambiguous sentence.
+ */
+const typeIntoTheBar = async (page, text) => {
+  await page.fill("#prompt", text);
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(300);
+};
+
+await check("typing “i approve” answers the waiting card, and sends no chat turn", async () => {
+  const page = await K.open(browser, base, "index.html", { pending: GATE });
+  const turnsBefore = await K.turnsSent(page);
+  await typeIntoTheBar(page, "i approve");
+  const sent = await decides(page);
+  const turns = await K.turnsSent(page);
+  const feed = await page.locator("#answer").innerText();
+  const box = await page.locator("#prompt").inputValue();
+  await page.close();
+  assert.equal(sent.length, 1, `nothing was decided: ${JSON.stringify(sent)}`);
+  assert.equal(sent[0].id, K.APPROVAL_PLAIN.id);
+  assert.equal(sent[0].approved, true);
+  assert.equal(turns, turnsBefore,
+    "the words were ALSO sent to the model, so the owner gets an answer about something else");
+  assert.match(feed, /Approved/, `the bar said nothing about the decision: ${feed}`);
+  assert.equal(box, "", "the decision stayed in the box, where Enter would send it again");
+});
+
+await check("typing “deny” denies it, through the same command", async () => {
+  const page = await K.open(browser, base, "index.html", { pending: GATE });
+  await typeIntoTheBar(page, "Deny.");
+  const sent = await decides(page);
+  await page.close();
+  assert.deepEqual(sent.map((d) => [d.id, d.approved]), [[K.APPROVAL_PLAIN.id, false]]);
+});
+
+await check("CONTROL: an ordinary prompt still goes to the model while a card waits", async () => {
+  // The typed path must not swallow what the bar is for. A prompt that is not
+  // one of the decision's own forms is a prompt, card or no card.
+  const page = await K.open(browser, base, "index.html",
+    { pending: GATE, chatReplies: ["Tuesday at 3."] });
+  const before = await K.turnsSent(page);
+  await typeIntoTheBar(page, "when is the dentist?");
+  const sent = await decides(page);
+  const turns = await K.turnsSent(page);
+  await page.close();
+  assert.equal(sent.length, 0, "an ordinary question decided the card");
+  assert.equal(turns, before + 1, "the prompt never reached the model");
+});
+
+await check("a sentence that only sounds like an answer decides nothing, and says so", async () => {
+  // "yes", "ok do it", "go ahead": exactly the words that produced "i have no
+  // idea what happens". Rule 4 forbids inferring a decision from them, and
+  // sending them to the model is what made the bar look broken - so the bar
+  // answers with what to press, and the card is untouched.
+  for (const said of ["yes", "ok", "go ahead", "do it", "sure, please do"]) {
+    const page = await K.open(browser, base, "index.html", { pending: GATE });
+    const turnsBefore = await K.turnsSent(page);
+    await typeIntoTheBar(page, said);
+    const sent = await decides(page);
+    const turns = await K.turnsSent(page);
+    const hint = await page.locator("#approval-hint").innerText();
+    await page.close();
+    assert.equal(sent.length, 0, `"${said}" was taken as a decision`);
+    assert.equal(turns, turnsBefore, `"${said}" was quietly sent to the model`);
+    assert.match(hint, /press Approve or Deny/i, `"${said}" got no explanation ("${hint}")`);
+  }
+});
+
+await check("a raised card refuses a typed approval, and a typed deny still works", async () => {
+  // `quickActionable` is the gate every faster path goes through, and typing is
+  // a faster path: an item carrying `raised` is on the card BECAUSE outside
+  // text tried to hurry the reader, so the fast answer must not be available
+  // for it. Deny is never held - refusing costs a retry.
+  const raised = await K.open(browser, base, "index.html", { pending: [K.APPROVAL_RAISED] });
+  await typeIntoTheBar(raised, "i approve");
+  const refused = await decides(raised);
+  const hint = await raised.locator("#approval-hint").innerText();
+  await raised.close();
+  assert.equal(refused.length, 0, "a raised card was approved from a typed word");
+  assert.match(hint, /tried to rush/i, `the refusal did not say why: "${hint}"`);
+
+  const denying = await K.open(browser, base, "index.html", { pending: [K.APPROVAL_RAISED] });
+  await typeIntoTheBar(denying, "i deny it");
+  const denied = await decides(denying);
+  await denying.close();
+  assert.deepEqual(denied.map((d) => [d.id, d.approved]), [[K.APPROVAL_RAISED.id, false]]);
+});
+
+await check("a parked card is not answered from a typed word - the bar says where it is", async () => {
+  // Esc puts a card aside without deciding it, so a queue can be waiting with
+  // nothing on screen. Picking one of those from a word would be a guess at
+  // WHICH card the owner meant.
+  const page = await K.open(browser, base, "index.html", { pending: GATE });
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(200);
+  await typeIntoTheBar(page, "i approve");
+  const sent = await decides(page);
+  const feed = await page.locator("#answer").innerText();
+  await page.close();
+  assert.equal(sent.length, 0, "a card that was not on screen was decided from a typed word");
+  assert.match(feed, /waiting/i, `the bar did not say a card is waiting: ${feed}`);
+  assert.match(feed, /decides nothing/i, `the bar did not say nothing was decided: ${feed}`);
+});
+
 /* ── The widget ──────────────────────────────────────────────────────────── */
 
 const widget = (data) => K.open(browser, base, "widget.html", data, { width: 320, height: 460 });

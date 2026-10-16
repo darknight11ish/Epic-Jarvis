@@ -346,6 +346,94 @@ export function quickActionable(approval) {
 }
 
 /**
+ * The decision a typed message IS, when the WHOLE message is one: "approve",
+ * "i approve it", "deny", "deny it" and the few forms around them. Anything
+ * else - "yes", "ok", "go ahead", "do it", "sounds good" - is not a decision,
+ * and returns null.
+ *
+ * **Why the match is the whole message, and why the list is this short.** Rule
+ * 4 is that nothing may be inferred as approval, and this app has already paid
+ * for getting it wrong once: `Esc` used to deny and `↵` used to approve, and
+ * both were removed, because the two most reflexive keys in a spotlight
+ * overlay must not be wired to a decision (index.html's approval footer says
+ * so in its own comment). A typed answer is the deliberate version of that
+ * same risk: a person may type "yes" while thinking about something else. So
+ * the word that decides is the decision itself, in a message that is nothing
+ * but the decision, and a sentence that merely sounds like one gets "press
+ * Approve" from the caller instead of a guess from here.
+ *
+ * Punctuation and case are the typist's business, not the decision's: "I
+ * approve.", "yes, i approve it!" and "DENY" all reduce to a form in the list.
+ *
+ * Exported, like `quickActionable` above and for the same reason: the next
+ * fast path must not arrive at its own answer.
+ */
+const TYPED_DECISIONS = new Map([
+  ["approve", true],
+  ["approved", true],
+  ["i approve", true],
+  ["i approve it", true],
+  ["approve it", true],
+  ["approve this", true],
+  ["yes approve", true],
+  ["yes approve it", true],
+  ["yes i approve", true],
+  ["yes i approve it", true],
+  ["deny", false],
+  ["denied", false],
+  ["i deny", false],
+  ["i deny it", false],
+  ["deny it", false],
+  ["deny this", false],
+  ["no deny", false],
+  ["yes deny it", false],
+]);
+
+export function typedDecision(text) {
+  const said = normaliseSaid(text);
+  return TYPED_DECISIONS.has(said) ? TYPED_DECISIONS.get(said) : null;
+}
+
+/**
+ * A message that SOUNDS like an answer to the card and is not one: "yes",
+ * "ok", "go ahead", "do it", "no" - the words a person says when they mean
+ * "go on then" without having read it. It is a closed list, and it is only
+ * ever consulted while a card is actually on screen.
+ *
+ * **What it is for.** These are the sentences that made the owner say "i have
+ * no idea what happens": he typed an answer, the bar sent it to the model as a
+ * prompt, the model replied about something else, and the card stayed. A word
+ * like this must not decide (rule 4: nothing may be inferred as approval) and
+ * must not be passed off as a prompt either, so the caller answers with words
+ * that say what to press. Nothing here decides anything - it only recognises
+ * the sentence that needs that answer.
+ */
+const TYPED_MAYBE = new Set([
+  "yes", "yep", "yeah", "yup", "ok", "okay", "k", "sure", "fine", "alright",
+  "go ahead", "go on", "do it", "do that", "yes do it", "yes please",
+  "please do", "sure please do", "yes please do", "ok please do",
+  "go ahead please", "please approve", "approve it please", "i guess",
+  "i guess so",
+  "no", "nope", "nah", "no thanks", "dont", "dont do it", "stop",
+  "deny it please", "please deny", "i guess not",
+]);
+
+export function typedMaybe(text) {
+  return TYPED_MAYBE.has(normaliseSaid(text));
+}
+
+/** Case, commas and a full stop are the typist's business, not the meaning's.
+ *  `null`/`undefined` normalise to the empty string, which is in neither list. */
+function normaliseSaid(text) {
+  return String(text == null ? "" : text)
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .replace(/[,.!?;:…"]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
  * Where an approval card can be answered, in the one sentence-part every
  * desktop surface uses (F3, audit 3). It used to be "the Jarvis bar" here,
  * "the Jarvis bar and the widget" there, and never the phone - where the
