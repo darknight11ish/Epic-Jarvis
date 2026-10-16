@@ -1,4 +1,4 @@
-# Decisions, dated: the owner's decisions from 2026-09-24 to 2026-10-11
+# Decisions, dated: the owner's decisions from 2026-09-24 onwards
 
 **This is the record, not the rulebook.** Every block below was moved here **verbatim**
 from `CLAUDE.md` on 2026-10-12, because that file had grown to about 150 KB and the
