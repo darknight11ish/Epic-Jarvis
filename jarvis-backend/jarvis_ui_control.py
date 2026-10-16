@@ -198,7 +198,10 @@ def _default_act(step: Step) -> Optional[str]:
     if step.action == "click":
         ctrl.Click()
     elif step.action == "type":
-        ctrl.SendKeys(step.value or "")
+        # Escaped: SendKeys PARSES its argument, so a `{` in the value would
+        # start a key name. See escape_sendkeys - this is the pre-existing path
+        # and it had the same hole as type_text's.
+        ctrl.SendKeys(escape_sendkeys(step.value or ""))
     elif step.action == "select":
         # A plain Control (what .Control() above returns) has no .Select()
         # method at all - that only exists on specific typed subclasses
@@ -338,6 +341,45 @@ def blocked_text(text: str) -> Optional[str]:
         if re.search(pattern, low):
             return SHELL_REFUSAL.format(what=why)
     return None
+
+
+#: `uiautomation.SendKeys` does not TYPE its argument - it PARSES it. From the
+#: installed library's own docstring (`uiautomation/uiautomation.py:2748-2759`):
+#:
+#:     SendKeys('{Ctrl}a{Delete}{Ctrl}v{Ctrl}s{Ctrl}{Shift}s{Win}e{PageDown}')
+#:         # press Ctrl+a, Delete, Ctrl+v, Ctrl+s, Ctrl+Shift+s, Win+e, PageDown
+#:     SendKeys('{{}Hello{}}abc')     # type: '{Hello}abc'
+#:
+#: So a `{` starts a KEY NAME and `{{}`/`{}}` are the literal braces. Everything
+#: else - including `` `~!@#$%^&*()-_=+ `` - is typed as itself, because
+#: `charMode=True` (the library's default, which this module uses) is what makes
+#: ordinary characters literal. Only the two braces need escaping.
+#:
+#: `str.translate` and not two `.replace()` calls: `"{".replace("{", "{{}")
+#: .replace("}", "{}}")` re-reads its own output and produces `{{{}}}` where a
+#: single literal `{` was meant. One pass, and the replacements are never
+#: rescanned.
+_SENDKEYS_ESCAPES = str.maketrans({"{": "{{}", "}": "{}}"})
+
+
+def escape_sendkeys(text) -> str:
+    """`text` as something `SendKeys` will TYPE rather than interpret.
+
+    WHY THIS EXISTS, and it is a security fix, not tidiness. `type_text` handed
+    the model's own words straight to `SendKeys`, so `type_text("{Win}l")` would
+    press **Win+L and lock the PC** - exactly what `BLOCKED_KEY_COMBOS` refuses
+    on the `hotkey` path. The two paths have to agree, or the blocklist is
+    decoration. Escaping at the one place that talks to `SendKeys` means a brace
+    can never start a key name, whatever the caller passes.
+
+    It also fixes ordinary typing that was already wrong: a sentence or a path
+    containing `{` or `}` was read as a key press, so the text that arrived was
+    not the text that was asked for.
+
+    Measured, not assumed: the semantics above are quoted from the installed
+    library's docstring, and `test_ui_control.py` pins the escaped forms.
+    """
+    return str(text or "").translate(_SENDKEYS_ESCAPES)
 
 
 def _uia_lib():
@@ -1096,7 +1138,10 @@ def _default_keys(kind: str, payload: str, window_id=None):  # pragma: no cover 
     target = (auto.ControlFromHandle(int(window_id)) if window_id is not None
               else auto.GetFocusedControl())
     if kind == "text":
-        target.SendKeys(payload)
+        # Escaped - the argument is PARSED by SendKeys, so raw text containing
+        # `{` would send a key press instead of typing the character. See
+        # escape_sendkeys.
+        target.SendKeys(escape_sendkeys(payload))
     else:
         target.SendKeys("{" + "}{".join(str(payload).split("+")) + "}")
     return "ok"

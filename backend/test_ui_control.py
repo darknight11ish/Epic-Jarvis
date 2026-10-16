@@ -818,6 +818,101 @@ def t_the_shell_patterns_that_are_never_typed():
           len(sent) == 4, repr(sent))
 
 
+def t_sendkeys_text_is_typed_not_parsed():
+    """`SendKeys` PARSES its argument, so a `{` in the text starts a KEY NAME.
+
+    Measured 2026-10-15 against the installed library's own docstring
+    (`uiautomation/uiautomation.py:2748-2759`):
+    `SendKeys('{Ctrl}a{Delete}...{Win}e')` presses Ctrl+a, Delete, ... Win+e;
+    `SendKeys('{{}Hello{}}')` types `{Hello}`. So without `escape_sendkeys`,
+    `type_text("{Win}l")` would press **Win+L and lock the PC** - exactly what
+    `BLOCKED_KEY_COMBOS` refuses on the `hotkey` path. The blocklist has to hold
+    on both paths or it is decoration.
+    """
+    # The pure escape, against the library's own documented literal forms.
+    for given, want in [("{Win}l", "{{}Win{}}l"),
+                        ("a{b}c", "a{{}b{}}c"),
+                        ("}{", "{}}{{}"),
+                        ("user{name}", "user{{}name{}}"),
+                        ("hello", "hello"),
+                        ("", ""),
+                        ("50% off (yes)", "50% off (yes)")]:
+        got = U.escape_sendkeys(given)
+        check(f"escape_sendkeys({given!r}) is the literal form {want!r}", got == want, repr(got))
+    check("... and the escape is done in ONE pass, not two replaces",
+          U.escape_sendkeys("{") == "{{}" and U.escape_sendkeys("}") == "{}}",
+          repr((U.escape_sendkeys("{"), U.escape_sendkeys("}"))))
+    check("... so an escaped brace can never start a key name",
+          U.escape_sendkeys("{Win}").startswith("{{}"), repr(U.escape_sendkeys("{Win}")))
+
+    # End to end through the REAL senders. A fake `uiautomation` in
+    # `sys.modules` is the seam `_uia_lib()` already offers (the same one
+    # `t_a_read_steps_result_reaches_the_caller` uses), so what `SendKeys` is
+    # handed can be read here without a desktop - which is the point: the escape
+    # lives in the real sender, so an injected `sender=` would bypass exactly
+    # the code under test.
+    typed = []
+
+    class FakeTarget:
+        @staticmethod
+        def SendKeys(payload):
+            typed.append(payload)
+
+    class FakeAuto:
+        @staticmethod
+        def GetFocusedControl():
+            return FakeTarget()
+
+        @staticmethod
+        def ControlFromHandle(hwnd):
+            return FakeTarget()
+
+    class FakeTop:
+        @staticmethod
+        def Control(**kw):
+            return FakeTarget()
+
+    class FakeAutoForAct(FakeAuto):
+        @staticmethod
+        def WindowControl(searchDepth, Name):
+            return FakeTop()
+
+    real_module = sys.modules.get("uiautomation")
+    try:
+        sys.modules["uiautomation"] = FakeAuto()
+        out = U.type_text("{Win}l")
+        check("typing '{Win}l' through the REAL sender is allowed",
+              out["ok"] is True, repr(out))
+        check("... and SendKeys was handed the ESCAPED text, not the key name",
+              typed == ["{{}Win{}}l"], repr(typed))
+        typed.clear()
+
+        sys.modules["uiautomation"] = FakeAutoForAct()
+        U._default_act(U.Step(window="Calc", control="Box", automation_id="",
+                              action="type", value="{Win}l"))
+        check("the PRE-EXISTING _default_act type path escapes too",
+              typed == ["{{}Win{}}l"], repr(typed))
+        typed.clear()
+
+        # CONTROL: ordinary text is handed through unchanged, so the escape
+        # cannot be quietly mangling real work.
+        sys.modules["uiautomation"] = FakeAuto()
+        U.type_text("C:\\Users\\me\\report.pdf (final)")
+        check("CONTROL: ordinary text is passed through untouched",
+              typed == ["C:\\Users\\me\\report.pdf (final)"], repr(typed))
+    finally:
+        if real_module is not None:
+            sys.modules["uiautomation"] = real_module
+        else:
+            del sys.modules["uiautomation"]
+
+    # A source pin on top, so a THIRD SendKeys call site added later cannot
+    # quietly take raw text.
+    src = (Path(__file__).resolve().parent / "jarvis_ui_control.py").read_text(encoding="utf-8")
+    check("and no SendKeys call is left handing it raw text",
+          "SendKeys(payload)" not in src and 'SendKeys(step.value or "")' not in src)
+
+
 if __name__ == "__main__":
     for fn in (t_planning_sends_no_input, t_unmatched_requests_do_not_become_steps,
                t_disabled_control_is_treated_as_unmatched,
@@ -842,7 +937,8 @@ if __name__ == "__main__":
                t_a_control_with_no_background_pattern_escalates_and_does_not_take_the_screen,
                t_foreground_delivery_is_gated_and_always_restores,
                t_the_combinations_that_are_never_sent,
-               t_the_shell_patterns_that_are_never_typed):
+               t_the_shell_patterns_that_are_never_typed,
+               t_sendkeys_text_is_typed_not_parsed):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
