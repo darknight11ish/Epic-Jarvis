@@ -445,6 +445,7 @@ CREATE TABLE IF NOT EXISTS projects (
     notes TEXT NOT NULL DEFAULT '[]',
     folder TEXT,
     shareable INTEGER NOT NULL DEFAULT 0,
+    auto_route_cloud INTEGER NOT NULL DEFAULT 0,
     work_list TEXT,
     goals TEXT NOT NULL DEFAULT '[]',
     created REAL NOT NULL,
@@ -560,6 +561,13 @@ class Projects:
             if "app" not in pcols:
                 # A projects.db from before apps joined Projects (2026-09-29).
                 c.execute("ALTER TABLE projects ADD COLUMN app TEXT")
+            if "auto_route_cloud" not in pcols:
+                # A projects.db from before Project Mode (step 4). OFF is the
+                # default here for the same reason it is the default everywhere:
+                # a database written by an older build must not come back with a
+                # loosening already on.
+                c.execute("ALTER TABLE projects ADD COLUMN auto_route_cloud "
+                          "INTEGER NOT NULL DEFAULT 0")
             # One project per app folder. After the column exists, so an old
             # file gets the column first.
             c.execute("CREATE UNIQUE INDEX IF NOT EXISTS projects_by_app ON projects (app) "
@@ -674,12 +682,35 @@ class Projects:
         with _P_LOCK:
             waiting = _P_STATE["pending"].get(r["id"])
             last = _P_STATE["last"].get(r["id"])
+        with _A_LOCK:
+            auto_waiting = _A_STATE["pending"].get(r["id"])
+            auto_last = _A_STATE["last"].get(r["id"])
         v = {
             "id": r["id"], "name": r["name"], "kind": r["kind"],
             "shareable": bool(r["shareable"]),
             "shareable_waiting": bool(waiting),
             "shareable_waiting_words": SHARE_WAITING if waiting else "",
             "shareable_last": dict(last) if last else None,
+            "auto_route_cloud": bool(r["auto_route_cloud"]),
+            "auto_route_waiting": bool(auto_waiting),
+            "auto_route_waiting_words": AUTO_ROUTE_WAITING if auto_waiting else "",
+            "auto_route_last": dict(auto_last) if auto_last else None,
+            # The pill the workspace draws. Both switches are the owner's own,
+            # and BOTH have to be on before a cloud lane is even considered:
+            # Shareable alone is not enough, and Auto-Route alone is not either.
+            "routing": ("Local / Auto-Route to Cloud"
+                        if (r["shareable"] and r["auto_route_cloud"])
+                        else "Local-Only"),
+            "routing_why": ("This project is Shareable and Auto-Route is on: a hard "
+                            "question in it may be offered to a cloud lane, and only "
+                            "after a card showing the exact words."
+                            if (r["shareable"] and r["auto_route_cloud"])
+                            else ("Not Shareable, so nothing from this project is ever "
+                                  "offered to a cloud lane."
+                                  if not r["shareable"] else
+                                  "Shareable, but Auto-Route is off, so every turn "
+                                  "stays on this PC.")),
+            "active": active_project_id() == r["id"],
             "folder": ({"path": folder, "name": _folder_name(folder),
                         "listed": bool(folder_ok),
                         "said": "" if folder_ok else
@@ -873,8 +904,10 @@ class Projects:
             return self._update(pid, body, here=here)
 
     def _update(self, pid: str, body: dict, *, here: bool) -> dict:
+        before, name = {}, ""
         with self._lock, self._db() as c:
             r = self._project_row(c, pid)
+            before, name = _snapshot(r), r["name"]
             sets, args = [], []
             if "name" in body:
                 name = _one_line(body.get("name"), MAX_NAME, "a project's name", required=True)
@@ -926,12 +959,33 @@ class Projects:
                     sets.append("shareable = 0")
                 elif s is not True:
                     raise ValueError("shareable is true or false")
+            if "auto_route_cloud" in body:
+                a = body.get("auto_route_cloud")
+                if a is True and not r["auto_route_cloud"]:
+                    # The same shape as Shareable, and for the same reason: this
+                    # is the switch that lets a turn reach a cloud lane, so ONE
+                    # card, and the route is the only door.
+                    raise ValueError("turning Auto-Route on asks you first - use "
+                                     "/api/projects/<id>/auto-route")
+                if a is False:
+                    sets.append("auto_route_cloud = 0")
+                elif a is not True:
+                    raise ValueError("auto_route_cloud is true or false")
             if sets:
                 sets.append("changed = ?")
                 args.append(self.clock())
                 c.execute(f"UPDATE projects SET {', '.join(sets)} WHERE id = ?", (*args, pid))
         if "shareable" in body and body.get("shareable") is False:
             _withdraw_share(pid)
+        if "auto_route_cloud" in body and body.get("auto_route_cloud") is False:
+            _withdraw_auto(pid)
+        if sets:
+            # One receipt per edit, so the edit has a one-click Undo. Written
+            # AFTER the change here (unlike an action that can half-fail), and
+            # never able to fail the edit it records.
+            _record_project_receipt(
+                pid, before,
+                {k: body.get(k) for k in UNDOABLE_FIELDS if k in body}, name)
         _audit("projects.update", {"id": pid, "fields": len(sets)})
         return self.get(pid)
 
@@ -974,6 +1028,15 @@ class Projects:
             c.execute("UPDATE projects SET shareable = 1, changed = ? WHERE id = ?",
                       (self.clock(), pid))
         _audit("projects.shareable_on", {"id": pid})
+
+    def set_auto_route_cloud_on(self, pid: str) -> None:
+        """The card's own write, and the ONLY way this column is ever set to 1.
+        `_update` refuses it, so there is one door and a card behind it."""
+        with self._lock, self._db() as c:
+            self._project_row(c, pid)
+            c.execute("UPDATE projects SET auto_route_cloud = 1, changed = ? WHERE id = ?",
+                      (self.clock(), pid))
+        _audit("projects.auto_route_on", {"id": pid})
 
     # ---- benchmarks ---------------------------------------------------------------
 
@@ -1778,6 +1841,408 @@ def request_shareable(pid: str, body, *, store: Optional[Projects] = None,
 
 
 # --------------------------------------------------------------------------
+#   Project Mode (design step 4): which project is ACTIVE, and the two switches
+#
+#   `active_project_id` is not a field of a project: it is which project the
+#   next turn belongs to, so it lives in its own small file beside projects.db
+#   rather than in a row. Entering and leaving Project Mode loosens nothing -
+#   it chooses whose context is assembled and whose rows get labelled - so it
+#   takes no card. `auto_route_cloud` DOES loosen something, and it takes ONE
+#   card, exactly as Shareable does. Rule 4: nothing here is ever
+#   auto-approved, and OFF is instant.
+# --------------------------------------------------------------------------
+
+MODE_FILE = "project-mode.json"
+
+#: The Auto-Route card's own waiting answer. Kept apart from Shareable's so
+#: one card can never answer the other's question.
+_A_LOCK = threading.Lock()
+#: Held while Auto-Route is switched off (or a project deleted) and while a
+#: card's yes is written, so the two never interleave - the same shape, and the
+#: same reason, as _P_SWITCH.
+_A_SWITCH = threading.RLock()
+_A_STATE: dict = {"pending": {}, "withdrawn": set(), "last": {}}
+
+AUTO_ROUTE_WAITING = "Waiting for your yes on the approval card."
+
+AUTO_ROUTE_LAST_WORDS = {
+    "on": "Auto-Route is on.",
+    "denied": "Auto-Route stays off - you said no.",
+    "timed_out": "Auto-Route stays off - the card timed out.",
+    "refused": "Auto-Route stays off.",
+    "withdrawn": "Auto-Route stays off - you turned it off before answering.",
+    "failed": "Auto-Route stays off - it could not be saved.",
+}
+
+
+def mode_path() -> Path:
+    return _config_dir() / MODE_FILE
+
+
+def _read_mode() -> dict:
+    try:
+        with open(mode_path(), encoding="utf-8") as fh:
+            got = json.load(fh)
+        return got if isinstance(got, dict) else {}
+    except Exception:
+        # No file, or one that will not read: NO active project. Failing here
+        # is failing to "an ordinary turn", which is what every turn recorded
+        # before this step was.
+        return {}
+
+
+def _write_mode(doc: dict) -> None:
+    """Replace the file whole, through a temporary name, so a reader never
+    sees half a file (the shape jarvis_limits.py uses for the settings file)."""
+    path = mode_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(doc, fh)
+    tmp.replace(path)
+
+
+def active_project_id() -> Optional[str]:
+    """The project the next turn belongs to, or None - and NEVER raises.
+
+    A missing file, a broken file, an id that is not an id, or no
+    jarvis_projects at all all answer None, and None is the safe answer: no
+    context is assembled and no row is labelled."""
+    pid = _read_mode().get("active_project_id")
+    return pid if isinstance(pid, str) and _ID.fullmatch(pid) else None
+
+
+def set_active_project(pid: Optional[str], *,
+                       store: Optional[Projects] = None) -> Optional[str]:
+    """Enter Project Mode for one project; None leaves it. Leaving is instant."""
+    store = store or get()
+    if pid in (None, ""):
+        _write_mode({})
+        _audit("projects.mode", {"active": False})
+        return None
+    if not isinstance(pid, str) or not _ID.fullmatch(pid):
+        raise ValueError("no such project")
+    store.get(pid)                      # KeyError when it is not there at all
+    _write_mode({"active_project_id": pid})
+    _audit("projects.mode", {"active": True})
+    return pid
+
+
+def _bench_summary(benches: list) -> tuple:
+    """(the numbers a turn may see, a plain sentence about what was held back).
+
+    A benchmark carrying the private mark (health or money) is NOT put in front
+    of a model: jarvis_projects keeps those "on screen, never read aloud or
+    sent anywhere", and a prompt is somewhere. Its NAME is left out too - the
+    name is what says "therapy" or "savings"."""
+    shown, held = [], 0
+    for b in benches or []:
+        if b.get("sensitive"):
+            held += 1
+            continue
+        shown.append({"name": b.get("name"), "unit": b.get("unit") or "",
+                      "latest": (b.get("latest") or {}).get("value"),
+                      "target": b.get("target")})
+    if not held:
+        words = f"{len(shown)} benchmark(s), none private."
+    else:
+        words = (f"{len(shown)} benchmark(s) shown; {held} kept off this list "
+                 f"because they are marked private (health or money).")
+    return shown, words
+
+
+def project_context(pid: Optional[str] = None, *,
+                    store: Optional[Projects] = None) -> dict:
+    """Everything a turn inside a project should be given, and nothing else:
+    the owner's own instructions, the notes he pinned, the work list, the
+    goals, and a summary of the benchmarks that are NOT privately marked.
+
+    Reads only. It changes nothing and needs no card."""
+    store = store or get()
+    pid = pid or active_project_id()
+    if not pid:
+        return {"active": False, "project_id": None, "instructions": "",
+                "pinned_notes": [], "work_list": None, "goals": [],
+                "benchmarks": [], "benchmarks_words": "", "held_back": 0,
+                "routing": "Local-Only",
+                "why": "No project is active, so no project context is added."}
+    p = store.get(pid)
+    shown, words = _bench_summary(p.get("benchmark_list") or [])
+    folder = p.get("folder") or {}
+    return {
+        "active": True,
+        "project_id": pid,
+        "name": p.get("name"), "kind": p.get("kind"),
+        "folder": folder.get("path") if folder else None,
+        "instructions": p.get("instructions") or "",
+        "pinned_notes": p.get("notes") or [],
+        "work_list": p.get("work_list"),
+        "goals": p.get("goals") or [],
+        "benchmarks": shown,
+        "benchmarks_words": words,
+        "held_back": len(p.get("benchmark_list") or []) - len(shown),
+        "routing": p.get("routing"),
+        "why": ("The active project's own instructions, pinned notes, work list, "
+                "goals and its non-private benchmark summary."),
+    }
+
+
+def route_for_turn(prompt: str, *, context_tokens: int = 0,
+                   store: Optional[Projects] = None) -> dict:
+    """Advise a lane for one turn - or say local.
+
+    THREE switches must all be on, and all three are the owner's own: a project
+    must be ACTIVE, that project must be SHAREABLE, and its AUTO-ROUTE must be
+    on. Anything less is "local", and so is every failure - the router not
+    being installed, a router that raises, advice this cannot read. THE
+    ABSENCE OF THE ROUTER MEANS LOCAL: never a crash, never an escalation.
+
+    Nothing here decides anything by itself either: jarvis_auto_router's own
+    contract says it ADVISES, and its `recommended` is the only thing read as
+    a yes. A dict with no `recommended` is a no."""
+    store = store or get()
+    pid = active_project_id()
+    out = {"lane": "local", "recommended": False, "active": bool(pid),
+           "routing": "Local-Only", "why": ""}
+    if not pid:
+        out["why"] = "No project is active, so this turn is an ordinary one."
+        return out
+    try:
+        p = store.get(pid)
+    except Exception:
+        out["why"] = "The active project is no longer there."
+        return out
+    if not p.get("shareable"):
+        out["why"] = "This project is not Shareable, so nothing may leave this PC."
+        return out
+    if not p.get("auto_route_cloud"):
+        out["routing"] = "Local-Only"
+        out["why"] = "Auto-Route is off for this project, so every turn stays local."
+        return out
+    try:
+        import jarvis_auto_router
+        advice = jarvis_auto_router.evaluate_route(
+            prompt, context_tokens=context_tokens, active_project=p)
+    except Exception as exc:
+        out["why"] = (f"Auto-Route is on, but the router is not available here "
+                      f"({type(exc).__name__}), so this turn stays on this PC.")
+        return out
+    if not isinstance(advice, dict):
+        out["why"] = ("Auto-Route answered something this cannot read, so this "
+                      "turn stays on this PC.")
+        return out
+    out["routing"] = "Local / Auto-Route to Cloud"
+    out["advice"] = advice
+    lane = advice.get("lane")
+    if advice.get("recommended") is not True or lane not in CLOUD_LANES:
+        out["why"] = advice.get("why") or "Auto-Route found no reason to leave this PC."
+        return out
+    return {"lane": lane, "recommended": True, "active": True,
+            "routing": "Local / Auto-Route to Cloud",
+            "why": advice.get("why") or "",
+            "would_send": advice.get("would_send") or "",
+            "advice": advice}
+
+
+#: The only two lanes a turn may be advised onto. Anything else - including
+#: whatever a future router might invent - reads as local.
+CLOUD_LANES = ("jarvis-escalate", "jarvis-critic")
+
+
+def auto_route_card(name: str) -> str:
+    return "\n".join([
+        f"Let a hard question in the project \"{name}\" go to a cloud lane?",
+        "",
+        "When Auto-Route is on AND the project is Shareable, a genuinely hard "
+        "question in that project may be estimated as too slow for this PC, and "
+        "offered to one of the cloud lanes you have already set up.",
+        "",
+        "It is never automatic. The advice is advice: the words that would leave "
+        "are scrubbed first, they are shown to you on the card that asks, and "
+        "nothing goes anywhere until you say yes to that card - every time.",
+        "",
+        "Never sent, whatever this says: health or money numbers, anything "
+        "Jarvis remembers about you, your email, and passwords or keys.",
+        "",
+        "Turning it off again is instant, from either app.",
+        "",
+        "If you did not just do this, say no.",
+        "",
+        "If you say no: nothing changes.",
+    ])
+
+
+def _finish_auto(pid: str, token: str, outcome: str, why: str = "") -> None:
+    with _A_LOCK:
+        p = _A_STATE["pending"].get(pid)
+        if p and p.get("token") == token:
+            _A_STATE["pending"].pop(pid, None)
+        _A_STATE["withdrawn"].discard(token)
+        _A_STATE["last"][pid] = {"outcome": outcome, "why": why, "at": time.time(),
+                                 "message": AUTO_ROUTE_LAST_WORDS.get(outcome, "")}
+    _audit("projects.auto_route.card", {"id": pid, "outcome": outcome})
+
+
+def _withdraw_auto(pid: str) -> None:
+    with _A_LOCK:
+        p = _A_STATE["pending"].pop(pid, None)
+        if p:
+            _A_STATE["withdrawn"].add(p["token"])
+
+
+def _decide_auto(pid: str, token: str, name: str, store: Projects, gate: Callable,
+                 tier_of: Callable) -> None:
+    text = auto_route_card(name)
+    detail = {"text": text, "what": "let a hard question in one project be offered "
+                                     "to a cloud lane",
+              "setting": "Auto-Route to Cloud", "to": name,
+              "leaves_this_pc": True}
+    try:
+        v = gate(CARD_ACTION, detail, text)
+    except Exception as exc:
+        return _finish_auto(pid, token, "refused",
+                            f"the approval gate failed ({type(exc).__name__})")
+    vtier = getattr(v, "tier", "unknown")
+    outcome = getattr(v, "outcome", None)
+    if vtier != "ask" or tier_of(CARD_ACTION) != "ask":
+        return _finish_auto(pid, token, "refused",
+                            f"the gate answered at tier {vtier!r}, which is not a "
+                            f"person saying yes")
+    if not _person_said_yes(v):
+        if outcome in ("denied", "timed_out"):
+            return _finish_auto(pid, token, outcome)
+        return _finish_auto(pid, token, "refused", str(getattr(v, "reason", "refused"))[:200])
+    with _A_SWITCH:
+        with _A_LOCK:
+            withdrawn = token in _A_STATE["withdrawn"]
+        if withdrawn:
+            return _finish_auto(pid, token, "withdrawn")
+        try:
+            store.set_auto_route_cloud_on(pid)
+        except Exception as exc:
+            return _finish_auto(pid, token, "failed", type(exc).__name__)
+    _finish_auto(pid, token, "on")
+
+
+def request_auto_route(pid: str, body, *, store: Optional[Projects] = None,
+                       gate: Optional[Callable] = None, tier_of: Optional[Callable] = None,
+                       spawn: Optional[Callable] = None) -> tuple:
+    """POST /api/projects/<id>/auto-route {"on": true|false}. OFF: at once, no
+    card (and a waiting card is withdrawn). ON: 202 and ONE card - the same
+    shape as Shareable, because it is the same kind of thing: a switch that
+    lets more of the owner's own work leave this PC."""
+    store = store or get()
+    gate = gate or _gate
+    tier_of = tier_of or _tier
+    spawn = spawn or _spawn
+    if not isinstance(body, dict) or not isinstance(body.get("on"), bool):
+        return 400, {"ok": False, "error": 'need {"on": true} or {"on": false}'}
+    try:
+        project = store.get(pid)
+    except KeyError:
+        return 404, {"ok": False, "error": "no such project"}
+    if body["on"] is False:
+        out = store.update(pid, {"auto_route_cloud": False}, here=False)
+        return 200, {"ok": True, "changed": project["auto_route_cloud"], "project": out,
+                     "message": "Auto-Route is off. Every turn in this project stays "
+                                "on this PC."}
+    if project["auto_route_cloud"]:
+        return 200, {"ok": True, "changed": False, "project": project,
+                     "message": "Auto-Route is already on."}
+    if not project["shareable"]:
+        # Both switches are the owner's, and this one is only meaningful with
+        # the other: said plainly rather than raising a card that cannot do
+        # anything yet.
+        return 409, {"ok": False, "error": (
+            "Make the project Shareable first - Auto-Route only decides where a "
+            "question may be offered, and nothing may leave a project that is "
+            "not Shareable.")}
+    t = tier_of(CARD_ACTION)
+    if t != "ask":
+        return 503, {"ok": False, "error": (
+            f"{CARD_ACTION} is tier {t!r} in jarvis-framework.toml; turning "
+            f"Auto-Route on needs a person to say yes, so it must be 'ask'")}
+    with _A_LOCK:
+        if pid in _A_STATE["pending"]:
+            return 409, {"ok": False, "error": "A card for this is already waiting - "
+                                               "answer it first."}
+        token = uuid.uuid4().hex
+        _A_STATE["pending"][pid] = {"token": token, "since": time.time()}
+    try:
+        spawn(lambda: _decide_auto(pid, token, project["name"], store, gate, tier_of))
+    except Exception:
+        with _A_LOCK:
+            _A_STATE["pending"].pop(pid, None)
+        return 503, {"ok": False, "error": "could not raise the approval card"}
+    return 202, {"ok": True, "waiting": True, "project": store.get(pid),
+                 "message": "Waiting for your approval. Auto-Route stays off unless "
+                            "you approve the card."}
+
+
+# --------------------------------------------------------------------------
+#   One receipt for a project edit, so an edit has a one-click Undo
+# --------------------------------------------------------------------------
+
+#: The fields an edit may put back. DELIBERATELY NOT `shareable` or
+#: `auto_route_cloud`: those are the two switches, each with its own card and
+#: its own instant-OFF, and an Undo button that silently turned one of them
+#: back ON would be a loosening nobody approved - the exact thing rule 4
+#: forbids. Putting the words back is not a loosening.
+UNDOABLE_FIELDS = ("name", "instructions", "notes", "goals", "work_list", "folder")
+
+
+def _snapshot(r) -> dict:
+    """The part of a project row an edit may put back."""
+    return {"name": r["name"], "instructions": r["instructions"],
+            "notes": json.loads(r["notes"] or "[]"),
+            "goals": json.loads(r["goals"] or "[]"),
+            "work_list": r["work_list"], "folder": r["folder"]}
+
+
+def restore_project(pid: str, before: dict, *, store: Optional[Projects] = None) -> bool:
+    """Put an edit back. Only the fields in UNDOABLE_FIELDS are ever written."""
+    store = store or get()
+    if not isinstance(before, dict):
+        return False
+    body = {k: before.get(k) for k in UNDOABLE_FIELDS if k in before}
+    if not body:
+        return False
+    store.update(pid, body, here=False)
+    return True
+
+
+def _register_receipts() -> bool:
+    try:
+        import jarvis_receipts
+        return bool(jarvis_receipts.register_restorer("project_edit",
+                                                      lambda payload: restore_project(
+                                                          (payload or {}).get("id", ""),
+                                                          (payload or {}).get("before") or {})))
+    except Exception:
+        return False
+
+
+def _record_project_receipt(pid: str, before: dict, after: dict, what: str) -> str:
+    """One receipt for one project edit, or "" - never an exception into the
+    edit. The same shape as jarvis_goals.py's own `_record_step_receipt`."""
+    try:
+        import jarvis_receipts
+    except Exception:
+        return ""
+    try:
+        summary = f'Edited the project "{what}"'
+        return jarvis_receipts.record("project_edit", summary,
+                                      before={"id": pid, "before": before},
+                                      after={"id": pid, "after": after},
+                                      undo=lambda: restore_project(pid, before))
+    except Exception:
+        return ""
+
+
+_register_receipts()
+
+
+# --------------------------------------------------------------------------
 #   Taking a private mark off a benchmark: the owner's own mark at once;
 #   Jarvis's automatic mark with ONE card (the owner, 2026-09-28)
 # --------------------------------------------------------------------------
@@ -1971,6 +2436,10 @@ def parse_route(route: str) -> Optional[tuple]:
         return None
     if route == PATH:
         return ("list",)
+    if route == PATH + "/mode":
+        # Project Mode itself: which project is active. Not a project id, and
+        # it must be read before anything treats the first segment as one.
+        return ("mode",)
     if not route.startswith(PATH + "/"):
         return None
     p = route[len(PATH) + 1:].split("/")
@@ -1979,9 +2448,11 @@ def parse_route(route: str) -> Optional[tuple]:
     pid = p[0]
     if len(p) == 1:
         return ("project", pid)
-    if len(p) == 2 and p[1] in ("delete", "shareable", "benchmarks"):
+    if len(p) == 2 and p[1] in ("delete", "shareable", "benchmarks", "context",
+                                "auto-route"):
         return ({"delete": "project_delete", "shareable": "shareable",
-                 "benchmarks": "benchmarks"}[p[1]], pid)
+                 "benchmarks": "benchmarks", "context": "context",
+                 "auto-route": "auto_route"}[p[1]], pid)
     if len(p) >= 3 and p[1] == "benchmarks" and p[2]:
         bid = p[2]
         if len(p) == 3:
@@ -2031,6 +2502,13 @@ def handle_get(route: str, query: str = "", *, store: Optional[Projects] = None)
                          "unlinked_apps": store.unlinked_apps()}
         if hit[0] == "project":
             return 200, {"ok": True, "project": store.get(hit[1])}
+        if hit[0] == "mode":
+            pid = active_project_id()
+            return 200, {"ok": True, "active_project_id": pid,
+                         "context": project_context(pid, store=store),
+                         "routing": route_for_turn("", store=store)}
+        if hit[0] == "context":
+            return 200, {"ok": True, "context": project_context(hit[1], store=store)}
         if hit[0] == "bench":
             q = parse_qs(query or "")
             n = (q.get("points") or [CHART_POINTS])[0]
@@ -2062,6 +2540,17 @@ def handle_post(route: str, body, *, here: bool = False,
             return 200, out
         if kind == "shareable":
             return request_shareable(hit[1], body, store=store, **card)
+        if kind == "auto_route":
+            return request_auto_route(hit[1], body, store=store, **card)
+        if kind == "mode":
+            was = active_project_id()
+            now = set_active_project(body.get("project_id"), store=store)
+            return 200, {"ok": True, "changed": was != now, "active_project_id": now,
+                         "context": project_context(now, store=store),
+                         "message": ("Project Mode is on for that project."
+                                     if now else
+                                     "Project Mode is off - turns are ordinary "
+                                     "again.")}
         if kind == "benchmarks":
             return 200, {"ok": True, "benchmark": store.add_benchmark(hit[1], body, here=here)}
         if kind == "bench":

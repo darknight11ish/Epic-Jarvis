@@ -15,6 +15,10 @@ suite proves three things instead, each with real code:
      check - proven by making the STT path raise if it is ever called, then
      driving hear() with a clip that does not match any enrolled profile.
   3. WAV bytes in, WAV bytes out is exact: encode, decode, compare samples.
+  4. Which FOLDER the speech-to-text files are looked in, for the optional
+     multilingual Parakeet TDT 0.6B v3 - off by default, and a string "false"
+     does not count as on. The weights are not here, so this is the folder
+     choice only; see ParakeetV3Switch.
 
 Run it beside the backend:
 
@@ -354,6 +358,80 @@ class StatusNeverOverstates(ReloadsBetweenTests):
             with mock.patch.object(S, "_build_tts_engine",
                                     side_effect=AssertionError("engine built on status()")):
                 S.status()
+
+
+class ParakeetV3Switch(ReloadsBetweenTests):
+    """The second speech-to-text model: a folder switch that must stay OFF.
+
+    What it proves (2026-10-15):
+    1. With the switch unset - the shipped TOML - the folder looked in is
+       EXACTLY the old one, so the English model already on disk is still the
+       one Jarvis loads and today's accuracy does not move.
+    2. `sherpa_stt_parakeet_v3 = true` looks in the v3 folder beside it, and
+       the same four-file check finds encoder/decoder/joiner/tokens.txt there.
+    3. A switch set to a STRING - "false" - does NOT turn it on. `bool("false")`
+       is True, and a switch that turns ON when it is set to false is worse
+       than no switch at all.
+    4. `sherpa_stt_dir` still overrides both, exactly as before.
+
+    What it does NOT prove: anything about the real v3 weights. They are not
+    in this repository and nothing here downloads them, so this is the folder
+    choice and the fallbacks only - not that v3 transcribes well.
+    """
+
+    def _base(self) -> Path:
+        return Path(self._tmp.name) / "voice-models" / "stt"
+
+    def test_off_by_default_is_the_folder_that_was_there_before(self):
+        with self._with_cfg({"sherpa_stt_parakeet_v3": None}):
+            self.assertEqual(S._stt_dir(), self._base())
+        # ...and the shipped TOML does not switch it on either: the line is
+        # there to be found and it says false.
+        shipped = (REBUILT / "jarvis-framework.toml").read_text(encoding="utf-8")
+        self.assertIn("# sherpa_stt_parakeet_v3 = false", shipped)
+        self.assertNotIn("\nsherpa_stt_parakeet_v3 = true", shipped)
+
+    def test_on_looks_in_the_v3_folder_and_finds_the_four_files(self):
+        d = self._base() / S.PARAKEET_V3_DIR_NAME
+        d.mkdir(parents=True)
+        for n in ("encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx"):
+            (d / n).write_bytes(b"x")
+        (d / "tokens.txt").write_text("a 0\n")
+        with self._with_cfg({"sherpa_stt_parakeet_v3": True}):
+            self.assertEqual(S._stt_dir(), d)
+            kind, files = S._stt_files()
+        self.assertEqual(kind, "nemo_transducer")
+        self.assertTrue(files["encoder"].endswith("encoder.int8.onnx"))
+        # The default folder was not written to: the two models are separate.
+        self.assertFalse((self._base() / "tokens.txt").exists())
+
+    def test_the_switch_on_with_the_v3_folder_empty_is_an_honest_missing(self):
+        # What the owner sees if they flip the switch before downloading the
+        # 670 MB: "not on disk yet", naming the folder it looked in - never a
+        # crash and never a silent fallback to the English model.
+        if S.sherpa_onnx is None:
+            self.skipTest("sherpa-onnx is not installed here")
+        with self._with_cfg({"sherpa_stt_parakeet_v3": True,
+                             "stt_engine": "sherpa-onnx"}):
+            out = S.status()
+        self.assertFalse(out["stt_available"])
+        self.assertIn("not on disk yet", out["note"])
+        self.assertIn(S.PARAKEET_V3_DIR_NAME, out["note"])
+
+    def test_a_string_false_does_not_switch_it_on(self):
+        for value in ("false", "False", "0", "no", "off", ""):
+            with self._with_cfg({"sherpa_stt_parakeet_v3": value}):
+                self.assertFalse(S._stt_v3_wanted(), repr(value))
+                self.assertEqual(S._stt_dir(), self._base())
+        for value in (True, "true", "on", "yes", "1"):
+            with self._with_cfg({"sherpa_stt_parakeet_v3": value}):
+                self.assertTrue(S._stt_v3_wanted(), repr(value))
+
+    def test_sherpa_stt_dir_still_wins_over_the_switch(self):
+        named = Path(self._tmp.name) / "elsewhere"
+        with self._with_cfg({"sherpa_stt_parakeet_v3": True,
+                             "sherpa_stt_dir": str(named)}):
+            self.assertEqual(S._stt_dir(), named)
 
 
 if __name__ == "__main__":
