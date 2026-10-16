@@ -448,6 +448,7 @@ import {
   ERASED_AND_CHAT_DELETED,
   ERASED_NO_CHAT,
   eraseAlsoChatNamedConfirm,
+  eraseSaid,
   readFactChat,
   erasedAt,
   erasedLine,
@@ -6231,7 +6232,9 @@ async function eraseFact(f) {
   const out = await memoryWrite(
     "brain_memory_erase",
     { id: Number(f.id), also_delete_conversation: alsoChat },
-    (reply) => (reply && reply.chat_deleted ? ERASED_AND_CHAT_DELETED
+    // eraseSaid: when the PC could not rebuild the file it says so in `note`,
+    // and THAT is what belongs on screen - not "Erased." (auto-learn.js).
+    (reply) => eraseSaid(reply, reply && reply.chat_deleted ? ERASED_AND_CHAT_DELETED
       : alsoChat || chat === null ? ERASED_NO_CHAT : ERASED),
   );
   if (out && out.ok !== false) {
