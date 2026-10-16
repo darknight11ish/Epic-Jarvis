@@ -529,7 +529,7 @@
       "patch": "cloud-say-yes.patch",
       "bucket": "core",
       "order": 83,
-      "why": "adds lines to the core (routes, gate tables or a function) but removes none"
+      "why": "edits lines the core already has; it cannot be applied out of order"
     },
     {
       "name": "goals",
