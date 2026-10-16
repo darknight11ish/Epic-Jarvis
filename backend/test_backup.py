@@ -452,6 +452,347 @@ def zf_read(zip_bytes: bytes, name: str) -> bytes:
         return zf.read(name)
 
 
+# ============================ 4b. the coverage gap, measured 2026-10-13
+#
+# The owner's install had 19 databases in ~/.openjarvis and this module's list
+# named 12. Two of the seven left over held the owner's own content and joined
+# the list; five are deliberate exclusions, written down in `NOT_BACKED_UP`.
+# Two settings files were missing for a plainer reason still - their extension
+# is not `.json`, so a glob for `*.json` could never match them, and the HUD's
+# own settings file (config.toml) was in NO backup of any kind.
+#
+# These checks are the ones that stop the gap reopening: a name that quietly
+# leaves `SOURCE_DBS` or `SETTINGS_NAMES` now fails a test rather than being
+# missed until the next audit.
+
+
+def t_a_database_whose_rows_live_in_the_wal_is_captured_whole():
+    """THE WAL TRAP, proved rather than assumed.
+
+    SQLite keeps recent writes in a write-ahead log (the `-wal` file beside a
+    database) and folds them back into the main file later - or never, while a
+    program holds the database open, which Jarvis always does. Measured on the
+    owner's own install on 2026-10-13: `agents.db` is 4,096 bytes with a
+    115,392-byte log beside it, `traces.db` 4,096 with 78,312, and
+    `telemetry.db` 4,096 with 28,872 - and a plain copy of the main file alone
+    reads 0 tables where the live database reads 6, 7 and 2.
+
+    This module uses SQLite's own online backup API, which reads one consistent
+    view and folds the log in. That is the claim; this is the measurement, on a
+    database built to have its rows ONLY in the log:
+
+      * a plain copy of the main file cannot even read the table (the trap);
+      * the online backup API returns every row, and the snapshot needs no
+        `-wal` beside it, so nothing can be lost by not copying the log.
+    """
+    conf, _backups = fresh_conf()
+    live = conf / "wal-notes.db"
+    # The connection stays OPEN for the whole test, exactly like Jarvis's own
+    # connections do while it runs: closing the last one checkpoints the log
+    # away, and a test that closed it would never have rows in the log at all.
+    keeper = sqlite3.connect(str(live))
+    try:
+        keeper.execute("PRAGMA journal_mode=WAL")
+        keeper.execute("PRAGMA wal_autocheckpoint=0")   # never fold it back by itself
+        keeper.execute("CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT)")
+        rows = [(f"only-in-the-log {i}",) for i in range(1, 41)]
+        keeper.executemany("INSERT INTO notes (body) VALUES (?)", rows)
+        keeper.commit()
+        wal = Path(str(live) + "-wal")
+        check("the test really did put the rows in the log, where they can be lost",
+              wal.is_file() and wal.stat().st_size > 0,
+              f"live={live.stat().st_size}B wal={wal.stat().st_size if wal.is_file() else 0}B")
+
+        # (a) The trap: the main file on its own.
+        plain = _scratch_dir("plaincopy") / "wal-notes.db"
+        shutil.copyfile(live, plain)
+        try:
+            plain_rows = _rows_in(plain, "SELECT COUNT(*) FROM notes")
+        except sqlite3.DatabaseError:
+            plain_rows = None       # what a plain copy really does: the table is not there
+        check("a plain copy of the main file loses every row (the trap is real)",
+              plain_rows != len(rows), f"a plain copy read {plain_rows} of {len(rows)} rows")
+
+        # (b) What this module actually does.
+        snap = _scratch_dir("snapshot") / "wal-notes.db"
+        check("_snapshot_db takes it", B._snapshot_db(live, snap) is True)
+        got = _rows_in(snap, "SELECT body FROM notes ORDER BY id")
+        check("the online backup API captures EVERY row that lived only in the log",
+              [r[0] for r in got] == [r[0] for r in rows],
+              f"snapshot has {len(got)} of {len(rows)} rows")
+        # "Self-contained" tested properly: remove anything SQLite put beside
+        # the snapshot and read it cold. If the rows needed a log to be
+        # complete, they would be gone here. Every connection is closed first -
+        # on Windows an open handle stops the unlink rather than failing the
+        # claim being measured.
+        for _suffix in ("-wal", "-shm"):
+            _side = Path(str(snap) + _suffix)
+            if _side.exists():
+                _side.unlink()
+        cold = _rows_in(snap, "SELECT COUNT(*) FROM notes")[0][0]
+        check("the snapshot is self-contained: every row survives with no -wal "
+              "beside it at all", cold == len(rows), f"cold read got {cold} of {len(rows)} rows")
+        check("...and it is the same database, not an empty one: the schema came too",
+              _rows_in(snap, "SELECT COUNT(*) FROM sqlite_master WHERE type='table' "
+                             "AND name='notes'")[0][0] == 1)
+    finally:
+        keeper.close()
+
+
+def _rows_in(db_path, sql: str) -> list:
+    """Run one read against `db_path` and CLOSE the connection.
+
+    Closed explicitly, not left to the garbage collector: on Windows an open
+    handle keeps the file locked, so a later `unlink` of a `-wal` beside it
+    raises PermissionError instead of measuring anything.
+    """
+    conn = sqlite3.connect(str(db_path))
+    try:
+        return conn.execute(sql).fetchall()
+    finally:
+        conn.close()
+
+
+def t_the_newly_covered_databases_and_named_files_really_go_in():
+    """The two databases and two settings files added on 2026-10-13, proved to
+    travel - and the five deliberate exclusions proved to stay out.
+
+    `SOURCE_DBS` is the whole of what this module claims to carry, so a check
+    that a name is merely ON the list proves nothing about whether
+    `build_archive` writes it. These start from real database files and open
+    the real archive.
+    """
+    conf, _backups = fresh_conf()
+    for name in ("knowledge.db", "traces.db"):
+        conn = sqlite3.connect(str(conf / name))
+        conn.execute("CREATE TABLE sample (id INTEGER PRIMARY KEY, text TEXT)")
+        conn.execute("INSERT INTO sample (text) VALUES (?)", (f"{name} content",))
+        conn.commit()
+        conn.close()
+    # The five that stay out, each with a table, so their absence from the
+    # archive is a decision and not "the file happened not to be there".
+    for name in B.NOT_BACKED_UP:
+        conn = sqlite3.connect(str(conf / name))
+        conn.execute("CREATE TABLE sample (id INTEGER PRIMARY KEY, text TEXT)")
+        conn.execute("INSERT INTO sample (text) VALUES ('must not travel')")
+        conn.commit()
+        conn.close()
+
+    zip_bytes, manifest = B.build_archive()
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        names = set(zf.namelist())
+
+    for name in ("knowledge.db", "traces.db"):
+        check(f"{name} is in the archive, with its rows counted",
+              f"db/{name}" in names
+              and manifest["databases"].get(name, {}).get("sample") == 1,
+              manifest["databases"].get(name))
+    for name, why in sorted(B.NOT_BACKED_UP.items()):
+        check(f"{name} deliberately stays out ({why})", f"db/{name}" not in names)
+    check("...and every excluded name says WHY, in the module's own words",
+          all(isinstance(v, str) and len(v) > 20 for v in B.NOT_BACKED_UP.values()),
+          B.NOT_BACKED_UP)
+
+    # A FILE THAT IS COVERED CANNOT BE DROPPED IN SILENCE. Every one of the
+    # databases the owner's install has is either carried or written down as an
+    # exclusion; anything else is a name somebody forgot. This is the check
+    # that fails if `SOURCE_DBS` loses an entry.
+    #
+    # 16, not the 14 this branch first counted: this branch adds knowledge.db and
+    # traces.db (14 -> 16 at the time), and main then added receipts.db (#432,
+    # the action receipts and their Undo snapshots) and voiceprint.db (#436,
+    # "Write Like Me"). Both numbers are asserted rather than derived, on
+    # purpose - the point is that adding a database is a decision somebody has
+    # to make here as well as in the module, and this is the line that asks.
+    check("every covered database is in SOURCE_DBS or in NOT_BACKED_UP",
+          not ({n for n in B.SOURCE_DBS} & {n for n in B.NOT_BACKED_UP}),
+          "a database is in both lists")
+    check("the databases of the owner's install, split 16 + 5, are all accounted for",
+          len(B.SOURCE_DBS) == 16 and len(B.NOT_BACKED_UP) == 5,
+          f"{len(B.SOURCE_DBS)} backed up, {len(B.NOT_BACKED_UP)} excluded")
+
+
+def t_the_settings_files_a_json_glob_cannot_reach_are_carried_and_put_back():
+    """config.toml and speed.jsonl (2026-10-13).
+
+    The `*.json` glob is why they were missing: a `.toml` and a `.jsonl` are
+    not `.json`, so no backup of any kind read the HUD's own settings file -
+    the one file holding every setting the owner changes in Jarvis's window.
+    This proves both halves: they go in, and a restore puts them back with
+    their bytes intact.
+    """
+    conf, _backups = fresh_conf()
+    toml_text = '[server]\nhost = "127.0.0.1"\nport = 8000\n'
+    jsonl_text = '{"tok_per_s": 12.5}\n{"tok_per_s": 13.0}\n'
+    (conf / "config.toml").write_text(toml_text, encoding="utf-8")
+    (conf / "speed.jsonl").write_text(jsonl_text, encoding="utf-8")
+    (conf / "folders.json").write_text('{"folders": []}', encoding="utf-8")
+
+    for name in B.SETTINGS_NAMES:
+        check(f"{name} is one of the named settings files this module carries",
+              name in B.SETTINGS_NAMES)
+    zip_bytes, manifest = B.build_archive()
+    # Read the folder's OWN bytes back, on this machine, rather than comparing
+    # against the literal above: `Path.write_text` turns \n into \r\n on
+    # Windows, so the literal is the right text in the wrong line endings. The
+    # claim being tested is that the archive holds the file unchanged - not that
+    # the file has some particular line ending.
+    archived = {}
+    for name in ("config.toml", "speed.jsonl"):
+        on_disk = (conf / name).read_bytes()
+        archived[name] = on_disk
+        check(f"settings/{name} is in the archive, byte for byte",
+              f"settings/{name}" in zf_names(zip_bytes)
+              and zf_read(zip_bytes, f"settings/{name}") == on_disk,
+              f"archive={zf_read(zip_bytes, f'settings/{name}')[:60]!r} disk={on_disk[:60]!r}")
+        check(f"...and the manifest says so ({name})", manifest["named_settings"].get(name) is True)
+    check("the *.json files still travel the way they always did",
+          "settings/folders.json" in zf_names(zip_bytes))
+    check("the manifest counts all three settings files",
+          manifest["settings_files"] == 3, manifest["settings_files"])
+
+    # A restore now lands in a SECOND, empty settings folder - so finding the
+    # files there proves the restore wrote them, not that they were never gone.
+    dest, _b2 = fresh_conf()
+    applied = B._apply_restore(zip_bytes)
+    check("a restore puts config.toml back, byte for byte",
+          (dest / "config.toml").is_file()
+          and (dest / "config.toml").read_bytes() == archived.get("config.toml"),
+          "restored bytes differ from the archived bytes")
+    check("...and speed.jsonl the same",
+          (dest / "speed.jsonl").is_file()
+          and (dest / "speed.jsonl").read_bytes() == archived.get("speed.jsonl"))
+    check("...with every settings file this archive held accounted for",
+          applied["skipped"] == 0 and applied["settings_files"] == 3, applied)
+
+    # The one list of what may land in the settings folder, so a tampered
+    # archive cannot write an arbitrary file into it.
+    check("a settings/ name that is neither *.json nor a named settings file is skipped, "
+          "not written",
+          B._named_settings_entries(["settings/folders.json", "settings/config.toml",
+                                     "settings/speed.jsonl", "settings/evil.exe",
+                                     "settings/there.js"])
+          == ["settings/folders.json", "settings/config.toml", "settings/speed.jsonl"])
+
+
+def zf_names(zip_bytes: bytes) -> set:
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        return set(zf.namelist())
+
+
+#: How a secret looks in a settings file: a name that means "this is a secret",
+#: on a line that is NOT a comment, with a value that is not empty and not an
+#: obvious placeholder. Used to read the owner's own config.toml - see the
+#: module docstring's "WHAT `config.toml` ACTUALLY HOLDS".
+_SECRET_NAME_RE = re.compile(
+    r'(?i)\b(token|secret|passwd|password|api[_-]?key|passphrase|private[_-]?key)\b')
+_PLACEHOLDER_VALUES = {'""', "''", '""', "null", "none", '""  # or set telegram_bot_token env var'}
+_CONFIG_PATH = Path(os.path.expanduser("~")) / ".openjarvis" / "config.toml"
+
+
+def _live_secret_lines(text: str) -> list:
+    """Every line of a TOML file that sets a secret-shaped name to a real value.
+
+    A commented-out line is skipped: this project's own config.toml documents
+    each integration by showing the line, commented, with an empty value and a
+    note to put the secret in the environment instead. What matters is a line
+    that would actually carry a value into a backup.
+    """
+    out = []
+    for n, raw in enumerate(text.splitlines(), 1):
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _sep, value = line.partition("=")
+        if not _SECRET_NAME_RE.search(key):
+            continue
+        value = value.split("#", 1)[0].strip()
+        if value in ("", '""', "''", "null", "None"):
+            continue
+        out.append((n, line))
+    return out
+
+
+def t_config_toml_holds_no_secret():
+    """The owner's real config.toml, read rather than taken on faith.
+
+    Before config.toml was added to the backup on 2026-10-13 it was checked for
+    secrets, because rule 3 says a pairing token or API key is never written to
+    disk in plain text - and a settings file is written to disk, and now travels
+    into an archive. Measured: every token, password, app_secret and api_key
+    line in it is COMMENTED OUT and empty, the one mention of a real key says it
+    comes from an environment variable, `[server]` is bound to loopback with the
+    "works without API authentication" line in the file itself, and the only two
+    non-comment settings whose names contain one of those words - `max_tokens =
+    1024` and `secret_scanner = true` - are not matches at all, because the
+    pattern is word-bounded: `\btoken\b` does not match `max_tokens` and
+    `\bsecret\b` does not match `secret_scanner`. So the check finds no live
+    secret-shaped line in the file.
+
+    This test exists so that stops being a fact somebody remembers. If a real
+    token is ever pasted into that file, this fails and says which line - the
+    day the change matters, rather than years later in a backup file.
+    """
+    if not _CONFIG_PATH.is_file():
+        # The live line here is `api_key`, not the bare `key` it was until
+        # 2026-10-14. `_SECRET_NAME_RE` is word-bounded and its vocabulary is
+        # token / secret / password / api_key / passphrase / private_key, so
+        # `key` was never a match: this assertion could not pass on any machine
+        # WITHOUT ~/.openjarvis/config.toml - which is every CI runner - and
+        # passed on the owner's PC only because his file is there and this branch
+        # does not run at all. The regex was NOT widened to suit it: a bare `key`
+        # is an ordinary settings name (a sort key, a cache key, a map key) and a
+        # scanner that cries wolf on those is worse than one that does not know
+        # the word. Measured on the owner's own file: it has no `key =` line, and
+        # `max_tokens = 1024` and `secret_scanner = true` are not matches either
+        # for the same word-boundary reason, so widening would catch nothing real.
+        check("the settings file TOML round-trips (no real install here to read)",
+              _live_secret_lines('[a]\ntoken = ""\n# token = "x"\napi_key = "REAL"\n')
+              == [(4, 'api_key = "REAL"')])
+        print("        NOTE: ~/.openjarvis/config.toml is not on this machine, so the two "
+              "checks below\n        about the owner's real file did NOT run. They are not "
+              "passes.")
+        return
+    text = _CONFIG_PATH.read_text(encoding="utf-8", errors="replace")
+    bad = _live_secret_lines(text)
+    check("the owner's own config.toml holds no live secret-shaped setting "
+          "(so carrying it puts no secret in the archive)", bad == [], bad[:3])
+    check("...and it is a real file, not an empty one", len(text) > 1000, len(text))
+    check("...and the token lines it does show are the commented-out kind this "
+          "project documents, with the environment named as where the real one goes",
+          "# bot_token" in text and "_TOKEN env var" in text)
+    check("...and its server section is loopback, not exposed",
+          'host = "127.0.0.1"' in text and '# host = "0.0.0.0"' in text)
+
+
+def t_the_credentials_folder_is_not_swept_into_a_backup():
+    """`devices/` holds a SHA-256 of each paired device's token, and the list
+    of devices allowed to talk to Jarvis. It must never travel: it is
+    authorization state (restoring an old copy re-authorizes a phone the owner
+    removed) and it is credential-derived material that rule 3 keeps on the PC
+    that checks it.
+
+    This is checked at the source level, the way this suite checks the
+    Credential Manager targets: the archive builder may not reach into a
+    subfolder at all, so a `*.json` glob cannot pick it up.
+    """
+    conf, _backups = fresh_conf()
+    (conf / "devices").mkdir()
+    (conf / "devices" / "registry.json").write_text(
+        '{"devices": [{"name": "OnePlus", "token_sha256": "deadbeef"}]}', encoding="utf-8")
+    (conf / "chatbot").mkdir()
+    (conf / "chatbot" / "api-money.json").write_text('{"limits": {"x": 1.0}}', encoding="utf-8")
+    zip_bytes, _m = B.build_archive()
+    names = zf_names(zip_bytes)
+    check("devices/registry.json (device list and token hashes) is not in the archive",
+          not any("registry.json" in n or "devices" in n for n in names), sorted(names))
+    check("a subfolder of the settings folder is never recursed into - not even for a "
+          "*.json the top level would have taken",
+          "settings/registry.json" not in names and "settings/api-money.json" not in names)
+    check("...so no token hash can be read out of a backup file's bytes",
+          b"deadbeef" not in zip_bytes)
+
+
 def t_the_backend_source_is_backed_up_and_put_back():
     """2026-10-05: an audit found five files - jarvis_hud.py (the whole control
     plane), jarvis_gate.py (the approval gate), jarvis_extract.py,

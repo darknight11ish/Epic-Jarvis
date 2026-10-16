@@ -159,6 +159,81 @@ def t_every_source_points_at_a_real_line():
 
 
 # ---------------------------------------------------------------------------
+#   The About page's six copies of the register's totals
+# ---------------------------------------------------------------------------
+
+#: Every place `docs/ABOUT-JARVIS.md` prints the register's own totals, with
+#: which figure each capture holds. The truth is never restated here - it is
+#: counted from `docs/CLAIMS.tsv` on every run - so this check follows the
+#: register instead of becoming a seventh stale copy of it. A checker holding
+#: 131/101 would go red on a merge that merely removed one row (PR #462 does);
+#: this one goes red only when the PAGE is out of date, which is the thing
+#: being checked.
+ABOUT_COUNT_SPOTS = (
+    ("the row count beside the register's name",
+     r"\(`docs/CLAIMS\.tsv`, (\d+) rows\)",
+     ("rows",)),
+    ("the sentence spelling out all four totals",
+     r"\*\*(\d+) claims: (\d+) built, (\d+) still open, (\d+) unverifiable\*\*",
+     ("rows", "built", "open", "unverifiable")),
+    ("the section 5 sentence about what is still open",
+     r"(\d+) of the (\d+) claims in `docs/CLAIMS\.tsv` are still marked open",
+     ("open", "rows")),
+    ("the section 6 table row for the register",
+     r"\*\*(\d+) rows\*\*, (\d+) built / (\d+) open / (\d+) unverifiable",
+     ("rows", "built", "open", "unverifiable")),
+    ("the quoted output of the checker itself",
+     r"`(\d+) claim\(s\) checked [^`]*?(\d+) built, (\d+) still open, "
+     r"(\d+) unverifiable`",
+     ("rows", "built", "open", "unverifiable")),
+    ("the honest caution about unverifiable rows",
+     r"(\d+) of the (\d+) rows are `unverifiable`",
+     ("unverifiable", "rows")),
+)
+
+
+def t_the_about_page_quotes_the_register_it_describes():
+    """`docs/ABOUT-JARVIS.md` prints the register's totals in six places, and
+    all six were stale when this check was written: the page said 127 rows,
+    128 claims and 98 built against a register of 131 rows, 131 claims and
+    101 built (measured on 6db0df06, 2026-10-15).
+
+    The totals are counted here from `docs/CLAIMS.tsv`, never written down a
+    second time, so this check follows the register. It fails when the page is
+    out of date - which is the point, and is why a merge that changes the
+    register must carry the page's own update with it - and it also fails when
+    a pattern stops matching at all, so a page reworded until this check can no
+    longer see it has to be re-anchored rather than passing because it stopped
+    looking.
+    """
+    page = REPO / "docs" / "ABOUT-JARVIS.md"
+    check("docs/ABOUT-JARVIS.md is there to be checked", page.is_file(), page)
+    if not page.is_file():
+        return
+    rows = data_rows(REGISTER.read_text(encoding="utf-8"))
+    measured = {"rows": len(rows)}
+    for state in ("built", "open", "unverifiable"):
+        measured[state] = sum(1 for row in rows if row["state"] == state)
+    check("the register's three states add up to its rows",
+          measured["built"] + measured["open"] + measured["unverifiable"]
+          == measured["rows"], measured)
+
+    flat = " ".join(page.read_text(encoding="utf-8").split())
+    for name, pattern, fields in ABOUT_COUNT_SPOTS:
+        wanted = tuple(measured[field] for field in fields)
+        found = re.search(pattern, flat)
+        got = tuple(int(g) for g in found.groups()) if found else None
+        says = ", ".join(f"{field}={measured[field]}" for field in fields)
+        check(f"the About page quotes the register's real {says} at {name}",
+              got == wanted,
+              f"the page says {got}, docs/CLAIMS.tsv holds {wanted}"
+              if found else
+              f"nothing on the page matches {pattern!r} any more - re-anchor "
+              f"this check when the page is reworded; do not let it stop "
+              f"looking")
+
+
+# ---------------------------------------------------------------------------
 #   Direction 1: a `built` row that stopped holding
 # ---------------------------------------------------------------------------
 
@@ -324,6 +399,7 @@ if __name__ == "__main__":
                t_list_prints_every_row_it_checked,
                t_the_vocabulary_is_actually_used,
                t_every_source_points_at_a_real_line,
+               t_the_about_page_quotes_the_register_it_describes,
                t_a_built_row_that_stopped_holding_fails,
                t_an_open_row_whose_gap_closed_fails,
                t_an_open_row_that_is_still_open_is_green,
