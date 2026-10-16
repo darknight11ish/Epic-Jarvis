@@ -1,4 +1,4 @@
-# Decisions, dated: the owner's decisions from 2026-09-24 to 2026-10-11
+# Decisions, dated: the owner's decisions from 2026-09-24 onwards
 
 **This is the record, not the rulebook.** Every block below was moved here **verbatim**
 from `CLAUDE.md` on 2026-10-12, because that file had grown to about 150 KB and the
@@ -2393,4 +2393,96 @@ under its own clear heading, and whoever merges second combines them.**
   copies of his data - and a reader looking for "the backup page" should find
   both tools and what each one covers. It is also the smaller change: the four
   PRs already carry links to this path.
+
+## 2026-10-06 and 2026-10-07 - six decisions that were only on a branch until now
+
+Six decisions the owner made on 06 and 07 October were written down only on the
+branch `next-claude-shortlist`, which never merged. Its 58-line addition was for
+the shape `CLAUDE.md` had **before** the 2026-10-12 split moved the dated
+decisions into this file, so it could not be merged as it stood - and a search of
+the whole tree on 2026-10-16 found **none of the six** anywhere: not in
+`CLAUDE.md`, not in `docs/DECISIONS.md`. They are recorded here, in the branch's
+own words, so that retiring the branch loses nothing.
+
+**The first of them reverses a decision recorded above**, which is the reason
+this is a correction and not only an addition: the 2026-09-28 entry says *"The
+desktop HUD's own chat box opens the Jarvis bar instead, so the PC has one chat
+box"*. That was replaced on 2026-10-06.
+
+- **2026-10-06 - the big Jarvis window gets its own chat box back.** This
+  reverses the 2026-09-28 "the PC has one chat box" decision. Typing there is
+  its own conversation, kept in History as HUD, and that window has no
+  Temporary chat, no New conversation, no "Used in this answer" and no crisis
+  panel. The owner was told those limits and accepted them. The "Open the
+  Jarvis bar" button stays in that window, beside the box.
+- **2026-10-06 - anything needing a key or a sign-in should be settable in the
+  Jarvis app itself**, desktop only, stored under rule 3 (Windows Credential
+  Manager for a secret; never a plain-text key file). The phone is never asked
+  for an account secret.
+- **2026-10-06 - the chatbot API keys and the monthly money limits are one
+  piece of work, not two.** A key with no limit leaves the service unusable, so
+  the keys box and the limits ship together. Raising a limit is a loosening and
+  takes a card plus Windows Hello; lowering one does not.
+- **2026-10-06 - the agent runs the patcher; the owner does not.** When the
+  owner says "patch Jarvis", the agent does the whole thing: quits Jarvis,
+  brings `C:\Users\pcadmin\Documents\jarvis-update` up to `main`, runs
+  `scripts/apply-patches.ps1` against the installed backend, reads the verdict,
+  restarts Jarvis and re-runs the preflight. He had been pasting that command
+  by hand for a long time and was never told it could be delegated; offer it,
+  never wait to be asked.
+- **2026-10-07 - the agent watches CI, fixes it and re-runs it without being
+  asked.** A red job is diagnosed, fixed if the fault is ours, and re-run by the
+  agent; a run cancelled by the concurrency setting (`cancel-in-progress: true`,
+  which shows its killed jobs as failures) is re-run rather than reported as a
+  test failure. The owner should never be the one to notice a red or cancelled
+  job, and should never have to ask for the re-run. Say what was done
+  afterwards, plainly - the diagnosis, the fix and the new result.
+- **2026-10-07 - the agent owns the pull requests, and merges them.** The owner
+  asked for the work rather than doing it himself, so the agent keeps the whole
+  board: watches every PR, resolves conflicts (every PR appends a CHANGELOG
+  bullet at the same spot, so each merge makes the others conflict), refreshes
+  the published base when a shipped module changed, re-runs a job killed by the
+  concurrency setting or by a runner fault, and presses Merge in the order that
+  costs the fewest fix-ups. This replaces the 2026-09-26 note that the owner
+  presses Merge; he can still press it himself whenever he wants.
+
+## 2026-10-16 - the card is answered where it is shown
+
+Asked by the owner the same day, in his own words, as his top priority:
+
+> "when i click open the card from the notification, it opens the jarvis bar
+> with no additional information. it should open the card itself. i should also
+> be able to approve any card from the jarvis hud directly on my desktop and
+> not need the jarvis widget or jarvis bar to do so"
+>
+> "also after i click open the card and type into the jarvis bar that i
+> approve, nothing happens. i have no idea what happens"
+
+**Decided: all three are real and all three are fixed, and the HUD answers a
+card through the SAME `decide_approval` the Jarvis bar and the widget call -
+never through a second permission path.** What that means concretely:
+
+* **The bar grows to the card a notification opened it for.** The quickbar is
+  collapsed to its base height every time it is summoned from hidden, and the
+  page sizes the window to what it measures; the stylesheet capped that
+  measurement at the window's own height, so the loop could never close and the
+  card - with Approve and Deny - sat outside an 80px window with no scroller
+  height to reach it through. The cap is now the window's own clamp, held to
+  `windows.rs`'s `QUICKBAR_MAX_HEIGHT` by a test.
+* **The HUD's card has real Approve and Deny**, granted as one command
+  (`hud-approvals` -> `allow-decide-approval`). Windows Hello, the stale-link
+  refusal, the cut-off refusal and the App-lock rule apply there unchanged, and
+  the page's own `fetch` still cannot post a decision: `hud_bootstrap.js`
+  refuses `/api/approve` and `/api/deny` whatever the link is doing. This
+  supersedes the 2026-09-25 rule that the HUD shows cards and answers none
+  (apps security audit M2) - that rule existed because the page's own POST had
+  none of those checks, and it still has none, which is why the command is the
+  only door.
+* **Typing the decision works, and nothing is inferred.** Only a message that
+  IS the decision ("approve", "i approve it", "deny") decides, and it goes
+  through the same `decideApproval` the two buttons call. A message that only
+  sounds like one ("yes", "ok", "go ahead") is answered with words saying which
+  button to press, and an APPROVE on a card `quickActionable()` refuses (it
+  carries `raised`) is refused with words too. A card that is not on screen -
+  Esc puts one aside without deciding it - is never answered from a typed word.
 

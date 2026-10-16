@@ -696,6 +696,19 @@ places between screens. Presentation only - no approval logic changed.
   waits, with a button that goes to it (the Jarvis bar on the PC, behind App
   lock; Home on the phone). One line per window rather than a link under each
   button, so a button added later cannot miss it. It decides nothing.
+- **The HUD page answers the card too, through the one decision path
+  (2026-10-16).** The owner asked for it in his own words - *"i should also be
+  able to approve any card from the jarvis hud directly on my desktop and not
+  need the jarvis widget or jarvis bar to do so"* - so the page's own Approve
+  and Deny are shown again and `hud_bootstrap.js` sends them through
+  `decide_approval`, the same command the Jarvis bar and the widget call. It is
+  the same permission path, not a second one: the stale-link refusal, the
+  cut-off refusal, Windows Hello for the card the settings say needs it and the
+  App-lock rule (`lock.rs` `Covered::Hud`) all apply, and the page's own POST
+  to `/api/approve` is still refused by that bootstrap's fetch shim - so
+  `hud-approvals` (one command) is the only way a decision leaves that window.
+  Before this it was the one window the owner watches and could not act from,
+  written down as item 8 of `docs/UI-AUDIT-2026-10-05.md`.
 - **Voice says a card is waiting, and what happened.** A spoken question that
   waits on a card hears "I need your OK for that. There's a card on your
   screen.", then "Approved. Carrying on.", "OK, I won't do that." or "That
@@ -1937,9 +1950,15 @@ for exactly that reason.
 No desktop page holds the pairing token. The HUD page (vendored from the
 backend) used to be given it; since the apps security audit (M2,
 2026-09-25) its requests go through Rust (`hud_proxy.rs`: a fixed list of
-reads, its chat, the right/wrong mark), and approvals are not answered in
-the HUD at all - only in the Jarvis bar and the widget, through
-`decide_approval`. No window may `emit` events to the others either (M1).
+reads, its chat, the right/wrong mark). Approvals **are** answered in the HUD
+since 2026-10-16 (the owner's ask, §3), and they are answered through the same
+`decide_approval` the Jarvis bar and the widget call - `capabilities/hud.json`
+holds one command for it, `hud-approvals` -> `allow-decide-approval`, so
+Windows Hello, the stale-link refusal, the cut-off refusal and the App-lock
+rule apply there unchanged. What that page's own `fetch` still cannot do is
+post a decision itself: `hud_bootstrap.js`'s shim refuses `/api/approve` and
+`/api/deny` whatever the link is doing. No window may `emit` events to the
+others either (M1).
 
 **A face never pretends Jarvis is there** (owner, 2026-09-28). When the
 link is down or stale for longer than 12 seconds - the same grace on both

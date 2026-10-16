@@ -2,22 +2,38 @@
    the page itself: jarvis_hud.html is vendored byte-identical from the backend
    and not ours to edit.
 
-   Approvals are not answered in the HUD (apps security audit M2): they are
-   answered in the Jarvis bar or the widget, where Windows Hello and the
-   stale-link check apply. The page's own Approve and Deny are hidden, and
-   the card says where to go instead. The bootstrap also refuses the click
-   and the request. No colours of its own - it only inherits - so the HUD's
-   palette stays the HUD's. */
+   Approvals ARE answered in the HUD since 2026-10-16 - the owner's ask: "i
+   should also be able to approve any card from the jarvis hud directly on my
+   desktop and not need the jarvis widget or jarvis bar to do so". The page's
+   own Approve and Deny are shown, and the bootstrap sends them through the
+   SAME `decide_approval` the Jarvis bar and the widget use, so Windows Hello,
+   the stale-link refusal, the cut-off refusal and the App-lock rule are the
+   ones already written for that command. The page's own relative POST to
+   /api/approve is still stopped, so nothing in this page can decide anything
+   behind the command's back.
 
-#approvals .appr .btns button {
-  display: none;
+   This file used to hide the buttons and say "Answer this in the Jarvis bar or
+   the widget." in their place (apps security audit M2, 2026-09-25) - which
+   left the one window the owner watches the one window he could not act from.
+
+   No colours of its own - it only inherits - so the HUD's palette stays the
+   HUD's. */
+
+/* What `decide_approval` answered when it refused: Rust's own sentence (lock.rs
+   and commands.rs write them), so this window and the bar cannot come to two
+   ways of saying one refusal. Under the card's own text, and never a control. */
+#approvals .appr .why {
+  margin: 6px 0 0;
+  font-size: 12px;
+  opacity: 0.9;
 }
 
-#approvals .appr .btns::after {
-  content: "Answer this in the Jarvis bar or the widget.";
-  align-self: center;
-  font-size: 12px;
-  opacity: 0.85;
+/* While a decision is in flight the card is dimmed and its buttons are dead -
+   the page's own `.settled` look (`jarvis_hud.html`, `.appr.settled`), applied
+   by the bootstrap because the bootstrap is what sends the decision now. */
+#approvals .appr.settled .btns button {
+  opacity: 0.5;
+  cursor: default;
 }
 
 /* The right/wrong mark under a HUD answer (hud_bootstrap.js section 6).
