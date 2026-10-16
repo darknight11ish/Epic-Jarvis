@@ -46,7 +46,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 use tauri_plugin_store::StoreExt;
 
 use crate::commands;
@@ -343,6 +343,10 @@ pub struct Run {
     pub log_dir: Option<String>,
     /// The script's own last lines, folded away behind the report.
     pub tail: String,
+    /// Where the run's own output says it got to: the phase, the count and the
+    /// verdict of the last thing it said (`update_progress`). The same shape the
+    /// live event carries, so the card does not change its mind at the end.
+    pub progress: crate::update_progress::Progress,
     /// This attempt stopped the Jarvis backend, so Jarvis is off until the app
     /// is restarted. False on every refusal that happens before that.
     pub stopped: bool,
@@ -390,18 +394,22 @@ pub async fn run(app: &AppHandle) -> Run {
 
     let script = Path::new(&repo).join(SCRIPT_REL);
     let backend = PathBuf::from(&backend);
-    let mut finished = tauri::async_runtime::spawn_blocking(move || run_script(&script, &backend))
-        .await
-        .unwrap_or_else(|err| Run {
-            detail: format!("The patch run could not be started: {err}. Nothing was changed."),
-            ..Run::default()
-        });
+    // The handle the progress events go to. Cloned out here because the closure
+    // below is `'static`: a borrow of `app` cannot cross into it.
+    let reports_to = app.clone();
+    let mut finished =
+        tauri::async_runtime::spawn_blocking(move || run_script(&script, &backend, &reports_to))
+            .await
+            .unwrap_or_else(|err| Run {
+                detail: format!("The patch run could not be started: {err}. Nothing was changed."),
+                ..Run::default()
+            });
     finished.stopped = stopped;
     finished
 }
 
 /// The blocking half: spawn, watch, and read back what it printed.
-fn run_script(script: &Path, backend: &Path) -> Run {
+fn run_script(script: &Path, backend: &Path, app: &AppHandle) -> Run {
     let log_dir = Some(backend.join(LOG_DIR).to_string_lossy().to_string());
 
     // Everything the child prints goes to a file of our own rather than down a
@@ -479,6 +487,38 @@ fn run_script(script: &Path, backend: &Path) -> Run {
         }
     };
 
+    // The screen's live view of this run: the file the child is writing, read as
+    // it grows. `update_progress` says why the file and not a pipe; the short
+    // version is that the redirect is the thing keeping stdout and stderr in one
+    // order, and this only reads.
+    let live = std::sync::Arc::new(std::sync::Mutex::new(crate::update_progress::Progress {
+        phase: "reading".to_string(),
+        ..Default::default()
+    }));
+    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let watcher = {
+        let file = capture.clone();
+        let stop = stop.clone();
+        let live = live.clone();
+        let app = app.clone();
+        std::thread::spawn(move || {
+            let mut last = String::new();
+            crate::update_progress::tail(file, stop, move |line| {
+                let shown = {
+                    let Ok(mut p) = live.lock() else { return };
+                    crate::update_progress::progress_of(line, &mut p);
+                    let said = serde_json::to_string(&*p).unwrap_or_default();
+                    if said == last {
+                        return;
+                    }
+                    last = said;
+                    p.clone()
+                };
+                let _ = app.emit(crate::update_progress::PROGRESS_EVENT, &shown);
+            });
+        })
+    };
+
     let deadline = Instant::now() + SCRIPT_LIMIT;
     let mut timed_out = false;
     let status = loop {
@@ -508,6 +548,12 @@ fn run_script(script: &Path, backend: &Path) -> Run {
             }
         }
     };
+
+    // The child has gone: stop the tailer, and let it take the last lines the
+    // verdict arrived in. Joined, not detached, so the screen's final reading is
+    // the finished run's and nothing is still holding the file when it is removed.
+    stop.store(true, std::sync::atomic::Ordering::Relaxed);
+    let _ = watcher.join();
 
     let bytes = std::fs::read(&capture).unwrap_or_default();
     let tail = tail_of(&String::from_utf8_lossy(&bytes), TAIL_LINES);
@@ -560,6 +606,7 @@ fn run_script(script: &Path, backend: &Path) -> Run {
         detail,
         log_dir,
         tail,
+        progress: live.lock().map(|p| p.clone()).unwrap_or_default(),
         // Filled in by `run`, which is the only caller and the only place that
         // knows whether Jarvis was stopped for this attempt.
         stopped: false,
