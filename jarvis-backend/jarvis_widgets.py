@@ -798,13 +798,16 @@ def _pending() -> list:
 def _gpu() -> tuple:
     """(used, total) bytes for the graphics cards, or (0.0, 0.0).
 
-    `jarvis_hardware.gpu_memory_used()` IS NOT DEFINED ANYWHERE in this
-    repository, in any patch, or on the owner's PC - measured 2026-10-16 - so
-    today this always takes the except branch and answers (0.0, 0.0). The
-    caller must read that as "could not read it", NOT as an empty card: see
-    `fill()`'s `gpu_memory` branch, which leaves the value empty and says so
-    rather than printing "0 GB used of 0 GB". `jarvis_hardware.py` is delivered
-    by `hardware.patch`, so the missing reader cannot be added from here.
+    The reader is `jarvis_hardware.gpu_memory_used()`: it sums every card's
+    used and total nvidia-smi memory and answers (0.0, 0.0) only when it could
+    read NO card at all. The caller must read a zero TOTAL as "could not read
+    it", NOT as an empty card: see `fill()`'s `gpu_memory` branch, which
+    leaves the value empty and says so rather than printing "0 GB used of
+    0 GB". A card that really is empty comes back as (0.0, its total), which
+    the same branch prints as a real "0.0 GB used of N GB". Before 2026-10-17
+    the function `jarvis_hardware` was asked for existed in no file, so this
+    always took the except branch and the tile never worked; the try/except
+    stays for an older backend whose `jarvis_hardware` predates the reader.
     """
     try:
         import jarvis_hardware
@@ -904,8 +907,9 @@ NO_BRIEFING = "No briefing yet today."
 #: this project uses for an empty value ("...yet.", never a bare 0).
 NO_SPEED_YET = "No speed measurement yet."
 
-#: The graphics card could not be read. `jarvis_hardware.gpu_memory_used()` does
-#: not exist yet (see `_gpu`), so this is what the gpu_memory block says today.
+#: The graphics card could not be read. `jarvis_hardware.gpu_memory_used()` is
+#: the one that can say so: it answers (0.0, 0.0) only when it read no card at
+#: all, which the `gpu_memory` branch above turns into this note and no value.
 NO_GPU = "Could not read the graphics card just now."
 
 

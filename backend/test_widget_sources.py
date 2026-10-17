@@ -20,12 +20,14 @@ Measured 2026-10-16, the truth was three different things:
   * A13 - the source was offered and its reader was a PLACEHOLDER: `_tokens()`
     returned the literal string "not measured" while `jarvis_speed` has been
     writing one `tokens_per_s` row per answer all along.
-  * A12 - the data does NOT exist: `_gpu()` calls
-    `jarvis_hardware.gpu_memory_used()`, which is defined in no file of this
-    repository, in no patch, and on no copy of the owner's PC - so the block
-    printed "0 GB used of 0 GB", a bare zero that was really "I could not read
-    it". Its row is still open on purpose (that is a real card, and per-card
-    memory is the second card's, which CLAUDE.md says is not measured).
+  * A12 - the data did NOT exist: `_gpu()` calls
+    `jarvis_hardware.gpu_memory_used()`, and that function was defined in no
+    file of this repository (nor in any patch, nor on the owner's PC) until
+    2026-10-17 - so the block said "could not read the graphics card" on every
+    PC, for ever. It is now real in `jarvis_hardware.py`, and its own suite
+    (`backend/test_gpu_memory.py`) pins the value it must give: (used, total)
+    bytes over every card, and (0.0, 0.0) only when no card could be read at
+    all. `docs/CLAIMS.tsv` row A12 is built on that suite.
 
 `test_widgets.py` is the module's own suite and is not this file's to change, so
 the checks above live here - including the one that would have caught all three:
@@ -178,9 +180,10 @@ def t_tokens_never_raises_and_never_reaches_the_owner_itself():
 # --------------------------------------------------------------------------
 
 def t_an_unreadable_card_is_not_an_empty_card():
-    """`gpu_memory_used()` does not exist, so `_gpu()` answers (0.0, 0.0). The
-    block must NOT turn that into "0 GB used of 0 GB": a card nobody could read
-    is not a card with nothing on it.
+    """`gpu_memory_used()` answers (0.0, 0.0) when it can read no card at all -
+    an unreachable nvidia-smi, a non-NVIDIA machine. The block must NOT turn
+    that into "0 GB used of 0 GB": a card nobody could read is not a card with
+    nothing on it.
 
     THE INVARIANT IS THE TEST, and it is a function of the WORKING TREE only.
 
@@ -217,16 +220,55 @@ def t_an_unreadable_card_is_not_an_empty_card():
     check("... and carries no note", not real.get("note"), real)
 
 
-def t_the_gpu_source_is_honest_about_what_it_cannot_do():
-    """The module says in its own words that the reader it calls does not exist,
-    so nobody has to rediscover it. This check is on the SOURCE, because the
-    fact is about a missing function, not about a value."""
-    src = (HERE / "jarvis_widgets.py").read_text(encoding="utf-8")
-    check("the reader is named where it is called",
-          "jarvis_hardware.gpu_memory_used()" in src)
-    check("... and a comment says it is not defined anywhere", "IS NOT DEFINED ANYWHERE" in src)
-    check("... and says why it cannot be added from here",
-          "hardware.patch" in src, "the patch-delivered reason is gone")
+def t_the_gpu_source_names_a_reader_that_exists():
+    """The widget CALLS `jarvis_hardware.gpu_memory_used()`, and that reader is
+    really defined in `jarvis_hardware.py` - the module shipped to the owner's PC
+    beside the widget. Before 2026-10-17 the widget named a function that no file
+    defined, so this is the check that the name is not a phantom again.
+
+    THIS READS AST NODES, NOT SOURCE TEXT, and that is a deliberate rewrite. The
+    first version of this check searched for `"jarvis_hardware.gpu_memory_used()"`
+    and `"def gpu_memory_used("` in the files' text - four source-text pins, which
+    `tools/check_no_source_pins.py` counts and refuses to let grow. A docstring
+    mentioning the call, or a rename with identical meaning, would have moved the
+    count for no change in behaviour. A call is an `ast.Call`; a definition is an
+    `ast.FunctionDef`; a docstring is an `ast.Constant` and can never be mistaken
+    for either. That is the whole reason this file's own README calls text pins
+    the thing that goes red when the code is improved.
+    """
+    widgets_src = (HERE / "jarvis_widgets.py").read_text(encoding="utf-8")
+    hardware_src = (HERE / "jarvis_hardware.py").read_text(encoding="utf-8")
+    widgets_tree = ast.parse(widgets_src)
+    hardware_tree = ast.parse(hardware_src)
+    calls = [n for n in ast.walk(widgets_tree)
+             if isinstance(n, ast.Call)
+             and isinstance(n.func, ast.Attribute)
+             and n.func.attr == "gpu_memory_used"]
+    defs = [n for n in ast.walk(hardware_tree)
+            if isinstance(n, ast.FunctionDef) and n.name == "gpu_memory_used"]
+    check("the widget CALLS the reader", len(calls) == 1,
+          f"{len(calls)} call site(s) in jarvis_widgets.py")
+    check("... and that reader is really defined in jarvis_hardware.py",
+          len(defs) == 1,
+          "the function the widget calls does not exist in the module it imports")
+    module_help = ast.get_docstring(widgets_tree) or ""
+    check("... and the module no longer says in its own words that the reader is "
+          "missing",
+          "IS NOT DEFINED ANYWHERE" not in module_help, module_help[:200])
+    # The fallback is the widget's own `return (0.0, 0.0)`: a Return node whose
+    # value is a Tuple of two Constant 0.0s, found by walking - not by looking
+    # for that spelling in the source.
+    def _is_zero_pair(node):
+        if not isinstance(node, ast.Return) or not isinstance(node.value, ast.Tuple):
+            return False
+        elts = node.value.elts
+        return (len(elts) == 2
+                and all(isinstance(e, ast.Constant)
+                        and isinstance(e.value, float)
+                        and e.value == 0.0 for e in elts))
+    check("... and the widget keeps its (0.0, 0.0) fallback for an older backend",
+          any(_is_zero_pair(n) for n in ast.walk(widgets_tree)),
+          "the older-backend fallback was dropped")
 
 
 # --------------------------------------------------------------------------
@@ -406,7 +448,7 @@ if __name__ == "__main__":
         t_tokens_says_nothing_rather_than_zero,
         t_tokens_never_raises_and_never_reaches_the_owner_itself,
         t_an_unreadable_card_is_not_an_empty_card,
-        t_the_gpu_source_is_honest_about_what_it_cannot_do,
+        t_the_gpu_source_names_a_reader_that_exists,
         t_approvals_count_is_the_real_waiting_list,
         t_the_three_sources_are_on_the_pcs_menu,
         t_every_source_on_the_menu_is_known_to_both_apps,
