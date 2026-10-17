@@ -191,16 +191,32 @@ def t_the_first_held_out_set():
     # weather. N is 10 - about twice the linear ratio, which is a JUDGEMENT margin
     # on a measured 4.8 rather than a guess. A quadratic classifier would be about
     # 23x and fails; a genuinely slower machine scales both sides and passes.
+    #
+    # A FLOOR, because a ratio alone can go too low. `max(3.0, ...)` keeps the old
+    # absolute bound on a machine where the ratio budget comes out smaller, and on
+    # a slower machine the ratio carries it. This is the heatmap's shape with the
+    # floor where it belongs: the 3.0 is the same number the check used to have.
+    #
+    # WHY THE ANCHOR IS 200 LINES AND NOT 20. Measured on this PC,
+    # `time.process_time()` advances in steps of exactly 1/64 s = 15.625 ms (eight
+    # consecutive non-zero deltas, all 0.015625). A 20-line run would be 1-2 timer
+    # ticks, so its own cost would be quantised by up to 100% and a ratio built on
+    # it would be noise; the 200-line run is 13-15 ticks (~7%). That is also why
+    # 100 lines was rejected: at ~6 ticks its ratios came out 9.71/11.33/11.00
+    # against a linear 9.63, while 200 lines gave 4.40/4.86/5.23 against a linear
+    # 4.815 - the 200-line anchor tracks the linear model, the 100-line one does
+    # not. On Linux (the `backend` CI job) the timer is fine-grained; this floor
+    # and anchor are chosen for the coarser of the two.
     t_small = time.process_time()
     S.measure(rows[:200], with_model=False)
     small = time.process_time() - t_small
-    budget = 10.0 * small
-    check(f"heldout1: {len(rows)} lines cost no more than 10x the 200-line anchor "
-          "(a scaling claim, not a speed one)",
+    budget = max(3.0, 10.0 * small)
+    check(f"heldout1: {len(rows)} lines scale with the input - no more than 10x the "
+          "200-line anchor, or the 3s floor",
           took < budget,
           f"{took:.2f}s of CPU for {len(rows)} lines, {small:.2f}s for 200 of the same "
-          f"lines, budget {budget:.2f}s (linear scaling would be "
-          f"{len(rows) / 200 * small:.2f}s; see the comment for why N is 10)")
+          f"lines, budget {budget:.2f}s (10x the anchor, floored at 3.0s; linear "
+          f"scaling would be {len(rows) / 200 * small:.2f}s)")
 
 
 def t_the_round_two_lines():
