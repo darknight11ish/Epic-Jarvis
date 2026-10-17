@@ -27,9 +27,11 @@ import {
   ERASE_LABEL,
   ERASED,
   ERASED_AND_CHAT_DELETED,
+  ERASED_NO_CHAT,
   erasedAt,
   erasedLine,
   eraseQuestion,
+  eraseSaid,
 } from "../src/auto-learn.js";
 import * as K from "./uikit.mjs";
 
@@ -78,6 +80,55 @@ await check("only a real erased_at makes a fact erased", async () => {
   }
   assert.equal(erasedAt(null), null);
   assert.match(erasedLine(1790000000), /^Erased on \S.*\d{4}$/);
+});
+
+/* ── "Erased." is only true when the PC says the file was rebuilt ──────── */
+
+/**
+ * The PC's own sentence for the case it could not finish, read OUT of the
+ * backend rather than typed here, so the fixture and the server can never
+ * drift apart. `jarvis_memory.handle_erase` builds one `note`: the short
+ * "Erased. The words are gone..." and, when `file_clean` is false, a second
+ * sentence saying an older copy may stay on disk. Python writes it as
+ * adjacent string literals, so the quotes and newlines between them are
+ * joined the way Python joins them.
+ */
+const NOT_CLEAN_NOTE = (() => {
+  const src = read("../backend/rebuilt/jarvis_memory.py");
+  const from = src.indexOf("Erased. The words are gone from Jarvis's memory");
+  const to = src.indexOf("is erased again.", from);
+  assert.ok(from > 0 && to > from,
+    "the PC's erase note moved - read handle_erase() in jarvis_memory.py again");
+  return src.slice(from, to + "is erased again.".length)
+    .replace(/"\s*\n\s*"/g, "").replace(/\s+/g, " ").trim();
+})();
+
+await check("the PC's not-clean sentence is the one the backend really sends", async () => {
+  // Without this the test could pass on a sentence nobody sends.
+  assert.match(NOT_CLEAN_NOTE, /^Erased\. The words are gone from Jarvis's memory on this PC;/);
+  assert.match(NOT_CLEAN_NOTE,
+    /Another part of Jarvis was reading the memory file at that moment, so it could not be rebuilt: an older copy of these words may stay in memory\.db or memory\.db-wal until the fact is erased again\.$/);
+});
+
+await check("eraseSaid: the PC's note replaces 'Erased.' only when file_clean is false", async () => {
+  // file_clean false, with the PC's own words -> the PC's own words.
+  assert.equal(eraseSaid({ ok: true, file_clean: false, note: NOT_CLEAN_NOTE }, ERASED),
+    NOT_CLEAN_NOTE, "the note the PC sent was not what the owner is shown");
+  // ... and it wins over the longer "and the chat was deleted too" line: the
+  // words may still be on disk is the more important sentence.
+  assert.equal(eraseSaid({ ok: true, file_clean: false, note: NOT_CLEAN_NOTE,
+                           chat_deleted: true }, ERASED_AND_CHAT_DELETED), NOT_CLEAN_NOTE);
+  // CONTROL: a clean erase keeps the short line - the fix must not make every
+  // erase alarming.
+  assert.equal(eraseSaid({ ok: true, file_clean: true, note: NOT_CLEAN_NOTE }, ERASED), ERASED);
+  assert.equal(eraseSaid({ ok: true, file_clean: true }, ERASED_AND_CHAT_DELETED),
+    ERASED_AND_CHAT_DELETED);
+  // CONTROL: a PC too old to send the field at all answers exactly as before.
+  assert.equal(eraseSaid({ ok: true, chat_deleted: false }, ERASED), ERASED);
+  assert.equal(eraseSaid({ ok: true, chat_deleted: false }, ERASED_NO_CHAT), ERASED_NO_CHAT);
+  assert.equal(eraseSaid(null, ERASED), ERASED, "no reply at all is not a reason to say less");
+  // A false flag with an empty note must not blank the message out.
+  assert.equal(eraseSaid({ ok: true, file_clean: false, note: "   " }, ERASED), ERASED);
 });
 
 /* ── The Brain window ─────────────────────────────────────────────────── */
@@ -147,6 +198,37 @@ await check("declining 'also delete the chat' still erases the words, and says o
   assert.equal(toast, ERASED);
 });
 
+await check("a PC that could not rebuild the file says so, instead of 'Erased.'", async () => {
+  // Measured 2026-10-16: another connection open across the erase left 21
+  // occurrences of the erased words in memory.db and its -wal. The PC answers
+  // file_clean:false and explains; the page used to print "Erased." and never
+  // read either field, so the one case where the promise was not kept was the
+  // one case the owner was told nothing about.
+  const page = await memoryTab({ auto: { facts: LIST }, eraseNotClean: NOT_CLEAN_NOTE });
+  page.on("dialog", (d) => d.accept());   // both: erase, and also the chat
+  await page.locator("#memory-auto-list .row-item").first().getByRole("button", { name: ERASE_LABEL }).click();
+  await page.waitForTimeout(400);
+  const toast = await page.locator("#toast").innerText();
+  await page.close();
+  assert.equal(toast, NOT_CLEAN_NOTE, "the owner was not shown the PC's own reason");
+  assert.notEqual(toast, ERASED, "'Erased.' was shown for an erase that did not finish");
+  assert.notEqual(toast, ERASED_AND_CHAT_DELETED);
+});
+
+await check("CONTROL: a PC that DID rebuild the file still says the short 'Erased.'", async () => {
+  // The other half: the fix must not make every erase alarming. Same click,
+  // same two dialogs, an ordinary reply.
+  const page = await memoryTab({ auto: { facts: LIST } });
+  let n = 0;
+  page.on("dialog", (d) => { n += 1; if (n === 1) d.accept(); else d.dismiss(); });
+  await page.locator("#memory-auto-list .row-item").first().getByRole("button", { name: ERASE_LABEL }).click();
+  await page.waitForTimeout(400);
+  const toast = await page.locator("#toast").innerText();
+  await page.close();
+  assert.equal(toast, ERASED, "an ordinary erase started showing the long note");
+  assert.notEqual(toast, NOT_CLEAN_NOTE);
+});
+
 await check("What Jarvis knows: a current fact has Forget and Erase; a forgotten one has Erase only", async () => {
   const page = await memoryTab();
   const current = await page.locator("#memory-facts .row-item").first().locator("button").allInnerTexts();
@@ -190,6 +272,20 @@ await check("on a stale link Erase is greyed in both lists, like Forget", async 
 });
 
 /* ── CONTROL: the Rust ────────────────────────────────────────────────── */
+
+await check("CONTROL: BOTH places that erase ask eraseSaid, so neither can say 'Erased.' alone", async () => {
+  // The Memory tab (brain.js eraseFact) and the quickbar's "Used in this
+  // answer" (answer-memory.js) are two separate call sites of the same
+  // command. The fix is only worth anything if BOTH ask: a reverted one looks
+  // exactly like the bug this pair of tests exists for.
+  for (const f of ["src/brain.js", "src/answer-memory.js"]) {
+    const src = read(f);
+    assert.match(src, /eraseSaid\(/, `${f} does not call eraseSaid`);
+    assert.match(src, /^\s*eraseSaid,$/m, `${f} does not import eraseSaid`);
+  }
+  const lib = read("src/auto-learn.js");
+  assert.match(lib, /export function eraseSaid\(/, "eraseSaid is not exported from auto-learn.js");
+});
 
 await check("CONTROL: brain_memory_erase is held on a stale link, sends one id, Brain and the quickbar's \"Used in this answer\" only", async () => {
   const rs = read("src-tauri/src/brain.rs");

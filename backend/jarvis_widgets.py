@@ -187,7 +187,8 @@ SOURCES = {
     "gpu_memory": Source("progress", "Graphics memory", False,
                          "the graphics memory used on your PC"),
     "tokens_per_second": Source("number", "Tokens per second", False,
-                                "tokens per second from the local model (not measured yet)"),
+                                "how fast the local model answers, in tokens a second, "
+                                "as the middle of the last 20 answers"),
 }
 
 #: The buttons: the phone's Quick Settings tile actions (data/QuickTiles.kt
@@ -795,6 +796,16 @@ def _pending() -> list:
 
 
 def _gpu() -> tuple:
+    """(used, total) bytes for the graphics cards, or (0.0, 0.0).
+
+    `jarvis_hardware.gpu_memory_used()` IS NOT DEFINED ANYWHERE in this
+    repository, in any patch, or on the owner's PC - measured 2026-10-16 - so
+    today this always takes the except branch and answers (0.0, 0.0). The
+    caller must read that as "could not read it", NOT as an empty card: see
+    `fill()`'s `gpu_memory` branch, which leaves the value empty and says so
+    rather than printing "0 GB used of 0 GB". `jarvis_hardware.py` is delivered
+    by `hardware.patch`, so the missing reader cannot be added from here.
+    """
     try:
         import jarvis_hardware
         return jarvis_hardware.gpu_memory_used()
@@ -803,7 +814,36 @@ def _gpu() -> tuple:
 
 
 def _tokens() -> str:
-    return "not measured"
+    """Tokens a second from the local model, or "" when nothing is measured.
+
+    `jarvis_speed` already writes one row per answer carrying `tokens_per_s`
+    ("How fast each answer was - numbers only, in a file on this PC"), and the
+    speed screen reads it through `jarvis_speed.view()`. This is the same read:
+    the MIDDLE of the last 20 answers' tokens a second, which is what the module
+    itself calls the middle value, rather than one jumpy last answer. The log
+    holds numbers only - no words of any conversation - so this is not a private
+    source.
+
+    "" is the honest answer when nothing has been measured yet: the caller turns
+    that into a note, never into a 0. This used to return the words "not
+    measured" as the value; the measurement exists, so that was wrong.
+    """
+    try:
+        import jarvis_speed
+        seen = jarvis_speed.view(limit=20)
+        if not isinstance(seen, dict) or seen.get("available") is not True:
+            return ""
+        values = [r.get("tokens_per_s") for r in (seen.get("recent") or [])
+                  if isinstance(r, dict)
+                  and isinstance(r.get("tokens_per_s"), (int, float))
+                  and not isinstance(r.get("tokens_per_s"), bool)
+                  and r.get("tokens_per_s") > 0]
+        if not values:
+            return ""
+        values.sort()
+        return f"{values[len(values) // 2]:.1f}"
+    except Exception:
+        return ""
 
 
 def _end_of_today(now: float) -> float:
@@ -859,6 +899,14 @@ def _section(b: dict, key: str) -> Optional[dict]:
 _UNREAD = re.compile(r"^(\d+) unread email")
 
 NO_BRIEFING = "No briefing yet today."
+
+#: Said where a number would be, when there is no number yet - the wording rule
+#: this project uses for an empty value ("...yet.", never a bare 0).
+NO_SPEED_YET = "No speed measurement yet."
+
+#: The graphics card could not be read. `jarvis_hardware.gpu_memory_used()` does
+#: not exist yet (see `_gpu`), so this is what the gpu_memory block says today.
+NO_GPU = "Could not read the graphics card just now."
 
 
 def fill(block: dict, r: Readers) -> dict:
@@ -924,7 +972,10 @@ def fill(block: dict, r: Readers) -> dict:
                 p = r.pending()
                 out["value"] = str(len(p) if isinstance(p, (list, tuple)) else 0)
             elif key == "tokens_per_second":
-                out["value"] = str(r.tokens())
+                got = str(r.tokens() or "").strip()
+                out["value"] = got
+                if not got:
+                    out["note"] = NO_SPEED_YET
             elif key in ("email_count", "events_count"):
                 b = _briefing_today(r)
                 sec = None if b is None else _section(b, "email" if key == "email_count"
@@ -946,8 +997,14 @@ def fill(block: dict, r: Readers) -> dict:
                 out["value"] = f"{_gb(free)} free of {_gb(total)}"
             elif key == "gpu_memory":
                 used, total = r.gpu() or (0.0, 0.0)
-                out["fraction"] = round(used / total, 3) if total > 0 else 0.0
-                out["value"] = f"{_gb(used)} used of {_gb(total)}" if total > 0 else "0 GB used of 0 GB"
+                if total > 0:
+                    out["fraction"] = round(used / total, 3)
+                    out["value"] = f"{_gb(used)} used of {_gb(total)}"
+                else:
+                    # NOT "0 GB used of 0 GB": a card that could not be read is
+                    # not an empty card, and a bare 0 is read as a measurement.
+                    out["fraction"], out["value"] = 0.0, ""
+                    out["note"] = NO_GPU
             elif key == "focus":
                 st = r.focus() or {}
                 if not st.get("on"):

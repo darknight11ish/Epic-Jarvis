@@ -245,6 +245,41 @@ export const ERASED_AND_CHAT_DELETED = "Erased, and the chat it came from is del
  *  MemoryErase says the same. */
 export const ERASED_NO_CHAT = "Erased. No chat was on record for this fact, so no chat was deleted.";
 
+/**
+ * What to say after an erase, from the PC's own reply - because "Erased." is
+ * only true when the PC says the file was rebuilt.
+ *
+ * `POST /api/memory/erase` erases the row, the word index and the vector, and
+ * then rebuilds the file (`optimize`, VACUUM, checkpoint). The rebuild needs
+ * no other program holding memory.db, and it is that last step which decides
+ * whether the words are gone from the DISK rather than merely unreachable:
+ * measured 2026-10-16, another connection open across the erase left 21
+ * occurrences of the erased words in memory.db and its -wal, and a second
+ * erase, once the reader had gone, left none.
+ *
+ * The PC is honest about that: it answers `file_clean: false` and puts the
+ * explanation in `note` - "Another part of Jarvis was reading the memory file
+ * at that moment, so it could not be rebuilt: an older copy of these words may
+ * stay in memory.db or memory.db-wal until the fact is erased again." Both
+ * apps used to print their own "Erased." and never read either field, so the
+ * one case where the promise was not kept was the one case the owner was told
+ * nothing about.
+ *
+ * So: `file_clean` false -> the PC's own sentence, word for word. There is no
+ * sentence invented here on purpose - the PC owns the words for its own state,
+ * the same way ERASED_NO_CHAT came from the chat audit. `normal` is what the
+ * caller would have said (ERASED, ERASED_NO_CHAT, ERASED_AND_CHAT_DELETED),
+ * and it is used for every other reply, including a `file_clean` the PC did
+ * not send (an older PC) - which is the behaviour that shipped before.
+ */
+export function eraseSaid(reply, normal) {
+  const note = reply && typeof reply.note === "string" ? reply.note.trim() : "";
+  if (reply && reply.file_clean === false && note) {
+    return note;
+  }
+  return normal;
+}
+
 /** The chat named, with when (the chat audit, 2026-09-28): the phone's
  *  checkbox says the same sentence. */
 export function eraseChatNamed(chat, when = "") {

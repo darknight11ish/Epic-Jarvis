@@ -884,6 +884,98 @@
     "name": ""
    }
   },
+  "quick_access": {
+   "answer": {
+    "at": 1790589600.0,
+    "blocks": [
+     {
+      "label": "Approvals waiting",
+      "private": false,
+      "source": "approvals_count",
+      "type": "number",
+      "value": "2"
+     },
+     {
+      "label": "Tokens per second",
+      "private": false,
+      "source": "tokens_per_second",
+      "type": "number",
+      "value": "41.2"
+     },
+     {
+      "fraction": 0.25,
+      "label": "Graphics memory",
+      "private": false,
+      "source": "gpu_memory",
+      "type": "progress",
+      "value": "3.0 GB used of 12 GB"
+     }
+    ],
+    "id": "w0123456789",
+    "name": "Quick access",
+    "ok": true
+   },
+   "hidden": {
+    "blocks": [
+     {
+      "hidden": false,
+      "label": "Approvals waiting",
+      "note": "",
+      "private": false,
+      "type": "number",
+      "value": "2"
+     },
+     {
+      "hidden": false,
+      "label": "Tokens per second",
+      "note": "",
+      "private": false,
+      "type": "number",
+      "value": "41.2"
+     },
+     {
+      "fraction": 0.25,
+      "hidden": false,
+      "label": "Graphics memory",
+      "note": "",
+      "private": false,
+      "type": "progress",
+      "value": "3.0 GB used of 12 GB"
+     }
+    ],
+    "name": "Quick access"
+   },
+   "view": {
+    "blocks": [
+     {
+      "hidden": false,
+      "label": "Approvals waiting",
+      "note": "",
+      "private": false,
+      "type": "number",
+      "value": "2"
+     },
+     {
+      "hidden": false,
+      "label": "Tokens per second",
+      "note": "",
+      "private": false,
+      "type": "number",
+      "value": "41.2"
+     },
+     {
+      "fraction": 0.25,
+      "hidden": false,
+      "label": "Graphics memory",
+      "note": "",
+      "private": false,
+      "type": "progress",
+      "value": "3.0 GB used of 12 GB"
+     }
+    ],
+    "name": "Quick access"
+   }
+  },
   "too_many_blocks": {
    "answer": {
     "blocks": [
