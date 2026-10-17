@@ -174,8 +174,49 @@ def t_the_first_held_out_set():
         g = [r for r in res["results"] if r["sensitive"] and r["category"] == cat]
         hit = sum(1 for r in g if r["by_patterns"])
         check(f"heldout1: recall for {cat} >= 95% ({hit}/{len(g)})", g and hit / len(g) >= 0.95)
-    check(f"heldout1: all 963 lines take about a second of CPU time ({took:.2f} s; limit 3 s for a "
-          "slower PC)", took < 3.0, took)
+    # THE BUDGET IS THE CLASSIFIER'S OWN SCALING, NOT A WALL CLOCK (2026-10-16).
+    #
+    # It used to be `took < 3.0` CPU seconds, and the message said so: "limit 3 s
+    # for a slower PC". That is a claim about the machine, not about the code,
+    # and on a slower shared runner it is a coin toss.
+    #
+    # The claim this check can really make is SCALING: 963 lines of held-out text
+    # cost no more than N times what 200 of the SAME lines cost, measured by the
+    # same classifier in the same run. CPU time (`time.process_time()` in
+    # `_numbers`), so other programs competing for the machine do not count.
+    #
+    # Measured on this PC over three fresh runs: 963 lines 1.03-1.06s, 200 lines
+    # 0.20-0.23s, ratios 4.40 / 4.86 / 5.23. Linear scaling for 963 vs 200 lines
+    # is 4.8, so the classifier is linear and these numbers are the code, not the
+    # weather. N is 10 - about twice the linear ratio, which is a JUDGEMENT margin
+    # on a measured 4.8 rather than a guess. A quadratic classifier would be about
+    # 23x and fails; a genuinely slower machine scales both sides and passes.
+    #
+    # A FLOOR, because a ratio alone can go too low. `max(3.0, ...)` keeps the old
+    # absolute bound on a machine where the ratio budget comes out smaller, and on
+    # a slower machine the ratio carries it. This is the heatmap's shape with the
+    # floor where it belongs: the 3.0 is the same number the check used to have.
+    #
+    # WHY THE ANCHOR IS 200 LINES AND NOT 20. Measured on this PC,
+    # `time.process_time()` advances in steps of exactly 1/64 s = 15.625 ms (eight
+    # consecutive non-zero deltas, all 0.015625). A 20-line run would be 1-2 timer
+    # ticks, so its own cost would be quantised by up to 100% and a ratio built on
+    # it would be noise; the 200-line run is 13-15 ticks (~7%). That is also why
+    # 100 lines was rejected: at ~6 ticks its ratios came out 9.71/11.33/11.00
+    # against a linear 9.63, while 200 lines gave 4.40/4.86/5.23 against a linear
+    # 4.815 - the 200-line anchor tracks the linear model, the 100-line one does
+    # not. On Linux (the `backend` CI job) the timer is fine-grained; this floor
+    # and anchor are chosen for the coarser of the two.
+    t_small = time.process_time()
+    S.measure(rows[:200], with_model=False)
+    small = time.process_time() - t_small
+    budget = max(3.0, 10.0 * small)
+    check(f"heldout1: {len(rows)} lines scale with the input - no more than 10x the "
+          "200-line anchor, or the 3s floor",
+          took < budget,
+          f"{took:.2f}s of CPU for {len(rows)} lines, {small:.2f}s for 200 of the same "
+          f"lines, budget {budget:.2f}s (10x the anchor, floored at 3.0s; linear "
+          f"scaling would be {len(rows) / 200 * small:.2f}s)")
 
 
 def t_the_round_two_lines():

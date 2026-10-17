@@ -3798,23 +3798,82 @@ pub fn get_lock_flags(app: AppHandle) -> serde_json::Value {
     serde_json::json!({ "appLock": s.app_lock, "privateAnswers": s.private_answers })
 }
 
-/// The widget's Approve while App lock is on or on an email (where an
-/// email can be read whole), and "Open the card" in
-/// Settings and the Brain (card-link.js): opens the Jarvis bar on the
-/// waiting card. The bar is behind the lock, so Windows Hello is asked
-/// before it shows, and the approval is made there. Decides nothing.
+/// Where an "Open the card" request asks the card to be shown.
 ///
-/// `id` names the card to show (the one the owner's click just raised);
-/// without one, or once it is no longer waiting, the bar shows the first.
-/// Only an id is passed on - the bar reads the card itself from its queue.
+/// TWO CALLERS, TWO SURFACES, ON PURPOSE (the Lead's decision, 2026-10-17). Do
+/// not simplify this to one target:
+/// * [`CardOpen::Hud`] - Settings/Brain's "Open the card" click
+///   (`card-link.js`, which sends `target: "hud"`): a deliberate "show me the
+///   card" click, and the HUD is the fuller surface (the whole card, with its
+///   own Approve and Deny, #488).
+/// * [`CardOpen::Quickbar`] - the widget's redirect for App lock, email/tidy
+///   and heavy cards: the Jarvis bar is where `heavy-approve.js`'s
+///   delay-and-scroll gate lives, and moving a button's destination must not
+///   remove a safety property. The widget sends no target, which lands here.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CardOpen {
+    /// The full HUD window.
+    Hud,
+    /// The Jarvis bar, the surface that carries the delay-and-scroll gate.
+    Quickbar,
+}
+
+/// The surface the caller asked for.
+///
+/// No target means the bar - the widget's redirect, and the safe default: it is
+/// the surface that carries the delay-and-scroll gate, never the one that
+/// approves at once. A word this build does not know is REFUSED rather than
+/// mapped to a default, so a typo in a caller cannot silently pick another
+/// window.
+pub(crate) fn card_open_target(requested: Option<&str>) -> Result<CardOpen, String> {
+    match requested.map(str::trim) {
+        None | Some("") | Some("bar") => Ok(CardOpen::Quickbar),
+        Some("hud") => Ok(CardOpen::Hud),
+        Some(other) => Err(format!(
+            "unknown card target {other:?}: expected \"hud\" or \"bar\""
+        )),
+    }
+}
+
+/// "Open the card" in Settings and the Brain (card-link.js), and the widget's
+/// Approve when it has to be answered in a window. Decides nothing.
+///
+/// The caller names the surface (see [`card_open_target`]): card-link asks for
+/// the HUD; the widget asks for nothing and keeps the bar, so its heavy/email/
+/// App-lock redirect still meets `heavy-approve.js`'s delay-and-scroll gate.
+/// The HUD path falls back to the bar if that window is missing, so a click can
+/// never do nothing. The command keeps its name: renaming it changes the
+/// hand-granted permission identifier in `permissions/surfaces.toml` and every
+/// capability that names it, which is churn with no behaviour in it.
+///
+/// A click is deliberate, so either surface may take the keyboard here. An
+/// ARRIVING card is the other direction: it raises the window without focus
+/// (`windows::show_hud_quietly`), because it interrupts nobody.
+///
+/// `id` is used only by the bar: the HUD draws every waiting card from its own
+/// queue, so there is no id to hand it.
 #[tauri::command]
-pub fn open_approval_in_quickbar(app: AppHandle, id: Option<String>) -> Result<(), String> {
-    windows::show_quickbar(&app)?;
+pub fn open_approval_in_quickbar(
+    app: AppHandle,
+    id: Option<String>,
+    target: Option<String>,
+) -> Result<(), String> {
     let id = id
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty() && s.len() <= 200);
-    crate::emit_quickbar(&app, crate::events::SHOW_APPROVAL, id);
-    Ok(())
+    let desired = card_open_target(target.as_deref())?;
+    match desired {
+        CardOpen::Hud if app.get_webview_window(crate::HUD_LABEL).is_some() => {
+            crate::windows::show_hud(&app)
+        }
+        // The bar was asked for (the widget's redirect, which keeps the gate),
+        // or the HUD was asked for and does not exist: the bar shows the card.
+        _ => {
+            windows::show_quickbar(&app)?;
+            crate::emit_quickbar(&app, crate::events::SHOW_APPROVAL, id);
+            Ok(())
+        }
+    }
 }
 
 /// Whether the widget's Approve for `id` must go to the Jarvis bar instead:
@@ -7425,5 +7484,40 @@ mod stale_approval_answers {
             !STALE_APPROVE_HELD.contains("nothing can be answered"),
             "the old sentence is false for Deny now: {STALE_APPROVE_HELD}"
         );
+    }
+}
+
+/// "Open the card" requests two surfaces for two callers on purpose (the
+/// Lead's decision, 2026-10-17). A window cannot exist in a test, so the tests
+/// call the decision the command calls - `card_open_target` - rather than
+/// reading source text.
+#[cfg(test)]
+mod card_open_tests {
+    use super::{card_open_target, CardOpen};
+
+    /// card-link.js's deliberate "show me the card" click: the full HUD.
+    #[test]
+    fn a_card_link_click_targets_the_hud() {
+        assert_eq!(card_open_target(Some("hud")), Ok(CardOpen::Hud));
+    }
+
+    /// THE CONTROL THAT MATTERS: the widget's redirect sends no target, so it
+    /// keeps the Jarvis bar - the surface that carries `heavy-approve.js`'s
+    /// delay-and-scroll gate. Routing this to the HUD would remove that gate
+    /// while looking like a simplification.
+    #[test]
+    fn the_widget_redirect_keeps_the_gate_surface() {
+        assert_eq!(card_open_target(None), Ok(CardOpen::Quickbar));
+        assert_eq!(card_open_target(Some("bar")), Ok(CardOpen::Quickbar));
+        assert_eq!(card_open_target(Some("  ")), Ok(CardOpen::Quickbar));
+        assert_ne!(card_open_target(None), Ok(CardOpen::Hud));
+    }
+
+    /// A caller that says something else is refused, not guessed into a
+    /// different window.
+    #[test]
+    fn an_unknown_target_is_refused() {
+        assert!(card_open_target(Some("hud2")).is_err());
+        assert!(card_open_target(Some("quickbar")).is_err());
     }
 }

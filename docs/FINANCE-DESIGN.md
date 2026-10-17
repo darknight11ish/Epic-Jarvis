@@ -511,7 +511,85 @@ file limit; "Keep these numbers" for the calculator off (form starts empty).
 4. **Rules re-check:** not read aloud; not remembered; not to search or chatbot;
    local lane only; outside-text mark; crisis and sensitive paths untouched.
 
-## 11. Not verified
+## 11. Subscriptions and price hikes (Pillar 10, first half, 2026-10-17)
+
+**Status: built, with no way in yet.** `backend/jarvis_spending.py` gains one
+pure function, `audit_subscriptions(transactions)`. It is the deterministic half
+of the "Subscription & Price-Hike Radar": no route, no chat tool, no UI, no model
+call, no file, no clock, no network. Nothing in either app changes, so
+`tools/check_parity.py` is unmoved, and the dict it returns is the design
+contract a later slice builds on rather than a frozen app contract.
+
+**The problem it answers.** Today the spending feature totals a bank export. It
+does not notice that a subscription quietly went up by 3.00 a month, or that the
+same shop charged the same amount twice in one week. Both are plain arithmetic,
+so both are done here, in whole cents, and the caller does the words.
+
+**What it is given.** Transactions already normalised by this module - the `Txn`
+namedtuples `normalise()`/`combine()` produce, or dicts with the same four keys
+(`date`, `cents`, `desc`, `currency`). `cents` is in this file's own convention:
+negative is money out. A dict's date may be a real date, an Excel date serial,
+or text, which goes through `jarvis_money_parse.parse_date` - the module's own
+parser, day-first by default - never a second set of date rules. An amount that
+is not whole cents (a float, text) or a date that cannot be read is **refused**
+with `ValueError`, never guessed at and never rounded. Money in, zero amounts,
+rows with no merchant name and rows whose whole description is a hidden account
+number are not charges: they are skipped, never attributed to anyone, because
+two unrelated transfers are not the same shop.
+
+**What it returns**, a plain dict of plain data (ISO dates, integer cents, JSON
+round-trips unchanged):
+
+1. `subscriptions`: every merchant with a recurring interval - **monthly** (26
+   to 35 days between charges) or **annual** (350 to 380 days) - with the count,
+   the first and latest dates and the latest amount. A gap shorter than a month
+   is not the time between two bills (it is the duplicate below), so it is
+   ignored here and cannot hide a subscription; every other gap must fall in the
+   same band, so a missed month is not vouched for as monthly.
+2. `price_hikes`: a recurring merchant whose **latest charge is higher than the
+   charge before it**, with `previous_*`, `latest_*` and `delta_cents = latest -
+   previous`, exact and positive (+300 is +3.00). **Only a rise counts**: an
+   equal amount and a decrease are never reported as one. The delta is per
+   billing period, exactly as the two charges state it; it is not turned into a
+   monthly figure, because that would have to round.
+3. `duplicate_charges`: the same merchant stem and amount charged twice **within
+   6 days or fewer** - `"< 7 days"` really means 6 - each entry one pair of
+   consecutive charges, so a third charge in the same week is a second entry and
+   not a hidden one. Different currencies are never the same charge, matching how
+   `RowLedger` already treats a card and a current account.
+4. `transactions`: how many charge rows were looked at (money in, zero amounts
+   and rows with no merchant name are not charges).
+
+**Why it errs towards missing a match.** A merchant is reduced to a stem
+(`merchant_stem`): `normalise_description` - the same folding the row
+fingerprints already use, so case, width, accents and punctuation never decide
+- with a trailing store number or reference code taken off ("TESCO STORES 1234"
+is "tesco stores", "SPOTIFY P2E4X7" is "spotify"). Two charges are the same
+merchant **only when the stems are exactly equal**; a word that merely ends in a
+number keeps it ("studio54", "7eleven"), and there is no fuzzy matching. A
+subscription written two different ways is missed rather than guessed at,
+because a false alarm about money is worse than no alarm.
+
+**What it costs and what it proves.** The function is file-free and clock-free,
+so the tests are file-free too: `backend/test_spending.py` section 11 adds 14
+test functions and 60 checks calling the real function with `Txn` lists and
+asserting on the returned dict - including the boundaries at both ends (25/26
+and 35/36 days monthly, 349/350 and 380/381 annual, exactly 6 and exactly 7 days
+for a duplicate), an equal amount and a lower amount that must not be a hike, a
+double charge that must not hide a subscription or its rise, two currencies that
+must not match, a bad transaction that must be refused, and the same rows in
+reverse order giving the identical dict. Every check was made to fail on purpose
+before it was trusted (the mutations and their red output are in the pull request
+for this slice).
+
+**Deliberately not built here.** The pillar's second half - scanning mail for
+trial-ending and delivery messages - belongs with `jarvis_mail.py`, which this
+slice does not touch: no IMAP, no socket, no model. And nothing is shown to the
+owner yet: no route, no table, no app screen. That is the later slice's job, and
+this function is written so that slice can call it - pure, deterministic,
+already in cents, already JSON-safe.
+
+## 12. Not verified
 
 - Nothing was built or run. No real bank export was read; the header words and
   layouts listed are from general knowledge of common exports, and the fixtures

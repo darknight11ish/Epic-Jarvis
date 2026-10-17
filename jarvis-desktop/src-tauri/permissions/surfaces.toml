@@ -76,12 +76,14 @@ permissions = [
 ]
 
 # "Open the card" (card-link.js): Settings and the Brain show one line while
-# an approval card waits, with a button that opens the Jarvis bar on it. That
-# DECIDES NOTHING - the bar, behind App lock, is where Deny and Approve are -
-# so those two windows get only this, not `approvals` above.
+# an approval card waits, with a button that opens it in the HUD window. That
+# DECIDES NOTHING - the HUD, behind App lock, is where Deny and Approve are -
+# so those two windows get only this, not `approvals` above. The same command
+# is the widget's redirect too, and that caller sends no target: it keeps the
+# Jarvis bar, where the delay-and-scroll gate lives (2026-10-17).
 [[set]]
 identifier = "open-card"
-description = "Open the Jarvis bar on a waiting approval card. Decides nothing."
+description = "Open a waiting approval card in the HUD window. Decides nothing."
 permissions = ["allow-open-approval-in-quickbar"]
 
 # The HUD's own Approve and Deny (2026-10-16; the owner's ask: "i should also

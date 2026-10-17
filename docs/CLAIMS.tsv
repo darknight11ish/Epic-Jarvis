@@ -89,7 +89,7 @@ A38	the phone has a "Delete older backups now" button	grep:jarvis-client:Delete 
 B01	the phone's read-only past-approvals list is built (an audit report said so on 2026-09-29)	grep:jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/InboxScreen.kt:Activity	built	docs/audit-reports-2026-09-29-30/49-audit-a1ef1de0.md:53
 B02	"Show or hide menus" is built in the backend, not merely designed	file:backend/jarvis_menus.py	built	docs/FEATURE-REVIEW-2026-10-04.md:91
 B03	MENU-VISIBILITY-DESIGN.md no longer calls the built "Show or hide menus" feature "designed, not built"	absent:docs/MENU-VISIBILITY-DESIGN.md:designed, not built	built	docs/MENU-VISIBILITY-DESIGN.md:3
-B04	docs/JARVIS-API.md no longer says the second graphics card is not installed	absent:docs/JARVIS-API.md:the second card is not installed	built	docs/JARVIS-API.md:1992
+B04	docs/JARVIS-API.md no longer says the second graphics card is not installed	absent:docs/JARVIS-API.md:the second card is not installed	built	docs/JARVIS-API.md:1993
 B05	the two graphics cards are installed and measured (2026-10-05)	grep:docs/SECOND-CARD.md:The cards are now installed and	built	docs/FEATURE-REVIEW-2026-10-04.md:44
 B06	the decisions file no longer says the owner is *adding* the RTX 2060	absent:docs/DECISIONS.md:The owner is adding an RTX 2060	built	docs/FEATURE-REVIEW-2026-10-04.md:92
 B07	MODEL-TOPOLOGY.md no longer says the RTX 2060 is "Coming soon"	absent:docs/MODEL-TOPOLOGY.md:Coming soon:	built	docs/MODEL-TOPOLOGY.md:7
@@ -107,7 +107,7 @@ B18	the phone's shader budget is still the 60,000 the eyelids decision recorded	
 B19	the second card's floor is still the 7,680 MiB the owner's decision recorded	number:docs/SECOND-CARD.md:backend/jarvis_second_card.py:7,680	built	docs/SECOND-CARD.md:26
 B20	the audit's "tap-to-talk is not built" is settled: the phone's VoiceButton no longer documents the opposite of the code ninety lines below it	absent:jarvis-client/app/src/main/java/com/jarvis/client/ui/parts/VoiceButton.kt:Hold rather than tap-to-start/tap-to-stop	built	docs/audit-reports-2026-09-29-30/43-audit-a696f0b6.md:16
 C01	the chat-tags design page no longer calls the built feature a design	absent:docs/CHAT-TAGS-DESIGN.md:designed, not built	built	docs/CHAT-TAGS-DESIGN.md:3
-C02	chat tags are built - the tag registry lives in the chat log	grep:backend/jarvis_chat_log.py:TAG_STARTERS	built	docs/JARVIS-API.md:15910
+C02	chat tags are built - the tag registry lives in the chat log	grep:backend/jarvis_chat_log.py:TAG_STARTERS	built	docs/JARVIS-API.md:15911
 C03	the review-decks page no longer says nothing here is built	absent:docs/QUIZ-DECKS-DESIGN.md:Nothing here is built	built	docs/QUIZ-DECKS-DESIGN.md:3
 C04	review decks are shipped as their own module	file:backend/jarvis_decks.py	built	docs/QUIZ-DECKS-DESIGN.md:3
 C05	the finance page no longer calls two built features a design	absent:docs/FINANCE-DESIGN.md:designed, not built	built	docs/FINANCE-DESIGN.md:3
@@ -123,8 +123,8 @@ C14	the goals page no longer says nothing here is built	absent:docs/GOALS-PROGRE
 C15	the goals backend is in this tree	file:backend/jarvis_goals.py	built	docs/GOALS-PROGRESS-DESIGN.md:3
 C16	the appearance proposal no longer says the phone does not implement the route	absent:docs/APPEARANCE-SYNC-PROPOSAL.md:implements this yet	built	docs/APPEARANCE-SYNC-PROPOSAL.md:3
 C17	the phone reads and writes /api/appearance	grep:jarvis-client/app/src/main/java/com/jarvis/client/data/AppearanceStore.kt:/api/appearance	built	docs/APPEARANCE-SYNC-PROPOSAL.md:5
-C18	ARCHITECTURE.md no longer says the apps' side of the wellbeing event is unbuilt	absent:docs/ARCHITECTURE.md:not built yet - JARVIS-API §38.1	built	docs/ARCHITECTURE.md:1699
-C19	the desktop holds the serious pose from the wellbeing event	grep:jarvis-desktop/src/jarvis-link.js:noteWellbeing	built	docs/ARCHITECTURE.md:1699
+C18	ARCHITECTURE.md no longer says the apps' side of the wellbeing event is unbuilt	absent:docs/ARCHITECTURE.md:not built yet - JARVIS-API §38.1	built	docs/ARCHITECTURE.md:1715
+C19	the desktop holds the serious pose from the wellbeing event	grep:jarvis-desktop/src/jarvis-link.js:noteWellbeing	built	docs/ARCHITECTURE.md:1715
 C20	the phone README no longer offers the home network as a way in	absent:jarvis-client/README.md:or the home network	built	jarvis-client/README.md:16
 C21	the phone README no longer lists the home network among the addresses it accepts	absent:jarvis-client/README.md:home network, Tailscale	built	jarvis-client/README.md:75
 C22	the phone refuses a home-network address at the cleartext step	grep:jarvis-client/app/src/main/java/com/jarvis/client/data/PhoneAddress.kt:not by a number or a home-network name	built	docs/FEATURE-REVIEW-2026-10-04.md:537
@@ -159,7 +159,7 @@ C50	the docs index mentions the audit-reports directory at all	grep:docs/README.
 C51	"Things you can say" is built in the desktop's empty Jarvis bar	grep:jarvis-desktop/src/sayable.js:Things you can say	built	docs/EASE-OF-USE-AUDIT-2026-09-27.md:29
 C52	the dated 2026-09-27 ease-of-use audit carries a 'built since' note recording that the Things you can say list and the speaking-speed control are both built	grep:docs/EASE-OF-USE-AUDIT-2026-09-27.md:Things you can say" list and the speaking-speed control are both built	built	docs/EASE-OF-USE-AUDIT-2026-09-27.md:19
 C53	the documents page prints the command that measures its own count	grep:docs/README.md:Get-ChildItem docs -Recurse -Filter *.md	built	docs/README.md:10
-C54	the phone holds the neutral animal pose on the wellbeing event	no definite check: the phone reads the crisis help line from the X-Jarvis-Route header under the same word "wellbeing" (jarvis-client/.../net/Wellbeing.kt), so a grep for it cannot tell the event from the header, and the register will not invent the marker the phone would use; ARCHITECTURE.md:1699 now says the phone's half is still to build	unverifiable	docs/ARCHITECTURE.md:1699
+C54	the phone holds the neutral animal pose on the wellbeing event	no definite check: the phone reads the crisis help line from the X-Jarvis-Route header under the same word "wellbeing" (jarvis-client/.../net/Wellbeing.kt), so a grep for it cannot tell the event from the header, and the register will not invent the marker the phone would use; ARCHITECTURE.md:1699 now says the phone's half is still to build	unverifiable	docs/ARCHITECTURE.md:1715
 D01	the source bundle really is gone from the tree, as the documents page recorded	no-file:docs/SOURCE-BUNDLE.md	built	docs/README.md:127
 D02	the documents page no longer records the source bundle as still being in the tree	absent:docs/README.md:Still in the tree	built	docs/README.md:127
 D03	the documents page records the source bundle's removal, now that the removal really ran	grep:docs/README.md:Removed 2026-10-05	built	docs/README.md:127

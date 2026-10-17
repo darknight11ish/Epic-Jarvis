@@ -152,6 +152,7 @@ await check("the widget sends an email's Approve to the Jarvis bar, and decides 
   await page.locator("#btn-appr-yes").click();
   await page.waitForTimeout(300);
   const opened = await page.evaluate(() => window.__openedInBar || 0);
+  const targets = await page.evaluate(() => window.__cardTargets || []);
   const decides = await page.evaluate(() => window.__decides || []);
   await page.locator("#btn-appr-no").click();
   await page.waitForTimeout(300);
@@ -162,6 +163,11 @@ await check("the widget sends an email's Approve to the Jarvis bar, and decides 
   assert.ok(!card.includes("alex@example.com") && !card.includes("Friday at 7"),
     "the widget's one line never passes for the whole email");
   assert.equal(opened, 1, "Approve opened the Jarvis bar");
+  // An email is read through before it is approved, so its redirect keeps
+  // the bar (the gate surface) and never asks for the HUD.
+  for (const target of targets) {
+    assert.ok(target !== "hud", "an email's redirect asked for the ungated HUD");
+  }
   assert.deepEqual(decides, [], "Approve decided nothing here");
   assert.deepEqual(after, [{ id: "e1", approved: false, optionId: undefined }],
     "Deny still works from the widget");

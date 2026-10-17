@@ -163,10 +163,12 @@ storage. One nullable column links them.**
   the default here is both.
 - **A "heavy" card.** The notice builder sets `weight: "heavy"` for
   `reversible == "no"` (`approval-notice.patch:64,78`), so the desktop
-  widget's Approve opens the Jarvis bar instead of approving (`widget.js:955-`,
-  `HEAVY_APPROVE_TITLE`) - right for a long diff. Not verified: that the
-  phone's own widget and notification path treat this card the same way
-  (`ApprovalWidget.kt`); a phone test must prove it (section 6).
+  widget's Approve opens the card in the Jarvis bar instead of approving
+  (`widget.js` `approveInBar`, `HEAVY_APPROVE_TITLE`) - right for a long
+  diff, and the bar is where `heavy-approve.js`'s delay-and-scroll gate lives.
+  Not verified: that the phone's own widget and notification path treats this
+  card the same way (`ApprovalWidget.kt`); a phone test must prove it
+  (section 6).
 - **Gate patch lines** (a new `backend/apps-in-projects.patch`, section 7):
   1. the risk table: `"app_merge_change": ("no", "local", "adds the change shown on the card to your app's files, exactly as shown; nothing is run; the older version stays in the app's git history, but there is no Undo button for it yet")` (same shape as `pair_device`, `devices.patch`);
   2. `_NO_RULE_FROM_DENIAL`: `"app_merge_change"` - a "no" must never become a
