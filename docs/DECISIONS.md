@@ -2394,6 +2394,58 @@ under its own clear heading, and whoever merges second combines them.**
   both tools and what each one covers. It is also the smaller change: the four
   PRs already carry links to this path.
 
+## 2026-10-06 and 2026-10-07 - six decisions that were only on a branch until now
+
+Six decisions the owner made on 06 and 07 October were written down only on the
+branch `next-claude-shortlist`, which never merged. Its 58-line addition was for
+the shape `CLAUDE.md` had **before** the 2026-10-12 split moved the dated
+decisions into this file, so it could not be merged as it stood - and a search of
+the whole tree on 2026-10-16 found **none of the six** anywhere: not in
+`CLAUDE.md`, not in `docs/DECISIONS.md`. They are recorded here, in the branch's
+own words, so that retiring the branch loses nothing.
+
+**The first of them reverses a decision recorded above**, which is the reason
+this is a correction and not only an addition: the 2026-09-28 entry says *"The
+desktop HUD's own chat box opens the Jarvis bar instead, so the PC has one chat
+box"*. That was replaced on 2026-10-06.
+
+- **2026-10-06 - the big Jarvis window gets its own chat box back.** This
+  reverses the 2026-09-28 "the PC has one chat box" decision. Typing there is
+  its own conversation, kept in History as HUD, and that window has no
+  Temporary chat, no New conversation, no "Used in this answer" and no crisis
+  panel. The owner was told those limits and accepted them. The "Open the
+  Jarvis bar" button stays in that window, beside the box.
+- **2026-10-06 - anything needing a key or a sign-in should be settable in the
+  Jarvis app itself**, desktop only, stored under rule 3 (Windows Credential
+  Manager for a secret; never a plain-text key file). The phone is never asked
+  for an account secret.
+- **2026-10-06 - the chatbot API keys and the monthly money limits are one
+  piece of work, not two.** A key with no limit leaves the service unusable, so
+  the keys box and the limits ship together. Raising a limit is a loosening and
+  takes a card plus Windows Hello; lowering one does not.
+- **2026-10-06 - the agent runs the patcher; the owner does not.** When the
+  owner says "patch Jarvis", the agent does the whole thing: quits Jarvis,
+  brings `C:\Users\pcadmin\Documents\jarvis-update` up to `main`, runs
+  `scripts/apply-patches.ps1` against the installed backend, reads the verdict,
+  restarts Jarvis and re-runs the preflight. He had been pasting that command
+  by hand for a long time and was never told it could be delegated; offer it,
+  never wait to be asked.
+- **2026-10-07 - the agent watches CI, fixes it and re-runs it without being
+  asked.** A red job is diagnosed, fixed if the fault is ours, and re-run by the
+  agent; a run cancelled by the concurrency setting (`cancel-in-progress: true`,
+  which shows its killed jobs as failures) is re-run rather than reported as a
+  test failure. The owner should never be the one to notice a red or cancelled
+  job, and should never have to ask for the re-run. Say what was done
+  afterwards, plainly - the diagnosis, the fix and the new result.
+- **2026-10-07 - the agent owns the pull requests, and merges them.** The owner
+  asked for the work rather than doing it himself, so the agent keeps the whole
+  board: watches every PR, resolves conflicts (every PR appends a CHANGELOG
+  bullet at the same spot, so each merge makes the others conflict), refreshes
+  the published base when a shipped module changed, re-runs a job killed by the
+  concurrency setting or by a runner fault, and presses Merge in the order that
+  costs the fewest fix-ups. This replaces the 2026-09-26 note that the owner
+  presses Merge; he can still press it himself whenever he wants.
+
 ## 2026-10-16 - the card is answered where it is shown
 
 Asked by the owner the same day, in his own words, as his top priority:

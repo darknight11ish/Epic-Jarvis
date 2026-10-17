@@ -62,6 +62,28 @@ with about 3,450 free for a turn's reading)
   * find returns at most FIND_MAX names; search at most SEARCH_MAX, each with
     a short snippet.
 
+THE SEARCH INDEX - a derived file that makes `search` rank, not just match
+  * `search` ranks with SQLite's own `bm25` over an FTS5 index, the same
+    machinery jarvis_memory.py ranks remembered facts with, and fuses it by
+    reciprocal rank with meaning when this PC has a meaning model loaded. The
+    index is ONE new file in the settings folder, beside folders.json:
+    `documents-index.db`. It is NOT `memory.db` - that file is not ours
+    (jarvis_owned_tables.py) and no table here is called `documents`.
+  * IT IS NOT A SOURCE OF TRUTH. It can only rank: every snippet is read from
+    the file when the answer is built, a file whose size or mtime moved is
+    re-indexed first, a row whose file has gone is dropped, and deleting the
+    index rebuilds it. The FTS table is CONTENTLESS, so a file's words are
+    indexed and its text is never stored in the index.
+  * WITHOUT fastembed (CI, or a PC that has never had it) the meaning half is
+    simply not used and `bm25` alone ranks. A missing model is never an error
+    and never an empty answer; with no usable index at all, `search` is the
+    plain word scan it has always been. `JARVIS_DOCUMENTS_EMBED=0` turns the
+    meaning half off outright.
+  * Writes locally and only locally: the index file, inside Jarvis's own
+    settings folder. Nothing is written into a listed folder, nothing is sent
+    anywhere, and the tool still never changes, moves or deletes a file of
+    the owner's.
+
 THE CONVERTER - MarkItDown, the document parts only, in a child process
   * Installed as `markitdown[pdf,docx,xlsx,pptx]` - NEVER `[all]`: its audio
     converter sends sound to Google and its YouTube converter fetches from
@@ -77,7 +99,8 @@ THE CONVERTER - MarkItDown, the document parts only, in a child process
     A crafted PDF that tries something runs as that child, with nothing to
     steal from its environment and a clock on it.
   * The text is kept in memory only, for the last few files (so reading
-    part 2 does not convert again) - never written to disk.
+    part 2 does not convert again) - never written to disk. (The search
+    index above is a different thing, and holds no document text at all.)
   * A scanned letter or bill has no text layer: the answer says "no text
     was found", plainly, rather than guessing.
 
@@ -102,8 +125,10 @@ PC. Notion's long ids ("Trip plan 1a2b...32 hex.md") stay in the file names
 so the pages' links to each other keep working; find and search show the
 names without them.
 
-Standard library only, apart from MarkItDown in the child process.
-Nothing here opens a socket.
+Standard library only, apart from MarkItDown in the child process, the shared
+closing-connection helper (jarvis_sqlite.py) the search index uses, and the
+meaning model (fastembed, inside jarvis_memory.py, imported only when the
+index is used, and never required). Nothing here opens a socket.
 """
 from __future__ import annotations
 
@@ -112,6 +137,7 @@ import ntpath
 import os
 import re
 import shutil
+import sqlite3
 import stat
 import subprocess
 import sys
@@ -119,7 +145,10 @@ import threading
 import time
 import uuid
 import zipfile
+from array import array
 from collections import OrderedDict
+from math import sqrt
+from operator import mul
 from pathlib import Path
 from typing import Callable, Optional
 from urllib.parse import parse_qs, urlsplit
@@ -128,6 +157,11 @@ try:
     import jarvis_framework as fw
 except Exception:  # pragma: no cover - shipped beside it on the PC
     fw = None  # type: ignore
+
+try:
+    import jarvis_sqlite  # the ONE closing-connection helper (test_sqlite_close_guard.py)
+except Exception:  # pragma: no cover - shipped beside it on the PC
+    jarvis_sqlite = None  # type: ignore
 
 PATH = "/api/folders"
 ADD_ROUTE = "/api/folders/add"
@@ -750,9 +784,603 @@ def _snippet(text: str, want: list) -> str:
     return ("..." if start else "") + s
 
 
-def search(words: str, *, roots: Optional[list] = None,
-           clock: Callable[[], float] = time.monotonic) -> dict:
-    """Words inside the notes and text files (.md, .txt, .csv)."""
+# --------------------------------------------------------------------------
+#   The search index - derived, rebuildable, and never a second copy
+# --------------------------------------------------------------------------
+#
+# WHY. The scan below reads every note and text file it can reach, on every
+# call (up to SEARCH_MAX_FILES of them inside WALK_MAX_SECONDS), and calls a
+# hit "every word is somewhere in the file". That answers "is this word in my
+# notes" and nothing better: on a folder of a few thousand notes it is slow,
+# and a note that is plainly about the thing in other words is not found.
+#
+# WHAT IT IS. One SQLite file in Jarvis's own settings folder, beside
+# `folders.json`:
+#   * `doc_index` - one row per indexed file: its real path, the listed folder
+#     it was found under, its display name, and the size and mtime the row was
+#     built from;
+#   * `doc_fts`   - a CONTENTLESS FTS5 index: SQLite's own word index, ranked
+#     with `bm25(...)`, which is the same machinery jarvis_memory.py ranks
+#     `facts_fts` with. CONTENTLESS means a file's words are INDEXED and not
+#     STORED - the index holds no readable copy of a document, and a note the
+#     owner deletes leaves no text behind in it;
+#   * `doc_vec`   - one optional vector per file, present only when a meaning
+#     model is loaded, so a question can reach a note that shares no words.
+#
+# NOT A SOURCE OF TRUTH, AND THIS IS THE PART THAT MATTERS. The files on disk
+# are the only truth:
+#   * the index can only RANK. Every hit's snippet is read from the file when
+#     the answer is built, so what the model is shown is the file as it is now;
+#   * a file whose size or mtime moved is re-indexed before it is ranked, and
+#     a row whose file has gone is dropped - and nothing is dropped at all
+#     when the walk stopped early and so cannot say what is still there;
+#   * delete the index file and the next search rebuilds it from the folders.
+#     It holds nothing that is not on disk, so losing it loses nothing.
+#
+# AN EXISTING INSTALL. The first search after this lands creates ONE new file
+# in the settings folder and adds three tables to it. It never opens, reads or
+# changes `memory.db`: that file is not ours (jarvis_owned_tables.py says why),
+# and a table called `documents` in it belongs to OpenJarvis. NO TABLE HERE IS
+# CALLED `documents`, deliberately. Nothing is ALTERed; there is one schema
+# version in `doc_meta`, and if a later version of this module ever changed
+# the shape of the DERIVED tables it would drop and rebuild them, which loses
+# no document because every document is on disk.
+#
+# WITHOUT A MEANING MODEL (CI, and any PC without fastembed). The vector half
+# is simply not used: `bm25` alone ranks, which is the same word-index ranking
+# a machine with the model gets, minus the semantic recall. A missing embedder
+# is never an error and never an empty answer.
+
+#: The index file, in the settings folder - NOT memory.db, and not a listed
+#: folder. `index_path()` below is the one place its name is written.
+INDEX_FILE = "documents-index.db"
+#: One schema version, kept in `doc_meta`. A mismatch drops and rebuilds the
+#: DERIVED tables - see the note above about what that does and does not lose.
+INDEX_SCHEMA = 1
+#: Reciprocal-rank fusion, the same shape AND the same constant that
+#: jarvis_memory.search() fuses its own lists with: the hit at rank r adds
+#: 1 / (RRF_K + r) to that file's score, so two lists that agree lift a file
+#: and one list on its own cannot bury it.
+RRF_K = 60
+#: How many candidates each half hands to the fusion.
+INDEX_CANDIDATES = 50
+#: At most this many files get a MEANING vector per search, so the first
+#: search after a change is never held up by an embedding model. Words rank
+#: everything immediately; meaning fills in over the next few searches.
+EMBED_MAX_PER_CALL = 64
+#: The whole meaning pass is bounded at this many rows.
+VEC_MAX_ROWS = SEARCH_MAX_FILES
+#: HOW CLOSE A DOCUMENT HAS TO BE to be added by MEANING. This is a floor and
+#: a margin, not a "> 0", and the difference is the whole feature: two pieces
+#: of ordinary English score about 0.35-0.5 against each other whatever they
+#: are about, so "every cosine above zero" hands back every file in the folder
+#: and buries the one that matched. MEASURED on this PC (2026-10-16, the
+#: memory model, 5 documents, 6 questions): the document a question is really
+#: about scored 0.56-0.81, and every other document scored 0.35-0.52 - even
+#: for "quantum chromodynamics lecture", which is about nothing in the folder.
+#: So a document joins by meaning only when it is both above the floor and
+#: within the margin of the best one - and a question with no near document
+#: adds none at all, which is the honest answer.
+VEC_MIN_SCORE = float(os.environ.get("JARVIS_DOCUMENTS_VEC_MIN", "0.55"))
+VEC_MARGIN = float(os.environ.get("JARVIS_DOCUMENTS_VEC_MARGIN", "0.90"))
+#: Words too common to carry a query. The same lesson jarvis_memory.py's _STOP
+#: records: an OR over "the" and "is" ranks the whole corpus and tells you
+#: nothing about which file you meant.
+_INDEX_STOP = frozenset(
+    """a about an and are as at be but by can could did do does for from had has have he her
+    his how i if in into is it its me my no not of on or our out she should so some than that
+    the their them then there these they this to too up us very was we were what when where
+    which who why will with would you your""".split())
+
+
+def index_path(name: str = INDEX_FILE) -> Path:
+    """A derived search index: one SQLite file in Jarvis's settings folder.
+
+    `name` is how a second caller keeps its own corpus apart - jarvis_notes.py
+    indexes an Obsidian vault in `notes-index.db` rather than sharing this
+    module's file, so one index never holds two different answers to "what is
+    in the folders".
+
+    Deliberately NOT `memory.db`. That file is not ours (jarvis_owned_tables.py
+    records why) and a table called `documents` in it is OpenJarvis's, read
+    into the brain map by jarvis_hud.py if it is ever there.
+    """
+    return _config_dir() / name
+
+
+def _index_terms(words: str, limit: int = 24) -> list:
+    """The query's content words, in the order they were asked, without the
+    words that appear in everything."""
+    out: list = []
+    for w in _words(words):
+        if w in _INDEX_STOP or (len(w) < 2 and not w.isdigit()):
+            continue
+        if w not in out:
+            out.append(w)
+    return out[:limit]
+
+
+def _fts_query(terms: list) -> str:
+    """An OR of quoted terms - FTS5's own syntax, built from words this module
+    took apart itself, never from a raw string the model handed in."""
+    return " OR ".join('"' + str(t).replace('"', '""') + '"' for t in terms)
+
+
+def _pack_vec(vec) -> bytes:
+    return array("f", [float(x) for x in vec]).tobytes()
+
+
+def _unpack_vec(blob: bytes, dim: int):
+    try:
+        out = array("f")
+        out.frombytes(bytes(blob))
+    except Exception:
+        return None
+    return out if len(out) == dim and dim > 0 else None
+
+
+def _cosine(a, b) -> float:
+    """How close two vectors point. 0.0 when either is empty or all zero."""
+    if a is None or b is None or len(a) != len(b) or not len(a):
+        return 0.0
+    dot = sum(map(mul, a, b))
+    na = sqrt(sum(map(mul, a, a)))
+    nb = sqrt(sum(map(mul, b, b)))
+    if not na or not nb:
+        return 0.0
+    return dot / (na * nb)
+
+
+class TextIndex:
+    """The word (and, when a meaning model is loaded, meaning) index.
+
+    A connection is opened and CLOSED around each call, never held open -
+    an open handle on Windows is what makes a file undeletable, which is the
+    whole reason jarvis_sqlite.py exists. Every method is safe to call when
+    nothing works: it answers False or an empty ranking rather than raising,
+    because a search that cannot use its index must fall back to the scan.
+    """
+
+    def __init__(self, path: Optional[Path] = None, *,
+                 kinds: Optional[set] = None) -> None:
+        self.path = Path(path) if path is not None else index_path()
+        #: Which file kinds this index carries. `search()` wants every text
+        #: file; a notes vault wants its own `.md` pages only.
+        self.kinds = set(TEXT_KINDS) if kinds is None else set(kinds)
+        self.why = ""                # why it is not being used, in plain words
+        self.row_delete: Optional[bool] = None   # can ONE row leave the index?
+        self._lock = threading.RLock()
+
+    # -- the database -------------------------------------------------------
+    def _db(self):
+        """A connection that CLOSES when its `with` ends, with rows by name.
+
+        `jarvis_sqlite.connect` is the one place this repository closes a
+        connection properly (test_sqlite_close_guard.py is the guard), and it
+        leaves `row_factory` to its caller - every query below reads its
+        columns by name.
+        """
+        c = jarvis_sqlite.connect(str(self.path))
+        c.row_factory = sqlite3.Row
+        return c
+
+    def _ready(self, c) -> None:
+        """Create what is missing. Idempotent, and safe on a fresh file, an
+        existing index and a file left by a LATER version of this module."""
+        c.execute("CREATE TABLE IF NOT EXISTS doc_meta ("
+                  "key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        row = c.execute("SELECT value FROM doc_meta WHERE key='schema'").fetchone()
+        have = int(row["value"]) if row is not None and str(row["value"]).isdigit() else 0
+        if have and have != INDEX_SCHEMA:
+            # The DERIVED tables only. No document lives here, so there is
+            # nothing to lose: the next reconcile re-reads the folders.
+            for table in ("doc_fts", "doc_vec", "doc_index"):
+                c.execute(f"DROP TABLE IF EXISTS {table}")
+            c.execute("DELETE FROM doc_meta WHERE key='schema'")
+            have = 0
+        c.execute("CREATE TABLE IF NOT EXISTS doc_index ("
+                  "path TEXT PRIMARY KEY, root TEXT NOT NULL, name TEXT NOT NULL,"
+                  " size INTEGER, mtime_ns INTEGER, indexed_at REAL NOT NULL)")
+        # CONTENTLESS: the words are indexed, the document is not stored.
+        # `contentless_delete` lets one row out again, which arrived in SQLite
+        # 3.43; where it is not supported the plain contentless table is made
+        # instead and a removal rebuilds the word index (see _drop_rows).
+        try:
+            c.execute("CREATE VIRTUAL TABLE IF NOT EXISTS doc_fts USING fts5("
+                      "text, content='', contentless_delete=1)")
+        except Exception:
+            c.execute("CREATE VIRTUAL TABLE IF NOT EXISTS doc_fts USING fts5("
+                      "text, content='')")
+        c.execute("CREATE TABLE IF NOT EXISTS doc_vec ("
+                  "path TEXT PRIMARY KEY, model TEXT NOT NULL, dim INTEGER NOT NULL,"
+                  " vec BLOB NOT NULL)")
+        if not have:
+            c.execute("INSERT OR REPLACE INTO doc_meta(key, value) "
+                      "VALUES('schema', ?)", (str(INDEX_SCHEMA),))
+
+    def _can_drop_one_row(self, c) -> bool:
+        """Does ONE row come out of this SQLite's contentless FTS index?
+
+        Not "is the module new enough" - the question is whether the DELETE
+        works, so this does the delete on a throwaway table in `temp.`, the
+        rule jarvis_memory._try_vec records for its own vec0 probe.
+        """
+        if self.row_delete is not None:
+            return self.row_delete
+        try:
+            c.execute("CREATE VIRTUAL TABLE IF NOT EXISTS temp._doc_fts_probe "
+                      "USING fts5(x, content='', contentless_delete=1)")
+            c.execute("INSERT INTO temp._doc_fts_probe(rowid, x) VALUES (1, 'probe')")
+            c.execute("DELETE FROM temp._doc_fts_probe WHERE rowid = 1")
+            c.execute("DROP TABLE temp._doc_fts_probe")
+            self.row_delete = True
+        except Exception:
+            try:
+                c.execute("DROP TABLE IF EXISTS temp._doc_fts_probe")
+            except Exception:
+                pass
+            self.row_delete = False
+        return self.row_delete
+
+    def _read_text(self, path: str) -> Optional[str]:
+        """What of one file is indexed: the same bytes the scan reads, decoded
+        the same forgiving way."""
+        try:
+            with open(path, "rb") as f:
+                return f.read(SEARCH_FILE_BYTES).decode("utf-8", "replace")
+        except OSError:
+            return None
+
+    # -- staying level with the folders -------------------------------------
+    def reconcile(self, roots: list, *,
+                  clock: Callable[[], float] = time.monotonic) -> bool:
+        """Bring the index level with the listed folders.
+
+        True when it can be used afterwards. Reads only files whose size or
+        mtime moved, keeps exactly what the scan would reach (allowed_path,
+        protected places, hidden folders), and never prunes when the walk
+        stopped early. Never raises: any failure means "use the scan".
+        """
+        if not roots:
+            return False
+        try:
+            with self._lock, self._db() as c:
+                self._ready(c)
+                return self._reconcile(c, roots, clock=clock)
+        except Exception as exc:
+            self.why = f"the index could not be used ({type(exc).__name__})"
+            return False
+
+    def _reconcile(self, c, roots: list, *,
+                   clock: Callable[[], float]) -> bool:
+        found: dict = {}
+        capped = [False]
+        mine = os.path.realpath(str(self.path))
+
+        def visit(root, dirpath, name):
+            if os.path.splitext(name)[1].lower() not in self.kinds:
+                return True
+            got = allowed_path(os.path.join(dirpath, name), [root])
+            if got is None:
+                return True
+            real = got[0]
+            if os.path.realpath(real) == mine:
+                return True                    # never index the index itself
+            try:
+                stt = os.stat(real)
+            except OSError:
+                return True
+            found[real] = (root, name, stt.st_size, stt.st_mtime_ns)
+            if len(found) >= SEARCH_MAX_FILES:
+                capped[0] = True               # as many as one search reads
+                return False
+            return True
+
+        stopped = _walk(roots, visit, clock=clock)
+        incomplete = bool(stopped) or capped[0]
+
+        rows = {r["path"]: r for r in c.execute(
+            "SELECT rowid, path, size, mtime_ns FROM doc_index")}
+        fresh, moved = [], []
+        for path, (root, name, size, mtime) in found.items():
+            row = rows.get(path)
+            if row is None:
+                fresh.append((path, root, name, size, mtime))
+            elif row["size"] != size or row["mtime_ns"] != mtime:
+                moved.append((path, root, name, size, mtime, row["rowid"]))
+        gone = [] if incomplete else [p for p in rows if p not in found]
+        gone_rows = [rows[p]["rowid"] for p in gone]
+        moved_rows = [m[5] for m in moved]
+        wipe = False
+
+        if gone_rows or moved_rows:
+            if incomplete:
+                # Something left or moved, and the walk cannot say whether it
+                # is still there: change nothing rather than drop a good row.
+                pass
+            elif self._drop_rows(c, gone_rows + moved_rows):
+                pass
+            else:
+                # This SQLite cannot take one row out of a contentless index,
+                # so the whole word index is rebuilt from the files - which is
+                # where the documents are, and the only place they live.
+                c.execute("INSERT INTO doc_fts(doc_fts) VALUES('delete-all')")
+                c.execute("DELETE FROM doc_vec")
+                wipe = True
+                # A file that has GONE still has to leave the index's own
+                # table: its row is what the ranking reads paths from.
+                for path in gone:
+                    c.execute("DELETE FROM doc_index WHERE path=?", (path,))
+                fresh = [(path, root, name, size, mtime)
+                         for path, (root, name, size, mtime) in found.items()]
+                moved = []
+                for path, (root, name, size, mtime) in found.items():
+                    # the rowids stay; only the FTS rows are rebuilt
+                    c.execute("UPDATE doc_index SET size=?, mtime_ns=? WHERE path=?",
+                              (size, mtime, path))
+                gone = []
+                gone_rows = []
+
+        for path, root, name, size, mtime, _rowid in moved:
+            c.execute("DELETE FROM doc_vec WHERE path=?", (path,))
+            fresh.append((path, root, name, size, mtime))
+
+        for path, root, name, size, mtime in fresh:
+            text = self._read_text(path)
+            if text is None:
+                continue
+            c.execute("INSERT OR REPLACE INTO doc_index"
+                      "(path, root, name, size, mtime_ns, indexed_at) "
+                      "VALUES(?, ?, ?, ?, ?, ?)",
+                      (path, root, name, size, mtime, time.time()))
+            rowid = c.execute("SELECT rowid FROM doc_index WHERE path=?",
+                              (path,)).fetchone()["rowid"]
+            if not wipe:
+                # Take this file's OLD row out. A brand-new rowid has nothing
+                # to remove, so this is a no-op for a file that is simply new;
+                # it matters for one that CHANGED. `wipe` means the clear
+                # above already did it for every row at once.
+                try:
+                    c.execute("DELETE FROM doc_fts WHERE rowid = ?", (rowid,))
+                except Exception:
+                    pass
+            # The NAME goes in with the text, because a search for a note's
+            # own title has to find it: the scan this replaced matched the file
+            # name as well as the body ("Margaret" finds "Margaret Hale.md"
+            # even when the page never says her name), and losing that would be
+            # a worse answer than the one it improved on.
+            c.execute("INSERT INTO doc_fts(rowid, text) VALUES(?, ?)",
+                      (rowid, display_name(name) + "\n" + text))
+
+        for path in gone:
+            c.execute("DELETE FROM doc_index WHERE path=?", (path,))
+            c.execute("DELETE FROM doc_vec WHERE path=?", (path,))
+
+        stayed = c.execute("SELECT count(*) AS n FROM doc_index").fetchone()["n"]
+        return bool(stayed) or not incomplete
+
+    def _drop_rows(self, c, rowids: list) -> bool:
+        """Take rows out of the word index. False when this SQLite cannot, so
+        the caller rebuilds instead."""
+        if not rowids:
+            return True
+        if not self._can_drop_one_row(c):
+            return False
+        try:
+            for rowid in rowids:
+                c.execute("DELETE FROM doc_fts WHERE rowid = ?", (rowid,))
+            return True
+        except Exception:
+            return False
+
+    # -- meaning, when there is a model -------------------------------------
+    def embed_missing(self, embedder, *, limit: int = EMBED_MAX_PER_CALL) -> int:
+        """Give up to `limit` files a meaning vector. 0 when there is no usable
+        model - never an error, and never anything the word half depends on."""
+        if embedder is None or not getattr(embedder, "semantic", False):
+            return 0
+        model = str(getattr(embedder, "model", "") or getattr(embedder, "name", "") or "?")
+        done = 0
+        try:
+            with self._lock, self._db() as c:
+                self._ready(c)
+                rows = c.execute(
+                    "SELECT i.path AS path FROM doc_index i "
+                    "LEFT JOIN doc_vec v ON v.path = i.path "
+                    "WHERE v.path IS NULL LIMIT ?", (int(limit),)).fetchall()
+                for row in rows:
+                    text = self._read_text(row["path"])
+                    if not text:
+                        continue
+                    vec = _embed_texts(embedder, [text[:SEARCH_FILE_BYTES]])[0]
+                    if not vec:
+                        break
+                    c.execute("INSERT OR REPLACE INTO doc_vec"
+                              "(path, model, dim, vec) VALUES(?, ?, ?, ?)",
+                              (row["path"], model, len(vec), _pack_vec(vec)))
+                    done += 1
+        except Exception:
+            return done
+        return done
+
+    # -- ranking ------------------------------------------------------------
+    def query(self, words: str, *, embedder=None,
+              candidates: int = INDEX_CANDIDATES) -> dict:
+        """Rank the indexed files for `words`.
+
+        `bm25` over the word index, fused by reciprocal rank with the meaning
+        half when an embedder is really there. Returns
+        {"ranked": [{path, name, score, how}], "how": "...", "matches": n,
+         "meaning": bool} - an empty ranking when nothing matched, never an
+        exception.
+        """
+        terms = _index_terms(words)
+        out = {"ranked": [], "how": "bm25", "matches": 0, "meaning": False,
+               "files": 0}
+        try:
+            with self._lock, self._db() as c:
+                self._ready(c)
+                meta = {r["path"]: r for r in c.execute(
+                    "SELECT rowid, path, name FROM doc_index")}
+                by_rowid = {r["rowid"]: r for r in meta.values()}
+                by_path = {r["path"]: r["rowid"] for r in meta.values()}
+                out["files"] = len(meta)
+                scores: dict = {}
+
+                if terms:
+                    q = _fts_query(terms)
+                    try:
+                        rows = c.execute(
+                            "SELECT rowid, bm25(doc_fts) AS s FROM doc_fts "
+                            "WHERE doc_fts MATCH ? ORDER BY s LIMIT ?",
+                            (q, int(candidates))).fetchall()
+                        out["matches"] = c.execute(
+                            "SELECT count(*) AS n FROM doc_fts WHERE doc_fts MATCH ?",
+                            (q,)).fetchone()["n"]
+                    except Exception:
+                        rows = []
+                    for rank, row in enumerate(rows, 1):
+                        if row["rowid"] in by_rowid:
+                            scores[row["rowid"]] = scores.get(row["rowid"], 0.0) \
+                                + 1.0 / (RRF_K + rank)
+
+                if embedder is not None and getattr(embedder, "semantic", False):
+                    qv = _embed_texts(embedder, [words])
+                    if qv and qv[0]:
+                        qvec = _unpack_vec(_pack_vec(qv[0]), len(qv[0]))
+                        got = []
+                        for row in c.execute(
+                                "SELECT path, dim, vec FROM doc_vec LIMIT ?",
+                                (VEC_MAX_ROWS,)):
+                            score = _cosine(qvec,
+                                            _unpack_vec(row["vec"], int(row["dim"])))
+                            if score > 0:
+                                got.append((score, row["path"]))
+                        got.sort(key=lambda t: (-t[0], t[1].casefold()))
+                        # The floor: see VEC_MIN_SCORE. A file joins by meaning
+                        # only when it is close in its own right AND close to
+                        # the best one, so a question nothing is about adds
+                        # nothing rather than everything.
+                        if got:
+                            line = max(VEC_MIN_SCORE, got[0][0] * VEC_MARGIN)
+                            got = [t for t in got if t[0] >= line]
+                        out["meaning"] = bool(got)
+                        if got:
+                            out["how"] = "bm25+meaning"
+                            for rank, (_s, path) in enumerate(got[:candidates], 1):
+                                rowid = by_path.get(path)
+                                if rowid is not None:
+                                    scores[rowid] = scores.get(rowid, 0.0) \
+                                        + 1.0 / (RRF_K + rank)
+
+                ranked = [{"rowid": rowid, "path": by_rowid[rowid]["path"],
+                           "name": by_rowid[rowid]["name"], "score": score,
+                           "how": out["how"]}
+                          for rowid, score in scores.items() if rowid in by_rowid]
+                ranked.sort(key=lambda h: (-h["score"], h["path"].casefold()))
+                out["ranked"] = ranked
+        except Exception as exc:
+            out["how"] = f"none ({type(exc).__name__})"
+            out["ranked"] = []
+        return out
+
+    def status(self) -> dict:
+        """What the index holds, for a test or a status line - never raises."""
+        out = {"file": str(self.path), "exists": self.path.exists(),
+               "files": 0, "vectors": 0, "why": self.why}
+        try:
+            with self._lock, self._db() as c:
+                self._ready(c)
+                out["files"] = c.execute(
+                    "SELECT count(*) AS n FROM doc_index").fetchone()["n"]
+                out["vectors"] = c.execute(
+                    "SELECT count(*) AS n FROM doc_vec").fetchone()["n"]
+        except Exception as exc:
+            out["why"] = f"{type(exc).__name__}"
+        return out
+
+
+#: The one index this process uses, and the one meaning model. Both are made
+#: on first use and can be dropped by `_reset_for_tests()`.
+_INDEX: Optional[TextIndex] = None
+_INDEX_LOCK = threading.Lock()
+_EMBEDDER = None
+_EMBEDDER_TRIED = False
+
+
+def the_index() -> TextIndex:
+    """THE index for the current settings folder.
+
+    Rebuilt when the settings folder moved (which is how the tests keep one
+    run away from the next), so nothing is ever indexed into the wrong file.
+    """
+    global _INDEX
+    with _INDEX_LOCK:
+        if _INDEX is None or Path(_INDEX.path) != index_path():
+            _INDEX = TextIndex()
+        return _INDEX
+
+
+def document_embedder():
+    """The meaning model for document search, or None - never an exception.
+
+    This machine already knows one way to load fastembed for a search, and it
+    is `jarvis_memory`'s. Reusing it means one model in memory and one model
+    on disk, not a second copy of either. It never raises: with no fastembed
+    (or `JARVIS_NO_EMBED=1`) it hands back a hash stand-in, and a stand-in's
+    numbers are not meaning - so it is refused here by checking `semantic`,
+    exactly the test jarvis_memory.search() makes for its own vector half.
+
+    `JARVIS_DOCUMENTS_EMBED=0` turns the meaning half off outright.
+    """
+    global _EMBEDDER, _EMBEDDER_TRIED
+    if os.environ.get("JARVIS_DOCUMENTS_EMBED", "").strip().lower() in (
+            "0", "off", "no", "false"):
+        return None
+    with _INDEX_LOCK:
+        if _EMBEDDER_TRIED:
+            return _EMBEDDER
+        _EMBEDDER_TRIED = True
+        try:
+            import jarvis_memory as M               # the one embedder here
+            maker = getattr(M, "_make_embedder", None)
+            _EMBEDDER = maker() if callable(maker) else None
+        except Exception:
+            _EMBEDDER = None
+        if _EMBEDDER is not None and not getattr(_EMBEDDER, "semantic", False):
+            _EMBEDDER = None                        # a stand-in is not meaning
+        return _EMBEDDER
+
+
+def _embed_texts(embedder, texts: list) -> list:
+    """Vectors for `texts`, or [] - a model that fails is simply not used."""
+    if embedder is None:
+        return []
+    for name in ("embed_query", "embed"):
+        fn = getattr(embedder, name, None)
+        if not callable(fn):
+            continue
+        try:
+            got = fn(list(texts))
+        except Exception:
+            continue
+        try:
+            return [list(v) for v in got]
+        except Exception:
+            return []
+    return []
+
+
+def _scan_search(words: str, *, roots: Optional[list] = None,
+                 clock: Callable[[], float] = time.monotonic) -> dict:
+    """The word scan - the fallback search() falls back TO.
+
+    Used when there is no usable index (no SQLite with FTS5, an index file
+    that cannot be opened or written, a settings folder that cannot be
+    written in). A missing index can therefore never be an error and never an
+    empty answer: this is the answer search() gave before the index existed,
+    kept whole.
+    """
     roots = folders() if roots is None else roots
     want = _words(words)
     if not want:
@@ -788,12 +1416,98 @@ def search(words: str, *, roots: Optional[list] = None,
     stopped = _walk(roots, visit, clock=clock) or capped[0]
     hits.sort(key=lambda h: (h[0], h[1]))
     out = {"ok": True, "results": [h[2] for h in hits[:SEARCH_MAX]], "matches": len(hits),
-           "files_searched": scanned[0],
-           "note": "PDF, Word, Excel and PowerPoint files are not searched inside - find them "
-                   "by name, then read them."}
+           "files_searched": scanned[0], "note": SEARCH_NOTE}
     if stopped:
         out["stopped_early"] = (f"the search stopped early ({stopped}), so files it did not "
                                 f"reach are not in these results")
+    return out
+
+
+#: The sentence every search carries about what it does NOT look inside. It is
+#: one string because the two halves of search() - the index and the scan -
+#: must say the same thing; `t_find_and_search` pins the words.
+SEARCH_NOTE = ("PDF, Word, Excel and PowerPoint files are not searched inside - find them "
+               "by name, then read them.")
+
+
+def search(words: str, *, roots: Optional[list] = None,
+           clock: Callable[[], float] = time.monotonic,
+           index=None, embedder=None) -> dict:
+    """Words inside the notes and text files (.md, .txt, .csv).
+
+    Ranked by SQLite's own `bm25` over the index (and, when a meaning model is
+    loaded on this PC, by meaning as well, fused by reciprocal rank) - and by
+    the plain word scan below when there is no usable index. The two answer
+    with the SAME keys, because callers exist and none of them should care
+    which half answered:
+
+        ok, results [{name, path, snippet}], matches, files_searched, note,
+        and `stopped_early` when the walk could not reach everything.
+    Added, so a caller CAN care: `ranked_by` ("bm25", "bm25+meaning" or
+    "words"), `index_files` (how many files the index holds) and `meaning`.
+
+    Every snippet is read from the file itself, index or no index, so what
+    comes back is the file as it is now.
+    """
+    roots = folders() if roots is None else roots
+    want = _words(words)
+    if not want:
+        return {"ok": False, "error": "say what to look for, in a few words"}
+
+    idx = the_index() if index is None else index
+    if idx is not None:
+        model = document_embedder() if embedder is None else embedder
+        # A rank is a nicety; the answer is not. Anything the index does wrong
+        # - including a bug in it - falls through to the scan below rather than
+        # reaching the owner as a failed search. (`TextIndex` catches its own
+        # failures; this is the belt to that pair of braces.)
+        try:
+            usable = idx.reconcile(roots, clock=clock)
+            if usable:
+                idx.embed_missing(model)
+                ranked = idx.query(words, embedder=model)
+                if ranked["ranked"] or not ranked["how"].startswith("none"):
+                    return _index_results(words, want, ranked, idx, model)
+        except Exception:
+            pass
+
+    out = _scan_search(words, roots=roots, clock=clock)
+    out["ranked_by"] = "words"
+    out["meaning"] = False
+    out["index_files"] = 0
+    return out
+
+
+def _index_results(words: str, want: list, ranked: dict, idx: "TextIndex",
+                   model) -> dict:
+    """Build search()'s answer from a ranking, reading every snippet from the
+    file. A file that has gone since it was indexed is left out here and
+    dropped by the next reconcile - the index can rank, and only the disk can
+    say what a file says."""
+    results, read = [], 0
+    for hit in ranked["ranked"]:
+        if len(results) >= SEARCH_MAX:
+            break
+        try:
+            with open(hit["path"], "rb") as f:
+                text = f.read(SEARCH_FILE_BYTES).decode("utf-8", "replace")
+        except OSError:
+            continue
+        read += 1
+        results.append({"name": display_name(hit["name"]), "path": hit["path"],
+                        "snippet": _snippet(text, want)})
+    why = idx.why if not results and not ranked["ranked"] else ""
+    out = {"ok": True, "results": results, "matches": int(ranked["matches"]),
+           "files_searched": read, "note": SEARCH_NOTE,
+           "ranked_by": ranked["how"], "meaning": bool(ranked["meaning"]),
+           "index_files": int(ranked.get("files", 0))}
+    if why:
+        out["index_why"] = why
+    if not results and ranked["ranked"]:
+        # Every ranked file had gone by the time its snippet was read: say so
+        # rather than answering as if nothing had ever matched.
+        out["stopped_early"] = ("the index pointed at files that are no longer there, so "
+                                "nothing could be read from them")
     return out
 
 
@@ -1067,16 +1781,22 @@ def run_tool(args: dict, *, roots: Optional[list] = None,
 def describe(args: dict) -> str:
     """What a card would say, if the owner set reading files to ask."""
     action = str(args.get("action") or "")
+    tail = "Nothing is changed, and nothing is sent anywhere."
     if action == "read":
         what = f"read part of {args.get('path', '')}"
         if args.get("part"):
             what += f" (part {args.get('part')})"
     elif action == "search":
         what = f"search inside your notes and text files for: {args.get('words', '')}"
+        # A search is the one action that writes anything: Jarvis keeps its own
+        # word index. Say so on the card, and say where it is.
+        tail = ("Nothing of yours is changed, and nothing is sent anywhere. Jarvis keeps its "
+                "own word index of the notes and text files it searches, in its settings "
+                "folder.")
     else:
         what = f"find files named: {args.get('words', '')}"
     return (f"Jarvis would like to {what} - only in the folders on your list, on this PC. "
-            "Nothing is changed, and nothing is sent anywhere.")
+            + tail)
 
 
 # --------------------------------------------------------------------------
@@ -1369,7 +2089,7 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
 
 
 def _reset_for_tests() -> None:
-    global _ARMED
+    global _ARMED, _INDEX, _EMBEDDER, _EMBEDDER_TRIED
     with _P_LOCK:
         _P_STATE["pending"].clear()
         _P_STATE["withdrawn"].clear()
@@ -1377,6 +2097,10 @@ def _reset_for_tests() -> None:
         _P_STATE["latest"].clear()
     with _C_LOCK:
         _CACHE.clear()
+    with _INDEX_LOCK:
+        _INDEX = None
+        _EMBEDDER = None
+        _EMBEDDER_TRIED = False
     _READY.clear()
     _ARMED = False
 
