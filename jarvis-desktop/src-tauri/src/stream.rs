@@ -528,6 +528,45 @@ async fn connect_once(app: &AppHandle, base: &str) -> Result<String, String> {
     }
 }
 
+/// Whether the queue after an event holds a card the queue before it did not.
+///
+/// The `approval` event is a POLLER diffing the pending ids
+/// (`jarvis_events._poll_approvals`), so it rings when a card is answered
+/// elsewhere as well as when one arrives. Only an ARRIVAL may raise the window:
+/// popping the HUD up because the owner just denied a card in the bar would be
+/// the opposite of the ask.
+fn brings_a_new_card(before: &[String], after: &[String]) -> bool {
+    after.iter().any(|id| !before.contains(id))
+}
+
+/// The ids the queue holds right now, in the shape the comparison above needs.
+fn pending_ids(app: &AppHandle) -> Vec<String> {
+    app.state::<StreamState>()
+        .pending()
+        .iter()
+        .filter_map(approval_id)
+        .collect()
+}
+
+/// What one stream event asks of the HUD window: raise it for a card that has
+/// just arrived, nothing for anything else.
+///
+/// THE one place "which events pull the card up" is decided, so the rule can be
+/// tested without a window server: `raise` runs only for an `"approval"` event
+/// that brought a NEW card. `dispatch`'s own `"approval"` arm calls it with the
+/// real show, and the test module calls this same seam with a recorder - it is
+/// not a re-reading of the source.
+///
+/// `"hello"` deliberately does NOT raise: a reconnect re-reads the queue, but
+/// popping the window on every reconnection (and at login, where the HUD is
+/// built hidden on purpose) would be the opposite of the owner's ask. Every
+/// other event is about state that is not a decision.
+fn raise_hud_for_event(name: &str, new_card: bool, raise: impl FnOnce()) {
+    if name == "approval" && new_card {
+        raise();
+    }
+}
+
 /// Applies one event: updates what the tray needs, re-fetches what the doorbell
 /// rang for, and hands the raw event to every window.
 async fn dispatch(app: &AppHandle, base: &str, event: Event) {
@@ -647,10 +686,26 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
         // this, one failed read left the buttons disabled until the stream
         // happened to reconnect.
         "approval" => {
+            // What was waiting BEFORE the read, so a card being answered
+            // elsewhere (which rings this same doorbell) raises nothing: only an
+            // arrival does.
+            let before = pending_ids(app);
             let read = refresh_pending(app, base).await;
             if read && app.state::<StreamState>().link().connected {
                 publish_link(app, |link| link.stale = false);
             }
+            let new_card = read && brings_a_new_card(&before, &pending_ids(app));
+            // The owner's ask of 2026-10-17: a card that has just arrived PULLS
+            // THE HUD UP, instead of leaving him to find the bar and type
+            // "approve". After the read, so the queue the page polls when it
+            // becomes visible is the one this event rang for. Quietly - see
+            // windows::show_hud_quietly: hidden only, never under App lock, and
+            // `show` without `set_focus`, the gentlest show there is.
+            raise_hud_for_event(&event.name, new_card, || {
+                if let Err(err) = crate::windows::show_hud_quietly(app) {
+                    eprintln!("[jarvis] could not raise the HUD for an approval: {err}");
+                }
+            });
         }
 
         "activity" => {
@@ -1806,5 +1861,69 @@ mod tests {
         assert!(link.stale);
         assert!(!link.connected);
         assert_eq!(link.approvals, 0);
+    }
+}
+
+/// The owner's ask of 2026-10-17: a waiting approval pulls the HUD up. A window
+/// cannot exist in a test, so the test calls the SAME seam `dispatch` calls -
+/// `raise_hud_for_event` - with a recorder in place of the show: it tests the
+/// rule, and `dispatch`'s own arm is one line of plumbing around it.
+#[cfg(test)]
+mod hud_raise_tests {
+    use super::{brings_a_new_card, raise_hud_for_event};
+    use std::cell::Cell;
+
+    /// A card that has just arrived must raise the HUD: the card "pulls up
+    /// fully" instead of the bar appearing.
+    #[test]
+    fn a_new_card_raises_the_hud() {
+        let raised = Cell::new(false);
+        raise_hud_for_event("approval", true, || raised.set(true));
+        assert!(raised.get(), "a new card must raise the HUD");
+    }
+
+    /// CONTROL. "Raise on everything" would pass the test above and put the
+    /// window up all day - the opposite of the ask. A reconnect (`hello`) is not
+    /// an arrival: it re-reads the queue, it does not say a new card is waiting,
+    /// and the HUD is built hidden at login on purpose.
+    #[test]
+    fn an_ordinary_event_does_not_raise_the_hud() {
+        for name in [
+            "hello",
+            "activity",
+            "attention",
+            "power",
+            "word",
+            "schedule",
+        ] {
+            let raised = Cell::new(false);
+            raise_hud_for_event(name, true, || raised.set(true));
+            assert!(!raised.get(), "{name} raised the HUD");
+        }
+    }
+
+    /// CONTROL, and the one the backend's poller makes necessary: `approval`
+    /// also rings when a card is ANSWERED elsewhere (it notes a change in the
+    /// pending ids). A resolution must not pop the window up.
+    #[test]
+    fn an_answer_to_a_card_does_not_raise_the_hud() {
+        let raised = Cell::new(false);
+        raise_hud_for_event("approval", false, || raised.set(true));
+        assert!(!raised.get(), "answering a card must not raise the HUD");
+    }
+
+    /// And the comparison itself: an id that was not there is an arrival; a list
+    /// that only shrank is not.
+    #[test]
+    fn only_an_added_id_counts_as_an_arrival() {
+        let one = vec!["a".to_string()];
+        let two = vec!["a".to_string(), "b".to_string()];
+        assert!(brings_a_new_card(&one, &two));
+        assert!(
+            !brings_a_new_card(&two, &one),
+            "a removal is not an arrival"
+        );
+        assert!(!brings_a_new_card(&two, &two));
+        assert!(brings_a_new_card(&one, &["b".to_string()]));
     }
 }

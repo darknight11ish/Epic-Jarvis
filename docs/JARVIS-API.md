@@ -309,7 +309,8 @@ still offers Deny only, never Approve.
 but Home, show one line while a card waits: the label, the title of the last
 card in the queue, "and N more waiting", and an "Open the card" button. It decides
 nothing: on the PC it calls the Tauri command `open_approval_in_quickbar`
-with the card's `id` (the Jarvis bar, behind App lock, opens on that card);
+with the card's `id` and `target: "hud"` (the card opens in the HUD window,
+behind App lock; the Jarvis bar is the fallback when there is no HUD window);
 on the phone it opens Home on that card. No backend route is involved.
 
 **Windows notifications.** The PC now shows a toast for **every** card that

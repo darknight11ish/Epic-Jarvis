@@ -970,6 +970,43 @@ pub(crate) fn show_hud_unlocked(app: &AppHandle) -> Result<(), String> {
         .map_err(|e| format!("unable to focus the HUD: {e}"))
 }
 
+/// Brings the HUD on screen **without taking the keyboard**, for an approval
+/// that arrived while it was hidden: the owner's ask of 2026-10-17, *"i want
+/// an approval card to pull up fully with the option to click approve instead
+/// of the jarvis bar appearing"*.
+///
+/// The gentle shape [`show_quickbar_quietly`] has used for Live answers since
+/// 2026-09-28: `show` and no `set_focus`. Whether Windows keeps the focus where
+/// it was when a hidden window is shown is Windows' call - that function's own
+/// words are "`show` without `set_focus` is the gentlest this API offers" - so
+/// this cannot PROMISE the caret stays where it was. It is the gentlest
+/// available, and that is said here rather than discovered by the owner
+/// mid-sentence.
+///
+/// Never while App lock is on: the HUD is a covered window then, and raising
+/// Windows Hello over an arriving card would interrupt the owner far more than
+/// the card is worth. Never moves a HUD that is already on screen.
+pub(crate) fn show_hud_quietly(app: &AppHandle) -> Result<(), String> {
+    if crate::lock::app_locked(app) {
+        return Ok(());
+    }
+    let window = app
+        .get_webview_window(HUD_LABEL)
+        .ok_or_else(|| format!("window `{HUD_LABEL}` was not found"))?;
+    if window.is_visible().unwrap_or(false) {
+        return Ok(());
+    }
+    window
+        .show()
+        .map_err(|e| format!("unable to show the HUD: {e}"))?;
+    // Maximised last time but built hidden: maximised now that it is on
+    // screen, never before (window_memory.rs).
+    crate::window_memory::finish_showing(&window);
+    // A window that was minimised stays minimised on `show`.
+    let _ = window.unminimize();
+    Ok(())
+}
+
 /// Toggles the HUD window, returning its new visibility.
 pub fn toggle_hud(app: &AppHandle) -> Result<bool, String> {
     let window = app

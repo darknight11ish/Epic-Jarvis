@@ -205,6 +205,20 @@ await check("the buttons' rules are unchanged: Deny is never disabled by a swap,
   assert.doesNotMatch(sync, /state\.cards/, "the swap guard was put in the disable rule instead of the decision");
 });
 
+await check("card-link asks for the HUD; the widget's redirect keeps the bar (the gate surface)", () => {
+  // ONE command, TWO callers, TWO surfaces on purpose (2026-10-17):
+  // - card-link's "Open the card" click asks for the HUD (target: "hud");
+  // - the widget's redirect sends no target, which the command maps to the
+  //   Jarvis bar - the surface where heavy-approve.js's delay-and-scroll gate
+  //   lives. Routing this to the HUD would remove that gate while looking
+  //   like a simplification (commands::card_open_target says so too).
+  const link = uncommented(fnBody(read("src/jarvis-link.js"), "export async function openCardInBar(id = null) {"));
+  assert.match(link, /target:\s*"hud"/, "Open the card no longer asks for the HUD");
+  const redirect = uncommented(fnBody(widget, "async function approveInBar() {"));
+  assert.match(redirect, /open_approval_in_quickbar/);
+  assert.doesNotMatch(redirect, /target/, "the widget's redirect asked for a surface by name");
+});
+
 await check("the clamped-detail rule is the gate's, not this file's (DEEP-AUDITS finding D1)", async () => {
   // widget.css clamps `.appr-detail` to two lines on purpose, so the widget
   // cannot claim the whole card was read. That decision lives in one place

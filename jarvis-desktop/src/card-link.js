@@ -1,6 +1,6 @@
 /**
  * "Open the card" - one line at the top of Settings and the Brain while an
- * approval card waits, with a button that opens the Jarvis bar on it.
+ * approval card waits, with a button that opens the card in the HUD window.
  *
  * Many buttons in those two windows raise a card: a switch that loosens a
  * rule, "Set up" for the morning briefing, a web search key, a voice
@@ -12,8 +12,10 @@
  * later - and a card raised by voice while Settings is open shows here too.
  *
  * The button DECIDES NOTHING. It calls `open_approval_in_quickbar`, which
- * opens the Jarvis bar - behind App lock, so Windows Hello is asked first
- * when the lock is on - on that card, where Deny and Approve are. The
+ * opens the card in the HUD window - the one that shows Approve and Deny on it
+ * (#488) - behind App lock, so Windows Hello is asked first when the lock is
+ * on. (It opened the Jarvis bar until 2026-10-17; the command keeps its old
+ * name because the name is what `permissions/surfaces.toml` grants.) The
  * line shows the card's title only (card-words.js), never `detail` or
  * `prompt`: the title is built by the PC from its own tables.
  *
@@ -74,7 +76,7 @@ export function mountCardLink(host) {
     try {
       await openCardInBar(current.id);
     } catch (error) {
-      said.textContent = `Could not open the Jarvis bar: ${String((error && error.message) || error)}`;
+      said.textContent = `Could not open the card: ${String((error && error.message) || error)}`;
     }
   });
 
