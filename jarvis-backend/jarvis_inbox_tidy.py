@@ -936,6 +936,33 @@ def _said(action: str, n: int) -> str:
     return ACTIONS[action][2].format(n=_count(n, "email"))
 
 
+def _outcome_said(action: str, n: int, skipped: int = 0, failure: str = "") -> str:
+    """The honest sentence for a tidy that has run: what WAS done, and what was
+    not - `skipped` emails that were already moved, deleted or changed since the
+    card was made, and a failure that stopped it part way. No undo notice: the
+    strip under the chat says that separately ("9 min left to undo").
+
+    WHY THIS EXISTS (2026-10-16, and it is a fix rather than a nicety). This
+    sentence used to be built only on the RETURN VALUE of run() - and nothing
+    POSTs a tidy: `POST /api/email/tidy` is 405 on purpose (a tidy is asked for
+    through the approval card), so no app ever saw that return value. Both apps
+    read `GET /api/email/tidy`, and the only sentence in it was the undo
+    record's own, `_said(action, n)` - "Archived 7 emails." So an owner whose
+    tidy skipped three emails, or stopped part of the way, was told it simply
+    worked. Measured before the fix: the desktop reads `undo.said`
+    (jarvis-desktop/src/inbox-tidy.js:61) and never reads `last`; the phone does
+    the same (InboxTidy.kt:97). The honest sentence now goes into the undo
+    record those two already read, so both apps show it and neither needed a
+    change."""
+    said = _said(action, n)
+    if skipped:
+        said += (f" {_count(skipped, 'email')} skipped - already moved, deleted or "
+                 f"changed since the card was made.")
+    if failure:
+        said += f" It stopped part of the way: {failure}."
+    return said
+
+
 def _purge(token: str) -> None:
     """The ten minutes are up: the record is dropped, for good."""
     with _LOCK:
@@ -983,7 +1010,10 @@ def _undo_view(u: dict, now: float, more: int) -> dict:
     return {"until": int(u["until"]), "seconds_left": left,
             "minutes_left": max(1, -(-left // 60)) if left else 0,
             "count": n, "action": u["action"], "action_name": name, "more": more,
-            "said": _said(u["action"], n)}
+            # The honest sentence the tidy itself built (skips and a partial
+            # failure included). The fallback keeps an undo record made before
+            # this field existed readable - an ordinary, complete tidy.
+            "said": u.get("said") or _said(u["action"], n)}
 
 
 #: The apps read the status every 20 seconds; whether tidying is set up
@@ -1156,29 +1186,29 @@ def run(p: Plan, *, approved: bool = False, connect: Optional[Callable] = None,
             if done:
                 token = uuid.uuid4().hex
                 at = _now() if now is None else now
+                # The sentence both apps will show, built HERE so the undo
+                # record carries the same honest words as the return value
+                # below - skips and a partial failure included.
+                honest = _outcome_said(p.action, len(done), skipped, failure)
                 rec = {"token": token, "until": at + UNDO_SECONDS,
                        "mono_until": time.monotonic() + UNDO_SECONDS, "action": p.action,
                        "items": done, "mailbox": p.mailbox, "uidvalidity": p.uidvalidity,
                        "dst": dst, "gmail": gmail, "user": p.user, "host": p.host,
-                       "port": p.port}
+                       "port": p.port, "said": honest}
                 with _LOCK:
                     stack = _STATE["undo"] + [rec]
                     _STATE["undo"] = stack[-MAX_UNDO:]
                     _STATE["last"] = {"outcome": "done", "at": at,
-                                      "message": _said(p.action, len(done))}
+                                      "message": honest}
                 timer(UNDO_SECONDS, lambda tok=token: _purge(tok))
     _audit("email.tidy.done", {"action": p.action, "done": len(done), "skipped": skipped,
                                "failed": bool(failure)})
     if failure and not done:
         return {"ok": False, "done": 0, "skipped": skipped, "error": failure}
-    said = _said(p.action, len(done))
-    if skipped:
-        said += (f" {_count(skipped, 'email')} skipped - already moved, deleted or "
-                 f"changed since the card was made.")
-    if failure:
-        said += f" It stopped part of the way: {failure}."
-    said += (f" The owner can undo this for {UNDO_MINUTES} minutes with the Undo button on "
-             f"screen.") if done else ""
+    said = _outcome_said(p.action, len(done), skipped, failure)
+    if done:
+        said += (f" The owner can undo this for {UNDO_MINUTES} minutes with the Undo button on "
+                 f"screen.")
     return {"ok": not failure, "done": len(done), "skipped": skipped, "action": p.action,
             "undo_minutes": UNDO_MINUTES if done else 0, "said": said,
             **({"error": failure} if failure else {})}
