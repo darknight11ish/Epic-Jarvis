@@ -464,7 +464,23 @@ GROUPS = (
     ("Writing your notes", ["append_obsidian_daily", "append_logseq_journal",
                             "create_joplin_note", "create_logseq_page", "edit_joplin_note",
                             "edit_logseq_page", "delete_joplin_note", "delete_logseq_page",
-                            "write_notes_after_outside_text", "wiki_update"]),
+                            "write_notes_after_outside_text", "wiki_update",
+                            # A Notion export into an Obsidian vault
+                            # (jarvis_notion_obsidian.py, 2026-10-16): it writes a NEW
+                            # tree of the owner's own files into a vault that is on no
+                            # approved-folder list, so its route asks on ONE card before
+                            # anything is brought in and `import_notion_export` is that
+                            # module's own GATE_ACTION. It sits here with the writes to
+                            # the vault, not with the reads: what it makes is notes. Its
+                            # tier is the file's own "ask" line ([autonomy.tiers]), and
+                            # the page must name it because a card can - the other half
+                            # of test_card_words.py's "every action a shipped module asks
+                            # under". It is deliberately NOT in MUST_ASK: this module
+                            # calls jarvis_gate.check and does not refuse a looser tier
+                            # itself, so "Always asks" would be a claim the code does not
+                            # keep. No switch either, so the honest note is NOTE_FILE -
+                            # loosening this one is a hand edit, not an app setting.
+                            "import_notion_export"]),
     ("Timers and reminders", ["fixed:timers", "fixed:repeats", "fixed:goals",
                               "referee_tick", "schedule_repeat"]),
     ("Your smart home", ["fixed:lights", "home_control"]),
