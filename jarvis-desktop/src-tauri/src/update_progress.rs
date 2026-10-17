@@ -162,6 +162,26 @@ pub fn progress_of(line: &str, p: &mut Progress) {
         .into_iter()
         .find_map(|kind| trimmed.strip_prefix(kind).map(|rest| (kind.trim(), rest)));
     let Some((kind, rest)) = body else { return };
+    let (name, reason) = match rest.split_once(" - ") {
+        Some((name, reason)) => (name.trim(), reason.trim()),
+        None => (rest.trim(), ""),
+    };
+    // ONLY A LINE THAT NAMES A FILE IS ONE ITEM OF THE RUN.
+    //
+    // The script prints more than its items with the same `ok`/`FAIL`/`skip`
+    // prefix: its own summary (`FAIL  335 passed, 4 failed.`) and, inside a
+    // failing suite's detail block, that suite's own inner check names. Counting
+    // those made the owner's own run of 2026-10-16 name NINE failures when four
+    // suites failed - five of the nine were not checks at all.
+    //
+    // By SHAPE, never by a list of known names: a suite added tomorrow must
+    // still be counted, and an allow-list would make it invisible. The shape is
+    // a FILE NAME - one of the two extensions the script deals in, and no
+    // spaces - so a sentence that merely ends in `.py` is not an item either.
+    if !(name.ends_with(".py") || name.ends_with(".patch")) || name.split_whitespace().count() != 1
+    {
+        return;
+    }
     // Only the indented form is a per-item line: the script's own summary lines
     // are not indented, and counting one of those as an item would make the
     // total wrong.
@@ -177,10 +197,6 @@ pub fn progress_of(line: &str, p: &mut Progress) {
         return;
     }
     p.failed += 1;
-    let (name, reason) = match rest.split_once(" - ") {
-        Some((name, reason)) => (name.trim(), reason.trim()),
-        None => (rest.trim(), ""),
-    };
     if p.bad.len() < MAX_BAD {
         p.bad.push(BadCheck {
             name: name.to_string(),
@@ -352,16 +368,89 @@ mod tests {
 
     #[test]
     fn a_summary_line_is_never_counted_as_an_item() {
-        // Not indented, so it is the script talking about the list, not one of it.
+        // Neither the unindented summary nor the INDENTED one is an item: the
+        // second is the shape the owner's own log really carries
+        // ("  FAIL  335 passed, 4 failed."), and before the file-name rule it
+        // was counted as a failed check with no reason. The real patch beside
+        // them is the control - the rule must not stop counting items.
         let p = read(&[
             "Rehearsing all 143 on a copy first.",
             "ok    All 143 patches are already applied. Nothing to do.",
             "  ok    Checked again on the real files: all 142 patches are on.",
+            "  FAIL  335 passed, 4 failed.",
+            "  ok    appearance.patch",
         ]);
-        assert_eq!(
-            p.done, 1,
-            "an unindented summary line was counted as a patch"
+        assert_eq!(p.done, 1, "a summary line was counted as an item");
+        assert_eq!(p.failed, 0, "the summary line was counted as a failure");
+        assert!(
+            p.bad.is_empty(),
+            "the summary line was named as a failed check"
         );
+    }
+
+    /// The owner's own run of 2026-10-16, verbatim from his log
+    /// (`_jarvis-logs/apply-patches-2026-10-16-135737.txt`): the four suites
+    /// that failed, the script's summary line, and four inner check names out
+    /// of three suites' detail blocks. The screen used to be told NINE failures.
+    #[test]
+    fn only_the_lines_that_name_a_check_are_counted() {
+        let p = read(&[
+            "Running the test suites against the patched backend.",
+            "  ok    test_apply_line_endings.py",
+            "  FAIL  test_apply_outcomes.py",
+            "  ok    test_appearance.py",
+            "  FAIL  test_auto_router.py",
+            "  FAIL  test_base_matches_repo.py",
+            "  FAIL  test_registry_claims.py",
+            "  ok    test_work.py",
+            "",
+            "  FAIL  335 passed, 4 failed.",
+            "",
+            "===== test_apply_outcomes.py =====",
+            "      FAIL  ... and no *.ps1 anywhere in the checkout does, read the way CI reads it",
+            "            ['apply-patches.ps1', 'apply-patches.ps1']",
+            "===== test_base_matches_repo.py =====",
+            "      FAIL  no private, generated or superseded file is in the base",
+            "              __pycache__/ - bytecode; it embeds absolute paths",
+            "===== test_registry_claims.py =====",
+            "      FAIL  every .py file in the tree parsed (a file skipped silently would be a claim never checked)",
+            "===== test_auto_router.py =====",
+            "      FAIL  gate 2: (about this machine) jarvis_gate is genuinely absent on a clone",
+        ]);
+        assert_eq!(p.failed, 4, "the run's four failed suites, not nine");
+        assert_eq!(
+            p.bad.iter().map(|b| b.name.as_str()).collect::<Vec<_>>(),
+            vec![
+                "test_apply_outcomes.py",
+                "test_auto_router.py",
+                "test_base_matches_repo.py",
+                "test_registry_claims.py",
+            ]
+        );
+        // The patcher now puts the suite's own first failing check after the
+        // name (see `Get-FirstFailureReason` in scripts/apply-patches.ps1), and
+        // the parser reads it unchanged. This is the shape with the reason, and
+        // the caught-on-a-refused-PC words are what `could_not_run` looks for.
+        let with_reason = read(&[
+            "  FAIL  test_base_matches_repo.py - no private, generated or superseded file is in the base - __pycache__/ - bytecode; it embeds absolute paths",
+        ]);
+        assert_eq!(with_reason.failed, 1);
+        assert_eq!(with_reason.bad[0].name, "test_base_matches_repo.py");
+        assert!(
+            with_reason.bad[0].reason.contains("__pycache__"),
+            "the reason was cut before the words that say the PC refused it"
+        );
+        assert!(
+            !with_reason.bad[0].ran_here,
+            "a suite that failed on this script's own __pycache__ is still a real failure"
+        );
+        // ... and a SENTENCE that happens to end in `.py` is not a file name,
+        // so it is not an item. Without the no-spaces half of the shape rule, a
+        // check named "the README lists every test_thing.py" would be counted
+        // the day one of them ends that way.
+        let sentence = read(&["  FAIL  the README lists every test_thing.py"]);
+        assert_eq!(sentence.failed, 0, "a sentence was counted as a file name");
+        assert_eq!(sentence.done, 0);
     }
 
     #[test]

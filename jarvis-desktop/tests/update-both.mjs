@@ -376,7 +376,12 @@ await check("the Windows-uninstall warning shows while a run is in flight and ne
   assert.equal(after, false, "the warning stayed on the card after the run");
   assert.match(words, /uninstall Jarvis/i, words);
   assert.match(words, /Click\s+Yes/i, words);
-  assert.match(words, /0\.2\.119/, words);
+  assert.match(words, /the old copy Windows still has registered/, words);
+  // NO VERSION NUMBER IN IT. It used to name one (0.2.119), which appears
+  // nowhere in this repository: it was machine state, so it would be wrong on
+  // any other PC and wrong for him after his next update - and the question
+  // this line answers is what to click, not which version it is.
+  assert.doesNotMatch(words, /\d+\.\d+\.\d+/, `the warning names a version: ${words}`);
 });
 
 await check("CONTROL: a progress event is read-only — it starts and changes nothing", async () => {
