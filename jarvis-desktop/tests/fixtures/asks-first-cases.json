@@ -222,6 +222,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Write pages in the Jarvis Wiki"
+      },
+      {
+       "action": "import_notion_export",
+       "fixed": false,
+       "id": "import_notion_export",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Bring your Notion export into your vault"
       }
      ],
      "title": "Writing your notes"
@@ -1460,6 +1469,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Write pages in the Jarvis Wiki"
+      },
+      {
+       "action": "import_notion_export",
+       "fixed": false,
+       "id": "import_notion_export",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Bring your Notion export into your vault"
       }
      ],
      "title": "Writing your notes"
@@ -2695,6 +2713,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Write pages in the Jarvis Wiki"
+      },
+      {
+       "action": "import_notion_export",
+       "fixed": false,
+       "id": "import_notion_export",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Bring your Notion export into your vault"
       }
      ],
      "title": "Writing your notes"
@@ -3923,6 +3950,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Write pages in the Jarvis Wiki"
+      },
+      {
+       "action": "import_notion_export",
+       "fixed": false,
+       "id": "import_notion_export",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Bring your Notion export into your vault"
       }
      ],
      "title": "Writing your notes"
@@ -5151,6 +5187,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Write pages in the Jarvis Wiki"
+      },
+      {
+       "action": "import_notion_export",
+       "fixed": false,
+       "id": "import_notion_export",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Bring your Notion export into your vault"
       }
      ],
      "title": "Writing your notes"
@@ -6391,6 +6436,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Write pages in the Jarvis Wiki"
+      },
+      {
+       "action": "import_notion_export",
+       "fixed": false,
+       "id": "import_notion_export",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Bring your Notion export into your vault"
       }
      ],
      "title": "Writing your notes"
@@ -7626,6 +7680,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Write pages in the Jarvis Wiki"
+      },
+      {
+       "action": "import_notion_export",
+       "fixed": false,
+       "id": "import_notion_export",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Bring your Notion export into your vault"
       }
      ],
      "title": "Writing your notes"

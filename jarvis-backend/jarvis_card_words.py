@@ -244,6 +244,12 @@ TITLES = {
     # builds the title from the action's own name - 'Jarvis wants your OK for
     # "vault put"' - on the one card whose whole job is to be understood.
     "vault_put": "keep a secret for you",
+    # --- a Notion export into an Obsidian vault (2026-10-16): the import
+    # writes a new tree of the owner's own files into a vault, so it asks
+    # first. Without a row here the fallback builds the title from the
+    # action's own name - 'Jarvis wants your OK for "import notion
+    # export"' - on a card whose whole job is to be understood.
+    "import_notion_export": "bring your Notion export into your vault",
     # --- helpers and anything else a tool asks for
     "agent_spawn": "start a helper task",
     "agent_kill": "stop a helper task",
@@ -400,6 +406,8 @@ SUMMARY = {
     "undo_action": "put back the change shown",
     # --- the blind credential vault (2026-10-14)
     "vault_put": "keep a secret for you",
+    # --- a Notion export into an Obsidian vault (2026-10-16)
+    "import_notion_export": "bring your Notion export in",
     # --- helpers and anything else a tool asks for
     "agent_spawn": "start a helper task",
     "agent_kill": "stop a helper task",
