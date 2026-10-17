@@ -89,7 +89,13 @@ reads), never read aloud. The end summary is written on this PC from it,
 so it is outside text too. The whole chat is kept in the ENCRYPTED chat
 history as a "Support chat" record (jarvis_chat_log.record_support) when
 history is on; "Export transcript" (desktop only) saves a plain text file
-the owner picks, and says it is not encrypted.
+the owner picks, and says it is not encrypted. **`GET .../support/export?scrub=1`
+makes the optional SCRUBBED copy of that file** (`export_text(scrub=True)`): the
+VALUES of the details the owner allowed are replaced by `mask_listed` (the same
+words the last check uses to hide them) and the whole text goes through the
+house scrubber, `jarvis_scrub.scrub_text`, so a password, key or one-time code
+cannot ride along - including in the company's own words. It refuses (503)
+rather than pass a plain file off as scrubbed when the scrubber is missing.
 
 Standard library only. No I/O at import.
 """
@@ -2123,39 +2129,98 @@ EXPORT_NOTE = ("This file is NOT encrypted: anyone who can open it can read the 
                "with the details you allowed. Keep it somewhere safe, or delete it when you "
                "no longer need it.")
 
+#: The note that rides on the optional SCRUBBED copy (`scrub=True` below). It has
+#: to say both things: what was taken out, and that the file is still not
+#: encrypted - the company's words and Jarvis's are still in it.
+EXPORT_SCRUB_NOTE = (
+    "This file is a SCRUBBED copy: the values of the details you allowed are replaced, and "
+    "anything that looked like a password, key or one-time code has been removed. It is still "
+    "NOT encrypted - both sides' words are still in it - so read it before you share it.")
 
-def export_text(c: SupportChat) -> str:
-    """The transcript as plain text, for "Export transcript" (desktop)."""
+#: Said instead of exporting when the scrubber itself is missing: a plain file
+#: must never be handed over wearing a scrubbed copy's name (the "a button that
+#: reports success and changes nothing" failure this project has paid for).
+EXPORT_SCRUB_OFF = (
+    "Jarvis cannot make a scrubbed copy on this PC, because the scrubber "
+    "(`jarvis_scrub.py`) is not there, and a plain file must not be passed off as a scrubbed "
+    "one. Nothing was exported.")
+
+
+def _scrubber():
+    """The house scrubber (`jarvis_scrub.scrub_text`), or None. Never a
+    home-made substitute: the one scrubber is the one every other feature uses."""
+    try:
+        import jarvis_scrub
+        return jarvis_scrub
+    except Exception:
+        return None
+
+
+def export_text(c: SupportChat, *, scrub: bool = False) -> str:
+    """The transcript as plain text, for "Export transcript" (desktop).
+
+    `scrub=True` is the optional safe copy. Every approved detail VALUE is
+    replaced by the module's own `mask_listed` (the same words the last check
+    uses to hide them), and the whole text then goes through the house scrubber
+    (`jarvis_scrub.scrub_text`), which takes out anything shaped like a
+    password, key or one-time code - including in the company's own words.
+    It raises rather than return a plain file when the scrubber is missing.
+    """
+    scrubber = _scrubber() if scrub else None
+    if scrub and scrubber is None:
+        raise RuntimeError(EXPORT_SCRUB_OFF)
+    details = tuple(c.details)
+
+    def shown(text) -> str:
+        out = str(text or "")
+        if not scrub:
+            return out
+        return scrubber.scrub_text(mask_listed(out, details))
+
     when = time.strftime("%Y-%m-%d %H:%M", time.localtime(c.created or time.time()))
+    if scrub and details:
+        # The NAMES stay, so a reader knows what was given; the values do not.
+        listed = "; ".join(name for name, _ in details) + " (their values are replaced here)"
+    else:
+        listed = "; ".join(f"{n}: {v}" for n, v in details)
     lines = [f"Support chat with {c.company_name} ({c.help_url})", f"Started: {when}",
-             f"Goal: {c.goal}", "Details Jarvis could give: " + (
-                 "; ".join(f"{n}: {v}" for n, v in c.details) or "none"), ""]
+             f"Goal: {shown(c.goal)}",
+             "Details Jarvis could give: " + (listed or "none"), ""]
     for t in c.transcript:
         at = time.strftime("%H:%M:%S", time.localtime(float(t.get("at") or 0)))
         who = WHO_WORDS.get(t.get("who"), "?").format(company=c.company_name)
         tag = " [outside text]" if t.get("who") in ("company", "system") else ""
-        lines.append(f"[{at}] {who}{tag}: {t.get('text')}")
+        lines.append(f"[{at}] {who}{tag}: {shown(t.get('text'))}")
     lines.append("")
     for o in c.offers:
-        lines.append(f"Offer card {o['id']}: {o.get('state')} - {str(o.get('words'))[:300]}")
+        lines.append(f"Offer card {o['id']}: {o.get('state')} - "
+                     f"{shown(str(o.get('words'))[:300])}")
     if c.reference:
-        lines.append(f"Reference number: {c.reference}")
+        lines.append(f"Reference number: {shown(c.reference)}")
     if c.ended_words:
         lines.append(f"Ended: {c.ended_words}")
-    lines += ["", EXPORT_NOTE]
+    lines += ["", EXPORT_SCRUB_NOTE if scrub else EXPORT_NOTE]
     return "\n".join(lines) + "\n"
 
 
-def export(chat_id: str) -> tuple:
+def export(chat_id: str, *, scrub: bool = False) -> tuple:
+    """The export answer. `scrub=True` asks for the optional scrubbed copy; the
+    filename says so and the note says what was taken out. A missing scrubber is
+    a refusal (503), never a plain file with a scrubbed label."""
     c = get(chat_id)
     if c is None:
         return 404, {"ok": False, "error": "No such support chat (chats are kept in memory "
                                            "until Jarvis restarts; the encrypted history "
                                            "keeps a copy)."}
+    try:
+        text = export_text(c, scrub=scrub)
+    except RuntimeError as exc:
+        return 503, {"ok": False, "error": str(exc)}
     stamp = time.strftime("%Y-%m-%d", time.localtime(c.created or time.time()))
     safe = re.sub(r"[^a-z0-9]+", "-", c.company_name.lower()).strip("-")[:40] or "company"
-    return 200, {"ok": True, "filename": f"jarvis-support-{safe}-{stamp}.txt",
-                 "text": export_text(c), "note": EXPORT_NOTE}
+    kind = "-scrubbed" if scrub else ""
+    return 200, {"ok": True, "filename": f"jarvis-support-{safe}-{stamp}{kind}.txt",
+                 "text": text, "note": EXPORT_SCRUB_NOTE if scrub else EXPORT_NOTE}
 
 
 # ============================================================================
