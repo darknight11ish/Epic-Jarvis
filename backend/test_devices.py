@@ -1820,7 +1820,17 @@ def t_the_apps_word_a_label_the_same_way():
           'The phone calls itself ${d.name}.' in plate)
     check("the desktop offers the way in, and never waits for a live link for it",
           "devices_label" in page and "LABEL_BUTTON" in page and "labelDevice" in page
-          and 'invoke("devices_label", { id: d.id, label: next })' in page)
+          and 'call("devices_label", { id: d.id, label: next }, LATE_ACTION)' in page)
+    # THE PROPERTY, not the spelling. The check above could pass while a card was
+    # UNBUDGETED - that was the state it blessed, and it is how the owner's
+    # "Pair a phone" froze for ever. This cannot: `call()` is the ONLY door to the
+    # bridge in this file, so no new card can reach it directly and hang unhandled.
+    # Exactly one is allowed, and it is the one inside `call()` itself - a second
+    # would be a card that had gone round the budget.
+    check("... and every command on the card goes through the one budgeted door",
+          page.count("TAURI.core.invoke(") == 1
+          and "function call(command, args = {}, late = LATE_READ)" in page
+          and page.index("TAURI.core.invoke(") > page.index("function call("))
     check("the desktop shows the name to show (`shown`), never rebuilding it",
           "d.shown || d.name || d.id" in page)
     check("a label never approves anything: pair_device stays PC only, with Windows Hello",
