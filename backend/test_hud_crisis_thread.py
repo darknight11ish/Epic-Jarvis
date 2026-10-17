@@ -88,14 +88,30 @@ def main() -> int:
           'import("./private-speech.js")' in src and ".mayReadAloud(" in src)
     check("and passes it THIS turn's route",
           "turnRoute = route;" in src and "route: turnRoute || {}" in src)
+    # THE ROUTE IS PER-TURN, so it must be cleared per-turn. It is module-level
+    # so the reply handler can see it, and nothing cleared it: once one turn
+    # carried a sensitive route, every later turn looked private too and the page
+    # said the on-screen line instead of speaking ORDINARY answers, for ever.
+    # hud.mjs caught it as 10 failed "reads the real reply" checks.
+    check("and the route is cleared at the start of every turn",
+          "turnRoute = null;" in src,
+          "a per-turn value must be per-turn")
     check("what the page cannot know is not silently claimed known",
           "toolsKnown: true" in src and "cannot know that" in src,
           "the limit must be written down beside the call")
+    # THE LINE IS SPOKEN, NOT POSTED. `private-speech.js:41` is the authority -
+    # "Jarvis says one fixed line instead, PRIVATE_LINE, once" - and the bar does
+    # it with `speechQueue.push(PRIVATE_LINE)` (main.js:4642, :4728). #504 first
+    # did `addMessage("system", ...)` instead, and a system line is how this page
+    # draws an ERROR, so every private answer looked like a failure: hud.mjs
+    # reported "an error was shown for a good reply" on 10 checks.
     check("speech happens only inside the rule's yes",
-          re.search(r"if\(aloud\) voice\.speak\(full\);", src) is not None)
-    check("and a refused answer still shows the rule's own on-screen line",
-          'rule && rule.PRIVATE_LINE' in src)
-    speak_at = src.index("if(aloud) voice.speak(full);")
+          re.search(r"voice\.speak\(aloud \? full :", src) is not None)
+    check("and a refused answer SAYS the rule's own line instead of the answer",
+          "(rule && rule.PRIVATE_LINE) ||" in src
+          and 'addMessage("system", (rule' not in src,
+          "spoken, not added as a message - a system line reads as an error here")
+    speak_at = src.index("voice.speak(aloud ? full :")
     render_at = min(src.index("node.textContent = full"), src.index('addMessage("jarvis", full)'))
     check("the answer RENDERS before the speak decision is even reached",
           render_at < speak_at, (render_at, speak_at))

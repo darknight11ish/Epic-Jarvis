@@ -1888,6 +1888,15 @@ let SEND_INFLIGHT = null;
 async function send(){
   const text = $("input").value.trim();
   if(!text) return;
+  // CLEARED AT THE START OF EVERY TURN, and this is not tidiness. `turnRoute`
+  // is module-level so the reply handler can hand it to the private-speech rule,
+  // and nothing cleared it - so once ONE turn carried a sensitive route, every
+  // later turn looked private too. The reply was still shown, but the page said
+  // "It's on your screen." INSTEAD of speaking it, for ordinary answers, for
+  // ever. `hud.mjs` caught it as 10 failed "reads the real reply" checks, every
+  // one of them reporting "an error was shown for a good reply". A per-turn
+  // value must be per-turn.
+  turnRoute = null;
   // One turn at a time. Sending while a stream is still open pushed the
   // second user turn into history ahead of the first assistant turn, and
   // the next request carried an out-of-order transcript upstream.
@@ -2098,12 +2107,19 @@ async function send(){
     clearTimeout(watchdog); if(SEND_INFLIGHT === ctrl) SEND_INFLIGHT = null;
     $("r-latency").textContent = Math.round(performance.now()-started) + " ms";
     tracePromise.then(t => { if(t){ attachRecall(userNode, t); showTrace(t); } });
-    // SHOWN either way; SAID only when the bar's rule allows it. The words
-    // are the rule's own (PRIVATE_LINE), so both windows say the same thing.
+    // SHOWN either way; SAID only when the bar's rule allows it. The words are
+    // the rule's own (PRIVATE_LINE), so both windows say the same thing.
+    //
+    // WHEN IT MAY NOT BE SAID, THE LINE IS SPOKEN INSTEAD - it is NOT added as a
+    // message. `private-speech.js` is the authority (:41, PRIVATE_LINE at :68):
+    // "Otherwise Jarvis says one fixed line instead, `PRIVATE_LINE`, once", and
+    // the bar does exactly that - `speechQueue.push(PRIVATE_LINE)`, main.js:4642
+    // and :4728. Adding a system message instead is what hud.mjs caught: a system
+    // line is how this page draws an ERROR, so every private answer looked like a
+    // failure - "an error was shown for a good reply", 10 checks, for ever.
     const rule = await loadSpeechRule();
     const aloud = !rule || rule.mayReadAloud({ route: turnRoute || {}, toolsKnown: true });
-    if(aloud) voice.speak(full);
-    else addMessage("system", (rule && rule.PRIVATE_LINE) || "It's on your screen.");
+    voice.speak(aloud ? full : ((rule && rule.PRIVATE_LINE) || "It's on your screen."));
   }catch(err){
     clearTimeout(watchdog); if(SEND_INFLIGHT === ctrl) SEND_INFLIGHT = null;
     // Do not leave a user turn with no answer in history: the next request
