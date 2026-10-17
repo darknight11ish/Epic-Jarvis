@@ -9,9 +9,10 @@
 WHY THIS EXISTS
 
 Jarvis is CAPABILITY-DRIVEN, NOT VERSION-GATED - a deliberate choice, and the
-right one (`jarvis_hardware.py:952`: "By the cards alone, so a new Ollama
-version does not forget that a size did not fit"). Jarvis never branches on
-Ollama's version number. It asks at runtime what a model can do, three reads:
+right one (`jarvis_hardware.py`, in `_limits`: "By the cards alone, so a new
+Ollama version does not forget that a size did not fit"). Jarvis never branches
+on Ollama's version number. It asks at runtime what a model can do, three
+reads:
 
   * `_model_can_use_tools()`    - /api/show -> "capabilities" -> "tools"
     (`jarvis_agent.py:3666`, `:3668`)
