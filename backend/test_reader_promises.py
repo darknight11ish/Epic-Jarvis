@@ -335,15 +335,22 @@ def t_caption_text_is_outside_text_and_cannot_be_kept():
     # `start_outside(text, count, title, "youtube")` exactly - and #501 added the
     # injection finding to the same call, so the pin failed because the code got
     # SAFER, not worse. That is the sixth time tonight a source pin has broken on
-    # an improvement, so the shape pinned here is the promise instead: ONE call to
-    # `start_outside`, and the block it starts names "youtube" as its source. The
-    # first argument is not pinned at all - it is `text` on one version and `safe`
-    # on another, and neither is the promise.
+    # an improvement, so the shape pinned here is the promise instead: ONE `return
+    # jarvis_quiz.start_outside(...)` statement, and the block it starts names
+    # "youtube" as its source. The first argument is not pinned at all - it is
+    # `text` on one version and `safe` on another, and neither is the promise.
+    #
+    # `return ` is in the search ON PURPOSE: the first cut of this check counted
+    # `jarvis_quiz.start_outside(` and found TWO, because the module's own
+    # docstring says `jarvis_quiz.start_outside()` as well - and it then matched
+    # the docstring's line and reported no "youtube" anywhere. A text search that
+    # matches a comment is the same defect as a pin that matches a spelling; the
+    # statement, not the mention, is the thing to find.
     _yl = y_src.splitlines()
-    _at = next((k for k, ln in enumerate(_yl) if "jarvis_quiz.start_outside(" in ln), -1)
+    _at = next((k for k, ln in enumerate(_yl) if "return jarvis_quiz.start_outside(" in ln), -1)
     _call = "\n".join(_yl[_at:_at + 5]) if _at >= 0 else ""
     check("a quiz on captions is marked outside, and says where it came from",
-          y_src.count("jarvis_quiz.start_outside(") == 1
+          y_src.count("return jarvis_quiz.start_outside(") == 1
           and '"youtube"' in _call
           and "provenance" in y_src and '"outside"' in y_src, _call)
     check("... and the quiz module itself is what marks it",
