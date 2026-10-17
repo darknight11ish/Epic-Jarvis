@@ -179,16 +179,43 @@ def t_tokens_never_raises_and_never_reaches_the_owner_itself():
 # --------------------------------------------------------------------------
 
 def _old_module_source():
-    """`jarvis_widgets.py` as `origin/main` has it, or None.
+    """`jarvis_widgets.py` as it was **before the change it is about**, or None.
 
     Read from git rather than remembered, so a bite about "what the code used to
-    do" is evidence about the old file and not about this file's own comment."""
+    do" is evidence about the old file and not about this file's own comment.
+
+    **WHY THE `~1` IS LOAD-BEARING, and this cost every open pull request its
+    `backend` job on 2026-10-16.** This used to read
+    ``origin/main:jarvis-backend/jarvis_widgets.py`` - "the old file" meaning
+    "what main has". That is true only while the change is unmerged. The moment
+    #484 landed, `origin/main` **became** the new file, the old branch was
+    genuinely absent from it, and this check failed - **on `main`**, where it
+    then failed the required `backend` job on **every open pull request**, none
+    of which touched this file. A test whose premise is "main is behind me" is
+    false the instant it is merged, which is the one moment it is supposed to
+    keep working.
+
+    So the old file is now found by asking git which commit last touched it and
+    reading its **parent**. That is a historical fact, it stays true for ever,
+    and it needs no pinned sha to rot: the last commit that changed
+    `jarvis_widgets.py` in this repository is the change this bite is about.
+    """
     git = shutil.which("git")
     if not git:
         return None
+    path = "jarvis-backend/jarvis_widgets.py"
+    try:
+        last = subprocess.run(
+            [git, "-C", str(ROOT), "log", "-1", "--format=%H", "origin/main", "--", path],
+            capture_output=True)
+    except OSError:
+        return None
+    sha = last.stdout.decode("ascii", "replace").strip() if last.returncode == 0 else ""
+    if not sha:
+        return None
     try:
         done = subprocess.run(
-            [git, "-C", str(ROOT), "show", "origin/main:jarvis-backend/jarvis_widgets.py"],
+            [git, "-C", str(ROOT), "show", "{0}~1:{1}".format(sha, path)],
             capture_output=True)
     except OSError:
         return None
