@@ -961,6 +961,21 @@ SHIPPED = (
     # model, and fails closed when jarvis_scrub is absent. Standard library
     # only.
     "jarvis_self_improve.py",
+    # Two-stage context compaction (2026-10-16, the owner's "have Jarvis keep
+    # the thread"). Phase 1: a cleared older tool result becomes a small exact
+    # stub - the tool, what it was aimed at, an outcome that says
+    # denied_by_owner when the gate refused it, and up to three anchors - all
+    # through jarvis_scrub, failing closed without it. Phase 2: the turns
+    # fit_messages evicts are folded into ONE bounded digest carrying the
+    # owner's own constraints word for word and a table of exact anchors by
+    # turn, plus a bounded recall of the evicted turns nearest the question,
+    # placed AFTER the cached prefix. The digest is a pure function of the
+    # evicted turns, so a turn that evicts nothing leaves the prompt
+    # byte-identical and Ollama's KV prefix survives. Pure functions over the
+    # messages it is given: reads nothing, writes nothing, opens no route, and
+    # the only optional model call is off by default and off the hot path.
+    # Standard library only.
+    "jarvis_compaction.py",
 )
 
 

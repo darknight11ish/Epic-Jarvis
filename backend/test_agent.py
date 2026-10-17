@@ -1194,9 +1194,19 @@ def t_the_rules_stay_first_after_trimming_and_for_an_app_s_own_note():
     got = first_request(long, 2048)
     check("trimming really happened (else this test measures nothing)",
           long[0] not in got and long[1] not in got, [m["role"] for m in got])
+    # 2026-10-16: this used to assert the prompt was exactly
+    # [rules, recalled, new question]. Compaction now folds what trimming drops
+    # into a digest (jarvis_compaction) and recalls the evicted turns nearest
+    # the question, so the prompt is [rules, recalled, digest, recall, question].
+    # The assertion is kept and strengthened: the rules are still first, and the
+    # recalled facts are still AHEAD OF the digest - which is the order the
+    # first attempt at this got wrong.
     check("trimmed until the recalled facts would be first - the Jarvis rules go in front",
-          got[:1] == [rules] and got[1:] == [recalled, long[-1]],
+          got[:1] == [rules] and got[1] == recalled and got[-1] == long[-1],
           [str(m.get("content"))[:30] for m in got])
+    check("... and what trimming dropped is carried in a digest, not lost",
+          any(str(m.get("content", "")).startswith("[EARLIER IN THIS CONVERSATION]")
+              for m in got), [str(m.get("content"))[:40] for m in got])
 
     # An app's own system message, which on a first question is position 0.
     # (The desktop used to send clipboard text this way; since 2026-09-25 it
