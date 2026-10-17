@@ -1035,7 +1035,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             window.__calls.push(["__updatedBoth"]);
             const ub = window.__updateBoth || {};
             if (ub.fails) throw new Error(ub.fails);
-            return ub.outcome || {
+            const answer = ub.outcome || {
               steps: [
                 { step: "backend", state: "ok", logDir: "C:\\backend\\_jarvis-logs", tail: "",
                   detail: "The backend folder is patched, and the patch program proved it " +
@@ -1046,6 +1046,13 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
               updatedBoth: true,
               restartNeeded: true,
             };
+            // `delayMs` holds the answer back, so a test can read the card WHILE
+            // the run is in flight. The "Starting the update…" line and the
+            // Windows-uninstall warning both exist only inside that window, and a
+            // run that answered in the same tick would prove neither of them.
+            return ub.delayMs
+              ? new Promise((r) => setTimeout(() => r(answer), ub.delayMs))
+              : answer;
           }
           case "reset_hotkeys":
             window.__hotkeys = window.__hotkeys.map((h) => ({
