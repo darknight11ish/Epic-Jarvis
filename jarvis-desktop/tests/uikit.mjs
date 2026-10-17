@@ -583,7 +583,7 @@ export const UPDATE_BOTH = {
   },
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals, quiz, progress, decks, topics,
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, eraseNotClean, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals, quiz, progress, decks, topics,
   folders, animal, chatbot, support, historyImport, widgets, devices, screen, spending, retirement, youtube, invokeFails, updateBoth,
   tutorials, faq }) {
   const listeners = {};
@@ -1590,7 +1590,18 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             // whether it happened, so the page can say so - never whether a
             // conversation was actually found, which the mock does not model.
             if (cmd === "brain_memory_erase") {
-              return { ok: true, chat_deleted: args.also_delete_conversation === true };
+              // `eraseNotClean` is the PC's OTHER answer (2026-10-16): the
+              // row, the index and the vector went, but the file could not be
+              // rebuilt because another part of Jarvis was reading memory.db,
+              // so an older copy of the words may still be on disk. The PC
+              // says so in its own words in `note`, with `file_clean: false`;
+              // the test passes the real sentence, read out of the backend.
+              if (typeof eraseNotClean === "string") {
+                return { ok: true, file_clean: false, note: eraseNotClean,
+                         chat_deleted: args.also_delete_conversation === true };
+              }
+              return { ok: true, file_clean: true,
+                       chat_deleted: args.also_delete_conversation === true };
             }
             return { ok: true };
           case "brain_memory_export":
