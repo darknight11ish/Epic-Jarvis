@@ -28,6 +28,16 @@
   opacity: 0.9;
 }
 
+/* What the HUD shows instead of reading a private answer aloud - "It's on your
+   screen.", the Jarvis bar's own sentence (hud_bootstrap.js section 2e, the
+   owner's instruction of 2026-10-16). It sits under the answer it is about,
+   exactly like the right/wrong mark below, and inherits the HUD's colours. */
+.jarvis-kept {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  opacity: 0.85;
+}
+
 /* While a decision is in flight the card is dimmed and its buttons are dead -
    the page's own `.settled` look (`jarvis_hud.html`, `.appr.settled`), applied
    by the bootstrap because the bootstrap is what sends the decision now. */

@@ -26,13 +26,15 @@
  * to load, draw, follow the page's state and the shell's appearance push,
  * stop behind the Galaxy view, and calm down under reduced motion.
  */
-import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import assert from "node:assert/strict";import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, extname, join, normalize } from "node:path";
 import * as K from "./uikit.mjs";
 import { OPEN_BAR_KEY } from "../src/hud-window.js";
+// The bar's own rule for what may be read aloud, which the HUD's spoken-reply
+// gate now holds itself to route by route (the check further down).
+import { usedSensitiveFact } from "../src/private-speech.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC = join(HERE, "..", "src");
@@ -246,8 +248,16 @@ async function openHud(browser, status, pageOptions = {}) {
         }
         // feedback.patch: the answer's id in X-Jarvis-Route, exposed to the
         // page as the backend exposes it. Only when a scenario asks for it.
-        const routeHeaders = status.turnId
-          ? { "X-Jarvis-Route": JSON.stringify({ lane: "qwen3:8b", turn_id: status.turnId }),
+        // `status.route` is a whole route a scenario wants - its memory
+        // counts, its gate - because the spoken-reply gate in the bootstrap
+        // reads exactly that header (section 2e). Named `routeDoc`, because
+        // `route` in this function is Playwright's own route object.
+        const routeDoc = {
+          ...(status.turnId ? { lane: "qwen3:8b", turn_id: status.turnId } : {}),
+          ...(status.route || {}),
+        };
+        const routeHeaders = Object.keys(routeDoc).length
+          ? { "X-Jarvis-Route": JSON.stringify(routeDoc),
               "Access-Control-Expose-Headers": "X-Jarvis-Route" }
           : {};
         return route.fulfill({
@@ -1241,6 +1251,88 @@ await check("a HUD reply is read aloud only with a voice on this computer", asyn
   const withNone = await only.page.evaluate(() => window.__spokenWith);
   await only.page.close();
   assert.deepEqual(withNone, [], "with no local voice, nothing should be spoken at all");
+});
+
+await check("a HUD answer that used a sensitive saved fact stays on screen, and is not spoken", async () => {
+  // The owner's instruction of 2026-10-16: "Gate it - keep sensitive answers
+  // on screen in the HUD too". The rule is the Jarvis bar's own
+  // (private-speech.js), read off the route the HUD's chat header carries;
+  // what he sees instead is the bar's own sentence, on screen, under the
+  // answer. The control below is the half that matters as much: an ordinary
+  // answer must still be spoken, or the gate would have killed HUD speech.
+  const local = { name: "Microsoft Hazel - English (United Kingdom)", lang: "en-GB", localService: true };
+
+  const sensitive = await openHud(browser, { jarvis: false, ollama: true, proxy: false,
+    voices: [local], route: { lane: "qwen3:8b", injected_facts: 2, injected_sensitive: 1 } });
+  await send(sensitive.page, "hi");
+  const kept = await sensitive.page.evaluate(() => {
+    const answers = document.querySelectorAll("#log .msg.jarvis");
+    const last = answers[answers.length - 1];
+    return {
+      spoken: window.__spokenWith,
+      answers: answers.length,
+      line: document.querySelector(".jarvis-kept")?.textContent || "",
+      underTheAnswer: Boolean(last && last.querySelector(".jarvis-kept")),
+    };
+  });
+  await sensitive.page.close();
+  assert.deepEqual(kept.spoken, [],
+    "an answer that used a sensitive saved fact was read aloud in the room");
+  assert.equal(kept.line, "It's on your screen.",
+    `the HUD did not say why it stayed quiet (said: ${JSON.stringify(kept.line)})`);
+  assert.ok(kept.answers >= 1, "the answer itself is not on screen");
+  assert.equal(kept.underTheAnswer, true,
+    "the keep-on-screen line is not under the answer it is about");
+  assert.deepEqual(sensitive.problems, []);
+
+  const ordinary = await openHud(browser, { jarvis: false, ollama: true, proxy: false,
+    voices: [local], route: { lane: "qwen3:8b", injected_facts: 2, injected_sensitive: 0 } });
+  await send(ordinary.page, "hi");
+  const spoke = await ordinary.page.evaluate(() => ({
+    spoken: window.__spokenWith,
+    line: document.querySelector(".jarvis-kept")?.textContent || "",
+  }));
+  await ordinary.page.close();
+  assert.deepEqual(spoke.spoken, [local.name],
+    "CONTROL FAILED: the gate silences ordinary answers too");
+  assert.equal(spoke.line, "", "the keep-on-screen line was drawn on an ordinary answer");
+  assert.deepEqual(ordinary.problems, []);
+});
+
+await check("the HUD's spoken-reply gate is the bar's own rule, route by route", async () => {
+  // private-speech.js is the one module that says what the bar may read
+  // aloud; the bootstrap cannot import it (it is injected as a plain script),
+  // so it holds the same rule in its own words - and this drives the REAL
+  // HUD window once per route and holds the two together. A route the bar
+  // would keep on screen must be silent here too; one it would read aloud
+  // must still be spoken.
+  const local = { name: "Microsoft Hazel - English (United Kingdom)", lang: "en-GB", localService: true };
+  const CASES = [
+    ["facts, none sensitive", { lane: "qwen3:8b", injected_facts: 2, injected_sensitive: 0 }],
+    ["one sensitive fact", { lane: "qwen3:8b", injected_facts: 2, injected_sensitive: 1 }],
+    ["a PC that does not say how many were sensitive", { lane: "qwen3:8b", injected_facts: 2 }],
+    ["no memory at all", { lane: "qwen3:8b", injected_facts: 0, injected_sensitive: 0, gate: "offer" }],
+    ["the router's private gate", { lane: "qwen3:8b", injected_facts: 0, injected_sensitive: 0, gate: "private" }],
+    ["a route with nothing in it", {}],
+    ["no route at all (an older PC)", null],
+  ];
+  for (const [name, route] of CASES) {
+    const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false,
+      voices: [local], ...(route ? { route } : {}) });
+    await send(page, "hi");
+    const spoken = await page.evaluate(() => window.__spokenWith.length > 0);
+    const line = await page.evaluate(() => document.querySelector(".jarvis-kept")?.textContent || "");
+    await page.close();
+    // What the bar would do with this same route: the sensitive check is the
+    // first line of `mayReadAloud`, and `gate: "private"` refuses after it.
+    const r = route || {};
+    const barKeepsIt = usedSensitiveFact(r) || String(r.gate || "").trim().toLowerCase() === "private";
+    assert.equal(spoken, !barKeepsIt,
+      `${name}: the HUD and the bar disagree about the same route (${JSON.stringify(route)})`);
+    assert.equal(line === "", !barKeepsIt,
+      `${name}: the keep-on-screen line was ${barKeepsIt ? "missing" : "drawn"}`);
+    assert.deepEqual(problems, []);
+  }
 });
 
 await check("the old OpenJarvis light is gone, and chat never depended on it", async () => {

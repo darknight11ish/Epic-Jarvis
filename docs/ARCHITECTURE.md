@@ -1957,7 +1957,16 @@ holds one command for it, `hud-approvals` -> `allow-decide-approval`, so
 Windows Hello, the stale-link refusal, the cut-off refusal and the App-lock
 rule apply there unchanged. What that page's own `fetch` still cannot do is
 post a decision itself: `hud_bootstrap.js`'s shim refuses `/api/approve` and
-`/api/deny` whatever the link is doing. No window may `emit` events to the
+`/api/deny` whatever the link is doing. **The same file also keeps a private
+answer on screen there** (2026-10-16, the owner's decision *"Gate it - keep
+sensitive answers on screen in the HUD too"*): that page is the one surface
+which reads a TYPED answer aloud, and its `speechSynthesis.speak` is now
+refused for an answer whose route says `injected_sensitive` above 0 or
+`gate: "private"`, with the bar's own line ("It's on your screen.") drawn
+under the answer instead - the rule of `docs/JARVIS-API.md` §16 step 3, read
+off the route the page already has. It is a decision, not an oversight: the
+step-3 exception that a typed question may be read aloud is removed in that
+one window and nowhere else. No window may `emit` events to the
 others either (M1).
 
 **A face never pretends Jarvis is there** (owner, 2026-09-28). When the

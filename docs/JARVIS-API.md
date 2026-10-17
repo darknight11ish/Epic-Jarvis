@@ -3098,6 +3098,29 @@ list, not a model - a sensitive fact worded in a way the list misses is
 read aloud under `memory_aloud`, and `memory_on_screen` is the way to keep
 every memory answer on screen.
 
+**The HUD window follows step 3 too (2026-10-16, the owner's decision).**
+It was the one surface that read a **typed** answer aloud - the HUD has no
+voice input of its own; its page's own chat box is typed, and its mic button
+opens the Jarvis bar - and it did so with none of the rules above.
+`jarvis-desktop/src-tauri/src/hud_bootstrap.js` (section 2e) now wraps that
+page's `speechSynthesis.speak` and refuses an answer whose route says
+`injected_sensitive` above 0, or `gate: "private"`; instead it draws the
+bar's own one line, **"It's on your screen."** (`private-speech.js`
+`PRIVATE_LINE`), under the answer. It reads the same `X-Jarvis-Route` the
+page already draws the lane and the gate from, so it is this rule, not a
+second one - and read the scope honestly: the rule above was written for a
+**voice** answer, and a typed question is otherwise allowed to be read aloud
+(`jarvis_voice.may_speak(private, origin="typed")`). **That exception is
+removed in that one window, on his instruction** - *"Gate it - keep
+sensitive answers on screen in the HUD too"* - and nowhere else: the bar,
+the widget and the phone are unchanged. `tests/hud.mjs` drives the real HUD
+window once per route and holds the gate against `usedSensitiveFact` here,
+so the two cannot drift; the local-voices-only rule that was already in that
+wrapper (an "Online (Natural)" voice would send the text to Microsoft) still
+stands in front of the same call. A route the window does not have - an
+older PC, a chat that failed - gates nothing, which is how the bar reads a
+missing route too.
+
 **Known gap, said plainly:** the server cannot yet label a finished answer
 as private. `X-Jarvis-Route` is sent before the model starts, so it cannot
 know that the model will call the email or calendar tool; the rule above is
