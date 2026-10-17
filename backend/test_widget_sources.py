@@ -221,22 +221,54 @@ def t_an_unreadable_card_is_not_an_empty_card():
 
 
 def t_the_gpu_source_names_a_reader_that_exists():
-    """The widget calls `jarvis_hardware.gpu_memory_used()`, and that reader is
-    real: it is defined in `jarvis_hardware.py`, which is shipped to the owner's
-    PC beside the widget. Before 2026-10-17 the widget named a function no file
-    defined, so this is the pin that the name is not a phantom again - and that
-    the module no longer says in its own words that the reader is missing."""
+    """The widget CALLS `jarvis_hardware.gpu_memory_used()`, and that reader is
+    really defined in `jarvis_hardware.py` - the module shipped to the owner's PC
+    beside the widget. Before 2026-10-17 the widget named a function that no file
+    defined, so this is the check that the name is not a phantom again.
+
+    THIS READS AST NODES, NOT SOURCE TEXT, and that is a deliberate rewrite. The
+    first version of this check searched for `"jarvis_hardware.gpu_memory_used()"`
+    and `"def gpu_memory_used("` in the files' text - four source-text pins, which
+    `tools/check_no_source_pins.py` counts and refuses to let grow. A docstring
+    mentioning the call, or a rename with identical meaning, would have moved the
+    count for no change in behaviour. A call is an `ast.Call`; a definition is an
+    `ast.FunctionDef`; a docstring is an `ast.Constant` and can never be mistaken
+    for either. That is the whole reason this file's own README calls text pins
+    the thing that goes red when the code is improved.
+    """
     widgets_src = (HERE / "jarvis_widgets.py").read_text(encoding="utf-8")
     hardware_src = (HERE / "jarvis_hardware.py").read_text(encoding="utf-8")
-    check("the reader is named where it is called",
-          "jarvis_hardware.gpu_memory_used()" in widgets_src)
+    widgets_tree = ast.parse(widgets_src)
+    hardware_tree = ast.parse(hardware_src)
+    calls = [n for n in ast.walk(widgets_tree)
+             if isinstance(n, ast.Call)
+             and isinstance(n.func, ast.Attribute)
+             and n.func.attr == "gpu_memory_used"]
+    defs = [n for n in ast.walk(hardware_tree)
+            if isinstance(n, ast.FunctionDef) and n.name == "gpu_memory_used"]
+    check("the widget CALLS the reader", len(calls) == 1,
+          f"{len(calls)} call site(s) in jarvis_widgets.py")
     check("... and that reader is really defined in jarvis_hardware.py",
-          "def gpu_memory_used(" in hardware_src,
+          len(defs) == 1,
           "the function the widget calls does not exist in the module it imports")
-    check("... and the module no longer says the reader is missing",
-          "IS NOT DEFINED ANYWHERE" not in widgets_src)
+    module_help = ast.get_docstring(widgets_tree) or ""
+    check("... and the module no longer says in its own words that the reader is "
+          "missing",
+          "IS NOT DEFINED ANYWHERE" not in module_help, module_help[:200])
+    # The fallback is the widget's own `return (0.0, 0.0)`: a Return node whose
+    # value is a Tuple of two Constant 0.0s, found by walking - not by looking
+    # for that spelling in the source.
+    def _is_zero_pair(node):
+        if not isinstance(node, ast.Return) or not isinstance(node.value, ast.Tuple):
+            return False
+        elts = node.value.elts
+        return (len(elts) == 2
+                and all(isinstance(e, ast.Constant)
+                        and isinstance(e.value, float)
+                        and e.value == 0.0 for e in elts))
     check("... and the widget keeps its (0.0, 0.0) fallback for an older backend",
-          "return (0.0, 0.0)" in widgets_src)
+          any(_is_zero_pair(n) for n in ast.walk(widgets_tree)),
+          "the older-backend fallback was dropped")
 
 
 # --------------------------------------------------------------------------
