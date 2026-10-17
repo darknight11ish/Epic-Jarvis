@@ -1925,6 +1925,17 @@ $SHIPPED = @(
 # lists. It applies nothing, writes nothing, opens no route, reaches no network
 # but the loopback model, and fails closed when jarvis_scrub is absent.
 'jarvis_self_improve.py'     # Diagnosis with citations; drafts a diff, applies nothing
+# --- Two-stage context compaction (2026-10-16, the owner's "keep the thread").
+# A cleared older tool result becomes a small exact stub (tool, target, an
+# outcome that reads denied_by_owner when the gate refused it, up to three
+# anchors), scrubbed, failing closed without the scrubber. The turns trimming
+# evicts are folded into ONE bounded digest of the owner's own constraints,
+# exact anchors by turn and one-line outcomes, plus a bounded recall of the
+# evicted turns nearest the question, after the cached prefix. The digest is a
+# pure function of the evicted turns, so a turn that evicts nothing leaves the
+# prompt byte-identical and the KV prefix intact. Reads nothing, writes
+# nothing, opens no route; the optional model condensation is off by default.
+'jarvis_compaction.py'       # What a long conversation keeps, exactly
 )
 
 # The settings file. Installed only where none exists; never overwritten.

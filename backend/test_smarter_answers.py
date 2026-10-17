@@ -176,9 +176,18 @@ def t_past_half_older_results_are_cleared():
     check("the results after the last three assistant messages are whole",
           all(out[i] == msgs[i] for i in tools[2:]))
     stub = json.loads(out[tools[0]]["content"])
+    # 2026-10-16: `cleared` used to be the bare CLEARED_RESULT sentence. The
+    # owner asked for what the result WAS - the tool, what it was aimed at, how
+    # it ended - so the envelope is the same and `cleared` now carries that stub
+    # (jarvis_compaction.tool_stub). These two checks keep their intent and are
+    # strictly stronger: the label and `ok` are still exact, and the stub has to
+    # name the tool and say it worked.
     check("a cleared result is valid JSON, keeps the outside-text label and its ok",
-          stub == {AG.OUTSIDE_FIELD: AG.OUTSIDE_LABEL, "ok": True,
-                   "cleared": AG.CLEARED_RESULT}, stub)
+          set(stub) == {AG.OUTSIDE_FIELD, "ok", "cleared"}
+          and stub[AG.OUTSIDE_FIELD] == AG.OUTSIDE_LABEL and stub["ok"] is True, stub)
+    check("... and now says which tool ran, what it aimed at and how it ended",
+          len([f for f in stub["cleared"].split("|") if f.strip()]) >= 3
+          and "file_read" in stub["cleared"], stub["cleared"])
     check("it keeps its tool_call_id, so it still answers its call",
           out[tools[0]]["tool_call_id"] == msgs[tools[0]]["tool_call_id"])
     check("every user, assistant and system message is untouched",
@@ -227,7 +236,12 @@ def t_a_long_answer_sends_cleared_results_to_the_model():
         results = [m["content"] for m in last if m.get("role") == "tool"]
         check("all five results reach the last request", len(results) == 5, len(results))
         check("the older ones are cleared",
-              sum(AG.CLEARED_RESULT in r for r in results) >= 1, [r[:60] for r in results])
+              sum("cleared" in json.loads(r) for r in results) >= 1,
+              [r[:60] for r in results])
+        check("... and each says which tool ran and how it ended",
+              all("calculator" in json.loads(r)["cleared"]
+                  for r in results if "cleared" in json.loads(r)),
+              [json.loads(r).get("cleared") for r in results])
         check("the newest one is whole", "RESULT5" in results[-1], results[-1][:60])
         check("the owner's words are in the last request, whole",
               any(m.get("role") == "user" and m.get("content") == "work it out" for m in last))
