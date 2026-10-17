@@ -295,8 +295,14 @@ def reg_text(adapters) -> str:
     return "\n".join(out) + "\n"
 
 
-SMI_2080S = f"0, {U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6980, 7.5, Enabled\n"
-SMI_PAIR = (SMI_2080S + f"1, {U_2060}, NVIDIA GeForce RTX 2060, 12288, 11650, 7.5, Disabled\n")
+#: The 8th column is `pci.bus_id`, which `jarvis_compute.FIELDS_FULL` asks for
+#: since 2026-10-16: the owner's real Ollama log carries `id=0`/`filter_id=0`
+#: and `pci_id=0000:0a:00.0` - NO GPU- uuid - so the bus address is what joins
+#: a log device to its nvidia-smi row. nvidia-smi spells the domain with 8 hex
+#: digits (measured on his PC, driver 617.42), the log with 4; `smi_for`'s
+#: `_pci_key` compares them by dropping the domain's leading zeros.
+SMI_2080S = f"0, {U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6980, 7.5, Enabled, 00000000:0a:00.0\n"
+SMI_PAIR = (SMI_2080S + f"1, {U_2060}, NVIDIA GeForce RTX 2060, 12288, 11650, 7.5, Disabled, 00000000:0b:00.0\n")
 #: The health query's answer (jarvis_hardware.HEALTH_FIELDS), made up in
 #: nvidia-smi's own format: the 2080 SUPER busy and warm; the 2060 idle, its
 #: fan stopped, which some cards report as "[N/A]".

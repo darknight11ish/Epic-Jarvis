@@ -188,9 +188,9 @@ def t_parsing():
     check("garbage parses to nothing",
           CP.parse_smi("Failed to initialize NVML: Driver/library version mismatch\n") == []
           and CP.parse_smi("0, x, y\n,,,,,,\n") == []
-          and CP.parse_smi("0, GPU-1, A, [N/A], 1, 7.5, Enabled") == [])
+          and CP.parse_smi("0, GPU-1, A, [N/A], 1, 7.5, Enabled, 00000000:0a:00.0") == [])
     check("[N/A] free memory reads as 0, not a crash",
-          CP.parse_smi("0, GPU-ab, X, 8192, [N/A], 7.5, [N/A]")[0].free_mb == 0)
+          CP.parse_smi("0, GPU-ab, X, 8192, [N/A], 7.5, [N/A], 00000000:0a:00.0")[0].free_mb == 0)
     # The query ladder: an old driver refuses the full query; the one without
     # compute_cap is used, and the result says capable.
     with G.World(G.SMI["2080s_2060"], old_driver=G.SMI_OLD_DRIVER):
@@ -243,14 +243,14 @@ def t_capable_and_not():
     roles = {c["name"]: c["role"] for c in det["cards"]}
     check("cards[] names the P100 unused and the 2080 Super primary",
           roles == {"NVIDIA GeForce RTX 2080 SUPER": "primary", "Tesla P100-PCIE-16GB": "unused"})
-    unknown = "0, GPU-aa11bb22-0000, NVIDIA GeForce RTX 2080 SUPER, 8192, 6000, 7.5, Enabled\n" \
-              "1, GPU-cc33dd44-0000, Mystery Card 9000, 16384, 16000, [N/A], Disabled\n"
+    unknown = "0, GPU-aa11bb22-0000, NVIDIA GeForce RTX 2080 SUPER, 8192, 6000, 7.5, Enabled, 00000000:0a:00.0\n" \
+              "1, GPU-cc33dd44-0000, Mystery Card 9000, 16384, 16000, [N/A], Disabled, 00000000:0b:00.0\n"
     with G.World(unknown):
         det = SC.detect(fresh=True)
     check("an unknown generation is 'not capable', in words",
           det["capable"] is False and "could not tell which generation" in det["why"], det["why"])
-    noid = "0, , NVIDIA GeForce RTX 2080 SUPER, 8192, 6000, 7.5, Enabled\n" \
-           "1, , NVIDIA GeForce RTX 2060, 12288, 12000, 7.5, Disabled\n"
+    noid = "0, , NVIDIA GeForce RTX 2080 SUPER, 8192, 6000, 7.5, Enabled, 00000000:0a:00.0\n" \
+           "1, , NVIDIA GeForce RTX 2060, 12288, 12000, 7.5, Disabled, 00000000:0b:00.0\n"
     with G.World(noid):
         det = SC.detect(fresh=True)
     check("no card id: not capable (work is only ever pointed at a card by id)",
@@ -294,18 +294,18 @@ U_2080TI_2 = "GPU-51c0e8aa-6d2f-4b19-8e37-2a4c9f0b6d59"
 #: Three capable cards: the primary, the second (the 2060, more memory) and
 #: a third (the second 2080 Ti) - shared by t_third_card_reshape and the
 #: third-card-lane tests below.
-SMI_THREE = (f"0, {G.U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, 7.5, Enabled\n"
-            f"1, {G.U_2060}, NVIDIA GeForce RTX 2060, 12288, 12030, 7.5, Disabled\n"
-            f"2, {U_2080TI_2}, NVIDIA GeForce RTX 2080 Ti, 11264, 11010, 7.5, Disabled\n")
+SMI_THREE = (f"0, {G.U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, 7.5, Enabled, 00000000:0a:00.0\n"
+            f"1, {G.U_2060}, NVIDIA GeForce RTX 2060, 12288, 12030, 7.5, Disabled, 00000000:0b:00.0\n"
+            f"2, {U_2080TI_2}, NVIDIA GeForce RTX 2080 Ti, 11264, 11010, 7.5, Disabled, 00000000:0c:00.0\n")
 
 
 def t_third_card_reshape():
     # Two capable extra cards: the 2060 (12,288 MB) and a 2080 Ti (11,264 MB).
     # "second" must still be the 2060 (more memory) - completely unchanged
     # from today's single-candidate rule.
-    three = (f"0, {G.U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, 7.5, Enabled\n"
-             f"1, {G.U_2060}, NVIDIA GeForce RTX 2060, 12288, 12030, 7.5, Disabled\n"
-             f"2, {U_2080TI_2}, NVIDIA GeForce RTX 2080 Ti, 11264, 11010, 7.5, Disabled\n")
+    three = (f"0, {G.U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, 7.5, Enabled, 00000000:0a:00.0\n"
+             f"1, {G.U_2060}, NVIDIA GeForce RTX 2060, 12288, 12030, 7.5, Disabled, 00000000:0b:00.0\n"
+             f"2, {U_2080TI_2}, NVIDIA GeForce RTX 2080 Ti, 11264, 11010, 7.5, Disabled, 00000000:0c:00.0\n")
     with G.World(three):
         det3 = SC.detect(fresh=True)
     with G.World(G.SMI["2080s_2060"]):
@@ -347,9 +347,9 @@ def t_third_card_memory_tie():
     # picks index 1 as "second" - unchanged - but the OTHER one's "why"
     # must say they tied, never claim the picked card "has more memory"
     # when it does not.
-    tie = (f"0, {G.U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, 7.5, Enabled\n"
-           f"1, {G.U_2060}, NVIDIA GeForce RTX 2060, 12288, 12030, 7.5, Disabled\n"
-           f"2, {U_2060_TIE}, NVIDIA GeForce RTX 2060, 12288, 12010, 7.5, Disabled\n")
+    tie = (f"0, {G.U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, 7.5, Enabled, 00000000:0a:00.0\n"
+           f"1, {G.U_2060}, NVIDIA GeForce RTX 2060, 12288, 12030, 7.5, Disabled, 00000000:0b:00.0\n"
+           f"2, {U_2060_TIE}, NVIDIA GeForce RTX 2060, 12288, 12010, 7.5, Disabled, 00000000:0c:00.0\n")
     with G.World(tie):
         det = SC.detect(fresh=True)
     check("tied memory: 'second' is still the lower-index card, unchanged",
@@ -362,9 +362,9 @@ def t_third_card_memory_tie():
     # A third card that is genuinely NOT capable (below Turing): excluded
     # from _lanes, and cards[] gives its REAL reason, never the generic
     # "more memory" line a merely-smaller capable card would get.
-    old_third = (f"0, {G.U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, 7.5, Enabled\n"
-                 f"1, {G.U_2060}, NVIDIA GeForce RTX 2060, 12288, 12030, 7.5, Disabled\n"
-                 f"2, {G.U_P100}, Tesla P100-PCIE-16GB, 16384, 16270, 6.0, Disabled\n")
+    old_third = (f"0, {G.U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, 7.5, Enabled, 00000000:0a:00.0\n"
+                 f"1, {G.U_2060}, NVIDIA GeForce RTX 2060, 12288, 12030, 7.5, Disabled, 00000000:0b:00.0\n"
+                 f"2, {G.U_P100}, Tesla P100-PCIE-16GB, 16384, 16270, 6.0, Disabled, 00000000:0c:00.0\n")
     with G.World(old_third):
         det_old = SC.detect(fresh=True)
     check("an incapable 3rd card does not change 'second' or capability",
@@ -1801,8 +1801,8 @@ def t_planning_uses_the_card_the_model_is_on():
               c for c in det["cards"] if c["uuid"] == G.U_2080S)["why"])
 
     # 4. No monitor seen anywhere: nvidia-smi's first card, as before.
-    nodisp = f"0, {G.U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, 7.5, Disabled\n" \
-             f"1, {G.U_2060}, NVIDIA GeForce RTX 2060, 12288, 12030, 7.5, Disabled\n"
+    nodisp = f"0, {G.U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, 7.5, Disabled, 00000000:0a:00.0\n" \
+             f"1, {G.U_2060}, NVIDIA GeForce RTX 2060, 12288, 12030, 7.5, Disabled, 00000000:0b:00.0\n"
     with G.World(nodisp, windows=True) as w:
         det = SC.detect(fresh=True)
     check("no monitor seen: still nvidia-smi's first card",
@@ -2303,11 +2303,13 @@ U_32 = "GPU-32323232-7777-4777-8777-777777777777"
 
 def smi(*cards):
     """nvidia-smi's real CSV for these (name, MiB, uuid, display) cards, the
-    first being the everyday card (a monitor on it)."""
+    first being the everyday card (a monitor on it). The last column is
+    `pci.bus_id`, which FIELDS_FULL asks for since 2026-10-16."""
     lines = []
     for i, (name, mib, uid, *rest) in enumerate(cards):
         disp = "Enabled" if (i == 0 or (rest and rest[0])) else "Disabled"
-        lines.append(f"{i}, {uid}, {name}, {mib}, {mib - 300}, 7.5, {disp}\n")
+        lines.append(f"{i}, {uid}, {name}, {mib}, {mib - 300}, 7.5, {disp}, "
+                     f"00000000:{10 + i:02x}:00.0\n")
     return "".join(lines)
 
 
@@ -2331,8 +2333,8 @@ def t_small_card_floor_edges():
     check("the old wording 'at least 10 GB' is gone",
           "at least 10 GB" not in d["why"])
     with G.World(smi(PRIM, ("Old", 8192, U_8A))) as w:
-        w.smi = f"0, {G.U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6000, 7.5, Enabled\n" \
-                f"1, {U_8A}, GTX 1080, 8192, 8000, 6.1, Disabled\n"
+        w.smi = f"0, {G.U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6000, 7.5, Enabled, 00000000:07:00.0\n" \
+                f"1, {U_8A}, GTX 1080, 8192, 8000, 6.1, Disabled, 00000000:05:00.0\n"
         d = SC.detect(fresh=True)
     check("an 8 GB card below Turing is still refused", d["capable"] is False
           and "older than Turing" in d["why"], d["why"])

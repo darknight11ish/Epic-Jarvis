@@ -149,6 +149,62 @@ def t_registry():
                                    ("NVIDIA GeForce RTX 2060", ""))] == ["amd", "intel", "nvidia"])
 
 
+def t_a_log_with_no_uuid_pairs_by_pci_address_and_the_fallback_still_pairs():
+    """The owner's real Ollama log, measured 2026-10-16: its "inference compute"
+    lines carry `id=0`/`filter_id=0` and `pci_id=0000:07:00.0`, NOT the GPU- uuid
+    the source's shape suggested. So the uuid-first pass in `smi_for` can never
+    fire on his PC, and when the third card arrives two of the three cards will
+    be identical 8 GB 2080 SUPERs - the PCI bus address is the only exact key
+    that tells those twins apart.
+
+    This is the measured gap the pci pass closes, and the second half is the
+    CONTROL: a log with neither id must still pair by name and size. The
+    fallback is not a legacy branch here - it is the only pairing an older
+    machine has.
+    """
+    # nvidia-smi's spelling of the two bus addresses (8 hex digits, measured on
+    # his PC, driver 617.42), and TWO cards with the same name and the same size.
+    # Index 0 is the twin WITHOUT the monitor, index 1 the one WITH it.
+    u_mon = "GPU-aaaaaaaa-0000-4000-8000-000000000001"
+    u_no_mon = "GPU-bbbbbbbb-0000-4000-8000-000000000002"
+    smi_twins = (f"0, {u_no_mon}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6980, 7.5, "
+                 f"Disabled, 00000000:0b:00.0\n"
+                 f"1, {u_mon}, NVIDIA GeForce RTX 2080 SUPER, 8192, 7100, 7.5, "
+                 f"Enabled, 00000000:0a:00.0\n")
+    # The log's own shape: no uuid at all, and the first-listed device is the
+    # card WITH the monitor - which nvidia-smi calls index 1. Different orders,
+    # so a greedy name+size match picks the wrong twin.
+    dev = {"library": "CUDA", "compute": "7.5",
+           "name": "NVIDIA GeForce RTX 2080 SUPER", "total": "8.0 GiB",
+           "available": "6.9 GiB"}
+    log = G.ollama_log([dict(dev), dict(dev)])   # pci_id=0000:0a:00.0, then ...:0b:00.0
+    check("CONTROL: this log really carries no GPU- uuid - the owner's shape",
+          [d["uuid"] for d in H.parse_ollama_log(log)["devices"]] == ["", ""])
+    with G.World(smi=smi_twins, log=log, reg=None):
+        det = H.detect(fresh=True)
+    rows = det["cards"]
+    check("two identical cards are told apart by their PCI bus address",
+          [r["uuid"] for r in rows] == [u_mon, u_no_mon], [r["uuid"] for r in rows])
+    check("... the monitor lands on the twin nvidia-smi says has the screen",
+          rows[0]["monitor"] is True and rows[1]["monitor"] is False,
+          [(r["uuid"], r["monitor"]) for r in rows])
+    check("the two spellings of one address compare equal; blank or junk never matches",
+          H._pci_key("0000:07:00.0") == H._pci_key("00000000:07:00.0")
+          and H._pci_key("0000:07:00.0") != H._pci_key("0000:08:00.0")
+          and H._pci_key("") == "" and H._pci_key(None) == "")
+    # CONTROL: strip the pci_id from the log lines as well, leaving a log with
+    # NEITHER id, and the name+size fallback must still pair the cards.
+    bare = re.sub(r" pci_id=\S+", "", log)
+    check("CONTROL: the control log has no id of either kind",
+          all(d["uuid"] == "" and d["pci_id"] == ""
+              for d in H.parse_ollama_log(bare)["devices"]))
+    with G.World(smi=smi_twins, log=bare, reg=None):
+        det = H.detect(fresh=True)
+    rows = det["cards"]
+    check("a log with no uuid AND no pci_id still pairs by name and size",
+          len(rows) == 2 and all("nvidia-smi" in r["sources"] for r in rows), rows)
+
+
 def t_the_join():
     with G.World(smi=G.SMI_PAIR, log=LOG2, reg=G.reg_text([G.REG_2080S, G.REG_2060, G.REG_UHD]),
                  user_env=G.TODAY_ENV):
@@ -539,7 +595,7 @@ def t_measure():
 #   The second card under a preset
 # --------------------------------------------------------------------------
 
-SMI_16 = f"0, {G.U_A}, NVIDIA RTX A4000, 16384, 15200, 8.6, Enabled\n"
+SMI_16 = f"0, {G.U_A}, NVIDIA RTX A4000, 16384, 15200, 8.6, Enabled, 00000000:0a:00.0\n"
 LOG_16 = G.ollama_log([{"uuid": G.U_A, "library": "CUDA", "compute": "8.6",
                         "name": "NVIDIA RTX A4000", "total": "16.0 GiB", "available": "15.0 GiB"}])
 
