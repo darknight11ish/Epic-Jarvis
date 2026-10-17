@@ -366,10 +366,16 @@ RATCHET = {
 def materialised(target: str, patches=None) -> dict:
     """What building `target`'s stand-in had to invent.
 
-    {'target', 'hunks', 'materialised', 'by_patch'} - 'materialised' is the
-    count the RATCHET pins, 'by_patch' names the patches that needed it, so a
-    failure can say which patch drifted. Empty counts when git is missing (the
-    stand-in could not be built at all, which the caller reports as a skip)."""
+    {'target', 'hunks', 'materialised', 'by_patch', 'by_patch_lines'} -
+    'materialised' is the count the RATCHET pins, 'by_patch' names the patches
+    that needed it and 'by_patch_lines' says how many LINES of the owner's
+    original text each of them read, so a failure can say which patch drifted
+    and by how much. The two units disagree in the case that matters:
+    `tools/check_patch_original_text.py` measured the pre-#472
+    `cloud-say-yes.patch` at 1 hunk / 27 lines against the fixed one's
+    1 hunk / 16 lines, so a hunk-count ratchet cannot see that break at all.
+    Empty counts when git is missing (the stand-in could not be built at all,
+    which the caller reports as a skip)."""
     stats = {}
     stand_in(target, patches, stats=stats)
     return stats
@@ -464,7 +470,8 @@ def stand_in(target: str, patches=None, *, replace: dict = None, stats: dict = N
     git = shutil.which("git")
     if not git:
         if stats is not None:
-            stats.update(target=target, hunks=0, materialised=0, by_patch={})
+            stats.update(target=target, hunks=0, materialised=0, by_patch={},
+                         by_patch_lines={})
         return None, ["git is not installed"]
     patches = order() if patches is None else list(patches)
     d = Path(tempfile.mkdtemp(prefix="jarvis-stack-"))
@@ -477,6 +484,7 @@ def stand_in(target: str, patches=None, *, replace: dict = None, stats: dict = N
     gaps = 0
     seen = 0
     by_patch = {}
+    by_patch_lines = {}
     try:
         f = d / target
         f.write_text("", encoding="utf-8")
@@ -490,6 +498,7 @@ def stand_in(target: str, patches=None, *, replace: dict = None, stats: dict = N
                     continue
                 gaps += 1
                 by_patch[name] = by_patch.get(name, 0) + 1
+                by_patch_lines[name] = by_patch_lines.get(name, 0) + len(pre)
                 text = f.read_text(encoding="utf-8")
                 if text and not text.endswith("\n"):
                     text += "\n"
@@ -512,7 +521,8 @@ def stand_in(target: str, patches=None, *, replace: dict = None, stats: dict = N
     finally:
         if stats is not None:
             stats.update(target=target, hunks=seen, materialised=gaps,
-                         by_patch=dict(by_patch))
+                         by_patch=dict(by_patch),
+                         by_patch_lines=dict(by_patch_lines))
         shutil.rmtree(d, ignore_errors=True)
 
 
