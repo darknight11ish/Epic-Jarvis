@@ -1617,6 +1617,18 @@ jobs:
       # job through run_suites.py, is the proof that this checker bites.
       - name: Every .py in the published base is delivered, or recorded as not
         run: python3 ../../tools/check_unmanaged_files.py
+      # A test must exercise the seam at runtime, never pin the source TEXT of a
+      # production module. Seven checks in this project passed while measuring
+      # something other than their invariant (origin/main's copy of a file, the
+      # checkout's own topology, git history, the spelling of a call, a pinned
+      # defect...), and a pin on text goes red when the code is renamed or
+      # improved while staying green when the behaviour is wrong.
+      # tools/check_no_source_pins.py is a CEILING RATCHET: it records the pins
+      # measured on 2026-10-17 (116 files, 423) and allows the number to fall,
+      # never rise. backend/test_no_source_pins.py, which runs in the required
+      # `backend` job through run_suites.py, is the proof that this checker bites.
+      - name: No test pins the source text of a production module
+        run: python3 ../../tools/check_no_source_pins.py
       # ---------------------------------------------------------------------
       # THE ONE STEP IN THIS JOB THAT REPORTS WITHOUT FAILING, on purpose.
       #
