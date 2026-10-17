@@ -19,7 +19,9 @@ What is proved here, against real SQLite files in a temp folder:
   * the route: token and origin like forget, one integer id and nothing
     else, 404 in its own words, and a reply that never carries the words;
   * no event on the bus (forget sends none either) and an audit line with
-    the id only.
+    the id only - written into THIS run's own log folder, never the owner's
+    (see LOGS below: a suite that erases facts must not put "fact 1 was
+    erased" into the log he reads).
 
 No pytest, no network, no model.
 """
@@ -39,17 +41,39 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+
+#: This run's own temp folder, and the config directory everything that reads
+#: one must use. Set BEFORE the first import that resolves it: jarvis_framework
+#: computes CONFIG_DIR once, at import.
+_TMP = Path(tempfile.mkdtemp(prefix="jarvis-erase-"))
+os.environ["OPENJARVIS_CONFIG_DIR"] = str(_TMP / "cfg")
+
 from _where import REPO, require_shipped  # noqa: E402
 
 require_shipped("rebuilt/jarvis_memory.py", "jarvis_chat_log.py")
 
-_TMP = Path(tempfile.mkdtemp(prefix="jarvis-erase-"))
 try:
     import jarvis_memory as M
 except ImportError:
     sys.path.append(str(REPO / "backend" / "rebuilt"))
     import jarvis_memory as M
 import jarvis_chat_log as CH  # noqa: E402 - "Also delete the chat it came from"
+import jarvis_framework as FW  # noqa: E402
+
+#: WHERE THIS RUN'S AUDIT LINES GO, AND WHY THEY ARE NOT THE OWNER'S.
+#:
+#: Erasing a fact writes an audit line (jarvis_memory.erase -> fw.audit_log),
+#: and jarvis_framework.log_dir() honours `[logging].log_directory` from the
+#: config file - which on the owner's PC names his own folder. This suite
+#: erases facts in most of its tests, so a run used to put 22 `memory.erased`
+#: lines into the log he may read: a log saying "fact 1 was erased" when he had
+#: erased nothing (measured 2026-10-16), which is a false record of an action
+#: on his own data. `jarvis_framework.log_dir`'s own docstring says the
+#: surviving suites redirect this by patching `load_framework`; the two lines
+#: below do exactly that, the same way backend/test_skill_discovery.py does.
+LOGS = _TMP / "logs"
+_CFG = {"logging": {"enabled": True, "log_directory": str(LOGS)}}
+FW.load_framework = lambda *a, **k: json.loads(json.dumps(_CFG))
 
 PASSED, FAILED = [], []
 SKIPPED = []
@@ -481,6 +505,42 @@ def t_the_lists_show_it_as_erased():
     check("'Saved automatically' lists current facts only, so the erased one is gone",
           all(f["id"] != fid for f in listed["facts"]) and SECRET not in json.dumps(listed),
           listed)
+
+
+def _audit_lines() -> list:
+    """Every line this run has written to its OWN log folder."""
+    if not LOGS.exists():
+        return []
+    out = []
+    for p in sorted(LOGS.glob("*.jsonl")):
+        out += [l for l in p.read_text(encoding="utf-8", errors="replace").splitlines()
+                if l.strip()]
+    return out
+
+
+def t_the_audit_lines_go_to_this_run_s_own_folder():
+    """The redirect, proved rather than assumed - and it IS the point.
+
+    jarvis_framework.log_dir() reads `[logging].log_directory` out of the
+    config file, so without the patch above every erase in this suite appends
+    to the log the owner reads. A check that only said "an audit line was
+    written" would pass either way; these say WHERE.
+    """
+    check("the log folder this suite writes is inside its own temp folder",
+          str(FW.log_dir()).startswith(str(_TMP)), FW.log_dir())
+    check("... and the patch is on the module jarvis_memory audits through",
+          M.fw is FW, (M.fw, FW))
+    st = fresh("audit-redirect")
+    fid = add_secret(st)
+    before = _audit_lines()
+    st.erase(fid)
+    after = _audit_lines()
+    written = after[len(before):]
+    check("erasing writes its audit line into THAT folder, not the owner's log",
+          len(after) > len(before) and any('"memory.erased"' in l for l in written),
+          written[-2:])
+    check("... and every line carries the id only, never a word",
+          all(SECRET not in l for l in after), after[-1:])
 
 
 def t_no_event_and_the_audit_line_has_the_id_only():
