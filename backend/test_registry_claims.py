@@ -214,10 +214,52 @@ class Scan:
         self.calls = {}        # relpath -> [(local name, attribute, line)]
         self.names = set()     # every file name in the tree
         self.unreadable = []   # (relpath, why) - a file this could not parse
+        # Whatever git IGNORES is not part of the tree this suite speaks for,
+        # so it is never walked - asked of git rather than added to the list
+        # above, because a hardcoded list is exactly how this broke on
+        # 2026-10-16. `dshwork/` held three throwaway files that do not parse
+        # (`audit-03-cienv.py` starts with a BOM, two `gitprobe` copies of
+        # jarvis_hud.py are fragments), so this suite reported the WHOLE update
+        # as untrustworthy in `apply-patches.ps1` on the owner's PC when the
+        # only thing wrong was the instrument.
+        #
+        # Kept as PATHS, and compared as paths - never as bare directory names.
+        # A name match looks right and is not: measured on this PC, the ignored
+        # list's first components include `backend`, `tools`, `jarvis-desktop`,
+        # `jarvis-client` and `keystore` (build output, node_modules and
+        # keystores inside them), so pruning by name dropped the walk from
+        # 11,156 `.py` files to 217 and this suite would have gone green while
+        # reading almost none of the repository.
+        ignored_dirs = set()    # repository-relative, no trailing slash
+        ignored_files = set()
+        try:
+            _out = subprocess.run(
+                ["git", "-C", str(self.repo), "ls-files", "--others", "--ignored",
+                 "--exclude-standard"],
+                capture_output=True, text=True, timeout=30).stdout
+            for _ln in _out.splitlines():
+                _entry = _ln.strip()
+                if not _entry:
+                    continue
+                if _entry.endswith("/"):
+                    ignored_dirs.add(_entry.rstrip("/"))
+                else:
+                    ignored_files.add(_entry)
+        except Exception:
+            pass                # no git here: the explicit list above still holds
         for dirpath, dirnames, filenames in os.walk(repo):
-            dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+            keep = []
+            for d in dirnames:
+                if d in SKIP_DIRS:
+                    continue
+                if (Path(dirpath) / d).relative_to(repo).as_posix() in ignored_dirs:
+                    continue
+                keep.append(d)
+            dirnames[:] = keep
             for fn in filenames:
                 rel = (Path(dirpath) / fn).relative_to(repo)
+                if rel.as_posix() in ignored_files:
+                    continue
                 self.names.add(rel.name)
                 if rel.suffix != ".py":
                     continue
