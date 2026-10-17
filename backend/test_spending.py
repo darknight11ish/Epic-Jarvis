@@ -2081,6 +2081,303 @@ def t_the_settings_card_never_deletes_a_layout_to_check_it_again():
     fresh()
 
 
+# ============================================================ 11. subscriptions
+
+def _audit_txn(day, cents, desc="NETFLIX.COM", currency="GBP"):
+    """One transaction in the module's own shape: money out is negative."""
+    return SP.Txn(day, cents, desc, currency)
+
+
+def _monthly_charges(*amounts, start=_dt.date(2026, 1, 5), gap=31):
+    """One subscription, billed `gap` days apart, at the amounts given."""
+    out, day = [], start
+    for amount in amounts:
+        out.append(_audit_txn(day, -amount))
+        day += _dt.timedelta(days=gap)
+    return out
+
+
+def _two_charges(days, *, amount=999, desc="GYM", currency="GBP"):
+    """Two identical charges `days` apart, both money out."""
+    first = _dt.date(2026, 1, 1)
+    return [_audit_txn(first, -amount, desc, currency),
+            _audit_txn(first + _dt.timedelta(days=days), -amount, desc, currency)]
+
+
+def _refused(call):
+    """Did this call raise ValueError? (A refused row is the proof, not a pass.)"""
+    try:
+        call()
+    except ValueError:
+        return True
+    return False
+
+
+def t_a_monthly_subscription_and_its_price_hike_are_reported_exactly():
+    """Pillar 10, the first half: a charge that comes back every month, and the
+    month it cost more. Money is whole cents, and the delta is exact."""
+    got = SP.audit_subscriptions(_monthly_charges(999, 999, 1299))
+    check("three charges about a month apart are one monthly subscription",
+          got["subscriptions"] == [{
+              "merchant_stem": "netflix com",
+              "description": "NETFLIX.COM",
+              "currency": "GBP",
+              "interval": "monthly",
+              "count": 3,
+              "first_date": "2026-01-05",
+              "latest_date": "2026-03-08",
+              "latest_amount_cents": 1299}], got["subscriptions"])
+    check("the rise is a price hike with the exact delta in whole cents (+300 = +3.00)",
+          got["price_hikes"] == [{
+              "merchant_stem": "netflix com",
+              "description": "NETFLIX.COM",
+              "currency": "GBP",
+              "interval": "monthly",
+              "previous_date": "2026-02-05",
+              "previous_amount_cents": 999,
+              "latest_date": "2026-03-08",
+              "latest_amount_cents": 1299,
+              "delta_cents": 300}], got["price_hikes"])
+    check("every amount is an int of cents, never a float and never formatted money",
+          all(isinstance(h[k], int) for h in got["price_hikes"]
+              for k in ("delta_cents", "latest_amount_cents", "previous_amount_cents")))
+    check("nothing else is claimed and every charge was looked at",
+          got["duplicate_charges"] == [] and got["transactions"] == 3, got)
+    check("the answer is plain data: JSON round-trips without help",
+          json.loads(json.dumps(got)) == got, got)
+
+
+def t_the_monthly_and_annual_boundaries_are_exact():
+    """26 and 35 days are monthly; 25 and 36 are not. 350 and 380 days are
+    annual; 349 and 381 are not. Each end of each band is tested on its own."""
+    for days, want in ((25, None), (26, "monthly"), (35, "monthly"), (36, None)):
+        got = SP.audit_subscriptions(_two_charges(days))
+        check(f"{days} days apart: " + ("monthly" if want else "not a known interval"),
+              [s["interval"] for s in got["subscriptions"]] == ([want] if want else []),
+              got["subscriptions"])
+    for days, want in ((349, None), (350, "annual"), (380, "annual"), (381, None)):
+        got = SP.audit_subscriptions(_two_charges(days, desc="MAGAZINE SUBSCRIPTION"))
+        check(f"{days} days apart: " + ("annual" if want else "not a known interval"),
+              [s["interval"] for s in got["subscriptions"]] == ([want] if want else []),
+              got["subscriptions"])
+
+
+def t_a_double_charge_is_six_days_or_fewer_and_seven_is_not():
+    """'Twice within < 7 days' means 6 days or fewer. Same day, 6 days and 7
+    days are each tested, so the boundary cannot drift either way."""
+    for days in (0, 1, 3, 5, 6):
+        got = SP.audit_subscriptions(_two_charges(days, desc="SPOTIFY P2E4X7"))
+        check(f"two identical charges {days} day(s) apart are a duplicate",
+              [(d["dates"], d["days_apart"]) for d in got["duplicate_charges"]]
+              == [(["2026-01-01", (_dt.date(2026, 1, 1) + _dt.timedelta(days=days)).isoformat()], days)],
+              got["duplicate_charges"])
+    check("the duplicate's amount is whole cents with money out positive",
+          SP.audit_subscriptions(_two_charges(2, desc="SPOTIFY P2E4X7"))[
+              "duplicate_charges"][0]["amount_cents"] == 999)
+    seven = SP.audit_subscriptions(_two_charges(7, desc="SPOTIFY P2E4X7"))
+    check("7 days apart is NOT a duplicate: '< 7' is 6 days or fewer",
+          seven["duplicate_charges"] == [], seven["duplicate_charges"])
+
+
+def t_a_duplicate_is_the_same_shop_and_amount_and_nothing_else():
+    day = _dt.date(2026, 1, 5)
+    check("a different amount is not a duplicate",
+          SP.audit_subscriptions([_audit_txn(day, -999, "SPOTIFY"),
+                                  _audit_txn(day, -1000, "SPOTIFY")])["duplicate_charges"] == [])
+    check("a different shop is not a duplicate",
+          SP.audit_subscriptions([_audit_txn(day, -999, "SPOTIFY"),
+                                  _audit_txn(day, -999, "NETFLIX")])["duplicate_charges"] == [])
+    check("the same shop written with another store number IS the same shop",
+          len(SP.audit_subscriptions([_audit_txn(day, -999, "TESCO STORES 1234"),
+                                      _audit_txn(day, -999, "TESCO STORES 5678")])["duplicate_charges"]) == 1)
+    check("the same amount in two currencies is not one duplicate charge",
+          SP.audit_subscriptions([_audit_txn(day, -999, "SPOTIFY", "GBP"),
+                                  _audit_txn(day, -999, "SPOTIFY", "EUR")])["duplicate_charges"] == [])
+    chain = SP.audit_subscriptions([_audit_txn(day, -500, "SPOTIFY"),
+                                    _audit_txn(day + _dt.timedelta(days=2), -500, "SPOTIFY"),
+                                    _audit_txn(day + _dt.timedelta(days=4), -500, "SPOTIFY")])
+    check("a third charge in the same week is a second duplicate, not a hidden one",
+          [(d["dates"], d["days_apart"]) for d in chain["duplicate_charges"]]
+          == [(["2026-01-05", "2026-01-07"], 2), (["2026-01-07", "2026-01-09"], 2)],
+          chain["duplicate_charges"])
+
+
+def t_only_a_rise_is_a_hike_never_an_equal_or_lower_charge():
+    equal = SP.audit_subscriptions(_monthly_charges(1200, 1200))
+    check("the same amount again is not a hike, and the subscription is still there",
+          equal["price_hikes"] == [] and len(equal["subscriptions"]) == 1, equal)
+    lower = SP.audit_subscriptions(_monthly_charges(1200, 1000))
+    check("a lower charge is a decrease and is never reported as a hike",
+          lower["price_hikes"] == [] and len(lower["subscriptions"]) == 1, lower)
+    rise = SP.audit_subscriptions(_monthly_charges(1000, 1200))
+    check("a rise is reported with delta = latest - previous, and it is positive",
+          [h["delta_cents"] for h in rise["price_hikes"]] == [200], rise["price_hikes"])
+    small = SP.audit_subscriptions(_monthly_charges(1000, 1001))
+    check("one cent is a real rise and is reported as +1, never rounded away",
+          [h["delta_cents"] for h in small["price_hikes"]] == [1], small["price_hikes"])
+
+
+def t_a_one_off_or_irregular_charge_is_not_a_subscription():
+    one = SP.audit_subscriptions([_audit_txn(_dt.date(2026, 1, 5), -999)])
+    check("a single charge is not a subscription",
+          one["subscriptions"] == [] and one["transactions"] == 1, one)
+    fortnightly = SP.audit_subscriptions([
+        _audit_txn(_dt.date(2026, 1, 1), -500, "GYM"),
+        _audit_txn(_dt.date(2026, 1, 15), -500, "GYM"),
+        _audit_txn(_dt.date(2026, 1, 29), -500, "GYM")])
+    check("a fortnightly charge is not called monthly",
+          fortnightly["subscriptions"] == [], fortnightly["subscriptions"])
+    skipped_month = SP.audit_subscriptions([
+        _audit_txn(_dt.date(2026, 1, 1), -500, "GYM"),
+        _audit_txn(_dt.date(2026, 2, 1), -500, "GYM"),
+        _audit_txn(_dt.date(2026, 4, 1), -500, "GYM")])   # 59 days: a missed month
+    check("a series with a missed month is not vouched for as monthly",
+          skipped_month["subscriptions"] == [], skipped_month["subscriptions"])
+
+
+def t_money_in_zero_and_a_nameless_row_are_not_charges():
+    got = SP.audit_subscriptions([
+        _audit_txn(_dt.date(2026, 1, 5), 999, "REFUND NETFLIX"),
+        _audit_txn(_dt.date(2026, 2, 5), -999),
+        _audit_txn(_dt.date(2026, 3, 5), -999)])
+    check("a payment in is not a charge and cannot stand in for one",
+          got["transactions"] == 2 and got["subscriptions"]
+          and got["subscriptions"][0]["first_date"] == "2026-02-05", got)
+    zero = SP.audit_subscriptions([_audit_txn(_dt.date(2026, 1, 5), 0, "NETFLIX"),
+                                   _audit_txn(_dt.date(2026, 2, 5), 0, "NETFLIX")])
+    check("a zero amount is not a charge",
+          zero["transactions"] == 0 and zero["subscriptions"] == [], zero)
+    nameless = SP.audit_subscriptions([_audit_txn(_dt.date(2026, 1, 5), -999, ""),
+                                       _audit_txn(_dt.date(2026, 2, 5), -999, "")])
+    check("a row with no merchant name is not attributed to anyone",
+          nameless["transactions"] == 0 and nameless["subscriptions"] == []
+          and nameless["duplicate_charges"] == [], nameless)
+    hidden = SP.audit_subscriptions([_audit_txn(_dt.date(2026, 1, 5), -999, SP.HIDDEN),
+                                     _audit_txn(_dt.date(2026, 2, 5), -999, SP.HIDDEN)])
+    check("a description that is ONLY a hidden account number names no merchant",
+          hidden["transactions"] == 0 and hidden["subscriptions"] == []
+          and hidden["duplicate_charges"] == []
+          and SP.merchant_stem(SP.HIDDEN) == "", hidden)
+    check("... but a hidden number beside a name keeps the name",
+          SP.merchant_stem("TESCO STORES [hidden]") == "tesco stores hidden",
+          SP.merchant_stem("TESCO STORES [hidden]"))
+
+
+def t_a_double_charge_in_the_middle_cannot_hide_the_subscription_or_its_rise():
+    got = SP.audit_subscriptions([
+        _audit_txn(_dt.date(2026, 1, 5), -999),
+        _audit_txn(_dt.date(2026, 2, 5), -999),
+        _audit_txn(_dt.date(2026, 2, 8), -999),      # charged twice in February
+        _audit_txn(_dt.date(2026, 3, 5), -1299)])
+    check("the subscription is still monthly",
+          [s["interval"] for s in got["subscriptions"]] == ["monthly"], got["subscriptions"])
+    check("... and the rise is still found, exactly",
+          [h["delta_cents"] for h in got["price_hikes"]] == [300], got["price_hikes"])
+    check("... and the double charge is reported, 3 days apart",
+          [(d["dates"], d["days_apart"]) for d in got["duplicate_charges"]]
+          == [(["2026-02-05", "2026-02-08"], 3)], got["duplicate_charges"])
+
+
+def t_two_currencies_are_two_subscriptions_never_one():
+    txns = []
+    for currency in ("GBP", "EUR"):
+        txns += [_audit_txn(_dt.date(2026, 1, 5), -999, "NETFLIX", currency),
+                 _audit_txn(_dt.date(2026, 2, 5), -999, "NETFLIX", currency)]
+    got = SP.audit_subscriptions(txns)
+    check("the same subscription in two currencies is two entries",
+          sorted(s["currency"] for s in got["subscriptions"]) == ["EUR", "GBP"],
+          got["subscriptions"])
+    same_day = SP.audit_subscriptions([
+        _audit_txn(_dt.date(2026, 1, 5), -999, "SPOTIFY", "GBP"),
+        _audit_txn(_dt.date(2026, 1, 5), -999, "SPOTIFY", "EUR")])
+    check("... and an amount in one currency is never the duplicate of another",
+          same_day["duplicate_charges"] == [], same_day["duplicate_charges"])
+
+
+def t_the_same_subscription_written_with_a_store_number_is_one_merchant():
+    got = SP.audit_subscriptions([
+        _audit_txn(_dt.date(2026, 1, 5), -999, "NETFLIX.COM 4832"),
+        _audit_txn(_dt.date(2026, 2, 5), -999, "NETFLIX.COM 3221")])
+    check("the trailing reference number is not part of the merchant",
+          [s["merchant_stem"] for s in got["subscriptions"]] == ["netflix com"],
+          got["subscriptions"])
+    check("... and the finding shows the latest real words, for the owner",
+          got["subscriptions"] and got["subscriptions"][0]["description"] == "NETFLIX.COM 3221",
+          got["subscriptions"])
+    check("a reference code at the end is stripped the same way",
+          SP.merchant_stem("SPOTIFY P2E4X7") == "spotify", SP.merchant_stem("SPOTIFY P2E4X7"))
+    check("a word that merely ends in a number keeps it",
+          SP.merchant_stem("STUDIO54") == "studio54"
+          and SP.merchant_stem("7ELEVEN") == "7eleven",
+          (SP.merchant_stem("STUDIO54"), SP.merchant_stem("7ELEVEN")))
+    check("two different shops are never one merchant",
+          SP.merchant_stem("COSTA COFFEE") != SP.merchant_stem("COSTCO")
+          and SP.merchant_stem("AMAZON PRIME") != SP.merchant_stem("AMAZON FRESH"))
+    check("case, punctuation, width and accents fold exactly as normalise_description does",
+          SP.merchant_stem("  COSTA--Coffee  #12 ") == "costa coffee"
+          and SP.merchant_stem("ＣＯＳＴＡ") == "costa"
+          and SP.merchant_stem("CAFÉ") == "cafe"
+          and SP.merchant_stem("") == "" and SP.merchant_stem(None) == "",
+          [SP.merchant_stem(x) for x in ("  COSTA--Coffee  #12 ", "ＣＯＳＴＡ", "CAFÉ", "", None)])
+
+
+def t_a_dict_transaction_can_carry_text_and_the_modules_own_parser_reads_it():
+    got = SP.audit_subscriptions([
+        {"date": "05/01/2026", "cents": -999, "desc": "NETFLIX.COM", "currency": "gbp"},
+        {"date": "05/02/2026", "cents": -999, "desc": "NETFLIX.COM", "currency": "GBP"}])
+    check("a dict with the same four keys is a transaction",
+          len(got["subscriptions"]) == 1, got["subscriptions"])
+    check("a text date is read day-first by the module's own parse_date",
+          got["subscriptions"][0]["first_date"] == "2026-01-05"
+          and got["subscriptions"][0]["latest_date"] == "2026-02-05", got["subscriptions"])
+    check("the currency is one value however it was written",
+          got["subscriptions"][0]["currency"] == "GBP", got["subscriptions"])
+    when = _dt.datetime(2026, 1, 5, 18, 30)
+    got = SP.audit_subscriptions([SP.Txn(when, -999, "NETFLIX", "GBP"),
+                                  SP.Txn(_dt.datetime(2026, 2, 5, 9, 0), -999, "NETFLIX", "GBP")])
+    check("a datetime is its date: no time of day takes part in an interval",
+          [s["interval"] for s in got["subscriptions"]] == ["monthly"]
+          and got["subscriptions"][0]["first_date"] == "2026-01-05", got["subscriptions"])
+
+
+def t_a_bad_transaction_is_refused_and_never_guessed_at():
+    day = _dt.date(2026, 1, 5)
+    cases = {
+        "a float amount": [SP.Txn(day, -11.99, "NETFLIX", "GBP")],
+        "a text amount": [{"date": day, "cents": "-999", "desc": "NETFLIX", "currency": "GBP"}],
+        "a missing amount": [{"date": day, "desc": "NETFLIX", "currency": "GBP"}],
+        "an unreadable date": [{"date": "the fifth", "cents": -999, "desc": "NETFLIX",
+                                "currency": "GBP"}],
+        "a description that is not text": [{"date": day, "cents": -999, "desc": b"NETFLIX",
+                                            "currency": "GBP"}],
+    }
+    for why in cases:
+        check(f"{why} is refused rather than guessed at",
+              _refused(lambda why=why: SP.audit_subscriptions(cases[why])))
+
+
+def t_the_answer_never_depends_on_the_order_of_the_rows():
+    txns = _monthly_charges(999, 999, 1299) + [_audit_txn(_dt.date(2026, 2, 8), -999)]
+    before = list(txns)
+    want = SP.audit_subscriptions(txns)
+    check("the same rows in reverse order give the same dict",
+          SP.audit_subscriptions(list(reversed(txns))) == want, want)
+    check("the list given is not changed and nothing is added to it",
+          txns == before and len(txns) == 4)
+    tie = [_audit_txn(_dt.date(2026, 1, 1), -100, "GYM"),
+           _audit_txn(_dt.date(2026, 2, 1), -200, "GYM"),
+           _audit_txn(_dt.date(2026, 2, 1), -300, "GYM")]
+    check("two charges on one day give the same answer in either order",
+          SP.audit_subscriptions(tie) == SP.audit_subscriptions(list(reversed(tie))))
+
+
+def t_an_empty_audit_is_an_empty_answer_not_a_crash():
+    empty = {"transactions": 0, "subscriptions": [], "price_hikes": [],
+             "duplicate_charges": []}
+    check("no transactions gives the four empty lists", SP.audit_subscriptions([]) == empty)
+    check("None is the same as none at all", SP.audit_subscriptions(None) == empty)
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):
