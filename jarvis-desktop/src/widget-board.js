@@ -54,8 +54,15 @@ export const LOCKED_OPENS_BAR =
 /** Buttons that still work on a stale link: they only stop, or only open. */
 export const NEVER_HELD = ["stop_everything", "brief_me"];
 export const PRIVATE_SOURCES = ["current_task", "now_playing", "reminders", "timers", "today", "todo"];
-const KNOWN_SOURCES = [...PRIVATE_SOURCES, "disk_free", "email_count", "events_count", "focus",
-  "reminders_count", "todo_count"];
+/** Every source the PC's own menu can fill (jarvis_widgets.SOURCES), in that
+ *  order. The phone carries the same list (net/JarvisWidgets.kt
+ *  KNOWN_SOURCES), and a source that is NOT here is drawn as private - so a
+ *  list that lags the PC hides a value the PC says is not private at all.
+ *  The last three were on the PC's menu and in the phone's list and missing
+ *  here, so "approvals waiting", "graphics memory" and "tokens a second" were
+ *  each drawn as if they held the owner's own words. */
+const KNOWN_SOURCES = [...PRIVATE_SOURCES, "approvals_count", "disk_free", "email_count",
+  "events_count", "focus", "gpu_memory", "reminders_count", "todo_count", "tokens_per_second"];
 export const LIMITS = { blocks: 8, items: 5, name: 40, text: 60, label: 40 };
 
 /** Text as both apps draw it: control and format characters out, ASCII
