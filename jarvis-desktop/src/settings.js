@@ -103,6 +103,7 @@ import {
   SPEEDS,
 } from "./face-tuning.js";
 import { PLACE_FRESH_MS, SETTINGS_PLACE_KEY, START_PLACE } from "./plain-errors.js";
+import { withBudget } from "./invoke-budget.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -231,26 +232,13 @@ const OPEN_READS = new Set([
   "get_backend_capabilities",
 ]);
 
-/** How long one of [`OPEN_READS`] is given before the page says so. */
-const OPEN_READ_BUDGET_MS = 30_000;
-
-/** The same failure every other line on this page shows, from a wait. */
-const OPEN_READ_LATE =
-  "Jarvis has not answered yet, so this part of Settings may be out of date. Try again in a moment.";
-
-/**
- * A request that must answer. `work` keeps running (Rust does not cancel a
- * command), and its late result is ignored - the race handles both sides, so
- * a late rejection cannot surface as an unhandled one.
- */
-function withBudget(work, ms = OPEN_READ_BUDGET_MS) {
-  let bell = 0;
-  const late = new Promise((_, fail) => {
-    bell = setTimeout(() => fail(new Error(OPEN_READ_LATE)), ms);
-  });
-  return Promise.race([work, late]).finally(() => clearTimeout(bell));
-}
-
+/** The budget and the sentence for a read that did not answer are NOT here: they
+ * live in the ONE shared module (src/invoke-budget.js), so this page, the
+ * Devices card and every card the sweep reaches next say the same thing and can
+ * never drift apart. Before 2026-10-16 the read sentence had three declarations
+ * - this one, `devices-words.js`'s and `invoke-budget.js`'s - and two of the
+ * three disagreed. `OPEN_READS` above stays exactly as it was: it is this
+ * page's own decision about WHICH commands get a budget, not a copy of anything. */
 async function invoke(command, args = {}) {
   if (!IS_TAURI) throw new Error("no desktop backend");
   const sent = TAURI.core.invoke(command, args);

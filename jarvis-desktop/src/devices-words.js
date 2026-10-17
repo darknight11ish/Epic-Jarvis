@@ -37,6 +37,19 @@ export const NEEDS_ADDRESS = "Type the name your phone reaches this PC at first 
 export const STALE = "The connection to Jarvis is catching up, so nothing can be sent " +
   "until it does.";
 
+/** The two sentences for a request that never answered live in ONE place:
+ * `invoke-budget.js`, the module that gives every command its budget and so is
+ * what produces them. They are re-exported from here because this file is the
+ * Devices card's flat word list, and `devices.js`, `tests/devices.mjs` and
+ * `tests/settings-devices-late.mjs` import them from it.
+ *
+ * They used to be DECLARED here - and `invoke-budget.js` declared them too - so
+ * the same sentence existed twice and the two copies had already drifted apart
+ * ("Check your phone and the list…" against "Check before pressing it again.").
+ * One definition, one home, both callers; `tests/invoke-budget.mjs` fails if a
+ * second copy ever appears. */
+export { LATE_ACTION, LATE_READ } from "./invoke-budget.js";
+
 /** Whether a session in `state` still shows a code or the words. */
 export function isActive(state) {
   return ACTIVE_STATES.includes(state);

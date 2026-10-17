@@ -1820,7 +1820,18 @@ def t_the_apps_word_a_label_the_same_way():
           'The phone calls itself ${d.name}.' in plate)
     check("the desktop offers the way in, and never waits for a live link for it",
           "devices_label" in page and "LABEL_BUTTON" in page and "labelDevice" in page
-          and 'invoke("devices_label", { id: d.id, label: next })' in page)
+          and 'call("devices_label", { id: d.id, label: next }, "action")' in page)
+    # STRONGER since 2026-10-16, and this clause could not have been written
+    # before: the call is not only spelled right, it goes through the ONE
+    # budgeted door (`call`, src/invoke-budget.js), which gives every command a
+    # budget - so a request that never answers ends in words on screen and live
+    # controls instead of a card frozen on "Naming…" for ever. The pin this
+    # replaced asked for `invoke("devices_label" ...)`: the exact spelling of a
+    # call that had NO budget. That is pinned to an implementation rather than a
+    # promise, and it went red when the code got BETTER.
+    check("... and every command on the card goes through the one budgeted door",
+          "TAURI.core.invoke(" not in page
+          and 'from "./invoke-budget.js"' in page)
     check("the desktop shows the name to show (`shown`), never rebuilding it",
           "d.shown || d.name || d.id" in page)
     check("a label never approves anything: pair_device stays PC only, with Windows Hello",
