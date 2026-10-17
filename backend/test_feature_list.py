@@ -128,10 +128,57 @@ def t_every_copy_is_the_same_file():
           C.source_bytes() == (REPO / "features" / "features.json").read_bytes())
 
 
+def t_a_one_sided_claim_carries_its_reason():
+    """Rule 5, and the reason it covers one direction only.
+
+    An entry whose `surface` is `"phone"` tells the owner his PC is missing the
+    feature. That is the claim that misinformed him three times (PC help,
+    "What did I believe on this date?", the rush-latch banner - all three said
+    `phone` while the desktop rendered them), so it must carry a sentence
+    saying why. The shape is all a checker can judge - it cannot tell whether a
+    sentence is TRUE - so these prove the three ways it bites:
+    a claim with no reason, a claim whose "reason" is the value said again, and
+    an exemption in REASON_PENDING that is no longer needed."""
+    def entry(**over):
+        base = {"id": "z", "group": "Talking", "title": "t", "what": "w",
+                "where": "w", "asks": "a", "limit": "", "surface": "phone",
+                "covers": []}
+        base.update(over)
+        return base
+
+    bare = C.field_problems([entry()])
+    check("a `phone` entry with no reason is reported, by name",
+          any("z" in b and "no `surface_reason`" in b for b in bare), bare)
+
+    echo = C.field_problems([entry(surface_reason="phone only")])
+    check("a reason that is only the value said again is refused",
+          any("not a reason" in b for b in echo), echo)
+
+    good = C.field_problems([entry(surface_reason=(
+        "The phone's own display setting, which no PC control can change."))])
+    check("a sentence a person wrote is accepted", good == [], good)
+
+    check("a `desktop` entry needs no reason (the rule is one-directional)",
+          C.field_problems([entry(surface="desktop")]) == [])
+
+    stale = C.pending_problems([entry(surface="both")])
+    check("an exemption that is no longer needed FAILS, so the list empties itself",
+          len(stale) == len(C.REASON_PENDING) and all("delete its line" in b for b in stale),
+          stale)
+
+    # CONTROL: the committed list passes both halves - so the failures above are
+    # the made-up input, not a check that is always red.
+    real = C.entries()
+    check("CONTROL: the real list passes rule 5, both halves",
+          C.field_problems(real) == [] and C.pending_problems(real) == [],
+          C.pending_problems(real))
+
+
 if __name__ == "__main__":
     for fn in (t_the_list_is_complete_and_true,
                t_the_check_is_sensitive_both_directions,
-               t_every_copy_is_the_same_file):
+               t_every_copy_is_the_same_file,
+               t_a_one_sided_claim_carries_its_reason):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

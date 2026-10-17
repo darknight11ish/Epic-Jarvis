@@ -312,6 +312,79 @@ def t_clean():
     check("... whatever went wrong in it", res["ok"] is False and res["unchecked"] is True)
 
 
+def t_clean_a_wrapped_secret_paints_both_lines():
+    """THE SEAM between "found" and "painted", which nothing drove end to end.
+
+    Every layer is proved on its own - `test_secrets.t_lines()` that a token the
+    screen wrapped is hidden on both LINES, `t_paint` that a box is filled SOLID
+    BLACK, `t_clean` above that a secret's own place is black in the returned
+    PNG - and the chain between them was not: the pixel fixture above keeps its
+    token inside ONE line, so a refactor could break "two boxes on two lines
+    become two black rectangles" with every suite still green.
+
+    That chain is a privacy promise about pixels, so it is pinned at the pixels:
+    the halves are read out of the RETURNED PNG, and the same points in the
+    picture that was NOT cleaned are checked not to be black - so this cannot
+    pass because the cleaner redacted nothing.
+    """
+    bgra, png, w, h = picture()
+    first, second = TOKEN[:20], TOKEN[20:]
+    # ONE WORD PER LINE: a 40-character token wrapped in a narrow column, which
+    # is the shape a screenshot really shows. The words carry no label on
+    # purpose - a line reading "token: <half>" matches the generic-api-key rule
+    # on HALF a token, and then the fixture would prove nothing about the wrap.
+    L = lines_of(first, second)
+    alone_a, alone_b = SEC.redact(lines_of(first)), SEC.redact(lines_of(second))
+    both = SEC.redact(L)
+    check("the fixture really needs the join: NEITHER line alone is a secret",
+          alone_a.hidden == 0 and alone_b.hidden == 0,
+          f"first half alone: {alone_a.hidden} hidden, second half alone: {alone_b.hidden}")
+    check("... and read together the token is hidden on BOTH lines",
+          both.hidden == 2 and first not in both.text and second not in both.text, both.text)
+
+    res = P.clean(png, ocr=reader(L, size=(w, h)), want_png=True)
+    check("clean_picture hides it in the words it hands on",
+          res["ok"] and "[hidden]" in res["text"] and TOKEN not in res["text"], res["text"])
+    boxes = both.boxes
+    check("TWO boxes come back, one per line", len(boxes) == 2, boxes)
+    check("... on two DIFFERENT lines, so they are two rectangles and not one",
+          len(boxes) == 2 and boxes[0][1] != boxes[1][1], boxes)
+    dec = P.decode_png(res["png"]) if res["png"] else None
+    check("a cleaned PNG came back to read the pixels out of", dec is not None)
+    # A missing PNG must FAIL the pixel checks below, never skip them: an empty
+    # buffer paints nothing, so nothing is black and nothing is skipped.
+    clean_px = dec[0] if dec is not None else bytearray()
+
+    def black_at(px, x, y):
+        return bool(px) and pix_at(px, w, x, y) == b"\x00\x00\x00\xff"
+
+    def points_in(word):
+        """Points well inside the place a word sits - a rectangle is not read
+        off one lucky pixel. The rectangle is the FIXTURE's own geometry, not
+        `red.boxes`: if the join broke there is one box, and a loop over that
+        list would quietly check one line instead of failing."""
+        pad = 4.0
+        l, t = int(word["left"] - pad) + 1, int(word["top"] - pad) + 1
+        r = int(word["left"] + word["width"] + pad) - 1
+        b = int(word["top"] + word["height"] + pad) - 1
+        mx, my = (l + r) // 2, (t + b) // 2
+        return [(l, t), (r, b), (mx, my), (l, my), (r, my), (mx, t), (mx, b)]
+
+    for n, (word, which) in enumerate(((L[0]["words"][0], "line 1"), (L[1]["words"][0], "line 2")), start=1):
+        pts = points_in(word)
+        black = [p for p in pts if black_at(clean_px, *p)]
+        check(f"{which}'s half of the wrapped token is one SOLID BLACK rectangle in the "
+              f"picture handed on", len(black) == len(pts),
+              f"{len(black)}/{len(pts)} of {pts} are black - the second line is the one that "
+              f"only the join can find")
+        # The control: the same points in the picture as it was captured are NOT
+        # black, so a cleaner that redacted nothing could not pass this.
+        plain = [p for p in pts if pix_at(bgra, w, *p) != b"\x00\x00\x00\xff"]
+        check(f"... and {which}'s rectangle in the picture that was NOT cleaned is not "
+              f"black either", len(plain) == len(pts),
+              f"{len(pts) - len(plain)}/{len(pts)} of {pts} were black already")
+
+
 # ---------------------------------------------------------------- jarvis_screen
 
 class World:
@@ -484,7 +557,8 @@ def t_hygiene():
 
 
 def main():
-    for fn in (t_png, t_paint, t_clean, t_screen, t_rules, t_owner_tool, t_hygiene):
+    for fn in (t_png, t_paint, t_clean, t_clean_a_wrapped_secret_paints_both_lines,
+               t_screen, t_rules, t_owner_tool, t_hygiene):
         try:
             fn()
         except Exception:
