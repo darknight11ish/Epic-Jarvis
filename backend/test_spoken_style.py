@@ -176,8 +176,26 @@ def t_trimming_cannot_leave_the_note_first():
     # A question so long that every earlier turn has to go.
     sent, _, passed = turn(long_history + [voice("read this back to me " + "z" * 45000)])
     msgs = sent[0]["messages"]
-    check("everything earlier trimmed away: the Jarvis block first, then the note",
-          msgs == [BLOCK, NOTE, passed[-1]], json.dumps(msgs)[:300])
+    # 2026-10-16: this used to assert the prompt was exactly
+    # [BLOCK, NOTE, question]. All forty earlier exchanges are trimmed away
+    # here, and compaction now folds what trimming drops into one digest, so the
+    # prompt is [BLOCK, digest, NOTE, question] - measured before changing
+    # anything: 81 messages went in, four came out, and exactly one of them is
+    # an own message, so the digest is owed and sits where the trimmed turns
+    # were. The assertion keeps its exact-list strength (nothing else may
+    # appear) and is strengthened: the digest has to be there, and it has to
+    # account for the forty that went.
+    digest = next((m for m in msgs
+                   if str(m.get("content", "")).startswith("[EARLIER IN THIS CONVERSATION]")),
+                  None)
+    trimmed = sum(1 for m in long_history if m.get("role") == "user")
+    check("everything earlier trimmed away: the Jarvis block first, then the digest, "
+          "then the note",
+          digest is not None and msgs == [BLOCK, digest, NOTE, passed[-1]],
+          json.dumps(msgs)[:400])
+    check("... and the digest says how much was trimmed away",
+          digest is not None and f"{trimmed} earlier exchanges" in digest["content"],
+          (digest or {}).get("content", "")[:200])
 
 
 def t_leaving_this_pc_takes_nothing_of_it():

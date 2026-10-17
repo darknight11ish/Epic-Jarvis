@@ -3698,6 +3698,54 @@ def estimate_tokens(obj) -> int:
     return len(json.dumps(obj, ensure_ascii=False)) // 3
 
 
+def _role(message) -> str:
+    """A message's role, or "" for anything that is not a message dict.
+
+    THE TRIM USED TO CRASH ON THIS. Its own pair-absorbing loop called
+    `.get("role")` on whatever was in the list, so one message that was not a
+    dict - from a caller that got its own history shape wrong - raised
+    AttributeError out of the middle of a turn instead of trimming what it could.
+    The list is built by this backend and is always dicts in practice; the point
+    is that a wrong shape costs a message and not the answer.
+    """
+    return str(message.get("role") or "") if isinstance(message, dict) else ""
+
+
+def fit_messages_detailed(messages: list, budget: int) -> tuple:
+    """`(kept, evicted, at)` - `fit_messages`, and what it had to drop.
+
+    `evicted` is the dropped messages in their original order and `at` is the
+    index in the ORIGINAL list where the first of them was, which is also the
+    position they are folded back into (`compact_messages`). One implementation,
+    so `fit_messages` and the digest can never disagree about what was dropped.
+    """
+    msgs = list(messages)
+    if estimate_tokens(msgs) <= budget:
+        return msgs, [], 0
+    last_user = max((i for i, m in enumerate(msgs) if _role(m) == "user"),
+                    default=len(msgs))
+    target = int(budget * 0.75)
+    earlier = [i for i in range(last_user) if _role(msgs[i]) != "system"]
+    dropped: set = set()
+    total = estimate_tokens(msgs)
+    k = 0
+    while k < len(earlier) and total > target:
+        i = earlier[k]
+        dropped.add(i)
+        total -= estimate_tokens(msgs[i])
+        k += 1
+        # An answer, or a tool result, left without the question before it
+        # goes with it.
+        while k < len(earlier) and _role(msgs[earlier[k]]) != "user":
+            dropped.add(earlier[k])
+            total -= estimate_tokens(msgs[earlier[k]])
+            k += 1
+    kept = [m for i, m in enumerate(msgs) if i not in dropped]
+    at = min(dropped) if dropped else 0
+    evicted = [m for i, m in enumerate(msgs) if i in dropped]
+    return kept, evicted, at
+
+
 def fit_messages(messages: list, budget: int) -> list:
     """`messages`, with the oldest earlier turns dropped until they fit in
     `budget` tokens.
@@ -3709,29 +3757,73 @@ def fit_messages(messages: list, budget: int) -> list:
     anything has to go, it goes down to three quarters of the budget, so the
     start of the prompt then stays the same for a few turns and Ollama can
     reuse what it has already read."""
-    msgs = list(messages)
-    if estimate_tokens(msgs) <= budget:
-        return msgs
-    last_user = max((i for i, m in enumerate(msgs)
-                     if isinstance(m, dict) and m.get("role") == "user"), default=len(msgs))
-    target = int(budget * 0.75)
-    earlier = [i for i in range(last_user)
-               if not (isinstance(msgs[i], dict) and msgs[i].get("role") == "system")]
-    dropped: set = set()
-    total = estimate_tokens(msgs)
-    k = 0
-    while k < len(earlier) and total > target:
-        i = earlier[k]
-        dropped.add(i)
-        total -= estimate_tokens(msgs[i])
-        k += 1
-        # An answer, or a tool result, left without the question before it
-        # goes with it.
-        while k < len(earlier) and msgs[earlier[k]].get("role") != "user":
-            dropped.add(earlier[k])
-            total -= estimate_tokens(msgs[earlier[k]])
-            k += 1
-    return [m for i, m in enumerate(msgs) if i not in dropped]
+    return fit_messages_detailed(messages, budget)[0]
+
+
+def compact_messages(messages: list, budget: int, *, question: str = "") -> list:
+    """`fit_messages`, and the exact facts it would otherwise throw away.
+
+    Two additions, and only when `fit_messages` really has to drop something:
+
+      * ONE digest system message, sitting exactly where the evicted turns were,
+        carrying the owner's own rules word for word and a table of the exact
+        anchors with the turn each came from (`jarvis_compaction`);
+      * a bounded recall of the one or two EVICTED turns nearest this question,
+        placed just before the newest user message - AFTER the cached prefix, so
+        what this turn asks can never change the start of the prompt.
+
+    A TURN THAT EVICTS NOTHING IS RETURNED EXACTLY AS `fit_messages` RETURNS IT.
+    That is not a nicety: Ollama reuses the KV prefix while the next prompt
+    starts the same way, and a digest rewritten on a turn where nothing was
+    evicted would make every later turn re-read the whole prompt. The digest is
+    a pure function of the evicted turns (`jarvis_compaction.digest_key` says how
+    many were folded), so re-deriving it on a later turn gives the same bytes.
+
+    WHERE THE DIGEST GOES, and why not at `at`. The leading system block (the
+    Jarvis rules, then the recalled facts) is the part of the prompt that never
+    changes, so the digest goes AFTER all of it - at the first kept message that
+    is not a system message. Putting it at the first evicted index instead was
+    measured to push the recalled-facts message behind it, which is a change to
+    the stable prefix for no gain (`test_agent.py` caught it).
+
+    A missing `jarvis_compaction`, or a missing scrubber inside it, leaves
+    exactly today's behaviour: the trimmed list, no digest, no recall.
+    """
+    kept, evicted, _at = fit_messages_detailed(messages, budget)
+    if not evicted:
+        return kept
+    compaction = _compaction()
+    if compaction is None:
+        return kept
+    try:
+        out = [m for m in kept
+               if not (isinstance(m, dict) and compaction.is_own_message(m))]
+        # ^ ONE DIGEST, EVER. `fit_messages` never drops a system message, so a
+        # caller that hands back what was sent - a retry, or a wiring that
+        # stores the request - would otherwise keep the stale digest AND get a
+        # fresh one, and the prompt would carry two. The fresh one is
+        # byte-identical while the evicted set is unchanged, so dropping the
+        # stale one cannot move the prefix.
+        digest = compaction.digest_message(evicted)
+        if digest is not None:
+            after_systems = next((i for i, m in enumerate(out)
+                                  if not (isinstance(m, dict)
+                                          and m.get("role") == "system")), None)
+            if after_systems is None:
+                after_systems = max((i for i, m in enumerate(out)
+                                     if isinstance(m, dict) and m.get("role") == "user"),
+                                    default=len(out))
+            out.insert(max(0, min(after_systems, len(out))), digest)
+        recall = compaction.recall_message(question, evicted)
+        if recall is not None:
+            newest = max((i for i, m in enumerate(out)
+                          if isinstance(m, dict) and m.get("role") == "user"),
+                         default=len(out))
+            out.insert(newest, recall)
+        return out
+    except Exception:                                           # noqa: BLE001
+        # A digest is a nicety; the turn is not. Never a reason an answer fails.
+        return kept
 
 
 # --------------------------------------------------------------------------
@@ -3920,8 +4012,63 @@ def _tool_content(result: dict) -> str:
 _CLEAR_OLD_RESULTS_AT = 0.5
 #: The newest assistant messages whose tool results are never cleared.
 _KEEP_LAST_ASSISTANTS = 3
-#: What an older tool result becomes.
+#: What an older tool result becomes when nothing better can be said about it -
+#: the bare placeholder this used to be, and still the answer when
+#: jarvis_compaction (or the scrubber inside it) is not available. See
+#: jarvis_compaction.tool_stub for the small exact stub that replaces it.
 CLEARED_RESULT = "[an earlier tool result was cleared to make room]"
+
+
+def _compaction():
+    """`jarvis_compaction`, or None. Imported inside the function, wrapped, so
+    a backend without the module runs with today's behaviour - the same rule
+    every shipped module is imported under."""
+    try:
+        import jarvis_compaction                                 # noqa: PLC0415
+        return jarvis_compaction
+    except Exception:                                            # noqa: BLE001
+        return None
+
+
+def _tool_calls_before(msgs: list, cutoff: int) -> dict:
+    """`{tool_call_id: call}` for the assistant messages before `cutoff`.
+
+    A cleared tool result keeps only its own JSON, so the tool's NAME and the
+    arguments it was aimed at have to come from the assistant message that asked
+    for it. Read once per call, and only from messages older than the ones being
+    kept whole.
+    """
+    out: dict = {}
+    for message in msgs[:cutoff]:
+        if not (isinstance(message, dict) and message.get("role") == "assistant"):
+            continue
+        for call in (message.get("tool_calls") or []):
+            if isinstance(call, dict) and call.get("id"):
+                out[call["id"]] = call
+    return out
+
+
+def _cleared_stub(content: str, call: Optional[dict]):
+    """What one tool result becomes: a small exact stub, or the bare placeholder.
+
+    The stub is `tool | target | outcome | up to three anchors` (<= 180
+    characters, jarvis_compaction.STUB_MAX), scrubbed. `None` - no module, no
+    scrubber - means the caller keeps the old placeholder, which is the
+    fail-closed direction: nothing from the result is emitted unscrubbed.
+    """
+    compaction = _compaction()
+    if compaction is None:
+        return None
+    function = (call or {}).get("function") if isinstance(call, dict) else None
+    function = function if isinstance(function, dict) else {}
+    args = function.get("arguments")
+    if isinstance(args, str):
+        try:
+            args = json.loads(args)
+        except Exception:                                        # noqa: BLE001
+            args = {}
+    return compaction.tool_stub(name=str(function.get("name") or ""), args=args,
+                                result_text=content or "")
 
 
 def clear_old_tool_results(messages: list, room: int) -> list:
@@ -3937,7 +4084,11 @@ def clear_old_tool_results(messages: list, room: int) -> list:
       - the results after the last _KEEP_LAST_ASSISTANTS assistant messages
         (the newest ones, which the model is working from) are kept whole;
       - a cleared result is still valid JSON, keeps the outside-text label
-        and its "ok", and says plainly that it was cleared.
+        and its "ok", and says in a few exact words which tool ran, what it was
+        aimed at, how it ended and the identifiers it returned
+        (jarvis_compaction.tool_stub). A DENIED call says `denied_by_owner`, so
+        it is never mistaken for one that completed. With no jarvis_compaction,
+        or no scrubber, the result becomes the bare placeholder as before.
 
     A new list; `messages` is not changed - the full results stay in this
     answer's own memory and are never written anywhere. Worked out from the
@@ -3953,19 +4104,24 @@ def clear_old_tool_results(messages: list, room: int) -> list:
     if len(helpers) < _KEEP_LAST_ASSISTANTS:
         return msgs
     cutoff = helpers[-_KEEP_LAST_ASSISTANTS]
+    calls = _tool_calls_before(msgs, cutoff)
     for i in range(cutoff):
         m = msgs[i]
         if not (isinstance(m, dict) and m.get("role") == "tool"):
             continue
         ok = None
+        content = m.get("content") or ""
         try:
-            was = json.loads(m.get("content") or "")
+            was = json.loads(content)
             if isinstance(was, dict):
                 ok = was.get("ok")
-        except Exception:
+        except Exception:                                        # noqa: BLE001
             pass
-        stub = {OUTSIDE_FIELD: OUTSIDE_LABEL, "ok": ok, "cleared": CLEARED_RESULT}
-        msgs[i] = dict(m, content=json.dumps(stub, ensure_ascii=False))
+        stub = _cleared_stub(content, calls.get(m.get("tool_call_id")))
+        stub = CLEARED_RESULT if not stub else stub
+        msgs[i] = dict(m, content=json.dumps(
+            {OUTSIDE_FIELD: OUTSIDE_LABEL, "ok": ok, "cleared": stub},
+            ensure_ascii=False))
     return msgs
 
 
@@ -7513,7 +7669,8 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         # Held out of the call so that what this round really sends can be
         # measured against what the model says it read - see sent_use.
         sent_messages = dress_messages(
-            fit_messages(clear_old_tool_results(msgs, room), room),
+            compact_messages(clear_old_tool_results(msgs, room), room,
+                             question=question_text),
             manner=manner, focus=focus_brief, next_time=next_time["note"],
             spoken=watch.spoken, live=watch.live,
             cut_off=watch.cut_off, crisis=watch.crisis)
