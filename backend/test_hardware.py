@@ -81,9 +81,18 @@ LOG2 = G.ollama_log([G.LOG_2080S, G.LOG_2060])
 #: twin with NO monitor, while the log lists the monitor's card first. An
 #: identical pair is therefore the only setup where a name+size match can pick
 #: the wrong twin - and `monitor` is the flag that says which card has the screen.
+#:
+#: The rows carry all EIGHT columns FIELDS_FULL asks for, `pci.bus_id` last
+#: (#514). A row whose column count does not match is SKIPPED by parse_smi, not
+#: failed - so this fixture stuck at 7 columns made the stub world produce no
+#: nvidia-smi cards at all and `monitor`/`index` read None on main (2026-10-17).
+#: The bus ids agree with the pci_id the log generator writes for the same two
+#: devices, so both of smi_for's exact passes see the same pairing.
 U_TWIN = "GPU-7d1c5b93-2a4e-4f60-8b17-c3e9a04f6d28"
-SMI_TWINS = (f"0, {G.U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6980, 7.5, Disabled\n"
-             f"1, {U_TWIN}, NVIDIA GeForce RTX 2080 SUPER, 8192, 7100, 7.5, Enabled\n")
+SMI_TWINS = (f"0, {G.U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6980, 7.5, "
+             f"Disabled, 00000000:0b:00.0\n"
+             f"1, {U_TWIN}, NVIDIA GeForce RTX 2080 SUPER, 8192, 7100, 7.5, "
+             f"Enabled, 00000000:0a:00.0\n")
 LOG_TWIN = G.ollama_log([{**G.LOG_2080S, "uuid": U_TWIN}, dict(G.LOG_2080S)])
 LOG_TWIN_NO_UUID = G.ollama_log([{k: v for k, v in G.LOG_2080S.items() if k != "uuid"}
                                  for _ in range(2)])
@@ -286,6 +295,34 @@ def t_two_identical_cards_pair_by_uuid_and_the_monitor_lands_right():
     rows = det["cards"]
     check("a log with no GPU- uuid still pairs both cards by name and size",
           len(rows) == 2 and all("nvidia-smi" in r["sources"] for r in rows), rows)
+
+
+def t_every_full_query_smi_fixture_has_a_column_per_field():
+    """The guard for the drift that took main red on 2026-10-17.
+
+    `parse_smi` SKIPS a row whose column count is not exactly the number of
+    fields asked for (jarvis_compute.parse_smi: "if len(parts) != len(names):
+    continue"). So a fixture left behind when `FIELDS_FULL` grows does not fail
+    loudly: the stub world simply has no nvidia-smi cards, every row's
+    `monitor` and `index` read None, and only the checks that look at them go
+    red. That is how #510's twin fixture (7 columns) met #514's `pci.bus_id`
+    (8 columns) on main - two green PRs, a semantic merge, and three red
+    checks. This is a check, not a comment, so the next field-list change
+    fails here first, with the column count in the detail.
+    """
+    want = [f.strip() for f in CP.FIELDS_FULL.split(",")]
+    fixtures = (("SMI_TWINS", SMI_TWINS), ("SMI_16", SMI_16),
+                ("G.SMI_2080S", G.SMI_2080S), ("G.SMI_PAIR", G.SMI_PAIR))
+    stale = []
+    for name, text in fixtures:
+        for line in text.strip().splitlines():
+            if line.strip() and len(line.split(",")) != len(want):
+                stale.append(f"{name}: {len(line.split(','))} columns, wanted {len(want)}")
+    check(f"every full-query nvidia-smi fixture has {len(want)} columns, one per "
+          f"FIELDS_FULL field ('{want[-1]}' last)", not stale, stale)
+    check("... and each one really parses to a card per row under that field list",
+          all(len(CP.parse_smi(text, CP.FIELDS_FULL)) == len(text.strip().splitlines())
+              for _, text in fixtures))
 
 
 # --------------------------------------------------------------------------
