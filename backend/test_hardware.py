@@ -75,6 +75,19 @@ YES = lambda a, d, p: Verdict(True, "ask", "approved")  # noqa: E731
 LOG1 = G.ollama_log([G.LOG_2080S])
 LOG2 = G.ollama_log([G.LOG_2080S, G.LOG_2060])
 
+#: The owner is adding a SECOND RTX 2080 SUPER 8 GB, so two of the cards on that
+#: PC will carry the same name AND the same size. Only the GPU- uuid tells them
+#: apart, and the two sources do not agree on ORDER: nvidia-smi's index 0 is the
+#: twin with NO monitor, while the log lists the monitor's card first. An
+#: identical pair is therefore the only setup where a name+size match can pick
+#: the wrong twin - and `monitor` is the flag that says which card has the screen.
+U_TWIN = "GPU-7d1c5b93-2a4e-4f60-8b17-c3e9a04f6d28"
+SMI_TWINS = (f"0, {G.U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6980, 7.5, Disabled\n"
+             f"1, {U_TWIN}, NVIDIA GeForce RTX 2080 SUPER, 8192, 7100, 7.5, Enabled\n")
+LOG_TWIN = G.ollama_log([{**G.LOG_2080S, "uuid": U_TWIN}, dict(G.LOG_2080S)])
+LOG_TWIN_NO_UUID = G.ollama_log([{k: v for k, v in G.LOG_2080S.items() if k != "uuid"}
+                                 for _ in range(2)])
+
 
 # --------------------------------------------------------------------------
 #   Parsing
@@ -179,6 +192,44 @@ def t_the_join():
         det = H.detect(fresh=True)
     check("an AMD card with no Ollama log is shown, not planned for, and says what to do",
           det["planned"] == [] and "Start Ollama once" in det["cards"][0]["why_unused"])
+
+
+def t_two_identical_cards_pair_by_uuid_and_the_monitor_lands_right():
+    """The card the owner is adding is a SECOND RTX 2080 SUPER 8 GB: two cards,
+    same name, same size. `smi_for` joins each Ollama-log device to its
+    nvidia-smi row, and it does that by the GPU- uuid first - which is the only
+    thing that can tell these two apart, because their name and size are equal
+    and the two sources order them differently.
+
+    THIS TEST IS THE PIN, and it exists because there was none: measured
+    2026-10-16, deleting the uuid-first pass from `smi_for` leaves this whole
+    suite green (147 passed), so the guard had been sitting unpinned. With the
+    pass gone, the greedy name+size match takes nvidia-smi's first unused row,
+    which here is the twin with NO monitor - and `monitor` is what the hardware
+    page and the second-card logic read to say which card has the screen.
+    """
+    with G.World(smi=SMI_TWINS, log=LOG_TWIN, reg=None):
+        det = H.detect(fresh=True)
+    rows = det["cards"]
+    check("both identical cards are shown, and they really are identical",
+          len(rows) == 2
+          and rows[0]["name"] == rows[1]["name"] == "NVIDIA GeForce RTX 2080 SUPER"
+          and rows[0]["total_gib"] == rows[1]["total_gib"] == 8.0, rows)
+    check("each is joined to its OWN nvidia-smi row by the GPU- uuid, not by the line order",
+          [r["uuid"] for r in rows] == [U_TWIN, G.U_2080S], [r["uuid"] for r in rows])
+    check("the monitor flag lands on the twin nvidia-smi says has the screen",
+          rows[0]["monitor"] is True and rows[1]["monitor"] is False,
+          [(r["uuid"], r["monitor"]) for r in rows])
+    check("... and each row carries its own nvidia-smi index, so a wrong twin cannot hide",
+          [r["index"] for r in rows] == [1, 0], [r["index"] for r in rows])
+    # The fallback STAYS: an older Ollama whose log has no GPU- uuid still pairs
+    # by name and size. A backend that stopped pairing on a missing field would
+    # be worse than one that pairs approximately.
+    with G.World(smi=SMI_TWINS, log=LOG_TWIN_NO_UUID, reg=None):
+        det = H.detect(fresh=True)
+    rows = det["cards"]
+    check("a log with no GPU- uuid still pairs both cards by name and size",
+          len(rows) == 2 and all("nvidia-smi" in r["sources"] for r in rows), rows)
 
 
 # --------------------------------------------------------------------------
