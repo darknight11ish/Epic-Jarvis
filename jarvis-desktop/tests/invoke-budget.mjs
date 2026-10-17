@@ -88,6 +88,20 @@ await check("... and a command that DOES answer is not touched", async () => {
   assert.equal(await B.withBudget(Promise.resolve("the answer")), "the answer");
 });
 
+await check("each sentence is declared ONCE in the whole desktop - one home, no copy", async () => {
+  // The failure this prevents actually happened: `LATE_READ` and `LATE_ACTION`
+  // were declared in `devices-words.js` (#498) and again in `invoke-budget.js`
+  // (#503), and the two copies had already drifted apart - so the owner would
+  // have read one wording or the other depending on which module a card
+  // imported. A duplicate that must agree has to be impossible, not unlikely.
+  const files = readdirSync(SRC).filter((f) => f.endsWith(".js") || f.endsWith(".html"));
+  for (const [name, words] of [["LATE_READ", B.LATE_READ], ["LATE_ACTION", B.LATE_ACTION]]) {
+    const holders = files.filter((f) => readFileSync(join(SRC, f), "utf8").includes(words));
+    assert.deepEqual(holders, ["invoke-budget.js"],
+      `${name} appears in ${holders.length} file(s): ${holders.join(", ")} - one home, no copy`);
+  }
+});
+
 /* ── the one shared door: no card reaches the bridge on its own ────────── */
 
 await check("no converted card calls TAURI.core.invoke itself any more", async () => {

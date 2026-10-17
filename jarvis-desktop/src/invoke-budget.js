@@ -43,14 +43,23 @@
  * @module invoke-budget
  */
 
-/** A late READ: the page may be showing something out of date. */
+/** A late READ: the page may be showing something out of date. THE ONLY copy in
+ * the tree - `settings.js` and `devices-words.js` import it rather than spelling
+ * it again, and `tests/invoke-budget.mjs` fails if either sentence is ever
+ * defined twice. It was defined twice before 2026-10-16, in two files that had
+ * already stopped agreeing. */
 export const LATE_READ =
-  "Jarvis has not answered yet, so this part may be out of date. Try again in a moment.";
+  "Jarvis has not answered yet, so this part of Settings may be out of date. Try again in a moment.";
 
-/** A late ACTION: it is not known whether it happened - never that it failed. */
+/** A late ACTION: it is not known whether it happened - never that it failed.
+ *
+ * Deliberately names no phone, no list and no backup: this module is imported by
+ * every card, so the sentence has to make sense on all of them. It read "Check
+ * your phone and the list before trying again" while it lived in
+ * `devices-words.js` - true of the Devices card, wrong on a backup card - and
+ * "look again" is the part of that advice that is true everywhere. */
 export const LATE_ACTION =
-  "Jarvis has not answered yet, so it is not known whether it happened. " +
-  "Check before pressing it again.";
+  "Jarvis has not answered yet, so it is not known whether it happened. Look again before pressing it a second time.";
 
 /** One small backend call. The page's existing budget, unchanged. */
 export const READ_BUDGET_MS = 30_000;
