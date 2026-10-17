@@ -35,7 +35,7 @@ WHAT IS PROVEN BY BEHAVIOUR, NOT BY READING THE SOURCE
   * that NO VERSION IS READ OR COMPARED, proved twice: the source holds no
     version comparison at all, and two answers that differ ONLY in a
     version-shaped value classify identically (tests 12 and 13). This is the
-    design `jarvis_hardware.py:912` states - "a new Ollama version does not
+    design `jarvis_hardware.py:952` states - "a new Ollama version does not
     forget that a size did not fit";
   * that the probe asks one read-only endpoint, writes nothing and (with `ask`
     injected) never touches the network (test 14).
@@ -746,20 +746,20 @@ def t_no_version_is_read_or_compared():
 
 
 def t_a_new_version_does_not_forget_what_a_model_can_do():
-    """The rule itself, from `jarvis_hardware.py:912`, pinned by its own line."""
+    """The rule itself, from `jarvis_hardware.py:952`, pinned by its own line."""
     if not HARDWARE.is_file():
         skip(f"{missing('jarvis_hardware.py')} - the citation cannot be checked")
     else:
         lines = HARDWARE.read_text(encoding="utf-8", errors="replace").splitlines()
-        check(f"jarvis_hardware.py still carries the line at 912 that this "
+        check(f"jarvis_hardware.py still carries the line at 952 that this "
               f"design rests on",
-              len(lines) >= 912
-              and "a new Ollama version does not forget" in lines[911],
-              f"line 912 is {lines[911]!r}" if len(lines) >= 912
+              len(lines) >= 952
+              and "a new Ollama version does not forget" in lines[951],
+              f"line 952 is {lines[951]!r}" if len(lines) >= 952
               else f"the file has only {len(lines)} lines")
         check("... and the probe's own docstring cites it, so the reasoning "
               "travels with the code",
-              "jarvis_hardware.py:912" in MODULE.read_text(encoding="utf-8",
+              "jarvis_hardware.py:952" in MODULE.read_text(encoding="utf-8",
                                                             errors="replace"),
               "the citation was dropped from jarvis_ollama_contract.py")
 
