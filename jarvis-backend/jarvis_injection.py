@@ -310,6 +310,48 @@ def _shown(matched: str) -> str:
     return text[:MATCH_CHARS - 1] + "…"
 
 
+#: Rule 9's own pattern, looked up by NAME rather than written out a second
+#: time, so a marker added to `chat_markers` is stripped the same day it is
+#: detected. This module is the one place the chat-template delimiters are
+#: described.
+_MARKERS = next(rx for name, rx, _level in PATTERNS if name == "chat_markers")
+
+
+def marker_free(text: str) -> str:
+    """`text` with the chat-template delimiters taken OUT of it, or `text`.
+
+    WHY A FENCE IS NOT ENOUGH ON ITS OWN. Fencing outside text between markers
+    made of a random word stops the MODEL being told to do something: between
+    `<<<TEXT ab12...>>>` and its end marker, everything is data. It does not
+    stop a TOKEN BOUNDARY. Those fence lines are ordinary text to a tokenizer,
+    while `<|im_end|>` inside them is a real end-of-turn for the template a
+    model was trained with - so a delimiter carried in a caption is read at the
+    tokenizer layer, before any fence this program wraps around it is
+    consulted. Anything that fences outside text for a model takes the
+    delimiters out first, with this.
+
+    ITERATIVE, AND THAT IS NOT DECORATION. One pass can leave a marker behind,
+    MEASURED with rule 9's own pattern (2026-10-16): `"<<|im_end|>|im_end|>"`
+    becomes `"<|im_end|>"` after one pass - a live delimiter - and `""` only
+    after the second. Three leading `<` with three trailing `|im_end|>` takes
+    five. The loop cannot run away: the pattern needs at least one literal
+    character, so it never matches the empty string, and every pass that
+    changes anything therefore SHORTENS the text. `test_caption_markers.py`
+    checks both halves of that, the nesting and the termination.
+
+    `scan()` stops at SCAN_LIMIT characters because it is a look. This does NOT
+    truncate: shortening the owner's own text would lose the end of it. A
+    string that is not a non-empty string comes back unchanged, and nothing
+    here raises."""
+    if not isinstance(text, str) or not text:
+        return text
+    while True:
+        cut = _MARKERS.sub("", text)
+        if cut == text:
+            return cut
+        text = cut
+
+
 def scan(text: str) -> list:
     """Every pattern that matched, as `{"name", "level", "match"}`.
 
