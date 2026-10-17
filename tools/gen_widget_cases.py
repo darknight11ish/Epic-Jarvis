@@ -166,13 +166,22 @@ class _Sched:
 
 
 def _readers():
+    # EVERY reader a case can reach is replaced here, and the three below are
+    # why: W.Readers falls back to the REAL readers, and `_pending()` opens the
+    # owner's approval database while `_tokens()` reads his speed log. A case
+    # that used one of those sources without a stand-in would read his PC (and
+    # `_pending()` would create that database) while merely generating a
+    # fixture. `_gpu()` and `_tokens()` are stand-ins for the same reason.
     return W.Readers(
         sched=_Sched, now=lambda: NOW,
         briefing=lambda: {"made": NOW - 3600, "sections": [
             {"key": "email", "state": "ok", "summary": "4 unread emails.", "items": []}]},
         disk=lambda: (412 * 1024 ** 3, 931 * 1024 ** 3),
         focus=lambda: {"on": True, "minutes": 25, "left_s": 600},
-        playing=lambda: {"ok": True, "said": "Playing: “Song” by Band."})
+        playing=lambda: {"ok": True, "said": "Playing: “Song” by Band."},
+        pending=lambda: [{"id": "a1", "action": "email_send"}, {"id": "a2", "action": "wiki_write"}],
+        gpu=lambda: (3 * 1024 ** 3, 12 * 1024 ** 3),
+        tokens=lambda: "41.2")
 
 
 def _real(spec) -> dict:
@@ -199,6 +208,12 @@ def cases() -> dict:
         {"type": "button", "action": "focus"},
         {"type": "button", "action": "pc_play_pause"},
         {"type": "button", "action": "brief_me"}]})
+    # The three sources A11-A13 are about, in one case so BOTH apps' lists are
+    # compared against what the PC's own menu can fill.
+    out["quick_access"] = _real({"name": "Quick access", "blocks": [
+        {"type": "number", "source": "approvals_count"},
+        {"type": "number", "source": "tokens_per_second"},
+        {"type": "progress", "source": "gpu_memory"}]})
     out["hostile"] = {"ok": True, "id": "w0123456789", "name": "Evil‮​ name" + "x" * 80,
                       "at": NOW, "blocks": [
         {"type": "script", "text": "alert(1)"},

@@ -1925,8 +1925,22 @@ $SHIPPED = @(
 # lists. It applies nothing, writes nothing, opens no route, reaches no network
 # but the loopback model, and fails closed when jarvis_scrub is absent.
 'jarvis_self_improve.py'     # Diagnosis with citations; drafts a diff, applies nothing
+<<<<<<< HEAD
     # --- A Notion export into an Obsidian vault (2026-10-16) ---
     'jarvis_notion_obsidian.py'  # An exported Notion workspace, tidied into an Obsidian vault: Notion's ids come off the file and folder names (collisions decided the same way every time), page properties become YAML frontmatter with notion_id kept so a second import is idempotent, each exported CSV database is merged into its rows' notes and gets an index note of [[wikilinks]] and a .base, HTML becomes Markdown (callouts, toggles, checklists, fenced code with its language, pipe tables), its relative links are rewritten through the cleaned-name map, and pictures and documents move into the vault's attachments folder. Plan -> describe -> gate -> run: one atomic move, and one reversible entry in jarvis_receipts so Undo takes the import back off. It writes only inside the vault it was pointed at, never in ~/.openjarvis. No new extractor: it imports jarvis_documents.safe_parts/.protected/.ImportRefused, the guards that already refuse zip-slip and cap a Notion zip. No patch - plugins/ready/notion-obsidian calls its install() - and standard library only
+=======
+# --- Two-stage context compaction (2026-10-16, the owner's "keep the thread").
+# A cleared older tool result becomes a small exact stub (tool, target, an
+# outcome that reads denied_by_owner when the gate refused it, up to three
+# anchors), scrubbed, failing closed without the scrubber. The turns trimming
+# evicts are folded into ONE bounded digest of the owner's own constraints,
+# exact anchors by turn and one-line outcomes, plus a bounded recall of the
+# evicted turns nearest the question, after the cached prefix. The digest is a
+# pure function of the evicted turns, so a turn that evicts nothing leaves the
+# prompt byte-identical and the KV prefix intact. Reads nothing, writes
+# nothing, opens no route; the optional model condensation is off by default.
+'jarvis_compaction.py'       # What a long conversation keeps, exactly
+>>>>>>> origin/main
 )
 
 # The settings file. Installed only where none exists; never overwritten.
@@ -5133,6 +5147,50 @@ function Show-SuiteFailure($out) {
     $note + "`n" + (($kept | ForEach-Object { "      $_" }) -join "`n")
 }
 
+# WHY A SUITE FAILED, ON THE SAME LINE (2026-10-16). This line used to be a bare
+# "FAIL  test_x.py", and that is all the update screen's reader
+# (jarvis-desktop\src-tauri\src\update_progress.rs) gets: it tells "this PC
+# refused the check" from "the check failed" by reading the reason, so with no
+# reason every failure read as a real one. Three of the owner's four failures on
+# 2026-10-16 were the PC refusing, and the screen called all four real.
+#
+# The reason is the suite's own first failing check, and the line UNDER that
+# check is where the cause usually is: test_base_matches_repo failed on this
+# script's own __pycache__, and those bytes are in the detail, never in the
+# check's name. So the detail is joined on - it is what makes the difference
+# visible - and the whole thing is capped, because one detail line in that run
+# was a two-thousand character list of file names.
+#
+# The shape is the one the patch path above already prints
+# ("FAIL  <name> - will not apply"), reused rather than invented: one shape,
+# already read by the parser, instead of a second one to keep in step.
+$script:WhyMax = 160
+
+function Get-FirstFailureReason($out) {
+    $lines = @("$out" -split "`r?`n")
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -notmatch '^[ \t]*FAIL[ \t]') { continue }
+        $said = ($lines[$i] -replace '^[ \t]*FAIL[ \t]+', '').Trim()
+        for ($j = $i + 1; $j -lt $lines.Count; $j++) {
+            $next = $lines[$j].Trim()
+            if (-not $next) { continue }
+            # A section header or the next failure ends the detail this check
+            # owns; a suite prints one check after another.
+            if ($next -match '^(---|=+$)' -or $next -match '^FAIL[ \t]') { break }
+            if ($said) { $said = "$said - $next" }
+            break
+        }
+        if ($said.Length -gt $script:WhyMax) {
+            $said = $said.Substring(0, $script:WhyMax) + ' ...'
+        }
+        return $said
+    }
+    # A suite that died before printing any check has no failing check to name,
+    # and the bare name is the honest line. Guessing here would be the dangerous
+    # direction: a real failure read as "the PC refused it".
+    return ''
+}
+
 $tests = @(Get-ChildItem -LiteralPath $PatchDir -Filter 'test_*.py' | Sort-Object Name)
 $pass = 0; $fail = @()
 # A suite that exits 0 is not necessarily a suite that tested anything: many
@@ -5190,7 +5248,12 @@ try {
             } else { Ok $t.Name }
         }
         else {
-            Bad $t.Name
+            # The reason rides on the same line, so the update screen can tell a
+            # real failure from a check this PC refused - see
+            # Get-FirstFailureReason above. `$fail` keeps the bare suite name:
+            # the detail blocks below are headed by it.
+            $why = Get-FirstFailureReason $txt
+            if ($why) { Bad "$($t.Name) - $why" } else { Bad $t.Name }
             $fail += @{ Name = $t.Name; Output = $txt.Trim() }
         }
     }
