@@ -388,8 +388,35 @@ def t_speed():
     t1 = time.time()
     a = w.act(26)
     dur = time.time() - t1
-    check("48,000 numbers: the 26-week heatmap is fast", dur < 1.5 and a["total"] > 0,
-          f"{dur:.2f}s (seeding {seed:.1f}s)")
+    # THE BUDGET IS THIS MACHINE'S OWN SPEED, NOT A WALL-CLOCK CONSTANT (2026-10-16).
+    #
+    # It used to be `dur < 1.5`, and on a shared Windows CI runner that is a coin
+    # toss: #502 failed here with "2.80s (seeding 0.8s)" while touching the prompt
+    # coach, `features.json` and the apps - nothing near this file. A wall-clock
+    # constant measures the weather, and every random red costs a PR an hour of CI.
+    #
+    # `seed` is this same machine writing the same 48,000 rows in this same run, so
+    # `dur/seed` is a claim about the CODE - "reading the heatmap costs no more than
+    # N times writing the data" - and it travels between machines. Measured on this
+    # PC over six runs: dur 0.15-0.17s against seed 0.30s, a ratio of 0.50-0.57
+    # (median 0.53).
+    #
+    # N IS 8 BECAUSE OF THE MACHINE THAT FAILED, NOT THIS ONE. That runner's own
+    # numbers (2.80s read, 0.8s seeding) are a ratio of 3.5 - 6.6x this PC's. A
+    # budget calibrated on this PC alone (N=2, or the old 1.5) would have kept #502
+    # red. 8 covers 3.5 with 2.3x to spare, and is 15x this PC's own 0.16s read.
+    #
+    # The 1.5 floor is the absolute half, kept so a machine fast enough to make
+    # `seed` meaningless (0.1s -> a 0.8s ratio budget) still has a real bound rather
+    # than a vacuous one. This is not "1.5 raised to 5": on this PC the budget is
+    # 2.4s and on the runner that failed it is 6.4s, and it scales with whatever
+    # machine runs it. It still fails on a genuine blow-up - the bite for this
+    # change made `activity()` sleep 6s and the check went red.
+    budget = max(1.5, 8.0 * seed)
+    ratio = (dur / seed) if seed else 0.0
+    check("48,000 numbers: the 26-week heatmap is fast", dur < budget and a["total"] > 0,
+          f"{dur:.2f}s to read, seeding {seed:.2f}s, budget {budget:.2f}s "
+          f"(read/write ratio {ratio:.2f} on this machine)")
 
 
 # --------------------------------------------------------------------------
