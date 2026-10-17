@@ -668,6 +668,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "get_app_lock": return Boolean(window.__appLock);
           case "open_approval_in_quickbar":
             window.__openedInBar = (window.__openedInBar || 0) + 1;
+            window.__cardTargets = window.__cardTargets || [];
+            window.__cardTargets.push(args && args.target);
             return null;
           case "check_server_health":
             return { services: [{ id: "ollama", name: "Ollama", online: true },

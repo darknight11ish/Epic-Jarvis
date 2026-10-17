@@ -693,9 +693,14 @@ places between screens. Presentation only - no approval logic changed.
   unchanged: Deny only, never Approve (rule 2 above).
 - **"Open the card"** wherever a button raises one. Settings and the Brain on
   the PC, and every phone screen but Home, show one line while any card
-  waits, with a button that goes to it (the Jarvis bar on the PC, behind App
-  lock; Home on the phone). One line per window rather than a link under each
-  button, so a button added later cannot miss it. It decides nothing.
+  waits, with a button that goes to it (the card in the HUD window on the PC,
+  behind App lock; the Jarvis bar only when there is no HUD window; Home on
+  the phone). One line per window rather than a link under each button, so a
+  button added later cannot miss it. It decides nothing. The widget's own
+  Approve is not this line: for an App-lock, email/tidy or heavy card it opens
+  the card in the Jarvis bar, on purpose - the bar is where `heavy-approve.js`'s
+  delay-and-scroll gate lives, and moving a button's destination must not
+  remove a safety property.
 - **The HUD page answers the card too, through the one decision path
   (2026-10-16).** The owner asked for it in his own words - *"i should also be
   able to approve any card from the jarvis hud directly on my desktop and not
@@ -709,6 +714,17 @@ places between screens. Presentation only - no approval logic changed.
   `hud-approvals` (one command) is the only way a decision leaves that window.
   Before this it was the one window the owner watches and could not act from,
   written down as item 8 of `docs/UI-AUDIT-2026-10-05.md`.
+- **A card that arrives while the HUD is hidden raises it (2026-10-17).** The
+  owner asked for it in his own words - *"i want an approval card to pull up
+  fully with the option to click approve instead of the jarvis bar appearing
+  and me typing approve."* - so an `approval` event brings the window up
+  through `windows::show_hud_quietly`: `show` and no `set_focus` (the gentlest
+  this API offers; whether Windows keeps the focus where it was is Windows'
+  call), only when the window is hidden, and never while App lock is on. Only
+  a card that has ARRIVED raises it: the event is a poller diffing the pending
+  ids, so it also rings when a card is answered elsewhere, and a resolution
+  must not pop the window up. The bar's own card is unchanged, and a card
+  answered there still works there.
 - **Voice says a card is waiting, and what happened.** A spoken question that
   waits on a card hears "I need your OK for that. There's a card on your
   screen.", then "Approved. Carrying on.", "OK, I won't do that." or "That
@@ -2020,14 +2036,17 @@ apps security audit (M3 and L5, the owner's decisions of 2026-09-25):
 
 - **Desktop:** the Jarvis bar, the Brain, Settings **and the HUD window**
   (`lock.rs` `Covered`; every way the HUD is shown - the tray, a second
-  launch, a normal start - goes through `lock::may_open`). The widget stays
-  on the desktop, but while App lock is on its approval card shows only the
-  notice's title, and its Approve opens the Jarvis bar to approve there;
-  `decide_approval` refuses an Approve from the widget in Rust as well. Deny
-  works from the widget, as from the phone's. An email's card (`send_email`,
-  2026-09-25) is approved in the Jarvis bar only, lock or not: the widget
-  shows one line of a card, and an email is approved after reading all of it
-  (`commands.rs` `waiting_email`, `widget.js`). **Notes too** (the
+  launch, a normal start, and the quiet raise for an arriving card - goes
+  through the App lock, either `lock::may_open` or
+  `windows::show_hud_quietly`'s own refusal). The widget stays on the
+  desktop, but while App lock is on its approval card shows only the notice's
+  title, and its Approve opens the card in the Jarvis bar - behind the lock,
+  where Windows Hello is asked first and `heavy-approve.js`'s delay-and-scroll
+  gate applies; `decide_approval` refuses an Approve from the widget in Rust as
+  well. Deny works from the widget, as from the phone's. An email's card
+  (`send_email`, 2026-09-25) is approved in the Jarvis bar only, lock or not:
+  the widget shows one line of a card, and an email is approved after reading
+  all of it (`commands.rs` `waiting_email`, `widget.js`). **Notes too** (the
   owner's decision of 2026-09-26): with App lock on, the widget offers no
   note to a running task or a card, and `inject_task_note` and
   `amend_approval` refuse the widget in Rust - notes are added in the
@@ -2525,11 +2544,11 @@ listening). Still in neither app: the "Voice delay" panel (`flow.summary`)
 same title and label, Deny left and Approve right, "Open the card", a
 notification for every card, and the spoken card lines. One small
 difference, on purpose: "Open the card" sits in Settings and the Brain on
-the PC (the Jarvis bar, the widget and the HUD show the card itself) and on
-every screen but Home on the phone (Home shows the cards). Both name the
-last card in the queue as read. The phone's home-screen widget has no
-Approve at all - "Review" opens the app - and sits where Approve sits
-elsewhere, on the right.
+the PC (the Jarvis bar, the widget and the HUD show the card itself, and the
+button opens it in the HUD window) and on every screen but Home on the phone
+(Home shows the cards). Both name the last card in the queue as read. The
+phone's home-screen widget has no Approve at all - "Review" opens the app -
+and sits where Approve sits elsewhere, on the right.
 
 **PC help is in both apps since 2026-09-28** (`docs/JARVIS-API.md` §84):
 the same five answers from `GET /api/pc/help`, and the same five questions

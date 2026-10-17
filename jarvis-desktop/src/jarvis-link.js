@@ -825,15 +825,21 @@ export async function decide(id, approved, optionId = null) {
 }
 
 /**
- * Opens the Jarvis bar on a waiting card ("Open the card", card-link.js).
- * DECIDES NOTHING: the bar is where Deny and Approve are, and it sits
- * behind App lock, so Windows Hello is asked first when the lock is on.
- * `id` names the card to show; without one (or once it is gone) the bar
- * shows the first card waiting.
+ * Opens the waiting card in the HUD window ("Open the card", card-link.js).
+ * DECIDES NOTHING: the HUD shows the whole card with its own Approve and Deny
+ * (#488), and it sits behind App lock, so Windows Hello is asked first when
+ * the lock is on.
+ *
+ * It asks for the HUD with `target: "hud"` (2026-10-17). The widget's own
+ * Approve is NOT this function: it sends no target and keeps the Jarvis bar,
+ * where `heavy-approve.js`'s delay-and-scroll gate lives - see
+ * `commands::card_open_target`. `id` is only for the bar fallback a process
+ * with no HUD window uses; the HUD draws every waiting card from its own queue.
  */
 export async function openCardInBar(id = null) {
-  if (!IS_TAURI) throw new Error("no desktop app to open the Jarvis bar in");
-  const args = id === null || id === undefined ? {} : { id: String(id) };
+  if (!IS_TAURI) throw new Error("no desktop app to open the card in");
+  const args = { target: "hud" };
+  if (id !== null && id !== undefined) args.id = String(id);
   return TAURI.core.invoke("open_approval_in_quickbar", args);
 }
 
