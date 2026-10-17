@@ -961,7 +961,6 @@ SHIPPED = (
     # model, and fails closed when jarvis_scrub is absent. Standard library
     # only.
     "jarvis_self_improve.py",
-<<<<<<< HEAD
     # A Notion export, tidied into an Obsidian vault (2026-10-16): ids off the
     # file and folder names with collisions decided deterministically, page
     # properties lifted into YAML frontmatter (notion_id kept, so a second
@@ -980,7 +979,6 @@ SHIPPED = (
     # this project's audits look for. Standard library only, and no patch:
     # plugins/ready/notion-obsidian calls its install().
     "jarvis_notion_obsidian.py",
-=======
     # Two-stage context compaction (2026-10-16, the owner's "have Jarvis keep
     # the thread"). Phase 1: a cleared older tool result becomes a small exact
     # stub - the tool, what it was aimed at, an outcome that says
@@ -996,7 +994,6 @@ SHIPPED = (
     # the only optional model call is off by default and off the hot path.
     # Standard library only.
     "jarvis_compaction.py",
->>>>>>> origin/main
 )
 
 
