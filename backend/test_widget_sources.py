@@ -20,12 +20,14 @@ Measured 2026-10-16, the truth was three different things:
   * A13 - the source was offered and its reader was a PLACEHOLDER: `_tokens()`
     returned the literal string "not measured" while `jarvis_speed` has been
     writing one `tokens_per_s` row per answer all along.
-  * A12 - the data does NOT exist: `_gpu()` calls
-    `jarvis_hardware.gpu_memory_used()`, which is defined in no file of this
-    repository, in no patch, and on no copy of the owner's PC - so the block
-    printed "0 GB used of 0 GB", a bare zero that was really "I could not read
-    it". Its row is still open on purpose (that is a real card, and per-card
-    memory is the second card's, which CLAUDE.md says is not measured).
+  * A12 - the data did NOT exist: `_gpu()` calls
+    `jarvis_hardware.gpu_memory_used()`, and that function was defined in no
+    file of this repository (nor in any patch, nor on the owner's PC) until
+    2026-10-17 - so the block said "could not read the graphics card" on every
+    PC, for ever. It is now real in `jarvis_hardware.py`, and its own suite
+    (`backend/test_gpu_memory.py`) pins the value it must give: (used, total)
+    bytes over every card, and (0.0, 0.0) only when no card could be read at
+    all. `docs/CLAIMS.tsv` row A12 is built on that suite.
 
 `test_widgets.py` is the module's own suite and is not this file's to change, so
 the checks above live here - including the one that would have caught all three:
@@ -178,9 +180,10 @@ def t_tokens_never_raises_and_never_reaches_the_owner_itself():
 # --------------------------------------------------------------------------
 
 def t_an_unreadable_card_is_not_an_empty_card():
-    """`gpu_memory_used()` does not exist, so `_gpu()` answers (0.0, 0.0). The
-    block must NOT turn that into "0 GB used of 0 GB": a card nobody could read
-    is not a card with nothing on it.
+    """`gpu_memory_used()` answers (0.0, 0.0) when it can read no card at all -
+    an unreachable nvidia-smi, a non-NVIDIA machine. The block must NOT turn
+    that into "0 GB used of 0 GB": a card nobody could read is not a card with
+    nothing on it.
 
     THE INVARIANT IS THE TEST, and it is a function of the WORKING TREE only.
 
@@ -217,16 +220,23 @@ def t_an_unreadable_card_is_not_an_empty_card():
     check("... and carries no note", not real.get("note"), real)
 
 
-def t_the_gpu_source_is_honest_about_what_it_cannot_do():
-    """The module says in its own words that the reader it calls does not exist,
-    so nobody has to rediscover it. This check is on the SOURCE, because the
-    fact is about a missing function, not about a value."""
-    src = (HERE / "jarvis_widgets.py").read_text(encoding="utf-8")
+def t_the_gpu_source_names_a_reader_that_exists():
+    """The widget calls `jarvis_hardware.gpu_memory_used()`, and that reader is
+    real: it is defined in `jarvis_hardware.py`, which is shipped to the owner's
+    PC beside the widget. Before 2026-10-17 the widget named a function no file
+    defined, so this is the pin that the name is not a phantom again - and that
+    the module no longer says in its own words that the reader is missing."""
+    widgets_src = (HERE / "jarvis_widgets.py").read_text(encoding="utf-8")
+    hardware_src = (HERE / "jarvis_hardware.py").read_text(encoding="utf-8")
     check("the reader is named where it is called",
-          "jarvis_hardware.gpu_memory_used()" in src)
-    check("... and a comment says it is not defined anywhere", "IS NOT DEFINED ANYWHERE" in src)
-    check("... and says why it cannot be added from here",
-          "hardware.patch" in src, "the patch-delivered reason is gone")
+          "jarvis_hardware.gpu_memory_used()" in widgets_src)
+    check("... and that reader is really defined in jarvis_hardware.py",
+          "def gpu_memory_used(" in hardware_src,
+          "the function the widget calls does not exist in the module it imports")
+    check("... and the module no longer says the reader is missing",
+          "IS NOT DEFINED ANYWHERE" not in widgets_src)
+    check("... and the widget keeps its (0.0, 0.0) fallback for an older backend",
+          "return (0.0, 0.0)" in widgets_src)
 
 
 # --------------------------------------------------------------------------
@@ -406,7 +416,7 @@ if __name__ == "__main__":
         t_tokens_says_nothing_rather_than_zero,
         t_tokens_never_raises_and_never_reaches_the_owner_itself,
         t_an_unreadable_card_is_not_an_empty_card,
-        t_the_gpu_source_is_honest_about_what_it_cannot_do,
+        t_the_gpu_source_names_a_reader_that_exists,
         t_approvals_count_is_the_real_waiting_list,
         t_the_three_sources_are_on_the_pcs_menu,
         t_every_source_on_the_menu_is_known_to_both_apps,
