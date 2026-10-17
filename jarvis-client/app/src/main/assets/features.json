@@ -502,7 +502,7 @@
     "where": "Brain, Memory, What did I believe on this date?",
     "asks": "No card.",
     "limit": "It needs the connection live.",
-    "surface": "phone",
+    "surface": "both",
     "covers": [
       "brain.memory.as-of",
       "memory"
@@ -752,10 +752,10 @@
     "group": "Notes and files",
     "title": "PC help",
     "what": "Five plain answers about this PC - what is slow, what is full, what is hot.",
-    "where": "Phone: Brain, PC help. Press Check now.",
+    "where": "Phone: Brain, PC help, Check now. PC: Settings, Hardware and models, PC help.",
     "asks": "No card - it only reads.",
     "limit": "Nothing is read until you press the button.",
-    "surface": "phone",
+    "surface": "both",
     "covers": [
       "brain.model.pc-help"
     ]
@@ -1809,7 +1809,7 @@
     "where": "The Brain, as the Rush latch banner.",
     "asks": "Nothing to press - it is a warning.",
     "limit": "No control clears it, and it is never hidden.",
-    "surface": "phone",
+    "surface": "both",
     "covers": [
       "brain.trust.rush-latch",
       "when-something-is-wrong"
