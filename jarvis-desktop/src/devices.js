@@ -31,6 +31,7 @@
 
 import { onLink, onEvent, currentLink, linkWords } from "./jarvis-link.js";
 import { pairWaitMs } from "./devices-pair-poll.js";
+import { call } from "./invoke-budget.js";
 import {
   CODE_GONE,
   LABEL_BUTTON,
@@ -273,7 +274,7 @@ function paint() {
 async function loadList() {
   if (!el.section || !IS_TAURI) return;
   try {
-    view = await TAURI.core.invoke("devices_list");
+    view = await call("devices_list");
   } catch (error) {
     view = { available: false, why: problemWords(error) };
   }
@@ -283,7 +284,7 @@ async function loadList() {
 async function loadAddress() {
   if (!IS_TAURI) return;
   try {
-    const out = await TAURI.core.invoke("pair_phone_address");
+    const out = await call("pair_phone_address");
     if (out && typeof out.address === "string" && out.address) {
       address = { value: out.address, editing: out.source !== "remembered" };
       el.address.value = out.address;
@@ -300,7 +301,7 @@ async function removeDevice(d) {
   say(el.status, "Removing…");
   paint();
   try {
-    const out = await TAURI.core.invoke("devices_remove", { id: d.id });
+    const out = await call("devices_remove", { id: d.id }, "action");
     say(el.status, `${(out && out.name) || d.name} was removed.`, "ok");
   } catch (error) {
     say(el.status, problemWords(error), "bad");
@@ -336,7 +337,7 @@ async function labelDevice(d) {
   say(el.status, "Naming…");
   paint();
   try {
-    const out = await TAURI.core.invoke("devices_label", { id: d.id, label: next });
+    const out = await call("devices_label", { id: d.id, label: next }, "action");
     say(el.status, labelDone((out && out.shown) || next || row.name || d.id), "ok");
   } catch (error) {
     say(el.status, problemWords(error), "bad");
@@ -353,7 +354,7 @@ async function retire() {
   say(el.sharedStatus, "Retiring…");
   paint();
   try {
-    await TAURI.core.invoke("devices_shared", { retired: true });
+    await call("devices_shared", { retired: true }, "action");
     say(el.sharedStatus, "Retired. It now works on this PC only.", "ok");
   } catch (error) {
     say(el.sharedStatus, problemWords(error), "bad");
@@ -372,7 +373,7 @@ async function bringBack() {
   say(el.sharedStatus, "Asking…");
   paint();
   try {
-    const out = await TAURI.core.invoke("devices_shared", { retired: false });
+    const out = await call("devices_shared", { retired: false }, "action");
     say(el.sharedStatus, out && out.waiting
       ? "Waiting for your approval on the card, with Windows Hello."
       : "Done.", "ok");
@@ -432,7 +433,7 @@ function paintSession(s) {
 
 async function poll() {
   try {
-    const s = await TAURI.core.invoke("pair_session");
+    const s = await call("pair_session");
     if (s && s.state === "none" && !showingCode && el.panel.hidden) return;
     el.panel.hidden = false;
     paintSession(s || { state: "none" });
@@ -492,7 +493,7 @@ async function pairPhone() {
   say(el.pairStatus, "Asking your PC for a code…");
   paint();
   try {
-    const out = await TAURI.core.invoke("pair_start", { address: typed });
+    const out = await call("pair_start", { address: typed }, "action");
     address = { value: typed, editing: false };
     say(el.pairStatus, "");
     el.qr.src = out.qr_svg;
@@ -520,7 +521,7 @@ async function cancelPairing() {
   el.words.textContent = "";
   say(el.session, "");
   try {
-    await TAURI.core.invoke("pair_cancel");
+    await call("pair_cancel", {}, "action");
     say(el.pairStatus, "Pairing was cancelled.");
   } catch (error) {
     say(el.pairStatus, problemWords(error), "bad");
@@ -557,7 +558,7 @@ if (el.section) {
       await loadAddress();
       // A pairing already open (this window was reloaded): its state and
       // words are shown, but never its code again.
-      const s = await TAURI.core.invoke("pair_session").catch(() => null);
+      const s = await call("pair_session").catch(() => null);
       if (s && isActive(s.state)) {
         el.panel.hidden = false;
         paintSession(s);
