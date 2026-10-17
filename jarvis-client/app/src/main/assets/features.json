@@ -403,6 +403,7 @@
     "asks": "No card to look. Forget on a fact asks first, as it does anywhere.",
     "limit": "The desktop keeps no people-and-things list of its own.",
     "surface": "phone",
+    "surface_reason": "Linking facts to the people and things they name, and joining two entries, is the memory graph, which stays off the phone: the desktop keeps the names, \"About <name>\" and the merge card, and the phone shows no names (docs/ARCHITECTURE.md section 8).",
     "covers": [
       "brain.memory.people-things",
       "memory-lists"
@@ -643,6 +644,7 @@
     "asks": "No extra card - the Live session is already running.",
     "limit": "Off until the photo test passes on the 12 GB card - the card is installed, but this feature is not measured. There is no words-only camera on one card.",
     "surface": "phone",
+    "surface_reason": "The phone's camera only: a PC webcam mostly sees the owner's face and room (the owner's answers of 2026-09-28, docs/LIVE-DESIGN.md section 5; docs/ARCHITECTURE.md section 8).",
     "covers": [
       "phone-live"
     ]
@@ -1117,6 +1119,7 @@
     "asks": "Off by default. Turning it on raises one card; turning it off is instant.",
     "limit": "Only the apps you choose, never banking. One-time codes are hidden before anything reaches the model, and it never makes Jarvis act. Never text messages, and Jarvis never replies or sends.",
     "surface": "phone",
+    "surface_reason": "A Windows desktop has no equivalent to \"which app posted a notification, and what did it say\": NotificationListenerService is an Android concept (docs/ARCHITECTURE.md section 8).",
     "covers": [
       "settings.phone-notify",
       "phone-notifications"
@@ -1131,6 +1134,7 @@
     "asks": "Every notification stays on the phone by default. Letting them all show on a watch raises a card; turning it off is instant.",
     "limit": "",
     "surface": "phone",
+    "surface_reason": "A smartwatch pairs with a phone, never with a Windows PC - there is nothing on the desktop for this to mean (docs/ARCHITECTURE.md section 8).",
     "covers": [
       "settings.watch-notify",
       "phone-extras"
@@ -1145,6 +1149,7 @@
     "asks": "No card.",
     "limit": "Bubble mode may need more than this setting before Android shows it at all - try it on the real phone.",
     "surface": "phone",
+    "surface_reason": "The phone's Floating Jarvis is the app's own icon with a status dot (AvatarOverlayService.kt), not the animal - the desktop's floating face draws the real animal, so there is no animal on the phone to sleep, keep still or take a serious pose (docs/ARCHITECTURE.md section 8).",
     "covers": [
       "settings.floating-avatar",
       "phone-extras"
@@ -1159,6 +1164,7 @@
     "asks": "No card.",
     "limit": "The tile never approves anything.",
     "surface": "phone",
+    "surface_reason": "Quick Settings tiles are an Android panel, and Windows has no equivalent a program can fill with its own buttons (docs/ARCHITECTURE.md section 8).",
     "covers": [
       "settings.quick-tiles",
       "phone-extras",
@@ -1174,6 +1180,7 @@
     "asks": "No card - it never reaches the PC, and nothing here is a route.",
     "limit": "It only asks. It cannot change the phone's own display setting - that belongs to the phone, and only the phone's own Settings or a system app can change it. If the screen does not take the rate, the row says so rather than pretending. A higher rate uses more battery. Not the animal's frame rate, which is how often the animal is drawn.",
     "surface": "phone",
+    "surface_reason": "It asks the PHONE's own screen for a rate, and the display setting belongs to the phone - only its Settings or a system app can change it; the desktop's frame-rate setting is the animal's, a different thing (this entry's own limit).",
     "covers": [
       "settings.screen-rate",
       "phone-extras"
@@ -1214,6 +1221,7 @@
     "asks": "Nothing to ask.",
     "limit": "No deep config editing, no model catalogue to browse, no speech-to-text on the phone, and no approve-all anywhere. Switching or installing a model by typing its name is allowed - it raises a card on the PC like any other change.",
     "surface": "phone",
+    "surface_reason": "It is the phone page's own honest list of what this phone will not do, so the two apps cannot disagree; there is nothing on the desktop for it to describe (this entry's own what).",
     "covers": [
       "phone-limits"
     ]
