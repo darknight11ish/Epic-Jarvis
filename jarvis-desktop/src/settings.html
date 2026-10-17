@@ -2483,6 +2483,19 @@
             <button class="btn ghost" id="ub-no" type="button" hidden>Cancel</button>
             <span class="status" id="ub-status" role="status"></span>
           </div>
+          <!-- Shown only while a run is under way, and never before or after:
+               it is about a question Windows asks DURING the install, and a
+               line that stayed on the card all day would stop being read. -->
+          <p class="note" id="ub-fallback" hidden>
+            Windows may ask whether to uninstall Jarvis while it updates. That is
+            the old 0.2.119 copy Windows still has registered. Click
+            <strong>Yes</strong> — it removes that old registration, then the new
+            version installs on top.
+          </p>
+          <!-- The loud verdict. A live region, and OUTSIDE the log disclosure
+               below: a run that finished with problems must not be something
+               the owner has to open a fold to find out about. -->
+          <div class="update-problems" id="ub-problems" role="alert" hidden></div>
           <ol id="ub-steps"></ol>
           <details class="update-notes" id="ub-log" hidden>
             <summary>What the patch program printed</summary>
