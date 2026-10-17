@@ -100,13 +100,23 @@ def t_a_map_that_cannot_be_read_fails_in_both_modes():
 
 
 def t_an_empty_range_is_not_a_pass():
-    """Nothing to check is not the same as nothing wrong."""
-    code, out = run(["--check"], REPO)          # HEAD == origin/main in CI
-    check("--check on an empty range is not a vacuous pass", code in (1, 2),
+    """Nothing to check is not the same as nothing wrong.
+
+    **`--since HEAD` is not decoration - it is the fix for a real CI failure.**
+    This used to run a bare `--check` and assert `exit in (1, 2)`, on the
+    comment "HEAD == origin/main in CI". That is true of a plain checkout and
+    **false of the checkout GitHub builds a pull request in**, where HEAD is the
+    merge ref: the range is not empty, the tool finds no debt in it, exits 0, and
+    this check failed the required `backend` job on two unrelated pull requests
+    (#491 and #493, 2026-10-16). A test whose answer depends on where it is run
+    is the same defect as a checker whose answer does - so the range is now made
+    empty on purpose and the tool is asked about that, wherever it runs.
+    """
+    code, out = run(["--check", "--since", "HEAD"], REPO)   # HEAD..HEAD, always
+    check("--check on an empty range is not a vacuous pass", code == 2,
           f"exit {code}: {out.strip()[-300:]}")
-    if code == 2:
-        check("and it says so in words rather than printing nothing",
-              "empty" in out.lower() or "nothing" in out.lower(), out.strip()[-300:])
+    check("and it says so in words rather than printing nothing",
+          "empty" in out.lower() or "nothing" in out.lower(), out.strip()[-300:])
 
 
 def t_the_map_is_real_and_each_row_can_be_read():
