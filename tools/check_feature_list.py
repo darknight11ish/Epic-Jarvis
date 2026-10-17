@@ -36,6 +36,14 @@ BOTH DIRECTIONS, which is the whole point:
      step. The same rule `backend/test_base_matches_repo.py` already applies to
      the backend copies, so this is one precedent rather than a new idea.
 
+  5. A ONE-SIDED CLAIM CARRIES ITS REASON. An entry whose `surface` is
+     `"phone"` says the DESKTOP does not have that feature - the claim that
+     misinformed the owner three times (see below) - so it must carry a
+     `surface_reason`: one sentence saying why, quoted from
+     `docs/ARCHITECTURE.md` section 8's one-sided table where the table has it.
+     The value alone is not a reason ("phone only" is refused). It covers one
+     direction on purpose - see "WHY THE RULE COVERS ONLY `phone`" below.
+
 WHAT `surface` IS NOT CHECKED AGAINST, AND WHY NOT (2026-10-16)
 
 `surface` is only required to be one of `("desktop", "phone", "both")` - never
@@ -64,11 +72,32 @@ MEASURED before one was written, and both fail:
 What is true, for anyone weighing the alternative: 101 of the 131 entries are
 `"both"` and only 30 are not (19 `"desktop"`, 11 `"phone"`; #495 moves three of
 the phone ones to `"both"`). Each of those 30 is a claim that ONE APP LACKS A
-FEATURE - exactly the claim that misinformed the owner here. The shape that
-would close it is a written reason per such entry, a sentence like
-`docs/ARCHITECTURE.md` section 8's one-sided table, so that a later change of
-`surface` has to move the sentence with it. That is thirty sentences to write
-honestly, not a rule to add, so it is recorded here rather than half-built.
+FEATURE - exactly the claim that misinformed the owner here.
+
+WHY THE RULE COVERS ONLY `phone`, AND NOT `"desktop"` TOO (2026-10-16)
+
+Rule 5 is deliberately one-directional, and this is the reason written down so
+it does not read as an oversight:
+
+  * `"phone"` has EVIDENCE OF HARM. Three entries said `"phone"` while the
+    desktop had the feature - PC help, "What did I believe on this date?" and
+    the rush-latch banner - and each told the owner his PC was missing
+    something it had. A `surface_reason` makes that negative claim a sentence
+    somebody had to write and a reader can weigh.
+  * `"desktop"` has no harm this checker can see, and no sentence anybody could
+    write honestly today without a fresh survey of the phone, one entry at a
+    time. The tempting mechanical signal - "its cover id is a desktop menu id,
+    so the phone must not have it" - is NOISE: it fires on 9 of the 11
+    phone-only entries, including genuinely Android-only ones (smartwatch
+    notifications, Quick Settings tiles, screen refresh rate, the floating
+    face), because `menu-catalog.js` is the SHARED registry that the phone's
+    `MenuCatalog.kt` is held to. A rule built on it would be switched off
+    inside a week.
+  * Three `"phone"` entries are exempt through `REASON_PENDING` for the same
+    honesty: their claim is FALSE on this tree (the desktop has all three), so
+    no sentence saying the desktop lacks them would be true. That list empties
+    itself - an id that stops being a `"phone"` entry FAILS, with the line to
+    delete named.
 
 WHY `INTERNAL` AND NOT "one entry per route": 249 backend routes are not 249
 features to a person - most are plumbing behind a button that IS listed. The
@@ -113,6 +142,39 @@ GROUPS = [
 ]
 
 SURFACES = ("desktop", "phone", "both")
+
+#: Rule 5: how a `surface_reason` is judged. Only its SHAPE can be checked - no
+#: checker can tell whether a sentence is true, which is exactly why the
+#: sentence has to exist for a person to read.
+REASON_MIN_WORDS = 6
+
+#: Values that are the `surface` said again rather than a reason for it.
+_VALUE_ECHO = {"phone", "phone only", "phone-only", "desktop", "desktop only",
+               "desktop-only", "both", "only on the phone", "only on the desktop"}
+
+
+def reason_is_a_sentence(text: str) -> bool:
+    """Is this a sentence somebody wrote, rather than the value restated?"""
+    words = str(text or "").split()
+    return (len(words) >= REASON_MIN_WORDS
+            and " ".join(words).lower().rstrip(".") not in _VALUE_ECHO)
+
+
+#: Rule 5's exemptions, each with the one line saying why it is here rather
+#: than carrying a sentence. Every one is a `"phone"` entry whose claim is
+#: FALSE on the tree it was written against - the desktop has the feature - so
+#: a `surface_reason` for it would be a lie. PR #495 corrects all three to
+#: `"both"`, and `pending_problems()` FAILS the moment one stops being a
+#: `"phone"` entry, so this list empties itself instead of rotting.
+REASON_PENDING = {
+    "pc-help": "the desktop HAS it (jarvis-desktop/src/pc-help.js, Settings -> Hardware "
+               "and models), so no sentence saying the desktop lacks it is true; PR #495 "
+               "corrects this entry to `both`",
+    "memory-as-of": "the desktop HAS it (brain.js:2501, :3018, Brain -> Memory); PR #495 "
+                    "corrects this entry to `both`",
+    "rush-latch": "the desktop HAS it (brain.js:1274-1290, the top of every Brain view); "
+                  "PR #495 corrects this entry to `both`",
+}
 
 #: Ids that are real but are never a row of their own, each with the one-line
 #: reason the owner never presses it. Keyed by the id exactly as the code
@@ -294,6 +356,18 @@ def field_problems(got: list) -> list:
             bad.append(f"{where}: group `{e.get('group')}` is not one of the nine")
         if e.get("surface") not in SURFACES:
             bad.append(f"{where}: surface `{e.get('surface')}` is not one of {SURFACES}")
+        # Rule 5: a `"phone"` entry claims the DESKTOP lacks the feature, so it
+        # must say why - unless REASON_PENDING has already said why no sentence
+        # is owed (see that dict, and the docstring's "WHY THE RULE COVERS ONLY
+        # `phone`").
+        if e.get("surface") == "phone" and where not in REASON_PENDING:
+            reason = str(e.get("surface_reason") or "").strip()
+            if not reason:
+                bad.append(f"{where}: says `phone` with no `surface_reason` - add one "
+                           f"sentence saying why the desktop does not have it")
+            elif not reason_is_a_sentence(reason):
+                bad.append(f"{where}: `surface_reason` is not a reason, it is the value "
+                           f"said again: {reason!r}")
         if not isinstance(e.get("limit"), str):
             bad.append(f"{where}: `limit` must be a string (empty when there is none)")
         if not isinstance(e.get("covers"), list) or any(not isinstance(c, str) for c in e.get("covers") or []):
@@ -395,12 +469,28 @@ def copy_problems() -> list:
     return bad
 
 
+def pending_problems(got: list) -> list:
+    """Rule 5's other half: an exemption that is no longer needed FAILS.
+
+    `REASON_PENDING` names the entries that cannot carry a true one-sided
+    sentence yet. The moment one of them stops being a `"phone"` entry it has
+    been corrected (`#495`), so its line is stale - the same rule `INTERNAL`
+    already follows for a line whose id is gone. That is what keeps the list
+    from becoming a permanent hiding place."""
+    phones = {e.get("id") for e in got
+              if isinstance(e, dict) and e.get("surface") == "phone"}
+    return [f"REASON_PENDING names `{name}`, which is no longer a `phone` entry - "
+            f"delete its line (the entry has been corrected): {why}"
+            for name, why in sorted(REASON_PENDING.items()) if name not in phones]
+
+
 def problems() -> list:
     """Everything wrong, in one list, each line naming what to fix."""
     got = entries()
     known = known_ids()
     return (field_problems(got) + phantom_covers(got, known) + uncovered(got, known)
-            + internal_problems(known) + copy_problems() + teaching_problems(got, known))
+            + internal_problems(known) + copy_problems() + teaching_problems(got, known)
+            + pending_problems(got))
 
 
 def main() -> int:
@@ -408,7 +498,8 @@ def main() -> int:
     known = known_ids()
     lessons = set(lesson_ids())
     checks = [
-        (f"{len(got)} entries, each with what / where / asks / limit / surface",
+        (f"{len(got)} entries, each with what / where / asks / limit / surface, and a "
+         f"`surface_reason` where it claims the other app lacks it",
          field_problems(got)),
         ("every `covers` id is a real registry id, a real lesson, or in INTERNAL",
          phantom_covers(got, known)),
@@ -416,6 +507,8 @@ def main() -> int:
          uncovered(got, known)),
         (f"INTERNAL's {len(INTERNAL)} lines are real, with reasons", internal_problems(known)),
         ("the three copies of features.json are byte-identical", copy_problems()),
+        (f"a `phone` reason is owed, never dropped: REASON_PENDING's "
+         f"{len(REASON_PENDING)} line(s) are self-emptying", pending_problems(got)),
         (f"every feature is taught by one of the {len(lessons)} lessons, or exempt with a reason",
          teaching_problems(got, known)),
     ]
