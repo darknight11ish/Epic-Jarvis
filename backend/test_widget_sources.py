@@ -40,7 +40,6 @@ import json
 import os
 import re
 import shutil
-import subprocess
 import sys
 import tempfile
 import traceback
@@ -178,83 +177,37 @@ def t_tokens_never_raises_and_never_reaches_the_owner_itself():
 #   A12 - the graphics card, and the bare zero that was not a measurement
 # --------------------------------------------------------------------------
 
-def _old_module_source():
-    """`jarvis_widgets.py` as it was **before the change it is about**, or None.
-
-    Read from git rather than remembered, so a bite about "what the code used to
-    do" is evidence about the old file and not about this file's own comment.
-
-    **WHY THE `~1` IS LOAD-BEARING, and this cost every open pull request its
-    `backend` job on 2026-10-16.** This used to read
-    ``origin/main:jarvis-backend/jarvis_widgets.py`` - "the old file" meaning
-    "what main has". That is true only while the change is unmerged. The moment
-    #484 landed, `origin/main` **became** the new file, the old branch was
-    genuinely absent from it, and this check failed - **on `main`**, where it
-    then failed the required `backend` job on **every open pull request**, none
-    of which touched this file. A test whose premise is "main is behind me" is
-    false the instant it is merged, which is the one moment it is supposed to
-    keep working.
-
-    So the old file is now found by asking git which commit last touched it and
-    reading its **parent**. That is a historical fact, it stays true for ever,
-    and it needs no pinned sha to rot: the last commit that changed
-    `jarvis_widgets.py` in this repository is the change this bite is about.
-    """
-    git = shutil.which("git")
-    if not git:
-        return None
-    path = "jarvis-backend/jarvis_widgets.py"
-    try:
-        last = subprocess.run(
-            [git, "-C", str(ROOT), "log", "-1", "--format=%H", "origin/main", "--", path],
-            capture_output=True)
-    except OSError:
-        return None
-    sha = last.stdout.decode("ascii", "replace").strip() if last.returncode == 0 else ""
-    if not sha:
-        return None
-    try:
-        done = subprocess.run(
-            [git, "-C", str(ROOT), "show", "{0}~1:{1}".format(sha, path)],
-            capture_output=True)
-    except OSError:
-        return None
-    if done.returncode != 0 or not done.stdout:
-        return None
-    # BYTES, decoded here: this console's default encoding is cp1252 and the old
-    # file carries curly quotes, so text=True raised inside the reader thread and
-    # the bite skipped itself for a reason that had nothing to do with the code.
-    return done.stdout.decode("utf-8", "replace")
-
-
 def t_an_unreadable_card_is_not_an_empty_card():
     """`gpu_memory_used()` does not exist, so `_gpu()` answers (0.0, 0.0). The
     block must NOT turn that into "0 GB used of 0 GB": a card nobody could read
     is not a card with nothing on it.
 
-    BITE: the OLD file is read out of git and shown to carry that very literal,
-    so the check is about a defect that shipped rather than a hypothetical one."""
+    THE INVARIANT IS THE TEST, and it is a function of the WORKING TREE only.
+
+    It used to also read the file as it was BEFORE this change out of git
+    (`git log -1 origin/main -- <path>`, then `git show <sha>~1:<path>`) to prove
+    the defect really shipped. That is a function of git history, not of the
+    tree, and it detonates on the next commit that touches the file: the "last
+    commit that touched it" becomes that commit, and its parent is the already
+    fixed file, so the check fails ON `main` and reddens the required `backend`
+    job on every open pull request. **A standing test must be a function of the
+    working tree. Anything else is a test of the weather.** The "this defect
+    really shipped" proof belongs in the pull request that fixes it, where it is
+    read once and then kept by git itself."""
     block = W.fill({"type": "progress", "source": "gpu_memory"},
                    W.Readers(gpu=lambda: (0.0, 0.0)))
     check("an unreadable card shows no value", block.get("value") == "", block.get("value"))
     check("... and says it could not be read", block.get("note") == W.NO_GPU, block)
     check("... and the bar is empty", block.get("fraction") == 0.0, block.get("fraction"))
 
-    old_src = _old_module_source()
+    # The same invariant on the CURRENT file: it reads `jarvis_widgets.py` as the
+    # working tree has it - no git, no history - so it stays true for ever.
     now_src = (HERE / "jarvis_widgets.py").read_text(encoding="utf-8")
-    if old_src is None:
-        skip("git or origin/main is not here, so the old branch cannot be shown")
-    else:
-        old_branch = 'else "0 GB used of 0 GB"'
-        check("BITE: the file before this change really did print a bare zero for this input",
-              old_branch in old_src, "the old branch is not in the old file")
-        check("... and the CODE does not any more",
-              old_branch not in now_src,
-              "the else-branch is still there (a comment mentioning the old words is fine)")
-        check("... and the old file also returned the placeholder 'not measured'",
-              '"not measured"' in old_src)
-        check("... which the file does not now",
-              'return "not measured"' not in now_src)
+    check("... and the CODE does not print a bare zero any more",
+          'else "0 GB used of 0 GB"' not in now_src,
+          "the else-branch is still there (a comment mentioning the old words is fine)")
+    check("... and the file no longer returns the placeholder 'not measured'",
+          'return "not measured"' not in now_src)
 
     real = W.fill({"type": "progress", "source": "gpu_memory"},
                   W.Readers(gpu=lambda: (3 * 1024 ** 3, 12 * 1024 ** 3)))
