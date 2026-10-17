@@ -1662,6 +1662,34 @@ const galaxy = (() => {
   };
 })();
 
+/* The bar's private-answer rule, applied here too.
+ *
+ * The owner's ruling (2026-10-16): "keep sensitive answers silent in the HUD
+ * too" - this window still SHOWS the answer, it just does not SAY it, which is
+ * the other half of #492. THE RULE IS IMPORTED, NEVER COPIED: private-speech.js
+ * is the bar's own decision module (jarvis-desktop/src/), and a copied
+ * predicate is the next drift between the two windows.
+ *
+ * WHAT IS HONESTLY DIFFERENT IS THE INPUT. The bar decides partly on the
+ * tool/step events ("a tool ran, so this may be private"); this page's event
+ * stream carries only `wellbeing` and `power`, so it cannot know that. It
+ * passes the route it does have - a sensitive saved fact, a private gate,
+ * injected facts, a screen read - and `toolsKnown: true` because that is what
+ * this page can claim. That closes the memory/private-gate half of the rule;
+ * a turn made private ONLY by a tool is not caught here, and saying otherwise
+ * would be a claim this page cannot support.
+ *
+ * When this page is served by the backend on its own there is no
+ * ./private-speech.js beside it; the import fails, nothing changes, and the
+ * page behaves as it did. */
+let speechRule = null;
+function loadSpeechRule(){
+  if(!speechRule) speechRule = import("./private-speech.js").catch(() => null);
+  return speechRule;
+}
+// This turn's `X-Jarvis-Route`, read below and handed to the rule.
+let turnRoute = null;
+
 /* ==================================================================
  * Voice — browser speech in, browser speech out.
  * Swap these two for the local pipeline (whisper + Kokoro) later by
@@ -1860,6 +1888,15 @@ let SEND_INFLIGHT = null;
 async function send(){
   const text = $("input").value.trim();
   if(!text) return;
+  // CLEARED AT THE START OF EVERY TURN, and this is not tidiness. `turnRoute`
+  // is module-level so the reply handler can hand it to the private-speech rule,
+  // and nothing cleared it - so once ONE turn carried a sensitive route, every
+  // later turn looked private too. The reply was still shown, but the page said
+  // "It's on your screen." INSTEAD of speaking it, for ordinary answers, for
+  // ever. `hud.mjs` caught it as 10 failed "reads the real reply" checks, every
+  // one of them reporting "an error was shown for a good reply". A per-turn
+  // value must be per-turn.
+  turnRoute = null;
   // One turn at a time. Sending while a stream is still open pushed the
   // second user turn into history ahead of the first assistant turn, and
   // the next request carried an out-of-order transcript upstream.
@@ -1932,10 +1969,22 @@ async function send(){
     }
 
     // The proxy tells us which lane it picked and why.
+    // Set when THIS turn is a crisis turn (the route's own flag), so the
+    // commit below can keep it out of what the next question re-sends.
+    let crisisTurn = false;
     try{
       const routeRaw = res.headers.get("X-Jarvis-Route");
       if(routeRaw){
         const route = JSON.parse(routeRaw);
+        turnRoute = route;
+        // The owner's rule (2026-09-29, docs/DECISIONS.md): a crisis question
+        // and its help answer show once and do NOT stay in the thread or in
+        // what the model is re-sent. The PC still keeps the chat in History,
+        // as "A difficult moment". The quickbar has this (chat-history.js
+        // `crisisRoute`/`keepsInThread`) and so does the phone: this page did
+        // not read the flag at all, so the next question carried the owner's
+        // crisis words and the 988/911 help back to the model.
+        crisisTurn = route.wellbeing === "crisis";
         // "Make the animal sharper" (Animal options, 2026-09-28; JARVIS-API
         // section 60.3): sharpness and frame rate are kept per device, so
         // the PC names the change and THIS computer applies it - the same
@@ -2046,11 +2095,31 @@ async function send(){
       $("tools-used").innerHTML = calls
         .map(c => `<span class="toolchip">${apprEscape(c.function?.name || "tool")}</span>`).join("");
     }
-    S.messages.push({role:"assistant", content:full});
+    if(crisisTurn){
+      // Showed once, above, and now kept out of the prompt: take the question
+      // back out as well, so the next request is not left with a user turn
+      // that has no answer beside it (the same repair the error path makes).
+      const last = S.messages[S.messages.length - 1];
+      if(last && last.role === "user" && last.content === text) S.messages.pop();
+    } else {
+      S.messages.push({role:"assistant", content:full});
+    }
     clearTimeout(watchdog); if(SEND_INFLIGHT === ctrl) SEND_INFLIGHT = null;
     $("r-latency").textContent = Math.round(performance.now()-started) + " ms";
     tracePromise.then(t => { if(t){ attachRecall(userNode, t); showTrace(t); } });
-    voice.speak(full);
+    // SHOWN either way; SAID only when the bar's rule allows it. The words are
+    // the rule's own (PRIVATE_LINE), so both windows say the same thing.
+    //
+    // WHEN IT MAY NOT BE SAID, THE LINE IS SPOKEN INSTEAD - it is NOT added as a
+    // message. `private-speech.js` is the authority (:41, PRIVATE_LINE at :68):
+    // "Otherwise Jarvis says one fixed line instead, `PRIVATE_LINE`, once", and
+    // the bar does exactly that - `speechQueue.push(PRIVATE_LINE)`, main.js:4642
+    // and :4728. Adding a system message instead is what hud.mjs caught: a system
+    // line is how this page draws an ERROR, so every private answer looked like a
+    // failure - "an error was shown for a good reply", 10 checks, for ever.
+    const rule = await loadSpeechRule();
+    const aloud = !rule || rule.mayReadAloud({ route: turnRoute || {}, toolsKnown: true });
+    voice.speak(aloud ? full : ((rule && rule.PRIVATE_LINE) || "It's on your screen."));
   }catch(err){
     clearTimeout(watchdog); if(SEND_INFLIGHT === ctrl) SEND_INFLIGHT = null;
     // Do not leave a user turn with no answer in history: the next request
