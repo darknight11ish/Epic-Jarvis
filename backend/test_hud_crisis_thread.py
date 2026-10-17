@@ -82,6 +82,33 @@ def main() -> int:
           re.search(r"export function keepsInThread\(crisis\) \{\s*\n\s*return crisis !== true;",
                     hist) is not None)
 
+
+    print("\n--- the speech gate: shown, not said (owner, 2026-10-16) ---")
+    check("the page imports the bar's own RULE rather than copying it",
+          'import("./private-speech.js")' in src and ".mayReadAloud(" in src)
+    check("and passes it THIS turn's route",
+          "turnRoute = route;" in src and "route: turnRoute || {}" in src)
+    check("what the page cannot know is not silently claimed known",
+          "toolsKnown: true" in src and "cannot know that" in src,
+          "the limit must be written down beside the call")
+    check("speech happens only inside the rule's yes",
+          re.search(r"if\(aloud\) voice\.speak\(full\);", src) is not None)
+    check("and a refused answer still shows the rule's own on-screen line",
+          'rule && rule.PRIVATE_LINE' in src)
+    speak_at = src.index("if(aloud) voice.speak(full);")
+    render_at = min(src.index("node.textContent = full"), src.index('addMessage("jarvis", full)'))
+    check("the answer RENDERS before the speak decision is even reached",
+          render_at < speak_at, (render_at, speak_at))
+
+    print("\n--- the rule reused is still the bar's rule, and rule 1 is untouched ---")
+    rule_src = (REPO / "jarvis-desktop" / "src" / "private-speech.js").read_text(encoding="utf-8")
+    check("private-speech.js still exports mayReadAloud and PRIVATE_LINE",
+          "export function mayReadAloud" in rule_src and "export const PRIVATE_LINE" in rule_src)
+    boot = (REPO / "jarvis-desktop" / "src-tauri" / "src" / "hud_bootstrap.js").read_text(encoding="utf-8")
+    check("hud_bootstrap.js 2e STILL keeps speech to local voices (rule 1)",
+          "localService === true" in boot and "synth.speak = function (utterance)" in boot
+          and "getVoices = localVoices" in boot)
+
     print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))

@@ -1662,6 +1662,34 @@ const galaxy = (() => {
   };
 })();
 
+/* The bar's private-answer rule, applied here too.
+ *
+ * The owner's ruling (2026-10-16): "keep sensitive answers silent in the HUD
+ * too" - this window still SHOWS the answer, it just does not SAY it, which is
+ * the other half of #492. THE RULE IS IMPORTED, NEVER COPIED: private-speech.js
+ * is the bar's own decision module (jarvis-desktop/src/), and a copied
+ * predicate is the next drift between the two windows.
+ *
+ * WHAT IS HONESTLY DIFFERENT IS THE INPUT. The bar decides partly on the
+ * tool/step events ("a tool ran, so this may be private"); this page's event
+ * stream carries only `wellbeing` and `power`, so it cannot know that. It
+ * passes the route it does have - a sensitive saved fact, a private gate,
+ * injected facts, a screen read - and `toolsKnown: true` because that is what
+ * this page can claim. That closes the memory/private-gate half of the rule;
+ * a turn made private ONLY by a tool is not caught here, and saying otherwise
+ * would be a claim this page cannot support.
+ *
+ * When this page is served by the backend on its own there is no
+ * ./private-speech.js beside it; the import fails, nothing changes, and the
+ * page behaves as it did. */
+let speechRule = null;
+function loadSpeechRule(){
+  if(!speechRule) speechRule = import("./private-speech.js").catch(() => null);
+  return speechRule;
+}
+// This turn's `X-Jarvis-Route`, read below and handed to the rule.
+let turnRoute = null;
+
 /* ==================================================================
  * Voice — browser speech in, browser speech out.
  * Swap these two for the local pipeline (whisper + Kokoro) later by
@@ -1939,6 +1967,7 @@ async function send(){
       const routeRaw = res.headers.get("X-Jarvis-Route");
       if(routeRaw){
         const route = JSON.parse(routeRaw);
+        turnRoute = route;
         // The owner's rule (2026-09-29, docs/DECISIONS.md): a crisis question
         // and its help answer show once and do NOT stay in the thread or in
         // what the model is re-sent. The PC still keeps the chat in History,
@@ -2069,7 +2098,12 @@ async function send(){
     clearTimeout(watchdog); if(SEND_INFLIGHT === ctrl) SEND_INFLIGHT = null;
     $("r-latency").textContent = Math.round(performance.now()-started) + " ms";
     tracePromise.then(t => { if(t){ attachRecall(userNode, t); showTrace(t); } });
-    voice.speak(full);
+    // SHOWN either way; SAID only when the bar's rule allows it. The words
+    // are the rule's own (PRIVATE_LINE), so both windows say the same thing.
+    const rule = await loadSpeechRule();
+    const aloud = !rule || rule.mayReadAloud({ route: turnRoute || {}, toolsKnown: true });
+    if(aloud) voice.speak(full);
+    else addMessage("system", (rule && rule.PRIVATE_LINE) || "It's on your screen.");
   }catch(err){
     clearTimeout(watchdog); if(SEND_INFLIGHT === ctrl) SEND_INFLIGHT = null;
     // Do not leave a user turn with no answer in history: the next request
