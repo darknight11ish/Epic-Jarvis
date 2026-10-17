@@ -204,6 +204,201 @@ await check("the command refusing outright never reads as an update", async () =
   assert.equal(tone, "bad", "a refused update is painted as a good one");
 });
 
+/* ── Where it has got to, while it is getting there ─────────────────────── */
+
+/** One `backend-update-progress` event, exactly as `update_progress.rs` sends
+ *  it: camelCase, and `total` null while the suites run. */
+const emitProgress = (page, payload) =>
+  page.evaluate((p) => window.__emit("backend-update-progress", p), payload);
+
+/** The owner's own run of 2026-10-16 (`apply-patches-2026-10-16-135737.txt`),
+ *  read off his `_jarvis-logs`: four suites failed and the verdict was
+ *  "DONE WITH PROBLEMS - do not trust this update yet". Three of the four were
+ *  not real failures - the PC refused the check - and per that log the failing
+ *  item line is a BARE `  FAIL  test_apply_outcomes.py` with no reason on it,
+ *  which is why the real one here carries an empty reason. */
+const REAL_PROBLEMS = {
+  phase: "done", done: 0, total: null, failed: 4, skipped: 0, verdict: "problems",
+  bad: [
+    { name: "test_media.py", ranHere: false,
+      reason: "Access is denied: the folder would not be written" },
+    { name: "test_tools.py", ranHere: false,
+      reason: "the run left a __pycache__ behind and read it back" },
+    { name: "test_apply_outcomes.py", ranHere: true, reason: "" },
+  ],
+};
+
+await check("the line says the update has started, instead of nothing, while it boots", async () => {
+  // The owner's actual complaint: "if its checking anything". The patch program
+  // takes about forty seconds to print its first line, and this line was BLANKED
+  // at the press - so the card said nothing at all for all of it.
+  const page = await open({ updateBoth: { delayMs: 1200, outcome: UB.bothOk } });
+  await page.waitForTimeout(300);
+  const idle = await page.locator("#ub-status").innerText();
+  await pressYes(page);
+  const during = await page.locator("#ub-status").innerText();
+  await page.waitForTimeout(1400);
+  const after = await page.locator("#ub-status").innerText();
+  await page.close();
+  assert.equal(idle, "", `the idle card already said "${idle}"`);
+  assert.match(during, /Starting the update/, `while the run booted it said "${during}"`);
+  assert.notEqual(after, during, "the run's own ending never replaced the starting line");
+});
+
+await check("every phase the updater reports becomes one line, in counts and never a percentage", async () => {
+  const page = await open();
+  await page.waitForTimeout(250);
+  const line = () => page.locator("#ub-status").innerText();
+  const seen = {};
+  const at = { done: 0, total: null, failed: 0, skipped: 0, verdict: null, bad: [] };
+  await emitProgress(page, { ...at, phase: "reading" });
+  seen.reading = await line();
+  await emitProgress(page, { ...at, phase: "rehearsing", done: 12, total: 145 });
+  seen.rehearsing = await line();
+  await emitProgress(page, { ...at, phase: "applying", done: 3, total: 145 });
+  seen.applying = await line();
+  await emitProgress(page, { ...at, phase: "testing", done: 7, failed: 2, skipped: 1 });
+  seen.testing = await line();
+  await emitProgress(page, { ...at, phase: "done", verdict: "ok" });
+  seen.done = await line();
+  await page.close();
+  assert.equal(seen.reading, "Working out what to update…");
+  assert.equal(seen.rehearsing, "Patching the backend — patch 12 of 145");
+  assert.equal(seen.applying, "Patching the backend — patch 3 of 145");
+  assert.equal(seen.testing, "Running the checks — 7 done, 2 failed");
+  // `total` is null while the suites run: a made-up denominator is worse than
+  // no denominator, and a percentage would be exactly that.
+  assert.doesNotMatch(seen.testing, /%|of \d/, `a denominator was invented: ${seen.testing}`);
+  assert.match(seen.done, /No problems/, seen.done);
+});
+
+await check("an event with nothing readable in it leaves the last line standing", async () => {
+  // A phase this build does not know must not put the card back to the silence
+  // the whole feature exists to remove.
+  const page = await open();
+  await page.waitForTimeout(250);
+  await emitProgress(page, { phase: "rehearsing", done: 5, total: 145, failed: 0, skipped: 0,
+    verdict: null, bad: [] });
+  const good = await page.locator("#ub-status").innerText();
+  await emitProgress(page, { phase: "a-phase-from-a-newer-build", done: 0, total: null,
+    failed: 0, skipped: 0, verdict: null, bad: [] });
+  const after = await page.locator("#ub-status").innerText();
+  await page.close();
+  assert.match(good, /patch 5 of 145/, good);
+  assert.equal(after, good, "an unknown phase blanked the line");
+});
+
+await check("a run with problems is a loud list, and a check this PC refused is NOT called a failure", async () => {
+  const page = await open();
+  await page.waitForTimeout(250);
+  await emitProgress(page, REAL_PROBLEMS);
+  const box = page.locator("#ub-problems");
+  const visible = await box.isVisible();
+  const role = await box.getAttribute("role");
+  const inFold = await box.evaluate((el) => Boolean(el.closest("details")));
+  const text = await box.innerText();
+  const lists = await box.locator("ul").allInnerTexts();
+  const status = await page.locator("#ub-status").innerText();
+  await page.close();
+  assert.equal(visible, true, "a run with problems showed nothing");
+  assert.equal(role, "alert", "the verdict is not a live region");
+  assert.equal(inFold, false, "the verdict is inside a fold, where it is not seen");
+  assert.equal(lists.length, 2, `${lists.length} lists, expected the real ones then the refused ones`);
+  assert.match(lists[0], /test_apply_outcomes\.py/, lists[0]);
+  assert.doesNotMatch(lists[0], /Access is denied/, "a refused check was listed as a real failure");
+  assert.match(lists[1], /Access is denied: the folder would not be written/, lists[1]);
+  assert.match(lists[1], /__pycache__/, lists[1]);
+  assert.match(text, /1 check the patch program reported as failed/, text);
+  assert.match(text, /2 checks could not run on this PC/, text);
+  assert.match(status, /do not trust this update yet/i, status);
+  // `failed` is the patcher's count of FAIL lines (4 here), and it is NOT used
+  // to label either list: it counts things that are not one named check - the
+  // script's own "335 passed, 4 failed." summary line, and a suite's inner
+  // check names. It is said plainly instead of standing in for the lists.
+  assert.match(text, /counted 4 failing check\(s\) in this phase; 3 of them are named above/,
+    text);
+});
+
+await check("when more checks failed than the payload carries, the count says so", async () => {
+  // `bad` is capped at 20 so a catastrophic run cannot grow the event; `failed`
+  // is not. Reporting the smaller number as the total would be a quiet lie.
+  const page = await open();
+  await page.waitForTimeout(250);
+  await emitProgress(page, { phase: "done", done: 0, total: null, failed: 25, skipped: 0,
+    verdict: "problems",
+    bad: [{ name: "test_real.py", reason: "three rows came back instead of four", ranHere: true }] });
+  const text = await page.locator("#ub-problems").innerText();
+  await page.close();
+  assert.match(text, /^1 check the patch program reported as failed:/m, text);
+  assert.match(text, /counted 25 failing check\(s\) in this phase; 1 of them are named above/, text);
+});
+
+await check("unproven is its own sentence, and never a quiet success", async () => {
+  const page = await open();
+  await page.waitForTimeout(250);
+  await emitProgress(page, { phase: "done", done: 0, total: null, failed: 0, skipped: 0,
+    verdict: "unproven", bad: [] });
+  const status = await page.locator("#ub-status").innerText();
+  const visible = await page.locator("#ub-problems").isVisible();
+  const box = await page.locator("#ub-problems").innerText();
+  await page.close();
+  assert.match(status, /not proven/i, status);
+  assert.equal(visible, true, "an unproven update showed nothing");
+  assert.match(box, /not the same as a proven update/i, box);
+});
+
+await check("CONTROL: a clean verdict shows no problem box at all", async () => {
+  // The other half of the loud verdict: if every ending raised a box, the box
+  // would stop meaning anything.
+  const page = await open();
+  await page.waitForTimeout(250);
+  await emitProgress(page, { phase: "done", done: 0, total: null, failed: 0, skipped: 0,
+    verdict: "ok", bad: [] });
+  const visible = await page.locator("#ub-problems").isVisible();
+  const status = await page.locator("#ub-status").innerText();
+  await page.close();
+  assert.equal(visible, false, "an alarm was shown for a clean run");
+  assert.match(status, /Done\. No problems/, status);
+});
+
+await check("the Windows-uninstall warning shows while a run is in flight and never otherwise", async () => {
+  const page = await open({ updateBoth: { delayMs: 1200, outcome: UB.bothOk } });
+  await page.waitForTimeout(300);
+  const idle = await page.locator("#ub-fallback").isVisible();
+  await pressYes(page);
+  const during = await page.locator("#ub-fallback").isVisible();
+  const words = await page.locator("#ub-fallback").innerText();
+  await page.waitForTimeout(1400);
+  const after = await page.locator("#ub-fallback").isVisible();
+  await page.close();
+  assert.equal(idle, false, "the warning is furniture on an idle card");
+  assert.equal(during, true, "the owner was not warned while the install could ask");
+  assert.equal(after, false, "the warning stayed on the card after the run");
+  assert.match(words, /uninstall Jarvis/i, words);
+  assert.match(words, /Click\s+Yes/i, words);
+  assert.match(words, /the old copy Windows still has registered/, words);
+  // NO VERSION NUMBER IN IT. It used to name one (0.2.119), which appears
+  // nowhere in this repository: it was machine state, so it would be wrong on
+  // any other PC and wrong for him after his next update - and the question
+  // this line answers is what to click, not which version it is.
+  assert.doesNotMatch(words, /\d+\.\d+\.\d+/, `the warning names a version: ${words}`);
+});
+
+await check("CONTROL: a progress event is read-only — it starts and changes nothing", async () => {
+  // The whole feature is a view of a run somebody else started. This is the
+  // "never automatic" rule at its smallest, and it is why the listener is
+  // written beside the existing one rather than instead of it.
+  const page = await open();
+  await page.waitForTimeout(250);
+  await emitProgress(page, REAL_PROBLEMS);
+  await emitProgress(page, { phase: "testing", done: 3, total: null, failed: 0, skipped: 0,
+    verdict: null, bad: [] });
+  const seen = await calls(page);
+  await page.close();
+  assert.ok(!seen.includes("__updatedBoth"), "a progress event started an update");
+  assert.ok(!seen.includes("__installed"), "a progress event installed something");
+});
+
 /* ── The two folders ────────────────────────────────────────────────────── */
 
 await check("the card says where each folder was read from, rather than implying it", async () => {

@@ -793,6 +793,38 @@ select:focus-visible {
   white-space: pre-wrap;
 }
 
+/* A run that finished with problems: a box the eye lands on, above the steps
+   and outside the log disclosure, because this is the one thing on the card
+   that must not need opening. `--bad` rather than `--bad-text` on the rule so
+   the border carries the alarm and the words stay readable at length. */
+.update-problems {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--bad);
+  border-left-width: 3px;
+  border-radius: 6px;
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+
+.update-problems p {
+  margin: 0;
+  color: var(--bad-text);
+}
+
+.update-problems ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.update-problems li {
+  margin: 2px 0;
+  /* The patcher's own words, kept verbatim: a long reason wraps rather than
+     being clipped, since the reason is the whole point of the line. */
+  overflow-wrap: anywhere;
+  color: var(--text);
+}
+
 .faq-list { display: flex; flex-direction: column; gap: 2px; }
 
 .faq-item {

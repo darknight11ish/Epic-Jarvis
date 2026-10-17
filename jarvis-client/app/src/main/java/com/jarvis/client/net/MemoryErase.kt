@@ -118,13 +118,46 @@ object MemoryErase {
     /** What the PC answered, kept whole: the status and the JSON body, if any. */
     data class Reply(val code: Int, val body: JsonObject?)
 
+    /**
+     * What to say after an erase, from the PC's own reply - because "Erased." is
+     * only true when the PC says the file was rebuilt.
+     *
+     * `POST /api/memory/erase` erases the row, the word index and the vector, and
+     * then rebuilds the file (`optimize`, VACUUM, checkpoint). The rebuild needs
+     * no other program holding memory.db, and it is that last step which decides
+     * whether the words are gone from the DISK rather than merely unreachable:
+     * measured 2026-10-16, another connection open across the erase left 21
+     * occurrences of the erased words in memory.db and its -wal, and a second
+     * erase, once the reader had gone, left none.
+     *
+     * The PC is honest about that: it answers `file_clean: false` and puts the
+     * explanation in `note` - "Another part of Jarvis was reading the memory file
+     * at that moment, so it could not be rebuilt: an older copy of these words may
+     * stay in memory.db or memory.db-wal until the fact is erased again." Both
+     * apps used to print their own "Erased." and never read either field, so the
+     * one case where the promise was not kept was the one case the owner was told
+     * nothing about. The desktop's copy is `eraseSaid` in
+     * `jarvis-desktop/src/auto-learn.js`, and the two must answer with the same
+     * words - a fact cannot be true on one device and false on the other.
+     *
+     * So: `file_clean` false -> the PC's own sentence, word for word. There is no
+     * sentence invented here on purpose - the PC owns the words for its own state,
+     * the same way ERASED_NO_CHAT came from the chat audit. [normal] is what the
+     * caller would have said (ERASED, ERASED_NO_CHAT, ERASED_AND_CHAT_DELETED),
+     * and it is used for every other reply, including a `file_clean` the PC did
+     * not send (an older PC) - which is the behaviour that shipped before.
+     */
+    fun eraseSaid(reply: Reply, normal: String): String {
+        val note = reply.body?.text("note") ?: ""
+        return if (reply.body?.flag("file_clean") == false && note.isNotEmpty()) note else normal
+    }
+
     /** The PC deleted the chat the fact came from, too. */
     fun chatDeleted(reply: Reply): Boolean = reply.code in 200..299 && reply.body?.flag("chat_deleted") == true
 
-    /**
-     * Whether the words are gone now (so the row leaves the list), and the
-     * sentence to show. [askedChat]: the chat was asked about (or the PC said
-     * none is on record) - a bare "Erased." would then hide that no chat went.
+    /** Whether the words are gone now (so the row leaves the list), and the
+     *  sentence to show. [askedChat]: the chat was asked about (or the PC said
+     *  none is on record) - a bare "Erased." would then hide that no chat went.
      */
     fun said(reply: Reply, askedChat: Boolean = false): Pair<Boolean, String> {
         val b = reply.body
@@ -133,11 +166,13 @@ object MemoryErase {
             reply.code in 200..299 -> if (b?.flag("ok") == false) {
                 false to ("Not erased. " + (error ?: "Your PC said no, without a reason."))
             } else {
-                true to when {
+                // eraseSaid: when the PC could not rebuild the file it says so in
+                // `note`, and THAT is what the owner must read instead of "Erased."
+                true to eraseSaid(reply, when {
                     b?.flag("chat_deleted") == true -> ERASED_AND_CHAT_DELETED
                     askedChat -> ERASED_NO_CHAT
                     else -> ERASED
-                }
+                })
             }
             reply.code == 404 && b?.text("reason") == "no_such_fact" -> true to ALREADY_GONE
             reply.code == 404 || reply.code == 501 -> false to TOO_OLD

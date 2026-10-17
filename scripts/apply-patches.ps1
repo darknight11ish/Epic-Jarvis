@@ -5142,6 +5142,50 @@ function Show-SuiteFailure($out) {
     $note + "`n" + (($kept | ForEach-Object { "      $_" }) -join "`n")
 }
 
+# WHY A SUITE FAILED, ON THE SAME LINE (2026-10-16). This line used to be a bare
+# "FAIL  test_x.py", and that is all the update screen's reader
+# (jarvis-desktop\src-tauri\src\update_progress.rs) gets: it tells "this PC
+# refused the check" from "the check failed" by reading the reason, so with no
+# reason every failure read as a real one. Three of the owner's four failures on
+# 2026-10-16 were the PC refusing, and the screen called all four real.
+#
+# The reason is the suite's own first failing check, and the line UNDER that
+# check is where the cause usually is: test_base_matches_repo failed on this
+# script's own __pycache__, and those bytes are in the detail, never in the
+# check's name. So the detail is joined on - it is what makes the difference
+# visible - and the whole thing is capped, because one detail line in that run
+# was a two-thousand character list of file names.
+#
+# The shape is the one the patch path above already prints
+# ("FAIL  <name> - will not apply"), reused rather than invented: one shape,
+# already read by the parser, instead of a second one to keep in step.
+$script:WhyMax = 160
+
+function Get-FirstFailureReason($out) {
+    $lines = @("$out" -split "`r?`n")
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -notmatch '^[ \t]*FAIL[ \t]') { continue }
+        $said = ($lines[$i] -replace '^[ \t]*FAIL[ \t]+', '').Trim()
+        for ($j = $i + 1; $j -lt $lines.Count; $j++) {
+            $next = $lines[$j].Trim()
+            if (-not $next) { continue }
+            # A section header or the next failure ends the detail this check
+            # owns; a suite prints one check after another.
+            if ($next -match '^(---|=+$)' -or $next -match '^FAIL[ \t]') { break }
+            if ($said) { $said = "$said - $next" }
+            break
+        }
+        if ($said.Length -gt $script:WhyMax) {
+            $said = $said.Substring(0, $script:WhyMax) + ' ...'
+        }
+        return $said
+    }
+    # A suite that died before printing any check has no failing check to name,
+    # and the bare name is the honest line. Guessing here would be the dangerous
+    # direction: a real failure read as "the PC refused it".
+    return ''
+}
+
 $tests = @(Get-ChildItem -LiteralPath $PatchDir -Filter 'test_*.py' | Sort-Object Name)
 $pass = 0; $fail = @()
 # A suite that exits 0 is not necessarily a suite that tested anything: many
@@ -5199,7 +5243,12 @@ try {
             } else { Ok $t.Name }
         }
         else {
-            Bad $t.Name
+            # The reason rides on the same line, so the update screen can tell a
+            # real failure from a check this PC refused - see
+            # Get-FirstFailureReason above. `$fail` keeps the bare suite name:
+            # the detail blocks below are headed by it.
+            $why = Get-FirstFailureReason $txt
+            if ($why) { Bad "$($t.Name) - $why" } else { Bad $t.Name }
             $fail += @{ Name = $t.Name; Output = $txt.Trim() }
         }
     }
