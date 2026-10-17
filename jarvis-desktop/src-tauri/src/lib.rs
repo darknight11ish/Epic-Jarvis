@@ -69,6 +69,7 @@ pub mod tool_updates;
 pub mod tray;
 pub mod tutorials;
 pub mod update;
+pub mod update_progress;
 pub mod vision;
 pub mod voice;
 pub mod voice_flow;
