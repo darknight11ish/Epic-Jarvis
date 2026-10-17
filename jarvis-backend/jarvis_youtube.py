@@ -73,6 +73,14 @@ try:
 except Exception:  # pragma: no cover - shipped beside it on the PC
     fw = None  # type: ignore
 
+#: The "sneaky instruction" table (the same one the agent's tool path and
+#: browser control use), and the ONE stripper this repository has for
+#: chat-template delimiters. Imported here - not lazily and not in
+#: jarvis_quiz.py - because this is where outside text ENTERS, and because
+#: jarvis_quiz may import only jarvis_local_http and jarvis_wellbeing (its own
+#: suite checks that with a syntax-tree walk). Both files ship together.
+import jarvis_injection
+
 PATH = "/api/youtube"
 QUIZ_ROUTE = "/api/youtube/quiz"
 
@@ -307,8 +315,36 @@ def default_fetch(video_id: str, languages) -> list:
 
 
 def default_quiz(text: str, count: int, title: str) -> dict:
+    """The caption, handed to the quiz - with TWO THINGS DONE FIRST (2026-10-16).
+
+    1. THE CHAT-TEMPLATE DELIMITERS ARE STRIPPED. A fence is a text-level
+       fence: it stops the MODEL being told to do something, and it is made of
+       a random word so the caption cannot close it. It does NOT stop a TOKEN
+       BOUNDARY - a `<|im_end|>` carried in a caption is a real end-of-turn for
+       the template the model was trained with, read at the tokenizer layer
+       before the fence is looked at. `jarvis_injection.marker_free` is the one
+       stripper this repository has for those markers, and it ITERATES, because
+       one pass can leave one behind (see its own note).
+
+    2. THE CAPTION IS SCANNED, and the finding rides with the quiz. A caption
+       is the one text here that nobody chose and nobody read before it reached
+       a model, and until this it never reached the "sneaky instruction" table
+       at all - so a poisoned video was invisible in the Trust list every other
+       outside-text reader feeds. ADVISORY, exactly as that table says of
+       itself: the sentence is shown and the level is recorded, and neither
+       blocks the quiz, changes a tier or removes a card.
+
+    Both live HERE rather than in jarvis_quiz because that module may import
+    only `jarvis_local_http` and `jarvis_wellbeing` - its own suite walks the
+    syntax tree and checks, so even a lazy import there fails.
+    """
     import jarvis_quiz
-    return jarvis_quiz.start_outside(text, count, title, "youtube")
+    safe = jarvis_injection.marker_free(text)
+    line = str(jarvis_injection.summary(text) or "")
+    level = str(jarvis_injection.worst(text) or "")
+    return jarvis_quiz.start_outside(safe, count, title, "youtube",
+                                     injection=(line or None),
+                                     injection_level=(level or None))
 
 
 def default_open_count() -> int:
@@ -545,7 +581,15 @@ def _decide(r: dict, parsed: dict, count: int, title: str, languages: tuple) -> 
             msg = (f"Ready. The video is long, so the quiz covers only the first part"
                    + (f" (about {minutes} minutes)." if minutes else "."))
         _set(r, "ready", message=msg)
-    _audit("youtube.captions", {"outcome": "ready", "truncated": bool(truncated)})
+    # A video whose captions look like they are trying to instruct Jarvis is
+    # RECORDED, not just shown: the quiz carries the sentence, and this carries
+    # the level into the audit trail. Only the level and only when there is
+    # one - the same rule this helper's own comment keeps ("never a link, a
+    # video id or any caption text").
+    detail = {"outcome": "ready", "truncated": bool(truncated)}
+    if quiz.get("injection_level"):
+        detail["injection"] = str(quiz["injection_level"])
+    _audit("youtube.captions", detail)
 
 
 def start(body, *, tainted: bool = False) -> tuple:

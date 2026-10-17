@@ -81,6 +81,15 @@ from typing import Callable, Optional
 
 import jarvis_local_http
 
+# WHAT THIS MODULE MAY IMPORT IS TESTED, so the marker strip the caption path
+# needs does NOT happen here. test_quiz.py walks the whole syntax tree and
+# requires the only jarvis_ modules imported to be `jarvis_local_http` and
+# `jarvis_wellbeing` (the pure crisis check and the help wording, owner
+# 2026-09-30). A LAZY import counts - the walk sees inside functions. So the
+# strip belongs where outside text ENTERS: jarvis_youtube.default_quiz strips
+# the delimiters and scans for a sneaky instruction, and `start_outside` below
+# takes that finding as plain data.
+
 # ---- the frozen contract (docs/STUDY-FROM-TEXT-DESIGN.md section 11) -------
 
 PATH = "/api/quiz"
@@ -91,6 +100,13 @@ MAX_OPEN = 3
 EXPIRY_SECONDS = 60 * 60
 TITLE_MAX = 80
 DEFAULT_TITLE = "Quiz on your text"
+#: The longest advisory sentence a CALLER may hand in about its own outside
+#: text, and the levels it may name (see `start_outside`). This module carries
+#: that finding and nothing else: it does not scan, because it may not import
+#: the table that scans. Both are clamped, so a caller cannot put a paragraph
+#: or an unknown level on a card through this door.
+INJECTION_MAX = 400
+INJECTION_LEVELS = ("high", "medium", "low")
 KINDS = ("recall", "explain", "apply")
 MODES = ("text", "spanish")
 CEFR_LEVELS = ("A1", "A2", "B1", "B2", "C1", "C2")
@@ -310,6 +326,20 @@ _MARK_SYSTEM = (
 
 
 def _fence(name: str, text: str, word: str) -> str:
+    """One block of text for the model, between THIS call's own random markers.
+
+    A fence says "this is data, not instructions", and its word is random so
+    the text cannot close it. What a fence cannot do is stop a TOKEN BOUNDARY:
+    the fence lines are ordinary text to a tokenizer, while a `<|im_end|>`
+    carried inside a YouTube caption is a real end-of-turn for the template a
+    model was trained with, read at the tokenizer layer before the fence is
+    consulted at all. THOSE DELIMITERS ARE STRIPPED BEFORE THE TEXT GETS HERE -
+    in jarvis_youtube.default_quiz, where outside text enters, by the one
+    stripper this repository has for them. It is not done in this function
+    because this module may import only `jarvis_local_http` and
+    `jarvis_wellbeing` (see the note beside the imports), and a second copy of
+    that pattern is the duplicate this project's audits look for. A NEW CALLER
+    THAT HANDS IN OUTSIDE TEXT MUST STRIP IT ITSELF."""
     return f"<<<{name} {word}>>>\n{text}\n<<<end {name} {word}>>>"
 
 
@@ -643,7 +673,8 @@ _CLOCK = {"now": time.time}
 
 class _Quiz:
     def __init__(self, title: str, questions: list, now: float, *, mode: str = "text",
-                 level=None, key_source=None, provenance=None, source=None):
+                 level=None, key_source=None, provenance=None, source=None,
+                 injection=None, injection_level=None):
         self.id = secrets.token_hex(8)
         self.title = title
         self.questions = [dict(q, mark=None) for q in questions]
@@ -654,6 +685,14 @@ class _Quiz:
         self.model = ""                 # the model that last wrote or marked here ("" = everyday)
         self.provenance = provenance    # "outside" for text the owner did not write (YouTube captions), else None
         self.source = source            # a short label for where outside text came from, e.g. "youtube"
+        # "This outside text LOOKS like it is trying to instruct Jarvis" - the
+        # advisory line jarvis_injection writes, and the level it found. A
+        # poisoned video must not be invisible: the line rides out with the
+        # quiz to both apps, and the level is what jarvis_youtube records in
+        # its own audit. Advisory, exactly as that table says of itself: it
+        # never blocks a quiz, never changes a tier and never removes a card.
+        self.injection = injection
+        self.injection_level = injection_level
         # For the cloud "grade this better" button (jarvis_quiz_cloud.py); all in memory, gone with the quiz.
         self.crisis_seen = False        # a crisis answer was typed here: the quiz never goes to a cloud service
         self.private = False            # something marked this quiz private: it never goes to a cloud service
@@ -683,6 +722,14 @@ def _view(s: _Quiz) -> dict:
         # Additive (JARVIS-API section 98/112): only a quiz on OUTSIDE text carries these.
         v["provenance"] = s.provenance
         v["source"] = s.source
+    if s.injection:
+        # Additive, and only when the CALLER's scan of outside text actually
+        # matched something: the sentence to show, and the level it found (what
+        # jarvis_youtube records in its audit). Advisory - it never blocks the
+        # quiz and never changes a tier. See start_outside.
+        v["injection"] = s.injection
+        if s.injection_level:
+            v["injection_level"] = s.injection_level
     return v
 
 
@@ -747,13 +794,25 @@ def start(body: dict) -> dict:
     return _register(lambda: write_questions(text, count), title)
 
 
-def start_outside(text, count, title, source: str) -> dict:
+def start_outside(text, count, title, source: str, *,
+                  injection=None, injection_level=None) -> dict:
     """A quiz on OUTSIDE text - text the owner did not write and did not paste,
     handed in by another module (jarvis_youtube.py: a video's caption text,
     fetched after the owner's own card). Same limits, same fenced-data model
     calls, same crisis check on every answer, nothing learned or written; the
     quiz is only marked `provenance: "outside"` and `source`, so the apps can
-    say so. The caller cuts a long text to TEXT_MAX itself (and says it did)."""
+    say so. The caller cuts a long text to TEXT_MAX itself (and says it did).
+
+    THE CALLER ALSO STRIPS THE CHAT-TEMPLATE DELIMITERS AND SCANS THE TEXT, and
+    hands the result in as `injection` (the advisory sentence) and
+    `injection_level` ("high"/"medium"/"low"). Two reasons it is the caller's
+    job: this module may import only `jarvis_local_http` and `jarvis_wellbeing`
+    (test_quiz.py walks the tree and checks - a lazy import counts too), and a
+    caption is the caller's own text, so the caller is where it enters. Both
+    values are ADVISORY, exactly as that table says of itself: they never block
+    a quiz, never change a gate tier and never remove a card. A poisoned video
+    is then not invisible - the sentence rides out with the quiz to both apps,
+    and the level is what jarvis_youtube records in its audit."""
     if not isinstance(text, str) or len(text.strip()) < TEXT_MIN:
         raise QuizError("text_too_short")
     if len(text) > TEXT_MAX:
@@ -761,7 +820,13 @@ def start_outside(text, count, title, source: str) -> dict:
     n = _count_of({"count": count})
     label = _clean_line(title, TITLE_MAX) or DEFAULT_TITLE
     tag = _clean_line(source, 20) or "outside"
-    return _register(lambda: write_questions(text, n), label, provenance="outside", source=tag)
+    line = _clean_line(injection, INJECTION_MAX) if injection else ""
+    level = str(injection_level or "")
+    if level not in INJECTION_LEVELS:
+        level = ""
+    return _register(lambda: write_questions(text, n), label, provenance="outside",
+                     source=tag, injection=(line or None),
+                     injection_level=(level or None))
 
 
 def _start_spanish(body: dict) -> dict:
