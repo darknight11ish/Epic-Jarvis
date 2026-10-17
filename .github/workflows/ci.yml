@@ -1629,6 +1629,20 @@ jobs:
       # `backend` job through run_suites.py, is the proof that this checker bites.
       - name: No test pins the source text of a production module
         run: python3 ../../tools/check_no_source_pins.py
+      # ... and the ratchet above was BLIND to the pin one step sideways: a
+      # text pin fails when the source's CONTENT changes; a POSITION pin
+      # (`lines[951]`) fails when the thing it points at is DISPLACED, passes on
+      # a wrong value that happens to sit at the old index, and fails on a right
+      # value one line lower. #525 moved one pin from the counted column into
+      # that uncounted one, so a file could hide its debt there.
+      # tools/check_position_pins.py is the SECOND CEILING RATCHET, in the same
+      # exact-count shape: it records the positions measured on 2026-10-17
+      # (12 files, 16), allows the number to fall, never rise, and fails BOTH
+      # when a pin is added and when one is paid off without lowering the entry.
+      # backend/test_position_pins.py, which runs in the required `backend` job
+      # through run_suites.py, is the proof that this checker bites.
+      - name: No test pins a position in a production module's source
+        run: python3 ../../tools/check_position_pins.py
       # ---------------------------------------------------------------------
       # THE ONE STEP IN THIS JOB THAT REPORTS WITHOUT FAILING, on purpose.
       #
