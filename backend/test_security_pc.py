@@ -510,8 +510,8 @@ def t_no_password_over_plain_http_to_another_machine():
             os.environ["JARVIS_HOME_URL"] = url
             check(f"CONTROL: Home Assistant at {url} is planned",
                   len(HOME.plan_states(["light.kitchen"]).queries) == 1
-                  and len(HOME.plan_service("light", "turn_on",
-                                            "light.kitchen").queries) == 1)
+                  and len(HOME.service_queries(HOME.plan_service(
+                      "light", "turn_on", "light.kitchen"))) == 1)
     finally:
         for k, v in saved.items():
             if v is None:

@@ -1925,10 +1925,17 @@ def lights_without_card(plan, owner_words: str, *, shaped: str) -> str:
 
 def record_no_card(plan) -> None:
     """The audit line for a home change made without a card: the devices
-    and the service, never anything else."""
+    and the service, never anything else.
+
+    Only the requests that ACT are named. A service-call plan carries each
+    device's read-only readback (`GET /api/states/<eid>`) beside its call, so
+    naming every query's `entity_id` would name each device twice, and the
+    service would be read off a readback that has none."""
+    acts = [q for q in (getattr(plan, "queries", None) or [])
+            if not getattr(q, "verify", False)]
     _audit("asks_first.lights.no_card", {
-        "entities": [getattr(q, "entity_id", "") for q in getattr(plan, "queries", []) or []],
-        "service": (getattr((getattr(plan, "queries", None) or [None])[0], "url", "") or "")
+        "entities": list(dict.fromkeys(getattr(q, "entity_id", "") for q in acts)),
+        "service": (getattr(acts[0] if acts else None, "url", "") or "")
         .rsplit("/api/services/", 1)[-1]})
 
 
