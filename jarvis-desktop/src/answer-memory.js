@@ -54,6 +54,7 @@ import { whenLine } from "./history-view.js";
 import {
   eraseAlsoChatNamedConfirm,
   ERASED_NO_CHAT,
+  eraseSaid,
   otherFactsInChat,
   readFactChat,
   ERASE_ALSO_CHAT_CONFIRM,
@@ -336,8 +337,11 @@ export function createAnswerMemory({ box, lineButton, list, note, invoke, isStal
         if (out && out.chat_deleted && chat && typeof onChatDeleted === "function") {
           onChatDeleted(chat.id);
         }
-        return out && out.chat_deleted ? ERASED_AND_CHAT_DELETED
-          : alsoChat || chat === null ? ERASED_NO_CHAT : ERASED;
+        // eraseSaid: when the PC could not rebuild the file it says so in
+        // `note`, and THAT is what the owner must read instead of "Erased."
+        // (see its own note in auto-learn.js).
+        return eraseSaid(out, out && out.chat_deleted ? ERASED_AND_CHAT_DELETED
+          : alsoChat || chat === null ? ERASED_NO_CHAT : ERASED);
       });
   }
 
