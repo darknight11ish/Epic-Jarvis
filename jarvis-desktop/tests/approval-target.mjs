@@ -194,14 +194,22 @@ await check("the press, not the click, is where the card is fixed", async () => 
   assert.match(close, /state\.cards\.clear\(\)/, "a closed card leaves its pin behind");
 });
 
-await check("the buttons' rules are unchanged: Deny is never disabled by a swap, and a card the widget may not decide still opens the bar", async () => {
+await check("the buttons' rules: Deny is held by nothing but a decision already on its way, and a card the widget may not decide still opens the bar", async () => {
   const decide = uncommented(fnBody(widget, "async function decide(approved, optionId = null) {"));
   assert.match(decide,
     /approved && \(state\.appLock \|\| isEmailCard\(approval\) \|\| needsFullCard\(approval\)\)/,
     "the redirect to the Jarvis bar no longer covers lock, email and cards whose text is clamped");
   assert.match(decide, /await approveInBar\(\)/);
   const sync = uncommented(fnBody(widget, "function syncApprovalButtons() {"));
-  assert.match(sync, /dom\.btnApprNo\.disabled = blocked;/, "Deny is no longer always available");
+  // MOVED WITH THE RULE, deliberately (2026-10-17, #522). This used to pin
+  // `dom.btnApprNo.disabled = blocked;` - and `blocked` includes `link.stale`,
+  // so Deny was disabled while the connection was catching up. That
+  // contradicts `features.json`: "refusing is never held, approving can be."
+  // Deny is held by exactly one thing now, a decision already on its way, and
+  // the pin says so. It was changed because the RULE changed, not to turn a
+  // red test green.
+  assert.match(sync, /dom\.btnApprNo\.disabled = state\.deciding;/,
+    "Deny must be held by an in-flight decision only - never by the stale link");
   assert.doesNotMatch(sync, /state\.cards/, "the swap guard was put in the disable rule instead of the decision");
 });
 
