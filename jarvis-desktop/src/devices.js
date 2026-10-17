@@ -35,6 +35,8 @@ import {
   CODE_GONE,
   LABEL_BUTTON,
   LABEL_PROMPT,
+  LATE_ACTION,
+  LATE_READ,
   NEEDS_ADDRESS,
   STALE,
   countdown,
@@ -111,6 +113,48 @@ function say(target, text, tone) {
   target.textContent = text || "";
   if (tone) target.dataset.tone = tone;
   else delete target.dataset.tone;
+}
+
+/* ── A request from this card that must answer ──────────────────────── */
+
+/** How long one of this card's own requests gets before the page says so -
+ *  the same 30 s `settings.js` gives its own open-time reads. */
+const CALL_BUDGET_MS = 30_000;
+
+/**
+ * A request that must answer. `work` keeps running (Rust does not cancel a
+ * command) and its late result is ignored - the race handles both sides, so a
+ * late rejection cannot surface as an unhandled one. `late` is what is said
+ * when it does not come back: a read only goes stale, an action may really have
+ * happened (`LATE_ACTION` in devices-words.js).
+ */
+function withBudget(work, late, ms = CALL_BUDGET_MS) {
+  let bell = 0;
+  const gone = new Promise((_, fail) => {
+    bell = setTimeout(() => fail(new Error(late)), ms);
+  });
+  return Promise.race([work, gone]).finally(() => clearTimeout(bell));
+}
+
+/**
+ * EVERY command this card sends goes through here (2026-10-16).
+ *
+ * The card had no budget of any kind. `settings.js` gives one to its own
+ * open-time reads, but through a private `OPEN_READS` set that only its own
+ * `invoke()` consults - and `settings.js` exports nothing, while every call in
+ * this file goes straight to `TAURI.core.invoke`. So a command that never
+ * settled left `pairPhone`'s `busy` true for ever, `paint()` kept every control
+ * disabled (`el.pair.disabled = busy || ...`), and the section sat on "Asking
+ * your PC for a code…" with nothing said at all. That is the freeze the owner
+ * reported, and it is the same defect the 2026-10-10 budget fixed for five
+ * reads in `settings.js` and did not fix for these.
+ *
+ * A budget of this card's own, rather than adding the pairing commands to
+ * `OPEN_READS`: that set cannot be reached from this module, so the change
+ * would have read like a fix and done nothing.
+ */
+function call(command, args = {}, late = LATE_READ) {
+  return withBudget(TAURI.core.invoke(command, args), late);
 }
 
 /* ── The old "Show the token for my phone" (design 7.1) ─────────────── */
@@ -273,7 +317,7 @@ function paint() {
 async function loadList() {
   if (!el.section || !IS_TAURI) return;
   try {
-    view = await TAURI.core.invoke("devices_list");
+    view = await call("devices_list");
   } catch (error) {
     view = { available: false, why: problemWords(error) };
   }
@@ -283,7 +327,7 @@ async function loadList() {
 async function loadAddress() {
   if (!IS_TAURI) return;
   try {
-    const out = await TAURI.core.invoke("pair_phone_address");
+    const out = await call("pair_phone_address");
     if (out && typeof out.address === "string" && out.address) {
       address = { value: out.address, editing: out.source !== "remembered" };
       el.address.value = out.address;
@@ -300,7 +344,7 @@ async function removeDevice(d) {
   say(el.status, "Removing…");
   paint();
   try {
-    const out = await TAURI.core.invoke("devices_remove", { id: d.id });
+    const out = await call("devices_remove", { id: d.id }, LATE_ACTION);
     say(el.status, `${(out && out.name) || d.name} was removed.`, "ok");
   } catch (error) {
     say(el.status, problemWords(error), "bad");
@@ -336,7 +380,7 @@ async function labelDevice(d) {
   say(el.status, "Naming…");
   paint();
   try {
-    const out = await TAURI.core.invoke("devices_label", { id: d.id, label: next });
+    const out = await call("devices_label", { id: d.id, label: next }, LATE_ACTION);
     say(el.status, labelDone((out && out.shown) || next || row.name || d.id), "ok");
   } catch (error) {
     say(el.status, problemWords(error), "bad");
@@ -353,7 +397,7 @@ async function retire() {
   say(el.sharedStatus, "Retiring…");
   paint();
   try {
-    await TAURI.core.invoke("devices_shared", { retired: true });
+    await call("devices_shared", { retired: true }, LATE_ACTION);
     say(el.sharedStatus, "Retired. It now works on this PC only.", "ok");
   } catch (error) {
     say(el.sharedStatus, problemWords(error), "bad");
@@ -372,7 +416,7 @@ async function bringBack() {
   say(el.sharedStatus, "Asking…");
   paint();
   try {
-    const out = await TAURI.core.invoke("devices_shared", { retired: false });
+    const out = await call("devices_shared", { retired: false }, LATE_ACTION);
     say(el.sharedStatus, out && out.waiting
       ? "Waiting for your approval on the card, with Windows Hello."
       : "Done.", "ok");
@@ -432,7 +476,7 @@ function paintSession(s) {
 
 async function poll() {
   try {
-    const s = await TAURI.core.invoke("pair_session");
+    const s = await call("pair_session");
     if (s && s.state === "none" && !showingCode && el.panel.hidden) return;
     el.panel.hidden = false;
     paintSession(s || { state: "none" });
@@ -492,7 +536,7 @@ async function pairPhone() {
   say(el.pairStatus, "Asking your PC for a code…");
   paint();
   try {
-    const out = await TAURI.core.invoke("pair_start", { address: typed });
+    const out = await call("pair_start", { address: typed }, LATE_ACTION);
     address = { value: typed, editing: false };
     say(el.pairStatus, "");
     el.qr.src = out.qr_svg;
@@ -520,7 +564,7 @@ async function cancelPairing() {
   el.words.textContent = "";
   say(el.session, "");
   try {
-    await TAURI.core.invoke("pair_cancel");
+    await call("pair_cancel", {}, LATE_ACTION);
     say(el.pairStatus, "Pairing was cancelled.");
   } catch (error) {
     say(el.pairStatus, problemWords(error), "bad");
@@ -557,7 +601,7 @@ if (el.section) {
       await loadAddress();
       // A pairing already open (this window was reloaded): its state and
       // words are shown, but never its code again.
-      const s = await TAURI.core.invoke("pair_session").catch(() => null);
+      const s = await call("pair_session").catch(() => null);
       if (s && isActive(s.state)) {
         el.panel.hidden = false;
         paintSession(s);

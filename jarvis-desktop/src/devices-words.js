@@ -37,6 +37,29 @@ export const NEEDS_ADDRESS = "Type the name your phone reaches this PC at first 
 export const STALE = "The connection to Jarvis is catching up, so nothing can be sent " +
   "until it does.";
 
+/** A READ from this card that never answered. Word for word the sentence
+ * `settings.js` already uses for its own open-time reads, so the Devices card
+ * says what every other part of Settings says: a read that is late is only
+ * out of date. */
+export const LATE_READ = "Jarvis has not answered yet, so this part of Settings may be out of date. " +
+  "Try again in a moment.";
+
+/** An ACTION from this card that never answered - and deliberately NOT the
+ * read sentence above.
+ *
+ * `pair_start` is a WRITE, and Rust does not cancel a command: the PC can make
+ * a pairing session a moment AFTER this page stops waiting for the answer, so
+ * a code may be live on the phone while the page has given up. "May be out of
+ * date" understates that; "it failed" would be a lie in the other direction.
+ * The only true thing left to say is that it is not known - and then where the
+ * truth will show, before the owner presses it again.
+ *
+ * Saying this at all is the fix for the owner's report of 2026-10-16 ("the
+ * settings page freezes and no longer works with me"): before it, the section
+ * said nothing at all, for ever. */
+export const LATE_ACTION = "Jarvis has not answered yet, so it is not known whether it happened. " +
+  "Check your phone and the list before trying again.";
+
 /** Whether a session in `state` still shows a code or the words. */
 export function isActive(state) {
   return ACTIVE_STATES.includes(state);
