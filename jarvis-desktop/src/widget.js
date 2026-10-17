@@ -1243,8 +1243,13 @@ async function readAppLock() {
   }
 }
 
-/** Approve while App lock is on, or on an email: open the Jarvis bar on this
- *  card. */
+/** Approve while App lock is on, or on an email/tidy/heavy card: open the card
+ *  in the Jarvis bar. That surface is deliberate - the bar is where
+ *  `heavy-approve.js`'s delay-and-scroll gate lives, so this redirect must not
+ *  be pointed at a window that approves at once. No target is sent, and the
+ *  command treats that as the bar (see `commands::card_open_target`). (The
+ *  function keeps its old name; `open_approval_in_quickbar` does too - the
+ *  command name is what `permissions/surfaces.toml` grants.) */
 async function approveInBar() {
   flash("Opening the Jarvis bar - approve it there.");
   try {

@@ -594,8 +594,18 @@ await check("App lock: the widget shows the notice title only, and Approve opens
   if (quote) assert.ok(!w.text.includes(quote), "the rush quote is shown while locked");
   await page.locator("#btn-appr-yes").click();
   await page.waitForTimeout(250);
-  const after = await page.evaluate(() => ({ bar: window.__openedInBar || 0, decides: window.__decides || [] }));
+  const after = await page.evaluate(() => ({
+    bar: window.__openedInBar || 0,
+    targets: window.__cardTargets || [],
+    decides: window.__decides || [],
+  }));
   assert.equal(after.bar, 1, "Approve did not open the Jarvis bar");
+  // The widget's redirect keeps the bar ON PURPOSE: the bar is where
+  // heavy-approve.js's delay-and-scroll gate lives, so it must never ask for
+  // the HUD, which approves at once (commands::card_open_target).
+  for (const target of after.targets) {
+    assert.ok(target !== "hud", "the widget's redirect asked for the ungated HUD surface");
+  }
   assert.equal(after.decides.length, 0, `the widget sent a decision while locked: ${JSON.stringify(after.decides)}`);
   // Deny still decides from the widget, as on the phone.
   await page.locator("#btn-appr-no").click();
