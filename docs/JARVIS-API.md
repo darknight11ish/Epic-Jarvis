@@ -16553,10 +16553,33 @@ Total. Examples made by the real code: `spending-cases.json` (`python3 tools/gen
 by `path` or every file with a saved layout by `all: true`), `files` (the bank-looking
 files in the listed folders and whether each has a saved layout), `suggest` (the top
 uncategorised shop names, at most 20 and 40 characters each, passed as quoted data - not
-instructions - for the model to say which category each might belong to; nothing is saved).
-`period`: `last_month`, `this_month`, `last_year`, `this_year`, `2026`, `2026-03`,
-`2026-01-01..2026-03-31`, or none for every date in the file. Offered only while a folder
-is listed and `my_spending` is in `[tools].enabled`; one of the "documents" group's tools.
+instructions - for the model to say which category each might belong to; nothing is saved),
+`subscriptions` (Pillar 10: the shops that charge again and again, any price rise and any
+double charge, read from one file by `path` or - with no path, the default - every file with
+a saved layout; `period` is ignored because finding a monthly or yearly rhythm needs the
+whole history; `all: true` is the same as naming no file). `period`: `last_month`,
+`this_month`, `last_year`, `this_year`, `2026`, `2026-03`, `2026-01-01..2026-03-31`, or none
+for every date in the file. Offered only while a folder is listed and `my_spending` is in
+`[tools].enabled`; one of the "documents" group's tools. As with `summary`, one table an
+answer: a second table-producing call in the same turn is refused.
+
+**The subscriptions answer** (`jarvis_spending.build_subscriptions_table`). It is the same
+table block both apps already draw (kind `"spending"`, version `1`), so neither app needed a
+change: columns are `What`, `How often` ("Every month" / "Every year" / "Charged twice"),
+`Last charged` (a date written out) and the money columns `Amount` and `Went up by`; one
+section per currency; `rows` are the subscriptions (the rise only where the latest charge is
+higher than the one before it) and the `also` rows are the double charges, each with its two
+dates. There are no `totals` rows (charging periods differ, so a sum would mean nothing). The
+title is "Subscriptions and price rises", "Subscriptions" or "Charged twice" depending on what
+was found; the caveats carry the counted-once/skipped/currency/hidden lines as usual plus "A
+subscription is a shop that charged about once a month (26 to 35 days apart) or once a year
+(350 to 380). A shop written two different ways is not matched." The two word columns are
+marked `"money": false`, so a date is never a figure the model's sentence may quote. When
+nothing at all was found, no table is made: `{"ok": true, "shown_on_screen": false, "message":
+"I found no subscriptions, price rises or double charges in your bank files."}`. The model is
+given each shop by its **merchant stem** (lower-case words with any trailing store number or
+reference removed), its amount and its exact rise - never the raw description, never a charge
+date, never the table - so its ONE sentence can name the row whose figure it quotes.
 
 ### 100.4 The column check (PC only)
 
@@ -16659,10 +16682,11 @@ in caveats are not figures; a total pinned on a category ("1,304.90 on food") is
 so is a percentage, a fraction, a hedged or rounded amount ("around a thousand"), an
 amount in words next to a currency word ("seventy pounds forty") and "1.3k". The period
 may be written as the table writes it. **When my_spending was called and made no table**
-(no layout yet, a layout that does not fit, an empty period, a refusal), the model's words
-are held and shown only if they carry no amount of money; otherwise the tool's own plain
-sentence is shown. On a question that looks like one about spending, the words before the
-tool call are held too. A hostile reply cannot carry a figure to the screen.
+(no layout yet, a layout that does not fit, an empty period, a refusal, or nothing found to
+report in the subscriptions answer), the model's words are held and shown only if they carry
+no amount of money; otherwise the tool's own plain sentence is shown (`message` for "nothing
+found", `error` for a refusal). On a question that looks like one about spending, the words
+before the tool call are held too. A hostile reply cannot carry a figure to the screen.
 
 **Money-sensitive conversations.** A turn in which `my_spending` was called reports
 `money: true`; `jarvis_chat_log` marks the conversation (in `meta`, no words, so a restart,

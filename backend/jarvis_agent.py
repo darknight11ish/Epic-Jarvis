@@ -973,7 +973,7 @@ def _spending_refusal(watch: "_TurnWatch", args: dict) -> str:
         return SPENDING_OUTSIDE
     if any(n != SPENDING_TOOL for n in watch.read):
         return SPENDING_OUTSIDE
-    if (str(args.get("action") or "summary").strip().lower() == "summary"
+    if (str(args.get("action") or "summary").strip().lower() in ("summary", "subscriptions")
             and watch.spending_table is not None):
         return SPENDING_ONE_TABLE
     return ""
@@ -1971,11 +1971,12 @@ TOOLS: dict = {
     # file_read's action - see SPENDING_TOOL.
     "my_spending": Tool(
         "my_spending",
-        "Add up spending from a bank CSV or Excel file in the owner's listed folders. summary "
-        "shows a table on their screen; then reply in ONE short sentence, only figures from the "
-        "result. files: list bank files. suggest: shop names no category fits.",
+        "Add up or audit spending from a bank file in listed folders. summary: a table on "
+        "screen, then ONE short sentence, only figures from the result. files: list them. "
+        "suggest: uncategorised shops. subscriptions: recurring charges, price rises, double "
+        "charges.",
         {"type": "object", "properties": {
-            "action": {"type": "string", "enum": ["summary", "files", "suggest"]},
+            "action": {"type": "string", "enum": ["summary", "files", "suggest", "subscriptions"]},
             "path": {"type": "string", "description": "the full path files gave"},
             "all": {"type": "boolean", "description": "combine every file with a saved layout"},
             "period": {"type": "string", "description":
@@ -8850,10 +8851,13 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
                 watch.spending_table = table
         elif name == SPENDING_TOOL:
             # No table (nothing set up, a layout that does not fit, an empty
-            # period): the tool's own plain sentence is what the owner reads if
-            # the model's words carry an amount (deliver_plain).
+            # period, or nothing found to report): the tool's own plain sentence
+            # is what the owner reads if the model's words carry an amount
+            # (deliver_plain). A "nothing found" answer carries its sentence as
+            # `message`; the refusals carry theirs as `error`.
             watch.spending_asked = True
-            said_err = str((result or {}).get("error") or "") if isinstance(result, dict) else ""
+            got_plain = result if isinstance(result, dict) else {}
+            said_err = str(got_plain.get("message") or got_plain.get("error") or "")
             watch.spending_message = re.sub(r"^refused:\s*", "", said_err)[:400]
         # Outside text: checked, cleaned and labelled before the model reads
         # it - see "Outside text in the tool loop".

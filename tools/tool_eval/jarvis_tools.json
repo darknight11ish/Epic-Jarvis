@@ -490,7 +490,7 @@
   "type": "function",
   "function": {
    "name": "my_spending",
-   "description": "Add up spending from a bank CSV or Excel file in the owner's listed folders. summary shows a table on their screen; then reply in ONE short sentence, only figures from the result. files: list bank files. suggest: shop names no category fits. To read what a file says, use my_files.",
+   "description": "Add up or audit spending from a bank file in listed folders. summary: a table on screen, then ONE short sentence, only figures from the result. files: list them. suggest: uncategorised shops. subscriptions: recurring charges, price rises, double charges. To read what a file says, use my_files.",
    "parameters": {
     "type": "object",
     "properties": {
@@ -499,7 +499,8 @@
       "enum": [
        "summary",
        "files",
-       "suggest"
+       "suggest",
+       "subscriptions"
       ]
      },
      "path": {
