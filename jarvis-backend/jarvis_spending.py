@@ -57,6 +57,16 @@ the skipped and de-duplicated counts (result_for_model). Never a raw description
 except in the `suggest` action, where the top uncategorised names are passed as
 quoted data (at most 20, at most 40 characters each).
 
+SUBSCRIPTIONS AND PRICE HIKES (Pillar 10, the first half). audit_subscriptions
+reads transactions that are already normalised and answers three questions with
+plain arithmetic: which merchants charge on a recurring interval (monthly or
+annual), which of those went up since the charge before it (the exact rise, in
+whole cents), and where the same shop charged the same amount twice within six
+days. Nothing here is displayed, remembered, sent to the model or written to
+disk: this is the deterministic half of the pillar, and the caller does the
+words. The mail half of the pillar (trial-ending and delivery emails) is
+deliberately NOT here - it belongs with jarvis_mail.py.
+
 Standard library only, apart from openpyxl in the child program.
 """
 from __future__ import annotations
@@ -1388,6 +1398,268 @@ def _combine_same(files: list) -> tuple:
         out.extend(kept)
         once += duplicates
     return out, once
+
+
+# --------------------------------------------------------------------------
+#   Recurring charges: what came back, what went up, what was charged twice
+# --------------------------------------------------------------------------
+#
+# Pillar 10's first half: a bank export that only totals things cannot tell the
+# owner that a subscription quietly went up, or that it was charged twice. This
+# is the deterministic arithmetic for that, and nothing else - no model, no
+# display words, no files, no clock. Every amount is whole cents (an int), as
+# everywhere else in this file; the caller turns cents into words.
+#
+# A WRONG MATCH IS WORSE THAN A MISSED ONE. Two statements write the same shop
+# in different ways, so a merchant is reduced to a stem (merchant_stem); but two
+# charges are the same merchant only when the stems are EQUAL. There is no fuzzy
+# matching here, for the same reason normalise_description has none: a
+# subscription nobody noticed costs the owner nothing, while two different shops
+# added up as one would raise a false alarm about his money.
+
+MONTHLY_DAYS = (26, 35)         # "every month": 26 to 35 days between charges
+ANNUAL_DAYS = (350, 380)        # "every year": 350 to 380 days
+DUPLICATE_DAYS = 6              # "twice within < 7 days" is 6 days or fewer
+
+#: The end of a description that is a store number or a reference code, not part
+#: of the merchant's name: "TESCO STORES 1234", "SPOTIFY P2E4X7", "DISNEY 888
+#: 555 1234". Stripped from the END only, and only whole tokens.
+_STORE_NUMBER = re.compile(r"^\d{1,16}$")
+
+
+def merchant_stem(desc) -> str:
+    """The merchant part of a description, for comparing two charges with plain
+    equality - never for showing to anyone.
+
+    It is normalise_description (this file's own folding: case, width, accents,
+    punctuation and whitespace) with any store number or reference code taken
+    off the end: "TESCO STORES 1234" is "tesco stores" and "SPOTIFY P2E4X7" is
+    "spotify". What counts as one:
+
+      * a run of 1 to 16 digits - a store, membership or reference number;
+      * a short mixed letter/digit code of at most 10 characters with at least
+        two digits and at least as many digits as letters ("x1234", "a1b2c3",
+        "p2e4x7"). A word that merely ends in a number keeps it ("studio54",
+        "7eleven"), and so does everything else that is not one of these - a
+        name is not a code.
+
+    It errs towards missing a match: nothing here is approximate, so two
+    different wordings that are not the same words (with their trailing codes
+    taken off) are two merchants, and a subscription written two ways is missed
+    rather than guessed at.
+
+    A description that is ONLY the [hidden] marker - an account or card number
+    this module hides before anyone sees it - names no merchant at all and has
+    no stem. Two such numbers are not the same shop, and treating them as one
+    would invent a subscription out of two unrelated transfers."""
+    text = "" if desc is None else str(desc)
+    if not text.replace(HIDDEN, "").strip():
+        return ""                      # only a hidden number: it names nobody
+    stem = normalise_description(text)
+    if not stem:
+        return ""
+    tokens = stem.split(" ")
+    while tokens and _is_store_or_reference(tokens[-1]):
+        tokens.pop()
+    if not tokens:                     # the description is ONLY a number/code
+        return stem                    # keep it whole, so it is still groupable
+    return " ".join(tokens)
+
+
+def _is_store_or_reference(token: str) -> bool:
+    """One trailing token that is a store number or a reference code, not a
+    name. See merchant_stem for the two shapes."""
+    if _STORE_NUMBER.match(token):
+        return True
+    if not 2 <= len(token) <= 10 or not re.fullmatch(r"[a-z0-9]+", token):
+        return False
+    digits = sum(ch.isdigit() for ch in token)
+    letters = len(token) - digits
+    return letters >= 1 and digits >= 2 and digits >= letters
+
+
+def _audit_date(value):
+    """The date of one transaction, or None. A date is used as it is, an Excel
+    date serial (a NumCell) goes through serial_date, and text goes through
+    jarvis_money_parse.parse_date - this module's own parsers, never a second
+    set of date rules. Text dates are read day-first, the default parse_date
+    has; the spending flow itself always reaches here with real dates."""
+    if isinstance(value, _dt.datetime):         # datetime is a date: check it first
+        return value.date()
+    if isinstance(value, _dt.date):
+        return value
+    if isinstance(value, NumCell):
+        return serial_date(value)
+    if isinstance(value, str):
+        return M.parse_date(value.strip())
+    return None
+
+
+_MISSING = object()
+
+
+def _charge_of(txn) -> tuple:
+    """(date, amount_cents, desc, currency) for one charge: amount_cents is a
+    positive whole number of cents. Raises ValueError for anything that is not
+    a transaction, rather than guessing: a bad row silently skipped could be the
+    very charge being looked for.
+
+    A transaction is a Txn (or anything with those four names) or a dict with
+    the same four keys. `cents` is in this module's own convention, negative for
+    money out, so the charge is its opposite; money in or a zero amount is not a
+    charge and is handled by the caller."""
+    got = {}
+    for name in ("date", "cents", "desc", "currency"):
+        if isinstance(txn, dict):
+            got[name] = txn.get(name, _MISSING)
+        else:
+            got[name] = getattr(txn, name, _MISSING)
+    if any(got[n] is _MISSING for n in ("date", "cents", "desc")):
+        raise ValueError("a transaction needs a date, an amount in whole cents and a "
+                         "description (a Txn has them all)")
+    date = _audit_date(got["date"])
+    if date is None:
+        raise ValueError(f"a transaction's date could not be read: {got['date']!r}")
+    cents = got["cents"]
+    if isinstance(cents, bool) or not isinstance(cents, int):
+        raise ValueError("a transaction's amount must be whole cents (an int), never a "
+                         "float or text: money is never rounded here")
+    desc = got["desc"]
+    if desc is None:
+        desc = ""
+    if not isinstance(desc, str):
+        raise ValueError(f"a transaction's description must be text: {desc!r}")
+    currency = "" if got["currency"] is _MISSING or got["currency"] is None else got["currency"]
+    if not isinstance(currency, str):
+        raise ValueError(f"a transaction's currency must be text: {currency!r}")
+    return date, -cents, desc, currency.strip().upper()
+
+
+def _interval_of(charges: list) -> Optional[str]:
+    """"monthly", "annual" or None for charges already sorted by date.
+
+    A gap SHORTER than a month is not the time between two bills - it is a
+    second charge of the same bill (the duplicate the other flag reports) - so
+    it is ignored here and cannot hide a real interval. Every remaining gap must
+    fall in the same band: one skipped month (a 60-day gap) is not a monthly
+    subscription this function can vouch for, and it is left alone."""
+    gaps = [(b["date"] - a["date"]).days for a, b in zip(charges, charges[1:])]
+    spans = [g for g in gaps if g >= MONTHLY_DAYS[0]]
+    if not spans:
+        return None
+    if all(MONTHLY_DAYS[0] <= g <= MONTHLY_DAYS[1] for g in spans):
+        return "monthly"
+    if all(ANNUAL_DAYS[0] <= g <= ANNUAL_DAYS[1] for g in spans):
+        return "annual"
+    return None
+
+
+def audit_subscriptions(transactions) -> dict:
+    """Which merchants bill on a recurring interval, which of those went up, and
+    where the same shop charged the same amount twice within six days.
+
+    `transactions` is what this module already produces - Txn namedtuples from
+    normalise()/combine(), or dicts with the same four keys - with money out
+    negative, as everywhere in this file. Money in and zero amounts are not
+    charges and are skipped; so is a row with no merchant name at all, which
+    includes a description that is only this module's [hidden] marker for an
+    account or card number (see merchant_stem).
+
+    What it answers, as whole cents (never formatted money) and ISO dates:
+
+      subscriptions      every merchant with a recurring interval: "monthly"
+                         (26 to 35 days between charges) or "annual" (350 to
+                         380). A gap under a month is ignored here so a
+                         duplicate cannot hide a subscription; every other gap
+                         must fall in one band, so a missed month is not
+                         reported as a monthly subscription. A merchant billed
+                         in two currencies is two entries, never one.
+      price_hikes        a subscription whose LATEST charge is higher than the
+                         charge before it, with delta_cents = latest - previous.
+                         Only a rise is here: an equal amount and a fall are
+                         not hikes and are never reported as one. The delta is
+                         per billing period, exactly as the two charges say.
+      duplicate_charges  the same merchant stem and amount charged twice within
+                         6 days or fewer (0 means the same day). Each entry is
+                         one pair of consecutive charges, so a third charge in
+                         the same week is a second entry, not a hidden one.
+                         Different currencies are never the same charge.
+
+    Nothing is remembered, written, displayed or sent anywhere: this is a pure
+    function of what it is given, so the same input always gives the same dict.
+    Date order in the input never changes the answer."""
+    charges: list = []
+    for txn in transactions or ():
+        date, amount_cents, desc, currency = _charge_of(txn)
+        if amount_cents <= 0:
+            continue                       # money in, or a zero amount: not a charge
+        stem = merchant_stem(desc)
+        if not stem:
+            continue                       # no merchant name (or only a hidden number)
+        charges.append({"date": date, "amount_cents": amount_cents, "desc": desc,
+                        "stem": stem, "currency": currency})
+    # One deterministic order, whatever order the rows arrived in: the date
+    # first, then the amount and the words, so two charges on one day cannot
+    # change the answer by being listed the other way round.
+    charges.sort(key=lambda c: (c["date"], c["amount_cents"], c["stem"], c["desc"]))
+
+    by_merchant: dict = defaultdict(list)
+    for c in charges:
+        by_merchant[(c["stem"], c["currency"])].append(c)
+
+    subscriptions: list = []
+    price_hikes: list = []
+    for key in sorted(by_merchant):
+        rows = by_merchant[key]
+        interval = _interval_of(rows)
+        if interval is None:
+            continue
+        latest, previous = rows[-1], rows[-2]
+        subscriptions.append({
+            "merchant_stem": latest["stem"],
+            "description": latest["desc"],
+            "currency": latest["currency"],
+            "interval": interval,
+            "count": len(rows),
+            "first_date": rows[0]["date"].isoformat(),
+            "latest_date": latest["date"].isoformat(),
+            "latest_amount_cents": latest["amount_cents"],
+        })
+        if latest["amount_cents"] > previous["amount_cents"]:
+            price_hikes.append({
+                "merchant_stem": latest["stem"],
+                "description": latest["desc"],
+                "currency": latest["currency"],
+                "interval": interval,
+                "previous_date": previous["date"].isoformat(),
+                "previous_amount_cents": previous["amount_cents"],
+                "latest_date": latest["date"].isoformat(),
+                "latest_amount_cents": latest["amount_cents"],
+                "delta_cents": latest["amount_cents"] - previous["amount_cents"],
+            })
+
+    by_amount: dict = defaultdict(list)
+    for c in charges:
+        by_amount[(c["stem"], c["amount_cents"], c["currency"])].append(c)
+    duplicate_charges: list = []
+    for key in sorted(by_amount):
+        rows = by_amount[key]
+        for first, second in zip(rows, rows[1:]):
+            days = (second["date"] - first["date"]).days
+            if days <= DUPLICATE_DAYS:
+                duplicate_charges.append({
+                    "merchant_stem": second["stem"],
+                    "description": second["desc"],
+                    "currency": second["currency"],
+                    "amount_cents": second["amount_cents"],
+                    "dates": [first["date"].isoformat(), second["date"].isoformat()],
+                    "days_apart": days,
+                })
+
+    return {"transactions": len(charges),
+            "subscriptions": subscriptions,
+            "price_hikes": price_hikes,
+            "duplicate_charges": duplicate_charges}
 
 
 # --------------------------------------------------------------------------
