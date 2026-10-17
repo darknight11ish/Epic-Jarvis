@@ -67,6 +67,10 @@ export const WORDS = Object.freeze({
   issues: "What is missing",
   why: "Why it matters",
   fix: "Smallest fix",
+  /** The chip beside one fix. It APPENDS that fix to the box and sends
+   *  nothing; "Send the suggestion" is the button that replaces the box and
+   *  sends. Two different promises, so two different words. */
+  addFix: "Add this",
   questions: "It would have to ask you",
   suggestion: "The rewritten prompt",
   sendMine: SEND_MINE,
@@ -88,6 +92,24 @@ export const WORDS = Object.freeze({
 /** A non-empty string field of the PC's answer, or "". */
 function words(v) {
   return typeof v === "string" && v.trim() ? v.trim() : "";
+}
+
+/**
+ * The box's text after one fix chip is pressed: **the owner's own words, then
+ * that fix.** His words are never replaced and never reordered - that is the
+ * whole difference between this chip and "Send the suggestion", which replaces
+ * the box with the rewritten prompt and sends it.
+ *
+ * Appending is a sentence-level join, not a guess at grammar: the fix is a
+ * clarification the coach already wrote to stand alone ("the project is
+ * Atlas"), so one space between the two is the whole rule. An empty box takes
+ * the fix alone; an empty fix changes nothing.
+ */
+export function withClarification(said, fix) {
+  const mine = String(said || "").trimEnd();
+  const add = String(fix || "").trim();
+  if (!add) return mine;
+  return mine ? `${mine} ${add}` : add;
 }
 
 /**
@@ -195,6 +217,9 @@ function block(doc, className, heading) {
  *  - `sendMine(text)` - send the owner's own words, UNCHANGED;
  *  - `sendSuggestion(text)` - ask the bar to put the rewritten prompt in the
  *    box and send it (main.js owns the box's tag and its own bookkeeping);
+ *  - `addFix(text)` - put ONE fix in the box AFTER the owner's own words, and
+ *    send nothing (main.js joins them with `withClarification`). This is the
+ *    chip beside each fix, never the suggestion button;
  *  - `announce(text)` - speak to a screen reader;
  *  - `onChange()` - let the window fit its height (main.js `syncWindowHeight`).
  *
@@ -206,6 +231,7 @@ export function mountPromptCoach(buttonHost, box, {
   history = () => [],
   sendMine = async () => {},
   sendSuggestion = async () => {},
+  addFix = () => {},
   announce = () => {},
   onChange = () => {},
   doc = globalThis.document,
@@ -327,6 +353,22 @@ export function mountPromptCoach(buttonHost, box, {
             fix.className = "coach-fix";
             fix.textContent = `${WORDS.fix}: ${issue.fix}`;
             row.append(fix);
+            // The SAME fix, as a chip: pressing it APPENDS this clarification
+            // to the box and sends nothing. "Send the suggestion" stays the
+            // button that replaces the box and sends - the chip is inside the
+            // issue, says "Add this", and carries the fix as its title, so the
+            // two controls cannot be mistaken for one another.
+            const chip = doc.createElement("button");
+            chip.type = "button";
+            chip.className = "text-button coach-fix-chip";
+            chip.textContent = WORDS.addFix;
+            chip.title = issue.fix;
+            chip.addEventListener("click", () => {
+              if (busy || !on()) return;
+              addFix(issue.fix);
+              announce(`${WORDS.addFix}: ${issue.fix}`);
+            });
+            row.append(chip);
           }
           issues.lines.append(row);
         }

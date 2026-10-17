@@ -3689,6 +3689,16 @@ private fun Composer(
             actions.onDraftChange(suggestion)
             actions.onSend()
         },
+        // A fix chip: his words STAY, one clarification is added after them,
+        // and NOTHING is sent - he reads the joined question and presses Send
+        // himself. The rule is the desktop's own (`withClarification` in
+        // prompt-coach-panel.js): one name, two apps. "Send the suggestion"
+        // above is the only control that replaces the box.
+        onAddFix = { fix ->
+            val said = draft().trimEnd()
+            val joined = com.jarvis.client.net.PromptCoach.withClarification(said, fix)
+            if (joined != said) actions.onDraftChange(joined)
+        },
     )
     Row(
         Modifier.fillMaxWidth(),

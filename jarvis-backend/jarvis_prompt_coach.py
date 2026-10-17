@@ -69,6 +69,40 @@ NO NEW DEPENDENCY, AND NOTHING CLEVER. Standard library only. The one HTTP call
 goes through jarvis_local_http.urlopen (the helper that ignores a proxy) and
 the model name comes from jarvis_sensitive.learner_model(), so nothing is
 hardcoded here.
+
+WHAT IT IS GIVEN, AND WHAT IT IS NOT (measured 2026-10-16)
+
+`prompt_for()` builds ONE prompt, in four parts: the base `PROMPT` above;
+**which AI the question is headed for** (that target's own notes, `advice_for`);
+the four settings, as instructions; and **the last `MAX_TURNS` (6) turns of the
+conversation verbatim, then the owner's question last** (`_turns`). That is the
+whole of it. The active project, the names of the owner's documents and the
+list of enabled tools are NOT in it.
+
+A session on 2026-10-16 was asked to add them as a small "context header", and
+measured before changing anything:
+
+  * **"the recent turn topic" was ALREADY COVERED, and richer** - the six real
+    turns are sent, not a summary of them. A topic field would carry LESS and
+    add a second source of truth. Dropped on purpose; do not re-add it.
+  * The other three fields are genuinely absent. A realistic header (one
+    project name, five document names, six tool names) is 195 characters,
+    about **48 tokens** - **6.5%** of this prompt, which is 2988 characters /
+    about 747 tokens with four turns of history. Size is not the objection.
+  * The objection is the one the project already runs on: **there is no way to
+    prove on this PC that a header improves a gap.** It would take the live
+    local model and a judgement of the words, prompt by prompt. A feature that
+    uses an unmeasured capability stays off until THAT feature is measured, and
+    the owner is not going to A/B prompts - so the header stays out.
+
+ANY FUTURE VERSION must be exactly these THREE fields and no more: the active
+project's NAME, **at most 5** document NAMES, and the enabled tools' names -
+**names only, never a document's contents or a snippet**, because a watched
+folder can hold hundreds of files and a list of filenames alone describes the
+owner's life. And it must say plainly that the prompt leaves this module into
+whatever serves the local URL: if that is Ollama, its own request logs are
+outside this code's reach - the same exposure the owner's own words already
+have, which is why this is not urgent and why it must not be widened casually.
 """
 from __future__ import annotations
 
