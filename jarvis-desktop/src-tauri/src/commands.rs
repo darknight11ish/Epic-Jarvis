@@ -2774,6 +2774,34 @@ enum AnsweredFrom<'a> {
     Notification,
 }
 
+/// The plain-words refusal for an APPROVE while the event stream is stale.
+///
+/// Deliberately about approving only. The old sentence was "nothing can be
+/// answered until it reconnects", and that sentence stopped being true for Deny
+/// on 2026-10-17 - see `answer_held_when_stale`. A person reading this must be
+/// told the path that still works.
+pub(crate) const STALE_APPROVE_HELD: &str =
+    "the event stream is stale, so the approval queue cannot be confirmed live - \
+     approving waits until it reconnects. Deny still works.";
+
+/// Whether answering a card waits until the event stream is live again, and
+/// what to say when it does.
+///
+/// APPROVE does: an unconfirmable queue means the card on screen may already be
+/// answered, and approving on an unfounded picture is how the wrong thing gets
+/// approved. DENY never does: page 7's own words are "refusing is never held,
+/// approving can be", and a deny is an explicit polarity that cannot approve
+/// anything, cannot fire twice (the card transitions once), and cannot write a
+/// standing rule (`_NO_RULE_FROM_DENIAL`). A late deny is refused by the
+/// server's expired / duplicate / no-longer-pending arm, not by this guard.
+///
+/// The one rule lives here, as a plain function over the two values that decide
+/// it, so the command and its tests read the same source and the whole matrix
+/// (`approved` x `stale`) can be tested without a running app.
+pub(crate) fn stale_answer_refusal(approved: bool, stale: bool) -> Option<&'static str> {
+    (approved && stale).then_some(STALE_APPROVE_HELD)
+}
+
 /// The one place a decision is sent, for both callers above.
 async fn answer_approval(
     app: AppHandle,
@@ -2822,20 +2850,32 @@ async fn answer_approval(
     // `approvals` capability reaches this directly, and a page that has not
     // re-read its link state reaches it by accident.
     //
-    // Stale means the queue could not be confirmed live, and answering a
-    // queue you cannot confirm is how one action gets decided twice. The
-    // server's 409 catches the second decision, but that is a backstop for a
-    // race, not a licence to send a decision we already know is unfounded.
+    // APPROVE ONLY (2026-10-17). The promise this project makes in words is
+    // "refusing is never held, approving can be" (features.json, "When the
+    // connection is catching up"; docs/APPROVAL-GAP-DESIGN.md: "Deny is never
+    // held up"). Until this change the guard held BOTH answers, so while the
+    // link was catching up the owner could not say no - the one direction a
+    // person most needs when the picture is uncertain. A stale DENY is safe by
+    // construction:
     //
-    // Found by the jarvis-client branch, which had the same shape on its own
-    // side: its `decisionBlocker` was consulted by `decide()` and by nothing
-    // else, so `revert` went out ungated. See docs/CROSS-CLIENT-CONTRACT.md.
-    if app.state::<crate::stream::StreamState>().link().stale {
-        return Err(
-            "the event stream is stale, so the approval queue cannot be confirmed live - \
-             nothing can be answered until it reconnects"
-                .to_string(),
-        );
+    //   - the call is an explicit polarity (`approved = false`), never a
+    //     toggle, so it cannot approve anything;
+    //   - the card transitions once (pending -> approved | denied | expired).
+    //     A deny for a card that is still pending is the answer the owner
+    //     wanted; a late one is refused by the server's own expired /
+    //     duplicate / no-longer-pending answer (a 409, handled as "already
+    //     handled" in the webview) - a refusal, never an approval;
+    //   - denying never writes a standing rule (`_NO_RULE_FROM_DENIAL` in
+    //     jarvis_gate.py), so there is nothing a stale picture can loosen.
+    //
+    // Only APPROVE waits for the queue to be confirmable live. The rule lives
+    // in `stale_answer_refusal` below so the command and its tests read the
+    // same source.
+    if let Some(said) = stale_answer_refusal(
+        approved,
+        app.state::<crate::stream::StreamState>().link().stale,
+    ) {
+        return Err(said.to_string());
     }
 
     // ARCHITECTURE section 3 requires every command to be approved IN FULL.
@@ -7332,5 +7372,58 @@ mod own_network_tests {
             Err("the base URL must not carry credentials".to_string())
         );
         assert!(validate_base("ftp://127.0.0.1").is_err());
+    }
+}
+
+/// Page 7's promise, at the rule the decision command uses: "refusing is never
+/// held, approving can be" (features.json, "When the connection is catching
+/// up"). These test the whole matrix the rule is over - an explicit polarity
+/// and the stream's staleness - not a source-text pin: the command calls this
+/// exact function.
+#[cfg(test)]
+mod stale_approval_answers {
+    use super::{stale_answer_refusal, STALE_APPROVE_HELD};
+
+    #[test]
+    fn a_stale_stream_holds_approving() {
+        assert_eq!(
+            stale_answer_refusal(true, true),
+            Some(STALE_APPROVE_HELD),
+            "approving on a queue that cannot be confirmed must wait"
+        );
+    }
+
+    #[test]
+    fn a_stale_stream_never_holds_denying() {
+        assert_eq!(
+            stale_answer_refusal(false, true),
+            None,
+            "a deny must be sent on a stale link - the owner must be able to say no"
+        );
+    }
+
+    #[test]
+    fn control_a_live_stream_holds_neither_answer() {
+        assert_eq!(stale_answer_refusal(true, false), None);
+        assert_eq!(stale_answer_refusal(false, false), None);
+    }
+
+    /// The words are part of the behaviour: a person reading the refusal must
+    /// be told the path that still works, and the old "nothing can be
+    /// answered" sentence must not creep back.
+    #[test]
+    fn the_refusal_names_approving_and_says_deny_still_works() {
+        assert!(
+            STALE_APPROVE_HELD.contains("approving waits"),
+            "{STALE_APPROVE_HELD}"
+        );
+        assert!(
+            STALE_APPROVE_HELD.contains("Deny still works"),
+            "{STALE_APPROVE_HELD}"
+        );
+        assert!(
+            !STALE_APPROVE_HELD.contains("nothing can be answered"),
+            "the old sentence is false for Deny now: {STALE_APPROVE_HELD}"
+        );
     }
 }

@@ -39,6 +39,17 @@ object LinkWords {
             "waits until then."
 
     /**
+     * The same state, for the ONE answer that waits: an APPROVE (2026-10-17).
+     * Deny is never held - the page's own words are "refusing is never held,
+     * approving can be" - so the sentence names the path that still works
+     * instead of claiming the decision cannot be made. [DECISION_CATCHING_UP]
+     * stays as it is for the other decisions that still wait.
+     */
+    const val DECISION_APPROVE_CATCHING_UP =
+        "Jarvis is catching up with your PC to make sure it has the latest, so approving " +
+            "waits until then. Deny still works here."
+
+    /**
      * Why a decision (Approve, Deny's cousins on the memory queue, the
      * overnight-tidy card) cannot be sent right now, or null when it can.
      * Non-null whenever [stale] is true or the link is not [LinkState.CONNECTED],

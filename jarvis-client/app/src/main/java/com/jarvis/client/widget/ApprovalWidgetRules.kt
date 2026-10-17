@@ -25,4 +25,13 @@ object ApprovalWidgetRules {
 
     /** Whether to show a Deny button at all. */
     fun showsDeny(hidden: Boolean, denyOk: Boolean): Boolean = hidden || denyOk
+
+    /**
+     * Whether the last known queue can still carry a DENY. A stale-but-
+     * connected link can: page 7's "refusing is never held" (2026-10-17). A
+     * link that is not connected cannot deliver anything, and the widget says
+     * so rather than drawing a button that would fail. App lock is unchanged:
+     * [denyActsDirectly] still routes Deny through the app.
+     */
+    fun denyReachable(ready: Boolean, connected: Boolean): Boolean = ready && connected
 }
