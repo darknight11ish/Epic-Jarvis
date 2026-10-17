@@ -19,16 +19,19 @@ DETECTION, in the design's trust order (section 4.1):
     1. Ollama's own log, %LOCALAPPDATA%\\Ollama\\server.log: the cards Ollama
        will use ("inference compute" lines, most recent start-up only), and
        the reason for each card it dropped.
-    2. nvidia-smi (jarvis_compute.query_cards): the GPU-... id, the monitor,
-       live free memory.
+    2. nvidia-smi (jarvis_compute.query_cards): the GPU-... id, its PCI bus
+       address, the monitor, live free memory.
     3. The registry (HardwareInformation.qwMemorySize under the display-
        adapter class key): name and real total memory of every card, any
        maker. Win32_VideoController is not used at all: its memory field
        stops at 4 GB, and the registry gives the same names.
 
-The log lines' shape was read from Ollama's source (the design, section 2.1);
-no real log from the owner's PC has been seen yet. Every test value is made
-up and labelled so.
+The log lines' shape was read from Ollama's source (the design, section 2.1),
+and a real log from the owner's PC has since been seen (2026-10-16): its
+"inference compute" lines carry `id=0`/`filter_id=0` and `pci_id=0000:07:00.0`,
+NOT the GPU- uuid the source's shape suggested, which is why `smi_for` has a
+PCI-address pass as well as the uuid one. Every test value is still made up and
+labelled so.
 
 NOTHING CHANGES UNTIL THE OWNER CHOOSES (section 4.8). Choosing a preset only
 records the choice in hardware-choice.json beside the other settings. Every
@@ -641,6 +644,24 @@ def _close(a: Optional[float], b: Optional[float]) -> bool:
     return a is not None and b is not None and abs(a - b) <= max(0.35, 0.06 * max(a, b))
 
 
+def _pci_key(bus: str) -> str:
+    """One PCI bus address as one comparable key, or "" when there is none.
+
+    The two sources spell the same card differently. Measured on the owner's PC,
+    2026-10-16 (nvidia-smi driver 617.42): nvidia-smi reports an 8-hex-digit
+    domain - `00000000:07:00.0` - while Ollama's log writes `0000:07:00.0` for
+    the card with the monitor. So compare the domain with its leading zeros
+    dropped, plus the rest, case-insensitively. A blank or malformed value
+    returns "", which sends the pairing on to its next pass rather than letting
+    it match on nothing.
+    """
+    text = str(bus or "").strip().lower()
+    domain, sep, rest = text.partition(":")
+    if not sep or not rest:
+        return ""
+    return (domain.lstrip("0") or "0") + ":" + rest
+
+
 _DET_LOCK = threading.Lock()
 _DET: dict = {"at": -1e9, "value": None}
 
@@ -692,11 +713,30 @@ def _detect(fresh: bool) -> dict:
     used_smi, used_reg = set(), set()
 
     def smi_for(dev) -> Optional[object]:
+        """Which nvidia-smi row is this Ollama-log device? Exact keys first.
+
+        1. The GPU- uuid, when both sides carry one.
+        2. The PCI bus address. This is the pass that matters on the owner's
+           PC: its log's `inference compute` lines carry `id=0`/`filter_id=0`
+           and a `pci_id=0000:07:00.0`, no GPU- id at all, so pass 1 can never
+           fire there (measured 2026-10-16, driver 617.42). Two of its three
+           cards will be identical 8 GB 2080 Supers, so the address is the
+           only thing that tells those twins apart.
+        3. Name and size, kept for an older log with neither id - pairing
+           approximately beats not pairing when a field is missing.
+        """
         for i, s in enumerate(smi):
             if i in used_smi:
                 continue
             if dev.get("uuid") and getattr(s, "uuid", "") and s.uuid.lower() == dev["uuid"].lower():
                 return i
+        want = _pci_key(dev.get("pci_id"))
+        if want:
+            for i, s in enumerate(smi):
+                if i in used_smi:
+                    continue
+                if _pci_key(getattr(s, "pci_id", "")) == want:
+                    return i
         for i, s in enumerate(smi):
             if i in used_smi:
                 continue

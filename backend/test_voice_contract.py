@@ -49,6 +49,7 @@ require_shipped("jarvis_speech.py", "jarvis_voice_enroll.py")
 import jarvis_speech as S  # noqa: E402
 import jarvis_voice as V  # noqa: E402
 import jarvis_voice_enroll as E  # noqa: E402
+import jarvis_voice_flow as F  # noqa: E402
 from _voice_test import semantic_voice  # noqa: E402
 
 KT = REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis" / "client" / "net" / "VoiceModels.kt"
@@ -150,7 +151,25 @@ def tone(freq=220.0, seconds=1.0, rate=16000) -> bytes:
 
 
 class Env:
-    """A temp config dir for jarvis_speech and a temp profile for jarvis_voice."""
+    """A temp config dir for jarvis_speech and a temp profile for jarvis_voice.
+
+    IT MUST NOT START A REAL WARM-UP THREAD. `S.status()` calls
+    `jarvis_voice_flow.ensure_warm()`, which runs `warm()` on a thread of its
+    own. That thread outlives this block and finishes whenever it finishes -
+    and `warm()` ends by recording REAL measured milliseconds in
+    `jarvis_voice_flow._WARM`. This suite later compares the producers' output
+    against committed fixtures IN THIS SAME INTERPRETER, and a thread landing
+    mid-render writes this PC's own timings into a file that is supposed to be
+    the same on every machine. Measured 2026-10-15: the first
+    `gen_voice_status_cases.render()` after one bare `S.status()` was 167,374 B
+    against the fixture's 167,174 B, and `gen_voice_training_cases` 707,067 B
+    against 706,868 B; the second render was clean again, which is why this
+    appeared intermittently and looked like a %TEMP%-length problem.
+
+    `_spawn` is stubbed for exactly the reason the producers stub it
+    themselves (tools/gen_voice_status_cases.py:197-200): the thread is not
+    started, so the fixture does not depend on when anything finishes.
+    """
 
     def __enter__(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -161,9 +180,14 @@ class Env:
                         # These are shapes, not the minimum length (that is
                         # test_voice_strict.py): no minimum, so the suite's
                         # one-second tones reach the voice check.
-                        mock.patch.object(S, "_min_command_seconds", return_value=0.0)]
+                        mock.patch.object(S, "_min_command_seconds", return_value=0.0),
+                        # No real warm-up thread; see this class's docstring.
+                        mock.patch.object(F, "_spawn", lambda fn: None)]
         for p in self.patches:
             p.start()
+        # Anything a previous block left armed, cleared - the same call the
+        # producers make for the same reason.
+        F._reset_for_tests()
         # A stand-in speaker model (_voice_test.py): since 2026-09-24 the
         # basic check lets nobody in, so "the owner" needs a real-ish one.
         self._voice = semantic_voice(V, settings_dir=d)
@@ -179,6 +203,7 @@ class Env:
         self.tmp.cleanup()
         S.reload_engines()
         E._reset_for_tests()
+        F._reset_for_tests()
 
 
 # ------------------------------------------------------------------ tests --
@@ -628,12 +653,58 @@ def t_the_desktop_fixture_is_fresh():
         P.FIXTURE, "gen_phone_voice_cases", short_runs, long_runs)
 
 
+def t_a_status_call_cannot_change_the_producers():
+    """THE REGRESSION for the 2026-10-15 intermittent failure, and the reason it
+    looked like a %TEMP%-length problem.
+
+    `S.status()` asks jarvis_voice_flow to warm the voice engines, and that
+    started a thread of its own. The thread outlived the call and finished
+    whenever it finished, and `warm()` ends by recording REAL measured
+    milliseconds in `jarvis_voice_flow._WARM`. This suite compares the
+    producers' output against committed fixtures in the SAME interpreter, so
+    whenever that thread landed first the `flow` block went from
+    "waiting"/null to "ready" with this PC's own timings, and the comparison
+    failed. Measured: the first `gen_voice_status_cases.render()` after one bare
+    `S.status()` was 167,374 B against the fixture's 167,174 B, and
+    `gen_voice_training_cases` 707,067 B against 706,868 B.
+
+    WHY ONE RENDER, AND WHY HERE. A SECOND render is clean even when the first
+    is not (the thread has already finished and the producer resets its state) -
+    which is exactly what made this look intermittent, and why the phone
+    producer's own "same bytes twice" check never caught it. So this renders
+    ONCE, immediately after the call that used to arm the leak, and compares
+    against the committed file byte for byte.
+
+    IT FAILS IF THE FIX IS REMOVED: take the `F._spawn` stub out of `Env` and
+    the first render below is no longer the fixture's bytes.
+    """
+    with Env():
+        S.status()                       # what used to start the warm thread
+    F._reset_for_tests()                 # start from a known flow state
+    # `tools/` on the path HERE, not borrowed from the check above: this check
+    # must pass on its own, and an earlier check inserting it made that a
+    # coincidence (found the hard way - the isolated run failed on the import,
+    # not on the bytes).
+    sys.path.insert(0, str(REPO / "tools"))
+    import gen_voice_status_cases as G
+    import gen_voice_training_cases as T
+    for mod in (G, T):
+        fx = mod.FIXTURE
+        want = (fx.read_text(encoding="utf-8") if fx.is_file() else "").replace("\r\n", "\n")
+        got = mod.render()
+        check(f"{fx.name} is unchanged by a status() call just before it",
+              got == want, f"{len(got.encode('utf-8'))} B against the fixture's "
+                           f"{len(want.encode('utf-8'))} B")
+    F._reset_for_tests()
+
+
 if __name__ == "__main__":
     for fn in (t_the_client_files_are_readable, t_status_has_every_field_the_phone_reads,
                t_push_to_talk_means_it_can_work, t_training_state_in_every_shape,
                t_the_utterance_reply_serves_both_clients, t_the_turn_answer_serves_the_desktop,
                t_the_someone_else_reply_serves_the_phone,
-               t_an_older_jarvis_voice_still_works, t_the_desktop_fixture_is_fresh):
+               t_an_older_jarvis_voice_still_works, t_the_desktop_fixture_is_fresh,
+               t_a_status_call_cannot_change_the_producers):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

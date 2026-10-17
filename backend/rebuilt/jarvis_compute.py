@@ -65,6 +65,11 @@ class Device:
     uuid: str = ""
     compute_cap: Optional[float] = None     # None: nvidia-smi did not say
     display_active: Optional[bool] = None   # None: nvidia-smi did not say
+    # This card's PCI bus address, e.g. "00000000:07:00.0". Added 2026-10-16:
+    # on the owner's PC Ollama's log carries no GPU- id (`filter_id=0`, `id=0`),
+    # so the bus address is the only exact key that can tell two cards with the
+    # same name and size apart. "" means nvidia-smi did not say.
+    pci_id: str = ""
 
 
 @dataclass
@@ -136,7 +141,14 @@ def _cfg(key: str, default=None):
 #: (an older one refuses the WHOLE query, saying the field is not a valid
 #: field to query), so a refusal is retried without it, and the generation
 #: is then looked up by name (COMPUTE_BY_NAME) or left unknown.
-FIELDS_FULL = "index,uuid,name,memory.total,memory.free,compute_cap,display_active"
+#:
+#: `pci.bus_id` is in the FULL list because it is the exact key a machine whose
+#: Ollama log carries `filter_id=0`/`id=0` instead of a GPU- id needs - measured
+#: on the owner's PC, 2026-10-16 (driver 617.42). It is deliberately NOT in
+#: FIELDS_OLD/FIELDS_OLDEST: those exist for a driver too old to know
+#: `compute_cap`, and such a machine keeps the name+size fallback rather than
+#: having its whole query refused over one more field.
+FIELDS_FULL = "index,uuid,name,memory.total,memory.free,compute_cap,display_active,pci.bus_id"
 FIELDS_OLD = "index,uuid,name,memory.total,memory.free,display_active"
 FIELDS_OLDEST = "index,name,memory.total,memory.free"
 
@@ -217,9 +229,11 @@ def parse_smi(text: str, fields: str = FIELDS_FULL) -> list:
         uuid = row.get("uuid", "")
         if not uuid.startswith("GPU-"):
             uuid = ""
+        pci = row.get("pci.bus_id", "").strip()
         found.append(Device(index, name, total,
                             int(free) if free is not None and free >= 0 else 0,
-                            uuid=uuid, compute_cap=cc, display_active=display))
+                            uuid=uuid, compute_cap=cc, display_active=display,
+                            pci_id=pci))
     return found
 
 

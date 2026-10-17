@@ -50,8 +50,10 @@ this cannot settle is reported as a skip rather than guessed at.
 import ast
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import traceback
 from pathlib import Path
 
@@ -251,6 +253,19 @@ class Scan:
             keep = []
             for d in dirnames:
                 if d in SKIP_DIRS:
+                    continue
+                # A NESTED REPOSITORY IS NEVER THIS REPOSITORY'S CODE, and git
+                # will not tell us about it: `git ls-files --others --ignored`
+                # does not descend into a directory that has its own `.git`, so
+                # such a directory never appears in ignored_dirs below and the
+                # walk went straight into it. That is how a scratch copy of
+                # jarvis_hud.py under dshwork/scratch-voice/gittest/ - a nested
+                # repo, with an unrelated syntax error - was parsed and reported
+                # as "unreadable", failing this suite on a clean tree and
+                # blocking scripts/apply-patches.ps1's own verification run.
+                # `.exists()` rather than `.is_dir()`: a linked worktree and a
+                # submodule both carry a `.git` FILE, not a directory.
+                if (Path(dirpath) / d / ".git").exists():
                     continue
                 if (Path(dirpath) / d).relative_to(repo).as_posix() in ignored_dirs:
                     continue
@@ -730,6 +745,37 @@ def t_it_reads_this_tree_and_reaches_nothing():
     check("every .py file in the tree parsed (a file skipped silently would be "
           "a claim never checked)", not SCAN.unreadable,
           f"unreadable: {SCAN.unreadable[:5]}")
+    # A NESTED REPOSITORY IS NEVER THIS REPOSITORY'S CODE, and git will not say
+    # so: `git ls-files --others --ignored` does not descend into a directory
+    # with its own `.git`, so such a directory never appears in the ignored set
+    # and the walk went straight into it. That is exactly how a scratch copy of
+    # jarvis_hud.py under `dshwork/scratch-voice/gittest/` - a nested repo, with
+    # an unrelated syntax error - was parsed and reported unreadable, failing
+    # this suite on a CLEAN tree and blocking scripts/apply-patches.ps1's own
+    # verification run (measured 2026-10-17: 8 suites failed, this was the last
+    # one standing after the worktree forest was pruned).
+    #
+    # The bite is real, not a spelling: build a nested repo holding a file that
+    # CANNOT parse, scan it, and require the walk never to reach it. A control
+    # in the same tree - a valid file BESIDE the nested repo - proves the scan
+    # still reads the tree rather than having stopped looking.
+    _nested = Path(tempfile.mkdtemp(prefix="jarvis-nested-repo-"))
+    try:
+        (_nested / "inner").mkdir()
+        (_nested / "inner" / "broken.py").write_text("this is ( not python\n",
+                                                     encoding="utf-8")
+        subprocess.run(["git", "-C", str(_nested / "inner"), "init", "-q"],
+                       capture_output=True, text=True, timeout=30)
+        (_nested / "fine.py").write_text("x = 1\n", encoding="utf-8")
+        _n = Scan(_nested)
+        check("a nested repository is never walked into",
+              _n.unreadable == [],
+              f"it parsed a file inside the nested repo: {_n.unreadable[:3]}")
+        check("... and the control: the file beside it was still read",
+              _n.has("fine.py"),
+              "the scan stopped looking at the whole tree, not just the nested repo")
+    finally:
+        shutil.rmtree(_nested, ignore_errors=True)
 
 
 SCAN = Scan(REPO)

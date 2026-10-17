@@ -47,24 +47,36 @@ U_2060 = "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23"
 U_2080TI = "GPU-51c0e8aa-6d2f-4b19-8e37-2a4c9f0b6d58"
 U_1080 = "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36"
 U_P100 = "GPU-c6e1f057-3a8b-49d2-9f14-b0e7a25d8c61"
+#: `jarvis_compute.FIELDS_FULL` has asked for `pci.bus_id` since 2026-10-16, so
+#: every full-query row below carries it as an 8th column. nvidia-smi spells the
+#: domain with 8 hex digits (measured on the owner's PC, driver 617.42), while
+#: Ollama's log writes 4 - jarvis_hardware's `_pci_key` compares them by
+#: dropping the domain's leading zeros.
+B_2080S = "00000000:07:00.0"
+B_2060 = "00000000:04:00.0"
+B_2080TI = "00000000:0c:00.0"
+B_1080 = "00000000:05:00.0"
+B_P100 = "00000000:0d:00.0"
+B_2060_6GB = "00000000:08:00.0"
 
 SMI = {
-    "one_card": f"0, {U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, 7.5, Enabled\n",
-    "2080s_2060": (f"0, {U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, 7.5, Enabled\n"
-                   f"1, {U_2060}, NVIDIA GeForce RTX 2060, 12288, 12030, 7.5, Disabled\n"),
+    "one_card": f"0, {U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, 7.5, Enabled, {B_2080S}\n",
+    "2080s_2060": (f"0, {U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, 7.5, Enabled, {B_2080S}\n"
+                   f"1, {U_2060}, NVIDIA GeForce RTX 2060, 12288, 12030, 7.5, Disabled, {B_2060}\n"),
     # The 2060 in the first slot: nvidia-smi calls it 0. The monitor decides.
-    "2060_first": (f"0, {U_2060}, NVIDIA GeForce RTX 2060, 12288, 12030, 7.5, Disabled\n"
-                   f"1, {U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, 7.5, Enabled\n"),
-    "2080s_2080ti": (f"0, {U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, 7.5, Enabled\n"
-                     f"1, {U_2080TI}, NVIDIA GeForce RTX 2080 Ti, 11264, 11010, 7.5, Disabled\n"),
-    "2080s_p100": (f"0, {U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, 7.5, Enabled\n"
-                   f"1, {U_P100}, Tesla P100-PCIE-16GB, 16384, 16270, 6.0, Disabled\n"),
-    "2080s_1080": (f"0, {U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, 7.5, Enabled\n"
-                   f"1, {U_1080}, NVIDIA GeForce GTX 1080, 8192, 8010, 6.1, Disabled\n"),
-    "2080s_2060_6gb": (f"0, {U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, 7.5, Enabled\n"
-                       f"1, {U_1080[:-4]}ab12, NVIDIA GeForce RTX 2060, 6144, 5900, 7.5, Disabled\n"),
+    "2060_first": (f"0, {U_2060}, NVIDIA GeForce RTX 2060, 12288, 12030, 7.5, Disabled, {B_2060}\n"
+                   f"1, {U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, 7.5, Enabled, {B_2080S}\n"),
+    "2080s_2080ti": (f"0, {U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, 7.5, Enabled, {B_2080S}\n"
+                     f"1, {U_2080TI}, NVIDIA GeForce RTX 2080 Ti, 11264, 11010, 7.5, Disabled, {B_2080TI}\n"),
+    "2080s_p100": (f"0, {U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, 7.5, Enabled, {B_2080S}\n"
+                   f"1, {U_P100}, Tesla P100-PCIE-16GB, 16384, 16270, 6.0, Disabled, {B_P100}\n"),
+    "2080s_1080": (f"0, {U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, 7.5, Enabled, {B_2080S}\n"
+                   f"1, {U_1080}, NVIDIA GeForce GTX 1080, 8192, 8010, 6.1, Disabled, {B_1080}\n"),
+    "2080s_2060_6gb": (f"0, {U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, 7.5, Enabled, {B_2080S}\n"
+                       f"1, {U_1080[:-4]}ab12, NVIDIA GeForce RTX 2060, 6144, 5900, 7.5, Disabled, {B_2060_6GB}\n"),
 }
-# An older driver: the full query is refused, the one without compute_cap works.
+# An older driver: the full query is refused, the one without compute_cap works
+# and has no bus column (FIELDS_OLD is 7 fields), so this stays as it was.
 SMI_OLD_DRIVER = (f"0, {U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, Enabled\n"
                   f"1, {U_2060}, NVIDIA GeForce RTX 2060, 12288, 12030, Disabled\n")
 
