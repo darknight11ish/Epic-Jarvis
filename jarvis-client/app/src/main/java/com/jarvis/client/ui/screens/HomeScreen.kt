@@ -756,6 +756,12 @@ data class HomeActions(
     val onOpenSettings: () -> Unit,
     val onOpenFaq: () -> Unit,
     val blockerFor: (PendingItem) -> String?,
+    /**
+     * The deny direction's blocker, which is the same rule minus the stale arm:
+     * a stale link holds Approve and never Deny (2026-10-17). A separate
+     * function because the card greys its two buttons from two calls.
+     */
+    val denyBlockerFor: (PendingItem) -> String?,
     val onVoiceBegin: () -> Unit,
     val onVoiceRelease: () -> Unit,
     val onVoiceCancel: () -> Unit,
@@ -1502,6 +1508,7 @@ private fun ConversationList(
                 ApprovalCard(
                     item = item,
                     blocker = actions.blockerFor(item),
+                    denyBlocker = actions.denyBlockerFor(item),
                     // Outlined, not auto-answered: scrolling to a card and
                     // marking it is the whole of "open the approval". Rule
                     // 4 - nothing is ever approved without a deliberate

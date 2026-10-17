@@ -98,6 +98,7 @@ private const val HEAVY_APPROVE_DELAY_MS = 2000L
 fun ApprovalCard(
     item: PendingItem,
     blocker: String?,
+    denyBlocker: String? = null,
     focused: Boolean = false,
     onApprove: () -> Unit,
     onDeny: () -> Unit,
@@ -112,6 +113,7 @@ fun ApprovalCard(
 ) = ApprovalCard(
     item = item,
     blocker = blocker,
+    denyBlocker = denyBlocker,
     focused = focused,
     onApprove = { _ -> onApprove() },
     onDeny = { _ -> onDeny() },
@@ -130,6 +132,13 @@ fun ApprovalCard(
     item: PendingItem,
     /** Null when a decision can be taken; the reason when it cannot. */
     blocker: String?,
+    /**
+     * The same for the DENY direction, and null more often than [blocker]: a
+     * stale link holds Approve and never Deny (2026-10-17). Defaulted so every
+     * caller that predates the split keeps the old both-directions behaviour
+     * from [blocker].
+     */
+    denyBlocker: String? = null,
     /**
      * This is the card a notification or digest row asked to open.
      *
@@ -252,6 +261,9 @@ fun ApprovalCard(
     // nothing else - the same split ExpiryCountdown made, now shared by both.
     val secondsLeft: State<Long>? = if (expiry != null) rememberSecondsLeft(expiry) else null
     val canDecide = blocker == null && !expired && swapGuardElapsed
+    // The deny direction has its own blocker since 2026-10-17: a stale link
+    // holds Approve and never Deny (page 7's "refusing is never held").
+    val canDeny = denyBlocker == null && !expired && swapGuardElapsed
 
     // Feasibility I110, "Slower Approve on risky cards": a heavy card's
     // Approve stays disabled for HEAVY_APPROVE_DELAY_MS AND until the card's
@@ -319,7 +331,7 @@ fun ApprovalCard(
     val swipeThresholdPx = with(LocalDensity.current) { 96.dp.toPx() }
     // The owner's switch comes first: off, the gesture is not there at all.
     val swipeOn = item.swipeable && swipeAllowed
-    val swipeModifier = if (canDecide && swipeOn && !decided) {
+    val swipeModifier = if ((canDecide || canDeny) && swipeOn && !decided) {
         Modifier.pointerInput(item.id) {
             detectHorizontalDragGestures(
                 onDragEnd = {
@@ -346,7 +358,7 @@ fun ApprovalCard(
                                 approve()
                                 offset.animateTo(0f)
                             }
-                            offset.value < -swipeThresholdPx -> {
+                            offset.value < -swipeThresholdPx && canDeny -> {
                                 deny()
                                 offset.animateTo(0f)
                             }
@@ -723,7 +735,7 @@ fun ApprovalCard(
             // works here." Emptying this whole row for a pcOnly card would make
             // the phone's own sentence a lie.
             if (!expired) {
-                Refuse(CardWords.BUTTONS[0], enabled = canDecide && !decided, onClick = deny)
+                Refuse(CardWords.BUTTONS[0], enabled = canDeny && !decided, onClick = deny)
                 if (!item.pcOnly) {
                     Affirm(CardWords.BUTTONS[1], enabled = canApprove && !decided, onClick = approve)
                 }

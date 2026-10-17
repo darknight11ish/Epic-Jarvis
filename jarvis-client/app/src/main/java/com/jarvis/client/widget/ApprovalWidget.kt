@@ -92,12 +92,20 @@ class ApprovalWidget : GlanceAppWidget() {
         // there are no approvals, which is the single failure it exists to
         // prevent.
         //
-        // It also gates Deny. `decisionBlocker` refuses on `_stale` as well
-        // as on a dropped link, so a Deny button shown on a stale-but-
-        // connected link is swallowed, and the explanation lands in an in-app
-        // notice nobody is looking at. Same condition, both problems.
+        // And it is the queue question only. Deny used to be gated by the
+        // same value because `decisionBlocker` refused it on `_stale` too -
+        // a Deny button shown on a stale-but-connected link was swallowed,
+        // with the explanation in an in-app notice nobody is looking at.
+        // Since 2026-10-17 that is the other way round: a stale link holds
+        // APPROVE only, and page 7's promise is "refusing is never held". So
+        // the last known queue is shown WITH Deny reachable, and only a link
+        // that cannot deliver anything at all hides it.
         val live = ready && !JarvisRuntime.stale.value &&
             JarvisRuntime.link.value == LinkState.CONNECTED
+        val reachable = ApprovalWidgetRules.denyReachable(
+            ready = ready,
+            connected = JarvisRuntime.link.value == LinkState.CONNECTED,
+        )
         val extra = (pending.size - 1).coerceAtLeast(0)
         // The home screen is public: under App lock (or hidden lists) only a
         // short title shows and the buttons open the locked app.
@@ -126,7 +134,7 @@ class ApprovalWidget : GlanceAppWidget() {
                         "Tap to open Jarvis and connect",
                     )
                     pending.isEmpty() -> EmptyState()
-                    !live -> MessageState(
+                    !reachable -> MessageState(
                         "Approvals pending — desktop unreachable",
                         "Tap to open Jarvis and reconnect",
                     )

@@ -1404,9 +1404,13 @@ function closeApproval() {
 }
 
 /**
- * Enables the buttons only while the stream can confirm the queue is live.
- * Answering one that cannot be confirmed is how the same thing gets approved
- * twice, from two surfaces, seconds apart.
+ * Enables the buttons from the link state.
+ *
+ * Rule 4 blocks ACTING on a stale stream, and answering a queue that cannot be
+ * confirmed is how the same thing gets approved twice from two surfaces - so a
+ * stale stream greys Approve. It never greys Deny (2026-10-17), the same fix
+ * as the bar's: "refusing is never held, approving can be". App lock is
+ * untouched: under it Deny opens the locked app, which is deliberate.
  */
 function syncApprovalButtons() {
   // `deciding`, not `busy`: `busy` is the capture box's flag (see its own
@@ -1418,12 +1422,15 @@ function syncApprovalButtons() {
   const blocked = link.stale || state.deciding;
   // A cut-off request cannot be approved - see the quickbar's twin.
   dom.btnApprYes.disabled = blocked || Boolean(state.approval && state.approval.cutOff);
-  dom.btnApprNo.disabled = blocked;
+  // Deny is held by one thing only: a decision already on its way. Never by
+  // the stale stream.
+  dom.btnApprNo.disabled = state.deciding;
   paintApprovalClock();
   // And say why, on the card. Two grey buttons and nothing else was all the
-  // widget showed while the queue could not be confirmed.
+  // widget showed while the queue could not be confirmed. Deny stays live, so
+  // the line names the direction that is waiting.
   const why = link.stale
-    ? `${linkWords(link).short} — the approval queue cannot be confirmed, so nothing can be answered from here.`
+    ? `${linkWords(link).short} — the approval queue cannot be confirmed, so approving waits until it reconnects. Deny still works.`
     : state.deciding
       ? "That decision is on its way."
       : "";
@@ -1507,8 +1514,9 @@ async function decide(approved, optionId = null) {
   // approved the wrong card - between the press and the click, a queue re-read
   // repaints whatever slid into slot 0, and the click decided that instead
   // (docs/DEEP-AUDITS-2026-10-05.md §5, finding 1). `syncApprovalButtons` is
-  // no help: it disables the buttons for a stale stream or a decision already
-  // in flight, which is a different thing from a swapped card.
+  // no help: it greys Approve for a stale stream (Deny stays live since
+  // 2026-10-17) and both buttons for a decision already in flight, which is a
+  // different thing from a swapped card.
   const target = state.cards.resolve(currentQueue());
   // The pin is spent either way: a refused decision must not leave it behind
   // for the next click to use.
