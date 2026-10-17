@@ -511,7 +511,20 @@ def repo_files(ignored: set[str]) -> list[Path]:
     The `*.ps1` half is not decoration: the five clock-named %TEMP% folders
     that cost several agents a day (2026-10-09) live in
     `scripts/apply-patches.ps1`, and this check could not see them.
+
+    `ignored` is what git says it ignores, and it holds TWO kinds of entry:
+    a file, and a DIRECTORY - the latter with a trailing slash and nothing
+    under it. Both kinds have to be honoured, because git does not always
+    enumerate what is inside an ignored directory: a `git worktree` living in
+    one (the `.dsh-scratch/` forest, 28 of them on this PC) is reported as the
+    directory alone. Matching only whole file paths therefore walked all 28
+    copies of `scripts/apply-patches.ps1` and called them offenders, so
+    `test_apply_outcomes.py` failed and `apply-patches.ps1` told the owner his
+    update could not be trusted (measured 2026-10-16: 28 offenders, every one
+    of them under `.dsh-scratch/`).
     """
+    #: Ignored DIRECTORIES, as repository-relative paths without the slash.
+    ignored_dirs = {entry.rstrip("/") for entry in ignored if entry.endswith("/")}
     kept = []
     for pattern in ("*.py", "*.patch", "*.ps1"):
         for path in sorted(REPO.rglob(pattern)):
@@ -520,8 +533,17 @@ def repo_files(ignored: set[str]) -> list[Path]:
             rel = path.relative_to(REPO)
             if any(part in SKIP for part in rel.parts[:-1]):
                 continue
-            if ignored and rel.as_posix() in ignored:
-                continue
+            if ignored:
+                posix = rel.as_posix()
+                if posix in ignored:
+                    continue
+                # ... or inside a directory git ignores. The whole path is
+                # asked, never a bare name: a name match would throw away every
+                # file of a top-level tree the moment one ignored file sat
+                # inside it.
+                if any("/".join(rel.parts[:i]) in ignored_dirs
+                       for i in range(1, len(rel.parts))):
+                    continue
             kept.append(path)
     return kept
 
