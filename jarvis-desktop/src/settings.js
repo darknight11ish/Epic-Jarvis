@@ -180,6 +180,8 @@ const dom = {
   ubYes: $("ub-yes"),
   ubNo: $("ub-no"),
   ubStatus: $("ub-status"),
+  ubProblems: $("ub-problems"),
+  ubFallback: $("ub-fallback"),
   ubSteps: $("ub-steps"),
   ubLog: $("ub-log"),
   ubLogBody: $("ub-log-body"),
@@ -1822,6 +1824,168 @@ function paintStep(step) {
   report(dom.ubStatus, li.textContent, step.state === "failed" ? "bad" : "");
 }
 
+/* ── Where the updater has got to, as it goes ───────────────────────────────
+   The owner's own words (2026-10-16): "user should have visibility in where the
+   updater is currently at and if its checking anything." Two silences were the
+   complaint, and this is both halves of the answer:
+
+   1. The line below the buttons was BLANK from the press until the first thing
+      the patch program printed — about forty seconds of a card that looks
+      broken. `runBoth` writes UPDATE_STARTING before it invokes anything, so the
+      gap is never empty.
+   2. After that first line there was still nothing until the whole run ended.
+      `update_progress.rs` reads the log the patch program is writing anyway and
+      emits one `backend-update-progress` event per new line;
+      `paintBackendProgress` turns each one into that same one line.
+
+   Counts, never percentages: `total` is null while the suites run (they are
+   globbed, so nobody knows how many there are until they are done), and a
+   made-up denominator is worse than an honest count. */
+
+/** The word the card shows before the patch program has said anything. */
+const UPDATE_STARTING = "Starting the update…";
+
+/** One event payload -> the one line the owner reads. `""` means "nothing
+ *  readable in this event", and the caller then leaves the line alone rather
+ *  than blanking it. Phases are the Rust side's own (`update_progress.rs`). */
+function progressLine(p) {
+  if (!p || typeof p.phase !== "string") return "";
+  const done = Number.isInteger(p.done) ? p.done : 0;
+  const failed = Number.isInteger(p.failed) ? p.failed : 0;
+  switch (p.phase) {
+    case "reading":
+      return "Working out what to update…";
+    case "rehearsing":
+    case "applying":
+      // `total` comes from the script's own "Rehearsing all 145" line. Without
+      // it, a bare count — never a guess at how many patches there are.
+      return Number.isInteger(p.total)
+        ? `Patching the backend — patch ${done} of ${p.total}`
+        : `Patching the backend — patch ${done}`;
+    case "testing":
+      // The phase where "if it's checking anything" is literal: this is the
+      // suites running, one at a time.
+      return `Running the checks — ${done} done, ${failed} failed`;
+    case "done":
+      return verdictWords(p.verdict);
+    default:
+      return "";
+  }
+}
+
+/** The verdict in the card's own words. `ok` is the quiet one on purpose: a
+ *  run with nothing wrong does not need a sentence that shouts. */
+function verdictWords(verdict) {
+  if (verdict === "problems") return "Done with problems — do not trust this update yet.";
+  if (verdict === "unproven") return "Applied, but not proven.";
+  return "Done. No problems.";
+}
+
+/** `Title:` then one line per check, each with the patcher's own reason kept
+ *  word for word — a reason tidied up is a reason that no longer matches the
+ *  log the owner can open. */
+function checkList(title, checks) {
+  const box = document.createElement("p");
+  box.textContent = title;
+  const list = document.createElement("ul");
+  checks.forEach((c) => {
+    const li = document.createElement("li");
+    li.textContent = c.reason ? `${c.name} — ${c.reason}` : c.name;
+    list.append(li);
+  });
+  box.append(list);
+  return box;
+}
+
+/** The loud verdict, and the reason this feature is not only cosmetic.
+ *
+ *  On 2026-10-16 the owner's own run ended "DONE WITH PROBLEMS - do not trust
+ *  this update yet" and three of its four failures were not real: one
+ *  impossible on Windows, one its own `__pycache__`, one a suite walking
+ *  scratch. A screen that cries wolf is ignored on the day it is right, so
+ *  `ranHere` (from `update_progress.rs`'s `could_not_run`) splits the two apart
+ *  and only the first list is a real failure. The second is a check this PC
+ *  could not run, which is NOT a pass either — it is its own sentence, and
+ *  neither is allowed to hide behind the other.
+ *
+ *  `p.failed` is the real count and `bad` is capped at 20, so when they
+ *  disagree the heading says so rather than quietly reporting the smaller
+ *  number. */
+function paintProblems(p) {
+  const box = dom.ubProblems;
+  if (!box) return;
+  const verdict = p && p.verdict;
+  const bad = Array.isArray(p && p.bad) ? p.bad : [];
+  if (verdict !== "problems" && verdict !== "unproven") {
+    box.hidden = true;
+    box.replaceChildren();
+    delete box.dataset.tone;
+    return;
+  }
+  const ran = bad.filter((c) => c && c.ranHere !== false);
+  const couldNot = bad.filter((c) => c && c.ranHere === false);
+  const failed = Number.isInteger(p.failed) ? p.failed : ran.length;
+
+  box.replaceChildren();
+  box.dataset.tone = "bad";
+  const head = document.createElement("p");
+  head.textContent = verdict === "problems"
+    ? "The patch program finished with problems. Do not trust this update yet."
+    : "The backend is patched, but the patch program could not prove every check. " +
+      "That is not the same as a proven update.";
+  box.append(head);
+  // The two headings count what each list HOLDS. The first is "the patch
+  // program reported it as failed" and NOT "it ran and failed", because that is
+  // all the payload supports: `ran_here` is `true` both for a check that ran and
+  // failed and for a failure line that carried no reason at all - and in the
+  // owner's own log of 2026-10-16 every failing suite line is a bare
+  // "  FAIL  test_x.py" with no reason. "Ran" is the Rust side's claim to make,
+  // not this card's. `failed` is the patcher's own count of FAIL lines, which
+  // includes lines that are not one named check (its summary line, and a suite's
+  // inner check names) and is capped at 20 in the payload - so it is reported
+  // separately, and only when it is bigger than the lists can show.
+  if (ran.length) {
+    box.append(checkList(
+      ran.length === 1
+        ? "1 check the patch program reported as failed:"
+        : `${ran.length} checks the patch program reported as failed:`,
+      ran));
+  }
+  if (couldNot.length) {
+    box.append(checkList(
+      couldNot.length === 1
+        ? "1 check could not run on this PC:"
+        : `${couldNot.length} checks could not run on this PC:`,
+      couldNot));
+  }
+  if (failed > bad.length) {
+    const counted = document.createElement("p");
+    counted.textContent = `The patch program counted ${failed} failing check(s) in this ` +
+      `phase; ${bad.length} of them are named above.`;
+    box.append(counted);
+  }
+  box.hidden = false;
+}
+
+/** One `backend-update-progress` event, on screen.
+ *
+ *  Named for the BACKEND run on purpose: `paintProgress` above is the desktop
+ *  half's own download bar (downloaded/total), a different feature with a
+ *  different source, and the two must not be confused in a later edit. */
+function paintBackendProgress(p) {
+  const line = progressLine(p);
+  if (p && p.phase === "done") paintProblems(p);
+  // Nothing readable: leave the last line standing. Blanking it here would put
+  // the card back to the silence this exists to remove.
+  if (line) report(dom.ubStatus, line, p && p.verdict && p.verdict !== "ok" ? "bad" : "");
+}
+
+/** The Windows-uninstall warning, shown for the length of a run and never
+ *  otherwise — see the note in `settings.html`. */
+function showFallback(on) {
+  if (dom.ubFallback) dom.ubFallback.hidden = !on;
+}
+
 /** The ending, in words that cannot be read as "updated" unless both halves
  *  really are. */
 function paintBothOutcome(outcome) {
@@ -1895,7 +2059,19 @@ async function runBoth() {
   if (dom.ubNo) dom.ubNo.hidden = true;
   if (dom.ubSteps) dom.ubSteps.replaceChildren();
   if (dom.ubLog) dom.ubLog.hidden = true;
-  report(dom.ubStatus, "");
+  // NOT an empty line. The patch program takes about forty seconds to boot and
+  // print its first line, and an empty line through that is indistinguishable
+  // from a hang — which is the owner's actual complaint ("if its checking
+  // anything"). Written here, before the invoke, because the first progress
+  // event may be the thing that never arrives.
+  report(dom.ubStatus, UPDATE_STARTING, "");
+  // Last run's verdict list must not stand as this run's: the new run has not
+  // failed at anything yet.
+  paintProblems(null);
+  // The Windows-uninstall question is asked DURING the desktop half, so the
+  // warning is on screen for as long as the run can ask it — and gone
+  // afterwards, so it never becomes something the eye skips.
+  showFallback(true);
   report(dom.ubState, "Working. Do not close this window.", "");
   try {
     paintBothOutcome(await invoke("update_both"));
@@ -1906,6 +2082,7 @@ async function runBoth() {
     report(dom.ubStatus, "Nothing was installed.", "bad");
   } finally {
     ubBusy = false;
+    showFallback(false);
     // Re-read WHICH folders there are, and leave the ending it just wrote on
     // screen alone — see `keepState` above.
     loadBoth(true);
@@ -1955,6 +2132,14 @@ if (dom.ubSave) {
 // this starts, resumes or approves anything — it is `update-status`'s shape,
 // one step at a time, so a card is not silent for the minutes a patch run takes.
 if (IS_TAURI) TAURI.event.listen("update-step", (event) => paintStep(event.payload));
+
+// The same run, in much finer steps: `update_progress.rs` tails the log the
+// patch program is writing and emits one of these per new line, so the line
+// below the buttons says which patch of how many, and whether the checks are
+// running. Also read-only, also starts nothing.
+if (IS_TAURI) {
+  TAURI.event.listen("backend-update-progress", (event) => paintBackendProgress(event.payload));
+}
 
 // About's source link opens in the real OS browser, never inside the
 // WebView - same reasoning and the same `data-external`/`open_external_url`
