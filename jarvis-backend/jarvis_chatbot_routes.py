@@ -67,7 +67,14 @@ driver, reached through the same routes file:
     GET  /api/chatbot/support/export  the transcript as plain text, for the
          ?id=                         desktop's "Export transcript" (it
                                       writes the file the owner picks; this
-                                      route writes nothing)
+                                      route writes nothing). `&scrub=1` for
+                                      the optional scrubbed copy: the values
+                                      of the details the owner allowed are
+                                      replaced and anything shaped like a
+                                      password, key or one-time code is
+                                      removed. Refuses when the scrubber is
+                                      not there - never a plain file wearing
+                                      the scrubbed name.
 
 "Solve it here" - a captcha or sign-in page handed to the owner's phone
 (jarvis_handoff.py, the owner's decision of 2026-09-28; JARVIS-API section
@@ -593,14 +600,28 @@ def _support_simple(route: str, body: dict, deps) -> tuple:
     return code, out
 
 
+#: The words the apps may send to mean "yes" on a boolean query flag. Kept as a
+#: list rather than a truthiness test, so `?scrub=` with nothing in it is the
+#: plain copy and never a surprise.
+_TRUE_FLAGS = ("1", "true", "yes", "on")
+
+
 def handle_export(query: str = "") -> tuple:
     """GET /api/chatbot/support/export?id= - the transcript as text. A read:
-    nothing is written here (the desktop saves the file the owner picks)."""
+    nothing is written here (the desktop saves the file the owner picks).
+
+    `&scrub=1` asks for the optional SCRUBBED copy: the values of the details
+    the owner allowed are replaced and anything shaped like a password, key or
+    one-time code is removed, because the plain file says in its own note that
+    it is not encrypted. It refuses (503) rather than pass a plain file off as
+    scrubbed when the scrubber is missing.
+    """
     q = parse_qs(str(query or ""))
     sid = (q.get("id") or [""])[0]
     if not SUP.valid_id(sid):
         return 400, {"ok": False, "error": "Say which support chat."}
-    return SUP.export(sid)
+    scrub = (q.get("scrub") or [""])[0].strip().lower() in _TRUE_FLAGS
+    return SUP.export(sid, scrub=scrub)
 
 
 def handle_frame(query: str = "") -> tuple:
