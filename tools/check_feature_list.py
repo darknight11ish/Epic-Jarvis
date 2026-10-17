@@ -163,18 +163,20 @@ def reason_is_a_sentence(text: str) -> bool:
 #: Rule 5's exemptions, each with the one line saying why it is here rather
 #: than carrying a sentence. Every one is a `"phone"` entry whose claim is
 #: FALSE on the tree it was written against - the desktop has the feature - so
-#: a `surface_reason` for it would be a lie. PR #495 corrects all three to
-#: `"both"`, and `pending_problems()` FAILS the moment one stops being a
-#: `"phone"` entry, so this list empties itself instead of rotting.
-REASON_PENDING = {
-    "pc-help": "the desktop HAS it (jarvis-desktop/src/pc-help.js, Settings -> Hardware "
-               "and models), so no sentence saying the desktop lacks it is true; PR #495 "
-               "corrects this entry to `both`",
-    "memory-as-of": "the desktop HAS it (brain.js:2501, :3018, Brain -> Memory); PR #495 "
-                    "corrects this entry to `both`",
-    "rush-latch": "the desktop HAS it (brain.js:1274-1290, the top of every Brain view); "
-                  "PR #495 corrects this entry to `both`",
-}
+#: a `surface_reason` for it would be a lie. `pending_problems()` FAILS the
+#: moment one stops being a `"phone"` entry, so this list empties itself
+#: instead of rotting.
+#:
+#: **IT IS EMPTY, AND THAT IS THE MECHANISM WORKING (2026-10-16).** It held
+#: three when this rule was written - `pc-help`, `memory-as-of` and
+#: `rush-latch` - and PR #495 corrected all three to `"both"` the same day.
+#: The checker then failed with, for each one, `delete its line (the entry has
+#: been corrected)`, naming the desktop file that has the feature. Deleting
+#: them was the whole resolution, and it took one command. **The dict stays,
+#: empty, because the next false claim needs exactly this shape**: a place to
+#: record "this is deliberately unhandled, and here is what un-handles it"
+#: that cannot quietly become permanent.
+REASON_PENDING = {}
 
 #: Ids that are real but are never a row of their own, each with the one-line
 #: reason the owner never presses it. Keyed by the id exactly as the code
