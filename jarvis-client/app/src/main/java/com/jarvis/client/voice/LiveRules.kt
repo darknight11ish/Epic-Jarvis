@@ -56,6 +56,62 @@ object LiveRules {
 
     /** ...and when it comes back and the phone listens again. */
     const val LINK_BACK_SAID = "I'm back."
+
+    /**
+     * WHY THIS PHONE'S LIVE STOPPED, and what the owner is told.
+     *
+     * THE BUG (the owner's Pixel 9, 2026-10-17). Live was tapped, showed
+     * "The microphone stopped. Start Jarvis Live again from the Live screen.",
+     * and then its end screen said "Jarvis Live ended - You ended it." He had
+     * ended nothing. Android had refused a MICROPHONE foreground service and
+     * ended it for him.
+     *
+     * TWO MECHANISMS, ONE SENTENCE BEFORE THIS. `LiveService.listen()`'s catch
+     * said "the microphone stopped" for ANY throw, and an End that nobody
+     * asked for reached the PC as reason "owner" (JarvisRuntime.liveStop's
+     * default), which is the PC's own words for "You ended it."
+     * (`backend/jarvis_live.py:255`). They are different events and must not
+     * share words:
+     *  - [FGS_REFUSED]: `ServiceCompat.startForeground(... MICROPHONE)` threw.
+     *    Android 14+ will not let a microphone service start from the
+     *    background, and this phone is newer than the one it was tested on.
+     *    That is Android's decision, so the headline must name Android.
+     *  - [MIC_STOPPED]: the microphone itself went away (audio focus taken by
+     *    a call or another app, permission revoked, the PC gone). Not the
+     *    owner's End and not a background refusal.
+     * Only [ENDED_OWNER] may say "You ended it."
+     *
+     * Pure Kotlin (no Android), so the JVM tests run it: LiveStopReasonTest.kt.
+     */
+    const val STOP_FGS_REFUSED =
+        "Android did not let Jarvis Live use the microphone in the background. " +
+            "Open Jarvis, then start Live from the Live screen."
+    const val STOP_MIC_STOPPED =
+        "The microphone stopped. Start Jarvis Live again from the Live screen."
+    const val ENDED_OWNER = "You ended it."
+    const val ENDED_FGS_REFUSED =
+        "Android ended it: it would not let Jarvis Live use the microphone in the background."
+
+    /** What stopped this phone's Live, as THIS phone can tell it. */
+    enum class LiveStop { OWNER, FGS_REFUSED, MIC_STOPPED }
+
+    /** The line shown beside the buttons when listening stopped. */
+    fun stopWords(stop: LiveStop): String = when (stop) {
+        LiveStop.FGS_REFUSED -> STOP_FGS_REFUSED
+        LiveStop.MIC_STOPPED -> STOP_MIC_STOPPED
+        // An End the owner tapped has no "stopped" line: nothing failed.
+        LiveStop.OWNER -> STOP_MIC_STOPPED
+    }
+
+    /** The headline on the ended screen. ONLY an End the owner tapped says "You ended it." */
+    fun endedWords(stop: LiveStop): String = when (stop) {
+        LiveStop.OWNER -> ENDED_OWNER
+        LiveStop.FGS_REFUSED -> ENDED_FGS_REFUSED
+        LiveStop.MIC_STOPPED -> STOP_MIC_STOPPED
+    }
+
+    /** True only when the owner's own End is what happened. */
+    fun endedByOwner(stop: LiveStop): Boolean = stop == LiveStop.OWNER
     const val SIDE_TALK_MARK = "[not for me]"
     val VOICE_PAUSES: List<String> = listOf("other_voices", "voice_trouble")
     val CARD_PAUSES: List<String> = listOf("card", "cards_unknown")
