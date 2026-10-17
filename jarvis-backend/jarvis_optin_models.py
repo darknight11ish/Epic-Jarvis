@@ -530,6 +530,18 @@ def detail_for(path: Path) -> str:
 #: 2026-10-10, so the old C: paths are NOT written down here as the answer -
 #: they are only ever tried as an extra place, and a machine that never had
 #: them simply finds nothing there.
+#:
+#: THE MODELS HOME ITSELF IS THE LAST ROOT, and that is the point: the named
+#: folders above are the homes known when this was written, and whatever the
+#: owner adds later lands beside them. `D:\Jarvis Models\HuggingFace\gguf\` came
+#: later and held three models this list could not see - a 27B uncensored, a 30B
+#: coder and a Qwen3-VL file, all on disk and imported into Ollama, none of them
+#: ever offered (found 2026-10-16). A fourth hard-coded path would repeat that
+#: with the next folder; walking the models home instead cannot. Safe because
+#: `_walk` only reads directory entries, `is_choice_file` keeps only files whose
+#: NAME carries a marker, `choices()` drops anything under 512 MB and
+#: de-duplicates by file name, and the named roots are tried first so which copy
+#: of a duplicated file wins does not change.
 def search_roots() -> tuple:
     env = os.environ.get("JARVIS_OPTIN_MODEL_ROOTS", "").strip()
     if env:
@@ -540,6 +552,10 @@ def search_roots() -> tuple:
         Path("D:/Jarvis Models/Ollama/store"),
         home / ".lmstudio" / "models",
         home / "Documents" / "AI Models",
+        # The discovering catch-all: every folder under the models home, now and
+        # later (HuggingFace\gguf\ and whatever is added next). Last, so the
+        # named homes keep the order they had.
+        Path("D:/Jarvis Models"),
     )
 
 
