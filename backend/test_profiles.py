@@ -21,6 +21,7 @@ What this proves, with no graphics card and no Ollama:
     generated line when /opt/pwsh/pwsh is there;
   - the tuned models keep jarvis-primary's rules word for word.
 """
+import itertools
 import json
 import os
 import re
@@ -348,6 +349,59 @@ def t_which_card_chat_goes_on():
     old, new = nv("o", "x", 8, compute="6.1"), nv("n", "y", 8, compute="8.6")
     check("unknown speeds: the newer generation", P.rank([old, new])[0][0] is new)
     check("the 2060 Super is not given the 2060's speed", P.published_speed("RTX 2060 SUPER") is None)
+
+def t_the_best_two_cards_whatever_order_the_cards_arrive_in():
+    """Three cards: a preset must plan for the fastest card plus the card with
+    room for the extra models, whatever order the cards are listed in.
+
+    The order is not the owner's: jarvis_hardware.detect() builds its planned
+    list in the order Ollama's log lists the cards, and rank() used to compare
+    only cards[0] and cards[1] - a third card was never compared at all, so the
+    log decided which two a preset planned for. This is the case that breaks:
+    the two identical 8 GB cards first, the 12 GB card last. On origin/main
+    6b18f3d3 (measured 2026-10-17) that planned for the TWO 8 GB cards and left
+    the 12 GB card out, because rank() prefers memory SPEED (496 GB/s for the
+    RTX 2080 SUPER against 336 for the RTX 2060) and only the first two cards
+    were ever compared.
+    """
+    fastest = nv("a", "RTX 2080 SUPER", 8, monitor=True, uuid="GPU-2080-aaaa")
+    twin = nv("b", "RTX 2080 SUPER", 8, monitor=False, uuid="GPU-2080-bbbb")
+    big = nv("c", "RTX 2060", 12, monitor=False, uuid="GPU-2060-cccc")
+    broken = [fastest, twin, big]      # the two 8 GB cards first: the old bug
+    working = [big, fastest, twin]     # the order that happened to work
+    for order in (broken, working):
+        listed = ", ".join(f"{c.name} {c.total_gib:g} GB" for c in order)
+        lay = P.plan(list(order), "features")
+        check(f"[{listed}]: the plan is one 8 GB card plus the 12 GB card",
+              sorted(c.total_gib for c in lay.cards) == [8.0, 12.0],
+              [(c.name, c.total_gib) for c in lay.cards])
+        check(f"[{listed}]: chat on the faster 8 GB card, extra models on the 12 GB card",
+              lay.chat is not None and lay.chat.card.name == "RTX 2080 SUPER"
+              and (lay.long is None or lay.long.card is big)
+              and (lay.pictures is None or lay.pictures.card is big),
+              (getattr(lay.chat, "card", None), getattr(lay.long, "card", None),
+               getattr(lay.pictures, "card", None)))
+        check(f"[{listed}]: the same 'left out' sentence, naming the dropped card",
+              any("plans for up to two cards" in n and "left out" in n for n in lay.notes),
+              lay.notes)
+    # THE ORDER MUST NOT MATTER, for every preset: all six orderings of the
+    # same three cards give the same two cards.
+    for pid in P.PRESET_IDS:
+        pairs = {tuple(c.key for c in P.plan(list(order), pid).cards)
+                 for order in itertools.permutations([fastest, twin, big])}
+        check(f"every order of the cards gives the same two for \"{pid}\"",
+              len(pairs) == 1, sorted(pairs))
+    # rank() itself: every card ordered, and the same order whichever way the
+    # cards arrive. The headless twin wins the tie with the monitor one on
+    # room, which is rank()'s own existing tie-break.
+    first = [c.key for c in P.rank(broken)[0]]
+    last = [c.key for c in P.rank(list(reversed(broken)))[0]]
+    check("rank() orders ALL THREE cards, not only the first two",
+          sorted(first) == ["a", "b", "c"], first)
+    check("... and gives the same order whichever way the cards arrive",
+          first == last == ["b", "a", "c"], (first, last))
+    check("... with the room tie-break said in words", "room" in P.rank(broken)[1],
+          P.rank(broken)[1])
 
 
 def t_measured_limits_drop_a_size():

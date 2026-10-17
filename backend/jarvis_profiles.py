@@ -334,14 +334,72 @@ def best_effort(card: Card) -> Optional[str]:
     return None
 
 
+def _speed(card: Card) -> Optional[float]:
+    """The memory speed rank() compares: the measured one, else the published."""
+    return card.speed_gbs if card.speed_gbs is not None else published_speed(card.name)
+
+
+def _beats(a: Card, b: Card) -> tuple:
+    """(the card that wins, why) for TWO cards - or (None, "") on a tie.
+
+    This is rank()'s one comparison, unchanged in what it prefers and in its
+    order: published memory speed, then the card Jarvis's settings are made for
+    over a best-effort one, then the newer generation, then the card with more
+    room. It is its own function because rank() now applies it to EVERY pair of
+    cards, not only to the first two: with three cards the old code never
+    compared the third one at all, so which two a preset planned for was
+    decided by the order Ollama's log happened to list them in (3-GPU audit,
+    2026-10-16).
+    """
+    sa, sb = _speed(a), _speed(b)
+    if sa and sb and abs(sa - sb) > 1e-9:
+        return ((a if sa > sb else b),
+                f"its memory is faster ({max(sa, sb):.0f} against {min(sa, sb):.0f} GB/s, "
+                f"the published figures)")
+    ea, eb = best_effort(a) is None, best_effort(b) is None
+    if ea != eb:
+        return ((a if ea else b),
+                "it is the card Jarvis's settings are made for; the other is best effort")
+    ca, cb = a.cc, b.cc
+    if a.route == b.route == "CUDA" and ca and cb and abs(ca - cb) > 1e-9:
+        return (a if ca > cb else b), "it is the newer generation"
+    ra, rb = room(a), room(b)
+    if abs(ra - rb) > 1e-9:
+        return ((a if ra > rb else b),
+                "the two look equally fast, and it has more room (no monitor on it)")
+    return None, ""
+
+
+def _best_first(cards: list) -> list:
+    """Every card, best first, by `_beats`. A card only moves on a strict win,
+    so a tie keeps the order the cards came in - the same "it is listed first"
+    rule rank() always had for two cards."""
+    left, out = list(cards), []
+    while left:
+        best = 0
+        for i in range(1, len(left)):
+            winner, _ = _beats(left[i], left[best])
+            if winner is left[i]:
+                best = i
+        out.append(left.pop(best))
+    return out
+
+
 def rank(cards: list, primary: str = "") -> tuple:
-    """(cards, fastest first; the sentence saying why the first is first).
+    """(every card, the best one for chat first; the sentence saying why).
 
     Section 4.1: `[compute] primary_gpu` overrides everything; otherwise
     published memory speed when both are known; otherwise the card Jarvis's
     settings are made for (NVIDIA, RTX 20 or newer) over a best-effort one;
     otherwise the newer generation; otherwise the card with more room. "The
-    card with the monitor" is not a rule any more."""
+    card with the monitor" is not a rule any more.
+
+    EVERY card is ranked, not only the first two (2026-10-16): a third card
+    used to be compared with nothing, so the order Ollama's log lists the
+    cards in decided which two a preset planned for. The pinned card still
+    comes first and the rest are ranked among themselves, so a pin cannot make
+    the second card depend on the log either.
+    """
     cards = list(cards)
     if not cards:
         return [], "no card"
@@ -351,31 +409,12 @@ def rank(cards: list, primary: str = "") -> tuple:
     if want:
         for i, c in enumerate(cards):
             if (c.uuid and c.uuid.lower() == want) or c.key.lower() == want:
-                rest = cards[:i] + cards[i + 1:]
-                return [c] + rest, "[compute] primary_gpu names it"
-    a, b = cards[0], cards[1]
-    rest = cards[2:]
-    sa = a.speed_gbs if a.speed_gbs is not None else published_speed(a.name)
-    sb = b.speed_gbs if b.speed_gbs is not None else published_speed(b.name)
-    if sa and sb and abs(sa - sb) > 1e-9:
-        first, second = (a, b) if sa > sb else (b, a)
-        return [first, second] + rest, (f"its memory is faster ({max(sa, sb):.0f} against "
-                                        f"{min(sa, sb):.0f} GB/s, the published figures)")
-    ea, eb = best_effort(a) is None, best_effort(b) is None
-    if ea != eb:
-        first, second = (a, b) if ea else (b, a)
-        return [first, second] + rest, ("it is the card Jarvis's settings are made for; the "
-                                        "other is best effort")
-    ca, cb = a.cc, b.cc
-    if a.route == b.route == "CUDA" and ca and cb and abs(ca - cb) > 1e-9:
-        first, second = (a, b) if ca > cb else (b, a)
-        return [first, second] + rest, "it is the newer generation"
-    ra, rb = room(a), room(b)
-    if abs(ra - rb) > 1e-9:
-        first, second = (a, b) if ra > rb else (b, a)
-        return [first, second] + rest, ("the two look equally fast, and it has more room "
-                                        "(no monitor on it)")
-    return [a, b] + rest, "the two look equally fast, and it is listed first"
+                return ([c] + _best_first(cards[:i] + cards[i + 1:]),
+                        "[compute] primary_gpu names it")
+    order = _best_first(cards)
+    winner, why = _beats(order[0], order[1])
+    return order, why if winner is order[0] else \
+        "the two look equally fast, and it is listed first"
 
 
 # --------------------------------------------------------------------------
@@ -513,6 +552,7 @@ def plan(cards: list, preset: str, *, gap: float = GAP_GIB, primary: str = "",
                        "processor, slowly. Pictures and extra features are off.")
         return lay
     if len(ranked) > 2:
+        ranked = _two_slots(ranked)
         extra = ", ".join(c.name for c in ranked[2:])
         lay.notes.append(f"Jarvis plans for up to two cards; the {extra} is left out.")
         ranked = ranked[:2]
@@ -624,6 +664,31 @@ def _lanes_possible(card: Card) -> Optional[str]:
         return (f"Extra features on the {card.name}: not possible, because its id (GPU-...) "
                 f"could not be read, and Jarvis only points work at a card by its id.")
     return None
+
+
+def _two_slots(ranked: list) -> list:
+    """The two cards a preset plans for: the best card for chat, then the card
+    the extra models get, and the rest after them.
+
+    Slot 1 is the ranking's own first card - the fastest, as it always was.
+    Slot 2 is the remaining card with the MOST ROOM, not simply the next card
+    in the ranking: rank() prefers memory SPEED (496 GB/s for the RTX 2080
+    SUPER against 336 for the RTX 2060), so on a three-card PC the second card
+    in the ranking can be another 8 GB card with no room for a 32K lane while
+    the 12 GB card sits below it. Taking the next-fastest card is what let the
+    order of Ollama's log decide the plan (3-GPU audit, 2026-10-16).
+
+    A card that cannot carry a lane at all is passed over when one that can is
+    there, and the ranking order breaks a tie, so every order of the same
+    cards gives the same two. All the cards stay in the returned list, the
+    rest after the slots, so plan()'s "left out" note still names exactly the
+    cards that were dropped.
+    """
+    first, rest = ranked[0], ranked[1:]
+    laneable = [c for c in rest if _lanes_possible(c) is None] or rest
+    best = max(range(len(laneable)), key=lambda i: (room(laneable[i]), -i))
+    lane = laneable[best]
+    return [first, lane] + [c for c in rest if c is not lane]
 
 
 def _plan_two(lay: Layout, a: Card, b: Card, preset: str, gap: float, limits: dict,
