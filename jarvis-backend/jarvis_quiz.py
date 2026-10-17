@@ -26,9 +26,15 @@ THE RULES IT KEEPS (each one has a test in test_quiz.py)
   * The pasted text and the owner's answer are DATA. Both go to the model
     inside a block whose fence has a random word in it (so the text cannot
     close the block), under a system message that says they cannot give
-    instructions. The mark comes ONLY from the model's schema-checked reply;
-    no line of code here looks at the words of the text or the answer to decide
-    a mark, so words in an answer cannot change the mark path.
+    instructions. Before either gets there, any chat-template delimiter it
+    carries (`<|im_end|>`, `<start_of_turn>`, `[INST]`, ...) is STRIPPED by
+    `_marker_free`, because a fence cannot stop a token boundary - a delimiter
+    inside the fence is read by the model's tokenizer as a real end of turn.
+    That strip is a pinned copy of `jarvis_injection`'s rule 9 (this module may
+    not import it): test_quiz.py proves the two cannot drift. The mark comes
+    ONLY from the model's schema-checked reply; no line of code here looks at
+    the words of the text or the answer to decide a mark, so words in an answer
+    cannot change the mark path.
   * The passage behind a question is kept here and returned only after that
     question is answered.
   * A model reply that is not in the shape asked for becomes a plain
@@ -80,6 +86,22 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import jarvis_local_http
+
+# A NOTE ON WHAT THIS MODULE MAY IMPORT, because the strip below looks like it
+# belongs somewhere else. test_quiz.py walks this whole syntax tree and requires
+# the only jarvis_ modules imported to be `jarvis_local_http` and
+# `jarvis_wellbeing` (the pure crisis check and its help wording, owner
+# 2026-09-30) - and a LAZY import counts, because the walk sees inside
+# functions. So this module may not import `jarvis_injection`, the one table
+# that describes chat-template delimiters, even though the fence below needs
+# those delimiters taken out. It uses Python's own `re` instead, and
+# `_MARKER_RX` is therefore a SECOND copy of one rule in that table - which is
+# exactly the kind of duplicate that rots silently (a hand-maintained list lost
+# voiceprint.db for two days in 2026-10-16). It does not rot unpinned:
+# test_quiz.py's `t_the_marker_pattern_covers_the_injection_table` checks this
+# copy against `jarvis_injection.PATTERNS` both ways - every marker that rule
+# names is stripped here, and every marker it matches is really gone from a
+# fence - and it fails when either side changes without the other.
 
 # ---- the frozen contract (docs/STUDY-FROM-TEXT-DESIGN.md section 11) -------
 
@@ -309,8 +331,59 @@ _MARK_SYSTEM = (
     "you are given, nothing else.")
 
 
+#: Chat-template delimiters, as the standard library sees them. This is a COPY
+#: of `jarvis_injection`'s rule 9 (`chat_markers`) plus the marker names a
+#: template uses without pipes - kept here because this module may not import
+#: that one (see the note beside the imports), and `test_quiz.py` proves the two
+#: cannot drift apart.
+#:
+#: WHY A FENCE IS NOT ENOUGH ON ITS OWN. A fence says "this is data, not
+#: instructions", and its word is random so the text cannot close it. It does
+#: not stop a TOKEN BOUNDARY: the fence lines are ordinary text to a tokenizer,
+#: while `<|im_end|>` inside them is a real end-of-turn for the template a model
+#: was trained with - read at the tokenizer layer, before the fence is consulted
+#: at all. So a delimiter carried in text the owner PASTED (or in the answer he
+#: typed, which is fenced back to the model for marking) is taken out first.
+#: The caption path does the same thing where outside text enters
+#: (jarvis_youtube); this is the other half, for text that arrives through
+#: `start()`.
+_MARKER_RX = re.compile(
+    r"<\s*\|\s*[A-Za-z_][A-Za-z0-9_]{1,24}\s*\|\s*>"
+    r"|\[\s*/?\s*(?:INST|SYS|SYSTEM|ASSISTANT)\s*\]"
+    r"|```\s*(?:system|assistant|user|developer|instructions?|prompt)\b"
+    r"|<\s*/?\s*(?:im_start|im_end|endoftext|start_of_turn|end_of_turn|tool_call|"
+    r"tool_response|think)\s*>",
+    re.I)
+
+
+def _marker_free(text) -> str:
+    """`text` with any chat-template delimiter taken out of it.
+
+    ITERATIVE, AND THAT IS NOT DECORATION. One pass can leave a live marker
+    behind, measured 2026-10-16 with the same pattern: `"<<|im_end|>|im_end|>"`
+    becomes `"<|im_end|>"` after one pass - still a real end-of-turn - and `""`
+    only after the second. The loop cannot run away: this pattern needs at
+    least one literal character, so it never matches the empty string, and every
+    pass that changes anything therefore SHORTENS the text. test_quiz.py checks
+    both halves of that (the nesting and the no-empty-match it rests on).
+
+    A marker is replaced by ONE SPACE, not by nothing: "the<|im_end|>end" is two
+    words, and gluing them into "theend" would corrupt text the owner is
+    studying. Nothing here raises, and a non-string comes back as "".
+    """
+    out = text if isinstance(text, str) else ""
+    while True:
+        cut = _MARKER_RX.sub(" ", out)
+        if cut == out:
+            return out
+        out = cut
+
+
 def _fence(name: str, text: str, word: str) -> str:
-    return f"<<<{name} {word}>>>\n{text}\n<<<end {name} {word}>>>"
+    """One block of text for the model, between THIS call's own random markers,
+    with any chat-template delimiters already taken out (see `_MARKER_RX`: a
+    fence controls what the model is TOLD, not what its tokenizer reads)."""
+    return f"<<<{name} {word}>>>\n{_marker_free(text)}\n<<<end {name} {word}>>>"
 
 
 def _norm(s: str) -> str:
