@@ -233,7 +233,7 @@ import { READING as PHOTO_READING, mountProposal } from "./photo-reminder.js";
 import { mountInboxTidy } from "./inbox-tidy.js";
 // "Coach this" - the prompt coach's button above the box and the panel its
 // critique opens (prompt-coach-panel.js; the owner's request of 2026-10-08).
-import { historyFor, mountPromptCoach } from "./prompt-coach-panel.js";
+import { historyFor, mountPromptCoach, withClarification } from "./prompt-coach-panel.js";
 // "Spending summaries" (2026-09-30): the table a spending answer announced.
 import { mountSpendingTable, tableIdFromBody, tableIdFromLine } from "./spending.js";
 import { mountFormReview } from "./form-review.js";
@@ -848,6 +848,12 @@ const formReview = dom.approvalPicture
  *    Jarvis written for the owner to read and send, not something pasted in
  *    from elsewhere (chat-history.js `boxTagAfter`, which holds that rule).
  *
+ * ... and one control that sends NOTHING: each issue's fix is also a chip
+ * ("Add this"), which APPENDS that one clarification to the box - the owner's
+ * own words stay, in order, and he presses Send when he is ready. The chip
+ * never sends and never replaces; "Send the suggestion" is the only control
+ * that replaces the box, and the two say different things on purpose.
+ *
  * The history handed over is the bar's own thread - the last few turns it was
  * going to re-send to the same local model anyway, and never anything the PC
  * does not already have.
@@ -867,6 +873,22 @@ const promptCoach = dom.coachPanel
       state.historyIndex = null;
       autoGrowPrompt();
       await send(text, state.boxTag);
+    },
+    // A fix chip: the owner's words stay, one clarification is added after
+    // them, and NOTHING is sent. He reads the joined question and presses
+    // Send himself. The box is marked "typed" for the same reason the
+    // suggestion above is: these are words written for him to read, not a
+    // paste from outside.
+    addFix: (fix) => {
+      const before = String(dom.prompt.value || "").trimEnd();
+      const after = withClarification(before, fix);
+      if (after === before) return;
+      dom.prompt.value = after;
+      state.boxTag = boxTagAfter("typed", "edit", after);
+      state.historyIndex = null;
+      autoGrowPrompt();
+      dom.prompt.focus();
+      syncWindowHeight();
     },
     announce,
     onChange: () => syncWindowHeight(),

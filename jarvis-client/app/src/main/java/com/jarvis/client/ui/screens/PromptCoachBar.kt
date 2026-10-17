@@ -102,6 +102,7 @@ internal fun PromptCoachBar(
     streaming: Boolean,
     sendMine: () -> Unit,
     sendSuggestion: (String) -> Unit,
+    onAddFix: (String) -> Unit,
 ) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
@@ -220,6 +221,12 @@ internal fun PromptCoachBar(
                     close()
                     sendSuggestion(pick)
                 },
+                // The fix chip: his words STAY and one clarification is added
+                // after them. Nothing is sent, and the panel stays open so he
+                // can press Send the suggestion, another chip, or dismiss.
+                // "Send the suggestion" above is the only control that
+                // replaces the box.
+                onAddFix = onAddFix,
                 onDismiss = { close() },
             )
         }
@@ -250,6 +257,10 @@ internal fun PromptCoachBar(
  * The rewrite is drawn in full and is never applied by being shown - only
  * "Send the suggestion" sends it, and even that puts it in the box first
  * ([PromptCoach.SEND_SUGGESTION]).
+ *
+ * Each fix also carries its own chip ([PromptCoach.ADD_FIX]): pressing it puts
+ * THAT one clarification in the box AFTER the owner's own words and sends
+ * nothing. It is the one control here that edits the box without sending.
  */
 @Composable
 private fun PromptCoachAdvice(
@@ -258,6 +269,7 @@ private fun PromptCoachAdvice(
     canSend: Boolean,
     onSendMine: () -> Unit,
     onSendSuggestion: () -> Unit,
+    onAddFix: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val chrome = LocalChrome.current
@@ -319,6 +331,18 @@ private fun PromptCoachAdvice(
             if (issue.fix.isNotEmpty()) {
                 Gap(6)
                 PromptCoachPart(PromptCoach.ISSUE_FIX, issue.fix, accent)
+                Gap(6)
+                // The chip: APPENDS this one fix to the box, after the owner's
+                // own words, and sends nothing. "Send the suggestion" below is
+                // the only control that replaces the box, and it says so.
+                Quiet(
+                    PromptCoach.ADD_FIX,
+                    color = accent,
+                    modifier = Modifier.semantics {
+                        contentDescription = "Add this fix to your question: ${issue.fix}"
+                    },
+                    onClick = { onAddFix(issue.fix) },
+                )
             }
         }
 

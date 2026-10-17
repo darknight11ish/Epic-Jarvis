@@ -70,6 +70,34 @@ object PromptCoach {
     const val SEND_SUGGESTION = "Send the suggestion"
 
     /**
+     * The chip beside one gap's fix, on both apps. Pressing it APPENDS that
+     * fix to the owner's own words in the box and sends nothing - the desktop
+     * has the same control and the same sentence (`prompt-coach-panel.js`,
+     * `WORDS.addFix`), so the two apps say one thing.
+     */
+    const val ADD_FIX = "Add this"
+
+    /**
+     * The box after one fix chip is pressed: **the owner's own words, then
+     * that fix.** His words are never replaced and never reordered - that is
+     * the whole difference between this chip and [SEND_SUGGESTION], which puts
+     * the rewritten prompt in the box and sends it. The fix is a clarification
+     * the coach already wrote to stand alone, so one space is the whole join.
+     *
+     * The desktop's `withClarification` in `prompt-coach-panel.js` is the same
+     * rule, and its suite pins the join: one rule, two apps.
+     */
+    fun withClarification(said: String, fix: String): String {
+        val mine = said.trimEnd()
+        val add = fix.trim()
+        return when {
+            add.isEmpty() -> mine
+            mine.isEmpty() -> add
+            else -> "$mine $add"
+        }
+    }
+
+    /**
      * The line under the switch after a change, in the same words the
      * desktop's own page words for itself (`prompt-coach-settings.js`:
      * `` `${label} is on.` `` / `` `is off.` ``), built from [LABEL] - which is
