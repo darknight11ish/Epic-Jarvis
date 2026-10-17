@@ -1932,10 +1932,21 @@ async function send(){
     }
 
     // The proxy tells us which lane it picked and why.
+    // Set when THIS turn is a crisis turn (the route's own flag), so the
+    // commit below can keep it out of what the next question re-sends.
+    let crisisTurn = false;
     try{
       const routeRaw = res.headers.get("X-Jarvis-Route");
       if(routeRaw){
         const route = JSON.parse(routeRaw);
+        // The owner's rule (2026-09-29, docs/DECISIONS.md): a crisis question
+        // and its help answer show once and do NOT stay in the thread or in
+        // what the model is re-sent. The PC still keeps the chat in History,
+        // as "A difficult moment". The quickbar has this (chat-history.js
+        // `crisisRoute`/`keepsInThread`) and so does the phone: this page did
+        // not read the flag at all, so the next question carried the owner's
+        // crisis words and the 988/911 help back to the model.
+        crisisTurn = route.wellbeing === "crisis";
         // "Make the animal sharper" (Animal options, 2026-09-28; JARVIS-API
         // section 60.3): sharpness and frame rate are kept per device, so
         // the PC names the change and THIS computer applies it - the same
@@ -2046,7 +2057,15 @@ async function send(){
       $("tools-used").innerHTML = calls
         .map(c => `<span class="toolchip">${apprEscape(c.function?.name || "tool")}</span>`).join("");
     }
-    S.messages.push({role:"assistant", content:full});
+    if(crisisTurn){
+      // Showed once, above, and now kept out of the prompt: take the question
+      // back out as well, so the next request is not left with a user turn
+      // that has no answer beside it (the same repair the error path makes).
+      const last = S.messages[S.messages.length - 1];
+      if(last && last.role === "user" && last.content === text) S.messages.pop();
+    } else {
+      S.messages.push({role:"assistant", content:full});
+    }
     clearTimeout(watchdog); if(SEND_INFLIGHT === ctrl) SEND_INFLIGHT = null;
     $("r-latency").textContent = Math.round(performance.now()-started) + " ms";
     tracePromise.then(t => { if(t){ attachRecall(userNode, t); showTrace(t); } });
