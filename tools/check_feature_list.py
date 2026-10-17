@@ -36,6 +36,40 @@ BOTH DIRECTIONS, which is the whole point:
      step. The same rule `backend/test_base_matches_repo.py` already applies to
      the backend copies, so this is one precedent rather than a new idea.
 
+WHAT `surface` IS NOT CHECKED AGAINST, AND WHY NOT (2026-10-16)
+
+`surface` is only required to be one of `("desktop", "phone", "both")` - never
+to be TRUE. That gap let three entries say `"phone"` for weeks while the
+desktop had the feature: PC help (`jarvis-desktop/src/pc-help.js`, Settings ->
+Hardware and models), "What did I believe on this date?" (`brain.js:2501`,
+`:3018`) and the rush-latch banner (`brain.js:1274-1290`). All three were
+corrected by hand; nothing here could have caught them. Two cross-checks were
+MEASURED before one was written, and both fail:
+
+  * `covers` ids that are a route in `tools/check_parity.py`: **0 of 131
+    entries.** The ids are menu ids (`brain.model.pc-help`) or the Brain's read
+    section names (`memory`, `models`, `skills`), so a direct match finds
+    nothing at all.
+  * Linked indirectly - a `covers` id that is a READ_ROUTES section name, then
+    its route, then the parity status: **10 of 131 entries (7.6%)**. On those it
+    is wrong in both directions. It flags `memory-tab` (a false positive:
+    `memory` there is the section name of the Memory TAB, not a claim about
+    `/api/memory/status`), and it cannot see either drift that motivated the
+    idea: `brain.model.pc-help` and `brain.trust.rush-latch` appear **0 times**
+    in READ_ROUTES, because PC help reaches `/api/pc/help` through
+    `hardware.rs` and the banner is drawn by `brain.js`. A check that stays
+    green through the case it exists for, and lies on the one case it reaches,
+    buys false confidence - which is why there is no such check here.
+
+What is true, for anyone weighing the alternative: 101 of the 131 entries are
+`"both"` and only 30 are not (19 `"desktop"`, 11 `"phone"`; #495 moves three of
+the phone ones to `"both"`). Each of those 30 is a claim that ONE APP LACKS A
+FEATURE - exactly the claim that misinformed the owner here. The shape that
+would close it is a written reason per such entry, a sentence like
+`docs/ARCHITECTURE.md` section 8's one-sided table, so that a later change of
+`surface` has to move the sentence with it. That is thirty sentences to write
+honestly, not a rule to add, so it is recorded here rather than half-built.
+
 WHY `INTERNAL` AND NOT "one entry per route": 249 backend routes are not 249
 features to a person - most are plumbing behind a button that IS listed. The
 allow-list below is what keeps "curated for reading" from meaning
