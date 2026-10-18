@@ -88,7 +88,14 @@ class Gate:
 
 
 def turn(messages, responses, *, enabled=(AG.RETIREMENT_TOOL,), gate=None, short=False,
-         cid="conv-ret", steps_out=None, stream=True):
+         cid=None, steps_out=None, stream=True):
+    # A fresh conversation id per turn. These nine scenarios are independent
+    # conversations; one fixed id made an early read in an earlier scenario
+    # taint the later ones (jarvis_agent now marks a conversation the moment a
+    # reading tool returns, security audit I6, so an aborted turn cannot leak
+    # outside text into the next). Reusing the id here tested the taint, not
+    # the retirement wiring; the product rule is unchanged for a real chat.
+    cid = cid or f"conv-ret-{time.time_ns()}"
     real_short = AG.short_list_on
     AG.short_list_on = lambda: short
     opener, calls = scripted_stream(responses)

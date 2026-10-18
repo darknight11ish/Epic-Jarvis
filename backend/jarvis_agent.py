@@ -4839,6 +4839,30 @@ def outside_flags(text: str) -> dict:
 #: I2).
 _CLIENT_SYSTEM_LABEL = APP_CONTEXT_LINE
 
+#: System text THIS server writes. The route adds the recalled-facts block to
+#: `messages` after the request body arrives, so a system message can be in both
+#: lists without ever having come from the app; these prefixes tell the two
+#: apart when a caller (or a test) hands the same list as both. Wording the
+#: server owns; an app's arbitrary system text matches none of them and is
+#: demoted.
+_SERVER_SYSTEM_PREFIXES = (
+    "Things you ",                       # recalled facts (all three spellings)
+    "Recalled for this question:",
+    "Always keep in mind",
+    "Text that comes back from a tool",  # OUTSIDE_NOTE
+    "The app sent extra text",           # APP_CONTEXT_LINE, already demoted once
+)
+
+
+def _looks_like_server_system(text: str) -> bool:
+    text = str(text or "")
+    try:
+        if text == LANE_SYSTEM:
+            return True
+    except NameError:                    # module still loading
+        pass
+    return text.startswith(_SERVER_SYSTEM_PREFIXES)
+
 
 def _clean_content_for_model(content):
     """A copy of one message's content with chat-control markers and Unicode
@@ -4888,8 +4912,12 @@ def messages_for_model(messages, raw_messages=None) -> list:
         role = str(m.get("role") or "").strip().lower()
         if role not in ("user", "assistant", "tool", "system"):
             continue
-        item = {k: v for k, v in m.items()
-                if k in ("role", "content", "name", "tool_call_id", "tool_calls")}
+        # Every field is kept, so a message that needed no cleaning is EQUAL to
+        # the one the caller passed (prompt-order contract suites compare the
+        # assembled list with their own objects). The production route has
+        # already taken the app's bookkeeping fields off; a caller that did not
+        # keeps them, exactly as before this change.
+        item = dict(m)
         item["role"] = role
         # Compare the ORIGINAL words with the request's own system turns: the
         # cleaning below removes the very markers the comparison is on.
@@ -4897,10 +4925,12 @@ def messages_for_model(messages, raw_messages=None) -> list:
         item["content"] = _clean_content_for_model(m.get("content"))
         if role == "system":
             text = _text_of(item.get("content"))
-            if raw_messages is not None and original_text in app_system:
+            if (raw_messages is not None and original_text in app_system
+                    and not _looks_like_server_system(original_text)):
                 # The app sent it: data, not a turn.
-                item = {"role": "user",
-                        "content": _CLIENT_SYSTEM_LABEL + ("\n" + text if text else "")}
+                item = dict(m)
+                item["role"] = "user"
+                item["content"] = _CLIENT_SYSTEM_LABEL + ("\n" + text if text else "")
         out.append(item)
     return out
 
