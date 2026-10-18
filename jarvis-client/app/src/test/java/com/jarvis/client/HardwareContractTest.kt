@@ -61,7 +61,8 @@ class HardwareContractTest {
                 "It is slowing itself down because it is hot.",
             Hardware.healthLine(pair.cards[0]),
         )
-        assertEquals("Now: 38 °C, using 10 of 184 watts, 0% busy.", Hardware.healthLine(pair.cards[1]))
+        assertEquals("Now: 38 °C, using 10 of 184 watts, 0% busy. " +
+            "It is not doing any work right now - that is normal.", Hardware.healthLine(pair.cards[1]))
         // Built-in graphics nvidia-smi does not see: nothing is said.
         assertNull(Hardware.healthLine(status("today_one_card").cards[1]))
     }

@@ -263,6 +263,79 @@ def query_cards(fresh: bool = False) -> list:
     return list(cards)
 
 
+# --------------------------------------------------------------------------
+#   Who is using a card, and how much (Pillar 20, 2026-10-17)
+# --------------------------------------------------------------------------
+#
+# MEASURED ON THIS PC (driver 617.42, 2026-10-17): the query ANSWERS, but
+# `used_memory` is "[N/A]" for every process, including the two
+# llama-server.exe on the 2060 - Windows does not report how much graphics
+# memory each program uses. So `used_mib` is None there and must stay None:
+# never 0, never a guess. WHICH card a program is on IS reported
+# (`gpu_uuid`), and that is the half the doctor can say honestly.
+
+APP_FIELDS = "gpu_uuid,pid,process_name,used_memory"
+APP_FIELDS_OLD = "pid,process_name,gpu_uuid,used_memory"
+_APP_CACHE_SECONDS = 30.0
+_app_cache: dict = {"at": -1e9, "apps": None}
+
+
+def parse_apps(text: str, fields: str = APP_FIELDS) -> list:
+    """Rows of `--query-compute-apps=<fields> --format=csv,noheader,nounits`
+    as dicts: {"pid", "name", "uuid", "used_mib"}. `used_mib` is None when the
+    driver says "[N/A]" - which is every process on this PC - never a made-up
+    0. A line that does not parse is skipped, never guessed at."""
+    names = fields.split(",")
+    out = []
+    for line in str(text or "").splitlines():
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) != len(names):
+            continue
+        row = dict(zip(names, parts))
+        try:
+            pid = int(row["pid"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if pid <= 0:
+            continue
+        used = _num(row.get("used_memory", ""))
+        uuid = str(row.get("gpu_uuid", "") or "")
+        if not uuid.startswith("GPU-"):
+            uuid = ""
+        out.append({"pid": pid, "name": str(row.get("process_name", "") or ""),
+                    "uuid": uuid,
+                    "used_mib": int(round(used)) if used is not None and used >= 0 else None})
+    return out
+
+
+def query_apps(fresh: bool = False) -> list:
+    """Every process nvidia-smi names on a card, cached for 30 seconds. []
+    when nvidia-smi is missing, refuses, or names none. Never raises. Follows
+    query_cards' shape: at most one process per call, both field orders tried,
+    a line that does not parse is skipped rather than guessed at."""
+    now = time.monotonic()
+    if (not fresh and _app_cache["apps"] is not None
+            and now - _app_cache["at"] < _APP_CACHE_SECONDS):
+        return list(_app_cache["apps"])
+    apps: list = []
+    for fields in (APP_FIELDS, APP_FIELDS_OLD):
+        try:
+            out = _run_smi([f"--query-compute-apps={fields}",
+                            "--format=csv,noheader,nounits"])
+        except Exception:
+            out = None
+        if out is None:
+            continue
+        try:
+            apps = parse_apps(out, fields)
+        except Exception:
+            apps = []
+        if apps:
+            break
+    _app_cache.update(at=now, apps=list(apps))
+    return list(apps)
+
+
 def devices() -> list:
     """The GPUs, via nvidia-smi. Empty list if there are none or it is absent.
 

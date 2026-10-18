@@ -411,11 +411,34 @@ def gpu_memory_used(fresh: bool = False) -> tuple:
 # notification (the feasibility audit's Overwhelm guardrail: "one line per
 # card; no new 'card is hot' notification").
 
+#: The richest query. `pstate`, the clocks and `gpu_idle`/`sw_power_cap` were
+#: measured to answer on this PC, driver 617.42 (2026-10-17), and they are what
+#: tells "resting" apart from "slowing itself down": at idle both cards sit at
+#: P8/300 MHz, the 2060 reports `sw_power_cap: Active` while idle, and the
+#: 2080 SUPER reports `gpu_idle: Active` -- so no single reason flag can be
+#: trusted as "throttling". The thermal slow-down reasons stay exactly where
+#: they were; an older driver refuses the WHOLE query for a field it does not
+#: know, so each older shape below is tried in turn and never loses the card
+#: list itself.
 HEALTH_FIELDS = ("index,uuid,temperature.gpu,power.draw,power.limit,fan.speed,"
-                 "utilization.gpu,clocks_event_reasons.hw_thermal_slowdown,"
+                 "utilization.gpu,pstate,clocks.current.graphics,clocks.max.graphics,"
+                 "clocks_event_reasons.gpu_idle,clocks_event_reasons.sw_power_cap,"
+                 "clocks_event_reasons.hw_thermal_slowdown,"
                  "clocks_event_reasons.sw_thermal_slowdown")
 HEALTH_FIELDS_OLD = HEALTH_FIELDS.replace("clocks_event_reasons", "clocks_throttle_reasons")
+#: The shape every driver this module knew before 2026-10-17 could answer:
+#: heat, power, fan, load and the two thermal slow-down reasons. Kept as its
+#: own shape so a driver too old for `pstate` still gets a reading (with the
+#: state honestly unknown), instead of falling all the way to no reasons at all.
+HEALTH_FIELDS_PLAIN = ("index,uuid,temperature.gpu,power.draw,power.limit,fan.speed,"
+                       "utilization.gpu,clocks_event_reasons.hw_thermal_slowdown,"
+                       "clocks_event_reasons.sw_thermal_slowdown")
+HEALTH_FIELDS_PLAIN_OLD = HEALTH_FIELDS_PLAIN.replace("clocks_event_reasons",
+                                                     "clocks_throttle_reasons")
 HEALTH_FIELDS_OLDEST = "index,uuid,temperature.gpu,power.draw,fan.speed,utilization.gpu"
+#: Tried in this order by `_read_health`; the first shape that parses wins.
+HEALTH_FIELDS_SHAPES = (HEALTH_FIELDS, HEALTH_FIELDS_OLD, HEALTH_FIELDS_PLAIN,
+                        HEALTH_FIELDS_PLAIN_OLD, HEALTH_FIELDS_OLDEST)
 _HEALTH_SECONDS = 5.0
 _HEALTH: dict = {"at": -1e9, "rows": None}
 _HEALTH_LOCK = threading.Lock()
@@ -431,9 +454,13 @@ def _smi_num(text) -> Optional[float]:
 
 def parse_health(text: str, fields: str = HEALTH_FIELDS) -> list:
     """Rows of the health query as dicts: index, uuid, temp_c, power_w,
-    power_limit_w, fan_percent, load_percent, hot_slowdown (True / False /
-    None when the driver does not say). A line that does not parse is
-    skipped."""
+    power_limit_w, fan_percent, load_percent, pstate, clock_mhz, max_clock_mhz,
+    idle, power_capped, hot_slowdown (True / False / None when the driver does
+    not say). A line that does not parse is skipped.
+
+    The three state fields are read by SUFFIX, so the same parser reads a new
+    `clocks_event_reasons` driver and an older `clocks_throttle_reasons` one,
+    and a plain shape without them gets None - never a guess."""
     names = fields.split(",")
     out = []
     for line in str(text or "").splitlines():
@@ -455,14 +482,32 @@ def parse_health(text: str, fields: str = HEALTH_FIELDS) -> list:
             v = _smi_num(row.get(key))
             return round(v, 1) if v is not None and v >= 0 else None
 
+        def flag(key):
+            """True/False for a `...reasons.<name>: Active` column, else None."""
+            v = str(row.get(key) or "").strip().lower()
+            return True if v == "active" else False if v == "not active" else None
+
         slow = [row[k].lower() for k in row if k.endswith("thermal_slowdown")]
         hot = None
         if slow and all(s in ("active", "not active") for s in slow):
             hot = any(s == "active" for s in slow)
+        pstate = str(row.get("pstate") or "").strip().upper()
+        if not re.fullmatch(r"P\d+", pstate):
+            pstate = ""
+        idle = power_capped = None
+        for key in row:
+            if key.endswith("gpu_idle"):
+                idle = flag(key)
+            elif key.endswith("sw_power_cap"):
+                power_capped = flag(key)
         out.append({"index": index, "uuid": uuid if uuid.startswith("GPU-") else "",
                     "temp_c": whole("temperature.gpu"), "power_w": watts("power.draw"),
                     "power_limit_w": watts("power.limit"), "fan_percent": whole("fan.speed"),
-                    "load_percent": whole("utilization.gpu"), "hot_slowdown": hot})
+                    "load_percent": whole("utilization.gpu"),
+                    "pstate": pstate or None,
+                    "clock_mhz": whole("clocks.current.graphics"),
+                    "max_clock_mhz": whole("clocks.max.graphics"),
+                    "idle": idle, "power_capped": power_capped, "hot_slowdown": hot})
     return out
 
 
@@ -475,7 +520,7 @@ def _read_health() -> list:
             return list(_HEALTH["rows"])
     rows: list = []
     if compute is not None:
-        for fields in (HEALTH_FIELDS, HEALTH_FIELDS_OLD, HEALTH_FIELDS_OLDEST):
+        for fields in HEALTH_FIELDS_SHAPES:
             try:
                 text = compute._run_smi([f"--query-gpu={fields}",
                                          "--format=csv,noheader,nounits"])
@@ -511,11 +556,43 @@ def health_for(row: dict, readings: list) -> Optional[dict]:
     return None
 
 
+def card_state(h: Optional[dict]) -> str:
+    """What a card is doing, from readings, as one of five plain states:
+    "hot", "idle", "power_limited", "working" or "unknown". Never a guess.
+
+    THE MEASURED TRAP (2026-10-17, driver 617.42): at idle both cards sit at
+    P8/300 MHz, the RTX 2060 reports `sw_power_cap: Active` while idle and the
+    RTX 2080 SUPER reports `gpu_idle: Active`. So NO single reason flag may be
+    read as "throttling". A card is idle only when the load is low AND the
+    state/clocks agree; "power_limited" needs a genuinely busy card as well;
+    "hot" is the driver's own thermal slow-down reason and nothing else."""
+    if not h:
+        return "unknown"
+    if h.get("hot_slowdown") is True:
+        return "hot"
+    load = h.get("load_percent")
+    pstate = str(h.get("pstate") or "").strip().upper()
+    clock, top = h.get("clock_mhz"), h.get("max_clock_mhz")
+    low_clock = (clock is not None and isinstance(top, int) and top > 0
+                 and clock <= 0.35 * top)
+    resting = pstate == "P8" or low_clock
+    if isinstance(load, int) and load <= 5 and resting:
+        return "idle"
+    if h.get("power_capped") is True and isinstance(load, int) and load >= 50:
+        return "power_limited"
+    known = any(h.get(k) is not None for k in
+                ("temp_c", "power_w", "load_percent", "clock_mhz", "pstate",
+                 "hot_slowdown"))
+    return "working" if known else "unknown"
+
+
 def health_words(h: Optional[dict]) -> Optional[str]:
     """One plain line for a card's health, the same on both apps: "64 °C,
-    using 120 of 250 watts, fan at 40%, 30% busy." - and, when the driver
-    says so, "It is slowing itself down because it is hot." None when
-    nothing was read."""
+    using 120 of 250 watts, fan at 40%, 30% busy." - plus, when the readings
+    say so, "It is slowing itself down because it is hot." (driver's thermal
+    reason), "It is not doing any work right now - that is normal." (idle) or
+    "It is at its power limit, which is normal while it is working hard."
+    None when nothing was read."""
     if not h:
         return None
     bits = []
@@ -533,8 +610,15 @@ def health_words(h: Optional[dict]) -> Optional[str]:
     if not bits and h.get("hot_slowdown") is None:
         return None
     line = (", ".join(bits) + ".") if bits else ""
-    if h.get("hot_slowdown") is True:
+    state = card_state(h)
+    if state == "hot":
         line = (line + " " if line else "") + "It is slowing itself down because it is hot."
+    elif state == "idle":
+        line = (line + " " if line else "") + ("It is not doing any work right now - "
+                                               "that is normal.")
+    elif state == "power_limited":
+        line = (line + " " if line else "") + ("It is at its power limit, which is normal "
+                                               "while it is working hard.")
     return line[:1].upper() + line[1:] if line else None
 
 
@@ -856,7 +940,12 @@ def _detect(fresh: bool) -> dict:
             rows.append({
                 "name": s.name, "total_gib": s.total_mb / 1024, "vendor": "nvidia",
                 "route": "CUDA", "compute": str(s.compute_cap) if s.compute_cap else "",
-                "uuid": s.uuid or "", "pci_id": "", "monitor": s.display_active,
+                # `pci_id` survives even when Ollama's log is missing: the
+                # planned third card is a SECOND 8 GB 2080 SUPER, and the bus
+                # address is the only exact key that tells the twins apart when
+                # the log's GPU- id is not there to join on (2026-10-16/17).
+                "uuid": s.uuid or "", "pci_id": getattr(s, "pci_id", "") or "",
+                "monitor": s.display_active,
                 "free_gib": s.free_mb / 1024, "share_gib": share, "share_how": how,
                 # No log: assumed usable, and said so.
                 "used": True, "why_unused": "",
@@ -871,7 +960,8 @@ def _detect(fresh: bool) -> dict:
             used_reg.add(ri)
         rows.append(_unused_row(s.name, s.total_mb / 1024, "nvidia", log,
                                 ["nvidia-smi"] + (["the registry"] if ri is not None else []),
-                                uuid=s.uuid or "", monitor=s.display_active, index=s.index))
+                                uuid=s.uuid or "", pci_id=getattr(s, "pci_id", "") or "",
+                                monitor=s.display_active, index=s.index))
     for i, r in enumerate(reg):
         if i in used_reg:
             continue
@@ -903,7 +993,8 @@ def _detect(fresh: bool) -> dict:
             "found": _found_sentence(rows, planned, log)}
 
 
-def _unused_row(name, total, vendor, log, sources, *, uuid="", monitor=None, index=None) -> dict:
+def _unused_row(name, total, vendor, log, sources, *, uuid="", pci_id="", monitor=None,
+                index=None) -> dict:
     why = ""
     if log is not None:
         for d in log["dropped"]:
@@ -921,7 +1012,7 @@ def _unused_row(name, total, vendor, log, sources, *, uuid="", monitor=None, ind
         why = ("Ollama's log was not found, so Jarvis cannot tell whether Ollama can use it. "
                "Start Ollama once, then look again")
     return {"name": name, "total_gib": total, "vendor": vendor, "route": "", "compute": "",
-            "uuid": uuid, "pci_id": "", "monitor": monitor, "free_gib": None,
+            "uuid": uuid, "pci_id": pci_id or "", "monitor": monitor, "free_gib": None,
             "share_gib": None, "share_how": "", "used": False, "why_unused": why,
             "sources": sources, "index": index}
 
@@ -1246,6 +1337,14 @@ def _card_row(row: dict, planned: list, ranked_first: Optional[P.Card],
         "key": row["key"], "name": row["name"],
         "total_gb": round(row["total_gib"], 1) if row["total_gib"] else None,
         "free_gb": round(row["free_gib"], 1) if row["free_gib"] is not None else None,
+        # 2026-10-17 (Pillar 20): identity and per-card usage for the doctor
+        # sentences and a later per-card panel. Additive keys only - both apps
+        # ignore keys they do not know, so nothing that reads this answer can
+        # break on them, and a card the driver cannot measure reads None.
+        "pci_id": row["pci_id"] or None,
+        "index": row["index"],
+        "used_gb": (round(max(0.0, row["total_gib"] - row["free_gib"]), 1)
+                    if row["free_gib"] is not None and row["total_gib"] else None),
         "vendor": row["vendor"], "route": row["route"] or None,
         "generation": gen or None, "monitor": row["monitor"], "uuid": row["uuid"] or None,
         "used": row["used"], "why_unused": row["why_unused"] or None,

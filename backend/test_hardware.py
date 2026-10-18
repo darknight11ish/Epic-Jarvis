@@ -378,8 +378,9 @@ def t_status_today():
 
 
 def t_every_cards_health():
-    """I12 (2026-09-26): heat, power, fan, load and "slowing down because
-    hot" for EVERY card, not only the first nvidia-smi line."""
+    """I12 (2026-09-26), extended for Pillar 20 (2026-10-17): heat, power, fan,
+    load, the card's state and "slowing down because hot" for EVERY card, not
+    only the first nvidia-smi line."""
     rows = H.parse_health(G.HEALTH_PAIR)
     check("health: both cards are read, not only the first line", [r["index"] for r in rows] == [0, 1]
           and rows[1]["uuid"] == G.U_2060, rows)
@@ -387,19 +388,30 @@ def t_every_cards_health():
           and rows[1]["temp_c"] == 38 and rows[1]["power_w"] == 9.8)
     check("health: the driver's thermal slow-down reason is read",
           rows[0]["hot_slowdown"] is True and rows[1]["hot_slowdown"] is False)
-    old = G.HEALTH_PAIR
+    check("health: pstate, the clocks, the idle flag and the power-cap flag are read",
+          rows[0]["pstate"] == "P0" and rows[0]["clock_mhz"] == 1935
+          and rows[0]["max_clock_mhz"] == 2100
+          and rows[1]["pstate"] == "P8" and rows[1]["clock_mhz"] == 300
+          and rows[1]["idle"] is False and rows[1]["power_capped"] is True, rows)
+    old = G.HEALTH_PLAIN_PAIR
     oldest = "0, GPU-x, 55, 100.0, 40, 50\n"
     check("health: an older driver's shape without the reasons says 'not told', not 'no'",
           H.parse_health(oldest, H.HEALTH_FIELDS_OLDEST)[0]["hot_slowdown"] is None)
+    check("health: a plain 9-column shape keeps working, with the state honestly unknown",
+          [r["hot_slowdown"] for r in H.parse_health(old, H.HEALTH_FIELDS_PLAIN)]
+          == [True, False]
+          and H.parse_health(old, H.HEALTH_FIELDS_PLAIN)[0]["pstate"] is None
+          and H.parse_health(old, H.HEALTH_FIELDS_PLAIN)[0]["idle"] is None)
     check("health: a line that does not parse is skipped",
-          H.parse_health("garbage\n" + old) == rows)
-    # A driver that refuses the new field name gets the old one, then none.
+          H.parse_health("garbage\n" + old, H.HEALTH_FIELDS_PLAIN)
+          == H.parse_health(old, H.HEALTH_FIELDS_PLAIN))
+    # A driver that refuses the new fields gets the plain shape next.
     asked = []
 
     def smi(args):
         asked.append(args[0])
-        if args[0] == f"--query-gpu={H.HEALTH_FIELDS_OLD}":
-            return G.HEALTH_PAIR
+        if args[0] == f"--query-gpu={H.HEALTH_FIELDS_PLAIN}":
+            return G.HEALTH_PLAIN_PAIR
         return None
     saved = CP._run_smi
     CP._run_smi = smi
@@ -409,15 +421,23 @@ def t_every_cards_health():
     finally:
         CP._run_smi = saved
         H._reset_for_tests()
-    check("health: an older driver ('clocks_throttle_reasons') is asked next",
-          asked[:2] == [f"--query-gpu={H.HEALTH_FIELDS}", f"--query-gpu={H.HEALTH_FIELDS_OLD}"]
-          and len(got) == 2, asked)
+    check("health: a driver refusing pstate is asked the plain shape next, and still answers",
+          asked[:3] == [f"--query-gpu={H.HEALTH_FIELDS}", f"--query-gpu={H.HEALTH_FIELDS_OLD}",
+                        f"--query-gpu={H.HEALTH_FIELDS_PLAIN}"]
+          and len(got) == 2 and got[0]["pstate"] is None, asked)
     check("health words: one plain line, the same both apps show",
-          H.health_words(rows[1]) == "38 °C, using 10 of 184 watts, 0% busy.", H.health_words(rows[1]))
+          H.health_words(rows[1]) == ("38 °C, using 10 of 184 watts, 0% busy. It is not doing "
+                                      "any work right now - that is normal."),
+          H.health_words(rows[1]))
     check("health words: a hot card that slows itself says so",
           H.health_words(rows[0]).endswith("It is slowing itself down because it is hot."))
     check("health words: nothing read, nothing said", H.health_words(None) is None
           and H.health_words({"temp_c": None, "hot_slowdown": None}) is None)
+    check("card state: the idle 2060 is 'idle' even though its power-cap flag is Active",
+          H.card_state(rows[1]) == "idle", H.card_state(rows[1]))
+    check("card state: the hot 2080 SUPER is 'hot'", H.card_state(rows[0]) == "hot")
+    check("card state: no readings, no state", H.card_state(None) == "unknown"
+          and H.card_state({}) == "unknown")
     # Matched by the card's own id - never by position alone when ids exist.
     swapped = [dict(rows[1], index=0), dict(rows[0], index=1)]
     check("health is matched to its card by the GPU- id, not the line order",
@@ -429,9 +449,64 @@ def t_every_cards_health():
     check("GET /api/hardware: BOTH cards of the planned pair carry their health and its words",
           [c["health"]["temp_c"] for c in pair] == [84, 38]
           and all(c["health_words"] for c in pair), [c.get("health_words") for c in pair])
+    check("... and the idle card's line says it is resting, in words",
+          "not doing any work right now" in pair[1]["health_words"], pair[1]["health_words"])
     uhd = data["today_one_card"]["cards"][1]
     check("... and built-in graphics nvidia-smi does not see has none",
           uhd["health"] is None and uhd["health_words"] is None)
+
+
+def t_an_idle_card_is_not_called_throttled():
+    """The measured trap (2026-10-17): an idle card reports
+    `sw_power_cap: Active` (the 2060 does on this PC), and the other one
+    reports `gpu_idle: Active`. Neither may be turned into "throttled" or
+    "hot": only the driver's own thermal reason is."""
+    idle = H.parse_health(f"0, {G.U_2060}, 29, 11.60, 184.00, 0, 0, P8, 300, 2145, "
+                          f"Not Active, Active, Not Active, Not Active\n")[0]
+    check("an idle card with the power-cap flag Active is still only resting",
+          H.card_state(idle) == "idle")
+    words = H.health_words(idle)
+    check("... its words say resting, and never 'throttl' or 'hot'",
+          "not doing any work" in words and "throttl" not in words.lower()
+          and "hot" not in words.lower(), words)
+    other = H.parse_health(f"0, {G.U_2080S}, 35, 21.06, 250.00, 0, 0, P8, 300, 2130, "
+                           f"Active, Not Active, Not Active, Not Active\n")[0]
+    check("... and the one whose gpu_idle flag is Active reads the same way",
+          H.card_state(other) == "idle", other)
+
+
+def t_a_busy_card_at_its_power_limit_is_not_a_fault():
+    """A busy card at its power limit is normal - the words say so, and never
+    call it hot or broken."""
+    row = H.parse_health(f"0, {G.U_2080S}, 76, 248.00, 250.00, 70, 99, P0, 1900, 2100, "
+                         f"Not Active, Active, Not Active, Not Active\n")[0]
+    check("a busy card at its power limit is 'power_limited'",
+          H.card_state(row) == "power_limited", H.card_state(row))
+    words = H.health_words(row)
+    check("... and its words call that normal, never hot or broken",
+          "power limit" in words and "normal" in words and "hot" not in words.lower(), words)
+
+
+def t_the_status_cards_keep_their_identity_and_usage():
+    """Pillar 20: `GET /api/hardware` must say WHICH card each row is (the
+    planned twin 2080 SUPERs share a name and a size), and how much of it is
+    used. pci_id matters most when Ollama's log is missing - the case this
+    used to throw away ("")."""
+    with G.World(smi=SMI_TWINS, log=None, reg=None) as w:
+        status = H.status()
+    cards = status["cards"]
+    check("two identical cards: each status row carries a distinct PCI bus id",
+          len(cards) == 2 and all(c["pci_id"] for c in cards)
+          and len({c["pci_id"] for c in cards}) == 2, [(c["name"], c["pci_id"]) for c in cards])
+    check("... its own nvidia-smi index, and its measured used memory",
+          [c["index"] for c in cards] == [0, 1]
+          and [c["used_gb"] for c in cards] == [1.2, 1.1], status["cards"])
+    with G.World(smi=G.SMI_2080S, log=LOG1, reg=G.reg_text([G.REG_2080S]),
+                 user_env=G.TODAY_ENV, health=G.HEALTH_2080S) as w:
+        one = H.status()["cards"][0]
+    check("one card: the status row keeps the PCI id Ollama's log carried",
+          one["pci_id"] == "0000:0a:00.0", one)
+    check("... used_gb is measured total minus free, in GB", one["used_gb"] == 1.2, one["used_gb"])
 
 
 def t_nothing_changes_until_chosen():

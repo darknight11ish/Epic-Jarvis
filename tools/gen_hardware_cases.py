@@ -303,12 +303,25 @@ def reg_text(adapters) -> str:
 #: `_pci_key` compares them by dropping the domain's leading zeros.
 SMI_2080S = f"0, {U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6980, 7.5, Enabled, 00000000:0a:00.0\n"
 SMI_PAIR = (SMI_2080S + f"1, {U_2060}, NVIDIA GeForce RTX 2060, 12288, 11650, 7.5, Disabled, 00000000:0b:00.0\n")
-#: The health query's answer (jarvis_hardware.HEALTH_FIELDS), made up in
-#: nvidia-smi's own format: the 2080 SUPER busy and warm; the 2060 idle, its
-#: fan stopped, which some cards report as "[N/A]".
-HEALTH_2080S = f"0, {U_2080S}, 67, 182.40, 250.00, 48, 91, Not Active, Not Active\n"
-HEALTH_PAIR = (f"0, {U_2080S}, 84, 247.10, 250.00, 78, 99, Active, Not Active\n"
-               f"1, {U_2060}, 38, 9.85, 184.00, [N/A], 0, Not Active, Not Active\n")
+#: The health query's answer (`jarvis_hardware.HEALTH_FIELDS`, the 14-column
+#: shape added 2026-10-17): heat, power, fan, load, pstate, the clocks,
+#: "is it idle", "is it at its power limit" and the driver's thermal slow-down
+#: reasons. Made up in nvidia-smi's own format, from the shape measured on the
+#: owner's PC (driver 617.42): the 2080 SUPER busy and warm; the 2060 idle at
+#: P8/300 MHz with its fan stopped ("[N/A]") - and, exactly as measured on this
+#: PC, `sw_power_cap: Active` while idle, which the words must NOT call hot or
+#: throttled.
+HEALTH_2080S = (f"0, {U_2080S}, 67, 182.40, 250.00, 48, 91, P2, 1695, 2100, "
+                f"Not Active, Not Active, Not Active, Not Active\n")
+HEALTH_PAIR = (f"0, {U_2080S}, 84, 247.10, 250.00, 78, 99, P0, 1935, 2100, "
+               f"Not Active, Active, Active, Not Active\n"
+               f"1, {U_2060}, 38, 9.85, 184.00, [N/A], 0, P8, 300, 2145, "
+               f"Not Active, Active, Not Active, Not Active\n")
+#: The 9-column shape every driver knew before 2026-10-17 (heat, power, fan,
+#: load, thermal reasons only) - the fallback for an older driver that refuses
+#: the newer fields, so the state reads "not told" and never a guess.
+HEALTH_PLAIN_PAIR = (f"0, {U_2080S}, 84, 247.10, 250.00, 78, 99, Active, Not Active\n"
+                     f"1, {U_2060}, 38, 9.85, 184.00, [N/A], 0, Not Active, Not Active\n")
 LOG_2080S = {"uuid": U_2080S, "library": "CUDA", "compute": "7.5",
              "name": "NVIDIA GeForce RTX 2080 SUPER", "total": "8.0 GiB",
              "available": "6.9 GiB"}
@@ -334,9 +347,10 @@ class World:
 
     def __init__(self, *, smi="", log=None, reg=None, installed=("jarvis-primary",),
                  loaded=(), current="jarvis-primary", windows=True, user_env=None,
-                 shows=None, ollama_up=True, spawn_now=True, gate_waiting=(), health=""):
+                 shows=None, ollama_up=True, spawn_now=True, gate_waiting=(), health="",
+                 health_plain=""):
         self.smi, self.log, self.reg = smi, log, reg
-        self.health = health
+        self.health, self.health_plain = health, health_plain
         self.installed, self.loaded = list(installed), [dict(x) for x in loaded]
         self.current, self.windows = current, windows
         self.user_env = dict(user_env or {})
@@ -353,6 +367,8 @@ class World:
             return self.smi or None
         if q == f"--query-gpu={H.HEALTH_FIELDS}":
             return self.health or None
+        if q == f"--query-gpu={H.HEALTH_FIELDS_PLAIN}":
+            return self.health_plain or None
         return None
 
     def http_json(self, url, payload=None, timeout=2.0):
