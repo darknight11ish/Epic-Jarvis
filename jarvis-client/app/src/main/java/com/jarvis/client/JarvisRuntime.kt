@@ -4918,6 +4918,33 @@ object JarvisRuntime {
         }
     }
 
+    // ---------------------- the data and maths sandbox ----------------------
+    // LM-1C, 2026-10-18; backend/jarvis_sandbox_exec.py and the drop-in folder
+    // plugins/ready/sandbox/. This phone only shows what the PC says and asks
+    // it to change: it never runs a script and never sees a file or a piece of
+    // data. ON is the normal approval card on the PC; OFF is instant.
+
+    /** `GET /api/sandbox`. */
+    suspend fun sandboxExecSettings(): ApiResult<JsonObject> = api.sandboxExecSettings()
+
+    /**
+     * The switch. ON is held on a stale link (rule 4) and raises an approval
+     * card on the PC; OFF is never held. @return the sentence to show under
+     * the switch.
+     */
+    suspend fun setSandboxExec(on: Boolean): String {
+        if (on) actionBlocker()?.let { return it }
+        return when (val r = writeNoticingCards { api.setSandboxExec(on) }) {
+            is ApiResult.Ok -> com.jarvis.client.net.SandboxExec.said(on, r.value)
+            is ApiResult.Failed ->
+                if (com.jarvis.client.net.SandboxExec.missing(r.error)) {
+                    com.jarvis.client.net.SandboxExec.MISSING
+                } else {
+                    "Not changed. " + describe(r.error)
+                }
+        }
+    }
+
     // ---------------------- how long the hand-off stays on offer ----------
     // The owner's decision of 2026-10-08 ("make this a setting for both options
     // with 1 as the default"); backend/jarvis_handoff_mode.py; see

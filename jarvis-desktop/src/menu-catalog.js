@@ -1018,6 +1018,30 @@ export const MENUS = [
     ]
   },
   {
+    "id": "settings.sandbox",
+    "title": "Data and maths sandbox",
+    "about": "Let the AI model run small Python scripts for sums and averages.",
+    "apps": [
+      "desktop",
+      "phone"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "card",
+    "group": null,
+    "parent": null,
+    "hide": true,
+    "collapse": true,
+    "why": "",
+    "names": [
+      "data sandbox",
+      "the data sandbox",
+      "python sandbox",
+      "the python sandbox",
+      "data and maths sandbox"
+    ]
+  },
+  {
     "id": "settings.limits",
     "title": "Limits and frequency",
     "about": "How long an Undo stays possible, how much Jarvis gets on with at once, and the other numbers you can change.",
@@ -2722,6 +2746,8 @@ export const ALIASES = {
   "crisis help": "safety.crisis-help",
   "custom voices": "settings.voices",
   "customer support": "brain.work.support",
+  "data and maths sandbox": "settings.sandbox",
+  "data sandbox": "settings.sandbox",
   "decks": "brain.work.decks",
   "deep questions": "brain.memory.deep",
   "desktop notifications": "settings.notifications",
@@ -2822,6 +2848,7 @@ export const ALIASES = {
   "projects": "brain.tab.projects",
   "projects and goals": "group.goals-projects",
   "prompt coach": "settings.prompt-coach",
+  "python sandbox": "settings.sandbox",
   "quick settings tiles": "settings.quick-tiles",
   "quick tiles": "settings.quick-tiles",
   "quiz": "brain.work.quiz",

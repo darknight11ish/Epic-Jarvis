@@ -85,6 +85,12 @@ object MenuPlaces {
         // MenuVisibilityTest's "not a menu" list, so the row is hideable like
         // every other section and the test's own rule is kept, not relaxed.
         "screen-rate" to "settings.screen-rate",
+        // "Data and maths sandbox" (LM-1C, 2026-10-18): SettingsScreen.kt draws
+        // it behind `menus.shows("settings.sandbox")` with a MenuFrame of its
+        // own. Without this line the new section would have no PLACE here - the
+        // phone could not hide it and its row would be an undecided item key -
+        // MenuVisibilityTest checks both halves.
+        "sandbox" to "settings.sandbox",
     )
 
     /** BrainScreen.kt `item(key = ...)` -> menu id (a key not listed is never hideable or is not a menu). */

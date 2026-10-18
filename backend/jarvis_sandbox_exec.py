@@ -126,11 +126,12 @@ WHAT THIS MODULE DOES NOT DO, SAID PLAINLY
     all, and every actual run is decided by the agent under the existing
     `file_read` / `calculator` gate actions. The switch is changed through
     `request_enabled()`: ON is ONE normal settings approval card
-    (`change_own_config`, tier ask), OFF is immediate. There is no HTTP route
-    for it in this slice and no static Settings toggle is wired yet - the
-    reachable path tonight is the chat/voice one from either app
-    ("turn on the data sandbox"), which comes through
-    `jarvis_settings_registry` to `request_enabled()`.
+    (`change_own_config`, tier ask), OFF is immediate. Its route is
+    `GET/POST /api/sandbox` (LM-1C, 2026-10-18), installed by the drop-in
+    folder `plugins/ready/sandbox/` - no patch and no core edit - and both
+    apps draw the same switch from that one answer. The chat/voice phrase
+    ("turn on the data sandbox") reaches the same `request_enabled()` through
+    `jarvis_settings_registry`.
   * The switch never weakens a refusal: with it ON, every AST refusal, the wall
     clock, the output cap, the memory cap and the files-only rule behave
     exactly as they do with it OFF.
@@ -172,6 +173,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.parse
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -1382,8 +1384,7 @@ def request_enabled(on, *, gate: Optional[Callable] = None,
 
 
 def switch_state() -> dict:
-    """{"enabled", "waiting", "last"} - what a future settings row would read.
-    Not on a route and not drawn by either app yet (see the section note)."""
+    """{"enabled", "waiting", "last"} - the state, read by `view()` and tests."""
     with _LOCK:
         pending = dict(_PENDING)
         last = dict(_LAST_CARD)
@@ -1395,3 +1396,126 @@ def _reset_for_tests() -> None:
         _PENDING.clear()
         _WITHDRAWN.clear()
         _LAST_CARD.clear()
+
+
+# --------------------------------------------------------------------------
+#   THE ROUTE (LM-1C, 2026-10-18): GET state / POST the switch, no patch
+# --------------------------------------------------------------------------
+# Installed by `plugins/ready/sandbox/plugin.json` through the core's own
+# plugin loader, exactly as jarvis_receipts.py, jarvis_watch_notify.py and
+# jarvis_browser_engine.py are - so this adds NO patch and edits no core file.
+#
+#   GET  /api/sandbox             the state, in the PC's own words
+#   POST /api/sandbox {"enabled": true|false}
+#                                 ON -> request_enabled() -> ONE approval card,
+#                                 202 {"waiting": true}; OFF -> 200 at once.
+#
+# The POST handler NEVER writes the setting itself: it calls
+# `request_enabled()` and nothing else. A direct POST with any other field, or
+# with `enabled: true`, cannot flip the switch without a person's approved
+# card - that is checked in backend/test_sandbox_exec.py, not promised here.
+#
+# The origin check runs BEFORE the request body is read, so a request from
+# another device / cross-origin is refused with 403 and its body is never
+# touched; a wrong token is 401. That is the same shape every route in this
+# repository uses (jarvis_watch_notify.install).
+
+PATH = "/api/sandbox"
+
+
+def view() -> dict:
+    """What both Settings rows show, decided HERE so the two apps cannot
+    disagree: {"enabled", "waiting", "line", "status", "why", "last"}.
+
+    `line` is the honest state line, including what the last card did when it
+    was not a yes (denied, timed out, refused, could not save). `status` is the
+    same last-card sentence separately, for a screen that has room for it.
+    """
+    st = settings()
+    with _LOCK:
+        pending = dict(_PENDING)
+        last = dict(_LAST_CARD)
+    enabled_now = st["enabled"]
+    waiting = bool(pending) and not enabled_now
+    if waiting:
+        line = SWITCH_WAITING_WORDS
+    elif enabled_now:
+        line = SWITCH_ON_WORDS
+    elif last.get("outcome") in SWITCH_LAST_WORDS:
+        line = str(last.get("message") or SWITCH_OFF_WORDS)
+    else:
+        line = SWITCH_OFF_WORDS
+    return {
+        "enabled": enabled_now,
+        "waiting": waiting,
+        "line": line,
+        "status": str(last.get("message") or ""),
+        "why": st["why"],
+        "last": ({"outcome": last.get("outcome"), "message": last.get("message", "")}
+                 if last else None),
+    }
+
+
+def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
+    """Wrap `handler_cls.do_GET` and `do_POST` so GET/POST /api/sandbox are
+    answered here, after the server's own origin and token checks. Every other
+    request goes straight to the original. Returns the banner line.
+
+    The origin check is first, so a cross-origin / other-device request is 403
+    before one byte of its body is read; a wrong token is 401. The POST handler
+    calls `request_enabled()` and never `set_enabled()`: one card, never a
+    direct write."""
+    get0, post0 = handler_cls.do_GET, handler_cls.do_POST
+    if getattr(post0, "_jarvis_sandbox_exec", False):
+        return "  sandbox    Data and maths sandbox answers at /api/sandbox (already on)"
+
+    def _allowed(self) -> bool:
+        try:
+            if not origin_ok(self):
+                self._send(403, {"error": "cross-origin request refused"})
+                return False
+            if not token_ok(self):
+                self._send(401, {"error": "bad or missing X-Jarvis-Token"})
+                return False
+        except Exception:
+            self._send(401, {"error": "bad or missing X-Jarvis-Token"})
+            return False
+        return True
+
+    def do_GET(self):
+        route = urllib.parse.urlsplit(str(getattr(self, "path", "") or "")).path.rstrip("/")
+        if route != PATH:
+            return get0(self)
+        if not _allowed(self):
+            return None
+        try:
+            out = view()
+        except Exception as exc:
+            return self._send(503, {"error": type(exc).__name__})
+        return self._send(200, out)
+
+    def do_POST(self):
+        route = urllib.parse.urlsplit(str(getattr(self, "path", "") or "")).path.rstrip("/")
+        if route != PATH:
+            return post0(self)
+        if not _allowed(self):
+            return None
+        try:
+            body = json.loads(read_body(self) or b"{}")
+        except Exception as exc:
+            return self._send(400, {"error": type(exc).__name__})
+        if not isinstance(body, dict):
+            return self._send(400, {"ok": False, "error": 'send {"enabled": true|false}'})
+        try:
+            code, out = request_enabled(body.get("enabled"))
+        except Exception as exc:
+            code, out = 503, {"ok": False, "error": type(exc).__name__}
+        return self._send(code, out)
+
+    do_GET._jarvis_sandbox_exec = True
+    do_POST._jarvis_sandbox_exec = True
+    handler_cls.do_GET = do_GET
+    handler_cls.do_POST = do_POST
+    return ("  sandbox    Data and maths sandbox: "
+            + ("on - the AI model is offered it" if enabled()
+               else "off - the AI model is not offered it"))

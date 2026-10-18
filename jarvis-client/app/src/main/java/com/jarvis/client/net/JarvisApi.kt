@@ -688,6 +688,20 @@ class JarvisApi(
     suspend fun setBrowserEngineMode(body: String): ApiResult<DesktopWrite.Outcome> =
         postWrite(BrowserEngine.PATH, body)
 
+    // ------------------------------------------------- the data sandbox ----
+    // docs/JARVIS-API.md section 142; see [SandboxExec] for the shapes and
+    // words. Decided on the PC like every other approval-card switch here.
+
+    /** `GET /api/sandbox`: `{"enabled", "waiting", "line", "status", "why", "last"}`. */
+    suspend fun sandboxExecSettings(): ApiResult<JsonObject> = probe(SandboxExec.PATH)
+
+    /**
+     * The switch. ON answers 202 waiting while its approval card is up; OFF is
+     * immediate, and withdraws an ON card still waiting.
+     */
+    suspend fun setSandboxExec(on: Boolean): ApiResult<DesktopWrite.Outcome> =
+        postWrite(SandboxExec.PATH, SandboxExec.enabledBody(on))
+
     // ------------------------------------------------- pairing and devices ----
     // docs/PAIRING-DESIGN.md §6.2 and §6.4.
 

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-sandbox-exec"
+description = "Enables the sandbox_exec command without any pre-configured scope."
+commands.allow = ["sandbox_exec"]
+
+[[permission]]
+identifier = "deny-sandbox-exec"
+description = "Denies the sandbox_exec command without any pre-configured scope."
+commands.deny = ["sandbox_exec"]

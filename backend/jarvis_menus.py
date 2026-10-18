@@ -378,6 +378,14 @@ MENUS: tuple = (
        names=("what asks first", "asks first", "what asks first settings")),
     _m("settings.reach", "What Jarvis can reach", "Which tools Jarvis may use.",
        names=("what jarvis can reach", "reach")),
+    # "Data and maths sandbox" (LM-1C, 2026-10-18): the switch that offers the
+    # small read-only Python tool to the AI model. A card on the desktop and a
+    # row on the phone, both from GET /api/sandbox; the plugin folder
+    # plugins/ready/sandbox/ answers that route.
+    _m("settings.sandbox", "Data and maths sandbox",
+       "Let the AI model run small Python scripts for sums and averages.",
+       names=("data sandbox", "the data sandbox", "python sandbox",
+              "the python sandbox", "data and maths sandbox")),
     # "Limits and frequency" (2026-10-08): the numbers the owner can change,
     # ONE table on the PC behind one read route and one write route. The
     # Both apps have a screen for it, so this is one menu for both.

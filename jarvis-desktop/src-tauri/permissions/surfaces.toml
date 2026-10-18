@@ -1555,6 +1555,17 @@ identifier = "browser-engine"
 description = "Read the headless browser's setting, ask to turn it on (one approval card on this PC), turn it off at once, or pick which browser Jarvis uses by default."
 permissions = ["allow-browser-engine"]
 
+# The data and maths sandbox's switch (sandbox_exec.rs; LM-1C, 2026-10-18;
+# backend/jarvis_sandbox_exec.py and the drop-in folder plugins/ready/sandbox/).
+# Whether the AI model is OFFERED the small read-only Python tool at all. Read
+# it, ask to turn it on (ONE normal approval card on this PC, held on a stale
+# link) or turn it off (at once). Only Settings shows it; it carries a switch
+# position and words - never a script, a file or a piece of data.
+[[set]]
+identifier = "sandbox-exec"
+description = "Read the data and maths sandbox's switch, ask to turn it on (one approval card on this PC) or turn it off at once."
+permissions = ["allow-sandbox-exec"]
+
 [[set]]
 identifier = "focus"
 description = "Read the focus session (a countdown, booleans and counts - never what was in front) and do ONE thing to it: pause, resume, +10 minutes, stop, or lock on where the owner lands. No card; resume, extend and lock are held on a stale link."

@@ -72,8 +72,10 @@ object SettingsCatalog {
         Row("supervise", null, "desktop", "start-jarvis", 26, "Let Jarvis Desktop start and stop Jarvis", "", null, null, false, true, null, null),
         Row("autostart", null, "desktop", "more-options", 27, "Start Jarvis Desktop when Windows starts", "", null, null, false, true, null, null),
         Row("pc-switch", "pictures", "desktop", "pictures", 28, "Making pictures", "", "pc-switch-label", null, false, true, null, null),
+        Row("sbx-switch", "sandbox_exec", "desktop", "sandbox", 29, "Let Jarvis run small Python scripts for sums and averages", "", "sbx-switch-label", null, false, true, null, null),
         Row("watch-notify", "smartwatch_notifications", "phone", "watch-notify", 1, "Show notifications on a compatible watch", "Off by default: every notification (approval cards, timers, reminders, \"tell me when\") stays on this phone only.", null, null, false, true, "watch-notify", "WatchNotifyPlate.kt:87-90"),
         Row("phone-notify", "phone_notifications", "phone", "phone-notify", 2, "Let your phone read notifications", "Off by default. Jarvis never sees a phone notification unless you turn this on AND add at least one app below.", null, null, false, true, "phone-notify", "PhoneNotificationsPlate.kt:107-110"),
+        Row("sandbox", "sandbox_exec", "phone", "sandbox", 3, "Data and maths sandbox", "Off by default. Let the AI model run a small Python script for sums, averages and percentages, in its own sandbox with no network and no file writes. Turning it on asks first.", null, null, false, true, "sandbox", "SandboxPlate.kt:120-126"),
     )
 
     private val BY_ID: Map<String, Row> = ROWS.associateBy { it.id }

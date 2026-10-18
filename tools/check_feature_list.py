@@ -241,6 +241,7 @@ LESSON_EXEMPT = {
     "settings-entry": "the way into Settings; the tray row and Ctrl+K say where",
     "start-the-model-lane": "one button on the standing line, which names the lane that is down and says what pressing it does",
     "restart-the-model-lane": "automatic and nothing to press; the line says what Jarvis did, in its own words",
+    "data-sandbox": "one switch in Settings whose card says what it does; the PC's own line says what the last card did",
 }
 
 #: Rule 6's exemptions: lessons that are deliberately NOT a feature row, each

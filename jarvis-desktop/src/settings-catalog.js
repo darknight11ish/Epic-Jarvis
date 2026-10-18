@@ -6,12 +6,12 @@
 
 export const SCHEMA = 1;
 export const COUNTS = {
-  "all": 30,
-  "desktop": 28,
-  "phone": 2,
+  "all": 32,
+  "desktop": 29,
+  "phone": 3,
   "fallback": 10,
-  "setting": 29,
-  "desktop_setting": 27
+  "setting": 31,
+  "desktop_setting": 28
 };
 export const MARKERS = {
   "begin": "<!-- settings-toggles:begin (tools/gen_settings_cases.py writes these; do not edit) -->",
@@ -635,6 +635,28 @@ export const ROWS = [
     "source": null
   },
   {
+    "id": "sbx-switch",
+    "setting": "sandbox_exec",
+    "owner": "desktop",
+    "section": "sandbox",
+    "order": 29,
+    "indent": 10,
+    "input": "sbx-switch",
+    "input_open": null,
+    "row_id": null,
+    "label_span": "sbx-switch-label",
+    "detail_span": null,
+    "label": "Let Jarvis run small Python scripts for sums and averages",
+    "detail": "",
+    "fallback": false,
+    "checked": false,
+    "hidden": false,
+    "data_live": false,
+    "setting_row": true,
+    "phone_key": null,
+    "source": null
+  },
+  {
     "id": "watch-notify",
     "setting": "smartwatch_notifications",
     "owner": "phone",
@@ -677,6 +699,28 @@ export const ROWS = [
     "setting_row": true,
     "phone_key": "phone-notify",
     "source": "PhoneNotificationsPlate.kt:107-110"
+  },
+  {
+    "id": "sandbox",
+    "setting": "sandbox_exec",
+    "owner": "phone",
+    "section": "sandbox",
+    "order": 3,
+    "indent": 8,
+    "input": "sandbox",
+    "input_open": null,
+    "row_id": null,
+    "label_span": null,
+    "detail_span": null,
+    "label": "Data and maths sandbox",
+    "detail": "Off by default. Let the AI model run a small Python script for sums, averages and percentages, in its own sandbox with no network and no file writes. Turning it on asks first.",
+    "fallback": false,
+    "checked": false,
+    "hidden": false,
+    "data_live": false,
+    "setting_row": true,
+    "phone_key": "sandbox",
+    "source": "SandboxPlate.kt:120-126"
   }
 ];
 

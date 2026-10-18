@@ -408,6 +408,16 @@ object SettingsSearch {
             source = JUMP + listOf("net/ChatHistory.kt"),
         ),
         Row(
+            // "Data and maths sandbox" (LM-1C, 2026-10-18): the switch that
+            // offers the small read-only Python tool to the AI model. The
+            // section's heading is SandboxExec's own constant, so the quote is
+            // looked for there rather than in the plate.
+            key = "sandbox", title = "Data and maths sandbox",
+            label = "Python; maths; data; sums; averages; script; sandbox; sandboxed code",
+            quotes = listOf("Data and maths sandbox"),
+            source = JUMP + listOf("net/SandboxExec.kt"),
+        ),
+        Row(
             key = SettingsJump.SEARCH_KEY, title = SettingsSearchWords.LABEL,
             label = SettingsSearchWords.PLACEHOLDER, quotes = emptyList(),
             source = SCREEN,

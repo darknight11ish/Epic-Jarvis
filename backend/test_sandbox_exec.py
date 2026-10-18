@@ -78,9 +78,18 @@ What it proves:
     leave it OFF. Turning it ON does not weaken one sandbox refusal (the same
     code is refused before and after). The registry's `set_sandbox_exec` -
     the chat/voice door both apps already have - calls exactly that function.
-    No Settings toggle row is shipped by this slice: a row that cannot be
-    clicked is worse than none, and the fixture check here bites if one is
-    added before LM-1C wires the surfaces.
+17. THE ROUTE AND BOTH SETTINGS ROWS (LM-1C, 2026-10-18): the drop-in folder
+    `plugins/ready/sandbox/` installs `GET/POST /api/sandbox` through the
+    core's own plugin loader - no patch and no core edit. GET answers the one
+    state both apps read (enabled, waiting, the PC's own `line` including what
+    the last card did). POST calls `request_enabled()` and NEVER
+    `set_enabled()`: ON is 202 waiting (a direct POST writes nothing), OFF is
+    200 at once. Origin is checked FIRST, so a cross-origin/other-device
+    request is 403 before its body is read; a bad token is 401. Malformed
+    bodies change nothing. The switch has a real desktop row and a real phone
+    row (`sandbox_exec` linked to both), the desktop page draws its card and
+    loads its script, the phone has its net client, the two generated settings
+    catalogs carry both rows from one generator, and the manifest is sound.
 """
 from __future__ import annotations
 
@@ -1196,28 +1205,229 @@ def t_the_spoken_setting_reaches_the_same_card():
           and off_match.f == {"key": "sandbox_exec", "on": False}, off_match)
 
 
-def t_no_dead_toggle_row_is_shipped_by_this_slice():
-    """The honest-scope guard (Lead's correction, 2026-10-18): LM-1 does NOT
-    draw a Settings toggle it cannot wire. The spoken switch exists, and the
-    generated catalogs must not carry a row for it until LM-1C adds both apps'
-    surfaces. If someone adds the row without the transport, this goes red."""
+# --------------------------------------------------------------------------
+#   The route and both Settings rows (LM-1C, 2026-10-18)
+# --------------------------------------------------------------------------
+# The drop-in folder `plugins/ready/sandbox/` installs GET/POST /api/sandbox;
+# both apps draw one row each from the same answer, and the POST may never
+# write the setting itself. These checks drive a real handler wrapper.
+
+class FakeHandler:
+    """The core's Handler, reduced to what install() wraps."""
+
+    def __init__(self, path, body=b"{}"):
+        self.path = path
+        self.body = body
+        self.sent = []
+
+    def _send(self, code, out):
+        self.sent.append((code, out))
+
+    def do_GET(self):
+        self.sent.append(("original GET", None))
+
+    def do_POST(self):
+        self.sent.append(("original POST", None))
+
+
+def _installed(*, origin=True, token=True):
+    """A FRESH handler class with the route installed; returns (H, banner, reads).
+
+    Fresh every time: install() writes the wrapped methods onto the class, so a
+    second install on the same class is intentionally a no-op - which would
+    make a later origin/token check read as passing without being applied."""
+    reads = []
+
+    class H(FakeHandler):
+        pass
+
+    def read_body(handler):
+        reads.append(handler.body)
+        return handler.body
+
+    line = SE.install(H, origin_ok=lambda h: origin, token_ok=lambda h: token,
+                      read_body=read_body)
+    return H, line, reads
+
+
+def t_the_sandbox_route_reads_the_state():
+    with switch_config():
+        H, line, reads = _installed()
+        check("the drop-in route installs and says what it answers",
+              "sandbox" in line and SE.PATH == "/api/sandbox", line)
+        h = H(SE.PATH)
+        H.do_GET(h)
+        code, out = h.sent[-1]
+        check("GET answers 200 with the one answer both apps read",
+              code == 200 and isinstance(out, dict)
+              and {"enabled", "waiting", "line", "status", "why", "last"} <= set(out),
+              out)
+        check("with no file the route says OFF, in the same words",
+              out["enabled"] is False and out["waiting"] is False
+              and out["line"] == SE.SWITCH_OFF_WORDS, out)
+        h = H("/api/something-else")
+        H.do_GET(h)
+        check("any other GET goes to the server's own handler",
+              h.sent[-1][0] == "original GET")
+        h = H("/api/something-else", b"{}")
+        H.do_POST(h)
+        check("any other POST too", h.sent[-1][0] == "original POST")
+        again = SE.install(H, origin_ok=lambda h: True, token_ok=lambda h: True,
+                           read_body=lambda h: b"{}")
+        check("installing twice wraps once", "already on" in again, again)
+
+
+def t_the_route_post_raises_one_card_and_never_writes_directly():
+    with switch_config():
+        H, _, _ = _installed()
+        real_tier, real_gate, real_spawn = SE._tier, SE._gate, SE._start_card_thread
+        real_set = SE.set_enabled
+        asked = []
+
+        def denied(action, detail, prompt):
+            asked.append(action)
+            return verdict(allowed=False, outcome="denied")
+
+        SE._tier = lambda a: "ask"
+        SE._gate = denied
+        SE._start_card_thread = lambda fn: fn()
+
+        def forbidden(*a, **k):
+            raise AssertionError("the route wrote the setting directly")
+
+        try:
+            h = H(SE.PATH, b'{"enabled": true}')
+            H.do_POST(h)
+            code, out = h.sent[-1]
+            check("POST ON answers 202 waiting, never 'it is on'",
+                  code == 202 and out.get("waiting") is True
+                  and out.get("enabled") is False, (code, out))
+            check("the card was raised under the NORMAL settings action, once",
+                  asked == [SE.SWITCH_ACTION] == ["change_own_config"], asked)
+            check("a DENIED card leaves the setting OFF", SE.enabled() is False)
+            h = H(SE.PATH)
+            H.do_GET(h)
+            got = h.sent[-1][1]
+            check("GET then says honestly what the card did",
+                  got["last"]["outcome"] == "denied"
+                  and got["line"] == SE.SWITCH_LAST_WORDS["denied"], got)
+            # The direct-write proof: the route must not call set_enabled().
+            SE.set_enabled = forbidden
+            h = H(SE.PATH, b'{"enabled": true}')
+            H.do_POST(h)
+            check("a POST without approval cannot write (the route never calls set_enabled)",
+                  h.sent[-1][0] == 202 and SE.enabled() is False
+                  and asked == [SE.SWITCH_ACTION, SE.SWITCH_ACTION], asked)
+        finally:
+            SE.set_enabled = real_set
+            SE._tier, SE._gate, SE._start_card_thread = real_tier, real_gate, real_spawn
+
+        # A yes works through the same route, still only after the card's job runs.
+        jobs = []
+        SE._tier = lambda a: "ask"
+        SE._gate = lambda *a: verdict(allowed=True, outcome="approved")
+        SE._start_card_thread = jobs.append
+        try:
+            h = H(SE.PATH, b'{"enabled": true}')
+            H.do_POST(h)
+            code, out = h.sent[-1]
+            check("POST ON queues the card and writes nothing yet",
+                  code == 202 and out.get("waiting") is True
+                  and SE.enabled() is False and len(jobs) == 1, out)
+            jobs[0]()
+            check("only the card's own yes flips it", SE.enabled() is True, SE.view())
+            h = H(SE.PATH)
+            H.do_GET(h)
+            check("and the read then says ON", h.sent[-1][1]["enabled"] is True
+                  and h.sent[-1][1]["line"] == SE.SWITCH_ON_WORDS, h.sent[-1][1])
+        finally:
+            SE._tier, SE._gate, SE._start_card_thread = real_tier, real_gate, real_spawn
+        SE._reset_for_tests()
+        SE.set_enabled(False)
+        for body in (b'{"enabled": "yes"}', b"[]", b"not json"):
+            h = H(SE.PATH, body)
+            H.do_POST(h)
+            code = h.sent[-1][0]
+            check(f"a malformed POST {body!r} changes nothing", code in (400, 503)
+                  and SE.enabled() is False, (code, h.sent[-1][1]))
+
+
+def t_a_cross_origin_request_is_403_before_its_body_is_read():
+    with switch_config():
+        H, line, reads = _installed(origin=False)
+        h = H(SE.PATH, b'{"enabled": true}')
+        H.do_POST(h)
+        check("cross-origin POST is 403 and its body was never read",
+              h.sent[-1][0] == 403 and reads == [] and SE.enabled() is False,
+              (h.sent[-1], reads))
+        h = H(SE.PATH)
+        H.do_GET(h)
+        check("cross-origin GET is refused the same way", h.sent[-1][0] == 403)
+        H2, line2, reads2 = _installed(token=False)
+        h = H2(SE.PATH, b'{"enabled": true}')
+        H2.do_POST(h)
+        check("a bad token is 401 before the body is read",
+              h.sent[-1][0] == 401 and reads2 == [], h.sent[-1])
+
+
+def t_the_route_and_both_settings_rows_are_real():
+    """The LM-1C guard: the switch now HAS a clickable row on both apps - and
+    the shipped piece that makes it clickable is the route, the drop-in folder
+    and the two settings rows. If one is missing, this goes red rather than
+    shipping a dead toggle again."""
     import jarvis_settings_registry as R
-    linked = [r.dom_id for r in R.SETTINGS_ROWS if r.setting == "sandbox_exec"]
-    check("no SETTINGS_ROWS row claims the sandbox switch before it can be clicked",
-          linked == [], linked)
+    import json as _json
+    linked = sorted(r.dom_id for r in R.SETTINGS_ROWS if r.setting == "sandbox_exec")
+    check("the sandbox switch is the same switch as a real row on both apps",
+          linked == ["sandbox", "sbx-switch"], linked)
+    rows = {r.dom_id: r for r in R.SETTINGS_ROWS if r.setting == "sandbox_exec"}
+    desktop, phone = rows.get("sbx-switch"), rows.get("sandbox")
+    check("its desktop row is a desktop row in the sandbox card",
+          desktop is not None and desktop.owner == "desktop"
+          and desktop.section == "sandbox", desktop)
+    check("its phone row is a phone row with the phone's own item key",
+          phone is not None and phone.owner == "phone"
+          and phone.phone_key == "sandbox" and phone.section == "sandbox", phone)
+    check("the section both rows sit in is a real Section on both apps",
+          R.section_by_id("sandbox") is not None
+          and R.section_by_id("sandbox").app == "both",
+          R.section_by_id("sandbox"))
     repo = HERE.parent
     desk = repo / "jarvis-desktop" / "tests" / "fixtures" / "settings-cases.json"
-    phone = (repo / "jarvis-client" / "app" / "src" / "test" / "resources" / "contract"
-             / "settings-cases.json")
-    check("both generated settings fixtures exist", desk.is_file() and phone.is_file(),
-          (desk, phone))
-    if desk.is_file() and phone.is_file():
+    phone_cases = (repo / "jarvis-client" / "app" / "src" / "test" / "resources"
+                   / "contract" / "settings-cases.json")
+    check("both generated settings fixtures exist", desk.is_file() and phone_cases.is_file())
+    if desk.is_file() and phone_cases.is_file():
         check("the two apps' settings fixtures are byte-identical",
-              desk.read_bytes() == phone.read_bytes(), "fixtures differ")
-        rows = json.loads(desk.read_text(encoding="utf-8")).get("rows", [])
-        check("neither app's catalog carries a dead sandbox row",
-              not any(r.get("setting") == "sandbox_exec" for r in rows),
-              [r for r in rows if r.get("setting") == "sandbox_exec"])
+              desk.read_bytes() == phone_cases.read_bytes(), "fixtures differ")
+        got = _json.loads(desk.read_text(encoding="utf-8")).get("rows", [])
+        ids = sorted(r.get("id") for r in got if r.get("setting") == "sandbox_exec")
+        check("both catalogs carry the switch, from the one generator",
+              ids == ["sandbox", "sbx-switch"], ids)
+    folder = repo / "plugins" / "ready" / "sandbox"
+    manifest = folder / "plugin.json"
+    check("the drop-in folder and its manifest exist", manifest.is_file()
+          and (folder / "README.md").is_file(), str(folder))
+    if manifest.is_file():
+        got = _json.loads(manifest.read_text(encoding="utf-8"))
+        check("its manifest names this module and install: handler",
+              got.get("module") == "jarvis_sandbox_exec"
+              and got.get("install") == "handler"
+              and isinstance(got.get("stack_order"), int), got)
+    html = (repo / "jarvis-desktop" / "src" / "settings.html").read_text(encoding="utf-8")
+    check("the desktop page draws the row and loads its script",
+          'id="sbx-switch"' in html and 'id="sandbox"' in html
+          and 'src="sandbox-settings.js"' in html)
+    js = (repo / "jarvis-desktop" / "src" / "sandbox-settings.js")
+    check("its desktop script calls the ONE command, with no other fields",
+          js.is_file() and 'invoke("sandbox_exec"' in js.read_text(encoding="utf-8"))
+    kt = (repo / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis"
+          / "client" / "net" / "SandboxExec.kt")
+    check("the phone has its net client for the same route",
+          kt.is_file() and 'PATH = "/api/sandbox"' in kt.read_text(encoding="utf-8"))
+    plate = (repo / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis"
+             / "client" / "ui" / "screens" / "SandboxPlate.kt")
+    check("...and its Settings plate", plate.is_file())
 
 
 if __name__ == "__main__":
