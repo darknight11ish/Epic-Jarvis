@@ -771,11 +771,25 @@ def t_the_api_document_has_the_section_and_it_matches_this_code():
 #: writes down that they meant to. That is the price of a check that bites, and
 #: it is why the failure message below spells out the difference instead of
 #: saying "the document changed".
-EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 142))   # 129 ..= 141
-#: 139 is PR #549's self-improvement diagnostics section (it merges FIRST),
-#: 140 is PR #568's file-guardian history, and 141 is PR #562's selection chip -
-#: the branches are stacked in that merge order, so the tail reads 129 ..= 141
-#: with no hole and no repeat. When the branches land this list stays the same.
+EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 143))   # 129 ..= 142
+#: 137 is a REAL section, not a gap: `## 137. Starting the local model when
+#: it is not running`; 138 is `skills.lock` (PR #455). The tail reads
+#: 129 ..= 138 with no hole.
+#:
+#: THE FOUR SECTIONS ABOVE 138 ARE FOUR PR FAMILIES, merged in this order:
+#: 139 self-improve's diagnostic routes (PR #549); 140 the guardian's history
+#: and restore routes (#568/#569/#571); 141 the selection chip (#562); 142
+#: the data-and-maths sandbox's own switch (LM-1C, this branch, the drop-in
+#: `/api/sandbox`), landing last. The Lead owns that numbering plan. The first
+#: three are on main; 142 is this branch's one new section, so the released
+#: tail is 129 ..= 142 with no hole and no repeat.
+#:
+#: This list names the RELEASED tail, so a dropped section anywhere in it is
+#: caught, and a section above it is reported rather than silently accepted.
+#:
+#: Measured, not reasoned: on main `^## 139\.`, `^## 140\.` and `^## 141\.`
+#: each match once, on this branch `^## 142\.` matches once, and the tail
+#: reads 129 ..= 142 with no hole.
 
 
 def t_every_section_from_129_up_is_still_in_the_document():

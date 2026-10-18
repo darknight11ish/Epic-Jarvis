@@ -146,11 +146,11 @@ await check("the catalogue is the fixture, row for row and in order", async () =
   }
 });
 
-await check("the fixture says how many rows there are, and it is 28 desktop toggles", async () => {
-  assert.equal(FIX.counts.desktop, 28);
-  assert.equal(FIX.rows.filter((r) => r.owner === "desktop").length, 28);
-  assert.equal(FIX.counts.phone, 2);
-  assert.equal(FIX.counts.all, 30);
+await check("the fixture says how many rows there are, and it is 29 desktop toggles", async () => {
+  assert.equal(FIX.counts.desktop, 29);
+  assert.equal(FIX.rows.filter((r) => r.owner === "desktop").length, 29);
+  assert.equal(FIX.counts.phone, 3);
+  assert.equal(FIX.counts.all, 32);
   // The number this whole feature was briefed with was wrong once already
   // ("all 19"): the 19 is the count of rows with a BARE `<label class="toggle">`,
   // and the seven rows that also carry a label id were left out of it.
@@ -158,8 +158,10 @@ await check("the fixture says how many rows there are, and it is 28 desktop togg
   // numbers moved by one together.
   // "Making pictures" (2026-10-11, JARVIS-API section 124) is a bare one too,
   // so both moved by one again - 20 to 21, 27 to 28.
+  // "Data and maths sandbox" (LM-1C, 2026-10-18) is a bare one as well: 21 to
+  // 22, 28 to 29 (and two phone rows to three).
   const bare = (HTML.match(/^[ \t]*<label class="toggle">[ \t]*$/gm) || []).length;
-  assert.equal(bare, 21, "the bare-label count moved - re-read the 28 claim");
+  assert.equal(bare, 22, "the bare-label count moved - re-read the 29 claim");
   assert.equal(FIX.counts.desktop, bare + 7);
 });
 
@@ -270,9 +272,9 @@ await check("row(), SETTING_ROWS and FALLBACK_ROWS agree with the fixture", asyn
   assert.equal(C.row("no-such-row"), undefined);
 });
 
-await check("the two phone rows carry their own words and their Settings key", async () => {
+await check("the three phone rows carry their own words and their Settings key", async () => {
   const phone = FIX.rows.filter((r) => r.owner === "phone");
-  assert.deepEqual(phone.map((r) => r.id), ["watch-notify", "phone-notify"]);
+  assert.deepEqual(phone.map((r) => r.id), ["watch-notify", "phone-notify", "sandbox"]);
   for (const r of phone) {
     assert.equal(r.phone_key, r.id, `${r.id}: phone_key`);
     assert.ok(r.label.length > 0 && r.detail.length > 0, `${r.id}: words`);

@@ -55,6 +55,7 @@ pub mod proctree;
 pub mod prompt_coach;
 pub mod pyfind;
 pub mod reach;
+pub mod sandbox_exec;
 pub mod screen_work;
 pub mod selection;
 pub mod sidecar;
@@ -1328,6 +1329,11 @@ pub fn run() {
             // Windows Hello. Settings only; it raises no window itself.
             handoff::handoff_front,
             browser_engine::browser_engine,
+            // The data and maths sandbox's switch (sandbox_exec.rs; LM-1C,
+            // 2026-10-18): read it, ask to turn it on (ONE normal approval card
+            // on the PC) or off at once. Settings only; it runs no script and
+            // sees no data.
+            sandbox_exec::sandbox_exec,
             // Interrupting by talking and "One moment." (voice_flow.rs).
             voice_flow::judge_barge_in,
             voice_flow::get_voice_flow,

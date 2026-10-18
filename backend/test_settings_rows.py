@@ -77,7 +77,9 @@ SETTINGS_HTML = REPO / "jarvis-desktop" / "src" / "settings.html"
 #: Pictures card, JARVIS-API section 129) joined the page on 2026-10-11. The
 #: row and its fixture were added first and this number was left behind, which
 #: is exactly what this constant is here to catch.
-EXPECTED_ROWS = 28
+#: 29 since LM-1C (2026-10-18) gave the data and maths sandbox its own card
+#: and its one switch - the row that makes the sandbox clickable on the PC.
+EXPECTED_ROWS = 29
 
 #: The rows that are not settings switches, with the reason. These are in
 #: SETTINGS_ROWS (so the page and the table still agree) but carry
@@ -128,7 +130,7 @@ def t_every_toggle_has_a_row():
 def t_no_row_without_a_toggle():
     """...and the table may not name a switch the page does not draw.
 
-    The phone's two rows are the named exception: the phone has them and the
+    The phone's three rows are the named exception: the phone has them and the
     desktop page does not, which is the whole point of `owner`."""
     page = {dom for dom, _, _ in page_rows()}
     extra = [r.dom_id for r in R.DESKTOP_ROWS if r.dom_id not in page]
@@ -136,7 +138,7 @@ def t_no_row_without_a_toggle():
           not extra, f"{extra} - the row was deleted from settings.html")
     phone = [r.dom_id for r in R.SETTINGS_ROWS if r.owner == "phone"]
     check("the phone's own rows are the only rows with no desktop toggle",
-          sorted(phone) == ["phone-notify", "watch-notify"], phone)
+          sorted(phone) == ["phone-notify", "sandbox", "watch-notify"], phone)
 
 
 def t_the_count_is_what_it_is():
@@ -154,14 +156,14 @@ def t_the_count_is_what_it_is():
           f"re-count and update EXPECTED_ROWS and SETTINGS_ROWS together")
     bare = len(re.findall(r'^[ \t]*<label class="toggle">[ \t]*$',
                           SETTINGS_HTML.read_text(encoding="utf-8"), re.M))
-    check("21 of them are bare `<label class=\"toggle\">`, 7 carry a label id",
-          bare == 21 and len(page) - bare == 7,
+    check("22 of them are bare `<label class=\"toggle\">`, 7 carry a label id",
+          bare == 22 and len(page) - bare == 7,
           f"bare={bare}, with-id={len(page) - bare} - this is the trap that "
           f"produced the wrong '19'")
-    check("all 28 desktop rows are described",
+    check("all 29 desktop rows are described",
           len(R.DESKTOP_ROWS) == EXPECTED_ROWS, str(len(R.DESKTOP_ROWS)))
-    check("the two phone rows are described too",
-          len(R.SETTINGS_ROWS) == EXPECTED_ROWS + 2, str(len(R.SETTINGS_ROWS)))
+    check("the three phone rows are described too",
+          len(R.SETTINGS_ROWS) == EXPECTED_ROWS + 3, str(len(R.SETTINGS_ROWS)))
 
 
 def t_row_order_matches_the_page():
@@ -207,26 +209,25 @@ def t_setting_links_are_real():
            if r.setting and r.setting not in keys]
     check("every row's `setting` names a real BoolSetting", not bad, "; ".join(bad))
     linked = sorted(r.dom_id for r in R.DESKTOP_ROWS if r.setting)
-    check("fifteen desktop rows are the same switch as a spoken setting",
-          len(linked) == 15, f"{linked} - if this grew, the row was given a setter")
+    check("sixteen desktop rows are the same switch as a spoken setting",
+          len(linked) == 16, f"{linked} - if this grew, the row was given a setter")
     # The spoken settings with no desktop toggle. Three have no switch row at
     # all on this page (two are on the Brain's Memory tab, one is a row inside
     # "What asks first"), and two are the phone's own. `big_coder` joined them
     # on 2026-10-11: the 30B coder's opt-in has a route and a spoken switch,
-    # and no page row yet. `sandbox_exec` joined on 2026-10-18 (LM-1): the one
-    # tool whose switch is its own, with a real card and no clickable row yet -
-    # a row that cannot be clicked would be a dead toggle, so it deliberately
-    # has none until LM-1C wires the surfaces.
+    # and no page row yet. `sandbox_exec` was one of these from LM-1 until
+    # LM-1C (2026-10-18) gave it the real card and row - so it is linked now,
+    # and this list is back to the six that genuinely have no page row.
     orphans = sorted(keys - {r.setting for r in R.DESKTOP_ROWS if r.setting})
-    check("...and the BoolSettings with no desktop row are the known seven",
+    check("...and the BoolSettings with no desktop row are the known six",
           orphans == ["background_learning", "big_coder", "learn_sensitive_topics",
-                      "lights_without_card", "phone_notifications", "sandbox_exec",
+                      "lights_without_card", "phone_notifications",
                       "smartwatch_notifications"], str(orphans))
     phone_linked = sorted(r.setting for r in R.SETTINGS_ROWS
                           if r.owner == "phone" and r.setting)
-    check("the two phone rows name the two phone-only spoken settings",
-          phone_linked == ["phone_notifications", "smartwatch_notifications"],
-          str(phone_linked))
+    check("the three phone rows name the three phone-side spoken settings",
+          phone_linked == ["phone_notifications", "sandbox_exec",
+                           "smartwatch_notifications"], str(phone_linked))
 
 
 def t_not_switches_are_the_known_one():
@@ -281,9 +282,9 @@ def t_bool_settings_is_the_measured_thirteen():
     which this file's other check states.
 
     Twenty-two since 2026-10-18 (LM-1): `sandbox_exec`, the data and maths
-    sandbox. It is a spoken switch with a real approval card and deliberately
-    NO page row yet - a toggle that cannot be clicked is worse than none - so
-    it is the seventh orphan in the check above. LM-1C gives it the rows.
+    sandbox - a spoken switch with a real approval card. LM-1C gave it a real
+    clickable card and row on both apps, so it is now one of the linked rows
+    above rather than an orphan.
 
     Neither is a row added "beside" the spoken table: each is a switch the
     owner can say out loud, which is what this table is. The growth is argued

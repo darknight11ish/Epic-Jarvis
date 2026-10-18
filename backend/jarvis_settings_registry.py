@@ -268,6 +268,12 @@ SECTIONS: tuple = (
     Section("asks-first", ("what asks first", "asks first settings")),
     Section("prompt-coach", ("prompt coach settings", "the prompt coach page")),
     Section("reach", ("what jarvis can reach", "what jarvis can access")),
+    # "Data and maths sandbox" (LM-1C, 2026-10-18): the switch that offers the
+    # small read-only Python tool to the AI model. A card on the desktop and a
+    # row on the phone, both drawn from GET /api/sandbox, so the two apps say
+    # the same words and only a person's approved card flips it.
+    Section("sandbox", ("the data sandbox", "the data and maths sandbox",
+                        "the python sandbox", "the sandbox")),
     # "Limits and frequency" (2026-10-08): the numbers the owner can change,
     # ONE table on the PC (backend/jarvis_limits.py) behind one read route and
     # one write route (limits-read.patch + limits-settings.patch). BOTH apps
@@ -1506,6 +1512,23 @@ SETTINGS_ROWS: tuple = (
         "desktop",
         indent=10,
         label_span_is_wrapper=True),
+    # "Data and maths sandbox" (LM-1C, 2026-10-18). The row's own label is this
+    # page's; the state line under it is the PC's (GET /api/sandbox), so both
+    # apps show the same sentence and the same card result. The row is last on
+    # the page and sits in its own card, id="sandbox".
+    SettingRow(
+        "sbx-switch",
+        "sandbox_exec",
+        "",
+        "sbx-switch-label",
+        "",
+        'Let Jarvis run small Python scripts for sums and averages',
+        "",
+        29,
+        "sandbox",
+        "desktop",
+        indent=10,
+        label_span_is_wrapper=True),
     # ------------------------------------------------------------------
     #   The phone's own two rows. There is no desktop toggle for
     #   either, so they are never spliced into settings.html; the
@@ -1542,6 +1565,23 @@ SETTINGS_ROWS: tuple = (
         owner="phone",
         phone_key="phone-notify",
         source="PhoneNotificationsPlate.kt:107-110",
+    ),
+    # "Data and maths sandbox" (LM-1C, 2026-10-18): the phone's own row, drawn
+    # by SandboxPlate.kt from the SAME answer as the desktop's card.
+    SettingRow(
+        dom_id="sandbox",
+        setting="sandbox_exec",
+        row_id="",
+        label_span_id="",
+        detail_span_id="",
+        label='Data and maths sandbox',
+        detail='Off by default. Let the AI model run a small Python script for sums, averages and percentages, in its own sandbox with no network and no file writes. Turning it on asks first.',
+        order=3,
+        indent=8,
+        section="sandbox",
+        owner="phone",
+        phone_key="sandbox",
+        source="SandboxPlate.kt:120-126",
     ),
 )
 
@@ -1988,6 +2028,7 @@ SECTION_PLAIN = {
     "screen-look": "looking at the screen",
     "briefing-settings": "the morning briefing",
     "browser-engine": "the browser",
+    "sandbox": "the data sandbox",
     "phone-notify": "phone notifications",
     "watch-notify": "watch notifications",
     "prompt-coach": "the prompt coach",

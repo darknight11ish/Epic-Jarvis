@@ -96,5 +96,11 @@ object SettingsJump {
         // jump list's own words for the same section (settings.html,
         // `#idle-new`).
         Entry("A new conversation starts after", "idle-new"),
+        // "Data and maths sandbox" (LM-1C, 2026-10-18): the switch that offers
+        // the small read-only Python tool to the AI model. It is the last row
+        // on the screen, so it is the last entry here too - the label is the
+        // desktop jump list's own words for the same section (settings.html,
+        // `#sandbox`).
+        Entry("Data and maths sandbox", "sandbox"),
     )
 }

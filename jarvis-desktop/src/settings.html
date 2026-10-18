@@ -206,6 +206,7 @@
             <a href="#reach">What Jarvis can reach</a>
             <a href="#limits">Limits and frequency</a>
             <a href="#email-sending">Sending email</a>
+            <a href="#sandbox">Data and maths sandbox</a>
           </div>
           <div class="settings-jump-place">
             <span class="settings-jump-place-label">About this build</span>
@@ -2689,7 +2690,6 @@
             <input id="pc-switch" type="checkbox" />
             <span id="pc-switch-label">Making pictures</span>
           </label>
-        <!-- settings-toggles:end -->
           <p class="note" id="autostart-note">
             This starts this app, not Jarvis itself. Jarvis starts with it only
             if "Let Jarvis Desktop start and stop Jarvis" (above) is on. It
@@ -2811,6 +2811,34 @@
         <p class="note" id="es-note"></p>
         <p class="state" id="es-state" role="status">Checking whether Jarvis can send email…</p>
         <p class="sc-line" id="es-said" hidden></p>
+      </section>
+
+      <!-- ── The data and maths sandbox ─────────────────────────────────────
+           LM-1C, 2026-10-18 (sandbox-settings.js; sandbox_exec.rs
+           sandbox_exec; backend/jarvis_sandbox_exec.py; the drop-in folder
+           plugins/ready/sandbox/; JARVIS-API section 142). The AI model may
+           run a small Python script for sums, averages and percentages, in the
+           module's own read-only sandbox: no network, no file writes, only the
+           files the owner already listed for Jarvis, and every AST refusal,
+           time limit, output cap and memory cap exactly as before. OFF by
+           default. Turning it ON raises ONE normal approval card on the PC;
+           turning it OFF is instant. Every word after the row's own label is
+           the PC's, so the phone says the same sentence from the same route. -->
+      <section class="card" id="sandbox">
+        <h2 id="sbx-title">Data and maths sandbox</h2>
+        <p class="note" id="sbx-detail">Off by default. Let the AI model run a small Python script for sums, averages and percentages, in its own read-only sandbox with no network and no file writes. Turning it on asks first.</p>
+        <div id="sbx-body" hidden>
+          <label class="toggle">
+            <input id="sbx-switch" type="checkbox" />
+            <span id="sbx-switch-label">Let Jarvis run small Python scripts for sums and averages</span>
+          </label>
+        <!-- settings-toggles:end -->
+          <p class="note" id="sbx-link-note" hidden></p>
+          <p class="sc-line" id="sbx-line" role="status"></p>
+          <p class="note" id="sbx-state" hidden></p>
+          <span class="status" id="sbx-status" role="status"></span>
+        </div>
+        <p class="state" id="sbx-reading" role="status">Asking Jarvis…</p>
       </section>
 
       <!-- ── About ─────────────────────────────────────────────────────────
@@ -2974,5 +3002,6 @@
     <script type="module" src="menu-visibility-settings.js"></script>
     <script type="module" src="hud-window-settings.js"></script>
 <script type="module" src="pictures-settings.js"></script>
+    <script type="module" src="sandbox-settings.js"></script>
   </body>
 </html>

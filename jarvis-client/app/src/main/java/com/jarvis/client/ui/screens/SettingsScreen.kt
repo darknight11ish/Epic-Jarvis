@@ -184,6 +184,10 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     // those numbers and their own test (`LimitsTest`'s "the index map has no
     // limits row" pins 25). A row added at the end moves nothing.
     "idle-new" to 27,
+    // "Data and maths sandbox" (LM-1C, 2026-10-18): whether the AI model is
+    // offered the small read-only Python tool. A row added at the end moves no
+    // other number; it sits under Idle new on the screen and in the jump list.
+    "sandbox" to 28,
 )
 
 /**
@@ -741,6 +745,15 @@ fun SettingsScreen(
                 MenuFrame(menus, "settings.idle-new") {
                     IdleNewSection(choice = idleNewChoice, onChange = onIdleNewChoiceChange)
                 }
+            }
+
+            // The data and maths sandbox (LM-1C, 2026-10-18): whether the AI
+            // model is offered the small read-only Python tool at all. Its words
+            // and its state line come from the PC's own GET /api/sandbox, so the
+            // phone and the desktop say the same sentence; ON asks first, with
+            // one normal approval card on the PC, and OFF is instant.
+            if (menus.shows("settings.sandbox")) if (drawn("sandbox")) if (menus.shows("settings.sandbox")) item(key = "sandbox") {
+                MenuFrame(menus, "settings.sandbox") { SandboxSection(canAct = canAct) }
             }
 
             item(key = "tail") { Gap(24) }

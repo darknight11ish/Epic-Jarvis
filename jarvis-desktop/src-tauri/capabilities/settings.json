@@ -26,6 +26,7 @@
     "handoff-mode",
     "handoff-front",
     "browser-engine",
+    "sandbox-exec",
     "spending-settings",
     "pictures-settings",
     "core:webview:allow-set-webview-zoom"

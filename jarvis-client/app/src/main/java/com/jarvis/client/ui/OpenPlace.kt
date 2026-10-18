@@ -116,6 +116,12 @@ object OpenPlace {
         // Settings. OpenPlaceTest's own new-section check is what requires a
         // decision here for every registry Section.
         "idle-new" to Where.Go(Screen.SETTINGS, "idle-new"),
+        // "Data and maths sandbox" (LM-1C, 2026-10-18): the registry's own
+        // Section for the switch that offers the small read-only Python tool to
+        // the AI model. An ordinary Settings row on the phone
+        // (SettingsScreen.kt, item "sandbox"), so "open the data sandbox" lands
+        // on it instead of the top of Settings.
+        "sandbox" to Where.Go(Screen.SETTINGS, "sandbox"),
         // "Platform checks": its Connection card, and "This app" with the
         // phone's own "Check for new versions" (the desktop's "updates" card
         // is the desktop app's; this is the nearest thing the phone has).

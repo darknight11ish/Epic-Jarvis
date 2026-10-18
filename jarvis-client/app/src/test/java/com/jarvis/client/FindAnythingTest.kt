@@ -186,12 +186,17 @@ class FindAnythingTest {
             // number here is 119 and not either side's own; both reasons are
             // above rather than one replacing the other.
             //
+            // 119 -> 120 (2026-10-18, LM-1C): `settings.sandbox`, the data and
+            // maths sandbox's switch, joined the registry as a real menu id on
+            // both apps - so the catalogue is one larger because a place really
+            // was added.
+            //
             // It is here so that a regeneration which drops the `names` field,
             // or a catalogue that comes back a different size, is noticed rather
             // than quietly searched: the check above still proves that every one
-            // of the 119 menus has all of its names searched for.
+            // of the 120 menus has all of its names searched for.
             "the catalogue must still carry the names at all",
-            119,
+            120,
             MenuCatalog.MENUS.size,
         )
         assertTrue(

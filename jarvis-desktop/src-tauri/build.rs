@@ -830,6 +830,10 @@ fn main() {
             // read it, turn it on (ONE card on the PC) or off, pick the default.
             // Settings only.
             "browser_engine",
+            // The data and maths sandbox's switch (sandbox_exec.rs): read it,
+            // ask to turn it on (ONE card on the PC) or off at once. Settings
+            // only; it runs no script and sees no data.
+            "sandbox_exec",
             // Interrupting by talking and "One moment." (voice_flow.rs):
             // ask for one utterance to be checked, read the status's `flow`
             // block, fetch the clip. Quickbar only; none records anything.

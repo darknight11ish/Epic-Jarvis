@@ -21476,3 +21476,63 @@ and, when it will not read, the same keys with `ok: false`, `refused: true`, `wh
 * **What it does not do:** no card (a read), nothing written, nothing kept, no model and no tool can reach it, and no other window's words are read. The privacy rules are `jarvis_screen`'s own (the Never look at list, private browser windows, password boxes, lock screen, capture protection) and the scrubber is `jarvis_scrub.scrub_text` - not a second copy.
 * **An older backend** (no route) answers 404, and the app says "This PC's Jarvis does not have the selection reader yet. Update the backend by running apply-patches.ps1, then try again."
 * `tools/check_parity.py` classifies the route `deliberate` (desktop only), and the desktop's chip is in the Jarvis bar's existing attachment strip - no new window and no HUD change.
+
+## 142. The data and maths sandbox's own switch: GET/POST `/api/sandbox` (added 2026-10-18)
+
+The sandbox tool (`run_data_script`, §"Pillar 15", `jarvis_sandbox_exec.py`)
+ships OFF: the AI model is not offered it unless the owner turns its switch on.
+This section is that switch's route - and the reason it needs no patch.
+
+### 142.1 The route
+
+| Route | Body | Answers |
+| --- | --- | --- |
+| `GET /api/sandbox` | - | 200 `{"enabled", "waiting", "line", "status", "why", "last"}`; 503 `{"error"}` if the module itself fails |
+| `POST /api/sandbox` | `{"enabled": true\|false}` | ON: **202** `{"ok": true, "enabled": false, "waiting": true, "message"}` while ONE normal approval card waits - nothing is written yet. OFF: 200 `{"ok": true, "enabled": false, "waiting": false, "message"}` **at once**, withdrawing a waiting ON card. 400 for a body that is not `{"enabled": <bool>}`. 503 if `change_own_config` is not tier `ask`, or the card cannot be raised - nothing changes either way. |
+
+The POST handler **never writes the setting itself**: it calls
+`jarvis_sandbox_exec.request_enabled()`, the same function the chat/voice
+phrase uses (`jarvis_quick` → `jarvis_settings_registry.set_sandbox_exec`), and
+that only writes after the gate reports a person's approved card. A direct POST
+therefore cannot bypass the approval card.
+
+`line` is the PC's own state sentence: off, on, a card waiting, or what the
+last card did (denied / timed out / refused / could not be saved). `status`
+carries that last-card sentence on its own when a screen has room for it.
+`last` is `{"outcome", "message"}` or null. Both apps print `line` unchanged,
+so the two Settings rows say one sentence from one source.
+
+### 142.2 Checks before anything is read
+
+The route is installed by `plugins/ready/sandbox/plugin.json`, whose `install`
+is `handler`: the core's own plugin loader calls
+`jarvis_sandbox_exec.install(Handler, origin_ok=..., token_ok=..., read_body=...)`
+at start-up, exactly as it does for `jarvis_receipts.py`. There is **no patch**
+and no edit to `jarvis_hud.py` for this route.
+
+- **origin first**: a cross-origin / another-device request is refused with
+  **403** *before its body is read* (the read callback is not called at all);
+- then the token: **401** without `X-Jarvis-Token`;
+- only then is the body parsed.
+
+An older PC that has the module but not this folder answers **404** on the
+route. Both apps treat 404 (and 501) as "not on this PC's Jarvis yet" and draw
+the row disabled with one sentence naming the command
+`scripts\add-plugin.ps1 -Name sandbox`, rather than a switch that does nothing.
+
+### 142.3 Both apps, one sentence
+
+- **Desktop**: `src-tauri/src/sandbox_exec.rs` (`sandbox_exec`: read / on /
+  off; "on" held on a stale link, "off" never), `src/sandbox-settings.js` and
+  `src/sandbox-rules.js`, and the `#sandbox` card in `src/settings.html`.
+  Settings only; the command carries a switch position and nothing else.
+- **Phone**: `net/SandboxExec.kt` (the same words, the same read-through),
+  `ui/screens/SandboxPlate.kt`, and Settings → Data and maths sandbox. It only
+  asks the PC: the switch is decided there, under `change_own_config`.
+- Neither app runs a script or sees a file or a piece of data. Every sandbox
+  refusal (the AST allow-list, the wall clock, the output cap, the memory cap,
+  "only files the owner listed") is unchanged by the switch.
+
+`docs/ARCHITECTURE.md` §8 needs no one-sided row: both apps carry the switch,
+and the phone deliberately only asks the PC - the same shape as every other
+approval-card setting.

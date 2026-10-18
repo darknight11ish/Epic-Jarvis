@@ -1866,5 +1866,18 @@
     "covers": [
       "entry.settings"
     ]
+  },
+  {
+    "id": "data-sandbox",
+    "group": "Safety",
+    "title": "Small Python scripts for sums and averages",
+    "what": "The AI model can run a small Python script for maths or data work, in its own read-only sandbox.",
+    "where": "PC: Settings, Data and maths sandbox. Phone: Settings, Data and maths sandbox.",
+    "asks": "Turning the sandbox on asks first, with one approval card on the PC. Turning it off is instant.",
+    "limit": "It has no network, writes no file, reads only files you already listed for Jarvis, and refuses dangerous code before it starts.",
+    "surface": "both",
+    "covers": [
+      "settings.sandbox"
+    ]
   }
 ]

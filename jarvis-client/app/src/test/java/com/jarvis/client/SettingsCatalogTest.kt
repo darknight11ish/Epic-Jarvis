@@ -75,34 +75,36 @@ class SettingsCatalogTest {
     }
 
     @Test
-    fun `there are 28 desktop toggles and 2 phone rows`() {
+    fun `there are 29 desktop toggles and 3 phone rows`() {
         // The number this work was briefed with was 19, which is the count of
         // rows spelled exactly `<label class="toggle">` - it misses the seven
         // that also carry a label id. Pinned here so it cannot quietly move.
         // "Making pictures" (2026-10-11, JARVIS-API section 129) is one more
         // bare one: 20 to 21 bare, 27 to 28 desktop.
-        assertEquals(28, rows.count { it.s("owner") == "desktop" })
-        assertEquals(2, rows.count { it.s("owner") == "phone" })
-        assertEquals(30, rows.size)
-        assertEquals(30, doc["counts"]!!.jsonObject.i("all"))
-        assertEquals(28, doc["counts"]!!.jsonObject.i("desktop"))
-        assertEquals(2, doc["counts"]!!.jsonObject.i("phone"))
+        // "Data and maths sandbox" (LM-1C, 2026-10-18) is one more again:
+        // 21 to 22 bare, 28 to 29 desktop, and 2 to 3 phone rows.
+        assertEquals(29, rows.count { it.s("owner") == "desktop" })
+        assertEquals(3, rows.count { it.s("owner") == "phone" })
+        assertEquals(32, rows.size)
+        assertEquals(32, doc["counts"]!!.jsonObject.i("all"))
+        assertEquals(29, doc["counts"]!!.jsonObject.i("desktop"))
+        assertEquals(3, doc["counts"]!!.jsonObject.i("phone"))
     }
 
     @Test
-    fun `every order is unique and the desktop rows run 1 to 28`() {
+    fun `every order is unique and the desktop rows run 1 to 29`() {
         val desktop = rows.filter { it.s("owner") == "desktop" }.map { it.i("order") }
-        assertEquals((1..28).toList(), desktop)
+        assertEquals((1..29).toList(), desktop)
         assertEquals(rows.size, SettingsCatalog.ROWS.map { it.id }.toSet().size)
     }
 
     // ---------------------------------------------------------------- the phone's own rows
 
     @Test
-    fun `the two rows the phone owns carry the words both plates show`() {
-        // These two are the only rows the phone may read words from HERE for.
-        // The plates fall back to the same strings if the row is missing, so
-        // this is what keeps the fallback and the catalogue from drifting.
+    fun `the three rows the phone owns carry the words both plates show`() {
+        // These three are the only rows the phone may read words from HERE
+        // for. The plates fall back to the same strings if the row is missing,
+        // so this is what keeps the fallback and the catalogue from drifting.
         val watch = requireNotNull(SettingsCatalog.row("watch-notify")) {
             "the catalogue has no watch-notify row - run python3 tools/gen_settings_cases.py"
         }
@@ -121,16 +123,25 @@ class SettingsCatalogTest {
                 "this on AND add at least one app below.",
             phone.detail,
         )
+        val sandbox = requireNotNull(SettingsCatalog.row("sandbox")) {
+            "the catalogue has no sandbox row - run python3 tools/gen_settings_cases.py"
+        }
+        assertEquals("Data and maths sandbox", sandbox.label)
+        assertTrue(sandbox.detail.startsWith("Off by default."))
+        assertTrue(sandbox.detail.contains("no network"))
     }
 
     @Test
     fun `the phone rows name their Settings key and the setting they are`() {
         assertEquals("watch-notify", SettingsCatalog.row("watch-notify")!!.phoneKey)
         assertEquals("phone-notify", SettingsCatalog.row("phone-notify")!!.phoneKey)
+        assertEquals("sandbox", SettingsCatalog.row("sandbox")!!.phoneKey)
         assertEquals("smartwatch_notifications", SettingsCatalog.row("watch-notify")!!.setting)
         assertEquals("phone_notifications", SettingsCatalog.row("phone-notify")!!.setting)
+        assertEquals("sandbox_exec", SettingsCatalog.row("sandbox")!!.setting)
         assertEquals(SettingsCatalog.row("watch-notify"),
             SettingsCatalog.byPhoneKey("watch-notify"))
+        assertEquals(SettingsCatalog.row("sandbox"), SettingsCatalog.byPhoneKey("sandbox"))
         assertNull(SettingsCatalog.byPhoneKey("no-such-row"))
         assertNull(SettingsCatalog.row("no-such-row"))
     }
@@ -174,10 +185,10 @@ class SettingsCatalogTest {
     fun `exactly one row is not a setting at all`() {
         val notSettings = SettingsCatalog.ROWS.filter { !it.settingRow }.map { it.id }
         assertEquals(listOf("spd-accept"), notSettings)
-        // 29 since "Making pictures" joined the page (2026-10-11): 30 rows, one
-        // of which is the spending accept-all control and not a setting. The
-        // row and the fixture moved first and this number was left behind.
-        assertEquals(29, SettingsCatalog.SETTING_ROWS.size)
+        // 31 since "Data and maths sandbox" joined (LM-1C, 2026-10-18): 32 rows,
+        // one of which is the spending accept-all control and not a setting.
+        // (It was 29 when "Making pictures" joined on 2026-10-11, at 30 rows.)
+        assertEquals(31, SettingsCatalog.SETTING_ROWS.size)
         // ...and it is hidden, because it is the spending screen's accept-all
         // control rather than a preference.
         assertTrue(rows.first { it.s("id") == "spd-accept" }.b("hidden"))
