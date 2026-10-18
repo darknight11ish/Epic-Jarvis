@@ -334,14 +334,74 @@ def t_the_real_uia_library_has_the_selection_api():
           and getattr(getattr(auto, "PatternId", None), "TextPattern", None) is not None)
     check("the default selection reader is a real callable, never run by this suite",
           callable(U._default_selection_text) and callable(U._default_front_snapshot))
+    check("the focused control's top-level window can be walked (the identity proof)",
+          hasattr(auto.Control, "GetTopLevelControl")
+          and callable(U._default_focused_window))
+
+
+# --------------------------------------------------------------------------
+#   4. The text must come from the window whose pause rules passed (S-2)
+# --------------------------------------------------------------------------
+
+
+def t_a_control_from_another_window_returns_no_text():
+    snap = {"exe": "notepad.exe", "title": "notes", "cls": "Notepad", "host": "",
+            "hwnd": 4321, "locked": False, "password_focused": False,
+            "capture_protected": False}
+    reader = Reader("words from somewhere else")
+    result = U.read_selection(front=snap, selection=reader, never=never_list(),
+                              scrubber=identity, window=lambda: {"hwnd": 9999})
+    check("a focused control in ANOTHER top-level window is refused",
+          result.get("ok") is False and result.get("refused") is True
+          and result.get("why") == "window_changed", result)
+    check("... and not one character of that other window's text is returned",
+          result.get("text") == "" and "words from somewhere else" not in result.get("words", ""),
+          result)
+    check("... the read happened (the refusal is the PROOF, not a skipped read)",
+          reader.calls == [1], reader.calls)
+
+
+def t_a_matching_focused_window_still_returns_text():
+    snap = {"exe": "notepad.exe", "title": "notes", "cls": "Notepad", "host": "",
+            "hwnd": 7, "locked": False, "password_focused": False,
+            "capture_protected": False}
+    result = U.read_selection(front=snap, selection=Reader("same window words"),
+                              never=never_list(), scrubber=identity,
+                              window=lambda: {"hwnd": 7})
+    check("the same window passes the identity proof and returns its text",
+          result.get("ok") is True and result.get("text") == "same window words", result)
+
+
+def t_a_window_that_changes_during_the_read_returns_nothing():
+    first = {"exe": "notepad.exe", "title": "notes", "cls": "Notepad", "host": "",
+             "hwnd": 11, "locked": False, "password_focused": False,
+             "capture_protected": False}
+    second = {"exe": "chrome.exe", "title": "Bank - Chrome", "cls": "Chrome_WidgetWin_1",
+              "host": "mybank.example", "hwnd": 22, "locked": False,
+              "password_focused": False, "capture_protected": False}
+    seen = []
+
+    def changing_front():
+        seen.append(1)
+        return first if len(seen) == 1 else second
+
+    result = U.read_selection(front=changing_front, selection=Reader("bank words"),
+                              never=never_list(), scrubber=identity)
+    check("the front window changing between the check and the read is refused",
+          result.get("ok") is False and result.get("why") == "window_changed", result)
+    check("... with no text from the second window",
+          result.get("text") == "" and "bank words" not in json.dumps(result), result)
+    check("... and the front was really read twice (once before, once after)",
+          len(seen) == 2, seen)
 
 
 def t_reading_the_selection_is_not_writing_anything_else():
     # Defence in depth: a selection read must not be a way to change a setting,
     # hold a card or change the taint latch. The injected fakes make any call
     # to such a helper impossible; this pins the module surface instead.
-    check("read_selection takes only the four injectable seams",
-          list(U.read_selection.__kwdefaults__ or {}) == ["front", "selection", "never", "scrubber"],
+    check("read_selection takes only the five injectable seams",
+          list(U.read_selection.__kwdefaults__ or {})
+          == ["front", "selection", "never", "scrubber", "window"],
           U.read_selection.__kwdefaults__)
     check("... and is keyword-only (no accidental positional bypass)",
           all(p.kind is p.KEYWORD_ONLY for p in
@@ -360,7 +420,10 @@ if __name__ == "__main__":
              t_a_selection_that_is_all_secret_is_refused,
              t_a_missing_or_broken_scrubber_fails_closed, t_a_reader_failure_is_plain,
              t_nothing_is_persisted, t_the_real_uia_library_has_the_selection_api,
-             t_reading_the_selection_is_not_writing_anything_else)
+             t_reading_the_selection_is_not_writing_anything_else,
+             t_a_control_from_another_window_returns_no_text,
+             t_a_matching_focused_window_still_returns_text,
+             t_a_window_that_changes_during_the_read_returns_nothing)
     try:
         for fn in TESTS:
             print(f"\n--- {fn.__name__} ---")
