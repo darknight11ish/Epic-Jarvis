@@ -1,5 +1,5 @@
 {
- "about": "The shared words of Review decks and Spanish practice (docs/QUIZ-DECKS-DESIGN.md, Slice contract C5), word for word, plus worked examples of the small rules and the frozen reply shapes of C2 and C4. Written by tools/gen_decks_cases.py: both apps' tests (src/decks.js, src/quiz.js, Decks.kt, Quiz.kt) read this file.",
+ "about": "The shared words of Review decks and Spanish practice (docs/QUIZ-DECKS-DESIGN.md, Slice contract C5), word for word, plus worked examples of the small rules and the frozen reply shapes of C2 and C4 - and slice 22B's two additive fields: the \"radar\" rows under the deck list and the \"grade\" a reveal answers a typed answer with. Written by tools/gen_decks_cases.py: both apps' tests (src/decks.js, src/quiz.js, Decks.kt, Quiz.kt) read this file.",
  "accents": [
   "á",
   "é",
@@ -355,6 +355,12 @@
   ]
  },
  "pc_words": {
+  "grade_words": {
+   "Again": "Marked Again so it comes back soon.",
+   "Good": "That matches the answer - marked Good.",
+   "Hard": "That answer is partly right - marked Hard.",
+   "no_answer": "There is no answer to compare with, so it is marked Again."
+  },
   "key_label_model": "Answer key written by the model",
   "spanish_notice": "Jarvis cannot recognise a crisis message written in Spanish. If you are in danger, call or text 988, or 911."
  },
@@ -419,6 +425,22 @@
    "new_per_day": 5,
    "next_ready_day": "2026-10-03",
    "ok": true,
+   "radar": [
+    {
+     "below": 2,
+     "cards": 6,
+     "lowest": 0.52,
+     "topic": "Plants",
+     "words": "2 cards in Plants have dropped below 75% memory strength"
+    },
+    {
+     "below": 1,
+     "cards": 4,
+     "lowest": 0.71,
+     "topic": "Verbos",
+     "words": "1 card in Verbos has dropped below 75% memory strength"
+    }
+   ],
    "ready": 3,
    "why": ""
   },
@@ -438,8 +460,23 @@
    "new_per_day": 5,
    "next_ready_day": null,
    "ok": true,
+   "radar": [],
    "ready": 2,
    "why": "Decks are not set up on this PC: no key in Credential Manager."
+  },
+  "graded_reveal": {
+   "back": {
+    "answer": "Chlorophyll",
+    "passage": "Chlorophyll absorbs sunlight."
+   },
+   "grade": {
+    "label": "Good",
+    "matched": true,
+    "rating": 3,
+    "words": "That matches the answer - marked Good."
+   },
+   "key_label": null,
+   "ok": true
   },
   "keep_crisis": {
    "crisis": true,

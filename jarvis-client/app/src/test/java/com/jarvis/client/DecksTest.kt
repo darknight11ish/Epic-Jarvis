@@ -11,6 +11,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -209,7 +210,6 @@ class DecksTest {
             "deck_name" to Decks.DECK_NAME,
             "choose_deck" to Decks.CHOOSE_DECK,
             "show_answer" to Decks.SHOW_ANSWER,
-            "typed_placeholder" to Decks.TYPE_HINT,
             "enough" to Decks.ENOUGH,
             "more" to Decks.DO_10_MORE,
             "stop" to Decks.STOP,
@@ -286,6 +286,98 @@ class DecksTest {
                 .copy(decks = decks)
             assertEquals(row.toString(), row[2].jsonPrimitive.boolean, Decks.perDeckNoteShown(list))
         }
+    }
+
+    @Test
+    fun thePhonesOwnWordsForTheMarkedAnswerAndTheRadar() {
+        // Slice 22B is the phone's half: the box can now ask the PC to mark what
+        // was typed, so its word is the phone's own rather than the shared one
+        // (the desktop's box still shows `typed_placeholder`, one-sided until its
+        // review screen draws the same button - docs/ARCHITECTURE.md section 8).
+        assertEquals("Mark my answer", Decks.MARK_ANSWER)
+        assertEquals("Cards fading", Decks.RADAR_HEADING)
+        assertTrue(Decks.TYPE_HINT.contains("mark", ignoreCase = true))
+        assertFalse(Decks.TYPE_HINT.contains("not sent"))
+        assertNotEquals(w("typed_placeholder"), Decks.TYPE_HINT)
+        // Neither word says the phone listens: it never does speech-to-text.
+        listOf(Decks.MARK_ANSWER, Decks.RADAR_HEADING, Decks.TYPE_HINT).forEach {
+            assertFalse(it, it.contains("voice", ignoreCase = true))
+            assertFalse(it, it.contains("microphone", ignoreCase = true))
+            assertFalse(it, it.contains("spoken", ignoreCase = true))
+        }
+    }
+
+    @Test
+    fun theRadarRowsAreReadWithThePcsOwnWordsAndNumbers() {
+        val samples = fixture["samples"]!!.jsonObject
+        val raw = samples["decks"]!!.jsonObject
+        val list = Decks.parseList(raw)!!
+        val fixRadar = raw["radar"]!!.jsonArray
+        assertEquals(fixRadar.size, list.radar.size)
+        assertEquals("Plants", list.radar[0].topic)
+        assertEquals(6, list.radar[0].cards)
+        assertEquals(2, list.radar[0].below)
+        assertEquals(0.52, list.radar[0].lowest, 1e-9)
+        assertEquals(fixRadar[0].jsonObject["words"]!!.jsonPrimitive.content, list.radar[0].words)
+        // An older PC sends no radar: an empty list, never a crash.
+        assertTrue(Decks.parseList(obj("""{"available":true,"decks":[],"ready":0}"""))!!.radar.isEmpty())
+        // A row with no topic is not a row; a strength outside 0..1 is clamped.
+        val odd = Decks.parseList(
+            obj(
+                """{"available":true,"decks":[],"ready":0,"radar":[
+                    {"topic":"","words":"x"}, 7,
+                    {"topic":"T","cards":2,"below":1,"lowest":7,"words":"w"}]}""",
+            ),
+        )!!
+        assertEquals(1, odd.radar.size)
+        assertEquals("T", odd.radar[0].topic)
+        assertEquals(1.0, odd.radar[0].lowest, 1e-9)
+    }
+
+    @Test
+    fun aGradedRevealCarriesThePcsMarkAndAnOldReplyCarriesNone() {
+        val samples = fixture["samples"]!!.jsonObject
+        val r = Decks.parseReveal(samples["graded_reveal"]!!.jsonObject)!!
+        assertEquals("Chlorophyll", r.answer)
+        val grade = requireNotNull(r.grade)
+        assertEquals(3, grade.rating)
+        assertEquals("Good", grade.label)
+        assertTrue(grade.matched)
+        assertEquals(
+            fixture["pc_words"]!!.jsonObject["grade_words"]!!.jsonObject["Good"]!!.jsonPrimitive.content,
+            grade.words,
+        )
+        // The old reveal reply has no "grade" at all.
+        assertNull(Decks.parseReveal(samples["reveal"]!!.jsonObject)!!.grade)
+        // A label outside the PC's three is not a grade; a bare mark is unreadable.
+        assertNull(
+            Decks.parseReveal(
+                obj("""{"back":{"answer":"a","passage":""},"grade":{"rating":3,"label":"Easy","matched":true,"words":"x"}}"""),
+            )!!.grade,
+        )
+        assertNull(Decks.parseReveal(obj("""{"back":{"answer":"a","passage":""},"grade":"x"}"""))!!.grade)
+    }
+
+    @Test
+    fun markingSendsOnlyTheTypedAnswerAndOnlyWhenAsked() {
+        assertEquals(setOf("card"), obj(Decks.revealBody("c1")).keys)
+        val marked = obj(Decks.revealBody("c1", "Chlorophyll"))
+        assertEquals("c1", marked["card"]!!.jsonPrimitive.content)
+        assertEquals("Chlorophyll", marked["answer"]!!.jsonPrimitive.content)
+        // An empty box sends no answer: the reply the PC has always given.
+        assertEquals(setOf("card"), obj(Decks.revealBody("c1", "   ")).keys)
+        assertEquals(setOf("card"), obj(Decks.revealBody("c1", null)).keys)
+    }
+
+    @Test
+    fun theRadarIsWithheldExactlyLikeThePrivateLists() {
+        val list = Decks.parseList(fixture["samples"]!!.jsonObject["decks"]!!.jsonObject)!!
+        assertTrue(Decks.radarShown(list))
+        assertFalse(Decks.radarShown(list, hidden = true))
+        assertFalse(Decks.radarShown(list.copy(available = false)))
+        assertFalse(Decks.radarShown(list.copy(radar = emptyList())))
+        assertTrue(Decks.hide(list).radar.isEmpty())
+        assertEquals(Decks.HIDDEN_TEXT, Decks.hide(list).decks[0].name)
     }
 
     @Test

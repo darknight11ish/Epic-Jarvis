@@ -59,6 +59,16 @@ through jarvis_receipts.py before the row changes, so a misheard grade is one
 Undo away. A spoken answer is never marked Easy by code (the grader tops out
 at Good): Easy stretches the next interval the most, and speech-to-text is not
 certain enough to make that call for the owner.
+
+SLICE 22B: THE PHONE SURFACE (2026-10-17)
+Additive fields only - this slice adds no route. GET /api/decks carries the
+radar rows in its own "radar" key (`low_retrievability_topics()`'s shapes), and
+POST /api/review/reveal takes an optional typed `answer` and answers with the
+grader's own "grade" dict in the same reply. Both are extra keys an older app
+ignores, and nothing else changes. The spelling of the four PC sentences is in
+GRADE_WORDS, one source for both apps' fixtures. The spoken path stays
+unbuilt: a phone must not do speech-to-text, and the review is typed only, so
+record_voice_review()'s receipt still has no route either.
 """
 from __future__ import annotations
 
@@ -252,6 +262,15 @@ VOICE_TOOL = "decks.voice_review"
 #: The four ratings as the apps label them (the words CLASSES.bad_rating uses).
 RATING_WORDS = {"again": "Didn't remember", "hard": "Remembered with effort",
                 "good": "Remembered", "easy": "Easy"}
+#: The PC's own sentences for one graded answer (slice 22B, 2026-10-17). They
+#: live here rather than in an app, because they are the PC's words:
+#: grade_spoken_answer() returns one of these four and no app copies one.
+GRADE_WORDS = {
+    "Good": "That matches the answer - marked Good.",
+    "Hard": "That answer is partly right - marked Hard.",
+    "Again": "Marked Again so it comes back soon.",
+    "no_answer": "There is no answer to compare with, so it is marked Again.",
+}
 
 #: A word of an answer: lower case, digits and the apostrophe only, so "don't"
 #: does not become "dont" and a number is not dropped as punctuation.
@@ -312,14 +331,12 @@ def grade_spoken_answer(expected_back, spoken_answer) -> dict:
     said = " ".join(spoken)
     if not expected:
         return {"rating": 1, "label": "Again", "matched": False,
-                "words": "There is no answer to compare with, so it is marked Again."}
+                "words": GRADE_WORDS["no_answer"]}
     if not said or said in PASS_PHRASES:
         return {"rating": 1, "label": "Again", "matched": False,
-                "words": "Marked Again so it comes back soon."}
+                "words": GRADE_WORDS["Again"]}
     rating, label, matched = _spoken_rating(_spoken_score(expected, spoken))
-    words = {"Good": "That matches the answer - marked Good.",
-             "Hard": "That answer is partly right - marked Hard.",
-             "Again": "Marked Again so it comes back soon."}[label]
+    words = GRADE_WORDS[label]
     return {"rating": rating, "label": label, "matched": matched, "words": words}
 
 
@@ -758,7 +775,7 @@ class Decks:
         ok, why = self.available()
         base = {"ok": True, "available": ok, "why": why, "decks": [], "ready": 0,
                 "new_per_day": NEW_PER_DAY_DEFAULT, "new_left": NEW_PER_DAY_DEFAULT,
-                "next_ready_day": None, "line": "",
+                "next_ready_day": None, "line": "", "radar": [],
                 "limits": {"decks": MAX_DECKS, "cards": MAX_CARDS, "name": NAME_MAX,
                            "front": FRONT_MAX, "back": BACK_MAX,
                            "new_per_day": NEW_PER_DAY_MAX}}
@@ -780,7 +797,57 @@ class Decks:
                             "cards": len(mine), "ready": n["per_deck"].get(did, 0),
                             "paused": bool(paused), "kind": self._kind_of(mine)})
             base["decks"] = out
+        if out:
+            try:
+                base["radar"] = self.radar()
+            except DeckError:
+                base["radar"] = []          # the deck list must never fail because of the radar
         return base
+
+    def radar(self, *, now=None) -> list:
+        """The fading-deck rows under the deck list (slice 22B, 2026-10-17).
+
+        `low_retrievability_topics()`'s own rows, weakest first: one per deck
+        with a reviewed card below LOW_RETRIEVABILITY, carrying {"topic",
+        "cards", "below", "lowest", "words"}. The topic is the deck's name, so
+        an app must withhold it under "Hide memory lists and chat history" as
+        it withholds the deck list. The numbers are plain columns, so no key is
+        needed to count; only the names are opened. A pause is respected: a
+        paused deck is left out, as its cards are left out of the review queue.
+        A deck whose name cannot be opened is left out rather than hiding the
+        rest. `now` is the boundary: tests pass a fixed clock, and with None
+        the clock is read once here."""
+        at = self._clock() if now is None else float(now)
+        with self._lock:
+            if not self._exists():
+                return []
+            with closing(self._connect()) as c:
+                decks = c.execute("SELECT id, name, paused FROM decks ORDER BY rowid").fetchall()
+                cards = c.execute("SELECT deck_id, stability, last_review FROM cards"
+                                  " WHERE last_review IS NOT NULL"
+                                  " AND stability IS NOT NULL ORDER BY rowid").fetchall()
+            if not decks or not cards:
+                return []
+            aead = self._cipher()
+            by_deck: dict = {}
+            for did, stability, last in cards:
+                by_deck.setdefault(did, []).append({"stability": stability,
+                                                    "last_review": last})
+            items = []
+            for did, name, paused in decks:
+                if paused:               # a paused deck is resting, not fading
+                    continue
+                mine = by_deck.get(did)
+                if not mine:             # nothing rated here: no memory strength to predict
+                    continue
+                try:
+                    topic = self._unseal(aead, name, f"deck|{did}|name")
+                except DeckError:
+                    continue             # one unreadable name must not hide the rest
+                for card in mine:
+                    card["deck"] = topic
+                items.extend(mine)
+        return low_retrievability_topics(items, now=at)
 
     def _deck_view(self, c, did: str) -> dict:
         n = self._numbers(c)
@@ -1073,17 +1140,29 @@ class Decks:
             raise DeckError("card_not_found")
         return row, n
 
-    def reveal(self, cid) -> dict:
+    def reveal(self, cid, answer=None) -> dict:
+        """Show one card's back; with a typed `answer`, mark it in the same read.
+
+        The extra "grade" key (slice 22B, 2026-10-17) is
+        grade_spoken_answer()'s own dict for the card's back against the typed
+        words - the app's "Mark my answer" button sends it. It is additive: a
+        caller that sends no answer (every older app) gets exactly the reply it
+        always got, and no rating is applied here - the owner still chooses one
+        of the four buttons. `answer` that is not a non-blank string is ignored
+        rather than failing the reveal."""
         with self._lock:
             if not isinstance(cid, str) or not self._exists():
                 raise DeckError("card_not_found")
             with closing(self._connect()) as c:
                 row, _n = self._up_for_review(c, cid)
                 aead = self._cipher()
+                back = self._unseal(aead, row[3], f"card|{cid}|back")
                 out = {"ok": True,
-                       "back": {"answer": self._unseal(aead, row[3], f"card|{cid}|back"),
+                       "back": {"answer": back,
                                 "passage": self._unseal(aead, row[4], f"card|{cid}|passage")},
                        "key_label": KEY_LABEL if row[7] == "model" else None}
+                if isinstance(answer, str) and answer.strip():
+                    out["grade"] = grade_spoken_answer(back, answer)
             now = self._clock()
             self._revealed = {k: v for k, v in self._revealed.items() if now - v < REVEAL_KEEP}
             self._revealed[cid] = now
@@ -1392,7 +1471,7 @@ def handle_post(route: str, body):
         if route == PATH_DECKS + "/settings":
             return 200, d.set_new_per_day(body.get("new_per_day"))
         if route == PATH_REVIEW + "/reveal":
-            return 200, d.reveal(body.get("card"))
+            return 200, d.reveal(body.get("card"), body.get("answer"))
         if route == PATH_REVIEW + "/rate":
             return 200, d.rate(body.get("card"), body.get("rating"), body.get("deck"))
         if route == PATH_REVIEW + "/more":
