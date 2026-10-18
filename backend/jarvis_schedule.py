@@ -126,6 +126,21 @@ everyday quick wins)
     UNDO_WINDOW seconds, and only once.
   * Named lists: a to-do item may carry a list name ("shopping"); none is
     the to-do list. One limit (MAX_TODO) for every list together.
+
+CONTEXT-RICH REMINDERS, AND WHAT IS KEPT WHEN THEY CANNOT BE SCRUBBED
+(GTD-1 follow-up, Gemini's Q2 ruling, 2026-10-18)
+A reminder may carry a context packet - a short summary, names, opaque file
+labels, a suggested prompt - and every word of it goes through `jarvis_scrub`
+before it is stored. When the scrubber is missing or raises, the packet is
+dropped WHOLE rather than stored half-scrubbed (privacy review F1/F2). What
+remains is ONE plain boolean on the reminder view,
+`context_dropped_unscrubbed: True`, and nothing else: no summary, no names, no
+ids, and deliberately NO HASH of the dropped words. A hash of a guessable name
+or sentence is a secret oracle (try a candidate, compare the hash) and tells
+the owner nothing useful; the boolean says only "this reminder had context
+that could not be checked, so none of it was kept". It is absent on an
+ordinary reminder, on an old row written before the flag existed, and when
+the scrubber worked.
 """
 from __future__ import annotations
 
@@ -1887,11 +1902,24 @@ class Scheduler:
             target = _safe_condition_target(row["condition_target"])
             if target:
                 v["condition_target"] = target
+        # GTD-1: the bundle's WORDS are deliberately not handed out here.
+        # `has_context` says a real packet exists, and
+        # `enrich_and_check_condition()` is the one read path, because that is
+        # where hide-memory-lists and App lock are honoured. GTD-1 follow-up
+        # (2026-10-18): when the packet was dropped rather than stored because
+        # it could not be scrubbed, the ONE additive key is the plain boolean
+        # `context_dropped_unscrubbed` - never a word, an id or a hash of it
+        # (Gemini's Q2 ruling: a hash would be a secret oracle). `has_context`
+        # is NOT set in that case: there is no context to hand out.
         try:
-            if row["context_bundle"]:
-                v["has_context"] = True
+            raw_bundle = row["context_bundle"]
         except (IndexError, KeyError):
-            pass
+            raw_bundle = None
+        bundle_here = _decode_bundle(raw_bundle) if raw_bundle else {}
+        if bundle_here.get(CONTEXT_DROPPED) is True:
+            v[CONTEXT_DROPPED] = True
+        if any(bundle_here.get(key) for key in BUNDLE_CONTENT_KEYS):
+            v["has_context"] = True
         if k is not None and not k.notify:
             v["notify"] = False
         if k is not None and k.note is not None:
@@ -1922,7 +1950,12 @@ class Scheduler:
 
         The scheduler's own read path hands out no bundle words (see `_view`);
         this is the backend door a caller that has already checked its own
-        hide-memory-lists / App lock flags uses, one row at a time."""
+        hide-memory-lists / App lock flags uses, one row at a time.
+
+        GTD-1 follow-up (2026-10-18): a packet dropped because the scrubber
+        was missing or raising reads as `{CONTEXT_DROPPED: True}` - the plain
+        boolean and nothing else. There is no hash of the dropped words, on
+        purpose: it would be a secret oracle and useless to the owner."""
         with self._lock, self._db() as c:
             row = c.execute("SELECT context_bundle FROM jobs WHERE id = ?",
                             (str(jid),)).fetchone()
@@ -2327,6 +2360,19 @@ BUNDLE_ENTITIES_MAX = 8
 BUNDLE_FILES_MAX = 8
 BUNDLE_PROMPT_MAX = 400
 
+#: GTD-1 follow-up (Gemini's Q2 ruling, 2026-10-18): the ONLY breadcrumb kept
+#: when a context packet's words must be dropped because the scrubber is
+#: missing or raising. A plain true flag, never a hash - a hash of a guessable
+#: name or sentence is a secret oracle, and it would tell the owner nothing.
+#: No words, no ids: just "there was context that could not be checked".
+CONTEXT_DROPPED = "context_dropped_unscrubbed"
+
+#: The packet's own content keys. Used to tell "a packet with real content"
+#: from "the dropped breadcrumb only", so the view never says `has_context`
+#: for a reminder whose context was in fact thrown away.
+BUNDLE_CONTENT_KEYS = ("source_conv_id", "source_summary", "linked_entities",
+                       "linked_files", "suggested_prompt")
+
 #: "At the PC" means unlocked AND no more than this many idle seconds AND no
 #: focus session running. Two minutes is the ruling's own number.
 IDLE_ACTIVE_MAX_S = 120.0
@@ -2436,6 +2482,11 @@ def _decode_bundle(raw) -> dict:
     return got if isinstance(got, dict) else {}
 
 
+def _bundle_has_content(bundle: dict) -> bool:
+    """Whether a packet dict carries anything besides the dropped breadcrumb."""
+    return any(bundle.get(key) for key in BUNDLE_CONTENT_KEYS)
+
+
 def scrub_context_bundle(bundle) -> dict:
     """The ONLY way a context packet becomes storable.
 
@@ -2445,15 +2496,19 @@ def scrub_context_bundle(bundle) -> dict:
     opaque id/label, never by its path (the blueprint's ruling, Q3/Q4).
 
     FAIL CLOSED (privacy review F1/F2): when the scrubber is missing, or
-    raises on any word in the packet, the result is {} - nothing is stored
-    raw and nothing is stored half-scrubbed. The old "keep everything but the
-    summary" rule is deliberately gone: a name or file label can carry a
-    secret too."""
+    raises on any word in the packet, the result is {CONTEXT_DROPPED: True} -
+    the packet's words are gone and the reminder keeps ONLY the plain boolean
+    saying they were dropped (GTD-1 follow-up, Gemini's Q2 ruling 2026-10-18).
+    No words, no ids, and no hash: a hash of the dropped text would be a
+    secret oracle. A packet already carrying the breadcrumb keeps it, so a
+    snoozed copy does not lose the fact."""
     if not isinstance(bundle, dict):
         return {}
+    prior = bundle.get(CONTEXT_DROPPED) is True
+    lost = prior or _bundle_has_content(bundle)
     scrubber = _scrubber()
     if scrubber is None:
-        return {}
+        return {CONTEXT_DROPPED: True} if lost else {}
 
     def clean(text, limit: int) -> str:
         t = " ".join(str(text or "").split())
@@ -2493,13 +2548,24 @@ def scrub_context_bundle(bundle) -> dict:
             prompt = ""                   # and never one in a suggested prompt
     except Exception:
         # A scrubber that cannot handle these words must not let ANY of them
-        # through: no half-scrubbed packet, no raw survivors.
-        return {}
-    return {"source_conv_id": conv or None,
-            "source_summary": summary,
-            "linked_entities": entities,
-            "linked_files": files,
-            "suggested_prompt": prompt}
+        # through: no half-scrubbed packet, no raw survivors. The breadcrumb is
+        # the only thing kept, so the owner can see the packet was dropped
+        # rather than think there never was one.
+        return {CONTEXT_DROPPED: True} if lost else {}
+    out = {"source_conv_id": conv or None,
+           "source_summary": summary,
+           "linked_entities": entities,
+           "linked_files": files,
+           "suggested_prompt": prompt}
+    if prior:
+        # Re-scrubbing an already-dropped packet (a snooze copies it, an app
+        # sends it back): keep the breadcrumb, and keep ONLY the breadcrumb
+        # when there are no words - so reading it again cannot grow empty
+        # fields that look like content.
+        if not _bundle_has_content(out):
+            return {CONTEXT_DROPPED: True}
+        out[CONTEXT_DROPPED] = True
+    return out
 
 
 def _reminder_extras(body) -> dict:
@@ -2676,8 +2742,10 @@ def enrich_and_check_condition(reminder, *, readers=None, hide_memory_lists=Fals
     """The details a reminder is ABOUT, plus its read-only condition.
 
     Returns {"withheld", "context", "facts", "condition_satisfied_early",
-    "condition_note", "toast", "context_attached"}. READ-ONLY: it starts
-    nothing, sends nothing, changes no reminder.
+    "condition_note", "toast", "context_attached"} - plus, ONLY when the stored
+    packet had to be dropped unscrubbed, `context_dropped_unscrubbed: True`
+    beside them: a plain flag about the reminder, never a word or a hash of
+    one. READ-ONLY: it starts nothing, sends nothing, changes no reminder.
 
     WITHHELD ENTIRELY under `hide_memory_lists` or `app_locked`: no reader is
     called, no bundle is read, no taint is latched, and every words field comes
@@ -2711,12 +2779,22 @@ def enrich_and_check_condition(reminder, *, readers=None, hide_memory_lists=Fals
     title = str(reminder.get("text") or "")
     context = scrub_context_bundle(reminder.get("context_bundle")) \
         if isinstance(reminder.get("context_bundle"), dict) else {}
+    # Only fetch from the store when the reminder carried no packet at all: a
+    # packet that scrubbed to the dropped breadcrumb is already an answer, and
+    # must not send this caller to the singleton scheduler for a second look.
     if not context and reminder.get("id"):
         try:
             context = scrub_context_bundle(get().bundle(str(reminder.get("id"))))
         except Exception:
             context = {}
+    context = dict(context or {})
+    # The dropped-packet breadcrumb is NOT context and must never be handed to
+    # a caller as if it were: it is a flag about the reminder, not a fact about
+    # the owner's words. It is exposed additively beside the details, no words.
+    dropped = context.pop(CONTEXT_DROPPED, None) is True
     out["context"] = context
+    if dropped:
+        out[CONTEXT_DROPPED] = True
 
     facts = []
     get_facts = _reader(readers, "memory_facts")
