@@ -22,8 +22,16 @@ is staged, and a suite is skipped only if its files are really not there.
 
 THE OWNER'S STATE IS LEFT ALONE. The suites run real code that writes -
 the audit log, approval queues, switch files - so each run gets a temporary
-config folder and audit log (private_state below), deleted afterwards.
-apply-patches.ps1 asks for the same variables with `--state-env DIR`.
+config folder, audit log and HOME, deleted afterwards (private_state below).
+`OPENJARVIS_HOME` and `JARVIS_HOME` are the folder most modules treat as "the
+owner's" (databases, inboxes, receipts, the guardian store); pointing them at
+a throwaway folder is what keeps a suite that forgot its own `_TMP` from
+reading or writing the owner's real data during a patcher run. The one way to
+ask for the real home is `JARVIS_TESTS_USE_REAL_HOME=1`, and it is never the
+default. apply-patches.ps1 asks for the same variables with
+`--state-env DIR`; whatever that prints is what its test loop sets, and the
+home folder is made before it is printed, so the patcher is hermetic without
+a second list to keep in step.
 
 The skip list is explicit, not guessed from a failure: a suite that is not in
 it and fails is a failure, and a suite in it whose files ARE present runs.
@@ -182,6 +190,14 @@ STAGE_PREFIX = "jarvis-staged-backend-"
 BACKEND_NAME = "backend"
 STATE_NAME = "state"
 SUITE_TEMP_NAME = "tmp"
+#: The throwaway HOME under this run's state folder, and the two names every
+#: module in this backend reads it by. See private_state.
+HOME_NAME = "home"
+HOME_ENVS = ("OPENJARVIS_HOME", "JARVIS_HOME")
+#: The ONE escape hatch for a suite that genuinely needs the owner's real home
+#: (his databases, his inbox): `JARVIS_TESTS_USE_REAL_HOME=1`. Never the
+#: default, and a run that sets it SAYS SO in its header.
+REAL_HOME_ENV = "JARVIS_TESTS_USE_REAL_HOME"
 OWNER_MARKER = "_owner.json"
 #: A marked folder - one this runner made - may be reaped once its owner is
 #: gone and it is at least this old.
@@ -336,7 +352,7 @@ def _with_log_directory(toml: str, where: Path) -> str:
 
 def private_state(env: dict, backend: Path, where: Path) -> dict:
     """`env`, changed so the suites write their state under `where`, never
-    into the owner's real config folder.
+    into the owner's real config folder or real HOME.
 
     Several suites run real code that writes: the audit log (131 fake
     events - "voice.training.decided", "wiki.asked", "task.stop" - landed
@@ -352,6 +368,19 @@ def private_state(env: dict, backend: Path, where: Path) -> dict:
     JARVIS_FRAMEWORK_TOML points at the copy. A suite that sets
     JARVIS_FRAMEWORK_TOML itself (test_rebuilt, test_router_private_terms)
     still reads the file it chose.
+
+    AND THE CONFIG FOLDER IS NOT THE HOME. `OPENJARVIS_HOME` is checked
+    BEFORE that rule, by the modules that keep the owner's own data
+    (jarvis_receipts, jarvis_file_guardian, jarvis_chat_log, ...), and a
+    suite that never sets it falls through to ~/.openjarvis - the owner's
+    real databases and inbox. During a patcher run that is data a check can
+    read, and a write can change. So each run gets a throwaway
+    `<state>/home` and BOTH names point at it. That is the default and stays
+    the default; a suite that genuinely needs the real home is run with
+    JARVIS_TESTS_USE_REAL_HOME=1, and the run's header says so in plain
+    words. Cleanup is the run's own: the home is under `where`, which lives
+    under the run root removed in main()'s finally (and, for --state-env,
+    under the state folder apply-patches.ps1 removes in its finally).
 
     PYTHONIOENCODING is set here too, and it is not about state: it is a
     bug this runner had on Windows. A Windows console (and a pipe) defaults
@@ -373,12 +402,35 @@ def private_state(env: dict, backend: Path, where: Path) -> dict:
     found = _config_the_suites_would_read(env, backend)
     out["OPENJARVIS_CONFIG_DIR"] = str(cfg)
     out["JARVIS_CONFIG_DIR"] = str(cfg)
+    if str(env.get(REAL_HOME_ENV) or "").strip() == "1":
+        # The escape hatch. The caller asked for the real home; nothing here
+        # touches it, and the header of a run says "NOT hermetic".
+        pass
+    else:
+        home = where / HOME_NAME
+        home.mkdir(parents=True, exist_ok=True)
+        for name in HOME_ENVS:
+            out[name] = str(home)
     if found is not None:
         copy = cfg / CONFIG_NAME
         copy.write_text(_with_log_directory(found.read_text(encoding="utf-8"), logs),
                         encoding="utf-8")
         out["JARVIS_FRAMEWORK_TOML"] = str(copy)
     return out
+
+
+def home_words(env: dict) -> str:
+    """The header line saying where the suites' HOME points - and saying it out
+    loud when that is the owner's real home. Never silent about the hatch."""
+    home = str(env.get("OPENJARVIS_HOME") or "")
+    if str(env.get(REAL_HOME_ENV) or "").strip() == "1":
+        return (f"home: {home or 'the real home'}  (NOT hermetic: "
+                f"{REAL_HOME_ENV}=1 - the suites may read and write real data)")
+    if home:
+        return (f"home: {home}  (throwaway: the suites' OPENJARVIS_HOME and "
+                f"JARVIS_HOME, not yours)")
+    return (f"home: the owner's REAL home  (NOT hermetic: {REAL_HOME_ENV}=1 - "
+            f"the suites may read and write real data)")
 
 
 def stage(root: Path = None) -> Path:
@@ -815,6 +867,7 @@ def _sweep(root: Path, only=(), jobs: int = 1) -> int:
         state = root / STATE_NAME
         worker_envs = [suite_temp_env(private_state(base, backend, state), root)]
         print(f"state: {state}  (config folder and audit log for this run, not yours)")
+        print(home_words(worker_envs[0]))
         for suite in suites:
             _print_job(_suite_job(suite, backend, worker_envs[0]),
                        ran, passed, failed, skipped)
@@ -826,6 +879,8 @@ def _sweep(root: Path, only=(), jobs: int = 1) -> int:
                 private_state(dict(base), backend, state), state))
         print(f"state: {root / STATE_NAME}-1 .. -{jobs}  ({jobs} worker folders: "
               f"config folder and audit log for this run, not yours)")
+        print(home_words(worker_envs[0]) + f"  (one home per worker: "
+              f"state-1 .. state-{jobs})")
         _sweep_parallel(suites, backend, worker_envs, ran, passed, failed, skipped)
     # No rmtree here any more: `root` - which holds the staged backend (unless
     # JARVIS_BACKEND named a real one), the state folder and the suites' own
@@ -847,6 +902,13 @@ def state_env(where: str) -> int:
     one, and sets these first - so the two runners cannot disagree about
     where test state goes.
 
+    That now includes `OPENJARVIS_HOME` / `JARVIS_HOME`: the owner's own data
+    (databases, inbox, receipts, the guardian store) is the one thing a
+    patcher-run suite must never read or write, and both names point at
+    DIR/home, which is made here before it is printed. The one exception is
+    `JARVIS_TESTS_USE_REAL_HOME=1`: then no home line is printed at all, so
+    the caller's real home is left alone - and the caller has asked for it.
+
     PYTHONIOENCODING is printed here for a different reason: apply-patches.ps1
     runs each suite as its own process, so without it in this list the suites
     it runs would still be on the console's code page and still crash on a
@@ -855,7 +917,7 @@ def state_env(where: str) -> int:
     backend = Path(os.environ.get("JARVIS_BACKEND") or HERE).resolve()
     env = private_state(dict(os.environ), backend, Path(where))
     for k in ("OPENJARVIS_CONFIG_DIR", "JARVIS_CONFIG_DIR", "JARVIS_FRAMEWORK_TOML",
-              "PYTHONIOENCODING"):
+              "OPENJARVIS_HOME", "JARVIS_HOME", "PYTHONIOENCODING"):
         if env.get(k) and env.get(k) != os.environ.get(k):
             print(f"{k}={env[k]}")
     return 0

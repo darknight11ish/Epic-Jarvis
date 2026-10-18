@@ -43,6 +43,12 @@ a temporary folder, and every socket made to fail:
 
 Every check fails on the code before this change: none of it existed. No
 pytest, no network, no model.
+
+AND IT IS HERMETIC (2026-10-18): its OPENJARVIS_HOME / JARVIS_HOME are a
+throwaway folder under its own temp dir, its six-item inbox fixture lives
+there, and the suite refuses to run at all if those names do not point
+inside that folder - a patcher run must never read the owner's real
+~/.openjarvis.
 """
 from __future__ import annotations
 
@@ -62,6 +68,78 @@ from pathlib import Path
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-quick-wins-"))
 os.environ["OPENJARVIS_CONFIG_DIR"] = str(_TMP / "config")
 os.environ["JARVIS_SCHEDULE_DB"] = str(_TMP / "schedule.db")
+
+#: THE SUITE'S OWN HOME AND ITS OWN INBOX FIXTURE (2026-10-18, Spotlight 2).
+#: OPENJARVIS_CONFIG_DIR alone is not the whole "owner's data" story: the
+#: modules that keep databases, receipts and an inbox read OPENJARVIS_HOME /
+#: JARVIS_HOME BEFORE the config folder, and a suite that leaves them unset
+#: falls through to ~/.openjarvis - the owner's real data. During a patcher run
+#: (apply-patches.ps1 runs these suites inside the live installation) that is
+#: data a check can read, and a write can change: the measured failure was
+#: `expected 6, got 1` from a suite reading the live inbox instead of its own
+#: fixture. So this suite names its own home, seeds its own six-item inbox
+#: fixture there, and refuses to run at all unless both home names point
+#: inside this temp folder.
+_HOME = _TMP / "home"
+_INBOX = _HOME / "inbox"
+_INBOX.mkdir(parents=True, exist_ok=True)
+#: The suite's own inbox fixture - six items, never the live installation's
+#: folder. The first two are what the "what did I miss" email check reads, so
+#: that check no longer depends on what is on the machine at all.
+INBOX_FIXTURE = [
+    {"from": "Alex <alex@example.com>", "subject": "Q4 numbers"},
+    {"from": "noreply@github.com", "subject": "A pull request"},
+    {"from": "Sam <sam@example.com>", "subject": "Friday"},
+    {"from": "billing@example.com", "subject": "Your receipt"},
+    {"from": "Ana <ana@example.com>", "subject": "Photos"},
+    {"from": "news@example.com", "subject": "The weekly"},
+]
+for _i, _item in enumerate(INBOX_FIXTURE):
+    (_INBOX / f"item-{_i + 1}.json").write_text(
+        json.dumps(_item), encoding="utf-8")
+os.environ["OPENJARVIS_HOME"] = str(_HOME)
+os.environ["JARVIS_HOME"] = str(_HOME)
+
+
+def _require_own_home_and_inbox() -> None:
+    """Stop, plainly, unless this suite's HOME is its OWN temp folder.
+
+    The same shape as `_where.require_shipped`: a suite that would read the
+    owner's real home must say so in one named line, not fail a check that
+    then looks like the code under test being wrong.
+    """
+    home = str(os.environ.get("OPENJARVIS_HOME") or "")
+    try:
+        same = bool(home) and Path(home).resolve() == _HOME.resolve()
+    except OSError:
+        same = False
+    if not same:
+        print("FAIL  the suite's OPENJARVIS_HOME is not its own temp folder "
+              f"(got {home or '(unset)'}, expected {_HOME})")
+        print("      Nothing here was tested: a suite that reads the owner's real "
+              "home is the patcher-mode live-data defect this suite is about.")
+        sys.exit(1)
+    items = sorted(_INBOX.glob("*.json"))
+    if len(items) != len(INBOX_FIXTURE):
+        print(f"FAIL  the suite's own inbox fixture is not its "
+              f"{len(INBOX_FIXTURE)} items (found {len(items)} in {_INBOX})")
+        print("      Nothing here was tested: the inbox this suite reads must be "
+              "its own, never the live installation's.")
+        sys.exit(1)
+
+
+_require_own_home_and_inbox()
+
+
+def _fixture_inbox() -> list:
+    """The suite's own six inbox items, read from its own temp folder."""
+    return [json.loads(p.read_text(encoding="utf-8"))
+            for p in sorted(_INBOX.glob("*.json"))]
+
+
+def _fixture_message(item: dict) -> bytes:
+    """One fixture inbox item as the raw message `jarvis_email` would return."""
+    return f"From: {item['from']}\r\n\r\n".encode("utf-8")
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -737,7 +815,9 @@ def t_what_did_i_miss_reads_email_like_the_briefing():
         w = World(local(2026, 9, 25, 12, 0), name="missedmail")
 
         def two(p, newest):
-            return 2, [b"From: Alex <alex@example.com>\r\n\r\n", b"From: noreply@github.com\r\n\r\n"]
+            # THE SUITE'S OWN FIXTURE, never the live installation's inbox:
+            # the first two of its six items, read from its temp home.
+            return 2, [_fixture_message(item) for item in _fixture_inbox()[:2]]
         asked = []
         with NoSockets() as ns:
             b = B.build_missed(sched=w.s, now=w.clock.t, since=w.clock.t - 3600,
