@@ -441,7 +441,15 @@ CREATE TABLE IF NOT EXISTS commands (
 #: keeps its trigger words and how often it was brought up there. Never
 #: handed out by _view: a kind shows what it wants through `fields`.
 _ADDED_COLUMNS = (("list_name", "TEXT"), ("snooze_of", "TEXT"), ("snoozed_to", "TEXT"),
-                  ("extra", "TEXT"))
+                  ("extra", "TEXT"),
+                  # GTD-1 (2026-10-18): a reminder's context packet, its
+                  # trigger kind, how often it has been snoozed, when it was
+                  # resolved, and the optional read-only condition it watches.
+                  # All nullable/empty for every row written before this, so
+                  # an old schedule.db reads exactly as it did.
+                  ("context_bundle", "TEXT"), ("trigger", "TEXT"),
+                  ("snooze_count", "INTEGER"), ("resolved_at", "REAL"),
+                  ("condition_kind", "TEXT"), ("condition_target", "TEXT"))
 
 #: States. `active` and `paused` are on the list; `waiting` is a repeating
 #: job whose card has not been answered; `fired` is a one-off that went off
@@ -963,16 +971,22 @@ class Scheduler:
 
     def _insert(self, kind: str, *, text: str, state: str, due, rule, duration,
                 source: str, list_name: Optional[str] = None,
-                snooze_of: Optional[str] = None, extra: Optional[dict] = None) -> str:
+                snooze_of: Optional[str] = None, extra: Optional[dict] = None,
+                context_bundle: Optional[dict] = None, trigger: Optional[str] = None,
+                condition_kind: Optional[str] = None,
+                condition_target: Optional[str] = None) -> str:
         jid = "s" + uuid.uuid4().hex[:10]
         now = self.now()
         with self._lock, self._db() as c:
             c.execute("INSERT INTO jobs (id, kind, text, state, due, rule, duration, created, "
-                      "changed, source, list_name, snooze_of, extra) "
-                      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                      "changed, source, list_name, snooze_of, extra, context_bundle, trigger, "
+                      "condition_kind, condition_target) "
+                      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                       (jid, kind, text, state, due,
                        json.dumps(rule) if rule else None, duration, now, now, source,
-                       list_name, snooze_of, json.dumps(extra) if extra else None))
+                       list_name, snooze_of, json.dumps(extra) if extra else None,
+                       json.dumps(context_bundle) if context_bundle else None,
+                       trigger or "time", condition_kind, condition_target))
         _audit("schedule.add", {"id": jid, "kind": kind, "repeats": bool(rule)})
         self._changed(jid, kind)
         return jid
@@ -1020,10 +1034,20 @@ class Scheduler:
         return self.job(jid)
 
     def add_at(self, kind: str, at: float, text: str = "", source: str = "app",
-               extra: Optional[dict] = None) -> dict:
+               extra: Optional[dict] = None, *, context_bundle: Optional[dict] = None,
+               trigger: Optional[str] = None, condition_kind: Optional[str] = None,
+               condition_target: Optional[str] = None) -> dict:
         """A one-off alarm, reminder or to-do with a time. No card. `extra`: a
         kind's own small state (the `extra` column), for a kind whose module
-        keeps one (jarvis_next_time.py)."""
+        keeps one (jarvis_next_time.py).
+
+        GTD-1 (2026-10-18), REMINDERS ONLY: `context_bundle` is the scrubbed
+        packet this reminder is about ("the details" a bare title loses),
+        `trigger` is "time" (default), "on_pc_active" or "after_focus", and
+        `condition_kind`/`condition_target` are the optional read-only check
+        ("no_email_reply_from": who should have replied; "decks_due"). The
+        bundle is normalised by `scrub_context_bundle` before it is stored -
+        no raw path and no secret ever enters the database through here."""
         if kind not in KINDS or kind == "timer":
             raise ValueError("that kind of job needs a time: alarm, reminder or to-do")
         try:
@@ -1036,10 +1060,21 @@ class Scheduler:
         if at - now > MAX_AHEAD:
             raise ValueError("that is more than a year away")
         text = self._clean_text(text, kind) if KINDS[kind].has_text else ""
+        if kind != "reminder" and (context_bundle or trigger not in (None, "time")
+                                   or condition_kind or condition_target):
+            raise ValueError("only a reminder can carry context, a trigger or a condition")
+        if trigger is not None and trigger not in TRIGGERS:
+            raise ValueError("trigger is one of: " + ", ".join(TRIGGERS))
         with self._lock, self._db() as c:
             self._room(c, kind)
         jid = self._insert(kind, text=text, state="active", due=at, rule=None,
-                           duration=None, source=source, extra=extra)
+                           duration=None, source=source, extra=extra,
+                           context_bundle=scrub_context_bundle(context_bundle)
+                           if context_bundle else None,
+                           trigger=trigger or "time",
+                           condition_kind=str(condition_kind) if condition_kind else None,
+                           condition_target=str(condition_target)[:200]
+                           if condition_target else None)
         return self.job(jid)
 
     # ---- a kind's own small state (the `extra` column) --------------------------
@@ -1598,7 +1633,8 @@ class Scheduler:
                 c.execute("UPDATE jobs SET due = due - ? WHERE kind = 'timer' "
                           "AND state = 'active' AND due IS NOT NULL", (last - now,))
             rows = c.execute("SELECT * FROM jobs WHERE state = 'active' AND due IS NOT NULL "
-                             "AND due <= ? ORDER BY due", (now,)).fetchall()
+                             "AND due <= ? AND (trigger IS NULL OR trigger = 'time') "
+                             "ORDER BY due", (now,)).fetchall()
             for row in rows:
                 late = (now - float(row["due"])) > LATE_AFTER
                 ended = False
@@ -1641,8 +1677,9 @@ class Scheduler:
                               (now, row["due"], int(late), now, row["id"]))
                 else:
                     c.execute("UPDATE jobs SET state = 'fired', fired_at = ?, fired_due = ?, "
-                              "late = ?, changed = ? WHERE id = ?",
-                              (now, row["due"], int(late), now, row["id"]))
+                              "late = ?, changed = ?, resolved_at = COALESCE(resolved_at, ?) "
+                              "WHERE id = ?",
+                              (now, row["due"], int(late), now, now, row["id"]))
                 went.append((row["id"], row["kind"], late, ended, past_end))
             # Housekeeping: what went off a day ago, and done to-dos a week old.
             c.execute("DELETE FROM jobs WHERE state = 'fired' AND fired_at < ?",
@@ -1650,6 +1687,10 @@ class Scheduler:
             c.execute("DELETE FROM jobs WHERE state = 'done' AND fired_at < ?",
                       (now - DONE_KEEP,))
             c.execute("DELETE FROM commands WHERE at < ?", (now - 30 * 86400,))
+            # GTD-1: a resolved reminder's context packet is dropped after
+            # BUNDLE_RETENTION_DAYS days - the bare reminder row stays, the
+            # details that were only there to help do it do not.
+            _expire_bundles(c, now)
         for jid, kind, late, ended, past_end in went:
             self.fired += 1
             k = KINDS.get(kind)
@@ -1690,7 +1731,9 @@ class Scheduler:
             if row is None or row["state"] not in ("active", "paused"):
                 return False
             c.execute("UPDATE jobs SET state = 'fired', due = NULL, fired_at = ?, "
-                      "fired_due = NULL, late = 0, changed = ? WHERE id = ?", (now, now, jid))
+                      "fired_due = NULL, late = 0, changed = ?, "
+                      "resolved_at = COALESCE(resolved_at, ?) WHERE id = ?",
+                      (now, now, now, jid))
         _audit("schedule.ended", {"id": jid, "kind": row["kind"]})
         self._changed(jid, row["kind"])
         return True
@@ -1813,6 +1856,36 @@ class Scheduler:
         if row["snooze_of"]:
             v["snoozed"] = True
         v["lock_screen"] = k.lock_screen if k else "Jarvis: something is due."
+        # GTD-1 (2026-10-18): additive, and only when there is something to
+        # say - an old row (or a plain timer/alarm) grows no keys, so every
+        # payload and every old test is byte-for-byte what it was. The bundle's
+        # WORDS are deliberately NOT handed out here: `has_context` says one
+        # exists, and `enrich_and_check_condition()` is the one read path,
+        # because that is where hide-memory-lists and App lock are honoured.
+        try:
+            trigger = row["trigger"]
+        except (IndexError, KeyError):
+            trigger = None
+        if trigger and trigger != "time":
+            v["trigger"] = trigger
+        try:
+            count = int(row["snooze_count"] or 0)
+        except (TypeError, ValueError, IndexError, KeyError):
+            count = 0
+        if count:
+            v["snooze_count"] = count
+        try:
+            kind_of_condition = row["condition_kind"]
+        except (IndexError, KeyError):
+            kind_of_condition = None
+        if kind_of_condition:
+            v["condition_kind"] = str(kind_of_condition)
+            v["condition_target"] = str(row["condition_target"] or "")
+        try:
+            if row["context_bundle"]:
+                v["has_context"] = True
+        except (IndexError, KeyError):
+            pass
         if k is not None and not k.notify:
             v["notify"] = False
         if k is not None and k.note is not None:
@@ -1837,6 +1910,26 @@ class Scheduler:
         with self._lock, self._db() as c:
             row = self._row(c, jid)
         return None if row is None else self._view(row, self.now())
+
+    def bundle(self, jid: str) -> dict:
+        """GTD-1: ONE reminder's stored context packet, {} for none.
+
+        The scheduler's own read path hands out no bundle words (see `_view`);
+        this is the backend door a caller that has already checked its own
+        hide-memory-lists / App lock flags uses, one row at a time."""
+        with self._lock, self._db() as c:
+            row = c.execute("SELECT context_bundle FROM jobs WHERE id = ?",
+                            (str(jid),)).fetchone()
+        return _decode_bundle(row["context_bundle"]) if row is not None else {}
+
+    def set_bundle(self, jid: str, bundle: Optional[dict]) -> bool:
+        """Replace ONE reminder's context packet (None/{} clears it). False
+        when the job is gone. Scrubbed on the way in, like `add_at`."""
+        clean = scrub_context_bundle(bundle) if bundle else {}
+        with self._lock, self._db() as c:
+            cur = c.execute("UPDATE jobs SET context_bundle = ?, changed = ? WHERE id = ?",
+                            (json.dumps(clean) if clean else None, self.now(), str(jid)))
+            return cur.rowcount > 0
 
     def listed(self) -> list:
         now = self.now()
@@ -2142,11 +2235,13 @@ def handle_add(body: dict) -> tuple:
                 if at <= now:
                     raise ValueError(f"{when_words(at, now)} has already passed - "
                                      f"change the date or time")
-                job = s.add_at(kind, at, body.get("text") or "", source="app")
+                job = s.add_at(kind, at, body.get("text") or "", source="app",
+                               **(_reminder_extras(body) if kind == "reminder" else {}))
                 noun = "Alarm" if kind == "alarm" else "Reminder"
                 return 200, {"ok": True, "job": job,
                              "said": f"{noun} set for {when_words(at, now)}."}
-            job = s.add_at(kind, _num(body.get("at")), body.get("text") or "", source="app")
+            job = s.add_at(kind, _num(body.get("at")), body.get("text") or "", source="app",
+                           **(_reminder_extras(body) if kind == "reminder" else {}))
         elif kind in KINDS and KINDS[kind].window:
             # The standby schedule: {"kind": "standby", "repeat": {"every":
             # "day", "at": "01:00", "until": "07:00"}}. Since 2026-09-26 it is
@@ -2200,3 +2295,514 @@ def handle_act(body: dict) -> tuple:
 def _sentence(exc: BaseException) -> str:
     t = str(exc).strip() or type(exc).__name__
     return t[0].upper() + t[1:] + ("" if t.endswith(".") else ".")
+
+
+# --------------------------------------------------------------------------
+#   GTD-1 - context-rich reminders, read-only conditions, smart snooze and
+#   "the owner is at the PC" (2026-10-18)
+# --------------------------------------------------------------------------
+# Additive throughout. A reminder written before today has no context, no
+# trigger and no condition, so every read path returns exactly what it did
+# (see `_view`: new keys appear only when there is something to say). Nothing
+# here raises a card, opens a socket, calls a model or writes to a client:
+# the readers are INJECTED (so this module stays pure and testable), and the
+# one call out is the privacy taint latch - and only when private context was
+# actually attached, never on a bare tick.
+
+#: A resolved reminder's context packet is dropped this many days later.
+#: The bare reminder row is already cleaned up by FIRED_KEEP/DONE_KEEP; this
+#: only bounds the extra detail (a summary, a name, a suggested prompt).
+BUNDLE_RETENTION_DAYS = 7
+
+#: Limits on what a context packet may hold. A summary is at most the length
+#: of a paragraph; a path is NEVER stored (see `scrub_context_bundle`).
+BUNDLE_SUMMARY_MAX = 280
+BUNDLE_ENTITIES_MAX = 8
+BUNDLE_FILES_MAX = 8
+BUNDLE_PROMPT_MAX = 400
+
+#: "At the PC" means unlocked AND no more than this many idle seconds AND no
+#: focus session running. Two minutes is the ruling's own number.
+IDLE_ACTIVE_MAX_S = 120.0
+
+#: After this many snoozes a reminder is "stuck" and its card may offer to be
+#: broken into three small steps. The option is OPT-IN (the caller has to say
+#: yes) and never for a sensitive reminder.
+STUCK_SNOOZE_THRESHOLD = 3
+
+#: How a reminder may become due. "time" is every reminder before today.
+TRIGGERS = ("time", "on_pc_active", "after_focus")
+
+#: The read-only conditions a reminder may watch. Neither ever sends anything.
+CONDITION_KINDS = ("no_email_reply_from", "decks_due")
+
+#: The five snooze presets. "next_pc_active" sets a trigger, not a time.
+SNOOZE_PRESETS = ("15m", "1h", "tonight", "tomorrow_morning", "next_pc_active")
+
+#: A path-shaped string, in the three shapes a Windows PC writes one. A file
+#: is stored in a context packet as an OPAQUE id/label only, never as a path.
+_PATHLIKE = re.compile(r"(?:^[A-Za-z]:[\\/]|^[\\/]|\\\\|(?:^|[\s:])[^/\s:]+[/\\][^/\s:]+)")
+
+
+def _scrubber():
+    """jarvis_scrub.scrub_text, or None on a backend without it."""
+    try:
+        import jarvis_scrub
+        fn = getattr(jarvis_scrub, "scrub_text", None)
+        return fn if callable(fn) else None
+    except Exception:
+        return None
+
+
+def _scrub_line(text, limit: int) -> str:
+    """One line of the owner's/reader's words, secrets hidden, cut to `limit`."""
+    t = " ".join(str(text or "").split())
+    fn = _scrubber()
+    if fn is not None and t:
+        try:
+            t = str(fn(t) or "")
+        except Exception:
+            pass
+    return t[:limit].strip()
+
+
+def _decode_bundle(raw) -> dict:
+    """A stored context packet as a dict; {} for absent or damaged."""
+    if isinstance(raw, dict):
+        got = raw
+    elif isinstance(raw, str) and raw.strip():
+        try:
+            got = json.loads(raw)
+        except Exception:
+            return {}
+    else:
+        return {}
+    return got if isinstance(got, dict) else {}
+
+
+def scrub_context_bundle(bundle) -> dict:
+    """The ONLY way a context packet becomes storable.
+
+    Scrubbed through the real `jarvis_scrub.scrub_text` (so a secret cannot
+    ride along in a summary, a name or a suggested prompt), bounded, and with
+    any path-shaped `linked_files` entry DROPPED: a file is remembered by an
+    opaque id/label, never by its path (the blueprint's ruling, Q3/Q4). A
+    backend without the scrubber keeps everything but `source_summary`, which
+    is stored as "" - the ruling's own rule, because a summary is the one
+    field whose whole value is its words.
+    """
+    if not isinstance(bundle, dict):
+        return {}
+    scrubber = _scrubber()
+    summary = _scrub_line(bundle.get("source_summary"), BUNDLE_SUMMARY_MAX) \
+        if scrubber is not None else ""
+    if summary and _PATHLIKE.search(summary):
+        summary = ""                  # never a path, even inside a summary
+    conv = bundle.get("source_conv_id")
+    conv = str(conv).strip()[:200] if isinstance(conv, (str, int)) and not isinstance(conv, bool) else ""
+    if conv and not re.fullmatch(r"[A-Za-z0-9_.:-]{1,200}", conv):
+        conv = ""
+    entities = []
+    for item in list(bundle.get("linked_entities") or [])[:BUNDLE_ENTITIES_MAX]:
+        if isinstance(item, dict):
+            item = item.get("name") or item.get("label") or ""
+        name = _scrub_line(item, 80)
+        if name and not _PATHLIKE.search(name):
+            entities.append(name)
+    files = []
+    for item in list(bundle.get("linked_files") or []):
+        if isinstance(item, dict):
+            label = _scrub_line(item.get("label") or item.get("id"), 80)
+        else:
+            label = _scrub_line(item, 80)
+        if not label or _PATHLIKE.search(label):
+            continue                     # NEVER a path, in any shape
+        files.append(label)
+        if len(files) >= BUNDLE_FILES_MAX:
+            break
+    prompt = _scrub_line(bundle.get("suggested_prompt"), BUNDLE_PROMPT_MAX) \
+        if scrubber is not None else ""
+    if prompt and _PATHLIKE.search(prompt):
+        prompt = ""                   # and never one in a suggested prompt
+    return {"source_conv_id": conv or None,
+            "source_summary": summary,
+            "linked_entities": entities,
+            "linked_files": files,
+            "suggested_prompt": prompt}
+
+
+def _reminder_extras(body) -> dict:
+    """The GTD-1 fields a POST /api/schedule/add body may carry, if present.
+
+    Only passed to `Scheduler.add_at` for a reminder. An app that does not
+    know about them sends none, and a reminder is created exactly as before."""
+    if not isinstance(body, dict):
+        return {}
+    out = {}
+    if isinstance(body.get("context_bundle"), dict):
+        out["context_bundle"] = body["context_bundle"]
+    if body.get("trigger"):
+        out["trigger"] = str(body.get("trigger")).strip().lower()
+    if body.get("condition_kind"):
+        out["condition_kind"] = str(body.get("condition_kind")).strip().lower()
+    if body.get("condition_target"):
+        out["condition_target"] = str(body.get("condition_target"))
+    return out
+
+
+def _expire_bundles(c, now: float) -> int:
+    """Drop context packets of reminders resolved long enough ago (one conn)."""
+    cutoff = float(now) - BUNDLE_RETENTION_DAYS * 86400.0
+    cur = c.execute("UPDATE jobs SET context_bundle = NULL WHERE context_bundle IS NOT NULL "
+                    "AND state IN ('fired', 'done') "
+                    "AND COALESCE(resolved_at, fired_at, changed) <= ?", (cutoff,))
+    return int(cur.rowcount)
+
+
+def expire_context_bundles(*, now=None, scheduler=None) -> int:
+    """The same sweep `tick()` runs, for a caller that wants it plainly."""
+    s = scheduler or get()
+    with s._lock, s._db() as c:
+        return _expire_bundles(c, s.now() if now is None else float(now))
+
+
+# ---- who is at the PC -----------------------------------------------------
+
+def _reader(readers, name):
+    """One injected reader as a zero-argument callable, or None."""
+    if readers is None:
+        return None
+    got = readers.get(name) if isinstance(readers, dict) else getattr(readers, name, None)
+    if callable(got):
+        return got
+    if got is None:
+        return None
+    return lambda: got
+
+
+def pc_active(readers=None) -> dict:
+    """Whether the owner is really AT this PC right now, from injected readers.
+
+    {"active": bool, "reason": "active" | "session_locked" | "app_locked" |
+     "user_idle" | "in_focus_session", "idle_seconds": float | None}
+
+    Active requires ALL THREE, in plain terms: the Windows session is unlocked,
+    the owner has touched the keyboard/mouse within `IDLE_ACTIVE_MAX_S` (two
+    minutes), and no focus session is running. Readers (all optional, so a
+    bare call is the conservative "cannot tell"):
+
+        session_unlocked() -> bool        default True (the loop only runs in a
+                                          session; the App lock is separate)
+        app_locked()       -> bool        default False
+        idle_seconds()     -> float|None  None = cannot tell -> NOT active
+        focus_active()     -> bool        default False
+
+    A missing reader or one that raises gives the conservative answer: not
+    active, reason "user_idle" - never a claim to know. Pure: reads nothing
+    itself, starts nothing, and is safe to call from a render or a test.
+    """
+    idle = None
+    get_idle = _reader(readers, "idle_seconds")
+    if get_idle is not None:
+        try:
+            raw = get_idle()
+            idle = float(raw) if raw is not None else None
+        except Exception:
+            idle = None
+    try:
+        unlocked = bool(_reader(readers, "session_unlocked")() ) \
+            if _reader(readers, "session_unlocked") is not None else True
+    except Exception:
+        unlocked = False                  # cannot tell: fail closed
+    try:
+        app_locked = bool(_reader(readers, "app_locked")()) \
+            if _reader(readers, "app_locked") is not None else False
+    except Exception:
+        app_locked = True                 # cannot tell: fail closed
+    try:
+        in_focus = bool(_reader(readers, "focus_active")()) \
+            if _reader(readers, "focus_active") is not None else False
+    except Exception:
+        in_focus = True                   # cannot tell: fail closed
+    if not unlocked:
+        return {"active": False, "reason": "session_locked", "idle_seconds": idle}
+    if app_locked:
+        return {"active": False, "reason": "app_locked", "idle_seconds": idle}
+    if idle is None or idle > IDLE_ACTIVE_MAX_S:
+        return {"active": False, "reason": "user_idle", "idle_seconds": idle}
+    if in_focus:
+        # A focus session is work already under way: a reminder must HOLD here,
+        # not interrupt it. This is the ruling's "holds during focus".
+        return {"active": False, "reason": "in_focus_session", "idle_seconds": idle}
+    return {"active": True, "reason": "active", "idle_seconds": idle}
+
+
+def reminder_ready(reminder, *, now=None, readers=None):
+    """(can become due now, reason) for ONE reminder - pure, reads nothing.
+
+    A "time" reminder is due when its own `due` has passed (the scheduler's
+    ordinary tick, unchanged). An "on_pc_active" or "after_focus" reminder is
+    due only when `pc_active()` says the owner is at the PC - which is false
+    DURING a focus session, so both triggers hold until it ends."""
+    if not isinstance(reminder, dict):
+        return False, "not_a_reminder"
+    trigger = str(reminder.get("trigger") or "time")
+    if trigger == "time":
+        due = reminder.get("due")
+        if due is None:
+            return False, "no_time"
+        at = time.time() if now is None else float(now)
+        return (float(due) <= at), ("due" if float(due) <= at else "not_due")
+    if trigger not in ("on_pc_active", "after_focus"):
+        return False, "unknown_trigger"
+    state = pc_active(readers)
+    return bool(state["active"]), str(state["reason"])
+
+
+def due_active_reminders(*, now=None, readers=None, scheduler=None) -> list:
+    """The reminders whose trigger is satisfied by the owner being at the PC.
+
+    READ ONLY: it returns the reminders that could go off now, and marks
+    nothing. A caller with a notification path fires them itself; this slice
+    deliberately adds no second firing loop (the scheduler's own tick only
+    runs "time" triggers, so these can never fire at an idle PC by accident).
+    """
+    s = scheduler or get()
+    at = s.now() if now is None else float(now)
+    with s._lock, s._db() as c:
+        rows = c.execute("SELECT * FROM jobs WHERE kind = 'reminder' AND state = 'active' "
+                         "AND trigger IN ('on_pc_active', 'after_focus')").fetchall()
+    out = []
+    for row in rows:
+        view = s._view(row, at)
+        ready, _why = reminder_ready(view, now=at, readers=readers)
+        if ready:
+            out.append(view)
+    return out
+
+
+# ---- read-only enrichment and early satisfaction ---------------------------
+
+def _latch_reminder_context() -> bool:
+    """Keep the turn on the local model once private context was attached."""
+    try:
+        import jarvis_gate
+        return bool(jarvis_gate.latch_taint(why="reminder_context"))
+    except Exception:
+        return False
+
+
+def enrich_and_check_condition(reminder, *, readers=None, hide_memory_lists=False,
+                               app_locked=False) -> dict:
+    """The details a reminder is ABOUT, plus its read-only condition.
+
+    Returns {"withheld", "context", "facts", "condition_satisfied_early",
+    "condition_note", "toast", "context_attached"}. READ-ONLY: it starts
+    nothing, sends nothing, changes no reminder.
+
+    WITHHELD ENTIRELY under `hide_memory_lists` or `app_locked`: no reader is
+    called, no bundle is read, no taint is latched, and every words field comes
+    back empty - the caller shows the bare reminder and that is all.
+
+    `readers` (all optional; a missing one means "nothing to add"):
+        memory_facts(name) -> list[str]        what Jarvis learned about a name
+        email_reply_since(target, since) -> {"at": epoch} | None
+                                               METADATA ONLY - the reader is
+                                               never given or asked for a body
+        decks_due() -> int                     cards due from jarvis_decks
+
+    Conditions:
+        no_email_reply_from  target already replied after the reminder was
+                             created -> early satisfaction; the note names the
+                             sender and the time ONLY, never an email body
+        decks_due            0 cards due -> early satisfaction
+
+    The one side effect is the privacy latch (`jarvis_gate.latch_taint`,
+    why="reminder_context") and it happens ONLY when private context was
+    actually attached or read - never on a bare reminder, never when withheld.
+    """
+    out = {"withheld": bool(hide_memory_lists or app_locked),
+           "context": {}, "facts": [], "condition_satisfied_early": False,
+           "condition_note": "", "toast": "", "context_attached": False}
+    if out["withheld"]:
+        # NOTHING is read: not the bundle, not a reader, not a latch.
+        return out
+    if not isinstance(reminder, dict):
+        return out
+    title = str(reminder.get("text") or "")
+    context = scrub_context_bundle(reminder.get("context_bundle")) \
+        if isinstance(reminder.get("context_bundle"), dict) else {}
+    if not context and reminder.get("id"):
+        try:
+            context = scrub_context_bundle(get().bundle(str(reminder.get("id"))))
+        except Exception:
+            context = {}
+    out["context"] = context
+
+    facts = []
+    get_facts = _reader(readers, "memory_facts")
+    names = list(context.get("linked_entities") or [])
+    if not names:
+        # No stored names: the capitalised words of the reminder itself are
+        # the only names it could be about. Nothing is guessed beyond that.
+        names = re.findall(r"\b[A-Z][a-z]{2,}\b", title)[:3]
+    if get_facts is not None:
+        for name in names[:3]:
+            if len(facts) >= 3:
+                break
+            try:
+                got = get_facts(name) or []
+            except Exception:
+                got = []
+            for fact in list(got)[: max(0, 3 - len(facts))]:
+                said = _scrub_line(fact, 200)
+                if said:
+                    facts.append(said)
+    out["facts"] = facts
+
+    condition = str(reminder.get("condition_kind") or "")
+    target = str(reminder.get("condition_target") or "")
+    note = ""
+    satisfied = False
+    if condition == "no_email_reply_from" and target:
+        get_reply = _reader(readers, "email_reply_since")
+        if get_reply is not None:
+            try:
+                got = get_reply(target, reminder.get("created"))
+            except Exception:
+                got = None
+            if isinstance(got, dict) and got.get("at"):
+                satisfied = True
+                # The sender and the clock, NEVER the body: the note is what a
+                # toast may show, and a message body must not be in it.
+                note = f"{target} already replied at {clock(float(got['at']))}"
+    elif condition == "decks_due":
+        get_due = _reader(readers, "decks_due")
+        if get_due is not None:
+            try:
+                due = get_due()
+            except Exception:
+                due = None
+            if due == 0:
+                satisfied = True
+                note = "No cards are due right now"
+    out["condition_satisfied_early"] = satisfied
+    out["condition_note"] = note
+
+    attached = bool(facts) or bool(note) or bool(context.get("source_summary"))
+    out["context_attached"] = attached
+    if attached:
+        _latch_reminder_context()
+    toast = title
+    if note:
+        toast = f"{title} - {note}" if title else note
+    out["toast"] = toast[:300]
+    return out
+
+
+# ---- snooze presets, the stuck threshold and the opt-in micro-steps --------
+
+_MICRO_STEPS = {
+    "email": ["Open the last message", "Draft a two-sentence reply with Jarvis "
+              "in chat", "Read it once, then send"],
+    "call": ["Open the contact's details", "Write the two things to say in chat "
+             "with Jarvis", "Make the call"],
+    "file": ["Open the document", "Ask Jarvis to sum up what needs doing in it",
+             "Do the first small edit"],
+    "default": ["Open what this reminder is about", "Write the first small step "
+                "in chat with Jarvis", "Do it for five minutes"],
+}
+
+
+def _micro_steps(title, condition_kind="") -> list:
+    """Three small first steps for a reminder that has been snoozed a lot."""
+    text = f"{title} {condition_kind}".lower()
+    if "email" in text or "reply" in text or "inbox" in text:
+        return list(_MICRO_STEPS["email"])
+    if "call" in text or "phone" in text:
+        return list(_MICRO_STEPS["call"])
+    if any(word in text for word in ("file", "document", "read", "pdf", "report")):
+        return list(_MICRO_STEPS["file"])
+    return list(_MICRO_STEPS["default"])
+
+
+def _is_sensitive(text) -> bool:
+    """Whether the shipped classifier calls this reminder's own words sensitive.
+
+    Pattern layer only (`use_model=False`): snoozing must be instant and must
+    never call a model. A classifier that is missing or raises is treated as
+    SENSITIVE - the conservative direction, so a broken classifier can never
+    offer the three-step breaker for private material."""
+    try:
+        import jarvis_sensitive
+        verdict = jarvis_sensitive.classify(str(text or ""), use_model=False)
+        return bool(verdict.get("sensitive"))
+    except Exception:
+        return True
+
+
+def _preset_due(preset: str, now: float):
+    """(due epoch or None, trigger) for one preset. Raises ValueError."""
+    if preset == "15m":
+        return now + 15 * 60.0, "time"
+    if preset == "1h":
+        return now + 3600.0, "time"
+    if preset == "tonight":
+        return next_at(19, 0, now), "time"
+    if preset == "tomorrow_morning":
+        y, mo, d = _add_days(*_wall(now)[:3], 1)
+        return wall_to_epoch(y, mo, d, 9, 0), "time"
+    if preset == "next_pc_active":
+        return None, "on_pc_active"
+    raise ValueError("preset is one of: " + ", ".join(SNOOZE_PRESETS))
+
+
+def snooze_reminder(reminder_id, preset: str = "15m", *, now=None,
+                    micro_steps_opt_in: bool = False, scheduler=None) -> dict:
+    """Snooze ONE reminder with a named preset, and remember how often.
+
+    `preset`: "15m", "1h", "tonight" (the next 19:00 on this PC's clock),
+    "tomorrow_morning" (tomorrow 09:00), "next_pc_active" (no time: it waits
+    for `pc_active()`). The reminder itself is kept and a new snoozed copy is
+    what becomes due - the same shape the scheduler already uses for Snooze.
+
+    The return carries `snooze_count` and:
+      * `stuck_hint`: True once the reminder has been snoozed
+        `STUCK_SNOOZE_THRESHOLD` (3) times - the boundary is "< 3 is not
+        stuck" - and NEVER for a sensitive reminder;
+      * `micro_steps`: the three small steps, and ONLY when the caller opted
+        in (`micro_steps_opt_in=True`) and the reminder is not sensitive.
+
+    Raises ValueError for an unknown preset (plain words); a missing/not-a-
+    reminder id is a plain {"ok": False, ...} answer.
+    """
+    preset = str(preset or "").strip().lower()
+    if preset not in SNOOZE_PRESETS:
+        raise ValueError("preset is one of: " + ", ".join(SNOOZE_PRESETS))
+    s = scheduler or get()
+    at = s.now() if now is None else float(now)
+    with s._lock, s._db() as c:
+        row = s._row(c, str(reminder_id))
+        if row is None or row["kind"] != "reminder":
+            return {"ok": False, "reason": "no_such_reminder",
+                    "error": "That reminder is not on the list any more."}
+        due, trigger = _preset_due(preset, at)
+        count = int(row["snooze_count"] or 0) + 1
+        c.execute("UPDATE jobs SET snooze_count = ?, changed = ? WHERE id = ?",
+                  (count, at, str(reminder_id)))
+    context = _decode_bundle(row["context_bundle"])
+    new_id = s._insert("reminder", text=row["text"], state="active", due=due,
+                       rule=None, duration=None, source=row["source"] or "app",
+                       snooze_of=str(reminder_id), context_bundle=context or None,
+                       trigger=trigger,
+                       condition_kind=row["condition_kind"],
+                       condition_target=row["condition_target"])
+    sensitive = _is_sensitive(row["text"])
+    stuck = count >= STUCK_SNOOZE_THRESHOLD and not sensitive
+    steps = _micro_steps(row["text"], row["condition_kind"] or "") \
+        if stuck and micro_steps_opt_in else []
+    return {"ok": True, "id": str(reminder_id), "snoozed_id": new_id,
+            "preset": preset, "due": due, "trigger": trigger,
+            "snooze_count": count, "stuck_hint": stuck,
+            "micro_steps": steps, "micro_steps_opt_in": True,
+            "sensitive": sensitive}
