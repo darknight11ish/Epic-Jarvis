@@ -3271,6 +3271,108 @@ def _model_waking(ollama_url: str, model: str) -> Optional[bool]:
 
 
 # --------------------------------------------------------------------------
+#   The cold-load progress line (2026-10-18, Spotlight 4)
+# --------------------------------------------------------------------------
+#
+# The owner hits a long wait every morning and after every sleep: the first
+# question finds the everyday model not loaded, and /api/ps is what says so.
+# The bar already has ONE progress line (jarvis-desktop/src/main.js draws
+# link.activityDetail in #progress-line), fed by the activity doorbell the
+# HUD passes into a turn as `announce` (tool-calling-wiring.patch:
+# `announce=lambda text: _activity("working", text)`). So a cold turn tells
+# that line what it is waiting for, and a warm one clears it again.
+#
+# BOUNDED, NEVER A TIMER: the fact comes from `_model_waking` (GET /api/ps,
+# one-second timeout, loads nothing) at the start of the turn. Nothing here
+# guesses from elapsed time, and the sentence names no ETA on purpose: the
+# only cold-load numbers this repository holds are from other machines and
+# other days (docs/feasibility-2026-09-26/hardware.md's ~9.6 s; the owner's
+# 2026-10-17 field note's 48-52 s), so quoting either would be a measured
+# claim this code cannot stand behind. It says only what is true: the model
+# is loading and the first answer waits for it.
+COLD_LOAD_NOTE = ("Loading the local model into GPU memory - the first answer waits "
+                  "for it to load. It is slower after the PC has been asleep.")
+_COLD_NOTE_LOCK = threading.Lock()
+_COLD_NOTE_SHOWN = False
+
+
+def cold_load_note(waking: Optional[bool], *, announce=None, activity=None) -> dict:
+    """One sentence for the progress line while the model is cold.
+
+    `waking` is what the bounded /api/ps probe answered: True (the model is
+    not in memory), False (it is), None (cannot tell - then NOTHING is
+    claimed). The sentence is announced ONCE per cold episode through
+    `announce` (the HUD's activity doorbell; injectable). When the probe
+    answers warm and the line is still showing OUR sentence, it is cleared
+    the same way - and only then, so another step's detail is never wiped.
+    Never raises and keeps nothing durable. The answer always has
+    `cold` (True/False/None), `said`, `cleared` and a plain `reason`.
+    """
+    global _COLD_NOTE_SHOWN
+    try:
+        if waking is True:
+            with _COLD_NOTE_LOCK:
+                first = not _COLD_NOTE_SHOWN
+                _COLD_NOTE_SHOWN = True
+            said = ""
+            if first and announce is not None:
+                announce(COLD_LOAD_NOTE)
+                said = COLD_LOAD_NOTE
+            return {"cold": True, "said": said, "cleared": False,
+                    "reason": "" if first else "already said for this cold start"}
+        if waking is False:
+            with _COLD_NOTE_LOCK:
+                were = _COLD_NOTE_SHOWN
+                _COLD_NOTE_SHOWN = False
+            cleared = False
+            if were and announce is not None:
+                current = ""
+                if activity is not None:
+                    try:
+                        current = str((activity() or {}).get("detail") or "")
+                    except Exception:
+                        current = ""
+                if current == COLD_LOAD_NOTE:
+                    announce("")
+                    cleared = True
+            return {"cold": False, "said": "", "cleared": cleared,
+                    "reason": "warm" if not cleared else "cleared"}
+        return {"cold": None, "said": "", "cleared": False,
+                "reason": "the model's state could not be read, so nothing was said"}
+    except Exception:
+        return {"cold": None, "said": "", "cleared": False,
+                "reason": "the progress sentence could not be said"}
+
+
+def _activity_now() -> dict:
+    """What the activity line says right now (`jarvis_events.activity`), or {}.
+
+    Used only to decide whether the cold-load sentence is still OURS to clear;
+    a backend without the events module answers {} and nothing is cleared.
+    """
+    try:
+        import jarvis_events
+        return dict(jarvis_events.activity() or {})
+    except Exception:
+        return {}
+
+
+def cold_load_check(ollama_url: str, model: str, *, announce=None,
+                    model_waking=None, activity=None) -> dict:
+    """`cold_load_note`, fed by the REAL bounded /api/ps probe.
+
+    `model_waking` is injectable so the tests drive all three answers (cold,
+    warm, cannot tell) without a socket. The probe itself loads nothing and
+    gives up after one second (`_model_waking`).
+    """
+    try:
+        waking = (model_waking or _model_waking)(ollama_url, model)
+    except Exception:
+        waking = None
+    return cold_load_note(waking, announce=announce, activity=activity)
+
+
+# --------------------------------------------------------------------------
 #   What goes down the wire to the app
 # --------------------------------------------------------------------------
 #
@@ -8255,7 +8357,12 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         # nothing is asked of a machine that is not this PC.
         waking = False
         try:
-            waking = bool((model_waking or _model_waking)(cur["url"], cur["model"]))
+            probe = (model_waking or _model_waking)(cur["url"], cur["model"])
+            waking = probe is True
+            # The progress line says what the first answer is waiting for.
+            # Fed by the bounded probe above - NOT by a timer - and cleared
+            # again on a warm turn (cold_load_note's own state).
+            cold_load_note(probe, announce=announce, activity=_activity_now)
         except Exception:
             waking = False
         last: Optional[_Round] = None

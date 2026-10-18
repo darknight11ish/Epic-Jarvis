@@ -77,6 +77,21 @@ the built engine's own check list stays what `test_rebuilt.py` pins it to
 a job needs. The owner's decision on who may run unattended, and who parks,
 is in `jarvis_jobs.py`'s docstring and in ARCHITECTURE.md section 10.
 
+AND IT WARMS THE MODEL AFTER A WAKE (2026-10-18, Spotlight 4)
+
+The owner's morning: the PC has been asleep, `qwen3.5:9b` is not in GPU
+memory, and the first question waits for a cold load. The heartbeat is the
+one clock already running, so it is where a slept-past gap is noticed - the
+same idea `jarvis_live.SLEEP_GAP_S` uses for its own loop, with a larger gap
+because a heartbeat runs every 30 minutes and a clock that moved 5+ minutes
+between two of its reads is a machine that slept, not a busy one. On that
+jump `jarvis_agent.warm_everyday()` is called ONCE: the existing preload path,
+this PC's own Ollama only, never a cloud model. It is idempotent (one warm
+per wake, guarded by a lock so two ticks can never load twice) and it does
+nothing on Standby - standby promised a free card. `[initiative]
+warm_on_wake = false` switches it off; the default is on, the same shape as
+`[power] warm_prefix`, and `false` is the only thing that reads as off.
+
 WHY THAT ONE AND NOT A HUNDRED (2026-10-14, task-8). Nothing in production
 had ever called `register()`. The audit measured `status()["checks"]` as 0 on
 every boot: the engine started, ticked, and could not have filed anything,
@@ -109,6 +124,43 @@ def _cfg(key: str, default=None):
         return fw.load_framework().get("initiative", {}).get(key, default)
     except Exception:
         return default
+
+
+#: A gap this long between two clock reads means the PC slept, not that the
+#: heartbeat was busy. The same idea as jarvis_live.SLEEP_GAP_S (30 s for a
+#: one-second loop); this clock beats every 30 minutes, so a 5-minute floor
+#: cannot be a slow check.
+WAKE_JUMP_S = 300.0
+
+#: How often the running loop looks at the clock while it waits for the next
+#: beat, so a wake is noticed within half a minute instead of at the next
+#: 30-minute beat. One `Event.wait` slice; no extra thread and no busy wait.
+WAKE_POLL_S = 30.0
+
+
+def warm_on_wake_on() -> bool:
+    """`[initiative] warm_on_wake` - ON unless it is explicitly false.
+
+    The same shape as `[power] warm_prefix` (`jarvis_agent.warm_prefix_on`):
+    a missing key keeps the feature on, and the only value that turns it off
+    is `false`. Read fresh each wake so the owner can switch it off without a
+    restart.
+    """
+    try:
+        return _cfg("warm_on_wake", True) is not False
+    except Exception:
+        return True
+
+
+def _on_standby() -> bool:
+    """True when Jarvis is on Standby right now: a promised-free card is not
+    warmed. False when that cannot be known (warming is then allowed - the
+    same fail-open the rest of this best-effort path takes)."""
+    try:
+        import jarvis_power
+        return str(jarvis_power.current()) == "standby"
+    except Exception:
+        return False
 
 
 #: The thread name jarvis_events.Pump.start() gives its poller thread:
@@ -273,6 +325,14 @@ class Engine:
         self._thread: Optional[threading.Thread] = None
         self._stop = threading.Event()
         self._lock = threading.RLock()
+        # The wake pre-warm (2026-10-18): one warm per wake, never two at
+        # once, and the clock fields move only in the running loop - so a
+        # test can drive clock_tick() by hand.
+        self._warm_lock = threading.Lock()
+        self._last_warm_at = 0.0
+        self._last_clock = 0.0
+        self.wake_warms = 0
+        self.last_wake: dict = {}
 
     # ---- registration ------------------------------------------------------
 
@@ -336,6 +396,69 @@ class Engine:
     @property
     def running(self) -> bool:
         return bool(self._thread and self._thread.is_alive())
+
+    # ---- waking the everyday model (2026-10-18, Spotlight 4) --------------
+
+    def _wake_out(self, warmed: bool, reason: str, at: float) -> dict:
+        out = {"warmed": bool(warmed), "reason": str(reason), "at": float(at)}
+        with self._lock:
+            self.last_wake = dict(out)
+        return out
+
+    def warm_on_wake(self, now=None, *, last=None, warm=None, enabled=None,
+                     standby=None) -> dict:
+        """Load the everyday model ONCE after a wake/clock jump.
+
+        `last` is the previous clock read; a jump of at most WAKE_JUMP_S is
+        not a wake. `warm` is `jarvis_agent.warm_everyday` (injectable for
+        the tests), `enabled` is `[initiative] warm_on_wake` (read fresh when
+        not given) and `standby` is `_on_standby`. Idempotent: one warm per
+        wake, and a non-blocking lock means two ticks can never load twice.
+        Never raises - a failure comes back as a plain sentence, not a
+        traceback that could kill the heartbeat.
+        """
+        at = time.time() if now is None else float(now)
+        if enabled is None:
+            enabled = warm_on_wake_on()
+        if not enabled:
+            return self._wake_out(False, "off ([initiative] warm_on_wake = false)", at)
+        if last is not None and at - float(last) <= WAKE_JUMP_S:
+            return self._wake_out(False, "no wake or clock jump", at)
+        if self._last_warm_at and at - self._last_warm_at <= WAKE_JUMP_S:
+            return self._wake_out(False, "this wake was already warmed", at)
+        if (standby or _on_standby)():
+            return self._wake_out(False, "Jarvis is on Standby, so nothing was loaded", at)
+        if not self._warm_lock.acquire(blocking=False):
+            return self._wake_out(False, "another warm-up is already loading", at)
+        try:
+            self._last_warm_at = at
+            if warm is None:
+                def warm():
+                    import jarvis_agent
+                    return jarvis_agent.warm_everyday()
+            if bool(warm()):
+                self.wake_warms += 1
+                return self._wake_out(True, "the everyday model is loading now", at)
+            return self._wake_out(False, "the warm-up did not load the model", at)
+        except Exception as exc:
+            return self._wake_out(False, f"the warm-up failed ({type(exc).__name__})", at)
+        finally:
+            self._warm_lock.release()
+
+    def clock_tick(self, now=None) -> dict:
+        """The running loop's clock read: notice a slept-past gap, warm once.
+
+        A gap over WAKE_JUMP_S between two reads is the PC having slept: the
+        same call `jarvis_live` makes with SLEEP_GAP_S for its own loop. A
+        test passes `now` to drive it without waiting.
+        """
+        at = time.time() if now is None else float(now)
+        with self._lock:
+            last = self._last_clock
+            self._last_clock = at
+        if last and at - last > WAKE_JUMP_S:
+            return self.warm_on_wake(at, last=last)
+        return self._wake_out(False, "no wake or clock jump", at)
 
     def beat(self) -> list:
         """One pass over the checks. Returns what was newly found.
@@ -461,9 +584,24 @@ class Engine:
             return n
 
     def _run(self) -> None:
+        # The first beat is immediate, as it always was; after that the wait
+        # is cut into WAKE_POLL_S slices so a wake is noticed within half a
+        # minute instead of at the next (30-minute) beat.
+        self._last_clock = time.time()
+        next_beat = self._last_clock + self.heartbeat
         while not self._stop.is_set():
-            self.beat()
-            self._stop.wait(self.heartbeat)
+            try:
+                self.beat()
+            except Exception:
+                pass
+            left = next_beat - time.time()
+            self._stop.wait(max(0.05, min(WAKE_POLL_S, left)))
+            if self._stop.is_set():
+                return
+            self.clock_tick()
+            now = time.time()
+            if now >= next_beat:
+                next_beat = now + self.heartbeat
 
     def status(self) -> dict:
         with self._lock:
