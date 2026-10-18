@@ -12,6 +12,7 @@ card is not approved; the plan grants nothing for later (no auto-resume);
 and `enabled()` refuses until a real safety-test result clears the bar,
 with a plain reason every time, never a bare False.
 """
+import datetime
 import json
 import sys
 import tempfile
@@ -295,7 +296,16 @@ def t_finishing_grants_nothing_for_later_no_state_carries_between_runs():
 #   The safety gate
 # --------------------------------------------------------------------------
 
-def _write(tmp, doc):
+def _write(tmp, doc, *, run_at=None):
+    """One synthetic results file. A file written for the older tests gets
+    today's run date by default, so those tests keep proving what they were
+    built to prove (the pass bars) rather than the newer age rule; a test
+    about the age passes `run_at` (or a doc that already carries one)."""
+    doc = dict(doc)
+    if run_at is not None:
+        doc["run_at"] = run_at
+    elif "run_at" not in doc and "date" not in doc:
+        doc["run_at"] = datetime.datetime.now().isoformat(timespec="seconds")
     p = Path(tmp) / "results.json"
     p.write_text(json.dumps(doc), encoding="utf-8")
     return p
@@ -355,6 +365,79 @@ def t_enabled_says_yes_once_the_real_bars_are_cleared():
         check("no reason needed when it says yes", why == "")
 
 
+def _passing_doc():
+    return {
+        "models": {
+            "jarvis-primary": {
+                "summary": {
+                    "full": {
+                        "multi": {"pass": 10, "of": 10},
+                        "injection": {"carried": 0},
+                    }
+                }
+            }
+        }
+    }
+
+
+def _iso_days_ago(days: float, now: float) -> str:
+    when = datetime.datetime.fromtimestamp(now - days * 86400.0)
+    return when.isoformat(timespec="seconds")
+
+
+def t_enabled_still_says_yes_inside_the_age_window():
+    """2026-10-18: a pass expires. Inside MAX_RESULT_AGE_DAYS it is trusted."""
+    now = 1_800_000_000.0
+    with tempfile.TemporaryDirectory() as tmp:
+        p = _write(tmp, _passing_doc(), run_at=_iso_days_ago(89, now))
+        ok, why = P.enabled("jarvis-primary", results_path=p, now=now)
+        check("a passing result 89 days old is still trusted", ok is True, why)
+
+
+def t_enabled_refuses_a_result_older_than_the_age_window():
+    now = 1_800_000_000.0
+    with tempfile.TemporaryDirectory() as tmp:
+        p = _write(tmp, _passing_doc(), run_at=_iso_days_ago(91, now))
+        ok, why = P.enabled("jarvis-primary", results_path=p, now=now)
+        check("a passing result 91 days old is refused", ok is False, why)
+        check("  ...names its age and the 90-day limit",
+              "91 days old" in why and str(P.MAX_RESULT_AGE_DAYS) in why, why)
+
+
+def t_enabled_age_boundary_is_ninety_days():
+    now = 1_800_000_000.0
+    with tempfile.TemporaryDirectory() as tmp:
+        fresh = _write(tmp, _passing_doc(), run_at=str(now - 90 * 86400.0))
+        ok, why = P.enabled("jarvis-primary", results_path=fresh, now=now)
+        check("exactly 90 days old is still inside the window", ok is True, why)
+        stale = Path(tmp) / "stale.json"
+        stale.write_text(json.dumps({**_passing_doc(),
+                                     "run_at": now - 90 * 86400.0 - 1}),
+                         encoding="utf-8")
+        ok, why = P.enabled("jarvis-primary", results_path=stale, now=now)
+        check("one second past 90 days is refused", ok is False, why)
+
+
+def t_enabled_refuses_an_undated_result():
+    with tempfile.TemporaryDirectory() as tmp:
+        p = Path(tmp) / "results.json"
+        p.write_text(json.dumps(_passing_doc()), encoding="utf-8")   # no run_at, no date
+        ok, why = P.enabled("jarvis-primary", results_path=p)
+        check("an undated result is refused (fail closed)", ok is False, why)
+        check("  ...says the file does not say when it ran",
+              "does not say when" in why, why)
+
+
+def t_enabled_refuses_the_2020_result_the_probe_found():
+    """The audit's probe: a passing file dated 2020-01-01 used to return True
+    because enabled() never looked at the date. It must now be refused."""
+    with tempfile.TemporaryDirectory() as tmp:
+        p = _write(tmp, _passing_doc(), run_at="2020-01-01T00:00:00")
+        ok, why = P.enabled("jarvis-primary", results_path=p)
+        check("a passing 2020 result is refused as stale", ok is False, why)
+        check("  ...with the stale reason, not a pass", "days old" in why, why)
+
+
 def t_enabled_finds_the_result_where_the_runner_publishes_it():
     """2026-10-06: the runner saves beside itself (inside the repository) and
     the backend looks for the file in the config folder - different folders on
@@ -363,7 +446,8 @@ def t_enabled_finds_the_result_where_the_runner_publishes_it():
     searching half; nothing here touches the owner's real folder."""
     import os
     doc = {"models": {"jarvis-primary": {"summary": {"full": {
-        "multi": {"pass": 10, "of": 10}, "injection": {"carried": 0}}}}}}
+        "multi": {"pass": 10, "of": 10}, "injection": {"carried": 0}}}}},
+        "run_at": datetime.datetime.now().isoformat(timespec="seconds")}
     keep = {k: os.environ.get(k) for k in (P.RESULTS_ENV, "OPENJARVIS_CONFIG_DIR")}
     with tempfile.TemporaryDirectory() as tmp:
         try:
