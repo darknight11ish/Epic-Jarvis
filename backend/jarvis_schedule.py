@@ -1073,7 +1073,7 @@ class Scheduler:
                            if context_bundle else None,
                            trigger=trigger or "time",
                            condition_kind=str(condition_kind) if condition_kind else None,
-                           condition_target=str(condition_target)[:200]
+                           condition_target=_clean_condition_target(condition_target)
                            if condition_target else None)
         return self.job(jid)
 
@@ -1878,9 +1878,15 @@ class Scheduler:
             kind_of_condition = row["condition_kind"]
         except (IndexError, KeyError):
             kind_of_condition = None
-        if kind_of_condition:
+        # Only the two known conditions are ever handed out, and the target
+        # only when it is a clean NAME: never a raw path or web address (F4 -
+        # the same rule that keeps `rule["watch"]` out of this payload,
+        # because the desktop's hiding of private lists only blanks `text`).
+        if kind_of_condition in CONDITION_KINDS:
             v["condition_kind"] = str(kind_of_condition)
-            v["condition_target"] = str(row["condition_target"] or "")
+            target = _safe_condition_target(row["condition_target"])
+            if target:
+                v["condition_target"] = target
         try:
             if row["context_bundle"]:
                 v["has_context"] = True
@@ -2355,15 +2361,65 @@ def _scrubber():
 
 
 def _scrub_line(text, limit: int) -> str:
-    """One line of the owner's/reader's words, secrets hidden, cut to `limit`."""
+    """One line of the owner's/reader's words, secrets hidden, cut to `limit`.
+
+    FAIL CLOSED (2026-10-18 privacy review, F1/F2): a missing scrubber, or a
+    scrubber that raises, means the line is DROPPED (""), never stored raw.
+    Anything that becomes a storable packet goes through
+    `scrub_context_bundle`, which drops the WHOLE packet on the same failure
+    rather than storing it half-scrubbed."""
     t = " ".join(str(text or "").split())
+    if not t:
+        return ""
     fn = _scrubber()
-    if fn is not None and t:
-        try:
-            t = str(fn(t) or "")
-        except Exception:
-            pass
+    if fn is None:
+        return ""
+    try:
+        t = str(fn(t) or "")
+    except Exception:
+        return ""
     return t[:limit].strip()
+
+
+#: An address rather than a person's name (privacy review F3/F4): a
+#: condition's target may be a name, never a path or a URL. `_PATHLIKE`
+#: covers paths; this covers every `scheme://` form and a bare `www.` host.
+_ADDRESSLIKE = re.compile(r"(?:[A-Za-z][A-Za-z0-9+.-]*://|\bwww\.)", re.I)
+
+
+def _clean_condition_target(value):
+    """A condition target as it may be persisted, or raise ValueError.
+
+    The target is a PERSON'S NAME (whose reply is being watched); it is never
+    a path or a web address (privacy review F3/F4: it is persisted and handed
+    to every client by `_view`). It is scrubbed for secrets on the way in; if
+    the scrubber is missing or fails, the target is refused rather than
+    stored raw - the same fail-closed rule as a context packet."""
+    text = " ".join(str(value or "").split())
+    if not text:
+        return None
+    if len(text) > 80:
+        raise ValueError("a condition's name must be 80 characters or fewer")
+    if _PATHLIKE.search(text) or _ADDRESSLIKE.search(text):
+        raise ValueError("a condition's name must be a name, not a path or a web address")
+    if _scrubber() is None:
+        raise ValueError("the condition's name cannot be checked for secrets here")
+    safe = _scrub_line(text, 80)
+    if not safe:
+        raise ValueError("the condition's name cannot be checked for secrets")
+    return safe
+
+
+def _safe_condition_target(value) -> str:
+    """The target as `_view` may hand to clients: "" unless it is a clean name.
+
+    Old rows (or a damaged database) may hold a path/address because an
+    earlier build stored it raw; `_view` must never pass one on (privacy
+    review F4 - the same reason `rule["watch"]` is withheld from `_view`)."""
+    try:
+        return _clean_condition_target(value) or ""
+    except Exception:
+        return ""
 
 
 def _decode_bundle(raw) -> dict:
@@ -2385,45 +2441,60 @@ def scrub_context_bundle(bundle) -> dict:
 
     Scrubbed through the real `jarvis_scrub.scrub_text` (so a secret cannot
     ride along in a summary, a name or a suggested prompt), bounded, and with
-    any path-shaped `linked_files` entry DROPPED: a file is remembered by an
-    opaque id/label, never by its path (the blueprint's ruling, Q3/Q4). A
-    backend without the scrubber keeps everything but `source_summary`, which
-    is stored as "" - the ruling's own rule, because a summary is the one
-    field whose whole value is its words.
-    """
+    any path-shaped entry in every field DROPPED: a file is remembered by an
+    opaque id/label, never by its path (the blueprint's ruling, Q3/Q4).
+
+    FAIL CLOSED (privacy review F1/F2): when the scrubber is missing, or
+    raises on any word in the packet, the result is {} - nothing is stored
+    raw and nothing is stored half-scrubbed. The old "keep everything but the
+    summary" rule is deliberately gone: a name or file label can carry a
+    secret too."""
     if not isinstance(bundle, dict):
         return {}
     scrubber = _scrubber()
-    summary = _scrub_line(bundle.get("source_summary"), BUNDLE_SUMMARY_MAX) \
-        if scrubber is not None else ""
-    if summary and _PATHLIKE.search(summary):
-        summary = ""                  # never a path, even inside a summary
-    conv = bundle.get("source_conv_id")
-    conv = str(conv).strip()[:200] if isinstance(conv, (str, int)) and not isinstance(conv, bool) else ""
-    if conv and not re.fullmatch(r"[A-Za-z0-9_.:-]{1,200}", conv):
-        conv = ""
-    entities = []
-    for item in list(bundle.get("linked_entities") or [])[:BUNDLE_ENTITIES_MAX]:
-        if isinstance(item, dict):
-            item = item.get("name") or item.get("label") or ""
-        name = _scrub_line(item, 80)
-        if name and not _PATHLIKE.search(name):
-            entities.append(name)
-    files = []
-    for item in list(bundle.get("linked_files") or []):
-        if isinstance(item, dict):
-            label = _scrub_line(item.get("label") or item.get("id"), 80)
-        else:
-            label = _scrub_line(item, 80)
-        if not label or _PATHLIKE.search(label):
-            continue                     # NEVER a path, in any shape
-        files.append(label)
-        if len(files) >= BUNDLE_FILES_MAX:
-            break
-    prompt = _scrub_line(bundle.get("suggested_prompt"), BUNDLE_PROMPT_MAX) \
-        if scrubber is not None else ""
-    if prompt and _PATHLIKE.search(prompt):
-        prompt = ""                   # and never one in a suggested prompt
+    if scrubber is None:
+        return {}
+
+    def clean(text, limit: int) -> str:
+        t = " ".join(str(text or "").split())
+        if not t:
+            return ""
+        return str(scrubber(t) or "")[:limit].strip()
+
+    try:
+        summary = clean(bundle.get("source_summary"), BUNDLE_SUMMARY_MAX)
+        if summary and _PATHLIKE.search(summary):
+            summary = ""                  # never a path, even inside a summary
+        conv = bundle.get("source_conv_id")
+        conv = str(conv).strip()[:200] if isinstance(conv, (str, int)) \
+            and not isinstance(conv, bool) else ""
+        if conv and not re.fullmatch(r"[A-Za-z0-9_.:-]{1,200}", conv):
+            conv = ""
+        entities = []
+        for item in list(bundle.get("linked_entities") or [])[:BUNDLE_ENTITIES_MAX]:
+            if isinstance(item, dict):
+                item = item.get("name") or item.get("label") or ""
+            name = clean(item, 80)
+            if name and not _PATHLIKE.search(name):
+                entities.append(name)
+        files = []
+        for item in list(bundle.get("linked_files") or []):
+            if isinstance(item, dict):
+                label = clean(item.get("label") or item.get("id"), 80)
+            else:
+                label = clean(item, 80)
+            if not label or _PATHLIKE.search(label) or _ADDRESSLIKE.search(label):
+                continue                 # NEVER a path or address, in any shape
+            files.append(label)
+            if len(files) >= BUNDLE_FILES_MAX:
+                break
+        prompt = clean(bundle.get("suggested_prompt"), BUNDLE_PROMPT_MAX)
+        if prompt and (_PATHLIKE.search(prompt) or _ADDRESSLIKE.search(prompt)):
+            prompt = ""                   # and never one in a suggested prompt
+    except Exception:
+        # A scrubber that cannot handle these words must not let ANY of them
+        # through: no half-scrubbed packet, no raw survivors.
+        return {}
     return {"source_conv_id": conv or None,
             "source_summary": summary,
             "linked_entities": entities,
@@ -2488,19 +2559,22 @@ def pc_active(readers=None) -> dict:
 
     Active requires ALL THREE, in plain terms: the Windows session is unlocked,
     the owner has touched the keyboard/mouse within `IDLE_ACTIVE_MAX_S` (two
-    minutes), and no focus session is running. Readers (all optional, so a
-    bare call is the conservative "cannot tell"):
+    minutes), and no focus session is running.
 
-        session_unlocked() -> bool        default True (the loop only runs in a
-                                          session; the App lock is separate)
-        app_locked()       -> bool        default False
-        idle_seconds()     -> float|None  None = cannot tell -> NOT active
-        focus_active()     -> bool        default False
+    FAIL CLOSED (privacy review F12): a missing or raising reader for ANY of
+    the three lock/focus signals means "cannot tell", which means NOT active -
+    never "assume unlocked". Only an explicitly injected reader may say the
+    session is unlocked, the App lock is off, or no focus session is running.
+    A missing/raising idle reading is also NOT active. Reasons name the signal
+    that failed, so a caller can wire it:
 
-    A missing reader or one that raises gives the conservative answer: not
-    active, reason "user_idle" - never a claim to know. Pure: reads nothing
-    itself, starts nothing, and is safe to call from a render or a test.
-    """
+        session_unlocked() -> bool   missing/raises -> "session_locked"
+        app_locked()       -> bool   missing/raises -> "app_locked"
+        focus_active()     -> bool   missing/raises -> "in_focus_session"
+        idle_seconds()     -> float|None  None/raises -> "user_idle"
+
+    Pure: reads nothing itself, starts nothing, and is safe to call from a
+    render or a test."""
     idle = None
     get_idle = _reader(readers, "idle_seconds")
     if get_idle is not None:
@@ -2509,21 +2583,19 @@ def pc_active(readers=None) -> dict:
             idle = float(raw) if raw is not None else None
         except Exception:
             idle = None
-    try:
-        unlocked = bool(_reader(readers, "session_unlocked")() ) \
-            if _reader(readers, "session_unlocked") is not None else True
-    except Exception:
-        unlocked = False                  # cannot tell: fail closed
-    try:
-        app_locked = bool(_reader(readers, "app_locked")()) \
-            if _reader(readers, "app_locked") is not None else False
-    except Exception:
-        app_locked = True                 # cannot tell: fail closed
-    try:
-        in_focus = bool(_reader(readers, "focus_active")()) \
-            if _reader(readers, "focus_active") is not None else False
-    except Exception:
-        in_focus = True                   # cannot tell: fail closed
+
+    def signal(name: str, when_unknown: bool) -> bool:
+        fn = _reader(readers, name)
+        if fn is None:
+            return when_unknown
+        try:
+            return bool(fn())
+        except Exception:
+            return when_unknown
+
+    unlocked = signal("session_unlocked", False)     # unknown -> treat as locked
+    app_locked = signal("app_locked", True)          # unknown -> treat as locked
+    in_focus = signal("focus_active", True)          # unknown -> treat as focused
     if not unlocked:
         return {"active": False, "reason": "session_locked", "idle_seconds": idle}
     if app_locked:
@@ -2543,7 +2615,10 @@ def reminder_ready(reminder, *, now=None, readers=None):
     A "time" reminder is due when its own `due` has passed (the scheduler's
     ordinary tick, unchanged). An "on_pc_active" or "after_focus" reminder is
     due only when `pc_active()` says the owner is at the PC - which is false
-    DURING a focus session, so both triggers hold until it ends."""
+    DURING a focus session, so both triggers hold until it ends - AND, when it
+    has a real `due`, not before that time (privacy review F13: a future-due
+    PC-triggered reminder must not be surfaced early). A `next_pc_active`
+    snooze copy has due None and is eligible at the next activity."""
     if not isinstance(reminder, dict):
         return False, "not_a_reminder"
     trigger = str(reminder.get("trigger") or "time")
@@ -2555,6 +2630,10 @@ def reminder_ready(reminder, *, now=None, readers=None):
         return (float(due) <= at), ("due" if float(due) <= at else "not_due")
     if trigger not in ("on_pc_active", "after_focus"):
         return False, "unknown_trigger"
+    due = reminder.get("due")
+    at = time.time() if now is None else float(now)
+    if due is not None and float(due) > at:
+        return False, "not_due"
     state = pc_active(readers)
     return bool(state["active"]), str(state["reason"])
 
@@ -2689,10 +2768,23 @@ def enrich_and_check_condition(reminder, *, readers=None, hide_memory_lists=Fals
     out["condition_satisfied_early"] = satisfied
     out["condition_note"] = note
 
-    attached = bool(facts) or bool(note) or bool(context.get("source_summary"))
+    attached = (bool(facts) or bool(note)
+                or bool(context.get("source_summary"))
+                or bool(context.get("linked_entities"))
+                or bool(context.get("linked_files"))
+                or bool(context.get("suggested_prompt")))
     out["context_attached"] = attached
-    if attached:
-        _latch_reminder_context()
+    if attached and not _latch_reminder_context():
+        # The privacy latch could not be set (F7): fail CLOSED. No private
+        # words go back - not even the facts already read - and the caller is
+        # told in plain words why. A latch-free "success" would be the one
+        # answer worse than a refusal.
+        out.update({"withheld": True, "context": {}, "facts": [],
+                    "condition_satisfied_early": False, "condition_note": "",
+                    "toast": "", "context_attached": False,
+                    "error": ("The privacy latch could not be set, so the private "
+                              "details were withheld. Nothing private was shown.")})
+        return out
     toast = title
     if note:
         toast = f"{title} - {note}" if title else note
@@ -2726,16 +2818,30 @@ def _micro_steps(title, condition_kind="") -> list:
     return list(_MICRO_STEPS["default"])
 
 
-def _is_sensitive(text) -> bool:
-    """Whether the shipped classifier calls this reminder's own words sensitive.
+def _is_sensitive(text, bundle=None) -> bool:
+    """Whether the classifier calls this reminder's words or packet sensitive.
+
+    The WHOLE bundle is considered, not only the title (privacy review F10):
+    a bland reminder ("Buy milk") with a private summary/name/file/prompt must
+    never be offered the three-step breaker just because its title is plain.
 
     Pattern layer only (`use_model=False`): snoozing must be instant and must
     never call a model. A classifier that is missing or raises is treated as
     SENSITIVE - the conservative direction, so a broken classifier can never
-    offer the three-step breaker for private material."""
+    offer the breaker for private material."""
+    parts = [str(text or "")]
+    if isinstance(bundle, dict):
+        for key in ("source_summary", "suggested_prompt"):
+            value = bundle.get(key)
+            if value:
+                parts.append(str(value))
+        for key in ("linked_entities", "linked_files"):
+            for value in list(bundle.get(key) or []):
+                if value:
+                    parts.append(str(value))
     try:
         import jarvis_sensitive
-        verdict = jarvis_sensitive.classify(str(text or ""), use_model=False)
+        verdict = jarvis_sensitive.classify("\n".join(parts), use_model=False)
         return bool(verdict.get("sensitive"))
     except Exception:
         return True
@@ -2763,13 +2869,17 @@ def snooze_reminder(reminder_id, preset: str = "15m", *, now=None,
 
     `preset`: "15m", "1h", "tonight" (the next 19:00 on this PC's clock),
     "tomorrow_morning" (tomorrow 09:00), "next_pc_active" (no time: it waits
-    for `pc_active()`). The reminder itself is kept and a new snoozed copy is
-    what becomes due - the same shape the scheduler already uses for Snooze.
+    for `pc_active()`). A new snoozed copy becomes due - the same shape the
+    scheduler already uses for Snooze - and the ORIGINAL one-off reminder is
+    resolved/replaced so it cannot fire at its old time as well (privacy
+    review F17). Its context packet is resolved with it (the sweep then drops
+    it after `BUNDLE_RETENTION_DAYS`), and the copy carries the packet.
 
     The return carries `snooze_count` and:
       * `stuck_hint`: True once the reminder has been snoozed
         `STUCK_SNOOZE_THRESHOLD` (3) times - the boundary is "< 3 is not
-        stuck" - and NEVER for a sensitive reminder;
+        stuck" - and NEVER for a sensitive reminder (the title AND the whole
+        packet are classified, F10);
       * `micro_steps`: the three small steps, and ONLY when the caller opted
         in (`micro_steps_opt_in=True`) and the reminder is not sensitive.
 
@@ -2788,16 +2898,31 @@ def snooze_reminder(reminder_id, preset: str = "15m", *, now=None,
                     "error": "That reminder is not on the list any more."}
         due, trigger = _preset_due(preset, at)
         count = int(row["snooze_count"] or 0) + 1
-        c.execute("UPDATE jobs SET snooze_count = ?, changed = ? WHERE id = ?",
-                  (count, at, str(reminder_id)))
+        # A one-off that was still waiting is finished by its snooze: mark it
+        # resolved (not "fired" - nobody should see a second "went off"), so
+        # only the new copy carries the reminder forward. A repeating rule or
+        # an already-resolved row is left alone.
+        resolve = row["rule"] is None and row["state"] in ("active", "paused")
+        if resolve:
+            c.execute("UPDATE jobs SET snooze_count = ?, changed = ?, state = 'fired', "
+                      "due = NULL, fired_at = NULL, fired_due = NULL, late = 0, "
+                      "resolved_at = COALESCE(resolved_at, ?) WHERE id = ?",
+                      (count, at, at, str(reminder_id)))
+        else:
+            c.execute("UPDATE jobs SET snooze_count = ?, changed = ? WHERE id = ?",
+                      (count, at, str(reminder_id)))
     context = _decode_bundle(row["context_bundle"])
     new_id = s._insert("reminder", text=row["text"], state="active", due=due,
                        rule=None, duration=None, source=row["source"] or "app",
                        snooze_of=str(reminder_id), context_bundle=context or None,
                        trigger=trigger,
                        condition_kind=row["condition_kind"],
-                       condition_target=row["condition_target"])
-    sensitive = _is_sensitive(row["text"])
+                       condition_target=_safe_condition_target(row["condition_target"])
+                       or None)
+    with s._lock, s._db() as c:
+        c.execute("UPDATE jobs SET snoozed_to = ?, changed = ? WHERE id = ?",
+                  (new_id, at, str(reminder_id)))
+    sensitive = _is_sensitive(row["text"], context)
     stuck = count >= STUCK_SNOOZE_THRESHOLD and not sensitive
     steps = _micro_steps(row["text"], row["condition_kind"] or "") \
         if stuck and micro_steps_opt_in else []

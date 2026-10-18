@@ -1355,7 +1355,8 @@ def t_gtd_a_context_bundle_is_scrubbed_and_never_a_path():
           ["Sam Fisher", "Mum"], stored.get("linked_entities"))
     check("... and the suggested prompt is kept",
           stored.get("suggested_prompt") == "Help me finish the tax form", stored)
-    # The ruling: without the scrubber a SUMMARY is stored as "", never raw.
+    # Fail closed (privacy review F2): without the scrubber NOTHING is stored,
+    # because a file label or a name can carry a secret too.
     real_scrubber = S._scrubber
     S._scrubber = lambda: None
     try:
@@ -1363,8 +1364,8 @@ def t_gtd_a_context_bundle_is_scrubbed_and_never_a_path():
                                        "linked_files": ["keep-me"]})
     finally:
         S._scrubber = real_scrubber
-    check("with no scrubber the summary is stored as \"\", never raw",
-          bare.get("source_summary") == "", bare)
+    check("with no scrubber the whole packet is dropped, never raw",
+          bare == {}, bare)
 
 
 def t_gtd_old_rows_and_plain_reminders_grow_nothing():
@@ -1618,7 +1619,20 @@ def t_gtd_pc_active_needs_unlocked_idle_and_no_focus():
     check("a focus session HOLDS it, even at the keyboard",
           focus["active"] is False and focus["reason"] == "in_focus_session", focus)
     check("no readers at all is the conservative not-active answer",
-          S.pc_active()["active"] is False and S.pc_active()["reason"] == "user_idle")
+          S.pc_active()["active"] is False
+          and S.pc_active()["reason"] == "session_locked")
+    check("an idle-only call is NOT active: a missing lock reader fails closed",
+          S.pc_active({"idle_seconds": lambda: 5.0})["active"] is False
+          and S.pc_active({"idle_seconds": lambda: 5.0})["reason"]
+          == "session_locked")
+    half = {"session_unlocked": lambda: True, "idle_seconds": lambda: 5.0}
+    check("a missing App-lock reader is NOT active either",
+          S.pc_active(half)["active"] is False
+          and S.pc_active(half)["reason"] == "app_locked")
+    no_focus = dict(half, app_locked=lambda: False)
+    check("a missing focus reader is NOT active either",
+          S.pc_active(no_focus)["active"] is False
+          and S.pc_active(no_focus)["reason"] == "in_focus_session")
     check("a reader that raises is not counted as a yes",
           S.pc_active(readers(idle_seconds=lambda: 1 / 0))["active"] is False)
     check("the answer always carries idle_seconds",
@@ -1642,23 +1656,29 @@ def t_gtd_active_triggers_hold_until_the_owner_is_back():
                                  readers={"session_unlocked": lambda: False}) == [])
     at_pc = S.due_active_reminders(
         now=w.clock.t, scheduler=w.s,
-        readers={"idle_seconds": lambda: 5.0, "focus_active": lambda: False})
+        readers={"session_unlocked": lambda: True, "app_locked": lambda: False,
+                 "idle_seconds": lambda: 5.0, "focus_active": lambda: False})
     check("the owner at the PC: both PC triggers are ready (read-only)",
           {j["id"] for j in at_pc} == {pc_job["id"], focus_job["id"]}
           and w.s.job(pc_job["id"])["state"] == "active",
           [j["id"] for j in at_pc])
     in_focus = S.due_active_reminders(
         now=w.clock.t, scheduler=w.s,
-        readers={"idle_seconds": lambda: 5.0, "focus_active": lambda: True})
+        readers={"session_unlocked": lambda: True, "app_locked": lambda: False,
+                 "idle_seconds": lambda: 5.0, "focus_active": lambda: True})
     check("a focus session holds them both", in_focus == [], in_focus)
     view = w.s.job(focus_job["id"])
     check("after_focus holds during focus, and is ready afterwards",
           S.reminder_ready(view, now=w.clock.t,
-                           readers={"idle_seconds": lambda: 1.0,
+                           readers={"session_unlocked": lambda: True,
+                                    "app_locked": lambda: False,
+                                    "idle_seconds": lambda: 1.0,
                                     "focus_active": lambda: True}) ==
           (False, "in_focus_session")
           and S.reminder_ready(view, now=w.clock.t,
-                               readers={"idle_seconds": lambda: 1.0,
+                               readers={"session_unlocked": lambda: True,
+                                        "app_locked": lambda: False,
+                                        "idle_seconds": lambda: 1.0,
                                         "focus_active": lambda: False})[0] is True)
     check("a time reminder's readiness is its own due time",
           S.reminder_ready({"due": now, "trigger": "time"}, now=now)[0] is True
@@ -1732,6 +1752,193 @@ def t_gtd_the_add_route_accepts_the_reminder_fields():
                       context_bundle={"source_summary": "x"}))
     finally:
         S.get = real_get
+
+
+def t_gtd_scrubber_failure_stores_nothing():
+    """Privacy review F1/F2: no scrubber, or a scrubber that raises, must never
+    store a raw word - not a summary, not a name, not a file label."""
+    secret = "sk-live-FIXTURE-SECRET-1234567890"
+
+    class Boom:
+        def __call__(self, text):
+            raise RuntimeError("scrubber down")
+
+    real = S._scrubber
+    bundle_in = {"source_summary": "key " + secret,
+                 "linked_entities": ["name " + secret],
+                 "linked_files": ["file " + secret],
+                 "suggested_prompt": "use " + secret}
+    S._scrubber = lambda: Boom()
+    try:
+        raised = S.scrub_context_bundle(bundle_in)
+    finally:
+        S._scrubber = real
+    check("a raising scrubber drops the WHOLE packet", raised == {}, raised)
+    check("... and no raw secret survives", secret not in json.dumps(raised))
+    S._scrubber = lambda: None
+    try:
+        missing = S.scrub_context_bundle(bundle_in)
+        w = _gtd_world("gtd-scrub-fail", S.wall_to_epoch(2026, 10, 20, 9, 0))
+        job = w.s.add_at("reminder", w.clock.t + 100.0, "Buy milk",
+                         context_bundle=bundle_in)
+    finally:
+        S._scrubber = real
+    check("a missing scrubber drops the WHOLE packet", missing == {}, missing)
+    check("... and no raw secret survives", secret not in json.dumps(missing))
+    check("... so a reminder stores no context at all",
+          "has_context" not in w.s.job(job["id"]), w.s.job(job["id"]))
+
+
+def t_gtd_condition_target_is_a_name():
+    """Privacy review F3/F4: the condition target is persisted and shown by
+    every client; a path/address must be refused, and an old raw row must
+    never be handed out."""
+    import sqlite3
+    now = S.wall_to_epoch(2026, 10, 20, 9, 0)
+    w = _gtd_world("gtd-target", now)
+    due = now + 100.0
+    check("a path-shaped condition target is refused in words",
+          _raises(ValueError, w.s.add_at, "reminder", due, "Reply to Sam",
+                  condition_kind="no_email_reply_from",
+                  condition_target="C:\\Users\\pcadmin\\secret.txt"))
+    check("... and a web address too",
+          _raises(ValueError, w.s.add_at, "reminder", due, "Reply to Sam",
+                  condition_kind="no_email_reply_from",
+                  condition_target="https://example.com/private"))
+    safe = w.s.add_at("reminder", due, "Reply to Sam",
+                      condition_kind="no_email_reply_from", condition_target="Sam")
+    check("a plain name is kept and shown",
+          w.s.job(safe["id"]).get("condition_target") == "Sam"
+          and w.s.job(safe["id"]).get("condition_kind") == "no_email_reply_from")
+    con = sqlite3.connect(w.s.path)
+    con.execute("UPDATE jobs SET condition_target = ? WHERE id = ?",
+                ("C:\\Users\\pcadmin\\secret.txt", safe["id"]))
+    con.commit(); con.close()
+    view = w.s.job(safe["id"])
+    shown = json.dumps(w.s.status())
+    check("a legacy path target is never handed out by job()",
+          "condition_target" not in view, view)
+    check("... nor by any listed/status payload", "C:\\\\Users" not in shown, shown)
+    con = sqlite3.connect(w.s.path)
+    con.execute("UPDATE jobs SET condition_kind = ? WHERE id = ?",
+                ("C:\\Users\\pcadmin\\secret.txt", safe["id"]))
+    con.commit(); con.close()
+    view2 = w.s.job(safe["id"])
+    check("... nor an unknown/raw condition kind",
+          "condition_kind" not in view2
+          and "C:\\\\Users" not in json.dumps(w.s.status()), view2)
+
+
+def t_gtd_sensitive_bundle_blocks_the_breaker():
+    """Privacy review F10: a bland title must not hide a sensitive packet."""
+    now = S.wall_to_epoch(2026, 10, 20, 9, 0)
+    w = _gtd_world("gtd-sensitive-packet", now)
+    job = _gtd_reminder(w, "Buy milk", context_bundle={
+        "source_summary": "my therapy appointment and diagnosis details"})
+    out = None
+    for _ in range(3):
+        out = S.snooze_reminder(job["id"], "15m", now=now, scheduler=w.s,
+                                micro_steps_opt_in=True)
+    check("the packet is sensitive even though the title is bland",
+          out["sensitive"] is True, out)
+    check("... so three snoozes do NOT make it stuck", out["stuck_hint"] is False, out)
+    check("... and it never gets the three-step breaker", out["micro_steps"] == [], out)
+
+
+def t_gtd_pc_trigger_respects_due():
+    """Privacy review F13: a PC-triggered reminder with a real due is not
+    surfaced before that time; a next_pc_active copy (no due) still is."""
+    now = S.wall_to_epoch(2026, 10, 20, 9, 0)
+    w = _gtd_world("gtd-trigger-due", now)
+    readers = {"session_unlocked": lambda: True, "app_locked": lambda: False,
+               "idle_seconds": lambda: 5.0, "focus_active": lambda: False}
+    future = _gtd_reminder(w, "Buy milk", trigger="on_pc_active")
+    check("a future-due on_pc_active reminder is not ready",
+          S.reminder_ready(w.s.job(future["id"]), now=now, readers=readers)[0]
+          is False)
+    check("... and is not surfaced as due",
+          S.due_active_reminders(now=now, scheduler=w.s, readers=readers) == [])
+    w.clock.t = now + 3601.0
+    check("... and becomes ready once its due has passed",
+          {j["id"] for j in S.due_active_reminders(
+              now=w.clock.t, scheduler=w.s, readers=readers)} == {future["id"]})
+    plain = _gtd_reminder(w, "Water the plants")
+    res = S.snooze_reminder(plain["id"], "next_pc_active", now=w.clock.t,
+                            scheduler=w.s)
+    copy = w.s.job(res["snoozed_id"])
+    check("a next_pc_active copy has no due and is eligible at activity",
+          copy.get("due") is None
+          and res["snoozed_id"] in [j["id"] for j in S.due_active_reminders(
+              now=w.clock.t, scheduler=w.s, readers=readers)], copy)
+
+
+def t_gtd_latch_covers_every_context_and_fails_closed():
+    """Privacy review F6/F7: every returned private word counts as attached
+    and latches exactly once; a latch that cannot be set withholds all of it."""
+    now = S.wall_to_epoch(2026, 10, 20, 9, 0)
+    w = _gtd_world("gtd-latch-all", now)
+    base = dict(_gtd_reminder(w, "Buy milk"))
+    for label, ctx in (
+            ("entities-only", {"linked_entities": ["Sam"]}),
+            ("files-only", {"linked_files": ["doc-7"]}),
+            ("prompt-only", {"suggested_prompt": "Draft the reply"})):
+        view = dict(base, context_bundle=ctx)
+        latch, old = _fake_latch()
+        try:
+            out = S.enrich_and_check_condition(view)
+        finally:
+            _restore_gate(old)
+        check(f"{label}: attached context counts as attached",
+              out["context_attached"] is True, out)
+        check(f"{label}: it latches exactly once",
+              latch == ["reminder_context"], latch)
+    import types
+    mod = types.ModuleType("jarvis_gate")
+
+    def boom(*, why=""):
+        raise RuntimeError("gate down")
+    mod.latch_taint = boom
+    old = sys.modules.get("jarvis_gate")
+    sys.modules["jarvis_gate"] = mod
+    try:
+        out = S.enrich_and_check_condition(dict(base, context_bundle={
+            "source_summary": "Sam asked about the invoice"}))
+    finally:
+        if old is None:
+            sys.modules.pop("jarvis_gate", None)
+        else:
+            sys.modules["jarvis_gate"] = old
+    check("a failing latch withholds every private word",
+          out["withheld"] is True and out["context"] == {} and out["facts"] == []
+          and out["context_attached"] is False, out)
+    check("... and says why in plain words",
+          "privacy latch" in (out.get("error") or "").lower()
+          and "withheld" in (out.get("error") or "").lower(), out.get("error"))
+
+
+def t_gtd_snooze_resolves_the_original():
+    """Privacy review F17: a snooze resolves the original one-off, so it cannot
+    fire twice, and its packet is resolved with it."""
+    now = S.wall_to_epoch(2026, 10, 20, 9, 0)
+    w = _gtd_world("gtd-resolve", now)
+    job = _gtd_reminder(w, "Buy milk", context_bundle={
+        "source_summary": "we spoke about milk", "linked_files": ["doc-3"]})
+    res = S.snooze_reminder(job["id"], "1h", now=now, scheduler=w.s)
+    orig = w.s.job(job["id"])
+    check("the original is resolved by its snooze",
+          orig["state"] != "active" and orig.get("due") is None, orig)
+    check("... and is not shown as having gone off", "fired_at" not in orig, orig)
+    w.clock.t = now + 200.0
+    check("... so it cannot fire a second time", w.s.tick() == [])
+    copy = w.s.job(res["snoozed_id"])
+    check("the copy is the only active reminder",
+          copy["state"] == "active"
+          and abs(copy["due"] - (now + 3600.0)) < 0.5, copy)
+    w.clock.t = now + 3700.0
+    check("... and it fires once", w.s.tick() == [res["snoozed_id"]])
+    check("the original's packet is resolved and swept after seven days",
+          S.expire_context_bundles(now=w.clock.t + 8 * 86400.0, scheduler=w.s) >= 1
+          and w.s.bundle(job["id"]) == {})
 
 
 def main():
