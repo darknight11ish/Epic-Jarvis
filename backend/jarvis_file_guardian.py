@@ -126,9 +126,12 @@ WHAT THIS MODULE DOES NOT DO, SAID PLAINLY
     works out), answered by `jarvis_brain_reads.py` and documented in
     JARVIS-API section 140. They read the store and nothing else; a request
     from another device is refused BEFORE anything is read; neither writes.
-    There is still NO restore route and no chat tool: `restore_version()` is
-    not reachable from any production path yet, and that is the next,
-    separately-gated slice.
+    ONE gated restore route exists too since 2026-10-18 (LM-2B):
+    `POST /api/guardian/restore` calls `restore_version()` with the EXISTING
+    `undo_action` card through the real `jarvis_gate.check()` - no new tier.
+    It is POST-only, the only route here that writes, and a request from
+    another device is refused before the request body is read. There is
+    still no chat tool: no model can reach any of this.
   * The backend cannot see App lock or "Hide memory lists" (both are
     desktop-side state), so no read route can withhold itself on those; the
     desktop's own drawer must hide while either is on, and JARVIS-API section

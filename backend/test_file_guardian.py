@@ -66,6 +66,16 @@ What it proves:
     store byte changes; and the route does not pretend a client-supplied lock
     flag withholds anything - the backend has no such flag, which is the one
     documented gap.
+15. THE ONE WRITE ROUTE (LM-2B): POST /api/guardian/restore calls
+    restore_version() with the EXISTING undo_action card - an approved restore
+    puts exactly the saved bytes back and leaves a NEW receipt whose Undo
+    restores what it replaced; a denied/timed-out/unraisable card, an unknown
+    saved version or a path outside the allowed folders changes nothing (and a
+    denial raises no write at all); a failed save-before-write aborts with the
+    file untouched; another device is refused BEFORE the body is read; the
+    route is POST-only (a GET goes to the original handler and calls nothing)
+    and the HTTP door never names a gate - the module's real jarvis_gate.check()
+    is the one asked.
 14. THE PRE-WRITE HOOKS (Blueprint B): the approved Obsidian append in
     jarvis_note_capture.py takes the guardian copy of the daily note BEFORE it
     appends a byte, links the answer's `before_sha256`/`snapshot_id`/
@@ -1579,6 +1589,271 @@ def t_an_older_backend_says_update_in_the_same_shape():
     check("an older guardian: 501 in the diff shape",
           code == 501 and body["ok"] is False and "apply-patches.ps1" in body["words"],
           (code, body))
+
+
+
+# --------------------------------------------------------------------------
+#   15. The one WRITE route: POST /api/guardian/restore (LM-2B)
+# --------------------------------------------------------------------------
+
+
+def post_door(body=None, *, origin=True, token=True, peer="127.0.0.1",
+              read=None, raw=None, path="/api/guardian/restore"):
+    """One POST through the real stack (the suite's handler, install(), body)."""
+    payload = raw if raw is not None else json.dumps(body or {}).encode()
+
+    def _read(_handler):
+        return payload
+
+    class Hd(RouteHandler):
+        def do_POST(self):
+            self.sent = ("original-post", self.path)
+
+    B.install(Hd, origin_ok=lambda s: origin, token_ok=lambda s: token,
+              read_body=(read if read is not None else _read))
+    h = Hd(path, peer=peer)
+    h.do_POST()
+    return h.sent
+
+
+def receipts_count() -> int:
+    return len(R.recent(limit=500))
+
+
+def journal_rows() -> int:
+    return len(G.rows())
+
+
+def route_restore(path, sha_before, gate):
+    return B.handle_post(B.GUARDIAN_RESTORE_PATH,
+                         {"path": str(path), "sha_before": sha_before}, gate=gate)
+
+
+def t_the_restore_route_puts_the_version_back_on_a_persons_yes():
+    fresh()
+    original = b"the first version\nwith two lines\n"
+    second = b"the second version\n"
+    path = write("route-restore.txt", original)
+    saved = snapshot(path)
+    path.write_bytes(second)
+    cards = Cards("approved")
+    code, body = route_restore(path, saved["before_sha256"], cards.gate)
+    check("the route answers 200 with the module's own success dict",
+          code == 200 and body.get("ok") is True and body.get("changed") is True, body)
+    check("... and the file is byte-for-byte the saved version",
+          path.read_bytes() == original, path.read_bytes())
+    check("... it raised exactly ONE card, and it was the EXISTING undo_action",
+          len(cards.cards) == 1 and cards.cards[0].get("action") == R.UNDO_ACTION,
+          cards.cards)
+    receipt_id = str(body.get("receipt_id") or "")
+    check("... and left a NEW receipt, not the snapshot's",
+          receipt_id.startswith("rc") and receipt_id != saved.get("receipt_id"),
+          (receipt_id, saved.get("receipt_id")))
+    receipt = R.get(receipt_id) if receipt_id else None
+    check("the new receipt says what the restore replaced",
+          receipt is not None and receipt.get("tool_name") == G.TOOL_RESTORE
+          and ((receipt.get("before") or {}).get("sha256")) == sha256_of(second),
+          receipt)
+    undo = R.undo(receipt_id)
+    check("the EXISTING Undo puts back the bytes that were here before",
+          undo.get("ok") is True and path.read_bytes() == second,
+          (undo, path.read_bytes()))
+
+
+def t_a_denied_timed_out_or_unraisable_card_writes_nothing():
+    fresh()
+    path = write("denied.txt", b"the first\n")
+    saved = snapshot(path)
+    path.write_bytes(b"the second\n")
+    store = Path(HOME_A) / G.GUARDIAN_DIR
+
+    def boom(action, detail, prompt):
+        raise RuntimeError("no gate on this PC")
+
+    for label, gate, words in (("denied", Cards("denied").gate, "turned down"),
+                               ("timed_out", Cards("timed_out").gate, "nobody"),
+                               ("unraisable", boom, "could not be raised")):
+        before_file, before_store = path.read_bytes(), tree_bytes(store)
+        before_receipts, before_rows = receipts_count(), journal_rows()
+        code, body = route_restore(path, saved["before_sha256"], gate)
+        check(f"a {label} card is a 200 refusal, not a traceback",
+              code == 200 and body.get("ok") is False and body.get("refused") is True,
+              (code, body))
+        check(f"... a {label} card writes nothing at all",
+              path.read_bytes() == before_file and tree_bytes(store) == before_store
+              and receipts_count() == before_receipts
+              and journal_rows() == before_rows, body)
+        check(f"... and says why in plain words ({label})",
+              words in str(body.get("words", "")).lower(), body.get("words"))
+
+
+def t_an_unknown_version_or_outside_path_is_refused_before_any_card():
+    fresh()
+    path = write("checked.txt", b"the first\n")
+    saved = snapshot(path)
+    path.write_bytes(b"the second\n")
+    outside = TMP / "outside-restore.txt"
+    outside.write_bytes(b"not jarvis's\n")
+    cards = Cards("approved")
+    for label, target, sha in (
+            ("a path outside the allowed folders", str(outside), saved["before_sha256"]),
+            ("an unknown saved version", str(path), "0" * 64),
+            ("a sha that is not a sha", str(path), "not-a-sha")):
+        before = path.read_bytes()
+        code, body = route_restore(target, sha, cards.gate)
+        check(f"the route refuses {label} with the module's own words",
+              code == 200 and body.get("ok") is False and body.get("refused") is True
+              and bool(body.get("words")), (label, code, body))
+        check(f"... and {label} wrote nothing and raised no card",
+              path.read_bytes() == before and outside.read_bytes() == b"not jarvis's\n"
+              and cards.cards == [], (cards.cards, body))
+    code, body = B.handle_post(B.GUARDIAN_RESTORE_PATH, "not a dict", gate=cards.gate)
+    check("a body that is not a JSON object is a 400 request refusal",
+          code == 400 and body.get("why") == "bad_request", (code, body))
+    for missing in ({"path": str(path)}, {"sha_before": "0" * 64}, {}):
+        code, body = B.handle_post(B.GUARDIAN_RESTORE_PATH, missing, gate=cards.gate)
+        check(f"a body missing one of the two strings is a 400 ({sorted(missing)})",
+              code == 400 and body.get("why") == "bad_request", (missing, code, body))
+
+
+def t_a_failed_save_before_write_aborts_before_any_write():
+    fresh()
+    path = write("abort.txt", b"the first\n")
+    saved = snapshot(path)
+    path.write_bytes(b"the second\n")
+    store = Path(HOME_A) / G.GUARDIAN_DIR
+    before_file, before_store = path.read_bytes(), tree_bytes(store)
+    before_receipts, before_rows = receipts_count(), journal_rows()
+    real_store_blob = G._store_blob
+
+    def no_room(data, sha):
+        raise OSError("the store is full")
+
+    G._store_blob = no_room
+    try:
+        code, body = route_restore(path, saved["before_sha256"], Cards("approved").gate)
+    finally:
+        G._store_blob = real_store_blob
+    check("a store that cannot save the version here now aborts the restore plainly",
+          code == 200 and body.get("ok") is False, (code, body))
+    check("... and the file is untouched", path.read_bytes() == before_file)
+    check("... with no new receipt and no new journal row",
+          receipts_count() == before_receipts and journal_rows() == before_rows
+          and tree_bytes(store) == before_store, (receipts_count(), journal_rows()))
+
+
+def t_another_device_is_refused_before_the_body_is_read():
+    fresh()
+    read_calls = []
+
+    def read_body(_handler):
+        read_calls.append(1)
+        return b'{"path": "x", "sha_before": "y"}'
+
+    real_check = B._from_this_pc
+    try:
+        B._from_this_pc = lambda peer, local: False
+        code, body = post_door(read=read_body)
+    finally:
+        B._from_this_pc = real_check
+    check("a request from another device gets 403 with the restore's own shape",
+          code == 403 and body.get("ok") is False and body.get("why") == "not_this_pc"
+          and body.get("receipt_id") == "", (code, body))
+    check("... and the request body was never read", read_calls == [], read_calls)
+
+
+def t_the_route_is_post_only_and_a_get_cannot_mutate():
+    fresh()
+    path = write("get.txt", b"the first\n")
+    snapshot(path)
+    real = G.restore_version
+    calls = []
+
+    def forbidden(*a, **k):
+        calls.append(1)
+        raise AssertionError("a GET must never reach the restore")
+
+    G.restore_version = forbidden
+    try:
+        code, _body = call("/api/guardian/restore")
+        code2, _body2 = call("/api/guardian/restore", "path=x&sha_before=y")
+        sent = post_door(raw=b'{"path": "x", "sha_before": "y"}',
+                         path="/api/not-a-route")
+    finally:
+        G.restore_version = real
+    check("a GET of the restore path is not answered by this module (it goes on)",
+          code == "original" or code2 == "original",
+          (code, code2))
+    check("... and the restore was never called by a GET", calls == [], calls)
+    check("a POST to any other path goes to the original handler",
+          sent is not None and sent[0] == "original-post", sent)
+    check("there is no GET route for the restore", B.GUARDIAN_RESTORE_PATH not in B.PATHS,
+          B.PATHS)
+    check("... and POST_PATHS holds exactly that one route", B.POST_PATHS
+          == (B.GUARDIAN_RESTORE_PATH,), B.POST_PATHS)
+
+
+def t_the_http_door_passes_the_two_strings_and_names_no_gate():
+    fresh()
+    path = write("door.txt", b"the first\n")
+    saved = snapshot(path)
+    path.write_bytes(b"the second\n")
+    real = G.restore_version
+    seen = []
+
+    def fake_restore(shown_path, shown_sha, gate=None):
+        seen.append((shown_path, shown_sha, gate))
+        return {"ok": True, "changed": False, "same": True, "path": shown_path,
+                "words": "pretend"}
+
+    G.restore_version = fake_restore
+    try:
+        code, body = post_door({"path": str(path), "sha_before": saved["before_sha256"]})
+    finally:
+        G.restore_version = real
+    check("the HTTP door answers with the module's dict unchanged",
+          code == 200 and body.get("ok") is True and body.get("words") == "pretend",
+          (code, body))
+    check("... hands the module the path and sha_before from the body",
+          len(seen) == 1 and seen[0][0] == str(path)
+          and seen[0][1] == saved["before_sha256"], seen)
+    check("... and names no gate over the wire (the real jarvis_gate.check() is asked)",
+          seen and seen[0][2] is None, seen)
+    check("a request body over 16 KiB is refused before it is parsed",
+          post_door(raw=b"{}" + b" " * (17 * 1024))[0] == 413,
+          post_door(raw=b"{}" + b" " * (17 * 1024)))
+    check("a body that is not JSON is a 400, never a traceback",
+          post_door(raw=b"not json")[0] == 400)
+    check("no token and another origin never reach the restore",
+          post_door(token=False)[0] == 401 and post_door(origin=False)[0] == 403,
+          (post_door(token=False)[0], post_door(origin=False)[0]))
+
+
+def t_an_older_backend_says_update_in_the_same_shape():
+    fresh()
+    path = write("older.txt", b"the first\n")
+    saved = snapshot(path)
+    real = G.restore_version
+    del G.restore_version
+    try:
+        code, body = post_door({"path": str(path),
+                                "sha_before": saved["before_sha256"]})
+    finally:
+        G.restore_version = real
+    check("an older guardian: 501 in the restore shape with the update sentence",
+          code == 501 and body.get("ok") is False and body.get("refused") is True
+          and body.get("receipt_id") == "" and "apply-patches.ps1" in str(body.get("words")),
+          (code, body))
+    class NoReader(RouteHandler):
+        def do_POST(self):
+            self.sent = ("original-post", self.path)
+
+    B.install(NoReader, origin_ok=lambda s: True, token_ok=lambda s: True,
+              read_body=None)
+    h = NoReader("/api/guardian/restore")
+    h.do_POST()
+    check("a server with no body reader answers 501 and changes nothing",
+          h.sent[0] == 501 and h.sent[1].get("why") == "update", h.sent)
 
 
 if __name__ == "__main__":

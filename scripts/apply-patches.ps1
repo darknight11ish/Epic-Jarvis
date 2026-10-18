@@ -1960,7 +1960,11 @@ $SHIPPED = @(
 # /api/guardian/snapshots and GET /api/guardian/diff, answered by
 # jarvis_brain_reads.py (JARVIS-API section 140). They read the store only, a
 # request from another device is refused before reading, and neither writes.
-# There is still NO restore route and no chat tool - that is the next slice.
+# ONE gated restore route exists too since 2026-10-18 (LM-2B): POST
+# /api/guardian/restore calls restore_version() with the EXISTING undo_action
+# card through the real jarvis_gate.check() - no new tier. POST-only, the one
+# route here that writes, and another device is refused before the body read.
+# There is still no chat tool.
 'jarvis_file_guardian.py'
 # --- A red-team / pre-mortem decision simulator, on this PC only (2026-10-17) ---
 # Takes a one-sentence decision and returns a 1-3-1 decision brief (checked by
