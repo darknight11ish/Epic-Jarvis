@@ -33,6 +33,9 @@ ignore = [
   "RUSTSEC-2025-0081",  # unic-char-property, unmaintained
   "RUSTSEC-2025-0098",  # unic-ucd-version, unmaintained
   "RUSTSEC-2025-0100",  # unic-ucd-ident, unmaintained
+  "RUSTSEC-2026-0370",  # zvariant, unmaintained (Tauri's Linux zbus tree; never in the Windows build)
+  "RUSTSEC-2026-0371",  # zbus_names, unmaintained (same Linux-only Tauri tree)
+  "RUSTSEC-2026-0372",  # zvariant_derive, unmaintained (same Linux-only Tauri tree)
 ]
 
 [sources]

@@ -50,16 +50,24 @@ import kotlinx.coroutines.launch
  * called. Deleting a deck or a card asks "Are you sure?" first and is then
  * immediate. No approval card exists anywhere in this slice.
  *
+ * Slice 22B (2026-10-17) adds two things, both from the PC's own numbers and
+ * words: the fading-card radar under the deck list ("Cards fading", the PC's
+ * sentences), and "Mark my answer" beside "Show answer" - the owner's TYPED
+ * attempt is sent to the PC only on that tap, and the PC's deterministic
+ * grader answers in its own sentence ([Decks.Reveal.grade]). The phone never
+ * listens and never does speech-to-text (CLAUDE.md); nothing is marked until
+ * the owner taps, and the four rating buttons stay the only way to rate.
+ *
  * NOTHING IS SAVED ON THIS PHONE: every word here is held by this screen's
  * memory only (plain `remember`, never `rememberSaveable`, never a file or a
- * preference). The box under a card's front is for the owner alone - it is
- * never sent and is dropped on Show answer.
+ * preference). The box under a card's front is dropped once the answer is
+ * shown; the typed words are sent only when "Mark my answer" is tapped.
  *
  * "Hide memory lists and chat history" hides deck names, fronts, backs and
- * passages; the counts and the line stay. Review and the card lists are
- * unavailable while hidden. Writes are held on a stale link (rule 4). There is
- * no streak, score, count of days or chart: a card left for a month is simply
- * ready.
+ * passages; the counts and the line stay, and the radar is withheld too (its
+ * rows name decks). Review and the card lists are unavailable while hidden.
+ * Writes are held on a stale link (rule 4). There is no streak, score, count
+ * of days or chart: a card left for a month is simply ready.
  */
 @Composable
 internal fun DecksSection(
@@ -204,6 +212,37 @@ internal fun DecksSection(
         }
     }
 
+    /**
+     * Shows a card's back ([JarvisRuntime.reviewReveal]).
+     *
+     * [answer] is the owner's typed attempt when they tapped "Mark my answer"
+     * (slice 22B): the PC marks it with its own deterministic grader and the
+     * sentence comes back with the answer. Null is the old "Show answer" path,
+     * and the words already typed are never sent any other way.
+     */
+    fun revealCard(run: ReviewRun, answer: String?) {
+        val card = run.review.card ?: return
+        if (busy) return
+        busy = true
+        said = null
+        scope.launch {
+            try {
+                val out = JarvisRuntime.reviewReveal(card.id, answer)
+                val back = out.value
+                if (out.ok && back != null) {
+                    // The typed words are dropped now; if the PC marked them, its
+                    // own sentence came back with the answer (Decks.Reveal.grade).
+                    review = run.copy(reveal = back, typed = "")
+                } else {
+                    said = out.said
+                    if (out.code == Decks.E_CARD_NOT_FOUND) refetch(run.deck)
+                }
+            } finally {
+                busy = false
+            }
+        }
+    }
+
     Section(Decks.TITLE, trailing = { Quiet(Decks.REFRESH, onClick = { reads += 1 }) }) {
         Plate {
             val shown = list?.let { if (privateHidden) Decks.hide(it) else it }
@@ -221,28 +260,8 @@ internal fun DecksSection(
                     nextReadyDay = shown.nextReadyDay,
                     enabled = canAct && !busy,
                     onTyped = { review = run.copy(typed = it.take(Decks.DEFAULT_MAX_BACK)) },
-                    onShowAnswer = {
-                        val card = run.review.card
-                        if (card != null && !busy) {
-                            busy = true
-                            said = null
-                            scope.launch {
-                                try {
-                                    val out = JarvisRuntime.reviewReveal(card.id)
-                                    val back = out.value
-                                    if (out.ok && back != null) {
-                                        // What was typed for the owner alone is dropped here; it was never sent.
-                                        review = run.copy(reveal = back, typed = "")
-                                    } else {
-                                        said = out.said
-                                        if (out.code == Decks.E_CARD_NOT_FOUND) refetch(run.deck)
-                                    }
-                                } finally {
-                                    busy = false
-                                }
-                            }
-                        }
-                    },
+                    onShowAnswer = { revealCard(run, null) },
+                    onMarkAnswer = { revealCard(run, run.typed) },
                     onRate = { rating ->
                         val card = run.review.card
                         if (card != null && !busy) {
@@ -483,6 +502,20 @@ internal fun DecksSection(
                         Gap(6)
                         Text(Decks.PER_DECK_NOTE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
                     }
+                    // Slice 22B: the PC's own fading-card sentences. Its rows name
+                    // decks, so it is withheld with the private lists (hidden means
+                    // `shown` carries no radar at all).
+                    if (Decks.radarShown(shown, privateHidden)) {
+                        Gap(10)
+                        Text(Decks.RADAR_HEADING, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+                        shown.radar.forEach { row ->
+                            Text(
+                                row.words,
+                                style = MaterialTheme.typography.bodySmall, color = chrome.textMid,
+                                modifier = Modifier.liveStatus(),
+                            )
+                        }
+                    }
                     Gap(10)
                     if (shown.available) {
                         val atLimit = shown.decks.size >= shown.limits.decks
@@ -661,6 +694,11 @@ private fun DeckRow(
 /**
  * The review session (contract C4): a card's front, "Show answer", then the
  * four ratings. The states: `card`, `empty`, `enough`, `paused`.
+ *
+ * Slice 22B adds "Mark my answer": the typed words go to the PC only on that
+ * tap, and the PC's deterministic mark comes back with the answer (the
+ * [Decks.Grade]'s own sentence). The four buttons are still the only way to
+ * rate a card - the mark is the PC's reading, never an applied rating.
  */
 @Composable
 private fun ReviewView(
@@ -669,6 +707,7 @@ private fun ReviewView(
     enabled: Boolean,
     onTyped: (String) -> Unit,
     onShowAnswer: () -> Unit,
+    onMarkAnswer: () -> Unit,
     onRate: (String) -> Unit,
     onMore: () -> Unit,
     onStop: () -> Unit,
@@ -707,7 +746,25 @@ private fun ReviewView(
                         enabled = enabled,
                         onClick = onShowAnswer,
                     )
+                    Gap(4)
+                    // Slice 22B: the only tap that sends the typed words. No
+                    // microphone and no speech-to-text: the PC marks the text.
+                    Secondary(
+                        Decks.MARK_ANSWER,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = enabled && run.typed.isNotBlank(),
+                        onClick = onMarkAnswer,
+                    )
                 } else {
+                    // The PC's own mark of the typed answer, when one was sent.
+                    back.grade?.let {
+                        Text(
+                            it.words,
+                            style = MaterialTheme.typography.bodyMedium, color = chrome.textHi,
+                            modifier = Modifier.liveStatus(),
+                        )
+                        Gap(4)
+                    }
                     if (back.answer.isNotEmpty()) {
                         Text(Decks.ANSWER_HEADING, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
                         Text(back.answer, style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)

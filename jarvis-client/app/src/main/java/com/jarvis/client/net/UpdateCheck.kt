@@ -286,6 +286,25 @@ object UpdateCheck {
         return Result.Newer(published)
     }
 
+    /**
+     * Whether a cached line is about the build that is now installed. The
+     * line carries the published short sha in its parentheses. After the
+     * owner installs exactly that build, the cached line must stop being
+     * shown at once - not six hours later when the next check runs. The
+     * prefixes are compared both ways because the line has 7 characters and
+     * the build knows 40 (or vice versa for an old build).
+     */
+    fun lineNamesBuild(line: String?, ownSha: String?): Boolean {
+        val own = ownSha?.trim()?.lowercase().orEmpty()
+        if (own.isEmpty() || line.isNullOrBlank()) return false
+        val open = line.lastIndexOf('(')
+        val close = line.lastIndexOf(')')
+        if (open < 0 || close <= open) return false
+        val inside = line.substring(open + 1, close).trim()
+        val named = inside.split(',').lastOrNull()?.trim()?.lowercase().orEmpty()
+        if (!HEX.matches(named)) return false
+        return named.startsWith(own) || own.startsWith(named)
+    }
     /** The one quiet line. */
     fun line(p: Published): String =
         "A newer build of this app is on GitHub (" +

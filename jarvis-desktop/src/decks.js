@@ -141,6 +141,27 @@ function readDeck(d) {
 }
 
 /**
+ * One fading-deck row of the radar under the deck list (slice 22B, 2026-10-17;
+ * an additive "radar" key of `GET /api/decks`). `topic` and `words` are the
+ * PC's own - the topic is a deck's name, so it is withheld with the private
+ * lists. The desktop parses the shape (the phone draws it this slice).
+ */
+export function readRadar(raw) {
+  const rows = Array.isArray(raw) ? raw : [];
+  return rows.map((r) => {
+    if (!r || typeof r !== "object" || typeof r.topic !== "string" || !r.topic) return null;
+    const lowest = typeof r.lowest === "number" && Number.isFinite(r.lowest) ? r.lowest : 0;
+    return {
+      topic: r.topic,
+      cards: count(r.cards),
+      below: count(r.below),
+      lowest: Math.min(1, Math.max(0, lowest)),
+      words: text(r.words),
+    };
+  }).filter(Boolean);
+}
+
+/**
  * `GET /api/decks`, read. `available` false carries `why`, which is shown word
  * for word; the counts and `line` still work then. Null for a reply that is
  * not a deck list at all.
@@ -152,6 +173,7 @@ export function readDecks(raw) {
     available: raw.available !== false,
     why: text(raw.why),
     decks: raw.decks.map(readDeck).filter(Boolean),
+    radar: readRadar(raw.radar),
     ready: count(raw.ready),
     newPerDay: Number.isInteger(raw.new_per_day) ? raw.new_per_day : 5,
     newLeft: count(raw.new_left),
@@ -229,13 +251,32 @@ export function readReview(raw) {
   };
 }
 
-/** `POST /api/review/reveal`, read: `{answer, passage, keyLabel}` or null. */
+/**
+ * The PC's own mark of a TYPED answer (slice 22B, 2026-10-17; the additive
+ * "grade" of `POST /api/review/reveal` when an `answer` was sent). Only the
+ * three labels the PC can send are accepted, and the words are the PC's own -
+ * no app copies them. Null when the PC sent no grade (the old reply).
+ */
+export function readGrade(raw) {
+  if (!raw || typeof raw !== "object" || !Number.isInteger(raw.rating)) return null;
+  const label = ["Good", "Hard", "Again"].includes(raw.label) ? raw.label : "";
+  if (!label) return null;
+  return {
+    rating: raw.rating,
+    label,
+    matched: raw.matched === true,
+    words: text(raw.words),
+  };
+}
+
+/** `POST /api/review/reveal`, read: `{answer, passage, keyLabel, grade}` or null. */
 export function readReveal(raw) {
   if (!raw || typeof raw !== "object" || !raw.back || typeof raw.back !== "object") return null;
   return {
     answer: text(raw.back.answer),
     passage: text(raw.back.passage),
     keyLabel: typeof raw.key_label === "string" && raw.key_label ? raw.key_label : null,
+    grade: readGrade(raw.grade),
   };
 }
 

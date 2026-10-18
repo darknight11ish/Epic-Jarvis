@@ -72,6 +72,22 @@ are (`windows`, `tree`, `screen`, `pattern`, `foreground`), so every rung and
 every refusal is testable with no desktop at all. Certain key combinations
 (Win+L, Ctrl+Alt+Del, Alt+F4) and dangerous shell patterns are refused
 outright, by `blocked_hotkey`/`blocked_text`.
+
+READING THE SELECTED TEXT (Pillar 24-A, 2026-10-18)
+`read_selection()` is the one function here that ONLY reads: it returns the
+text the owner has highlighted in the window in front, the program's name, and
+whether the project's scrubber changed anything. It does not click, type, raise
+a card or write a file, and nothing it returns is persisted - no file, no
+database, no audit row. The privacy rules are NOT a second copy: before a
+single character is read it asks `jarvis_screen.pause_reason()` about the
+window in front (the owner's "Never look at" list, private browser windows,
+password boxes, the lock screen, Jarvis's own windows, capture protection), and
+after reading it runs the text through `jarvis_scrub.scrub_text` - the same two
+functions the screen reader already uses. An excluded window's selection is
+refused BEFORE it is touched. How FAST this is, and whether a given program
+exposes its selection through Windows UI Automation at all, is a measurement on
+the owner's PC, not a number promised here. Every part is injectable (`front`,
+`selection`, `never`, `scrubber`), so every refusal is testable with no desktop.
 """
 
 from __future__ import annotations
@@ -1405,3 +1421,220 @@ def run(p: Plan, *, read: Optional[Callable[[str], list]] = None,
     else:
         tell("Done.")
     return result
+
+
+# --------------------------------------------------------------------------
+#   Reading the selected text (Pillar 24-A, 2026-10-18)
+# --------------------------------------------------------------------------
+#
+# THE ONE FUNCTION HERE THAT ONLY READS. `read_selection()` returns the text the
+# owner has highlighted in the window in front, the program's name, and whether
+# the project's scrubber changed anything. It clicks, types and writes NOTHING,
+# raises no card and persists nothing - there is no file, no database and no
+# audit row for a selection.
+#
+# THE PRIVACY RULES ARE NOT A SECOND COPY. Before a single character is read it
+# asks `jarvis_screen.pause_reason()` about the window in front - the owner's
+# own "Never look at" list, private browser windows, password boxes, the lock
+# screen, Jarvis's own windows, capture protection - and after reading it runs
+# the text through `jarvis_scrub.scrub_text`. Those are the two functions the
+# screen reader already uses, so a rule added there covers this too. A window
+# that may not be looked at is refused BEFORE its selection is touched, so the
+# words of an excluded window never even enter this process's memory.
+#
+# WHAT IT DOES NOT PROMISE. How fast this is, and whether a given program
+# exposes its selection through Windows UI Automation at all, is a measurement
+# on the owner's PC - not a number promised here. A program with no text pattern
+# answers "there is no highlighted text", which is the honest answer.
+#
+# Everything the real world touches is injectable - `front` (the window in
+# front), `selection` (the text reader), `never` (the list) and `scrubber` - so
+# every refusal and the scrub path are testable with no desktop at all, exactly
+# as `read`/`act` are above.
+
+#: The longest selection returned. A highlighted log line is useful; a whole
+#: document pasted by a mis-drag is not. The rest is cut and said so.
+MAX_SELECTION_CHARS = 8000
+
+#: The words for the three refusals that are this function's own. A window the
+#: pause rules exclude uses `jarvis_screen.PAUSE_SAID` instead - one list of
+#: sentences, not two.
+SELECTION_WORDS = {
+    "no_selection": "There is no highlighted text in the window in front.",
+    "cannot_read": "The highlighted text could not be read from that window, so nothing was returned.",
+    "platform": ("This PC cannot read the highlighted text: Windows UI Automation is not "
+                 "available here."),
+    "scrubber": ("The project's scrubber is not available, so the highlighted text was not "
+                 "read."),
+    "secret": ("The highlighted text looked like a secret (a key, a password or a card "
+               "number), so it was not passed on."),
+}
+SELECTION_CUT = "Only the first part of the highlighted text was kept."
+
+
+def _selection_refusal(why: str, words: str, app: str = "") -> dict:
+    """A refusal in one shape, always with the title empty - a refused window's
+    words are never returned, not even a character of them."""
+    return {"ok": False, "refused": True, "why": why, "words": words, "app": app,
+            "text": "", "chars": 0, "truncated": False, "scrubbed": False}
+
+
+def _default_front_snapshot():
+    """What is in front, in `jarvis_screen.pause_reason`'s own shape."""
+    try:
+        import jarvis_screen_win
+        return jarvis_screen_win.front_snapshot()
+    except Exception:
+        return None
+
+
+def _default_selection_text() -> str:
+    """The focused control's selected text, through the SAME UIA library and
+    lazy-import rule the rest of this module uses (`_uia_lib`).
+
+    `TextPattern.GetSelection()` returns text ranges; each range's `GetText(-1)`
+    is the whole range. A password control is answered with "" here as well -
+    the pause rules above already refuse a password box, and this is the second
+    lock on the same door, not the only one.
+    """
+    auto = _uia_lib()
+    try:
+        focused = auto.GetFocusedControl()
+    except Exception as exc:
+        raise RuntimeError(f"the focused control could not be read ({type(exc).__name__})") from exc
+    if focused is None:
+        return ""
+    try:
+        if bool(focused.IsPassword):
+            return ""
+    except Exception:
+        pass
+    try:
+        pattern = focused.GetPattern(auto.PatternId.TextPattern)
+    except Exception as exc:
+        raise RuntimeError(
+            f"that control has no readable text pattern ({type(exc).__name__})") from exc
+    if pattern is None:
+        return ""
+    try:
+        ranges = pattern.GetSelection()
+    except Exception as exc:
+        raise RuntimeError(
+            f"the selected text could not be read ({type(exc).__name__})") from exc
+    parts = []
+    for item in ranges or []:
+        try:
+            got = item.GetText(-1)
+        except Exception:
+            continue
+        if isinstance(got, str):
+            parts.append(got)
+    return "".join(parts)
+
+
+def _default_scrubber():
+    """`jarvis_scrub.scrub_text`, or None. Fails CLOSED: no scrubber, no text."""
+    try:
+        import jarvis_scrub
+        return jarvis_scrub.scrub_text
+    except Exception:
+        return None
+
+
+def read_selection(*, front=None, selection=None, never=None, scrubber=None) -> dict:
+    """The text the owner has highlighted in the window in front. Never raises.
+
+    Returns `{ok, text, app, chars, truncated, scrubbed, words}` on success, or
+    `{ok: False, refused: True, why, words, app, text: "", ...}` when it will
+    not read. `app` is the program's own name (never the window's title, which
+    can carry the owner's private words); `scrubbed` says the project's scrubber
+    changed the text - the text returned is the SCRUBBED text, never the raw
+    one; `truncated` says a long selection was cut to MAX_SELECTION_CHARS.
+
+    Order, and why: the window is checked FIRST (the pause rules), then the
+    selection is read, then it is scrubbed. An excluded program's selection is
+    never touched. A missing scrubber is a refusal, not a raw pass.
+
+    `front`, `selection`, `never` and `scrubber` inject the real world:
+    a callable returning the `jarvis_screen.pause_reason` snapshot (or a dict),
+    a zero-argument callable returning text, a `jarvis_screen.NeverLook`-shaped
+    object, and a callable text -> text.
+    """
+    try:
+        import jarvis_screen
+    except Exception:
+        return _selection_refusal("platform", SELECTION_WORDS["platform"])
+
+    # 1. What is in front, and may it be read at all?
+    if front is None:
+        snap = _default_front_snapshot()
+    else:
+        try:
+            snap = front() if callable(front) else front
+        except Exception:
+            snap = None
+    app = ""
+    try:
+        app = jarvis_screen.program_name((snap or {}).get("exe")
+                                         if isinstance(snap, dict) else "")
+    except Exception:
+        app = ""
+    list_obj = never
+    if list_obj is None:
+        try:
+            list_obj = jarvis_screen.NeverLook()
+        except Exception:
+            list_obj = None
+    if list_obj is None:
+        return _selection_refusal("cannot_check",
+                                  "The Never look at list could not be read, so nothing was read.",
+                                  app)
+    if not isinstance(snap, dict):
+        return _selection_refusal("cannot_read", SELECTION_WORDS["cannot_read"], app)
+    try:
+        reason = jarvis_screen.pause_reason(snap, list_obj)
+    except Exception:
+        reason = "cannot_check"
+    if reason:
+        said = jarvis_screen.PAUSE_SAID.get(reason)
+        if not said:
+            said = ("That window is not one Jarvis reads ("
+                    + str(jarvis_screen.PAUSE_WORDS.get(reason) or reason) + "), "
+                    "so nothing was read.")
+        return _selection_refusal(reason, said, app)
+
+    # 2. The text itself.
+    reader = selection or _default_selection_text
+    try:
+        raw = reader()
+    except Exception as exc:
+        return _selection_refusal(
+            "cannot_read",
+            f"The highlighted text could not be read ({type(exc).__name__}), so nothing "
+            f"was returned.", app)
+    if not isinstance(raw, str) or not raw.strip():
+        return _selection_refusal("no_selection", SELECTION_WORDS["no_selection"], app)
+    truncated = len(raw) > MAX_SELECTION_CHARS
+    raw = raw[:MAX_SELECTION_CHARS]
+
+    # 3. The scrubber. Fail closed - no scrubber, no text.
+    scrubbing = scrubber if callable(scrubber) else _default_scrubber()
+    if scrubbing is None:
+        return _selection_refusal("scrubber", SELECTION_WORDS["scrubber"], app)
+    try:
+        cleaned = scrubbing(raw)
+    except Exception:
+        return _selection_refusal("scrubber", SELECTION_WORDS["scrubber"], app)
+    if not isinstance(cleaned, str):
+        return _selection_refusal("scrubber", SELECTION_WORDS["scrubber"], app)
+    scrubbed = cleaned != raw
+    if not cleaned.strip():
+        # Everything in it was a secret: there is no useful text to return, and
+        # returning a string of [redacted] markers would only invite a guess.
+        return _selection_refusal("secret", SELECTION_WORDS["secret"], app)
+    words = (f"Read the highlighted text from {app or 'the window in front'}."
+             + (" " + SELECTION_CUT if truncated else ""))
+    return {"ok": True, "refused": False, "why": "", "text": cleaned, "app": app,
+            "chars": len(cleaned), "truncated": truncated, "scrubbed": scrubbed,
+            "words": words}
+

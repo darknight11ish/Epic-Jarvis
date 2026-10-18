@@ -25,6 +25,13 @@ import kotlinx.serialization.json.put
  * and no colour that goes red for "late" (C1): a card left for a month is
  * simply ready. A test scans this file's strings for the banned words.
  *
+ * Slice 22B (2026-10-17) adds two additive PC shapes: the fading-deck radar
+ * rows of `GET /api/decks` ([DeckList.radar]) and the mark a reveal answers a
+ * typed answer with ([Reveal.grade]). A typed answer is sent only when the
+ * owner taps "Mark my answer"; the phone never listens and never does
+ * speech-to-text (CLAUDE.md), and nothing here applies a rating - the owner
+ * still taps one of the four buttons.
+ *
  * Typed only. Everything here is pure (no Android, no network), so DecksTest.kt
  * can run it.
  */
@@ -54,13 +61,24 @@ object Decks {
     const val CHOOSE_DECK = "Choose a deck"
 
     const val SHOW_ANSWER = "Show answer"
-    const val TYPE_HINT = "Type your answer (only for you - it is not sent or marked)"
+    /**
+     * The box's word, changed for slice 22B: a typed answer can now be sent to
+     * the PC to be marked ("Mark my answer"). The desktop's review box still
+     * shows the old word and still drops what is typed; its screen is not part
+     * of this slice (docs/ARCHITECTURE.md section 8, "One-sided on purpose").
+     */
+    const val TYPE_HINT = "Type your answer (it stays on this device unless you ask the PC to mark it)"
+    const val MARK_ANSWER = "Mark my answer"
     const val ENOUGH = "That's enough for now"
     const val DO_10_MORE = "Do 10 more"
     const val STOP = "Stop"
     const val ANSWER_HEADING = "Answer"
     const val FROM_TEXT = "From the text"
     const val EXAMPLE_SENTENCE = "Example sentence"
+
+    // ---- Slice 22B: the radar under the deck list. ----
+    /** The heading over the PC's fading-deck rows ([DeckList.radar]). */
+    const val RADAR_HEADING = "Cards fading"
 
     // ---- This phone's own words. ----
     const val HIDDEN_TEXT = "(hidden)"
@@ -109,6 +127,13 @@ object Decks {
         "easy" to "Easy",
     )
 
+    /**
+     * The three labels the PC's deterministic grader can answer with (slice
+     * 22B; a typed answer is never Easy by code - mishearing must not stretch
+     * the interval). Closed world: a label outside this set is not a grade.
+     */
+    val GRADE_LABELS = setOf("Good", "Hard", "Again")
+
     private val ID = Regex("^[A-Za-z0-9_-]{1,64}$")
 
     /** Whether [id] is safe to put in a URL path. */
@@ -137,6 +162,29 @@ object Decks {
         val kind: String,
     )
 
+    /**
+     * One fading-deck row of the radar under the deck list (slice 22B,
+     * 2026-10-17): py-fsrs's own numbers for a deck whose reviewed cards have
+     * dropped below the PC's 75% line. [topic] is the deck's name and [words] is
+     * the PC's own sentence - both are the owner's words, so both are withheld
+     * under "Hide memory lists and chat history" (like the deck rows).
+     */
+    data class Radar(
+        val topic: String,
+        val cards: Int,
+        val below: Int,
+        val lowest: Double,
+        val words: String,
+    )
+
+    /** The PC's own mark of a typed answer (slice 22B; one additive key of a reveal). */
+    data class Grade(
+        val rating: Int,
+        val label: String,
+        val matched: Boolean,
+        val words: String,
+    )
+
     data class DeckList(
         val available: Boolean,
         val why: String,
@@ -147,6 +195,8 @@ object Decks {
         val nextReadyDay: String?,
         val line: String,
         val limits: Limits,
+        /** Slice 22B: the decks whose reviewed cards are fading, weakest first. Empty on an older PC. */
+        val radar: List<Radar> = emptyList(),
     )
 
     data class CardFull(
@@ -190,8 +240,8 @@ object Decks {
         val comesBack: String? = null,
     )
 
-    /** A revealed back: the owner's answer words, the passage, and the label for a model-written key. */
-    data class Reveal(val answer: String, val passage: String, val keyLabel: String?)
+    /** A revealed back: the owner's answer words, the passage, the label for a model-written key. */
+    data class Reveal(val answer: String, val passage: String, val keyLabel: String?, val grade: Grade? = null)
 
     /** What `act` on a deck answered: the deck, or that it was deleted. */
     data class Acted(val deck: Deck?, val deleted: Boolean)
@@ -248,7 +298,25 @@ object Decks {
             nextReadyDay = body.text("next_ready_day"),
             line = body.text("line").orEmpty(),
             limits = limits(body["limits"]),
+            radar = parseRadar(body["radar"]),
         )
+    }
+
+    /** `GET /api/decks`'s additive "radar": one row per fading deck, malformed rows dropped. */
+    private fun parseRadar(el: Any?): List<Radar> {
+        val rows = el as? JsonArray ?: return emptyList()
+        return rows.mapNotNull { row ->
+            val o = row as? JsonObject ?: return@mapNotNull null
+            val topic = o.text("topic") ?: return@mapNotNull null
+            Radar(
+                topic = topic,
+                cards = o.num("cards")?.toInt()?.coerceAtLeast(0) ?: 0,
+                below = o.num("below")?.toInt()?.coerceAtLeast(0) ?: 0,
+                // A memory strength is 0.0 to 1.0; anything else is not one.
+                lowest = o.num("lowest")?.coerceIn(0.0, 1.0) ?: 0.0,
+                words = o.text("words").orEmpty(),
+            )
+        }
     }
 
     fun parseCard(el: Any?): CardFull? {
@@ -317,7 +385,20 @@ object Decks {
     fun parseReveal(body: JsonObject): Reveal? {
         val b = body["back"] as? JsonObject ?: return null
         val answer = (b["answer"] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull.orEmpty()
-        return Reveal(answer, b.text("passage").orEmpty(), body.text("key_label"))
+        return Reveal(answer, b.text("passage").orEmpty(), body.text("key_label"), parseGrade(body["grade"]))
+    }
+
+    /** The PC's own mark of a typed answer, or null when it sent none (an older PC, or no answer typed). */
+    private fun parseGrade(el: Any?): Grade? {
+        val o = el as? JsonObject ?: return null
+        val rating = o.num("rating")?.toInt()?.takeIf { it in 1..4 } ?: return null
+        val label = o.text("label")?.takeIf { it in GRADE_LABELS } ?: return null
+        return Grade(
+            rating = rating,
+            label = label,
+            matched = o.flag("matched") == true,
+            words = o.text("words").orEmpty(),
+        )
     }
 
     // ------------------------------------------------------------- bodies ----
@@ -351,7 +432,12 @@ object Decks {
 
     const val CARD_DELETE_BODY = "{\"do\":\"delete\"}"
 
-    fun revealBody(card: String): String = buildJsonObject { put("card", card) }.toString()
+    fun revealBody(card: String, answer: String? = null): String = buildJsonObject {
+        put("card", card)
+        // Slice 22B: "Mark my answer". A blank box sends no answer, so the PC
+        // answers exactly as it always has; the text is never sent unasked.
+        if (!answer.isNullOrBlank()) put("answer", answer)
+    }.toString()
 
     /**
      * `POST /api/review/rate`. [deck] is the scope this screen is reviewing (a
@@ -563,6 +649,15 @@ object Decks {
     fun canReviewAll(ready: Int, available: Boolean = true, hidden: Boolean = false): Boolean =
         available && !hidden && ready > 0
 
+    /**
+     * Whether the fading-card radar is shown (slice 22B): the store can be
+     * opened, something is fading, and the owner's words are not hidden - a
+     * radar row names its deck, so it is withheld with the private lists. An
+     * older PC sends no radar at all, and then nothing is shown.
+     */
+    fun radarShown(v: DeckList, hidden: Boolean = false): Boolean =
+        !hidden && v.available && v.radar.isNotEmpty()
+
     /** Whether to say why the rows' ready counts add up to more than the total (new cards are shared between decks). */
     fun perDeckNoteShown(v: DeckList): Boolean = v.decks.sumOf { it.ready } > v.ready
 
@@ -573,7 +668,7 @@ object Decks {
     fun levelLine(level: String?): String = if (level == null) "" else Quiz.levelLine(level)
 
     /** The deck rows and card words with every owner-written word replaced; counts and `line` stay (C1). */
-    fun hide(v: DeckList): DeckList = v.copy(decks = v.decks.map { it.copy(name = HIDDEN_TEXT) })
+    fun hide(v: DeckList): DeckList = v.copy(decks = v.decks.map { it.copy(name = HIDDEN_TEXT) }, radar = emptyList())
 
     fun hide(c: DeckCards): DeckCards = c.copy(
         deckName = HIDDEN_TEXT,

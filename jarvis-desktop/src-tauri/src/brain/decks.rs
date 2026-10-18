@@ -134,6 +134,17 @@ fn redact_card(card: &mut serde_json::Value) {
     }
 }
 
+/// One "cards fading" row (slice 22B). Its `topic` IS a deck's name and its
+/// `words` sentence repeats it, so both are taken out; `cards`, `below` and
+/// `lowest` stay, like every other count in hidden mode. Found by the shared
+/// fixture: the slice's radar rows carried the sample decks' names into the
+/// hidden-mode test, which is exactly the leak this redaction must close.
+fn redact_radar_row(row: &mut serde_json::Value) {
+    if let Some(o) = row.as_object_mut() {
+        blank(o, &["topic", "words"]);
+    }
+}
+
 /// Any answer of this file with the owner's words taken out, for while the
 /// private lists are hidden. Counts, `line`, `next_ready_day` and every id
 /// stay. A refusal has nothing to hide and is left as it is.
@@ -147,6 +158,9 @@ pub(crate) fn redact_answer(mut answer: serde_json::Value) -> serde_json::Value 
         }
         if let Some(deck) = obj.get_mut("deck") {
             redact_deck(deck);
+        }
+        if let Some(serde_json::Value::Array(radar)) = obj.get_mut("radar") {
+            radar.iter_mut().for_each(redact_radar_row);
         }
         if let Some(serde_json::Value::Array(cards)) = obj.get_mut("cards") {
             cards.iter_mut().for_each(redact_card);
@@ -514,6 +528,13 @@ mod tests {
         assert_eq!(hidden["decks"][0]["id"], "d1a2b3c4d5e6");
         assert_eq!(hidden["line"], "3 cards ready");
         assert_eq!(hidden["next_ready_day"], "2026-10-03");
+        // Slice 22B: each fading-topic row names a deck in `topic` and repeats
+        // it in `words`; both are blanked while hidden, and its counts stay.
+        assert_eq!(hidden["radar"][0]["topic"], "");
+        assert_eq!(hidden["radar"][0]["words"], "");
+        assert_eq!(hidden["radar"][0]["cards"], 6);
+        assert_eq!(hidden["radar"][0]["below"], 2);
+        assert_eq!(hidden["radar"][1]["topic"], "");
         assert_eq!(hidden["new_per_day"], 5);
     }
 
