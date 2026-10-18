@@ -46,9 +46,23 @@ THE ONE SCHEDULER KIND
 `review` (plain_repeat, silent, single, no notification, no card): created with
 the first deck, removed with the last. It goes off once a day at 04:00 only to
 tell the apps the list changed. Its `note` is the "N cards ready" line.
+
+SLICE 22A: THE VOICE COACH (2026-10-17)
+The backend half of the hands-free review, and nothing more: no route, no app
+screen, no model call. `grade_spoken_answer()` turns a transcribed spoken
+answer into one of the four ratings with plain code - case, punctuation and
+fillers aside, then key-token recall and difflib's ratio - so a misheard grade
+is a fixed rule, never a model's guess. `low_retrievability_topics()` reads
+py-fsrs's own retrievability to name the decks whose cards are fading.
+`record_voice_review()` is rate() with one extra thing: it writes a receipt
+through jarvis_receipts.py before the row changes, so a misheard grade is one
+Undo away. A spoken answer is never marked Easy by code (the grader tops out
+at Good): Easy stretches the next interval the most, and speech-to-text is not
+certain enough to make that call for the owner.
 """
 from __future__ import annotations
 
+import difflib
 import json
 import os
 import re
@@ -209,6 +223,214 @@ def review(state: dict, rating: str, now: float, fuzz: bool = True) -> dict:
     return {"state": int(out.state.value), "step": out.step, "stability": out.stability,
             "difficulty": out.difficulty, "due": _calendar_due(now, out.due.timestamp()),
             "last_review": out.last_review.timestamp() if out.last_review else None}
+
+
+# --------------------------------------------------------------------------
+#   The voice coach: a spoken answer graded by code, and the fading cards
+# --------------------------------------------------------------------------
+#
+# Slice 22A of the voice flashcard coach is these functions and the receipt at
+# the end of the file - no route, no app screen, no model call, no new module.
+# The review maths stays py-fsrs's; this section only reads it.
+
+#: A reviewed card is worth another look when its memory strength is below this.
+LOW_RETRIEVABILITY = 0.75
+#: The two lines grade_spoken_answer() puts a spoken answer on. A score exactly
+#: on a line belongs to the better mark (>=, not >), and both are N_placeholder:
+#: a real calibration would move them on a measured set of answers.
+GOOD_AT, HARD_AT = 0.85, 0.50
+#: Filled pauses and articles: they are said, not remembered, so they never
+#: count toward an answer.
+_FILLERS = frozenset(("a", "an", "the", "uh", "um"))
+#: What the owner says instead of an answer. "I don't know" is a real signal
+#: (bring the card back soon), not a wrong answer to be guessed at - so all of
+#: these mean Again, without any comparison.
+PASS_PHRASES = frozenset(("i don't know", "i dont know", "skip", "pass", "no idea"))
+#: The receipt's name for a voice grade. jarvis_receipts.py treats it as a
+#: name, never a path and never importable code.
+VOICE_TOOL = "decks.voice_review"
+#: The four ratings as the apps label them (the words CLASSES.bad_rating uses).
+RATING_WORDS = {"again": "Didn't remember", "hard": "Remembered with effort",
+                "good": "Remembered", "easy": "Easy"}
+
+#: A word of an answer: lower case, digits and the apostrophe only, so "don't"
+#: does not become "dont" and a number is not dropped as punctuation.
+_WORD = re.compile(r"[a-z0-9']+")
+
+
+def _spoken_tokens(text) -> list:
+    """The words that count in a spoken answer. Nothing is guessed: casefold,
+    the two typographic apostrophes folded to a plain one, punctuation dropped,
+    and the filler words removed."""
+    if not isinstance(text, str):
+        return []
+    flat = text.casefold().replace("\u2019", "'").replace("\u2018", "'")
+    return [w for w in _WORD.findall(flat) if w not in _FILLERS]
+
+
+def _spoken_score(expected: list, spoken: list) -> float:
+    """How close one spoken answer is to the card's back, from 0.0 to 1.0.
+
+    Two readings, averaged: how much of the answer's own words were said at
+    all (key-token recall), and how closely the two read in the same order
+    (difflib's ratio). A paraphrase cannot pass on order alone, and a word
+    salad cannot pass on vocabulary alone."""
+    if not expected:
+        return 0.0
+    ratio = difflib.SequenceMatcher(None, " ".join(expected), " ".join(spoken),
+                                    autojunk=False).ratio()
+    heard = set(spoken)
+    recall = sum(1 for word in expected if word in heard) / len(expected)
+    return (ratio + recall) / 2.0
+
+
+def _spoken_rating(score: float) -> tuple:
+    """(rating, label, matched) for one score - the only place the two lines
+    live, so a test can stand exactly on each of them."""
+    if score >= GOOD_AT:
+        return 3, "Good", True
+    if score >= HARD_AT:
+        return 2, "Hard", True
+    return 1, "Again", False
+
+
+def grade_spoken_answer(expected_back, spoken_answer) -> dict:
+    """One spoken answer, marked by plain code - no model, no network, no clock.
+
+    Returns {"rating", "label", "matched", "words"}: the four ratings are the
+    app's own (1 Again, 2 Hard, 3 Good, 4 Easy); a spoken answer never gets 4
+    Easy by code, because Easy stretches the next interval the most and
+    speech-to-text is not certain enough to make that call for the owner.
+
+    An empty answer, a filled pause, or one of PASS_PHRASES is Again at once:
+    "I don't know" is information, not a wrong answer. Otherwise a score is
+    the average of key-token recall and difflib's ratio: >= GOOD_AT is Good,
+    >= HARD_AT is Hard (matched), and below HARD_AT is Again (not matched).
+    Deterministic: the same two strings always give the same answer."""
+    expected = _spoken_tokens(expected_back)
+    spoken = _spoken_tokens(spoken_answer)
+    said = " ".join(spoken)
+    if not expected:
+        return {"rating": 1, "label": "Again", "matched": False,
+                "words": "There is no answer to compare with, so it is marked Again."}
+    if not said or said in PASS_PHRASES:
+        return {"rating": 1, "label": "Again", "matched": False,
+                "words": "Marked Again so it comes back soon."}
+    rating, label, matched = _spoken_rating(_spoken_score(expected, spoken))
+    words = {"Good": "That matches the answer - marked Good.",
+             "Hard": "That answer is partly right - marked Hard.",
+             "Again": "Marked Again so it comes back soon."}[label]
+    return {"rating": rating, "label": label, "matched": matched, "words": words}
+
+
+def _retrievability(card, now: float):
+    """py-fsrs's retrievability for one card AT `now` (seconds since 1970, UTC).
+
+    The caller has already resolved the clock; this reads no clock itself.
+    None when the card has never been rated - a new card has no memory
+    strength to predict - and for a stability that is not a positive number."""
+    if not isinstance(card, dict):
+        raise TypeError("a card is a dict")
+    stability, last = card.get("stability"), card.get("last_review")
+    if stability is None or last is None:
+        return None
+    try:
+        s, t = float(stability), float(last)
+    except (TypeError, ValueError):
+        return None
+    if not s > 0:                       # also None for a NaN stability
+        return None
+    sch = _scheduler(False)             # raises deck_unavailable, in plain words
+    probe = fsrs.Card(card_id=1, stability=s, last_review=_dt(t))
+    return float(sch.get_card_retrievability(probe, _dt(now)))
+
+
+def retrievability(card, *, now=None):
+    """How likely the owner is to remember this card now, 0.0 to 1.0.
+
+    py-fsrs 6.3.2's own number, from the card's stability and the whole days
+    since its last review. `now` is the boundary: tests pass a fixed epoch and
+    nothing inside reads the clock again; with no `now`, the real clock is read
+    exactly once here. None for a card never rated (there is nothing to
+    predict yet)."""
+    at = time.time() if now is None else float(now)
+    return _retrievability(card, at)
+
+
+def _radar_add(groups: dict, topic: str, card, cut: float, now: float) -> None:
+    """One card into one topic's numbers. A never-rated card is not counted."""
+    r = _retrievability(card, now)
+    if r is None:
+        return
+    group = groups.get(topic)
+    if group is None:
+        group = groups[topic] = {"topic": topic, "cards": 0, "below": 0, "lowest": 1.0}
+    group["cards"] += 1
+    if r < cut:
+        group["below"] += 1
+        if r < group["lowest"]:
+            group["lowest"] = r
+
+
+def _radar_words(topic: str, below: int, threshold: float) -> str:
+    """The one plain sentence for a topic, from its numbers only."""
+    cards = "1 card" if below == 1 else f"{below} cards"
+    verb = "has" if below == 1 else "have"
+    return (f"{cards} in {topic} {verb} dropped below "
+            f"{threshold * 100:.6g}% memory strength")
+
+
+def low_retrievability_topics(decks_or_cards, *, threshold: float = LOW_RETRIEVABILITY,
+                              now=None) -> list:
+    """The decks/topics whose reviewed cards are fading, weakest first.
+
+    `decks_or_cards` is one deck, one card, or a list of either. A DECK is
+    {"name": ..., "cards": [...]}; a CARD carries py-fsrs's plain numbers
+    ({"deck" or "topic": ..., "stability": ..., "last_review": ...}). Cards
+    never rated are not counted: no stability means there is nothing to
+    predict yet.
+
+    Returns one dict per topic with at least one reviewed card below the
+    threshold, sorted by that topic's lowest retrievability first:
+    {"topic", "cards" (reviewed cards in it), "below" (cards under the line),
+    "lowest" (0.0..1.0), "words" (one plain-English sentence)}.
+
+    `threshold` is a memory strength from 0 to 1. `now` is the boundary: tests
+    pass a fixed epoch, and it is read once here, so every card is measured at
+    the same moment and nothing flakes at midnight."""
+    at = time.time() if now is None else float(now)
+    try:
+        cut = float(threshold)
+    except (TypeError, ValueError):
+        raise ValueError("the threshold is a memory strength from 0 to 1")
+    if not 0.0 <= cut <= 1.0:
+        raise ValueError("the threshold is a memory strength from 0 to 1")
+    if isinstance(decks_or_cards, dict):
+        items = [decks_or_cards]
+    elif isinstance(decks_or_cards, (list, tuple)):
+        items = decks_or_cards
+    else:
+        raise TypeError("decks_or_cards is a deck, a card, or a list of them")
+    groups: dict = {}
+    for item in items:
+        if not isinstance(item, dict):
+            raise TypeError("a deck or a card is a dict")
+        cards = item.get("cards")
+        if isinstance(cards, (list, tuple)):
+            topic = str(item.get("name") or item.get("deck") or item.get("topic")
+                        or "an unnamed deck")
+            for card in cards:
+                _radar_add(groups, topic, card, cut, at)
+        else:
+            topic = str(item.get("deck") or item.get("topic") or item.get("deck_name")
+                        or "an unnamed deck")
+            _radar_add(groups, topic, item, cut, at)
+    out = [group for group in groups.values() if group["below"]]
+    out.sort(key=lambda group: (group["lowest"], -group["below"],
+                                group["topic"].casefold(), group["topic"]))
+    for group in out:
+        group["words"] = _radar_words(group["topic"], group["below"], cut)
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -867,6 +1089,53 @@ class Decks:
             self._revealed[cid] = now
             return out
 
+    def _rating_plan(self, c, cid: str, rating: str) -> tuple:
+        """The checks and the py-fsrs maths one rating makes, from one read.
+
+        rate() and record_voice_review() share this, so a voice grade's receipt
+        records exactly the row that is then written: the numbers are computed
+        ONCE and used by the UPDATE. Recomputing for the receipt would let
+        fuzzing give the snapshot a different due date from the row."""
+        row = self._card_row(c, cid)
+        if row is None:
+            raise DeckError("card_not_found")
+        if c.execute("SELECT paused FROM decks WHERE id=?", (row[1],)).fetchone()[0]:
+            raise DeckError("deck_paused")
+        if cid not in self._revealed:
+            raise DeckError("not_revealed")
+        now = self._clock()
+        before = {"state": row[8], "step": row[9], "stability": row[10],
+                  "difficulty": row[11], "due": row[12], "last_review": row[13]}
+        after = review(before, rating, now, self.fuzz)
+        return row, before, after, now
+
+    def _apply_rating(self, c, cid: str, rating: str, row, after: dict) -> int:
+        """Write one rating's numbers into the row, and forget the reveal.
+
+        Returns the lapse this rating added (1 or 0), so a receipt can record
+        the same number the row gets."""
+        lapse = 1 if (rating == "again" and row[8] == 2) else 0
+        c.execute("UPDATE cards SET state=?, step=?, stability=?, difficulty=?, due=?,"
+                  " last_review=?, reps=reps+1, lapses=lapses+?,"
+                  " first_day=COALESCE(first_day, ?) WHERE id=?",
+                  (after["state"], after["step"], after["stability"], after["difficulty"],
+                   after["due"], after["last_review"], lapse, self._today(), cid))
+        self._revealed.pop(cid, None)
+        return lapse
+
+    def _rated_view(self, c, row, deck) -> dict:
+        """Which run counted the rating, then the same review answer rate()
+        has always returned."""
+        if isinstance(deck, str) and deck in ("", row[1]):
+            scope = deck
+        else:       # an old app that sends none: the newest run this card belongs to
+            live = [(v["at"], k) for k, v in self._runs.items() if k in ("", row[1])]
+            scope = max(live)[1] if live else ""
+        scope = scope or None
+        run = self._scope_run(scope)
+        run["done"] += 1
+        return self._review_view(c, scope)
+
     def rate(self, cid, rating, deck=None) -> dict:
         """`deck` is the scope the app is reviewing ("" or None: all decks, else a
         deck id). If it is missing, or not one this card belongs to, the newest run
@@ -877,36 +1146,52 @@ class Decks:
             if not isinstance(cid, str) or not self._exists():
                 raise DeckError("card_not_found")
             with closing(self._connect()) as c:
-                row = self._card_row(c, cid)
-                if row is None:
-                    raise DeckError("card_not_found")
-                if c.execute("SELECT paused FROM decks WHERE id=?", (row[1],)).fetchone()[0]:
-                    raise DeckError("deck_paused")
-                if cid not in self._revealed:
-                    raise DeckError("not_revealed")
-                now = self._clock()
-                before = {"state": row[8], "step": row[9], "stability": row[10],
-                          "difficulty": row[11], "due": row[12], "last_review": row[13]}
-                after = review(before, rating, now, self.fuzz)
-                lapse = 1 if (rating == "again" and row[8] == 2) else 0
-                c.execute("UPDATE cards SET state=?, step=?, stability=?, difficulty=?, due=?,"
-                          " last_review=?, reps=reps+1, lapses=lapses+?,"
-                          " first_day=COALESCE(first_day, ?) WHERE id=?",
-                          (after["state"], after["step"], after["stability"], after["difficulty"],
-                           after["due"], after["last_review"], lapse, self._today(), cid))
-                self._revealed.pop(cid, None)
-                if isinstance(deck, str) and deck in ("", row[1]):
-                    scope = deck
-                else:       # an old app that sends none: the newest run this card belongs to
-                    live = [(v["at"], k) for k, v in self._runs.items() if k in ("", row[1])]
-                    scope = max(live)[1] if live else ""
-                scope = scope or None
-                run = self._scope_run(scope)
-                run["done"] += 1
-                view = self._review_view(c, scope)
+                row, _before, after, _now = self._rating_plan(c, cid, rating)
+                self._apply_rating(c, cid, rating, row, after)
+                view = self._rated_view(c, row, deck)
             return {"ok": True, "ready": view["ready"], "new_left": view["new_left"],
                     "next": view["card"], "state": view["state"], "line": view["line"],
                     "run": view["run"], "comes_back": _day(after["due"])}
+
+    def record_voice_review(self, cid, rating, *, deck=None, grade=None) -> dict:
+        """Rate a card from a spoken answer, and leave an Undo receipt for it.
+
+        The rating is applied exactly as rate() applies it - the same checks
+        (the card is up for review, its deck is not paused, and its answer was
+        shown this run) and the same py-fsrs maths. Before the row changes, one
+        receipt is written through jarvis_receipts.py holding the card's plain
+        numbers before AND after, with the live undo callable, so a misheard
+        grade is one Undo away. No word of the deck, the card or the spoken
+        answer is written in the receipt; the snapshots are numbers only.
+
+        `grade` is optional: grade_spoken_answer()'s dict, used only for the
+        receipt's plain-English summary. "record_voice_review" never fails the
+        review because receipts are missing: it returns "receipt_id": "" then,
+        exactly as jarvis_goals.py does for a tick.
+
+        Returns rate()'s answer plus "receipt_id" and "undoable"."""
+        if rating not in RATINGS:
+            raise DeckError("bad_rating")
+        with self._lock:
+            if not isinstance(cid, str) or not self._exists():
+                raise DeckError("card_not_found")
+            with closing(self._connect()) as c:
+                row, before, after, now = self._rating_plan(c, cid, rating)
+                counts = c.execute("SELECT reps, lapses, first_day FROM cards WHERE id=?",
+                                   (cid,)).fetchone()
+                lapse = 1 if (rating == "again" and row[8] == 2) else 0
+                before = dict(before, card=cid, deck=row[1], reps=counts[0],
+                              lapses=counts[1], first_day=counts[2])
+                after = dict(after, card=cid, deck=row[1], reps=counts[0] + 1,
+                             lapses=counts[1] + lapse,
+                             first_day=counts[2] or self._today(), reviewed_at=now)
+                receipt_id = _record_voice_receipt(rating, before, after, grade)
+                self._apply_rating(c, cid, rating, row, after)
+                view = self._rated_view(c, row, deck)
+            return {"ok": True, "ready": view["ready"], "new_left": view["new_left"],
+                    "next": view["card"], "state": view["state"], "line": view["line"],
+                    "run": view["run"], "comes_back": _day(after["due"]),
+                    "receipt_id": receipt_id, "undoable": bool(receipt_id)}
 
     # ---- the scheduler kind's one job -----------------------------------------------
 
@@ -932,6 +1217,84 @@ class Decks:
             return "added"
         except Exception:
             return ""
+
+
+# --------------------------------------------------------------------------
+#   The receipt: one voice grade, put back in one tap
+# --------------------------------------------------------------------------
+# A voice grade changes the same row a tap does, but a misheard word is easier
+# to miss than a wrong tap - so record_voice_review() writes a receipt through
+# jarvis_receipts.py BEFORE the row changes, and Undo puts the schedule back
+# exactly as it was. It is optional: a backend folder that has not installed
+# jarvis_receipts.py still reviews, it just cannot undo; nothing here may raise
+# into the review. The shape is jarvis_goals.py's (the module that first
+# recorded a receipt for an everyday action).
+
+def restore_card_state(snapshot) -> None:
+    """Put one card's review schedule back exactly as a receipt's before
+    snapshot has it.
+
+    This is the SNAPSHOT path: jarvis_receipts.py calls it after a restart,
+    when the live undo callable is gone by definition. It needs only the
+    numbers - never the card's words and never the key - and it writes through
+    this module's own db_path(), so JARVIS_STUDY_DB is honoured. Raises on a
+    snapshot it cannot use; the caller reports that in plain words and changes
+    nothing."""
+    if not isinstance(snapshot, dict):
+        raise ValueError("this is not a study card receipt snapshot")
+    card_id = str(snapshot.get("card") or "")
+    columns = ("state", "step", "stability", "difficulty", "due", "last_review",
+               "reps", "lapses", "first_day")
+    if not card_id or any(column not in snapshot for column in columns):
+        raise ValueError("this study card receipt snapshot has no card or schedule")
+    store = Decks()                     # the default path: no key is needed for numbers
+    if not store.path.is_file():
+        raise KeyError("no such card")
+    with store._lock, closing(store._connect()) as c:
+        if c.execute("SELECT 1 FROM cards WHERE id=?", (card_id,)).fetchone() is None:
+            raise KeyError("no such card")
+        c.execute("UPDATE cards SET state=?, step=?, stability=?, difficulty=?, due=?,"
+                  " last_review=?, reps=?, lapses=?, first_day=? WHERE id=?",
+                  (snapshot["state"], snapshot["step"], snapshot["stability"],
+                   snapshot["difficulty"], snapshot["due"], snapshot["last_review"],
+                   snapshot["reps"], snapshot["lapses"], snapshot["first_day"], card_id))
+
+
+def register_receipts() -> bool:
+    """Tell jarvis_receipts.py how a voice grade is put back from its snapshot.
+
+    Called once at import, below: a restorer only exists in a process whose
+    module was imported, and jarvis_receipts deliberately keeps no list of its
+    own. False (never an exception) when jarvis_receipts is not installed."""
+    try:
+        import jarvis_receipts
+        return bool(jarvis_receipts.register_restorer(VOICE_TOOL, restore_card_state))
+    except Exception:
+        return False
+
+
+def _record_voice_receipt(rating, before: dict, after: dict, grade=None) -> str:
+    """One receipt for one voice grade, or "" - never an exception into the review.
+
+    The summary is plain words and names no card: the snapshots hold py-fsrs's
+    numbers only, so the receipt is one more place a deck's owner words are
+    not written. `grade` is the grader's dict, when there is one, only to say
+    in the summary that what was heard did not match."""
+    try:
+        import jarvis_receipts
+    except Exception:
+        return ""
+    try:
+        summary = f"Rated a card by voice: {RATING_WORDS.get(rating, rating)}"
+        if isinstance(grade, dict) and grade.get("matched") is False:
+            summary += " (the spoken answer did not match)"
+        return jarvis_receipts.record(VOICE_TOOL, summary, before=before, after=after,
+                                      undo=lambda: restore_card_state(before))
+    except Exception:
+        return ""
+
+
+register_receipts()
 
 
 # --------------------------------------------------------------------------

@@ -26,7 +26,16 @@ What it proves:
   - hide-lists shapes: the owner's words sit in a few named fields only; the
     counts and the line carry no words;
   - no streak / guilt wording anywhere in the module's strings;
-  - the routes through install(), the patch on the stack, the shipped lists.
+  - the routes through install(), the patch on the stack, the shipped lists;
+  - the voice coach (Slice 22A, 2026-10-17): grade_spoken_answer() marks a
+    spoken answer from plain code only - case, punctuation and fillers aside,
+    an exact answer vs a partial one vs a wrong one vs every pass phrase - and
+    the two score lines are stood on exactly; a spoken answer is never marked
+    Easy by code; low_retrievability_topics() flags a card reviewed 30 days ago
+    with S=2.0 and not one reviewed today with S=10.0, names fading decks
+    weakest first, and reads the clock once at the boundary; record_voice_review()
+    writes a real jarvis_receipts receipt whose Undo restores every plain number
+    both live and through the post-restart snapshot path.
 """
 from __future__ import annotations
 
@@ -965,8 +974,11 @@ def t_purity():
         elif isinstance(node, ast.ImportFrom):
             mods.add((node.module or "").split(".")[0])
     jarvis_mods = sorted(m for m in mods if m.startswith("jarvis_"))
-    check("it imports only jarvis_framework (settings folder), jarvis_chat_log (the key helper), jarvis_schedule, jarvis_quiz (to hand in `keep`)",
-          set(jarvis_mods) <= {"jarvis_framework", "jarvis_chat_log", "jarvis_schedule", "jarvis_quiz"}, jarvis_mods)
+    check("it imports only jarvis_framework (settings folder), jarvis_chat_log (the key helper), "
+          "jarvis_schedule, jarvis_quiz (to hand in `keep`), and jarvis_receipts (the one-tap undo "
+          "of a voice grade)",
+          set(jarvis_mods) <= {"jarvis_framework", "jarvis_chat_log", "jarvis_schedule",
+                               "jarvis_quiz", "jarvis_receipts"}, jarvis_mods)
     banned = ("jarvis_learner", "jarvis_memory", "jarvis_auto_learn", "jarvis_extract", "jarvis_gate",
               "jarvis_agent", "jarvis_facts", "jarvis_history", "urllib.request", "socket", "http.client",
               "jarvis_local_http", "requests", "subprocess", "ollama")
@@ -1285,6 +1297,221 @@ def t_after_a_pc_restart_the_next_rating_is_refused_then_recovers():
     check("... the same card is asked for again", st["state"] == "card" and st["card"]["id"] == cid)
     d2.reveal(cid)
     check("... and after showing the answer again the rating works", d2.rate(cid, "good", v)["ok"])
+
+
+# ---------------------------------------------------------------- the voice coach (Slice 22A, 2026-10-17)
+
+def _db_schedule(d, cid):
+    """One card's plain py-fsrs numbers, straight out of the store's own file."""
+    c = sqlite3.connect(str(d.path))
+    try:
+        row = c.execute("SELECT state, step, stability, difficulty, due, last_review,"
+                        " reps, lapses, first_day FROM cards WHERE id=?", (cid,)).fetchone()
+    finally:
+        c.close()
+    keys = ("state", "step", "stability", "difficulty", "due", "last_review",
+            "reps", "lapses", "first_day")
+    return dict(zip(keys, row)) if row is not None else None
+
+
+def _refused(fn, exc=Exception):
+    """True when `fn` raises exactly `exc` (not another exception, not nothing)."""
+    try:
+        fn()
+    except exc:
+        return True
+    except Exception:
+        return False
+    return False
+
+
+def t_spoken_answer_grader():
+    exact = D.grade_spoken_answer("Blood glucose levels", "BLOOD, glucose levels!")
+    check("case and punctuation are ignored: the exact answer is Good, matched",
+          exact["rating"] == 3 and exact["label"] == "Good" and exact["matched"] is True, exact)
+    check("... and its words say what was done",
+          exact["words"] == "That matches the answer - marked Good.")
+    filled = D.grade_spoken_answer("Blood glucose levels", "um uh the blood glucose levels")
+    check("um, uh, the, a and an are fillers, not answer words",
+          filled["rating"] == 3 and filled["matched"] is True, filled)
+    check("... a short answer said with them is still Good (they cannot drag it down)",
+          D.grade_spoken_answer("Yes", "um uh yes")["rating"] == 3)
+    check("a pass phrase wins even when it is the card's own answer ('Pass' -> 'pass' is Again)",
+          D.grade_spoken_answer("Pass", "pass")["label"] == "Again")
+    partial = D.grade_spoken_answer("Blood glucose levels", "Blood glucose")
+    check("a partly right answer is Hard and still matched",
+          partial["rating"] == 2 and partial["label"] == "Hard"
+          and partial["matched"] is True, partial)
+    check("... with the plain words for a part match",
+          partial["words"] == "That answer is partly right - marked Hard.")
+    wrong = D.grade_spoken_answer("Blood glucose levels", "I like turtles")
+    check("a wrong answer is Again, not matched",
+          wrong["rating"] == 1 and wrong["matched"] is False, wrong)
+    for said in ("", "   ", "um uh the", "I don't know", "i dont know", "skip", "pass", "NO IDEA"):
+        got = D.grade_spoken_answer("Blood glucose levels", said)
+        check(f"spoken {said!r} is Again at once, never compared word by word",
+              got["rating"] == 1 and got["label"] == "Again"
+              and got["matched"] is False, got)
+    check("the pass/empty words are the guide's own sentence",
+          D.grade_spoken_answer("x", "pass")["words"] == "Marked Again so it comes back soon.")
+    check("a card with no expected answer is Again and says why, not compared with nothing",
+          D.grade_spoken_answer("", "anything") == {
+              "rating": 1, "label": "Again", "matched": False,
+              "words": "There is no answer to compare with, so it is marked Again."})
+    check("a short exact answer (one word) still matches",
+          D.grade_spoken_answer("Nunca", "nunca")["rating"] == 3)
+    check("the Good line is >= 0.85: exactly 0.85 is Good",
+          D._spoken_rating(0.85) == (3, "Good", True))
+    check("... and 0.8499 is Hard", D._spoken_rating(0.8499) == (2, "Hard", True))
+    check("the Hard line is >= 0.50: exactly 0.50 is Hard",
+          D._spoken_rating(0.50) == (2, "Hard", True))
+    check("... and 0.4999 is Again", D._spoken_rating(0.4999) == (1, "Again", False))
+    want, said = D._spoken_tokens("Blood glucose levels"), D._spoken_tokens("Blood glucose")
+    expected = (2 * 13 / (20 + 13) + 2 / 3) / 2     # difflib over "blood glucose", recall 2/3
+    check("the score averages difflib's ratio with key-token recall (0.7273 for the partial answer)",
+          abs(D._spoken_score(want, said) - expected) < 1e-12,
+          (D._spoken_score(want, said), expected))
+    check("a spoken answer is never marked Easy by code (a mishearing must not stretch the interval)",
+          all(D.grade_spoken_answer("a b c d", spoken)["rating"] != 4
+              for spoken in ("a b c d", "a b c", "wrong", "d c b a")))
+
+
+def t_low_retrievability_radar():
+    import fsrs
+    now = T0 + 30 * DAY
+    weak = {"id": "c-weak", "deck": "Spanish Verbs", "stability": 2.0,
+            "last_review": now - 30 * DAY}
+    strong = {"id": "c-strong", "deck": "Spanish Verbs", "stability": 10.0,
+              "last_review": now}
+    fresh = {"id": "c-fresh", "deck": "Spanish Verbs"}          # never rated
+    probe = fsrs.Card(card_id=1, stability=2.0, last_review=D._dt(weak["last_review"]))
+    want = D._scheduler(False).get_card_retrievability(probe, D._dt(now))
+    got = D.retrievability(weak, now=now)
+    check("retrievability is py-fsrs 6.3.2's own number, from stability and last review",
+          abs(got - want) < 1e-12, (got, want))
+    check("a card reviewed 30 days ago with low stability (S=2.0) is below 0.75",
+          got < 0.75, got)
+    check("a card reviewed today with high stability (S=10.0) is not below 0.75",
+          D.retrievability(strong, now=now) >= 0.75, D.retrievability(strong, now=now))
+    check("a card nobody has rated has no retrievability to report",
+          D.retrievability(fresh, now=now) is None)
+    deck = {"name": "Spanish Verbs", "cards": [weak, strong, fresh]}
+    out = D.low_retrievability_topics(deck, now=now)
+    check("the radar names only the deck with a card below the line, counting reviewed cards",
+          len(out) == 1 and out[0]["topic"] == "Spanish Verbs"
+          and out[0]["cards"] == 2 and out[0]["below"] == 1, out)
+    check("... carrying the weakest card's retrievability", abs(out[0]["lowest"] - got) < 1e-12)
+    check("its plain sentence says the count, the deck and the 75% line",
+          out[0]["words"] == "1 card in Spanish Verbs has dropped below 75% memory strength",
+          out[0]["words"])
+    two = D.low_retrievability_topics({"name": "Spanish Verbs",
+                                       "cards": [weak, dict(weak, id="c-weak-2")]}, now=now)
+    check("two cards: '2 cards ... have dropped below 75% memory strength'",
+          two[0]["words"] == "2 cards in Spanish Verbs have dropped below 75% memory strength",
+          two[0]["words"])
+    deep = {"id": "c-deep", "deck": "Biology", "stability": 1.0,
+            "last_review": now - 90 * DAY}
+    ranked = D.low_retrievability_topics([{"name": "Spanish Verbs", "cards": [weak]},
+                                          {"name": "Biology", "cards": [deep]}], now=now)
+    check("decks are sorted by their weakest card first, lowest retrievability first",
+          [group["topic"] for group in ranked] == ["Biology", "Spanish Verbs"], ranked)
+    edge = {"id": "c-edge", "deck": "Threshold", "stability": 10.0,
+            "last_review": T0 - 30 * DAY}
+    line = D.retrievability(edge, now=T0)
+    check("a card exactly on the threshold is NOT below it (R < threshold, not <=)",
+          D.low_retrievability_topics(edge, threshold=line, now=T0) == [])
+    check("... one hair above that line and it is named",
+          len(D.low_retrievability_topics(edge, threshold=line + 1e-6, now=T0)) == 1)
+    check("the threshold is the caller's: at 0.40 the S=2.0 card is above the line",
+          D.low_retrievability_topics(deck, threshold=0.40, now=now) == [])
+    fixed = T0 + 10 * 365 * DAY        # far enough ahead that the real clock cannot agree
+    future_card = {"id": "c-future", "deck": "Clock", "stability": 2.0,
+                   "last_review": fixed - 30 * DAY}
+    check("an explicit now is the only clock the radar reads (a fixed future now is honoured)",
+          len(D.low_retrievability_topics(future_card, now=fixed)) == 1,
+          D.low_retrievability_topics(future_card, now=fixed))
+    just_now = {"id": "c-now", "deck": "Clock", "stability": 10.0,
+                "last_review": time.time()}
+    check("with now=None the clock is read once at the boundary: a card reviewed this "
+          "second is at 1.0", D.retrievability(just_now) == 1.0, D.retrievability(just_now))
+    flat = D.low_retrievability_topics([dict(weak, deck="", topic="Verbs")], now=now)
+    check("a flat list of cards is grouped by each card's topic",
+          len(flat) == 1 and flat[0]["topic"] == "Verbs", flat)
+    single = D.low_retrievability_topics(weak, now=now)
+    check("one card on its own is accepted (its deck name is the topic)",
+          len(single) == 1 and single[0]["topic"] == "Spanish Verbs", single)
+    check("a deck whose cards are all unrated is not named",
+          D.low_retrievability_topics({"name": "New", "cards": [fresh]}, now=now) == [])
+    check("a threshold outside 0..1 is refused in plain words",
+          _refused(lambda: D.low_retrievability_topics([], threshold=1.5, now=now), ValueError)
+          and _refused(lambda: D.low_retrievability_topics([], threshold="high", now=now),
+                       ValueError))
+    check("something that is neither a deck, a card nor a list is refused",
+          _refused(lambda: D.low_retrievability_topics("Spanish Verbs", now=now), TypeError))
+
+
+def t_a_voice_grade_leaves_an_undoable_receipt():
+    import jarvis_receipts as R
+    old_receipts, old_study = (os.environ.get("JARVIS_RECEIPTS_DB"),
+                               os.environ.get("JARVIS_STUDY_DB"))
+    os.environ["JARVIS_RECEIPTS_DB"] = str(_TMP / "receipts-voice.db")
+    try:
+        R._reset_for_tests()
+        w = World()
+        os.environ["JARVIS_STUDY_DB"] = str(w.path)
+        v = w.d.create_deck("Voice")["id"]
+        w.d.keep({"deck": v}, mkcards(2))
+        cid = w.d.review_state(v)["card"]["id"]
+        check("a voice grade before the answer was shown is refused like any rating",
+              raises(lambda: w.d.record_voice_review(cid, "good"), "not_revealed"))
+        w.d.reveal(cid)
+        before = _db_schedule(w.d, cid)
+        grade = D.grade_spoken_answer("Q0 answer", "q0 answer")
+        out = w.d.record_voice_review(cid, "good", grade=grade)
+        check("record_voice_review applies the rating like rate() and returns the next card",
+              out["ok"] is True and out["run"]["done"] == 1
+              and out["receipt_id"].startswith("rc") and out["undoable"] is True, out)
+        after = _db_schedule(w.d, cid)
+        check("... the row really changed (reps 1, last_review is this clock)",
+              after["reps"] == 1 and after["last_review"] == w.clock.t, after)
+        receipt = R.get(out["receipt_id"])
+        check("the receipt names the voice grade and says what happened in plain words",
+              receipt["tool_name"] == D.VOICE_TOOL
+              and receipt["summary"] == "Rated a card by voice: Remembered", receipt)
+        check("its before/after snapshots are the card's numbers, not its words",
+              receipt["before"]["reps"] == 0 and receipt["after"]["reps"] == 1
+              and receipt["before"]["last_review"] is None
+              and receipt["after"]["last_review"] == w.clock.t
+              and "Q0" not in json.dumps(receipt), receipt)
+        check("jarvis_receipts says this one can be undone", R.is_undoable(receipt) is True)
+        undone = R.undo(out["receipt_id"])
+        check("one tap of Undo puts the schedule back exactly",
+              undone["ok"] is True and undone["path"] == "callable", undone)
+        check("... every plain number is what it was before the voice grade",
+              _db_schedule(w.d, cid) == before, (_db_schedule(w.d, cid), before))
+        check("... and a second Undo refuses in plain words",
+              R.undo(out["receipt_id"])["ok"] is False)
+        w.d.reveal(cid)
+        out2 = w.d.record_voice_review(cid, "hard")
+        R._reset_for_tests()          # the live callable is gone: this is a restart
+        undone2 = R.undo(out2["receipt_id"])
+        check("after a restart the before snapshot alone puts the schedule back",
+              undone2["ok"] is True and undone2["path"] == "snapshot", undone2)
+        check("... to the exact numbers too", _db_schedule(w.d, cid) == before)
+        check("... because jarvis_decks registered its restorer for this tool",
+              "restore_card_state" in R.get(out2["receipt_id"])["undo_callable"])
+        check("a bad rating is refused before any receipt is written",
+              raises(lambda: w.d.record_voice_review(cid, "meh"), "bad_rating"))
+        check("a snapshot that is not a card's is refused instead of half-restoring",
+              _refused(lambda: D.restore_card_state({"card": cid}), ValueError))
+    finally:
+        for key, old in (("JARVIS_RECEIPTS_DB", old_receipts),
+                         ("JARVIS_STUDY_DB", old_study)):
+            if old is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = old
+        R._reset_for_tests()
 
 
 def t_wording_and_the_shared_fixture():
