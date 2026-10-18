@@ -1693,6 +1693,19 @@
     "covers": []
   },
   {
+    "id": "clipboard-time-machine",
+    "group": "The PC itself",
+    "title": "Clipboard history, and three one-press cleanups for what you copy",
+    "what": "A drawer at the Jarvis bar keeps the last 25 things you copied, newest first, in this PC's memory only - and turns a copied table, a blob of JSON or a link into one press each: Table, Pretty JSON or Clean link. Password managers, one-time codes, private keys, card numbers and empty copies are never kept.",
+    "where": "Press Alt+Shift+C on the PC to open it - the key only opens the drawer, and it can be changed in Settings, Shortcuts.",
+    "asks": "No card. Nothing is kept until you press Turn on in the drawer, and that press is the permission.",
+    "limit": "PC only: the phone's clipboard belongs to the phone's own OS and keyboard, and the drawer lives at the PC's Jarvis bar, so the phone has no clipboard history. On the PC it is off on every launch, held in memory - never written to disk, never logged - and wiped when Jarvis or Windows locks.",
+    "surface": "desktop",
+    "covers": [
+      "clipboard-time-machine"
+    ]
+  },
+  {
     "id": "approvals",
     "group": "Safety",
     "title": "Approval cards",
