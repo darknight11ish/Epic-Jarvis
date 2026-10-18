@@ -108,6 +108,7 @@ from __future__ import annotations
 import ast
 import json
 import math
+import ntpath
 import os
 import re
 import shutil
@@ -126,6 +127,13 @@ PATCHER_REL = Path("scripts") / "apply-patches.ps1"
 SUITES_REL = Path("backend") / "run_suites.py"
 WHERE_REL = Path("backend") / "_where.py"
 BASE_REL = Path("jarvis-backend")
+
+#: How a shell is looked for. An indirection (not a direct `shutil.which` call
+#: inside `shell_choice`) so the suite can drive every update flow on a machine
+#: with no PowerShell at all - it supplies a fake name here, exactly as it
+#: supplies a fake runner; the real preference order is tested by passing
+#: `which=` explicitly to `shell_choice`.
+SHELL_WHICH = shutil.which
 
 #: The three paces. `plain` is what the owner reads on the card; `effect` is
 #: the one-line honest description of what the PC will feel like.
@@ -1024,14 +1032,103 @@ def phase_fraction(phase: str, *, patch_share: float = 0.0,
 #   The commands this tool runs - and everything it refuses to guess
 # ---------------------------------------------------------------------------
 
-def patcher_command(repo, backend) -> list:
+#: The shells that can run apply-patches.ps1, in the order this PC should try.
+#: PowerShell 7 (`pwsh`) first: a 5.1 child launched from a pwsh-hosted process
+#: can inherit a PSModulePath that points only at pwsh's own modules, and then
+#: 5.1 starts unable to find Get-FileHash - the 30-second failure the field
+#: test hit on 2026-10-18. Windows PowerShell is still the fallback, and its
+#: child gets its own module path appended (see `_child_env`).
+SHELL_PREFERENCE = ("pwsh", "powershell")
+
+
+def shell_choice(which=None) -> str:
+    """The shell that can actually run the patcher on this PC.
+
+    `pwsh` when it is installed, else Windows PowerShell; when neither exists
+    this is a clear refusal, never a guess. `which` is injectable (it defaults
+    to `shutil.which`) so the ordering is a unit test on every machine.
+    """
+    find = which or SHELL_WHICH
+    for name in SHELL_PREFERENCE:
+        found = find(name)
+        if found:
+            return found
+    raise UpdateRefused(
+        "no_shell",
+        "This PC has neither PowerShell 7 (pwsh) nor Windows PowerShell "
+        "(powershell), so apply-patches.ps1 cannot run. Install PowerShell, "
+        "then start the update again.")
+
+
+def _is_windows_powershell_5(shell) -> bool:
+    """True for Windows PowerShell 5.1 (powershell.exe), never for pwsh.
+
+    `ntpath.basename`, not `os.path.basename`: the path being judged is a
+    Windows one even when this code is exercised on the required Linux
+    backend job (which runs the suite with fake paths), and a host-specific
+    basename would see the whole `C:\\...\\powershell.exe` string and say no.
+    """
+    name = ntpath.basename(str(shell or "")).lower()
+    return name.startswith("powershell")
+
+
+def _windows_powershell_module_dirs(env) -> list:
+    """The module directories a 5.1 child must be told about, built from the
+    child's own environment rather than hard-coded for one PC.
+
+    Windows path rules are used (`ntpath`) whatever host runs this: the child
+    is a Windows PowerShell and its module list is semicolon-separated, so the
+    composition is a pure function of `env` that behaves identically on the
+    Windows desk and the Linux backend job.
+    """
+    root = env.get("SystemRoot") or env.get("windir") or r"C:\Windows"
+    program_files = env.get("ProgramFiles") or r"C:\Program Files"
+    user = env.get("USERPROFILE") or ""
+    dirs = [
+        ntpath.join(root, "System32", "WindowsPowerShell", "v1.0", "Modules"),
+        ntpath.join(program_files, "WindowsPowerShell", "Modules"),
+    ]
+    if user:
+        dirs.append(ntpath.join(user, "Documents", "WindowsPowerShell", "Modules"))
+    return dirs
+
+
+def _child_env(shell, base=None) -> dict:
+    """The environment one child gets: the caller's env, never wiped.
+
+    For the Windows PowerShell 5.1 fallback the WindowsPowerShell module
+    directories are APPENDED to PSModulePath (each only when missing), because
+    a child of a pwsh-hosted process can inherit a module path that hides 5.1's
+    own modules. A `pwsh` child - and every non-shell child - gets the
+    caller's copy unchanged.
+
+    PSModulePath is a WINDOWS environment value, so its entries are split and
+    joined with Windows' own separator (`ntpath.pathsep`, always ';'), never
+    with the host's: on the Linux backend job `os.pathsep` is ':' and would
+    split `C:\\Program Files\\...` into pieces.
+    """
+    env = dict(os.environ if base is None else base)
+    if _is_windows_powershell_5(shell):
+        parts = [p for p in str(env.get("PSModulePath") or "").split(ntpath.pathsep) if p]
+        for path in _windows_powershell_module_dirs(env):
+            if path not in parts:
+                parts.append(path)
+        env["PSModulePath"] = ntpath.pathsep.join(parts)
+    return env
+
+
+def patcher_command(repo, backend, *, which=None) -> list:
     """The patcher, exactly as the documented line runs it, plus -SkipTests.
 
     Nothing about patching is reimplemented here: this is the script the owner
     would paste into PowerShell himself, with the suite phase left to step 3 of
-    this tool (which runs the same suites, in parallel when asked)."""
+    this tool (which runs the same suites, in parallel when asked). The shell is
+    chosen by `shell_choice`: pwsh when this PC has it, else Windows PowerShell
+    (with its own module path passed by `_run`/`_child_env`), else a refusal.
+    """
+    shell = shell_choice(which)
     return [
-        "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+        shell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
         str(Path(repo) / PATCHER_REL), "-BackendPath", str(Path(backend)),
         "-SkipTests",
     ]
@@ -1055,6 +1152,14 @@ def preflight(repo, backend) -> None:
     """Refuse, before anything runs, when this PC does not have what an update
     needs. The same two paths the desktop card already checks, checked again
     here because this tool is also reachable by hand."""
+    if os.name == "nt":
+        # The patcher IS a PowerShell script. On the PC this tool runs on, a
+        # machine with neither shell cannot update at all - say so before the
+        # folder checks pretend the rest of the update could happen. (Off
+        # Windows the suite drives the flows with a fake runner and a fake
+        # shell name, so it must stay runnable there; this tool ships for
+        # Windows.)
+        shell_choice()
     repo = Path(repo)
     backend = Path(backend)
     if not repo.is_dir():
@@ -1345,10 +1450,18 @@ def _run(cmd, cwd, on_line) -> "int | None":
 
     stdout and stderr share one pipe, so the order the programs printed in is
     the order the card shows. `None` means the child could not be watched to
-    its end - the caller treats that as ambiguous, never as a pass."""
+    its end - the caller treats that as ambiguous, never as a pass.
+
+    A Windows PowerShell 5.1 child gets `_child_env`'s environment (the
+    caller's env with the WindowsPowerShell module dirs appended) so its own
+    cmdlets are discoverable even when the parent was started by pwsh; every
+    other child inherits the caller's environment as before.
+    """
+    argv = [str(part) for part in cmd]
+    env = _child_env(argv[0]) if argv and _is_windows_powershell_5(argv[0]) else None
     try:
         child = subprocess.Popen(
-            [str(part) for part in cmd], cwd=str(cwd),
+            argv, cwd=str(cwd), env=env,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, encoding="utf-8", errors="replace", bufsize=1,
         )

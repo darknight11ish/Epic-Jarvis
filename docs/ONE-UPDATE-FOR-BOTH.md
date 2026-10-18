@@ -29,8 +29,14 @@ calls one cannot.
    nothing.
 2. **The backend.** Since 2026-10-17 a press also chooses a PACE, and the
    backend half runs through `tools/update_backend.py --mode <pace>`:
-   `scripts/apply-patches.ps1 -SkipTests` is run first (with
-   `powershell -NoProfile -ExecutionPolicy Bypass -File`), then the SAME suites
+   `scripts/apply-patches.ps1 -SkipTests` is run first in a shell the tool
+   **chooses**: PowerShell 7 (`pwsh`) when this PC has it, else Windows
+   PowerShell 5.1 (`-NoProfile -ExecutionPolicy Bypass -File`), else a clear
+   refusal before anything runs. A 5.1 child gets the WindowsPowerShell module
+   directories appended to its own `PSModulePath` (the caller's environment is
+   kept, not wiped), because a child launched from a pwsh-hosted process can
+   otherwise start unable to find its own cmdlets — the 30-second failure the
+   2026-10-18 field test hit. Then the SAME suites
    from `backend/run_suites.py --jobs <workers>`, then the recorded times are
    kept for the next estimate. Before any of that the tool takes the exclusive
    `update-in-progress.lock` (2026-10-18): a second update is refused, a test

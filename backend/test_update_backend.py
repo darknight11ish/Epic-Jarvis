@@ -67,6 +67,15 @@ from _where import REPO  # noqa: E402
 sys.path.insert(0, str(REPO / "tools"))
 import update_backend as U  # noqa: E402
 
+#: The suite drives every update flow with a FAKE runner and must run on a PC
+#: with no PowerShell at all. Give the tool the shell name those fake flows
+#: expect, so `patcher_command` never looks for a real one; the REAL preference
+#: order (pwsh first, then Windows PowerShell, then a refusal) is tested below
+#: with an injected `which`.
+U.SHELL_WHICH = lambda name: (                         # noqa: E731 - a test stand-in
+    r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+    if name == "powershell" else None)
+
 PASSED, FAILED = [], []
 
 
@@ -832,20 +841,119 @@ def t_the_commands_are_the_patcher_and_the_runner_and_nothing_else():
     root = _make_root()
     repo, backend = _make_repo(root)
     fake = FakeRun(_staged_handler(repo, backend, suites="ok"))
+    expected_shell = U.shell_choice()
     U.update(repo, backend, "responsive", run=fake, say=lambda line: None,
              clock=lambda: 0.0, timings_path=root / "timings.json")
     patcher = fake.calls[0]
     check("the first process is the one patcher script, with -SkipTests",
           _is_patcher(patcher) and "-SkipTests" in patcher
           and "-BackendPath" in patcher and str(backend) in patcher, patcher)
-    check("the patcher is run through the documented interpreter flags",
-          patcher[:5] == ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
-                          "-File"], patcher[:5])
+    check("the patcher is run through the shell this PC can use, with the "
+          "documented flags",
+          patcher[0] == expected_shell
+          and patcher[1:5] == ["-NoProfile", "-ExecutionPolicy", "Bypass",
+                               "-File"], patcher[:5])
+    check("the recorded patcher command is exactly patcher_command's list",
+          patcher == [str(part) for part in U.patcher_command(repo, backend)],
+          (patcher, U.patcher_command(repo, backend)))
     check("the second process is run_suites.py, not a second patcher",
           not _is_patcher(fake.calls[1])
           and fake.calls[1][2].endswith("run_suites.py"), fake.calls[1])
     check("the tool itself writes no repository file (the fake runner is the only "
           "process it starts)", len(fake.calls) == 2, fake.calls)
+
+
+def t_the_shell_choice_prefers_pwsh_then_falls_back_then_refuses():
+    pwsh = r"C:\Program Files\PowerShell\7\pwsh.exe"
+    windows = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+    both = {"pwsh": pwsh, "powershell": windows}
+    only_windows = {"powershell": windows}
+    check("pwsh is preferred when both shells exist",
+          U.shell_choice(which=both.get) == pwsh, U.shell_choice(which=both.get))
+    check("Windows PowerShell is the fallback when pwsh is absent",
+          U.shell_choice(which=only_windows.get) == windows,
+          U.shell_choice(which=only_windows.get))
+    try:
+        got = U.shell_choice(which=lambda name: None)
+    except U.UpdateRefused as exc:
+        got = exc
+    check("no shell at all is a clear no_shell refusal, not a guess",
+          isinstance(got, U.UpdateRefused) and got.code == "no_shell"
+          and "PowerShell" in got.message, got)
+    cmd = U.patcher_command("the-repo", "the-backend", which=both.get)
+    check("the chosen shell is argv[0] of the patcher command, not a fixed name",
+          cmd[0] == pwsh and cmd[1:5] == ["-NoProfile", "-ExecutionPolicy",
+                                         "Bypass", "-File"], cmd[:5])
+
+
+def t_the_5_1_fallback_gets_its_module_path_without_losing_the_caller_env():
+    # PSModulePath is a WINDOWS value (always ';'-separated), so these checks
+    # are host-independent by construction (ntpath in the tool) and run on the
+    # required Linux backend job too - no skip is needed and none is taken.
+    windows = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+    base = {"PSModulePath": r"C:\Program Files\PowerShell\7\Modules",
+            "KEEP_ME": "yes", "SystemRoot": r"C:\Windows",
+            "ProgramFiles": r"C:\Program Files"}
+    env = U._child_env(windows, base)
+    raw = env["PSModulePath"]
+    check("PSModulePath keeps Windows' own ';' separator on every host",
+          ";" in raw and "\n" not in raw and raw.count(r"C:\Program Files\PowerShell\7\Modules") == 1,
+          raw)
+    parts = raw.split(";")
+    check("the caller's own PSModulePath entry is kept",
+          base["PSModulePath"] in parts, parts)
+    check("the WindowsPowerShell v1.0 module directory is appended",
+          any("WindowsPowerShell\\v1.0\\Modules" in part for part in parts), parts)
+    check("the 5.1 shell is recognised from a Windows path on every host",
+          U._is_windows_powershell_5(windows)
+          and not U._is_windows_powershell_5(r"C:\Program Files\PowerShell\7\pwsh.exe"),
+          (windows, r"C:\Program Files\PowerShell\7\pwsh.exe"))
+    check("no other caller variable is lost", env.get("KEEP_ME") == "yes", env)
+    check("the caller's own dict was not modified",
+          base["PSModulePath"] == r"C:\Program Files\PowerShell\7\Modules", base)
+    check("a pwsh child gets the caller's environment unchanged",
+          U._child_env(r"C:\Program Files\PowerShell\7\pwsh.exe", base) == base)
+
+
+def t_the_chosen_shell_and_its_environment_are_what_run_receives():
+    seen = {}
+
+    class FakeProc:
+        stdout = iter(["a line from the child\n"])
+
+        def wait(self):
+            return 0
+
+    real_popen = U.subprocess.Popen
+
+    def fake_popen(argv, **kwargs):
+        seen["argv"] = [str(part) for part in argv]
+        seen["env"] = kwargs.get("env")
+        return FakeProc()
+
+    windows = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+    lines = []
+    U.subprocess.Popen = fake_popen
+    try:
+        code = U._run([windows, "-NoProfile"], ".", lines.append)
+    finally:
+        U.subprocess.Popen = real_popen
+    check("_run starts exactly the command it was handed",
+          seen.get("argv", [])[:2] == [windows, "-NoProfile"], seen.get("argv"))
+    env = seen.get("env") or {}
+    check("_run gives the 5.1 child the WindowsPowerShell module path",
+          "WindowsPowerShell" in str(env.get("PSModulePath", "")), env.get("PSModulePath"))
+    check("... and the child ran to its end", code == 0 and lines == ["a line from the child"],
+          (code, lines))
+
+    seen.clear()
+    U.subprocess.Popen = fake_popen
+    try:
+        U._run([sys.executable, "-B", "-c", "pass"], ".", lambda line: None)
+    finally:
+        U.subprocess.Popen = real_popen
+    check("a non-PowerShell child inherits the caller's env (no override)",
+          "env" in seen and seen.get("env") is None, seen.get("env"))
 
 
 # --------------------------------------------------------------------------
