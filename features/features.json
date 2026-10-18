@@ -1706,6 +1706,18 @@
     ]
   },
   {
+    "id": "file-history",
+    "group": "The PC itself",
+    "title": "File history",
+    "what": "Jarvis keeps a copy of a file before it changes one, so you can see exactly what changed and put a version back.",
+    "where": "Brain -> Projects -> File history. Show the difference draws the change in the module's own bounded diff; Put this version back asks first.",
+    "asks": "Showing a difference asks nothing. A restore raises ONE card in the Jarvis bar; a denied or timed-out card changes nothing. The whole drawer hides while App lock or Hide memory lists and chat history is on.",
+    "limit": "This PC only: the copies are files on this PC, and a phone has no page for them.",
+    "surface": "desktop",
+    "covers": [
+      "guardian_history"    ]
+  },
+  {
     "id": "approvals",
     "group": "Safety",
     "title": "Approval cards",

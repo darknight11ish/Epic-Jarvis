@@ -19,6 +19,8 @@
 /// lock/rules.rs's private list. Galaxy is now drawn from
 /// `memory_entities`, which is. The test below keeps it out, and keeps every
 /// memory list here on the private list.
+use super::guardian::SNAPSHOTS_PATH;
+
 const READ_ROUTES: &[(&str, &str)] = &[
     ("status", "/api/status"),
     ("models", "/api/models"),
@@ -77,6 +79,11 @@ const READ_ROUTES: &[(&str, &str)] = &[
     ("attention", "/api/attention"),
     ("digest", "/api/digest"),
     ("config", "/api/config"),
+    // The file guardian's history (LM-2C; JARVIS-API section 140): the copies
+    // Jarvis took of a file before changing it, newest first and bounded. A
+    // read. Hidden whole in brain.rs under App lock and the hidden lists; the
+    // two commands that can act on it are brain/guardian.rs's own.
+    ("guardian_history", SNAPSHOTS_PATH),
 ];
 
 pub(super) fn route_for(section: &str) -> Option<&'static str> {

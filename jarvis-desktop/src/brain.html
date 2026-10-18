@@ -881,6 +881,16 @@
                Making a picture needs no approval card: it is a new file in a
                folder on this PC, from words the owner typed. -->
           <div class="panes" id="pictures-root" data-menu-id="brain.projects.pictures" data-menu-group="goals-projects"></div>
+          <!-- "File history" (LM-2C; JARVIS-API section 140; guardian-panel.js
+               draws it): copies Jarvis took of a file before changing it.
+               Newest first, a file's name and why and when - never its words,
+               only the module's bounded diff when it is asked for. The whole
+               drawer hides in RUST under App lock and "Hide memory lists and
+               chat history" (brain/guardian.rs) - a hidden answer is one
+               sentence with no path. Restore asks "are you sure?" here, then
+               asks the PC, which raises the EXISTING undo_action card in the
+               Jarvis bar; this page never approves anything. -->
+          <div class="panes" id="guardian-root"></div>
           <div class="panes" id="projects-root"></div>
         </section>
 

@@ -994,6 +994,8 @@ pub fn run() {
             brain::pictures::brain_pictures_make,
             brain::pictures::brain_pictures_settings,
             brain::pictures::choose_pictures_folder,
+            brain::guardian::guardian_diff,
+            brain::guardian::guardian_restore,
             brain::quiz::brain_quiz_start,
             brain::quiz::brain_quiz_get,
             brain::quiz::brain_quiz_answer,

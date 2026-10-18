@@ -45,6 +45,7 @@ pub mod focus;
 pub mod forget_range;
 pub mod form_review;
 pub mod goals;
+pub mod guardian;
 pub mod history;
 pub mod history_import;
 pub mod inbox_tidy;
@@ -117,8 +118,16 @@ pub async fn brain_read(
     // `JoinSet` rather than `futures_util::join_all` because tokio is already a
     // direct dependency and futures-util is only a transitive one — a new
     // top-level crate for one combinator is a new thing to audit and pin.
+    // The file guardian's history is hidden whole while App lock or the hidden
+    // lists are on, and while hidden the section is not even asked for: the
+    // answer is the one sentence brain/guardian.rs owns, and not one file name
+    // crosses the loopback wire. The commands next door do the same.
+    let hide_guardian = guardian::words_hidden(&app);
     let mut set = tokio::task::JoinSet::new();
     for (section, path) in wanted {
+        if hide_guardian && section == "guardian_history" {
+            continue;
+        }
         let base = base.clone();
         let headers = headers.clone();
         set.spawn(async move {
@@ -165,6 +174,16 @@ pub async fn brain_read(
         for (section, body) in out.iter_mut() {
             *body = crate::lock::redact_private(section, std::mem::take(body));
         }
+    }
+    // The file guardian's history names the owner's own files, so it hides
+    // under "Hide memory lists and chat history" AND while App lock is locked -
+    // the same pair the Pictures gallery keeps, and `brain/guardian.rs` owns
+    // the words. The answer becomes one sentence with no path and no count.
+    if hide_guardian {
+        out.insert(
+            "guardian_history".to_owned(),
+            guardian::hidden_answer(guardian::HIDDEN_WORDS),
+        );
     }
     Ok(serde_json::Value::Object(out))
 }
