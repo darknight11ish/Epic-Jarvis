@@ -1976,6 +1976,17 @@ $SHIPPED = @(
 # parameters off links). No file, no database, no route and no caller yet: the
 # desktop wiring is a later slice.
 'jarvis_clipboard.py'
+    # --- Pillar 16 (2026-10-17): the pre-meeting person dossier ---
+    # ONE person's facts split current/retired, the kept chat turns that mention
+    # them, the newest mail headers/snippets, the open to-dos that name them and
+    # the next calendar event whose own words name them - each through the
+    # module that already owns that record (jarvis_memory.py is base-only and is
+    # never edited; its public reads are called from here). Withheld completely,
+    # before any read, when "Hide memory lists and chat history" or App lock is
+    # on; reading facts latches the conversation private. No route and no chat
+    # tool: its one surface is one line in the morning briefing (jarvis_briefing.py)
+    # for a person Jarvis already knows who is named in today's calendar.
+    'jarvis_people_crm.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.

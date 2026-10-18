@@ -68,6 +68,20 @@ WHAT IS IN IT - only what Jarvis can already read on this PC
     the section out and says why, the same shape weather and email use.
     Headlines are OUTSIDE TEXT (a feed can say anything): a briefing that
     shows one says `news_read` was used, exactly as a calendar title does.
+  * People (Pillar 16, 2026-10-17): a name Jarvis already knows who is
+    named in one of today's calendar events gets ONE compact line -
+    "Alex - 14:30: Lunch with Alex (4 saved facts)" - through
+    jarvis_people_crm.briefing_people(). It is the pre-meeting line, never
+    the whole dossier: no mail, no chat turns, no to-do list, and it ADDS
+    NO READ OF ITS OWN - it is worked out from the calendar read above and
+    from the names the memory entity layer already holds (a local SQLite
+    read, topics="use", so a topic the owner switched off is left out).
+    The NAME is in `items`, which BOTH apps already blank while "Hide
+    memory lists and chat history" or App lock is on (desktop
+    brain/briefing.rs `redact`, phone Briefing.hide); the summary says only
+    how many people, so a hidden briefing shows a count and no name. The
+    full dossier (`build_person_dossier()`) is the on-request version, and
+    is not called here - a 7am briefing does not widen an unattended read.
 
 WHERE IT SHOWS
 Both apps: a notification with only "Jarvis: your morning briefing is
@@ -209,6 +223,8 @@ EMPTY = "No briefing yet. Say \"brief me now\", or set one up to arrive each mor
 CARD_NOTE = (
     "Each time, Jarvis puts together a short list on this PC, without the AI model:",
     "  - today's calendar events, if your calendar is set up for Jarvis",
+    "  - people you already know who are named in today's calendar events (the names "
+    "are hidden with your memory lists)",
     "  - today's alarms, reminders and timers, and your to-do list",
     "  - how many approval cards are waiting",
     "  - how many unread emails you have and who the newest are from (the number "
@@ -390,6 +406,11 @@ class Deps:
     #: None: the real jarvis_news.read_news() (I49, 2026-09-27). A test
     #: injects a plain function so it never opens a real socket.
     news_read: Optional[Callable[[], dict]] = None
+    #: None: the real jarvis_people_crm.briefing_people() (Pillar 16,
+    #: 2026-10-17). A test injects `lambda events, now: None` so a briefing
+    #: test never opens the memory store; a test of the line injects its own
+    #: section, so the two stay independent.
+    people_section: Optional[Callable[[list, float], Optional[dict]]] = None
     senders_on: Callable[[], bool] = lambda: senders_setting()["on"]
     publish: Callable[[str, dict], None] = _publish
     deadline: float = READ_DEADLINE
@@ -737,7 +758,11 @@ def calendar_items(events: list, now: float) -> list:
     return [r[1] for r in rows]
 
 
-def _read_calendar(now: float, deps: Deps) -> dict:
+def _read_calendar(now: float, deps: Deps, seen: Optional[dict] = None) -> dict:
+    """Today's calendar, read-only. `seen` (a caller's own dict) is filled
+    with the events the server returned, for the People line - the section
+    itself carries only the lines, and the raw event shape is never sent to
+    an app."""
     title = "Calendar"
     import jarvis_calendar as CAL
     # Today by this PC's clock, midnight to midnight: 23 or 25 hours on the
@@ -761,7 +786,10 @@ def _read_calendar(now: float, deps: Deps) -> dict:
     if not out.get("ok"):
         return _section("calendar", title, "failed",
                         "Not read: the calendar server did not answer.")
-    items = calendar_items(out.get("events") or [], now)
+    events = [e for e in (out.get("events") or []) if isinstance(e, dict)]
+    if seen is not None:
+        seen["events"] = events
+    items = calendar_items(events, now)
     if not items:
         return _section("calendar", title, "empty", "Nothing on your calendar today." + (
             " Some events may be missing: the calendar is larger than Jarvis reads at once."
@@ -778,6 +806,45 @@ def _read_calendar(now: float, deps: Deps) -> dict:
     if more > 0:
         shown.append(f"... and {more} more")
     return _section("calendar", title, "ok", summary + ".", shown)
+
+
+def _people_events(events: list, now: float) -> list:
+    """The events that are today's by this PC's clock, for the People line.
+
+    The calendar read was asked for today, so this only drops what a server
+    sent beyond it (tomorrow's, or one whose start cannot be read at all:
+    a name is never attached to an event Jarvis cannot place in the day)."""
+    lt = time.localtime(now)
+    today = (lt.tm_year, lt.tm_mon, lt.tm_mday)
+    kept = []
+    for e in events or []:
+        if not isinstance(e, dict):
+            continue
+        when = event_when(e.get("start") or "")
+        if when is not None and when[0] <= today:
+            kept.append(e)
+    return kept
+
+
+def _people_section(events: list, now: float, deps: Deps) -> Optional[dict]:
+    """The People line, or None when nobody Jarvis knows is named in today's
+    events (then the briefing is byte-for-byte what it was before Pillar 16).
+
+    `deps.people_section` is None for the real jarvis_people_crm line, a
+    callable in a test, and it never opens the memory store when a test gave
+    it `lambda events, now: None`."""
+    if deps.people_section is None:
+        try:
+            import jarvis_people_crm as CRM
+            return CRM.briefing_people(_people_events(events, now), now=now)
+        except Exception:
+            # A backend without the module (an older PC, or a clone that has
+            # not shipped it): the line is simply not there.
+            return None
+    try:
+        return deps.people_section(_people_events(events, now), now)
+    except Exception:
+        return None
 
 
 def sender_line(names: list, count: int, looked_at: int) -> str:
@@ -973,8 +1040,9 @@ def build(*, sched=None, now: Optional[float] = None, deps: Optional[Deps] = Non
     src = sources(deps)
     started = time.time()
     reads = {}
+    cal_seen: dict = {}
     if src["calendar"]["state"] == "on":
-        reads["calendar"] = _in_thread(_read_calendar, now, deps)
+        reads["calendar"] = _in_thread(_read_calendar, now, deps, cal_seen)
     if src["email"]["state"] == "on":
         reads["email"] = _in_thread(_read_email, deps)
     if src["weather"]["state"] == "on":
@@ -1013,6 +1081,13 @@ def build(*, sched=None, now: Optional[float] = None, deps: Optional[Deps] = Non
         sections.append(got["weather"])
     if "calendar" in got:
         sections.append(got["calendar"])
+        # The People line (Pillar 16): today's events that name someone
+        # Jarvis already knows. It adds no read of its own - the raw events
+        # are this same calendar read's answer - and the apps already blank
+        # its items while the private lists are hidden.
+        people = _people_section(cal_seen.get("events") or [], now, deps)
+        if people is not None:
+            sections.append(people)
     sections.extend([today, todo, approvals])
     if "email" in got:
         sections.append(got["email"])
