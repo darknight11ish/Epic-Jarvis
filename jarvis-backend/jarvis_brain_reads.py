@@ -31,6 +31,19 @@ The owner's choice of 2026-09-28 (docs/RESEARCH-AUDIT-2026-09-28.md section
         meta names the conversation; jarvis_chat_log.brief() gives its
         title without opening a message. It deletes nothing.
 
+    GET /api/guardian/snapshots?limit=<n>
+    GET /api/guardian/diff?path=<file>&sha_before=<sha256>
+        (2026-10-18, LM-2A; JARVIS-API section 140) "What did Jarvis change,
+        and what did this file look like before?": the file guardian's own
+        journal (newest first, one bounded page) and the bounded unified diff
+        jarvis_file_guardian.diff_versions() already works out. They READ the
+        store only - no restore, no write, no file contents and no blob bytes
+        beyond the diff itself, which the module already bounds to
+        MAX_DIFF_BYTES. A request from another device is refused BEFORE
+        anything is read. The backend cannot see App lock or "Hide memory
+        lists" (both are desktop-side state), so the desktop's own drawer must
+        hide while either is on; JARVIS-API section 140 says that gap plainly.
+
     GET /api/pc/help
         (2026-09-28; JARVIS-API section 84) "PC help": five plain answers
         about this PC - why it is slow, how full the drives are, what is using
@@ -48,8 +61,7 @@ The owner's choice of 2026-09-28 (docs/RESEARCH-AUDIT-2026-09-28.md section
         blanks the same sections in Rust. Read-only.
 
 All of them are READS for the apps' Brain screens, behind the pairing token
-and the origin check like every memory and history read. None is a tool: no
-model and no chat turn can call them (jarvis_agent.py offers nothing that
+and the origin check like every memory and history read. None is a tool: nomodel and no chat turn can call them (jarvis_agent.py offers nothing that
 reaches here), so what they return never reaches the AI model. None writes
 anything.
 
@@ -71,6 +83,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from urllib.parse import parse_qs, urlsplit
 
 SEARCH_PATH = "/api/history/search"
@@ -78,12 +91,17 @@ FACT_HISTORY_PATH = "/api/memory/fact-history"
 CONVERSATION_FACTS_PATH = "/api/memory/conversation-facts"
 PC_HELP_PATH = "/api/pc/help"
 FACT_CHAT_PATH = "/api/memory/fact-chat"
+#: The file guardian's history, read-only (LM-2A): the journal page and the
+#: bounded diff. Restore is NOT here - it overwrites a file and waits for its
+#: own gated slice.
+GUARDIAN_SNAPSHOTS_PATH = "/api/guardian/snapshots"
+GUARDIAN_DIFF_PATH = "/api/guardian/diff"
 #: GTD-2 (2026-10-18): the Today board. The route lives in jarvis_today.py;
 #: this module is only the door the server already wraps, so it needs no
 #: patch of its own.
 COCKPIT_PATH = "/api/today/cockpit"
 PATHS = (SEARCH_PATH, FACT_HISTORY_PATH, CONVERSATION_FACTS_PATH, PC_HELP_PATH,
-         FACT_CHAT_PATH, COCKPIT_PATH)
+         FACT_CHAT_PATH, COCKPIT_PATH, GUARDIAN_SNAPSHOTS_PATH, GUARDIAN_DIFF_PATH)
 
 #: The one POST this module answers (GTD-2, 2026-10-18): the said-I'd-do
 #: switch's own toggle. OFF is immediate; ON raises ONE approval card. It is
@@ -93,9 +111,206 @@ POST_PATHS = (COCKPIT_PATH,)
 UPDATE = ("This PC's Jarvis is missing part of this feature. Run apply-patches.ps1 on the PC "
           "to update it.")
 
+#: One page of guardian history: newest first, 50 by default, 200 at most. The
+#: answer never carries the whole journal, however long it has grown.
+DEFAULT_SNAPSHOTS = 50
+MAX_SNAPSHOTS = 200
+MAX_PATH_CHARS = 4096
+MAX_RECEIPT_CHARS = 120
+MAX_REASON_CHARS = 200
 
-def handle_get(path: str, query: str = "") -> tuple:
-    """(http status, reply) for one of PATHS. Never raises."""
+NOT_THIS_PC = ("The file guardian's history is on this PC, so a request from another "
+               "device is refused before anything is read.")
+
+
+def _from_this_pc(peer, local) -> bool:
+    """Is this request from this PC? Fails CLOSED: no helper, no answer.
+
+    `jarvis_owner_check.from_this_pc` is the project's one answer to this
+    question, and it treats loopback and this PC's own addresses as here - so
+    a program on the PC can ask, and a phone on the same private network
+    cannot.
+    """
+    try:
+        import jarvis_owner_check
+        return bool(jarvis_owner_check.from_this_pc(peer, local))
+    except Exception:
+        return False
+
+
+def _guardian_refusal(why: str, words: str, path: str) -> dict:
+    """A refusal in the SAME shape that route's success answer has."""
+    if path == GUARDIAN_SNAPSHOTS_PATH:
+        return {"ok": False, "refused": True, "why": why, "snapshots": [],
+                "count": 0, "total": 0, "limit": 0, "more": False, "usage": {},
+                "words": words}
+    return {"ok": False, "refused": True, "why": why, "path": "", "diff": "",
+            "truncated": False, "binary": False, "same": False,
+            "before_sha256": "", "after_sha256": "", "words": words}
+
+
+def _param(params, name: str) -> str:
+    try:
+        return str((params.get(name) or [""])[0])
+    except Exception:
+        return ""
+
+
+def _safe_text(value, limit: int) -> str:
+    """One line of a value from the journal, cut to a bound. Never raises."""
+    try:
+        text = str(value or "")
+    except Exception:
+        return ""
+    return " ".join(text.split())[:limit]
+
+
+def _safe_usage(usage) -> dict:
+    """Only the numbers and words usage() already answers - never its blob map."""
+    if not isinstance(usage, dict):
+        return {}
+    out = {}
+    for key in ("blob_bytes", "blobs", "quota_bytes", "pinned", "over_quota", "words"):
+        value = usage.get(key)
+        if isinstance(value, str) or isinstance(value, (int, float)) or isinstance(value, bool):
+            out[key] = value
+    return out
+
+
+def _label(path: str) -> str:
+    """The short name a drawer shows; the full path is carried beside it."""
+    return path.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1] or path
+
+
+def _snapshot_page(query: str, read_rows, read_usage) -> tuple:
+    """(status, answer) for GET /api/guardian/snapshots?limit=<n>.
+
+    Newest first, one bounded page, every field read from the module's own
+    journal. A row this route cannot mean (no path, no sha256) is skipped
+    rather than guessed at. It never opens a blob and never touches a file.
+    """
+    params = parse_qs(query or "", keep_blank_values=True)
+    raw = _param(params, "limit").strip()
+    if raw:
+        try:
+            limit = int(raw)
+        except (TypeError, ValueError):
+            limit = 0
+        if limit < 1 or limit > MAX_SNAPSHOTS:
+            return 400, _guardian_refusal(
+                "bad_limit",
+                f"The page size must be a whole number from 1 to {MAX_SNAPSHOTS}.",
+                GUARDIAN_SNAPSHOTS_PATH)
+    else:
+        limit = DEFAULT_SNAPSHOTS
+    try:
+        found = read_rows()
+    except Exception as exc:
+        return 500, _guardian_refusal(
+            "unreadable",
+            f"The file guardian's history could not be read ({type(exc).__name__}).",
+            GUARDIAN_SNAPSHOTS_PATH)
+    entries = []
+    for order, row in enumerate(found if isinstance(found, list) else []):
+        if not isinstance(row, dict):
+            continue
+        shown = _safe_text(row.get("path"), MAX_PATH_CHARS)
+        sha = _safe_text(row.get("before_sha256"), 64).lower()
+        if not shown or not sha:
+            continue
+        stamp = row.get("timestamp")
+        if isinstance(stamp, bool) or not isinstance(stamp, (int, float)):
+            stamp = 0.0
+        size = row.get("size")
+        size = (int(size) if isinstance(size, int) and not isinstance(size, bool)
+                and size >= 0 else 0)
+        entries.append((float(stamp), order, {
+            "path": shown,
+            "label": _label(shown),
+            "before_sha256": sha,
+            "size": size,
+            "timestamp": float(stamp),
+            "when": (time.strftime("%Y-%m-%d %H:%M", time.localtime(float(stamp)))
+                     if stamp > 0 else ""),
+            "reason": _safe_text(row.get("reason"), MAX_REASON_CHARS),
+            "receipt_id": _safe_text(row.get("receipt_id"), MAX_RECEIPT_CHARS),
+        }))
+    entries.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    total = len(entries)
+    page = [entry for _stamp, _order, entry in entries[:limit]]
+    try:
+        usage = _safe_usage(read_usage())
+    except Exception:
+        usage = {}
+    if not total:
+        words = "No saved versions yet: Jarvis has not overwritten a file it keeps a copy of."
+    else:
+        words = (f"Showing the {len(page)} most recent of {total} saved version(s). "
+                 "Only this PC's own guardian store is read.")
+    return 200, {"ok": True, "refused": False, "why": "", "count": len(page),
+                 "total": total, "limit": limit, "more": total > limit,
+                 "snapshots": page, "usage": usage, "words": words}
+
+
+def _diff_answer(query: str, differ) -> tuple:
+    """(status, answer) for GET /api/guardian/diff?path=<file>&sha_before=<sha>.
+
+    The module's own answer is passed back UNCHANGED: its own allowed-folder
+    rules, its own sha check, its own MAX_DIFF_BYTES bound and its own plain
+    refusals. This route only refuses a missing/oversized pair of inputs.
+    """
+    params = parse_qs(query or "", keep_blank_values=True)
+    path = _param(params, "path").strip()
+    sha = _param(params, "sha_before").strip()
+    if not path or not sha:
+        return 400, _guardian_refusal(
+            "bad_request",
+            "Say which file and which saved version (path and sha_before).",
+            GUARDIAN_DIFF_PATH)
+    if len(path) > MAX_PATH_CHARS or len(sha) > 64:
+        return 400, _guardian_refusal(
+            "bad_request", "That path or saved version is too long to be one.",
+            GUARDIAN_DIFF_PATH)
+    answer = differ(path, sha)
+    if not isinstance(answer, dict):
+        return 500, _guardian_refusal(
+            "unreadable", "The difference could not be worked out.", GUARDIAN_DIFF_PATH)
+    return 200, dict(answer)          # the module's own answer, unchanged
+
+
+def handle_get(path: str, query: str = "", *, peer=None, local=None) -> tuple:
+    """(http status, reply) for one of PATHS. Never raises.
+
+    `peer` and `local` are the request's own socket addresses, handed in by
+    `install()`; the guardian history uses them to refuse another device
+    BEFORE it reads anything. A direct in-process call omits them (there is no
+    network request to place), and `jarvis_owner_check.from_this_pc` answers
+    for a request with no peer the way it always has.
+    """
+    if path in (GUARDIAN_SNAPSHOTS_PATH, GUARDIAN_DIFF_PATH):
+        if not _from_this_pc(peer, local):
+            return 403, _guardian_refusal("not_this_pc", NOT_THIS_PC, path)
+        try:
+            import jarvis_file_guardian as engine
+        except Exception:
+            return 501, _guardian_refusal("update", UPDATE, path)
+        if path == GUARDIAN_SNAPSHOTS_PATH:
+            read_rows = getattr(engine, "rows", None)
+            if not callable(read_rows):
+                return 501, _guardian_refusal("update", UPDATE, path)
+            try:
+                return _snapshot_page(query, read_rows, getattr(engine, "usage", None))
+            except Exception:
+                return 500, _guardian_refusal(
+                    "unreadable", "The file guardian's history could not be read.", path)
+        differ = getattr(engine, "diff_versions", None)
+        if not callable(differ):
+            return 501, _guardian_refusal("update", UPDATE, path)
+        try:
+            return _diff_answer(query, differ)
+        except Exception:
+            return 500, _guardian_refusal(
+                "unreadable", "The difference could not be worked out.", path)
     if path == SEARCH_PATH:
         try:
             import jarvis_chat_log
@@ -207,9 +422,23 @@ def install(handler_cls, *, origin_ok, token_ok, read_body=None) -> str:
     is GET-only."""
     widgets = _install_widgets(handler_cls, origin_ok, token_ok, read_body)
     if getattr(handler_cls.do_GET, "_jarvis_brain_reads", False):
-        return ("  brain      Search old chats, fact history, a chat's facts and PC help "
-                "(already on)" + widgets)
+        return ("  brain      Search old chats, fact history, a chat's facts, PC help and "
+                "the file guardian's history (already on)" + widgets)
     get0 = handler_cls.do_GET
+
+    def _peer_local(self) -> tuple:
+        """(peer, local) for this request, best effort. The guardian routes
+        fail CLOSED when they cannot be had (jarvis_owner_check's own rule)."""
+        peer = local = None
+        try:
+            peer = self.client_address[0]
+        except Exception:
+            pass
+        try:
+            local = self.connection.getsockname()[0]
+        except Exception:
+            pass
+        return peer, local
 
     def _allowed(self) -> bool:
         try:
@@ -231,7 +460,8 @@ def install(handler_cls, *, origin_ok, token_ok, read_body=None) -> str:
             return get0(self)
         if not _allowed(self):
             return None
-        code, out = handle_get(route, parsed.query)
+        peer, local = _peer_local(self)
+        code, out = handle_get(route, parsed.query, peer=peer, local=local)
         return self._send(code, out)
 
     do_GET._jarvis_brain_reads = True
@@ -267,7 +497,6 @@ def install(handler_cls, *, origin_ok, token_ok, read_body=None) -> str:
 
         handler_cls.do_POST = do_POST
     return "  brain      Search old chats, fact history, a chat's facts and PC help: on" + widgets
-
 
 def _install_widgets(handler_cls, origin_ok, token_ok, read_body) -> str:
     """"Widgets you describe" (jarvis_widgets.py): its own routes, wrapped

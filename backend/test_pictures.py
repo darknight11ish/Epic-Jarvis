@@ -771,26 +771,11 @@ def t_the_api_document_has_the_section_and_it_matches_this_code():
 #: writes down that they meant to. That is the price of a check that bites, and
 #: it is why the failure message below spells out the difference instead of
 #: saying "the document changed".
-EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 140))   # 129 ..= 139
-#: 139 is the self-improvement diagnostics section added 2026-10-17 by this
-#: branch's own two read-only GET routes (`## 139. Self-improvement diagnostics:
-#: two read-only GETs, and everything they cannot do`). The list must name it in
-#: the same commit that adds it, which is exactly how the check below says a new
-#: section is meant to arrive: one visible line, on purpose.
-#: 137 is a REAL section in this tree, not a gap: `## 137. Starting the local
-#: model when it is not running` is this branch's own model-lanes section, and it
-#: is in `docs/JARVIS-API.md` here, so the tail reads 129 ..= 139 with no hole.
-#:
-#: On `main` alone the tail is 129 ..= 136 and then 138 - `range(129, 137) +
-#: (138,)` - because 137 was reserved for `skills.lock` (PR #455) and that
-#: section landed as 138. Merging this branch fills that gap, so 137 has to be
-#: named here too. Main's form would still PASS on this tree (`missing` only
-#: demands the numbers the list names, and `extra` only looks above the list's
-#: last element) but it would stop watching 137 - and watching the whole tail is
-#: the one thing this check exists for.
-#:
-#: Measured in this worktree, not reasoned: `^## 137\.` matches once, `^## 138\.`
-#: matches once, the highest section is 138, and both lists below come out empty.
+EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 141))   # 129 ..= 140
+#: 139 is PR #549's self-improvement diagnostics section (it merges FIRST),
+#: and 140 is THIS branch's file-guardian history (PR #568, added after it).
+#: They are stacked in that merge order, so the tail reads 129 ..= 140 with
+#: no hole and no repeat. When the branches land this list stays the same.
 
 
 def t_every_section_from_129_up_is_still_in_the_document():

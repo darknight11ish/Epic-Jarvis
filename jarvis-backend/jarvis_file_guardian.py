@@ -120,8 +120,19 @@ WHAT THIS MODULE DOES NOT DO, SAID PLAINLY
     is the caller's action and goes through the caller's own gate, as always.
     The one place a card is raised here is the restore, because a restore
     itself overwrites the file.
-  * It has no route, no chat tool and no call site yet. This is the module and
-    its suite; wiring it in is a later, separately-approved slice.
+  * TWO READ-ONLY routes expose its history since 2026-10-18 (LM-2A):
+    `GET /api/guardian/snapshots` (the journal, newest first and bounded) and
+    `GET /api/guardian/diff` (the bounded unified diff this module already
+    works out), answered by `jarvis_brain_reads.py` and documented in
+    JARVIS-API section 140. They read the store and nothing else; a request
+    from another device is refused BEFORE anything is read; neither writes.
+    There is still NO restore route and no chat tool: `restore_version()` is
+    not reachable from any production path yet, and that is the next,
+    separately-gated slice.
+  * The backend cannot see App lock or "Hide memory lists" (both are
+    desktop-side state), so no read route can withhold itself on those; the
+    desktop's own drawer must hide while either is on, and JARVIS-API section
+    140 records that as the remaining gap rather than pretending it does.
   * It is not a backup and not encryption. The copies sit in the owner's
     settings folder on this PC, readable by this process and by anything else
     that can read that folder; nothing here sends them anywhere, and nothing
