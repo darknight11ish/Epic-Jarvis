@@ -158,7 +158,13 @@ class LiveService : Service() {
                     listen()
                 } catch (t: Throwable) {
                     Log.w(TAG, "Jarvis Live listening stopped", t)
-                    JarvisRuntime.liveNotice("The microphone stopped. Start Jarvis Live again from the Live screen.")
+                    // WHICH failure it was (the owner's Pixel 9, 2026-10-17):
+                    // a permission refusal or a foreground-service refusal has
+                    // its own line and its own reason for the PC - it must
+                    // never reach the end screen as "the owner ended it".
+                    val stop = classifyStop(t) ?: LiveRules.LiveStop.MIC_STOPPED
+                    refusedStop = stop
+                    JarvisRuntime.liveNotice(LiveRules.stopWords(stop))
                 } finally {
                     running = false
                     stopSelf()
@@ -270,8 +276,11 @@ class LiveService : Service() {
     private suspend fun listen() {
         val voice = JarvisRuntime.voice
         if (!hasMicPermission()) {
-            JarvisRuntime.liveNotice("Jarvis needs the microphone for Jarvis Live. Allow it, then start Live again.")
-            JarvisRuntime.liveStop("owner")
+            // The microphone permission is off: its own reason, never the
+            // owner's End (2026-10-17).
+            refusedStop = LiveRules.LiveStop.MIC_PERMISSION
+            JarvisRuntime.liveNotice(LiveRules.stopWords(LiveRules.LiveStop.MIC_PERMISSION))
+            JarvisRuntime.liveStop(LiveRules.whyOf(LiveRules.LiveStop.MIC_PERMISSION))
             return
         }
         // Smart Turn: optional. Without it a sentence ends after the fixed pause.
@@ -601,12 +610,13 @@ class LiveService : Service() {
             true
         } catch (e: Exception) {
             // Android 14+ refuses a microphone service started from the
-            // background or without the permission. Said, never retried.
+            // background, or the permission is off. WHICH one is recorded
+            // (2026-10-17) so the runtime can tell the PC the truth and the
+            // end screen never blames the owner. Said, never retried.
             Log.w(TAG, "startForeground refused", e)
-            JarvisRuntime.liveNotice(
-                "Android did not let Jarvis Live listen from the background. Open Jarvis, " +
-                    "then start Live from the Live screen.",
-            )
+            val stop = classifyStop(e) ?: LiveRules.LiveStop.FGS_REFUSED
+            refusedStop = stop
+            JarvisRuntime.liveNotice(LiveRules.stopWords(stop))
             running = false
             listening.value = false
             false
@@ -625,6 +635,32 @@ class LiveService : Service() {
         /** The "Live is on your PC - move it here?" heads-up channel. */
         const val OFFER_CHANNEL_ID = "jarvis_live_offer"
         private const val OFFER_ID = NotificationIds.LIVE_OFFER
+
+        /**
+         * Why the microphone service last refused to start or stopped, as the
+         * phone could tell - null when the last start was fine. Set where the
+         * failure is caught ([goForeground], the listen loop, [start]); read by
+         * `JarvisRuntime.liveStop` so the PC gets `fgs_refused` /
+         * `mic_permission` / `mic_stopped` instead of a default "owner"
+         * (2026-10-17). The DECISION itself is pure:
+         * [LiveRules.stopForClasses], run by the JVM tests.
+         */
+        @Volatile var refusedStop: LiveRules.LiveStop? = null
+
+        /** The throwable's class and its superclasses, as names - what the pure decision reads. */
+        private fun classPath(t: Throwable): List<String> {
+            val names = mutableListOf<String>()
+            var c: Class<*>? = t.javaClass
+            while (c != null) {
+                names += c.name
+                c = c.superclass
+            }
+            return names
+        }
+
+        /** Which stop a caught failure is, or null when it does not say. */
+        fun classifyStop(t: Throwable?): LiveRules.LiveStop? =
+            t?.let { LiveRules.stopForClasses(classPath(it)) }
 
         /**
          * True while the service holds the microphone as a foreground
@@ -651,16 +687,19 @@ class LiveService : Service() {
         private const val CHECK_EVERY_STEPS = 5
 
         /** Call from the app's own screen, or from a reply the app received in front. False when Android refused. */
-        fun start(context: Context): Boolean =
-            runCatching {
+        fun start(context: Context): Boolean {
+            refusedStop = null            // a fresh attempt: forget the last refusal
+            return runCatching {
                 ContextCompat.startForegroundService(context, Intent(context, LiveService::class.java))
-            }.onFailure {
-                Log.w(TAG, "could not start", it)
-                JarvisRuntime.liveNotice(
-                    "Android did not let Jarvis Live listen from the background. Open Jarvis, then " +
-                        "start Live from the Live screen.",
-                )
+            }.onFailure { t ->
+                Log.w(TAG, "could not start", t)
+                // Which refusal it was: the runtime reports THIS reason to the
+                // PC (2026-10-17), never a default "owner".
+                val stop = classifyStop(t) ?: LiveRules.LiveStop.FGS_REFUSED
+                refusedStop = stop
+                JarvisRuntime.liveNotice(LiveRules.stopWords(stop))
             }.isSuccess
+        }
 
         /**
          * "Hey Jarvis" to this phone while Live runs on the PC: a heads-up,

@@ -65,7 +65,9 @@ the gate):
   trust setting on the Voice check screen and "Interrupting Jarvis" on the
   Readiness screen.
 - Both apps are held to one table, `live-cases.json`
-  (`tools/gen_live_cases.py`).
+  (`tools/gen_live_cases.py`) - the sign, listening, replies, the fixed lines,
+  the interrupt setting, and (2026-10-17) every reason Live may end with, the
+  PC's and the phone's words for it, and the reasons an app may send.
 
 **The owner's answers, as built:**
 
@@ -390,6 +392,26 @@ stays on. Android
 allows this: the hands-free listener already keeps a microphone service
 running with the screen off (`WakeWordService.kt:824`, foreground service
 type microphone).
+
+**The microphone service, and the end that accused him (2026-10-17).** The
+owner's Pixel 9 starts Live, hears nothing, and ends with "Jarvis Live ended -
+You ended it." above "Android did not let Jarvis Live listen from the
+background." Two different events had shared one sentence:
+`startForeground(..., MICROPHONE)` was refused (Android 14+ will not start a
+microphone service from the background), and an end nobody supplied reached
+the PC as `why: "owner"`, whose words ARE "You ended it.". **Fixed in the
+code, NOT device-verified:** the phone classifies the failure at the catch - a
+`ForegroundServiceStartNotAllowedException` is `fgs_refused`, a
+`SecurityException` is `mic_permission`, anything else `mic_stopped` - and the
+PC words each one (`APP_END_REASONS` / `END_WORDS`); an unknown or missing
+reason is now `unknown` ("Live ended.") and never `owner`. The decision is ONE
+pure function (`LiveRules.stopForClasses`), so its JVM test runs without a
+device, and `live-cases.json` carries every reason, both word sets and the
+reasons an app may send - read by the phone's JVM test and
+`backend/test_live.py` alike. What this does NOT do is make Android allow the
+service: the next attempt will now SAY which refusal it was (the end screen
+names Android or the permission), and that answer is what any "start it from
+the front" fix must wait for.
 
 **Only one Live session at a time.** Starting Live on the phone ends one on
 the PC, and the other way round. While Live runs on one device, "Hey Jarvis"

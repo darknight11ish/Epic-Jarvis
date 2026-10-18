@@ -462,7 +462,10 @@ pub async fn live_stop(app: AppHandle) -> Result<serde_json::Value, String> {
     stop(&app, "owner").await
 }
 
-/// `why`: "owner", "app_lock" or "locked" (backend `APP_END_REASONS`).
+/// `why`: "owner", "app_lock" or "locked" (backend `APP_END_REASONS`; the
+/// phone may also send "fgs_refused", "mic_permission" or "mic_stopped" when
+/// Android is what stopped its microphone, 2026-10-17). The desktop only ever
+/// sends its own three.
 pub(crate) async fn stop(app: &AppHandle, why: &str) -> Result<serde_json::Value, String> {
     // Here first: the microphone closes even if the PC cannot be reached.
     ended_here(app).await;

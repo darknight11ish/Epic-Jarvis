@@ -707,7 +707,8 @@ def t_review_fixes_2026_09_28():
     # The words.
     check("no fixed line says 'desktop' (it is 'your PC')",
           all("desktop" not in str(v).lower() for d in (L.SEEN, L.PAUSE_WORDS, L.MUTE_WORDS,
-                                                         L.END_WORDS, L.END_SAID, L.LINES)
+                                                         L.END_WORDS, L.END_SAID, L.LINES,
+                                                         L.APP_STOP_WORDS)
               for v in d.values()) and L.device_words("desktop") == "PC")
     check("every pause and mute line says what happens next or what to do",
           all(" - " in v for v in list(L.PAUSE_WORDS.values()) + list(L.MUTE_WORDS.values())))
@@ -1391,8 +1392,12 @@ def t_the_route():
               L.ENGINE.status()["on"])
         h = H("/api/voice/live", json.dumps({"do": "stop", "why": "stop_all"}).encode())
         h.do_POST()
-        check("POST stop with a reason an app may not give: 'you ended it'",
-              L.ENGINE.status()["ended"] == "owner", L.ENGINE.status())
+        # WAS "you ended it": this check used to PIN THE LIE. A reason an app
+        # may not give (stop_all is the PC's own; "unknown" is the fallback)
+        # must never reach either app's end screen as "You ended it."
+        check("POST stop with a reason an app may not give: 'Live ended.', never 'you ended it'",
+              L.ENGINE.status()["ended"] == "unknown"
+              and L.ENGINE.status()["ended_words"] == "Live ended.", L.ENGINE.status())
         h = H("/api/voice/live", b"{not json")
         h.do_POST()
         check("a bad body: 400", FakeHandler.sent[0] == 400)
@@ -1535,6 +1540,59 @@ def t_the_shared_table_is_current():
     check("the camera switch never shows on the desktop, nor with the camera not ready",
           all(not c["want"] for c in table["camera"]
               if c["me"] == "desktop" or not table["statuses"][c["status"]]["camera"]["ready"]))
+    check("the table's app-stop words are jarvis_live's",
+          table["app_stop_words"] == L.APP_STOP_WORDS)
+    check("every reason an app may send has words - no raw wire code can reach a screen",
+          set(L.APP_END_REASONS) <= set(L.END_WORDS)
+          and set(L.APP_STOP_WORDS) <= set(L.APP_END_REASONS)
+          and "unknown" not in L.APP_END_REASONS)
+
+
+def t_an_end_nobody_explained_never_blames_the_owner():
+    """The owner's Pixel 9, 2026-10-17, THE LIE: Live ended and both apps said
+    "You ended it." He had ended nothing - Android had refused the microphone
+    foreground service, and an end nobody supplied reached the PC as `why:
+    "owner"`. The phone's split catch now reports which refusal it was
+    (`fgs_refused` / `mic_permission` / `mic_stopped`), the PC words each one,
+    and an END NOBODY SUPPLIED is "unknown" ("Live ended."), never "owner"."""
+    w = World()
+    e = w.engine
+    for why in ("fgs_refused", "mic_permission", "mic_stopped"):
+        e.start("phone")
+        back = e.stop(why)["status"]
+        check(f"an end reported as {why} is accepted and worded, not 'You ended it'",
+              back["ended"] == why and back["ended_words"] == L.END_WORDS[why]
+              and "You ended it" not in (back["ended_words"] or "")
+              and why in L.APP_END_REASONS, back)
+    old = L.ENGINE
+    L.ENGINE = e
+    try:
+        # The route the phone actually posts to, not only the engine.
+        for why in ("fgs_refused", "mic_permission", "mic_stopped"):
+            e.start("phone")
+            code, out = L.handle_post({"do": "stop", "why": why, "device": "phone"})
+            check(f"POST stop why={why} keeps its reason (not turned into 'owner')",
+                  code == 200 and out["status"]["ended"] == why
+                  and out["status"]["ended_words"] == L.END_WORDS[why], out)
+        for body in ({"do": "stop", "device": "phone"},
+                     {"do": "stop", "why": "something_the_phone_invented",
+                      "device": "phone"}):
+            e.start("phone")
+            code, out = L.handle_post(body)
+            check(f"an end nobody explained ({body.get('why')!r}) is 'unknown', never the owner",
+                  code == 200 and out["status"]["ended"] == "unknown"
+                  and out["status"]["ended_words"] == "Live ended."
+                  and "You ended it" not in (out["status"]["ended_words"] or ""), out)
+    finally:
+        L.ENGINE = old
+    e.start("phone")
+    check("the owner's own End still says exactly 'You ended it.'",
+          e.stop("owner")["status"]["ended_words"] == "You ended it.")
+    e.start("phone")
+    check("an engine stop with an unknown reason is 'unknown' too (the fallback is not 'owner')",
+          e.stop("not-a-reason")["status"]["ended"] == "unknown")
+    check("'unknown' is the PC's fallback only - no app may send it",
+          "unknown" not in L.APP_END_REASONS)
 
 
 if __name__ == "__main__":

@@ -11362,7 +11362,8 @@ sent as the `live` event on every change (the same object).
   raised in THIS session (which pauses Live and hides the tap buttons) from
   one that was already waiting (which does neither).
 - `ended_words` - why it ended, as a whole sentence ("You ended it.", "App
-  lock came on.", "The PC went to sleep."...). `ended_say` - the fixed line
+  lock came on.", "The PC went to sleep.", "Android ended it: it would not let
+  Jarvis Live use the microphone in the background."...). `ended_say` - the fixed line
   the device the session was on SAYS when Live ended by itself ("Live
   ended - the time was up."); null for the owner's own End (an end tone
   only), "that's all" (already answered), Stop everything, and a locked or
@@ -11406,11 +11407,28 @@ One action per request; only these fixed words are read.
 | Body | What it does | Held on a stale link? |
 |---|---|---|
 | `{"do": "start", "device", "by"?: "button"\|"tray"\|"hotkey", "minutes"?, "conversation_id"?}` | Starts Live on that device (ends one on the other). **No card** ("What asks first" lists it as a fixed row, "Start Jarvis Live - does it without asking"). 409 with `"needs": "voice"` and, in `error`, "Jarvis Live didn't start: it needs your voice trained first - Settings, then Voice." (the phone's: "- Settings, then Train my voice.") until the owner's voice print and the better voice model are there; both apps add a button that goes there. On Standby it starts and says "Waking up, a few seconds"; otherwise it loads the everyday model. Returns `status` and the `say` line | Yes |
-| `{"do": "stop", "why"?: "owner"\|"app_lock"\|"locked"\|"screen_lock", "device"?}` | Ends it. `screen_lock` ("The phone's screen locked.") is the phone's, under its "End Live when: Only when the phone's screen locks" (63.4) | **Never** |
+| `{"do": "stop", "why"?: "owner"\|"app_lock"\|"locked"\|"screen_lock"\|"fgs_refused"\|"mic_permission"\|"mic_stopped", "device"?}` | Ends it. `screen_lock` ("The phone's screen locked.") is the phone's, under its "End Live when: Only when the phone's screen locks" (63.4). The last three are the PHONE's own microphone-service reasons (2026-10-17), each with its own sentence: `fgs_refused` ("Android ended it: it would not let Jarvis Live use the microphone in the background."), `mic_permission` ("Jarvis needs the microphone for Jarvis Live. Allow it, then start Live again."), `mic_stopped` ("The microphone stopped. Start Jarvis Live again from the Live screen."). **Any other `why`, or none, ends as `unknown`** ("Live ended.") - never `owner`, which both apps word "You ended it." | **Never** |
 | `{"do": "active", "device"?, "conversation_id"?}` | The owner typed, or tapped a quick answer, in Live: the quiet clock starts again, as a spoken sentence does. `conversation_id` names the session's chat when it has none yet (a voice or tray start; the first one wins). Nothing typed comes here (the words go to the chat route as usual); it can only keep open a session that is already on | **Never** |
 | `{"do": "extend", "minutes"?}` | More time (20 by default), never more than 2 hours ahead | Yes |
 | `{"do": "resume"}` | "Carry on" after a voice pause | Yes |
 | `{"do": "mute"\|"unmute", "why"?: "owner"\|"call"\|"mic_in_use", "device"?}` | The microphone closes; the session and its time carry on; the quiet clock stands still. A call or another program ending never undoes the OWNER's Mute | **Never** |
+
+**Why the phone reports its own microphone-service reasons (the owner's Pixel
+9, 2026-10-17).** Live was tapped, Android refused the microphone foreground
+service, and the end reached the PC with no reason - so it became `owner` and
+BOTH apps told the owner "You ended it." when he had ended nothing. The phone
+now classifies the failure where it is caught: `ForegroundServiceStartNotAllowedException`
+-> `fgs_refused`, `SecurityException` -> `mic_permission`, anything else ->
+`mic_stopped` (never `owner`), and the PC words each one (`END_WORDS`,
+`APP_STOP_WORDS` for the app's own stopped line). The phone's decision is ONE
+pure function (`LiveRules.stopForClasses`), so its JVM test runs without a
+device; the shared table `live-cases.json` carries every reason, both word
+sets and the reasons an app may send, and is read by that JVM test AND by
+`backend/test_live.py` - so a clean merge cannot leave the two sides wording
+one event differently. **No device claim:** this makes the next attempt
+self-diagnose (the end screen will name Android or the permission) and stops
+the false blame; whether Android's refusal itself is fixed is a separate,
+device-verified question.
 
 Voice commands do the same (only from a clip that passed the owner check):
 "Hey Jarvis, let's talk" starts it (`started_by: "voice"`); "Okay Jarvis,
