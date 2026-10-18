@@ -1789,8 +1789,10 @@ def t_the_route_is_post_only_and_a_get_cannot_mutate():
           sent is not None and sent[0] == "original-post", sent)
     check("there is no GET route for the restore", B.GUARDIAN_RESTORE_PATH not in B.PATHS,
           B.PATHS)
-    check("... and POST_PATHS holds exactly that one route", B.POST_PATHS
-          == (B.GUARDIAN_RESTORE_PATH,), B.POST_PATHS)
+    # Two POSTs now share the door: the Today board's said-I'd-do switch
+    # (GTD-2, merged into main before this branch) and this restore route.
+    check("... and POST_PATHS holds the restore route and the Today switch",
+          B.POST_PATHS == (B.COCKPIT_PATH, B.GUARDIAN_RESTORE_PATH), B.POST_PATHS)
 
 
 def t_the_http_door_passes_the_two_strings_and_names_no_gate():
