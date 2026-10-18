@@ -392,14 +392,19 @@ def t_what_is_backed_up_and_what_is_excluded():
           "its weekly check-ins live in schedule.db", "goals.db" in B.SOURCE_DBS)
     # Every database file name a backend module opens must be on the list, so
     # the next one added cannot be forgotten the way projects.db and goals.db
-    # each were once.
+    # each were once. A `.jsonl` store is the same kind of decision and is
+    # scanned too (Frontier 2 audit, 2026-10-18) - the older `.db`-only regex
+    # could not see the File Guardian's journal, so a whole store could go
+    # missing without a red check.
     import re as _re
     opened = set()
+    opened_jsonl = set()
     for mod in sorted(HERE.glob("jarvis_*.py")):
         if mod.name == "jarvis_backup.py":
             continue
-        opened |= set(_re.findall(r"[\"']([A-Za-z0-9_-]+\.db)[\"']",
-                                  mod.read_text(encoding="utf-8")))
+        text = mod.read_text(encoding="utf-8")
+        opened |= set(_re.findall(r"[\"']([A-Za-z0-9_-]+\.db)[\"']", text))
+        opened_jsonl |= set(_re.findall(r"[\"']([A-Za-z0-9_-]+\.jsonl)[\"']", text))
     # The module's OWN register of deliberate exclusions, so a new database is
     # accounted for in one place. study.db (review decks, jarvis_decks.py)
     # joined the locked backup on 2026-09-30, the owner's decision; the search
@@ -408,6 +413,14 @@ def t_what_is_backed_up_and_what_is_excluded():
     NOT_BACKED_UP = set(B.NOT_BACKED_UP)
     check("every .db a backend module names is backed up (or written down here)",
           opened - NOT_BACKED_UP <= set(B.SOURCE_DBS), sorted(opened - NOT_BACKED_UP - set(B.SOURCE_DBS)))
+    excused_jsonl = {n for n in opened_jsonl if B.not_backed_up_reason(n)}
+    check("every .jsonl a backend module names is backed up or recorded too",
+          opened_jsonl - set(B.SETTINGS_NAMES) - excused_jsonl == set(),
+          sorted(opened_jsonl - set(B.SETTINGS_NAMES) - excused_jsonl))
+    check("every recorded non-SQLite exclusion says why, in plain words",
+          all(isinstance(w, str) and len(w) > 20
+              for w in B.NOT_BACKED_UP_PATHS.values()),
+          B.NOT_BACKED_UP_PATHS)
     check("study.db (review decks) is on the list of databases backed up",
           "study.db" in B.SOURCE_DBS and "study.db" in opened)
     check("the settings JSON is in", "settings/folders.json" in names)
@@ -615,6 +628,50 @@ def t_the_newly_covered_databases_and_named_files_really_go_in():
     check("the databases of the owner's install, split 16 + 6, are all accounted for",
           len(B.SOURCE_DBS) == 16 and len(B.NOT_BACKED_UP) == 6,
           f"{len(B.SOURCE_DBS)} backed up, {len(B.NOT_BACKED_UP)} excluded")
+
+
+def t_the_guardian_store_is_an_explicit_exclusion_never_a_silent_one():
+    """The File Guardian's store is device-local file history, not memory.
+
+    Frontier 2 audit, 2026-10-18: there is no `guardian.db`; the store is
+    `guardian/guardian.jsonl` (a path per saved version), `pins.json` and
+    `blobs/<sha256>.gz` (up to the 250 MiB quota in jarvis_file_guardian.py).
+    It was in neither SOURCE_DBS nor NOT_BACKED_UP, so a backup simply left it
+    out and no check said so. This proves the archive never carries it - a
+    blob store must not bloat a backup - and that every piece of the decision
+    is written down in words, so a new store cannot disappear the same way.
+    """
+    conf, _backups = fresh_conf()
+    guardian = conf / "guardian"
+    (guardian / "blobs").mkdir(parents=True)
+    (guardian / "guardian.jsonl").write_text(
+        '{"path": "C:\\\\Users\\\\owner\\\\notes.txt", "before_sha256": "%s"}\n'
+        % ("a" * 64), encoding="utf-8")
+    (guardian / "pins.json").write_text(
+        '{"pins": ["%s"]}' % ("a" * 64), encoding="utf-8")
+    (guardian / "blobs" / ("a" * 64 + ".gz")).write_bytes(b"COMPRESSED OLD BYTES" * 100)
+
+    zip_bytes, _manifest = B.build_archive()
+    names = zf_names(zip_bytes)
+    check("the guardian store never enters the archive",
+          not any(n.startswith("guardian/") for n in names),
+          [n for n in names if "guardian" in n])
+    check("...and its blob store cannot be reached by any other name",
+          not any(n.endswith(".gz") for n in names),
+          [n for n in names if n.endswith(".gz")])
+
+    blob = "guardian/blobs/" + ("a" * 64) + ".gz"
+    for path in ("guardian/guardian.jsonl", "guardian/pins.json", blob):
+        why = B.not_backed_up_reason(path)
+        check(f"{path} has a recorded reason", len(why) > 20, why)
+    why = B.not_backed_up_reason("guardian/guardian.jsonl")
+    check("...the journal's reason says device-local, not memory",
+          "device-local" in why, why)
+    check("the same record covers the other non-SQLite stores",
+          "energy" in B.not_backed_up_reason("energy.jsonl")
+          and "anchor" in B.not_backed_up_reason("ledger-anchors.jsonl"))
+    check("a store nobody wrote down gets no invented reason",
+          B.not_backed_up_reason("something-else.jsonl") == "")
 
 
 def t_the_settings_files_a_json_glob_cannot_reach_are_carried_and_put_back():

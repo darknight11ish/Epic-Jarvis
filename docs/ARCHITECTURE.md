@@ -46,7 +46,14 @@ it works.
    program uploads it, the same as anything else the owner puts there.
    That is the whole exception: one named file, always locked, never a
    general loosening of this invariant, and never anything Jarvis decides
-   to send anywhere on its own. `docs/JARVIS-API.md` §45.
+   to send anywhere on its own. `docs/JARVIS-API.md` §45. What the file
+   deliberately leaves out - the File Guardian's device-local store
+   (`guardian/`: journal, pins and `blobs/`) and the two non-SQLite
+   measurement/anchor files beside it - is recorded with a reason in
+   `jarvis_backup.py`'s `NOT_BACKED_UP` / `NOT_BACKED_UP_PATHS` and its
+   "EXPLICITLY NOT BACKED UP" section, and `test_backup.py` fails if a
+   backend module names a `.jsonl` store that is neither carried nor
+   written down.
 
    **A second named exception: support-chat details** (`jarvis_support.py`;
    the owner's decisions of 2026-09-28, "Customer-support chats"). In a
