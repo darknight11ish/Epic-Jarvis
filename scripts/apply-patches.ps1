@@ -1965,6 +1965,13 @@ $SHIPPED = @(
 # written, no route is opened, there is no cloud lane, and it is deliberately
 # unwired: no route, no chat tool, no approval card, no UI in either app.
 'jarvis_decision_lab.py'     # Red-team and pre-mortem: 1-3-1 brief, failure modes, local only
+# --- Pillar 14 slice 14A: the opt-in, RAM-only clipboard time machine (2026-10-17).
+# One in-memory deque of recent copied texts, OFF until the owner turns it on,
+# wiped on lock, refusing password managers, one-time codes, private keys and card
+# numbers; three pure transforms (CSV/TSV -> pipe table, pretty JSON, tracking
+# parameters off links). No file, no database, no route and no caller yet: the
+# desktop wiring is a later slice.
+'jarvis_clipboard.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.

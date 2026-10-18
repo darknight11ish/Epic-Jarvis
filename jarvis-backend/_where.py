@@ -1031,6 +1031,17 @@ SHIPPED = (
     # loopback-only: no cloud lane exists in the file. Deliberately unwired -
     # no route, no chat tool, no approval card, no UI in either app.
     "jarvis_decision_lab.py",
+    # --- Pillar 14 slice 14A, 2026-10-17: the opt-in, RAM-only clipboard
+    # time machine ---
+    # One in-memory deque of recent copied texts, OFF until the owner turns
+    # it on, wiped on lock, refusing password managers, one-time codes,
+    # private keys and card numbers, with three pure transforms (CSV/TSV
+    # to a pipe table, pretty JSON, tracking parameters stripped from
+    # links). No file, no database, no route and no caller yet: this is
+    # the module and its 141-check suite, and the desktop wiring (Pillar
+    # 14B) is a later slice after the commands.rs hand-off. Nothing it
+    # does leaves this PC.
+    "jarvis_clipboard.py",
 )
 
 
