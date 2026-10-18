@@ -22,7 +22,9 @@ so no owner's PC, no Ollama and no socket is needed:
     exactly the limit IS read, so the boundary is the limit and not an accident;
   * a happy diagnosis carries a citation whose quote is re-read from disk, and
     a citation's quote is SCRUBBED before it is returned - the raw citation
-    field would be a second display path with one fewer guard;
+    field would be a second display path with one fewer guard. The same is
+    proved end to end through the INSTALLED Handler's `do_GET`, with the whole
+    JSON reply checked for the secret (Q8 hardening on #549);
   * "could not establish it" (no answer, model down) is an ordinary answer with
     `found` False and a plain `why`, never a made-up citation;
   * the Ollama contract route reports all three outcomes, and the honest
@@ -268,6 +270,46 @@ def t_a_citation_quote_is_scrubbed_before_it_is_returned():
               "help@example.com" not in quote, quote)
         check("... and it is scrubbed, not dropped: the line is there in its place",
               "retry loop" in quote and "[redacted: e-mail]" in quote, quote)
+    finally:
+        M._run, M.default_roots = real_run, real_roots
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_the_installed_handler_never_returns_the_secret_end_to_end():
+    """The route driven through the installed Handler - the way the core does it.
+
+    Gemini's hardening request on #549 (Q8): drive `do_GET(
+    "/api/self-improve/diagnose?q=...")` against a line containing a test secret
+    and prove that removing the citation scrub breaks THIS test, not only a
+    unit-level call to `handle_get`. `Stand.get` calls the installed
+    `Handler.do_GET` after the real origin/token checks, so this is the whole
+    path the core takes; the whole JSON reply, every field, must be free of the
+    address, and the core's own handlers must never be reached.
+    """
+    root = _fixture_tree(_SECRET_LINE)
+    real_roots, real_run = M.default_roots, M._run
+    M.default_roots = lambda: (root,)
+    M._run = lambda *a, **k: _answer()
+    try:
+        stand = Stand()
+        stand.install()
+        code, body = stand.get("/api/self-improve/diagnose"
+                               "?q=where+is+the+backup+retry+loop+described")
+        whole = json.dumps(body, ensure_ascii=False, sort_keys=True)
+        check("E2E: the installed do_GET answers the diagnosis route 200",
+              code == 200 and isinstance(body, dict) and body.get("found") is True,
+              f"{code} {whole[:300]}")
+        check("E2E: the core's own handlers were never reached",
+              stand.calls == [], str(stand.calls))
+        check("E2E: no field of the whole reply carries the e-mail address",
+              "help@example.com" not in whole, whole[:400])
+        citations = body.get("citations") or []
+        quote = str(citations[0].get("quote")) if citations else ""
+        check("E2E: the citation is still there and scrubbed in place",
+              "retry loop" in quote and "[redacted: e-mail]" in quote, quote)
+        check("E2E: the plain-words rendering is scrubbed too",
+              "help@example.com" not in str(body.get("words")),
+              str(body.get("words"))[:300])
     finally:
         M._run, M.default_roots = real_run, real_roots
         shutil.rmtree(root, ignore_errors=True)
