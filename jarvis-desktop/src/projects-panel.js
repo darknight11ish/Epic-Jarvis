@@ -37,6 +37,11 @@ import { refreshProgress, setProgressVisible } from "./progress-panel.js";
 // JARVIS-API section 129). It sits beside the Progress pictures, above the
 // project list, and reads on its own - never blocking this page.
 import { refreshPictures, setPicturesVisible } from "./pictures-panel.js";
+// "File history" (LM-2C): the copies of files Jarvis changed, beside the
+// pictures and above the project list. It reads on its own, never blocks
+// this page, and Rust hides it whole while App lock or the private lists
+// are on (brain/guardian.rs).
+import { refreshGuardian, setGuardianVisible } from "./guardian-panel.js";
 import {
   APP_WORDS,
   appProjectBody,
@@ -260,6 +265,8 @@ export async function showProjects() {
   if (!state.open) refreshProgress();
   setPicturesVisible(!state.open);
   if (!state.open) refreshPictures();
+  setGuardianVisible(!state.open);
+  if (!state.open) refreshGuardian();
   if (state.again) {
     state.again = false;
     await showProjects();

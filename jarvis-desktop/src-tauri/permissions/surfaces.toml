@@ -1151,6 +1151,22 @@ permissions = [
   "allow-brain-pictures-make",
 ]
 
+# "File history" (LM-2C; JARVIS-API section 140; brain/guardian.rs): the copies
+# Jarvis took of a file before changing it - the module's own bounded diff, and
+# ONE restore that asks the PC, which raises the EXISTING undo_action card in
+# the Jarvis bar. Nothing is approved here. The whole drawer hides in Rust under
+# App lock and "Hide memory lists and chat history" before a file name is read,
+# and the list itself rides on brain_read's allowlist (`guardian_history`), so
+# only these two commands need a grant of their own. The Brain window only: no
+# other page draws a Restore button.
+[[set]]
+identifier = "brain-guardian"
+description = "Read the bounded difference of one file version Jarvis kept, and ask the PC to put it back (the PC raises ONE undo_action card in the Jarvis bar). The list is a brain_read section. Hidden whole under App lock and the hidden lists. Approves nothing."
+permissions = [
+  "allow-guardian-diff",
+  "allow-guardian-restore",
+]
+
 # The three controls, and ONLY the three controls: which is on, what draws, and
 # where the pictures are kept. The backend refuses all three from anywhere but
 # this PC, so this is the only window that can call them at all. No approval

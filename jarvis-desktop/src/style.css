@@ -3433,3 +3433,23 @@ thead .st-cell {
     outline-offset: 2px;
   }
 }
+
+/* ── File history (LM-2C; guardian-panel.js) ───────────────────────────────
+   The copies Jarvis took of a file before changing it. A row is the file's
+   name, when and why - never its words; the difference is one bounded <pre>
+   the owner asked for. The whole section is replaced by one sentence in Rust
+   while App lock or the hidden lists are on. */
+.guardian-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.guardian-row { display: flex; align-items: center; gap: 10px; justify-content: space-between;
+                padding: 8px 10px; border: 1px solid var(--border);
+                border-radius: 8px; }
+.guardian-row-body { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+.guardian-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.guardian-meta, .guardian-reason { color: var(--text-muted); font-size: 12px;
+                                   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.guardian-actions { display: flex; gap: 6px; flex: 0 0 auto; }
+.guardian-diff-card { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
+.guardian-diff-text { max-height: 360px; overflow: auto; white-space: pre-wrap;
+                      word-break: break-word; font-size: 12px; margin: 8px 0; }
+.guardian-diff-cut, .guardian-said { color: var(--text-muted); font-size: 12px; }
+.guardian-hidden .empty { margin: 0; }

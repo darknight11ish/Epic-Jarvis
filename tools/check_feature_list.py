@@ -217,6 +217,8 @@ LESSON_EXEMPT = {
     "interrupt": "the talk button stops the answer; there is nothing to learn",
     "temporary-chat": "one switch in the chat head; its own label is the lesson",
     "history-search": "a search box over the list it is above",
+    "file-history": "the drawer explains itself: it lists the copies Jarvis "
+                    "took and asks before a restore",
     "quiz": "the deck screen explains itself; it is revision, not a Jarvis feature",
     "decks": "the deck screen explains itself; a deck is yours, not Jarvis's",
     "pc-help": "five answers on one card; the card is the lesson",

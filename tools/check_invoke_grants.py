@@ -93,6 +93,7 @@ DYNAMIC_BELOW = {
     ("widget.js", "command"): "the widget's invoke(command, args) and invokeStrict(command, args); every caller passes a literal.",
     ("settings.js", "command"): "the settings window's invoke(command, args); every caller passes a literal.",
     ("tutorials.js", "name"): "tutorials.js's own invoke(name, args); every caller passes a literal.",
+    ("guardian-panel.js", "command"): "guardian-panel.js's own invoke(command, args) wrapper; every caller passes a literal (brain_read, guardian_diff, guardian_restore).",
     ("live-badge.js", "command"): "the Live badge's invoke(command, args); every caller passes a literal.",
     ("watch-badge.js", "command"): "the watch badge's invoke(command, args); every caller passes a literal.",
     ("floating.js", "command"): "the floating face's invoke(command, args); every caller passes a literal.",
