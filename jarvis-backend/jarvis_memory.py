@@ -2212,6 +2212,26 @@ class MemoryStore:
                 fw.audit_log("memory.erased", {"id": fid})   # the id only, never the words
         except Exception:
             pass
+        # DELETION REACHABILITY (audit DATA D5, 2026-10-18): a receipt's summary
+        # or its before/after snapshot can quote words a tool was given, and a
+        # private word is not a secret shape the receipts scrubber removes. Ask
+        # the receipts store to replace these words now. Best effort on purpose:
+        # the words are already out of memory.db above, and a missing or failing
+        # receipts module must not turn a finished erase into an error.
+        try:
+            import jarvis_receipts
+            jarvis_receipts.purge_words(old_text)
+        except Exception:
+            pass
+        # The file time machine keeps previous file bytes; a forgotten fact's
+        # words can sit in one of those copies. Remove the UNPINNED copies that
+        # contain them; a pinned version is the owner's own decision to keep
+        # (audit DATA D2/D5). Best effort, same reason as the receipts purge.
+        try:
+            import jarvis_file_guardian
+            jarvis_file_guardian.purge_words(old_text)
+        except Exception:
+            pass
         # Chat history is a different file with its own lock (jarvis_chat_log
         # .py) - done after this store's own transaction and scrub, so a slow
         # or failing chat-history delete can never leave a fact half-erased.

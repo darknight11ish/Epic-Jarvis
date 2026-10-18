@@ -481,6 +481,36 @@ class Events(unittest.TestCase):
         got = [e for e in EV.BUS.since(before)[0] if e.kind == "activity"]
         self.assertEqual([e.data["value"]["state"] for e in got], ["thinking"])
 
+    def test_a_long_or_secret_activity_detail_is_scrubbed_and_bounded(self):
+        """Audit DATA D7: the activity line leaves the PC over the event bus.
+        The detail is scrubbed like a log line and capped, so a future caller
+        cannot push a page title, a URL or a credential-shaped string to a
+        paired app through announce()."""
+        before = EV.BUS.latest
+        EV.set_activity("working", "password=hunter2 and " + "A" * 500)
+        detail = EV.activity()["detail"]
+        self.assertNotIn("hunter2", detail)
+        self.assertLessEqual(len(detail), EV.ACTIVITY_DETAIL_MAX)
+        got = [e for e in EV.BUS.since(before)[0] if e.kind == "activity"]
+        self.assertTrue(got and "hunter2" not in str(got[-1].data))
+        EV.set_activity("idle")
+
+    def test_activity_detail_fails_closed_when_the_scrubber_is_missing(self):
+        """No scrubber means no detail, never raw text; the state still travels."""
+        import sys as _sys
+        keep = _sys.modules.get("jarvis_scrub")
+        _sys.modules["jarvis_scrub"] = None
+        try:
+            EV.set_activity("working", "words that must not leave the PC")
+            self.assertEqual(EV.activity()["detail"], "")
+            self.assertEqual(EV.activity()["state"], "working")
+        finally:
+            if keep is None:
+                _sys.modules.pop("jarvis_scrub", None)
+            else:
+                _sys.modules["jarvis_scrub"] = keep
+            EV.set_activity("idle")
+
     def test_forget_makes_the_next_note_fire(self):
         """Its name is the contract. Deleting the key instead made it a
         baseline, so forget() followed by note() published nothing at all -

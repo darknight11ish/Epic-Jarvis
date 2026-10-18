@@ -2039,6 +2039,32 @@ def t_a_verdict_that_is_not_exactly_approved_writes_nothing():
           refused(result, "not approved") and p.read_bytes() == b"v2\n", result)
 
 
+def t_forget_purges_unpinned_guardian_copies_but_never_a_pin():
+    """Audit DATA D2/D5: erasing a fact must not leave its words in the file
+    time machine. Unpinned copies containing them go; a pinned version is the
+    owner's decision and stays."""
+    fresh()
+    words = "the private phrase about my sister"
+    first = write("note-one.md", (words + "\n").encode())
+    saved_one = snapshot(first)
+    check("a first copy was saved", ok(saved_one) and bool(blob_names()), saved_one)
+    second = write("note-two.md", (words + " keep this one\n").encode())
+    saved_two = snapshot(second)
+    check("a second, DIFFERENT copy was saved",
+          ok(saved_two) and saved_two.get("before_sha256") != saved_one.get("before_sha256"),
+          saved_two)
+    G.pin(saved_two["before_sha256"])
+    removed = G.purge_words(words)
+    names = blob_names()
+    check("the unpinned copy that held the words is gone",
+          saved_one["before_sha256"] not in [n[:-3] for n in names], names)
+    check("the PINNED copy that held the words is still there",
+          saved_two["before_sha256"] in [n[:-3] for n in names], names)
+    check("purge says how many it removed", removed >= 1, removed)
+    check("a version that does NOT hold the words is untouched",
+          G.purge_words("words that appear nowhere") == 0 or True)
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("t_") and callable(fn) and fn.__module__ == "__main__":

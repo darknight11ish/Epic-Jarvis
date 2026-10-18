@@ -684,6 +684,46 @@ def pinned() -> list:
     return _load_pins()
 
 
+def purge_words(text) -> int:
+    """Delete UNPINNED saved versions whose bytes contain `text`. Returns how many.
+
+    Audit DATA D2/D5 (2026-10-18): the file time machine keeps the bytes a file
+    had before Jarvis changed it, so a forgotten fact's words could survive in a
+    blob after the fact itself is erased. Forget/Erase call this with the erased
+    words; only blobs that still contain them go, and a PINNED version is never
+    removed (the pin is the owner's own decision to keep that version).
+    Best effort by design - an unreadable blob, a missing store or an unreadable
+    pins file means nothing is deleted rather than a pin being broken.
+    """
+    needle = " ".join(str(text or "").split()).encode("utf-8")
+    if not needle:
+        return 0
+    try:
+        pins = set(_load_pins(strict=False))
+    except Exception:
+        return 0                      # never guess "nothing is pinned"
+    directory = blobs_dir()
+    if not directory.is_dir():
+        return 0
+    removed = 0
+    for p in sorted(directory.glob("*.gz")):
+        sha = p.stem.lower()
+        if sha in pins:
+            continue
+        try:
+            raw = gzip.decompress(p.read_bytes())
+        except Exception:
+            continue
+        if needle.lower() not in raw.lower():
+            continue
+        try:
+            p.unlink()
+            removed += 1
+        except OSError:
+            continue
+    return removed
+
+
 def pin(sha256: str) -> dict:
     """Keep one saved version for good. Never raises; plain words on failure."""
     try:

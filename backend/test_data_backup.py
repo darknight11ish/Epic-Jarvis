@@ -43,6 +43,9 @@ made in a temp folder: **nothing in this file reads or writes the owner's real
       no `/RP` (no administrator, no stored password), and says in its own
       description that the snapshot it makes is NOT encrypted.
 """
+import argparse
+import contextlib
+import io
 import json
 import os
 import shutil
@@ -151,6 +154,45 @@ def _raised(fn):
     except Exception as exc:      # noqa: BLE001 - the point is to inspect it
         return exc
     return None
+
+
+# ---------------------------------------------------------------------------
+#   The snapshots are SEALED by default (2026-10-18, audit HIGH-4)
+# ---------------------------------------------------------------------------
+
+
+class _FakeKeyStore:
+    """The tests' stand-in for Windows Credential Manager: one dict, no OS."""
+
+    DATA: dict = {}
+
+    def __init__(self, target):
+        self.target = target
+
+    def read(self):
+        return _FakeKeyStore.DATA.get(self.target)
+
+    def write(self, value):
+        _FakeKeyStore.DATA[self.target] = value
+
+
+def _backup_args(src, dest, **kw):
+    fields = dict(action="backup", snapshot=None, source=str(src), dest=str(dest),
+                  keep=jdb.KEEP, seal=False, passphrase_env="JARVIS_TEST_NO_SUCH_ENV",
+                  passphrase_file=None, plaintext=False)
+    fields.update(kw)
+    return argparse.Namespace(**fields)
+
+
+def _run(fn, args):
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        code = fn(args)
+    return code, buf.getvalue()
+
+
+def _files_under(folder: Path):
+    return [f for f in Path(folder).rglob("*") if f.is_file()]
 
 
 # ---------------------------------------------------------------------------
@@ -1048,9 +1090,156 @@ def t_the_other_drive_is_a_note_and_the_program_folder_is_a_refusal():
 # ---------------------------------------------------------------------------
 
 
+def t_a_snapshot_is_sealed_by_default_and_leaves_no_plaintext_db():
+    print("\n--- t_a_snapshot_is_sealed_by_default_and_leaves_no_plaintext_db ---")
+    if jdb._crypto()[0] is None:
+        skip("a snapshot is sealed by default", "the `cryptography` package is not installed")
+        return
+    base = Path(tempfile.mkdtemp(prefix="jarvis-databak-sealed-", dir=ROOT_TMP))
+    src = build_source(base)
+    dest = base / "dest"
+    _FakeKeyStore.DATA.clear()
+    code, out = _run(jdb.cmd_backup, _backup_args(src, dest))
+    check("a default run succeeds, sealed", code == 0 and "(sealed)" in out, out[-800:])
+    check("... it names where the key is kept, in plain words",
+          "Windows Credential Manager" in out and jdb.BACKUP_KEY_TARGET in out, out[-800:])
+    entries = sorted(x.name for x in dest.iterdir())
+    check("the destination holds ONE .jba file (plus last-run.txt), not a folder",
+          len([n for n in entries if n.endswith(jdb.SEAL_SUFFIX)]) == 1
+          and not any(n.startswith(jdb.SNAP_PREFIX) and not n.endswith(jdb.SEAL_SUFFIX)
+                      for n in entries), entries)
+    files = _files_under(dest)
+    check("NO plaintext SQLite/DB file anywhere in the snapshot destination",
+          not [str(f) for f in files
+               if f.name.endswith((".db", ".db-wal", ".db-shm", ".db-journal"))], files)
+    check("... and no file starts with the SQLite header either",
+          not [str(f) for f in files if f.read_bytes()[:16] == b"SQLite format 3\x00"], files)
+    check("a sealed default run never prints the NOT SEALED warning",
+          "NOT SEALED" not in out, out[-400:])
+
+
+def t_old_plaintext_snapshots_are_named_with_the_owner_s_own_command():
+    print("\n--- t_old_plaintext_snapshots_are_named_with_the_owner_s_own_command ---")
+    if jdb._crypto()[0] is None:
+        skip("old plaintext snapshots are named, not deleted", "cryptography is not installed")
+        return
+    base = Path(tempfile.mkdtemp(prefix="jarvis-databak-oldplain-", dir=ROOT_TMP))
+    src = build_source(base)
+    dest = base / "dest"
+    dest.mkdir()
+    old = dest / f"{jdb.SNAP_PREFIX}20260101-030000"
+    old.mkdir()
+    (old / "memory.db").write_bytes(b"SQLite format 3\x00" + b"x" * 20)
+    (old / jdb.MANIFEST).write_text("{}", encoding="utf-8")
+    code, out = _run(jdb.cmd_backup, _backup_args(src, dest))
+    check("the sealed run succeeds", code == 0, out[-800:])
+    check("the old PLAINTEXT snapshot is NOT deleted automatically (owner ruling)",
+          old.exists(), old)
+    check("... it is NAMED in the output", old.name in out, out[-1200:])
+    check("... and the exact one-line owner command is printed",
+          "Remove-Item -LiteralPath @(" in out and old.as_posix() in out, out[-1200:])
+    check("... the output says the encrypted .jbak archives are untouched",
+          "encrypted .jbak archives are untouched" in out, out[-1200:])
+    sealed = [x for x in dest.iterdir() if x.name.endswith(jdb.SEAL_SUFFIX)]
+    check("the sealed snapshot is still written beside it", len(sealed) == 1, sealed)
+
+
+def t_the_snapshot_destination_holds_no_plaintext_canary():
+    print("\n--- t_the_snapshot_destination_holds_no_plaintext_canary ---")
+    if jdb._crypto()[0] is None:
+        skip("no plaintext canary in the snapshot destination", "cryptography is not installed")
+        return
+    base = Path(tempfile.mkdtemp(prefix="jarvis-databak-canary-", dir=ROOT_TMP))
+    src = build_source(base)
+    canary = "JARVIS-CANARY-7f3c9d-DO-NOT-APPEAR"
+    (src / "canary.txt").write_text(canary, encoding="utf-8")
+    dest = base / "dest"
+    _FakeKeyStore.DATA.clear()
+    code, out = _run(jdb.cmd_backup, _backup_args(src, dest))
+    check("the sealed run succeeds", code == 0, out[-600:])
+    blobs = {f: f.read_bytes() for f in _files_under(dest)}
+    check("NO file in the destination contains the plaintext canary string",
+          not [str(f) for f, data in blobs.items() if canary.encode() in data], list(blobs))
+    check("... nor the canary FILE NAME (a zip keeps names uncompressed)",
+          not [str(f) for f, data in blobs.items() if b"canary.txt" in data], list(blobs))
+    check("... and no file starts with the SQLite header",
+          not [str(f) for f, data in blobs.items() if data[:16] == b"SQLite format 3\x00"],
+          list(blobs))
+
+
+def t_verify_opens_a_key_sealed_snapshot():
+    print("\n--- t_verify_opens_a_key_sealed_snapshot ---")
+    if jdb._crypto()[0] is None:
+        skip("verify opens a key-sealed snapshot", "the `cryptography` package is not installed")
+        return
+    base = Path(tempfile.mkdtemp(prefix="jarvis-databak-verifykey-", dir=ROOT_TMP))
+    src = build_source(base)
+    dest = base / "dest"
+    _FakeKeyStore.DATA.clear()
+    code, out = _run(jdb.cmd_backup, _backup_args(src, dest))
+    check("a sealed default snapshot was made", code == 0, out[-800:])
+    args = argparse.Namespace(action="verify", snapshot=None, dest=str(dest),
+                              source=str(src), seal=False,
+                              passphrase_env="JARVIS_TEST_NO_SUCH_ENV",
+                              passphrase_file=None, plaintext=False)
+    code, out = _run(jdb.cmd_verify, args)
+    check("verify opens it with the key from Credential Manager, no passphrase typed",
+          code == 0 and "every database opens" in out, out[-800:])
+
+
+def t_plaintext_is_written_only_when_explicitly_asked():
+    print("\n--- t_plaintext_is_written_only_when_explicitly_asked ---")
+    base = Path(tempfile.mkdtemp(prefix="jarvis-databak-plain-", dir=ROOT_TMP))
+    src = build_source(base)
+    dest = base / "dest"
+    code, out = _run(jdb.cmd_backup, _backup_args(src, dest, plaintext=True))
+    check("--plaintext still writes a folder, and succeeds", code == 0, out[-800:])
+    check("... and the output says NOT SEALED out loud", "NOT SEALED" in out, out[-800:])
+    entries = sorted(x.name for x in dest.iterdir())
+    check("... the folder is a plaintext snapshot directory",
+          any(n.startswith(jdb.SNAP_PREFIX) and not n.endswith(jdb.SEAL_SUFFIX)
+              for n in entries), entries)
+
+
+def t_the_acl_check_names_other_user_aces():
+    print("\n--- t_the_acl_check_names_other_user_aces ---")
+    owner = "MARIOSBEASTDESK\\pcadmin"
+    clean = (f"{owner}:(F)\nNT AUTHORITY\\SYSTEM:(F)\n"
+             f"BUILTIN\\Administrators:(F)\n")
+    check("the owner, SYSTEM and Administrators are the allowed set",
+          jdb.acl_problems_from_icacls(clean, user="pcadmin") == [],
+          jdb.acl_problems_from_icacls(clean, user="pcadmin"))
+    for bad in ("Everyone:(R)", "BUILTIN\\Users:(RX)", "NT AUTHORITY\\Authenticated Users:(R)",
+                "MACHINE\\someone-else:(F)"):
+        got = jdb.acl_problems_from_icacls(bad + "\n", user="pcadmin")
+        check(f"an ACE for {bad.split('(')[0].strip()} is NAMED as a problem", bool(got), got)
+    check("a deny ACE for another user is also named (it still means the folder is shared)",
+          bool(jdb.acl_problems_from_icacls("Everyone:(DENY)(R)\n", user="pcadmin")))
+
+
+def t_a_sealed_run_warns_when_the_data_folder_is_readable_by_others():
+    print("\n--- t_a_sealed_run_warns_when_the_data_folder_is_readable_by_others ---")
+    if jdb._crypto()[0] is None:
+        skip("a sealed run warns about folder ACLs", "cryptography is not installed")
+        return
+    base = Path(tempfile.mkdtemp(prefix="jarvis-databak-acl-", dir=ROOT_TMP))
+    src = build_source(base)
+    dest = base / "dest"
+    saved = jdb.acl_problems
+    jdb.acl_problems = lambda source: ["BUILTIN\\Users has (RX)"]
+    try:
+        code, out = _run(jdb.cmd_backup, _backup_args(src, dest))
+    finally:
+        jdb.acl_problems = saved
+    check("the run still happens (a bad ACL is a warning, not a refusal)", code == 0, out[-800:])
+    check("... and the output NAMES the folder permission problem",
+          "WARNING" in out and "BUILTIN\\Users" in out and "permission" in out.lower(), out[-1200:])
+
+
 def main() -> int:
     global ROOT_TMP
     ROOT_TMP = tempfile.mkdtemp(prefix="jarvis-databak-")
+    jdb.KEY_STORE = lambda target: _FakeKeyStore(target)
     try:
         for fn in (t_no_network_call_anywhere_in_the_tool,
                    t_a_database_living_in_its_wal_is_snapshotted_whole,
@@ -1060,6 +1249,13 @@ def main() -> int:
                    t_a_restore_really_puts_the_data_back,
                    t_keeping_the_newest_few_touches_nothing_else,
                    t_a_sealed_snapshot_round_trips,
+                   t_a_snapshot_is_sealed_by_default_and_leaves_no_plaintext_db,
+                   t_old_plaintext_snapshots_are_named_with_the_owner_s_own_command,
+                   t_the_snapshot_destination_holds_no_plaintext_canary,
+                   t_the_acl_check_names_other_user_aces,
+                   t_a_sealed_run_warns_when_the_data_folder_is_readable_by_others,
+                   t_verify_opens_a_key_sealed_snapshot,
+                   t_plaintext_is_written_only_when_explicitly_asked,
                    t_sealing_without_the_library_writes_nothing,
                    t_a_nordlocker_locker_is_refused_as_a_destination,
                    t_two_runs_inside_one_second_do_not_collide,

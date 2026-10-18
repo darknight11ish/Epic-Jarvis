@@ -125,13 +125,33 @@ What he gets if he has never chosen: `~/jarvis-data-snapshots`, where the first
 copy of these snapshots went. It is a default, not a decision, and the folder he
 picks wins over it.
 
-**The one thing to know about a shared folder:** the `.jbak` half is encrypted
+SEALED BY DEFAULT (2026-10-18, audit HIGH-4)
+
+Every snapshot is now ONE sealed `.jba` file, using the same AES-256-GCM +
+Argon2id construction as the app's `.jbak` archives. The passphrase is 32 random
+bytes kept in **Windows Credential Manager** under `Jarvis Backend/data backup
+key`, made on the first run and never printed, never written to a file and never
+sent off this PC - so the destination folder no longer matters (a sync folder,
+another drive, a NAS) and a plaintext SQLite file is never left there. The cost,
+said plainly: **a sealed snapshot opens only on this Windows account on this
+PC**. If the profile or Credential Manager entry is lost, the snapshots cannot be
+opened - the `.jbak` archives (whose recovery code the owner holds) are the
+disaster-recovery path. `--plaintext` writes an old-style readable folder and is
+for debugging only; it says NOT SEALED in its output and in `last-run.txt`.
+
+The plaintext snapshots already on the PC are NOT deleted by this tool. After
+the first sealed snapshot, a run NAMES every old plaintext `jarvis-snap-*`
+folder still in its destination, says plainly that the encrypted `.jbak`
+archives are untouched, and prints the exact one-line PowerShell that removes
+them. Deleting somebody's old backups automatically is an action that waits for
+the owner's own command; `last-run.txt` carries the same names and command, and
+sealed/`.jbak`/`-INCOMPLETE`/`.partial` entries are never in that list.
+
+THE ONE THING TO KNOW ABOUT A SHARED FOLDER: the `.jbak` half is encrypted
 before it is written, so the app's own docstring rightly says a NordLocker or
-OneDrive folder is fine for *it*. These snapshots are **plain files** unless
-`--seal` is asked for, so if the folder he picks is one a sync program uploads,
-his memory and chat history are uploaded too. That is his decision to make
-with the folder picker in front of him (the app's own panel says so in those
-words), rather than something decided here by pointing this tool somewhere else.
+OneDrive folder is fine for *it*. Snapshots are sealed by default now (see SEALED BY DEFAULT below), so a sync
+folder receives ciphertext; before 2026-10-18 they were plain files, and any
+snapshot made then is deleted by the first sealed run.
 The validation refuses the places that are never right - a folder inside
 `~/.openjarvis`, inside this tool's own program folder, and inside a NordLocker
 locker. The locker is the one of the three that would otherwise LOOK like it
@@ -190,13 +210,13 @@ itself is a supported, documented option:
     NordLocker is installed but has no command line (GUI only), and
     `Compress-Archive` cannot password a file at all - so `cryptography` is the
     only safe option already present, and it is the one used;
-  * if `cryptography` is missing, `--seal` **refuses in plain words** and writes
-    nothing. It never quietly writes the data unsealed instead;
-  * the default is unsealed, on purpose: the weekly timer has no passphrase to
-    use, because the only place an unattended run could keep one is on the same
-    disk as the backup - which is the trade `jarvis_backup.py` deliberately
-    refuses to make. Sealing is for the runs the owner starts by hand, and for
-    a folder he later decides to sync.
+  * if `cryptography` is missing, even the default sealed run **refuses in plain
+    words** and writes nothing. It never quietly writes the data unsealed instead;
+  * the default is SEALED since 2026-10-18: the timer's key is kept in Windows
+    Credential Manager (not on the backup disk), so an unattended run can seal
+    without a human typing anything - the construction below is unchanged and
+    the key never leaves this PC. `--plaintext` exists for a deliberate
+    exception; a sealed snapshot opens only on this Windows account.
 
 NORDLOCKER - MEASURED, AND WHY A LOCKER IS REFUSED AS A DESTINATION
 (2026-10-13, on this PC, read-only first and then with a probe file that was
@@ -289,7 +309,7 @@ Restore is a real, testable path - to a spare folder, never over the live data:
     python tools/jarvis_data_backup.py restore <snapshot> --to <folder>
     python tools/jarvis_data_backup.py --install --register-task
 
-Standard library only, plus `cryptography` when `--seal` is asked for.
+Standard library only, plus `cryptography` (snapshots are SEALED by default).
 """
 from __future__ import annotations
 
@@ -366,6 +386,18 @@ def chosen_destination():
         return Path(value.strip())
     return None
 
+
+#: Where the key that seals every snapshot is kept: Windows Credential
+#: Manager, under its own name - the SAME store `jarvis_token_store.WindowsStore`
+#: uses for the pairing token and the chat-history key. This tool opens it with
+#: ctypes (standard library) so the installed single file needs no backend
+#: import, and the key never leaves this PC.
+BACKUP_KEY_TARGET = "Jarvis Backend/data backup key"
+
+#: Tests replace this with `factory(target) -> object with read()/write()` so a
+#: suite never touches the real Credential Manager (the same seam
+#: `jarvis_token_store._STORE_FACTORY` uses).
+KEY_STORE = None
 
 SNAP_PREFIX = "jarvis-snap-"
 INCOMPLETE = "-INCOMPLETE"
@@ -686,6 +718,87 @@ def older_snapshots_elsewhere(dest) -> list:
         return []
     return [{"folder": default, "count": len(rows),
              "newest": time.strftime("%Y-%m-%d %H:%M", time.localtime(rows[0]["at"]))}]
+
+
+def old_plaintext_snapshots(dest) -> list:
+    """The OLD PLAINTEXT snapshot folders still in `dest`, as names.
+
+    NOT deleted here, deliberately (Gemini's ruling on HIGH-4). The owner's PC
+    holds plaintext snapshots taken before this change; deleting another
+    person's backups automatically, even old copies, is the kind of action that
+    needs the owner's hand on the command. The run NAMES them, says what they
+    are, and prints the exact one-line PowerShell that removes them - after the
+    owner has seen a sealed snapshot and knows the encrypted `.jbak` archives
+    remain untouched. Sealed files, `-INCOMPLETE` entries and `.partial`
+    folders are not in this list."""
+    folder = Path(dest)
+    out = []
+    for row in list_snapshots(folder):
+        if not row["sealed"] and row["path"].is_dir():
+            out.append(row["name"])
+    return out
+
+
+def plaintext_delete_command(folder, names) -> str:
+    """The exact one-line PowerShell that removes those old folders.
+
+    Shown, never run: `-LiteralPath` so a name can never be taken as a pattern,
+    `-Recurse -Force` for the folder, and one line because the owner pastes it.
+    """
+    if not names:
+        return ""
+    paths = " , ".join(f"'{(Path(folder) / n).as_posix()}'" for n in names)
+    return f"Remove-Item -LiteralPath @({paths}) -Recurse -Force"
+
+
+#: ACEs that are the owner's own account (or the OS itself) - everything else
+#: can read the live data folder and is named as a problem. Windows profile
+#: folders normally carry SYSTEM, Administrators and the owner only.
+_ACL_ALLOWED_HINTS = ("nt authority\\system", "creator owner", "owner rights")
+
+
+def acl_problems_from_icacls(text: str, user: str | None = None) -> list:
+    """ACEs in `icacls <folder>` output that are NOT the owner/SYSTEM/Admins.
+
+    Audit DATA D2 (2026-10-18): `~/.openjarvis` holds the personal databases in
+    the clear, so "only this Windows account can read it" is part of the threat
+    model. A folder inherited from somewhere else can carry `Everyone:(R)` or
+    `BUILTIN\\Users:(RX)`; nothing in the app would ever say so. Returns a list of
+    plain problem strings (empty = clean). Pure text parsing, so the checker can
+    be tested without a Windows ACL.
+    """
+    user = (user or os.environ.get("USERNAME") or "").strip().lower()
+    problems = []
+    for raw in (text or "").splitlines():
+        line = raw.strip()
+        m = re.match(r"^(.+?):((?:\([^)]*\))+)\s*$", line)
+        if not m:
+            continue
+        who, perms = m.group(1).strip(), m.group(2)
+        low = who.lower()
+        if "successfully processed" in low or "failed processing" in low:
+            continue
+        allowed = any(hint in low for hint in _ACL_ALLOWED_HINTS)
+        if not allowed and "\\administrators" in low:
+            allowed = True
+        if not allowed and user and (low == user or low.endswith("\\" + user)):
+            allowed = True
+        if not allowed:
+            problems.append(f"{who} has {perms}")
+    return problems
+
+
+def acl_problems(source) -> list:
+    """Run the ACL read on `source` - [] when it cannot be read (never a reason
+    to fail a backup), the problems otherwise."""
+    if os.name != "nt":
+        return []
+    try:
+        done = subprocess.run(["icacls", str(source)], capture_output=True,
+                              text=True, errors="replace", timeout=15)
+    except Exception:
+        return []
+    return acl_problems_from_icacls(done.stdout)
 
 
 def _connect_ro(path, timeout=30.0) -> sqlite3.Connection:
@@ -1067,6 +1180,17 @@ def _write_last_run(dest: Path, result: dict) -> None:
     ]
     if result.get("dest_note"):
         lines.append(f"  NOTE: {result['dest_note']}")
+    if result.get("sealed_by") == "key":
+        lines.append(f"  sealed by the key in Windows Credential Manager "
+                     f"(\"{BACKUP_KEY_TARGET}\") - it never leaves this PC")
+    if result.get("plaintext_old"):
+        lines.append(f"  WARNING: {len(result['plaintext_old'])} old PLAINTEXT snapshot(s) "
+                     f"remain here and were NOT deleted: "
+                     f"{', '.join(result['plaintext_old'])}")
+        lines.append(f"  remove them with: {result.get('plaintext_command', '')}")
+    for problem in result.get("acl_problems") or []:
+        lines.append(f"  WARNING: folder permission lets someone else read the "
+                     f"live data folder: {problem}")
     for problem in result["problems"]:
         lines.append(f"  PROBLEM: {problem}")
     _write_text(dest / "last-run.txt", "\n".join(lines) + "\n")
@@ -1441,6 +1565,139 @@ def passphrase_from(args, *, required: bool = False) -> str:
     return phrase
 
 
+class _CredStore:
+    """advapi32's CredReadW/CredWriteW through ctypes - standard library, the
+    same three calls token_store.rs and jarvis_token_store.WindowsStore make.
+
+    Kept INSIDE this file on purpose: `--install` copies this one script to
+    %LOCALAPPDATA%\\JarvisDataBackup and the weekly task runs that copy, which
+    has no backend folder beside it to import from.
+    """
+
+    def __init__(self, target: str = BACKUP_KEY_TARGET):
+        if os.name != "nt":
+            raise Refused("there is no Windows Credential Manager on this system")
+        import ctypes
+        from ctypes import wintypes
+
+        class FILETIME(ctypes.Structure):
+            _fields_ = [("dwLowDateTime", wintypes.DWORD),
+                        ("dwHighDateTime", wintypes.DWORD)]
+
+        class CREDENTIALW(ctypes.Structure):
+            _fields_ = [("Flags", wintypes.DWORD),
+                        ("Type", wintypes.DWORD),
+                        ("TargetName", wintypes.LPWSTR),
+                        ("Comment", wintypes.LPWSTR),
+                        ("LastWritten", FILETIME),
+                        ("CredentialBlobSize", wintypes.DWORD),
+                        ("CredentialBlob", ctypes.POINTER(ctypes.c_ubyte)),
+                        ("Persist", wintypes.DWORD),
+                        ("AttributeCount", wintypes.DWORD),
+                        ("Attributes", ctypes.c_void_p),
+                        ("TargetAlias", wintypes.LPWSTR),
+                        ("UserName", wintypes.LPWSTR)]
+
+        api = ctypes.WinDLL("advapi32", use_last_error=True)
+        api.CredReadW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                                  ctypes.POINTER(ctypes.POINTER(CREDENTIALW))]
+        api.CredReadW.restype = wintypes.BOOL
+        api.CredWriteW.argtypes = [ctypes.POINTER(CREDENTIALW), wintypes.DWORD]
+        api.CredWriteW.restype = wintypes.BOOL
+        api.CredFree.argtypes = [ctypes.c_void_p]
+        api.CredFree.restype = None
+        self._ctypes, self._api, self._cred = ctypes, api, CREDENTIALW
+        self.target = target
+
+    def read(self):
+        c = self._ctypes
+        ptr = c.POINTER(self._cred)()
+        if not self._api.CredReadW(self.target, 1, 0, c.byref(ptr)):
+            if c.get_last_error() == 1168:          # ERROR_NOT_FOUND
+                return None
+            raise Refused(f"Windows Credential Manager could not be read "
+                          f"(error {c.get_last_error()})")
+        try:
+            cred = ptr.contents
+            size = int(cred.CredentialBlobSize)
+            raw = c.string_at(cred.CredentialBlob, size) if size and cred.CredentialBlob else b""
+        finally:
+            self._api.CredFree(c.cast(ptr, c.c_void_p))
+        try:
+            return raw.decode("utf-8").strip() or None
+        except UnicodeDecodeError:
+            raise Refused("the backup key in Credential Manager is not valid text") from None
+
+    def write(self, value: str) -> None:
+        c = self._ctypes
+        data = value.encode("utf-8")
+        blob = (c.c_ubyte * len(data)).from_buffer_copy(data)
+        cred = self._cred()
+        cred.Type = 1
+        cred.TargetName = self.target
+        cred.UserName = "jarvis"
+        cred.CredentialBlobSize = len(data)
+        cred.CredentialBlob = c.cast(blob, c.POINTER(c.c_ubyte))
+        cred.Persist = 2                              # CRED_PERSIST_LOCAL_MACHINE
+        ok = self._api.CredWriteW(c.byref(cred), 0)
+        code = c.get_last_error()
+        c.memset(blob, 0, len(data))                  # do not leave the copy lying about
+        if not ok:
+            raise Refused(f"the backup key could not be saved to Credential Manager "
+                          f"(error {code})")
+
+
+def key_store():
+    """The store the snapshot key lives in, or Refused saying why there is none.
+    `KEY_STORE` is the tests' seam; the real one is Windows Credential Manager."""
+    if KEY_STORE is not None:
+        return KEY_STORE(BACKUP_KEY_TARGET)
+    try:
+        return _CredStore(BACKUP_KEY_TARGET)
+    except Refused:
+        raise
+    except Exception as exc:
+        raise Refused("Windows Credential Manager could not be opened "
+                      f"({type(exc).__name__})") from None
+
+
+def default_passphrase(*, create: bool) -> str:
+    """The key the snapshots are sealed with, from Windows Credential Manager.
+
+    `create=True` makes one on the first run (32 random bytes, base64). It is
+    never printed, never written to a file and never leaves this PC: a sealed
+    snapshot opens on this Windows account and nowhere else. `create=False` is
+    for `verify`/`restore` and refuses in plain words when the key is absent.
+    """
+    st = key_store()
+    try:
+        value = (st.read() or "").strip()
+    except Refused:
+        raise
+    except Exception as exc:
+        raise Refused(f"the backup key could not be read from Credential Manager "
+                      f"({type(exc).__name__})") from None
+    if value:
+        return value
+    if not create:
+        raise Refused(
+            "this snapshot is sealed with the key kept in Windows Credential "
+            f"Manager under \"{BACKUP_KEY_TARGET}\", and that key is not on this "
+            "PC. It never leaves the PC that made the snapshot - a sealed snapshot "
+            "cannot be opened anywhere else.")
+    import base64
+    import secrets
+    value = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode("ascii")
+    try:
+        st.write(value)
+    except Refused:
+        raise
+    except Exception as exc:
+        raise Refused(f"a backup key could not be saved to Credential Manager "
+                      f"({type(exc).__name__}); nothing was written in the clear") from None
+    return value
+
+
 # ---------------------------------------------------------------------------
 #   Installing it somewhere stable, and the weekly timer
 # ---------------------------------------------------------------------------
@@ -1572,12 +1829,24 @@ def _print_snapshot(result: dict) -> None:
     m = result["manifest"]
     print(f"Jarvis personal data backup - {'OK' if result['ok'] else 'FAILED'}")
     print(f"  snapshot:   {result['name']}{'  (sealed)' if result['sealed'] else ''}")
+    if result.get("sealed_by") == "key":
+        print(f"  sealed by:  the key in Windows Credential Manager "
+              f"(\"{BACKUP_KEY_TARGET}\") - it never leaves this PC")
+    if result.get("plaintext_old"):
+        print(f"  WARNING:    {len(result['plaintext_old'])} old PLAINTEXT snapshot(s) are "
+              f"still in this folder: {', '.join(result['plaintext_old'])}")
+        print("  They are NOT deleted by this tool. The encrypted .jbak archives are "
+              "untouched. Once you have seen this sealed snapshot, remove them with:")
+        print(f"    {result.get('plaintext_command', '')}")
     print(f"  databases:  {m['totals']['databases']} "
           f"({m['totals']['database_rows']} rows), "
           f"{m['totals']['files']} other files")
     print(f"  verified:   every database was opened again and checked"
           f"{'' if result['ok'] else ' -- SEE PROBLEMS BELOW'}")
     print(f"  kept:       newest {result['keep']}; removed {len(result['removed'])} older")
+    if not result["sealed"]:
+        print("  NOT SEALED: this snapshot is readable by anyone who can read the "
+              "folder - only --plaintext does this on purpose.")
     for note in result["manifest"].get("notes", []):
         print(f"  note:       {note}")
     for problem in result["problems"]:
@@ -1594,6 +1863,7 @@ def cmd_backup(args) -> int:
         return _nothing_backed_up(message, dest if dest is not None else args.dest,
                                   args.source)
 
+    plaintext = bool(getattr(args, "plaintext", False))
     try:
         phrase = passphrase_from(args, required=args.seal)
     except Refused as exc:
@@ -1605,14 +1875,41 @@ def cmd_backup(args) -> int:
         return failed("a passphrase was given but --seal was not, so the snapshot "
                       "would have been written readable. Add --seal, or leave the "
                       "passphrase out.")
+    if plaintext and (phrase or args.seal):
+        return failed("--plaintext and --seal together do not make sense: one asks "
+                      "for an UNENCRYPTED snapshot and the other for a sealed one. "
+                      "Nothing was written.")
     if args.seal:
-        # Asked to seal: check the tool is here BEFORE a snapshot is taken, so
-        # a missing `cryptography` cannot leave a plainly readable copy behind.
+        # Asked to seal: check the tool is here BEFORE a snapshot is taken, so a
+        # missing `cryptography` cannot leave a plainly readable copy behind.
         aesgcm, _argon2 = _crypto()
         if aesgcm is None:
             return failed("sealing needs the `cryptography` package, which is not "
                           "installed here. Take the backup without --seal, or install "
                           "it - nothing was written unsealed instead.")
+    # SEALED BY DEFAULT (2026-10-18, audit HIGH-4). The weekly personal-data
+    # snapshot used to be a plain folder; the only protection was EFS on two
+    # folders and the hope the destination never changed. Now the key is in
+    # Windows Credential Manager (never printed, never on disk), so the
+    # destination does not matter and the snapshot opens only on this account.
+    # `--plaintext` exists for a deliberate, loud exception.
+    if plaintext:
+        phrase = ""
+        sealed_by = ""
+    elif args.seal:
+        sealed_by = "passphrase"          # phrase came from the env/file above
+    else:
+        aesgcm, _argon2 = _crypto()
+        if aesgcm is None:
+            return failed("the personal-data snapshots are SEALED by default and "
+                          "sealing needs the `cryptography` package, which is not "
+                          "installed here. Install it, or pass --plaintext to write "
+                          "an UNENCRYPTED snapshot on purpose. Nothing was written.")
+        try:
+            phrase = default_passphrase(create=True)
+        except Refused as exc:
+            return failed(f"{exc} Nothing was written in the clear instead.")
+        sealed_by = "key"
     try:
         dest, note = destination(args.dest, args.source)
     except Refused as exc:
@@ -1621,10 +1918,32 @@ def cmd_backup(args) -> int:
         print(f"Note: {note} - a backup there stops happening if it is unplugged.")
     try:
         result = take_snapshot(args.source, dest, keep=args.keep,
-                               passphrase=phrase if args.seal else None,
+                               passphrase=phrase if phrase else None,
                                dest_note=note)
     except Refused as exc:
         return failed(str(exc), dest)
+    result["sealed_by"] = sealed_by if result["sealed"] else ""
+    # Owner-only DACL check on the live data folder (audit DATA D2): a folder
+    # that lets another user or Everyone read it defeats the at-rest story
+    # before any encryption is asked about. A WARNING, not a refusal: fixing an
+    # ACL is an owner decision, and a backup must never stop over it.
+    result["acl_problems"] = acl_problems(default_source())
+    if result["acl_problems"]:
+        print(f"  WARNING:    {len(result['acl_problems'])} folder permission(s) on "
+              f"{default_source()} let someone other than you read it:")
+        for problem in result["acl_problems"][:6]:
+            print(f"    {problem}")
+        print("  The live databases are not encrypted at rest; these snapshots are. "
+              "Ask Jarvis/the PC owner to remove those ACEs with icacls.")
+        _write_last_run(dest, result)
+    if result["sealed"]:
+        # Only after the sealed file exists and verified. The old plaintext
+        # folders in THIS folder are named with the exact owner command; they
+        # are not deleted by this tool (see old_plaintext_snapshots).
+        result["plaintext_old"] = old_plaintext_snapshots(dest)
+        if result["plaintext_old"]:
+            result["plaintext_command"] = plaintext_delete_command(dest, result["plaintext_old"])
+            _write_last_run(dest, result)
     _print_snapshot(result)
     _print_older_elsewhere(dest)
     return 0 if result["ok"] else 1
@@ -1660,6 +1979,11 @@ def cmd_verify(args) -> int:
     except Refused as exc:
         print(f"Nothing was verified: {exc}")
         return 2
+    if not phrase:
+        try:
+            phrase = default_passphrase(create=False)
+        except Refused:
+            phrase = ""      # a plaintext snapshot needs no key; verify says which
     try:
         out = verify_snapshot(snapshot, phrase or None)
     except Refused as exc:
@@ -1685,6 +2009,11 @@ def cmd_restore(args) -> int:
     except Refused as exc:
         print(f"Nothing was restored: {exc}")
         return 2
+    if not phrase:
+        try:
+            phrase = default_passphrase(create=False)
+        except Refused:
+            phrase = ""
     try:
         out = restore_snapshot(snapshot, args.to, passphrase=phrase or None,
                               to_temp=args.to_temp, source=args.source)
@@ -1721,6 +2050,12 @@ def cmd_status(args) -> int:
     print(f"Snapshots in {dest}: {len(good)} good"
           f"{', ' + str(len(rows) - len(good)) + ' incomplete' if len(rows) > len(good) else ''}")
     print(f"  keeping the newest {KEEP}; the older ones are deleted as new ones arrive")
+    plain = [r for r in good if not r["sealed"]]
+    if plain:
+        print(f"  WARNING: {len(plain)} PLAINTEXT snapshot(s) here "
+              f"({', '.join(r['name'] for r in plain)}). New runs are sealed; "
+              f"they are NOT deleted automatically. Remove them yourself with:")
+        print(f"    {plaintext_delete_command(dest, [r['name'] for r in plain])}")
     for row in rows[:8]:
         when = time.strftime("%Y-%m-%d %H:%M", time.localtime(row["at"]))
         marks = "  (sealed)" if row["sealed"] else ""
@@ -1802,7 +2137,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--to-temp", action="store_true",
                    help="restore into a fresh folder under the system temp folder")
     p.add_argument("--seal", action="store_true",
-                   help="write one passphrase-protected .jba file instead of a folder")
+                   help="write one passphrase-protected .jba file - snapshots are "
+                        "sealed by default now; this keeps the old passphrase route")
+    p.add_argument("--plaintext", action="store_true",
+                   help="write an UNENCRYPTED folder snapshot (debugging only: "
+                        "everyone who can read the folder can read the data)")
     p.add_argument("--passphrase-env", default="JARVIS_BACKUP_PASSPHRASE",
                    help="the environment variable holding the passphrase for --seal")
     p.add_argument("--passphrase-file", default=None,
