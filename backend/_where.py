@@ -1025,8 +1025,15 @@ SHIPPED = (
     # append calls it first and writes nothing if the copy fails), and
     # `jarvis_projects.py` imports it before Project Mode's pointer file is
     # replaced (best-effort, so a broken store never blocks Project Mode).
-    # No route and no chat tool expose it yet - that is still the owner's
-    # decision - and nothing it does leaves this PC.
+    # Two READ-ONLY routes expose its history since 2026-10-18 (LM-2A): GET
+    # /api/guardian/snapshots (the journal, newest first and bounded) and GET
+    # /api/guardian/diff (the bounded unified diff this module already works
+    # out), answered by jarvis_brain_reads.py and documented in JARVIS-API
+    # section 140. They read the store and nothing else; a request from
+    # another device is refused BEFORE anything is read; neither writes.
+    # There is still NO restore route and no chat tool - restore_version() is
+    # not reachable from any production path yet, and that is the next,
+    # separately-gated slice. Nothing it does leaves this PC.
     "jarvis_file_guardian.py",
     # A red-team / pre-mortem decision simulator, on this PC only (2026-10-17,
     # Pillar 21): takes one-sentence decision and returns a 1-3-1 decision

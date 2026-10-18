@@ -21395,3 +21395,37 @@ section, and no `features/features.json` entry are added.
 `docs/CLAIMS.tsv` gets no row for this: it is a read-only exposure of two
 modules whose own claims are already registered, and adding a row would force
 an ABOUT recount against every open PR.
+
+## 140. The file guardian's history: what changed, and what did this file look like before (LM-2A, added 2026-10-18)
+
+Jarvis keeps a copy of the bytes of a file BEFORE it overwrites it (the file guardian, `backend/jarvis_file_guardian.py`, JARVIS-API-adjacent design in its own docstring). Until now that store was write-only from the owner's point of view. Two **read-only** routes put it on screen; the restore route is deliberately NOT part of this slice.
+
+### 140.1 `GET /api/guardian/snapshots?limit=<n>`
+
+The owner's snapshot index, newest first, one bounded page. `limit` is optional: **50 by default, 1 to 200 at most** - a request outside that range is refused (`400`, `why: "bad_limit"`) rather than quietly clamped. The answer:
+
+```
+{"ok": true, "refused": false, "why": "", "count": <this page>, "total": <all rows>,
+ "limit": <n>, "more": <total > this page>,
+ "snapshots": [{"path": "<full path>", "label": "<file name, for the drawer>",
+                "before_sha256": "<saved version>", "size": <bytes>,
+                "timestamp": <epoch>, "when": "YYYY-MM-DD HH:MM",
+                "reason": "<why the write happened, bounded>",
+                "receipt_id": "<the existing jarvis_receipts row, opaque>"}],
+ "usage": {"blob_bytes", "blobs", "quota_bytes", "pinned", "over_quota", "words"},
+ "words": "<what this page is>"}
+```
+
+It reads the journal only. It never opens a saved copy, never reads a file, and carries no file contents - the fields above are what the module already stores, bounded (path 4,096 chars, reason 200, receipt id 120). A row with no path or no sha256 is skipped rather than guessed at. An empty store answers `count: 0` with a sentence, not an error.
+
+### 140.2 `GET /api/guardian/diff?path=<file>&sha_before=<sha256>`
+
+The bounded unified diff the module already works out: `jarvis_file_guardian.diff_versions(path, sha_before)`'s answer, passed back **unchanged** - `{"ok", "refused", "path", "before_sha256", "after_sha256", "diff", "truncated", "binary", "same", "words"}`. The module is the authority on everything: the path must be inside a folder the owner already allows Jarvis to change, the sha must be a saved version, the diff is cut at `MAX_DIFF_BYTES` (64 KiB) and says so (`truncated`), a binary pair answers `binary: true`, an unchanged file answers `same: true`, and a version no longer in the store is refused in plain words. The route itself only refuses a missing pair (`400`, `why: "bad_request"`) or one longer than a path/sha can be. It never reads a file outside the store's allowed folders.
+
+### 140.3 Who may ask, and the one gap
+
+Both routes are **this PC's own**. A request from another device (a phone on the same private network, say) is refused with `403` and `why: "not_this_pc"` by `jarvis_owner_check.from_this_pc` - BEFORE the guardian module is imported or anything is read. The desktop apps are the intent: the drawer belongs where the files are, and the phone has no PC files to show. A missing or older `jarvis_file_guardian.py` answers `501` in the same refusal shape with the "run apply-patches.ps1" sentence.
+
+**The gap, said plainly rather than papered over:** the backend cannot see App lock or "Hide memory lists and chat history" - both are desktop-side state that never reaches the backend. So these routes cannot withhold themselves while either is on. The desktop drawer that will use them **must** hide while App lock is on or those lists are hidden, exactly as its other private surfaces do; until that drawer lands (the UI half of LM-2), this is a documented gap. Nothing here writes, restores, or raises a card: the restore route is the next slice and will go through the EXISTING `undo_action` card.
+
+`tools/check_parity.py` does not decide this one: it scans the two apps' own source, and **no app calls either route yet** - so it sees no drift, which is said here rather than read as a clean pass it did not earn.

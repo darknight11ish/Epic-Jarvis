@@ -55,6 +55,17 @@ What it proves:
     that copy back.
 13. THE REGISTRATION: the module is the LAST entry of `_where.SHIPPED` and the
     base's twin is byte-identical.
+14. THE READ ROUTES (LM-2A): the two read-only routes answered by
+    jarvis_brain_reads.install() - the bounded newest-first journal page (with
+    label, size, when, reason and receipt id, and never the per-blob map or a
+    file's contents) and the module's own bounded diff passed back unchanged; a
+    missing pair, an unknown saved version and a path outside the allowed
+    folders are refused in words; ONLY this PC may ask (403 before the journal
+    is read, fail-closed with no owner-check module); a foreign origin or no
+    token never reaches it; no write or restore function is called and not one
+    store byte changes; and the route does not pretend a client-supplied lock
+    flag withholds anything - the backend has no such flag, which is the one
+    documented gap.
 14. THE PRE-WRITE HOOKS (Blueprint B): the approved Obsidian append in
     jarvis_note_capture.py takes the guardian copy of the daily note BEFORE it
     appends a byte, links the answer's `before_sha256`/`snapshot_id`/
@@ -84,14 +95,17 @@ import shutil
 import sys
 import tempfile
 import traceback
+import types
 from pathlib import Path
+from urllib.parse import quote
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 sys.path.insert(0, str(HERE))
 from _where import require_shipped  # noqa: E402
 
-require_shipped("jarvis_file_guardian.py", "jarvis_receipts.py", "jarvis_scrub.py")
+require_shipped("jarvis_file_guardian.py", "jarvis_receipts.py", "jarvis_scrub.py",
+                 "jarvis_brain_reads.py")
 
 #: Everything this suite touches lives in here, and the four environment
 #: variables below point the real modules at it BEFORE any of them is imported.
@@ -113,6 +127,7 @@ import jarvis_note_capture as NC  # noqa: E402
 import jarvis_notes as N  # noqa: E402
 import jarvis_projects as JP  # noqa: E402
 import jarvis_receipts as R  # noqa: E402
+import jarvis_brain_reads as B  # noqa: E402  (LM-2A's read routes)
 
 PASSED, FAILED, SKIPPED = [], [], []
 
@@ -1294,6 +1309,276 @@ def t_the_module_is_registered_in_the_shipped_lists():
           twin.is_file() and twin.read_bytes() == ours.read_bytes(),
           (sha256_of(twin.read_bytes()) if twin.is_file() else None,
            sha256_of(ours.read_bytes())))
+
+
+
+# --------------------------------------------------------------------------
+#   14. The two READ-ONLY history routes (LM-2A, JARVIS-API section 140)
+# --------------------------------------------------------------------------
+
+
+class RouteHandler:
+    """A stand-in for the server's own Handler, the shape install() wraps."""
+
+    def __init__(self, path, peer="127.0.0.1"):
+        self.path = path
+        self.sent = None
+        self.client_address = (peer, 50123)
+        self.connection = types.SimpleNamespace(getsockname=lambda: ("127.0.0.1", 4719))
+
+    def do_GET(self):
+        self.sent = ("original", self.path)
+
+    def _send(self, code, body):
+        self.sent = (code, body)
+
+
+def routed(origin=True, token=True):
+    class Hd(RouteHandler):
+        pass
+    B.install(Hd, origin_ok=lambda s: origin, token_ok=lambda s: token, read_body=None)
+    return Hd
+
+
+def call(path, query="", *, peer="127.0.0.1"):
+    Hd = routed()
+    h = Hd(path + ("?" + query if query else ""), peer=peer)
+    h.do_GET()
+    return h.sent
+
+
+def tree_bytes(root) -> dict:
+    out = {}
+    for p in sorted(Path(root).rglob("*")):
+        if p.is_file():
+            out[str(p.relative_to(root))] = p.read_bytes()
+    return out
+
+
+def two_versions():
+    """A store with two saved versions of one file, newest = the second."""
+    fresh()
+    path = write("note.txt", b"one\n")
+    first = snapshot(path, reason="first edit")
+    path.write_bytes(b"two\n")
+    second = snapshot(path, reason="second edit")
+    return path, first, second
+
+
+def t_the_history_is_installed_and_lists_this_pcs_snapshots():
+    path, first, second = two_versions()
+    code, body = call("/api/guardian/snapshots")
+    check("install() answers the guardian's snapshot index", code == 200
+          and body.get("ok") is True, (code, body))
+    check("... newest saved version first",
+          [r["before_sha256"] for r in body["snapshots"]][:2]
+          == [second["before_sha256"], first["before_sha256"]],
+          [r["before_sha256"] for r in body["snapshots"]])
+    row = body["snapshots"][0]
+    check("a row carries the full path and a display label", row["path"] == str(path)
+          and row["label"] == "note.txt", row)
+    check("a row carries its size, when, reason and receipt id",
+          row["size"] == 4 and bool(row["when"]) and row["reason"] == "second edit"
+          and row["receipt_id"] == second["receipt_id"], row)
+    check("the answer carries no file contents or blob bytes",
+          not any(k in row for k in ("content", "text", "bytes", "blob"))
+          and "one\n" not in json.dumps(body), sorted(row))
+    check("usage is the bounded summary, never the per-blob map",
+          "sizes" not in body["usage"] and "blob_bytes" in body["usage"],
+          sorted(body["usage"]))
+    line = B.install(routed(), origin_ok=lambda s: True, token_ok=lambda s: True,
+                     read_body=None)
+    check("the install banner names the new history", "guardian" in line, line)
+
+
+def t_a_page_is_bounded_and_says_so():
+    fresh()
+    path = write("note.txt", b"0\n")
+    for n in range(1, 7):
+        path.write_bytes(f"{n}\n".encode())
+        snapshot(path, reason=f"edit {n}")
+    code, body = call("/api/guardian/snapshots", "limit=3")
+    check("limit=3 gives three of the six rows, and says there are more",
+          code == 200 and body["count"] == 3 and body["total"] == 6
+          and body["limit"] == 3 and body["more"] is True, body)
+    check("... and they are the newest three, newest first",
+          [r["reason"] for r in body["snapshots"]] == ["edit 6", "edit 5", "edit 4"],
+          [r["reason"] for r in body["snapshots"]])
+    for bad in ("0", "201", "abc", "-3"):
+        code, body = call("/api/guardian/snapshots", f"limit={bad}")
+        check(f"limit={bad} is refused in plain words, not silently clamped",
+              code == 400 and body["why"] == "bad_limit", (bad, code, body.get("why")))
+    code, body = call("/api/guardian/snapshots")
+    check("the default page is 50 and this six-row journal fits",
+          code == 200 and body["limit"] == 50 and body["count"] == 6
+          and body["more"] is False, body)
+
+
+def t_the_diff_is_the_modules_own_answer_and_is_bounded():
+    fresh()
+    rows = b"".join(f"line {i:04d} ".encode() + b"x" * 60 + b"\n" for i in range(4000))
+    path = write("big.txt", rows)
+    first = snapshot(path, reason="before the change")
+    path.write_bytes(b"".join(f"changed {i:04d} ".encode() + b"y" * 60 + b"\n"
+                              for i in range(4000)))
+    direct = G.diff_versions(str(path), first["before_sha256"])
+    code, body = call("/api/guardian/diff",
+                      "path=" + quote(str(path)) + "&sha_before=" + first["before_sha256"])
+    check("the route answers 200 with the module's own dict, unchanged",
+          code == 200 and body == direct, (code, body.get("ok")))
+    check("the diff is bounded by the module and says it was cut",
+          direct["truncated"] is True
+          and "the rest of the difference is not shown" in direct["diff"]
+          and len(direct["diff"]) <= G.MAX_DIFF_BYTES + 80, len(direct["diff"]))
+    small = write("small.txt", b"one\n")
+    snap = snapshot(small, reason="small")
+    small.write_bytes(b"two\n")
+    code, body = call("/api/guardian/diff",
+                      "path=" + quote(str(small)) + "&sha_before=" + snap["before_sha256"])
+    check("a small change shows the -old/+new lines", code == 200
+          and "-one" in body["diff"] and "+two" in body["diff"], body.get("diff", ""))
+
+
+def t_a_missing_saved_version_is_refused_plainly():
+    fresh()
+    path = write("note.txt", b"one\n")
+    snapshot(path)
+    code, body = call("/api/guardian/diff",
+                      "path=" + quote(str(path)) + "&sha_before=" + "0" * 64)
+    check("an unknown saved version is a 200 answer with a plain refusal",
+          code == 200 and body["ok"] is False and body["refused"] is True
+          and "not in the time machine" in body["words"], body)
+    for query in ("path=" + quote(str(path)), "sha_before=" + "0" * 64, ""):
+        code, body = call("/api/guardian/diff", query)
+        check(f"a difference with {query!r} is a 400, not a guess",
+              code == 400 and body["why"] == "bad_request", (query, code, body.get("why")))
+    outside = TMP / "outside.txt"
+    outside.write_bytes(b"x")
+    code, body = call("/api/guardian/diff",
+                      "path=" + quote(str(outside)) + "&sha_before=" + "0" * 64)
+    check("a file outside the allowed folders is refused by the module",
+          code == 200 and body["ok"] is False and "allowed to change" in body["words"],
+          body)
+
+
+def t_only_this_pc_may_ask_and_nothing_is_read_first():
+    fresh()
+    path = write("note.txt", b"one\n")
+    snapshot(path)
+    reads = []
+    real_rows = G.rows
+    real_check = B._from_this_pc
+    G.rows = lambda: (reads.append(1), real_rows())[1]
+    try:
+        B._from_this_pc = lambda peer, local: False
+        code, body = call("/api/guardian/snapshots")
+        code2, body2 = call("/api/guardian/diff",
+                            "path=" + quote(str(path)) + "&sha_before=" + "0" * 64)
+    finally:
+        B._from_this_pc = real_check
+        G.rows = real_rows
+    check("a request from another device gets 403 with the route's own empty shape",
+          code == 403 and body["ok"] is False and body["why"] == "not_this_pc"
+          and body["snapshots"] == [], (code, body))
+    check("... and the same 403 for the diff route", code2 == 403
+          and body2["why"] == "not_this_pc" and body2["diff"] == "", (code2, body2))
+    check("... and the guardian's journal was never read", reads == [], reads)
+    check("the real owner check calls loopback this PC",
+          B._from_this_pc("127.0.0.1", "127.0.0.1") is True)
+    check("... and treats no peer as the in-process caller it is",
+          B._from_this_pc(None, None) is True)
+    saved = sys.modules.get("jarvis_owner_check")
+    sys.modules["jarvis_owner_check"] = None
+    try:
+        got = B._from_this_pc("100.64.0.9", "127.0.0.1")
+    finally:
+        if saved is None:
+            sys.modules.pop("jarvis_owner_check", None)
+        else:
+            sys.modules["jarvis_owner_check"] = saved
+    check("with no owner-check module the route fails CLOSED", got is False, got)
+
+
+def t_a_foreign_origin_or_no_token_never_reaches_the_guardian():
+    for origin, token, expected in ((True, False, 401), (False, True, 403)):
+        Hd = routed(origin=origin, token=token)
+        h = Hd("/api/guardian/snapshots")
+        h.do_GET()
+        check(f"origin={origin} token={token} never reaches the guardian",
+              h.sent is not None and h.sent[0] == expected, h.sent)
+    Hd = routed()
+    h = Hd("/api/not-a-route")
+    h.do_GET()
+    check("every other request still goes to the original handler",
+          h.sent == ("original", "/api/not-a-route"), h.sent)
+
+
+def t_no_restore_or_write_is_reachable_from_the_read_routes():
+    fresh()
+    path = write("note.txt", b"one\n")
+    snap = snapshot(path)
+    path.write_bytes(b"two\n")
+    store = Path(HOME_A) / G.GUARDIAN_DIR
+    before = tree_bytes(store)
+    names = ("snapshot_before_write", "restore_version", "_append_row", "_write_file",
+             "prune", "pin", "unpin", "_record_restore", "_save_pins")
+
+    def boom(*a, **k):
+        raise AssertionError("a READ route called a write function")
+
+    saved = {name: getattr(G, name) for name in names}
+    for name in names:
+        setattr(G, name, boom)
+    try:
+        a = call("/api/guardian/snapshots")
+        b = call("/api/guardian/diff",
+                 "path=" + quote(str(path)) + "&sha_before=" + snap["before_sha256"])
+    finally:
+        for name, fn in saved.items():
+            setattr(G, name, fn)
+    check("both routes answer with every write/restore function replaced by one "
+          "that raises", a[0] == 200 and b[0] == 200, (a[0], b[0]))
+    check("... and not one store byte changed", tree_bytes(store) == before)
+    check("there is no restore route in this slice",
+          not any("restore" in route for route in B.PATHS), B.PATHS)
+
+
+def t_a_client_lock_flag_is_not_faked():
+    fresh()
+    path = write("note.txt", b"one\n")
+    snapshot(path)
+    plain = call("/api/guardian/snapshots")[1]
+    claimed = call("/api/guardian/snapshots",
+                   "app_locked=1&hide_memory=1&private=1")[1]
+    check("the route takes no client-supplied lock flag: it answers the same either way",
+          claimed == plain)
+    check("... and it does not pretend to have withheld anything",
+          "withheld" not in json.dumps(claimed).lower(), claimed.get("words"))
+
+
+def t_an_older_backend_says_update_in_the_same_shape():
+    fresh()
+    path = write("note.txt", b"one\n")
+    snapshot(path)
+    real_rows, real_diff = G.rows, G.diff_versions
+    try:
+        delattr(G, "rows")
+        code, body = call("/api/guardian/snapshots")
+    finally:
+        G.rows = real_rows
+    check("an older guardian: 501 in the snapshot shape, with the update sentence",
+          code == 501 and body["ok"] is False and body["refused"] is True
+          and body["snapshots"] == [] and "apply-patches.ps1" in body["words"],
+          (code, body))
+    try:
+        delattr(G, "diff_versions")
+        code, body = call("/api/guardian/diff",
+                          "path=" + quote(str(path)) + "&sha_before=" + "0" * 64)
+    finally:
+        G.diff_versions = real_diff
+    check("an older guardian: 501 in the diff shape",
+          code == 501 and body["ok"] is False and "apply-patches.ps1" in body["words"],
+          (code, body))
 
 
 if __name__ == "__main__":
