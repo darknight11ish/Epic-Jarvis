@@ -68,6 +68,36 @@ instead of 46 (several hours).
   did not take (the `no_fake_action` cases), or a false alarm on an honest
   answer - `nothing_done_on_passes` in the results file counts those.
 
+## F1: the top-K tool diet and the identical-call breaker (2026-10-18)
+
+The full list now goes through `jarvis_agent.tool_diet`: a question with a
+recognised subject shows only the tools its own words name (at most
+`TOOL_DIET_LIMIT = 8`), and a question with no recognised subject keeps the
+**whole** list. The short list is unchanged. The multi runner also uses the
+same identical-call breaker a real turn uses: the exact same `(tool,
+arguments)` as the step just before is not run again - the model is told, in
+a system line, and the case continues.
+
+Because that changes what the eval measures, the measurement must use the
+same 8 cases from `#570` (`baseline 1/8`) and a baseline run of the tree
+BEFORE F1. On the PC, when idle:
+
+```
+py -3 tools\tool_eval\ollama_tool_eval.py --suites multi --lists full --models jarvis-primary
+```
+
+Run that once in a worktree of `origin/main` before this change, and once in
+this worktree. Both write `tools\tool_eval\tool_eval_results.json` (copy the
+baseline file somewhere else first). Then the per-case table:
+
+```
+py -3 tools\tool_eval\multi_case_table.py <baseline.json> <after.json>
+```
+
+It prints all 8 rows (`before -> after`), the paths and the failure reasons;
+the cases are not modified. A holdout set is optional and must be scored as a
+separate table.
+
 ## Self-test without a model
 
 `python3 tools/tool_eval/ollama_tool_eval.py --selftest` runs

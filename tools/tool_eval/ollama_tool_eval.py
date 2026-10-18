@@ -224,14 +224,23 @@ def ask_once(model, messages, tools):
 
 class Offer:
     """What one conversation shows the model: the full list, or the short
-    one (with `more_tools` opening groups as Jarvis does)."""
+    one (with `more_tools` opening groups as Jarvis does).
 
-    def __init__(self, lst):
+    The FULL list goes through Jarvis's own tool diet (F1, 2026-10-18): the
+    eval must send the tools a real turn would send, or the measurement is of
+    a Jarvis nobody runs. `question` is the case's own words; with no question
+    (or on a build without the selector) it is the full list, as before.
+    """
+
+    def __init__(self, lst, question=""):
         self.list = lst
+        self.question = question
         self.opened = set()
 
     def schemas(self):
         if self.list == "full" or AG is None:
+            if AG is not None and getattr(AG, "tool_diet", None) is not None:
+                return AG._schemas_for(AG.tool_diet(self.question, NAMES), [], {})
             return TOOLS
         shown = AG.tool_offer(NAMES, self.opened, short=True)
         groups = AG.more_tools_groups(NAMES, short=True)
@@ -345,12 +354,12 @@ def repair_messages(msgs, r):
 def run_pick(model, lst, repair=False, cases=None):
     rows = []
     for utt, expected, required in (CASES + HELD_OUT if cases is None else cases):
-        r = converse(model, start(utt), Offer(lst))
+        r = converse(model, start(utt), Offer(lst, utt))
         s = score_pick(expected, required, r)
         s["fixed_by_retry"] = False
         needs_fix = expected is not None and (s["crash"] or (r.get("calls") and not s["args_ok"]))
         if repair and needs_fix:
-            r2 = converse(model, repair_messages(r["msgs"], r), Offer(lst))
+            r2 = converse(model, repair_messages(r["msgs"], r), Offer(lst, utt))
             s["fixed_by_retry"] = score_pick(expected, required, r2)["args_ok"]
         rows.append({"utt": utt, "expected": expected,
                      "picked": [c["name"] for c in r.get("calls", [])],
@@ -382,7 +391,7 @@ def score_ask(target, lookups, r):
 def run_ask(model, lst, cases=None):
     rows = []
     for utt, target, missing, lookups in (ASK_CASES if cases is None else cases):
-        r = converse(model, start(utt), Offer(lst))
+        r = converse(model, start(utt), Offer(lst, utt))
         outcome = score_ask(target, lookups, r)
         rows.append({"utt": utt, "missing": missing, "outcome": outcome,
                      "pass": outcome in ("asked", "looked_up"),
@@ -396,10 +405,11 @@ def run_ask(model, lst, cases=None):
 # --------------------------------------------------------------------------
 
 def run_multi_case(model, lst, case, max_steps=5):
-    offer = Offer(lst)
+    offer = Offer(lst, case["say"])
     msgs = start(case["say"])
     path, tokens, noted = [], None, False
     why = "it stopped before the last step"
+    last_key = None
     for _ in range(max_steps):
         r = converse(model, msgs, offer)
         tokens = r.get("prompt_tokens") if tokens is None else tokens
@@ -413,6 +423,22 @@ def run_multi_case(model, lst, case, max_steps=5):
                 return {"id": case["id"], "pass": True, "path": path, "why": "",
                         "prompt_tokens": tokens}
             break
+        if AG is not None and getattr(AG, "canonical_call_args", None) is not None:
+            # The same identical-call breaker a real turn uses (F1): a repeated
+            # (tool, arguments) pair is NOT run again; the model is told, in a
+            # system line, and this case goes on. Only consecutive pairs match.
+            key = (call["name"], AG.canonical_call_args(call["args"]))
+            if last_key is not None and key == last_key:
+                msgs = msgs + [
+                    _assistant_call(r["content"], [call]),
+                    {"role": "tool", "tool_call_id": call["id"],
+                     "content": json.dumps({"ok": False,
+                                            "error": getattr(AG, "IDENTICAL_CALL_ERROR",
+                                                             "not run again")})},
+                    {"role": "system",
+                     "content": AG.IDENTICAL_CALL_NOTE.format(tool=call["name"])}]
+                continue
+            last_key = key
         path.append(call["name"])
         if call["name"] == case["want"]:
             ok = call["bad_json"] is None and not check_args(call["name"], call["args"]) \

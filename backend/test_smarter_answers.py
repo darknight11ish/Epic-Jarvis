@@ -222,11 +222,14 @@ def t_a_long_answer_sends_cleared_results_to_the_model():
         return {"ok": True, "value": f"RESULT{n['i']} " + "v" * 6500}
     AG.TOOLS["calculator"].execute = big
     try:
-        call = {"choices": [{"message": {"role": "assistant", "tool_calls": [
-            {"id": "1", "function": {"name": "calculator",
-                                     "arguments": json.dumps({"expression": "1+1"})}}]}}]}
+        # Five DIFFERENT calls: the same call twice is now the loop-breaker's
+        # business (F1, 2026-10-18) and would not run a second time.
+        rounds = [{"choices": [{"message": {"role": "assistant", "tool_calls": [
+            {"id": str(i), "function": {"name": "calculator",
+                                        "arguments": json.dumps({"expression": f"1+{i}"})}}]}}]}
+                  for i in range(5)]
         answer = {"choices": [{"message": {"role": "assistant", "content": "All read."}}]}
-        opener, calls = TA.scripted_stream([call] * 5 + [answer])
+        opener, calls = TA.scripted_stream(rounds + [answer])
         with TA.NoRealIO():
             AG.run_local_turn([{"role": "user", "content": "work it out"}], "qwen3:8b",
                               ollama_url=URL, stream_out=lambda b: None, gate_check=TA.allow,
@@ -514,6 +517,51 @@ def t_an_honest_reminder_answer_gets_no_correction():
           and "set_reminder" in res["tools_ran"], res["answer"])
 
 
+def t_an_identical_consecutive_tool_call_is_not_run_twice():
+    """F1 (2026-10-18): the loop-breaker. The exact same (tool, arguments) as
+    the step just before is never run again - a different pair, or the same
+    pair after another tool, is a new step."""
+    real = AG.TOOLS["calculator"].execute
+    seen = []
+    AG.TOOLS["calculator"].execute = \
+        lambda args, state, **kw: (seen.append(args), {"ok": True, "value": 4})[1]
+
+    def call(expression="2+2", cid="1"):
+        return {"choices": [{"message": {"role": "assistant", "tool_calls": [
+            {"id": cid, "function": {"name": "calculator",
+                                     "arguments": json.dumps({"expression": expression})}}]}}]}
+    try:
+        check("the canonical pair ignores key order",
+              AG.canonical_call_args('{"a":1,"b":2}')
+              == AG.canonical_call_args('{"b":2,"a":1}'))
+        check("... and different arguments are different pairs",
+              AG.canonical_call_args('{"a":1}') != AG.canonical_call_args('{"a":2}'))
+        res, _blob = _turn("It's 4.", tool_rounds=[call(), call()],
+                           tools={"calculator"})
+        check("the same call twice in a row runs ONCE", len(seen) == 1, seen)
+        check("... and the turn still answers", res["answer"].startswith("It's 4."),
+              res["answer"])
+        seen.clear()
+        _turn("It's six.", tool_rounds=[call("2+2"), call("3+3")],
+              tools={"calculator"})
+        check("different arguments are never suppressed", len(seen) == 2, seen)
+        seen.clear()
+        real_mem = AG.TOOLS["memory_search"].execute
+        AG.TOOLS["memory_search"].execute = lambda args, state, **kw: {"ok": True,
+                                                                       "facts": []}
+        try:
+            mem = {"choices": [{"message": {"role": "assistant", "tool_calls": [
+                {"id": "2", "function": {"name": "memory_search",
+                                         "arguments": json.dumps({"query": "x"})}}]}}]}
+            _turn("Done.", tool_rounds=[call(), mem, call()],
+                  tools={"calculator", "memory_search"})
+        finally:
+            AG.TOOLS["memory_search"].execute = real_mem
+        check("the same call after another tool is a new step", len(seen) == 2, seen)
+    finally:
+        AG.TOOLS["calculator"].execute = real
+
+
 if __name__ == "__main__":
     for fn in (t_a_small_result_is_unchanged,
                t_one_long_text_keeps_its_start_and_end,
@@ -542,7 +590,8 @@ if __name__ == "__main__":
                t_a_model_denial_after_a_real_reminder_is_corrected,
                t_a_failed_reminder_leaves_the_honest_limitation_alone,
                t_no_reminder_tool_gets_no_correction,
-               t_an_honest_reminder_answer_gets_no_correction):
+               t_an_honest_reminder_answer_gets_no_correction,
+               t_an_identical_consecutive_tool_call_is_not_run_twice):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
