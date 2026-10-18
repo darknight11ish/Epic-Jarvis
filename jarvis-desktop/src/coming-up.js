@@ -295,6 +295,10 @@ export function readSchedule(answer) {
     // An older PC sends neither: nothing went off, and no named lists.
     wentOff: available && Array.isArray(a.went_off) ? a.went_off.filter(ok).map(row) : [],
     lists: available ? lists : [],
+    // The Today board (GTD-2, 2026-10-18): added by Rust from
+    // GET /api/today/cockpit, passed on as it came so today.js reads it.
+    // An older PC sends none: the page keeps its Today cards as they were.
+    cockpit: available && a.cockpit && typeof a.cockpit === "object" ? a.cockpit : null,
   };
 }
 

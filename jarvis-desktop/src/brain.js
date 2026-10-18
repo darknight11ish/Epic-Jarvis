@@ -268,18 +268,45 @@ import {
 } from "./briefing.js";
 import {
   addArgs as todayAddArgs,
+  BREAK_COPIED,
+  BREAK_LABEL,
   briefingCards,
   cardMeta as todayCardMeta,
   cardsOf,
   cardTitle as todayCardTitle,
+  cockpitOf as todayCockpit,
   DELETE_LABEL as TODAY_DELETE_LABEL,
+  DO_THIS_COPIED,
+  DO_THIS_COPY_FAILED,
+  DO_THIS_LABEL,
+  DUE_DETAIL as TODAY_DUE_DETAIL,
+  DUE_TITLE as TODAY_DUE_TITLE,
+  dueRows as todayDueRows,
   EMPTY_CARDS as TODAY_EMPTY,
   FROM_BRIEFING as TODAY_FROM_BRIEFING,
   LATER_TITLE as TODAY_LATER_TITLE,
   MISSING as TODAY_MISSING,
+  NEXT_DETAIL as TODAY_NEXT_DETAIL,
+  NEXT_TITLE as TODAY_NEXT_TITLE,
+  nextRows as todayNextRows,
   NO_BRIEFING_TODAY,
+  PROPOSALS_DETAIL as TODAY_PROPOSALS_DETAIL,
+  PROPOSALS_OFF as TODAY_PROPOSALS_OFF,
+  PROPOSALS_OFF_LABEL as TODAY_PROPOSALS_OFF_LABEL,
+  PROPOSALS_ON_LABEL as TODAY_PROPOSALS_ON_LABEL,
+  PROPOSALS_TITLE as TODAY_PROPOSALS_TITLE,
+  PROPOSALS_TURNED_OFF as TODAY_PROPOSALS_TURNED_OFF,
+  PROPOSALS_TURNED_ON as TODAY_PROPOSALS_TURNED_ON,
+  PROPOSALS_WAITING as TODAY_PROPOSALS_WAITING,
+  proposalRows as todayProposalRows,
+  REMIND_LABEL as TODAY_REMIND_LABEL,
+  SENSITIVE_NOTE as TODAY_SENSITIVE_NOTE,
+  SNOOZE_FAILED,
+  SNOOZE_LABEL,
+  SNOOZED_SAID,
   TAG as TODAY_TAG,
   todayCards,
+  unspokenEnabled as todayUnspokenEnabled,
 } from "./today.js";
 import {
   ADD_LABEL as WIDGETS_ADD_LABEL,
@@ -11050,6 +11077,151 @@ function todayRow(card) {
   return item;
 }
 
+/** Copy one prompt for the owner to paste into the Jarvis bar: the bar's
+ *  own private copy (kept out of Windows' clipboard history), or a plain one
+ *  from an older build. Nothing is sent by this page. */
+async function copyTodayPrompt(prompt) {
+  try {
+    await invoke("write_clipboard_private", { text: prompt });
+  } catch {
+    try {
+      await navigator.clipboard.writeText(prompt);
+    } catch (error) {
+      toast(errorText(error) || DO_THIS_COPY_FAILED, "bad");
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Snooze ONE job that went off, by a preset - the scheduler's own existing
+ *  action (`brain_schedule_act` "snooze", seconds), one job per tap, and
+ *  held on a stale link like every change here. */
+async function snoozeToday(id, seconds, select) {
+  if (!linkWords(currentLink()).canAct) {
+    toast(STALE_TITLE, "bad");
+    if (select) select.value = "";
+    return;
+  }
+  try {
+    const out = await invoke("brain_schedule_act", { id, action: "snooze", seconds });
+    if (out && out.ok === false) toast(String(out.error || SNOOZE_FAILED), "bad");
+    else toast(String((out && out.said) || SNOOZED_SAID), "ok");
+  } catch (error) {
+    toast(errorText(error) || SNOOZE_FAILED, "bad");
+  }
+  await loadComingUp();
+}
+
+/** One due reminder's row: Do This, Break Into 3 Easy Steps (only when the PC
+ *  said so AND the words are not sensitive), and the Snooze presets (only a
+ *  job that really went off - the PC refuses a snooze on any other). */
+function todayDueRow(item) {
+  const actions = [button(DO_THIS_LABEL, async () => {
+    if (await copyTodayPrompt(item.prompt)) toast(DO_THIS_COPIED, "ok");
+  })];
+  if (item.breakPrompt) {
+    actions.push(button(BREAK_LABEL, async () => {
+      if (await copyTodayPrompt(item.breakPrompt)) toast(BREAK_COPIED, "ok");
+    }));
+  }
+  if (item.snooze && item.snooze.length) {
+    const select = el("select", "field small");
+    select.title = SNOOZE_LABEL;
+    select.setAttribute("aria-label", SNOOZE_LABEL);
+    const first = el("option", "", SNOOZE_LABEL);
+    first.value = "";
+    select.append(first);
+    for (const offer of item.snooze) {
+      const option = el("option", "", offer.label);
+      option.value = String(offer.seconds);
+      select.append(option);
+    }
+    select.addEventListener("change", () => {
+      const seconds = Number(select.value);
+      select.value = "";
+      if (seconds) snoozeToday(item.id, seconds, select);
+    });
+    // Snoozing changes the PC's list: held until the link is confirmed.
+    liveButtons.add(select);
+    syncLiveButton(select);
+    actions.push(select);
+  }
+  return row({
+    tag: item.tag,
+    state: item.overdue ? "warn" : "ok",
+    title: item.title,
+    meta: item.meta,
+    actions,
+  });
+}
+
+/** The said-I'd-do switch's own one button (OFF immediate; ON asks first). */
+function todayProposalsButton(on) {
+  return button(on ? TODAY_PROPOSALS_OFF_LABEL : TODAY_PROPOSALS_ON_LABEL, async () => {
+    try {
+      const out = await invoke("brain_schedule_set_unspoken", { enabled: !on });
+      toast(String((out && out.message)
+        || (on ? TODAY_PROPOSALS_TURNED_OFF : TODAY_PROPOSALS_WAITING)), "ok");
+    } catch (error) {
+      toast(errorText(error), "bad");
+    }
+    await loadComingUp();
+  });
+}
+
+/** The Today board's three added sections (GTD-2, 2026-10-18): due now,
+ *  next steps, and the said-I'd-do proposals with their own opt-in. Read
+ *  from the same Coming up view; nothing here is created without the
+ *  owner's own tap, and a tap only copies a prompt for the chat box. */
+function todayBoardNodes(v) {
+  const cockpit = todayCockpit(v);
+  if (!cockpit) return [];
+  const out = [];
+  const due = todayDueRows(cockpit);
+  if (due.length) {
+    out.push(el("h3", "subhead", TODAY_DUE_TITLE));
+    const list = el("div", "rows");
+    for (const item of due) list.append(todayDueRow(item));
+    out.push(list);
+  }
+  const steps = todayNextRows(cockpit);
+  if (steps.length) {
+    out.push(el("h3", "subhead", TODAY_NEXT_TITLE));
+    const list = el("div", "rows");
+    for (const item of steps) {
+      list.append(row({ tag: item.tag, title: item.title, meta: item.meta }));
+    }
+    out.push(list);
+  }
+  out.push(el("h3", "subhead", TODAY_PROPOSALS_TITLE));
+  if (todayUnspokenEnabled(cockpit)) {
+    const proposals = todayProposalRows(cockpit);
+    if (proposals.length) {
+      const list = el("div", "rows");
+      for (const item of proposals) {
+        list.append(row({
+          tag: "you said",
+          title: item.title,
+          meta: item.meta,
+          actions: [button(TODAY_REMIND_LABEL, async () => {
+            if (await copyTodayPrompt(item.prompt)) toast(DO_THIS_COPIED, "ok");
+          })],
+        }));
+      }
+      out.push(list);
+    } else {
+      out.push(el("p", "empty", "Nothing new you said you would do."));
+    }
+    out.push(el("p", "note", TODAY_PROPOSALS_DETAIL));
+    out.push(todayProposalsButton(true));
+  } else {
+    out.push(el("p", "note", TODAY_PROPOSALS_OFF));
+    out.push(todayProposalsButton(false));
+  }
+  return out;
+}
+
 function paintToday() {
   const box = dom.today;
   if (!box) return;
@@ -11071,6 +11243,9 @@ function paintToday() {
       out.push(rest);
     }
     if (v.hidden) out.push(hiddenNode(0, "words"));
+    // The Today board (GTD-2): due reminders, next steps, and the
+    // said-I'd-do proposals with their own opt-in, from the same read.
+    out.push(...todayBoardNodes(v));
   }
   if (dom.todayForm) dom.todayForm.hidden = Boolean(v && !v.available);
   // The briefing's own parts, from the latest one made today - never a new read.

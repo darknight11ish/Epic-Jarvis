@@ -966,6 +966,7 @@ pub fn run() {
             brain::schedule::brain_schedule_add_todo,
             brain::schedule::brain_schedule_add_standby,
             brain::schedule::brain_schedule_add_today,
+            brain::schedule::brain_schedule_set_unspoken,
             brain::widgets::brain_widgets,
             brain::widgets::brain_widgets_draft,
             brain::widgets::brain_widgets_add,

@@ -38,11 +38,20 @@ The owner's choice of 2026-09-28 (docs/RESEARCH-AUDIT-2026-09-28.md section
         jarvis_pc_help.read() does the work, on this PC only; the program
         names in it are never logged or kept. It changes nothing.
 
-All four are READS for the apps' Brain screens, behind the pairing token and
-the origin check like every memory and history read. Neither is a tool: no
+    GET /api/today/cockpit
+        (GTD-2, 2026-10-18) the Today board: due reminders from the one
+        scheduler, the first open step of each active goal and project work
+        list, and the owner-words-only "you said you would" proposals.
+        jarvis_today.handle_cockpit() does the work; it creates nothing.
+        `?hidden=1` withholds every word (an app whose private lists are
+        hidden or App lock is on asks for it that way), and the desktop ALSO
+        blanks the same sections in Rust. Read-only.
+
+All of them are READS for the apps' Brain screens, behind the pairing token
+and the origin check like every memory and history read. None is a tool: no
 model and no chat turn can call them (jarvis_agent.py offers nothing that
-reaches here), so what they return never reaches the AI model. Neither
-writes anything.
+reaches here), so what they return never reaches the AI model. None writes
+anything.
 
 "Widgets you describe" (2026-09-28; JARVIS-API section 86) rides on this
 module's install() too, so it needs no patch of its own: install() also
@@ -69,7 +78,17 @@ FACT_HISTORY_PATH = "/api/memory/fact-history"
 CONVERSATION_FACTS_PATH = "/api/memory/conversation-facts"
 PC_HELP_PATH = "/api/pc/help"
 FACT_CHAT_PATH = "/api/memory/fact-chat"
-PATHS = (SEARCH_PATH, FACT_HISTORY_PATH, CONVERSATION_FACTS_PATH, PC_HELP_PATH, FACT_CHAT_PATH)
+#: GTD-2 (2026-10-18): the Today board. The route lives in jarvis_today.py;
+#: this module is only the door the server already wraps, so it needs no
+#: patch of its own.
+COCKPIT_PATH = "/api/today/cockpit"
+PATHS = (SEARCH_PATH, FACT_HISTORY_PATH, CONVERSATION_FACTS_PATH, PC_HELP_PATH,
+         FACT_CHAT_PATH, COCKPIT_PATH)
+
+#: The one POST this module answers (GTD-2, 2026-10-18): the said-I'd-do
+#: switch's own toggle. OFF is immediate; ON raises ONE approval card. It is
+#: not a second way to change any other setting.
+POST_PATHS = (COCKPIT_PATH,)
 
 UPDATE = ("This PC's Jarvis is missing part of this feature. Run apply-patches.ps1 on the PC "
           "to update it.")
@@ -121,6 +140,19 @@ def handle_get(path: str, query: str = "") -> tuple:
         return jarvis_pc_help.handle_get(query)
     if path == FACT_CHAT_PATH:
         return fact_chat(query)
+    if path == COCKPIT_PATH:
+        try:
+            import jarvis_today
+        except Exception:
+            return 503, {"available": False, "why": UPDATE}
+        handler = getattr(jarvis_today, "handle_cockpit", None)
+        if handler is None:
+            return 501, {"error": UPDATE}
+        try:
+            return handler(query)
+        except Exception as exc:
+            # The exception's NAME only, as for /api/schedule.
+            return 500, {"error": type(exc).__name__}
     return 404, {"error": "no such route"}
 
 
@@ -204,6 +236,36 @@ def install(handler_cls, *, origin_ok, token_ok, read_body=None) -> str:
 
     do_GET._jarvis_brain_reads = True
     handler_cls.do_GET = do_GET
+    if read_body is not None:
+        post0 = handler_cls.do_POST
+
+        def do_POST(self):
+            try:
+                from urllib.parse import urlsplit
+                route = urlsplit(str(getattr(self, "path", "") or "")).path.rstrip("/")
+            except Exception:
+                route = ""
+            if route not in POST_PATHS:
+                return post0(self)
+            if not _allowed(self):
+                return None
+            try:
+                raw = read_body(self) or b"{}"
+                if len(raw) > 16 * 1024:
+                    return self._send(413, {"ok": False, "error": "too big"})
+                body = json.loads(raw)
+            except Exception as exc:
+                return self._send(400, {"ok": False, "error": type(exc).__name__})
+            try:
+                import jarvis_today
+                handler = getattr(jarvis_today, "handle_cockpit_post", None)
+                code, out = ((501, {"ok": False, "error": UPDATE}) if handler is None
+                             else handler(body))
+            except Exception as exc:
+                code, out = 500, {"ok": False, "error": type(exc).__name__}
+            return self._send(code, out)
+
+        handler_cls.do_POST = do_POST
     return "  brain      Search old chats, fact history, a chat's facts and PC help: on" + widgets
 
 

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-schedule-set-unspoken"
+description = "Enables the brain_schedule_set_unspoken command without any pre-configured scope."
+commands.allow = ["brain_schedule_set_unspoken"]
+
+[[permission]]
+identifier = "deny-brain-schedule-set-unspoken"
+description = "Denies the brain_schedule_set_unspoken command without any pre-configured scope."
+commands.deny = ["brain_schedule_set_unspoken"]

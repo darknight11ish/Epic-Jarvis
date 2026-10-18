@@ -149,3 +149,170 @@ export function addArgs(text, at, days) {
   if (!d.length) return { error: NO_DAYS };
   return { text: t, at: `${m[1].padStart(2, "0")}:${m[2]}`, days: d };
 }
+
+/* ── The Today board (GTD-2, 2026-10-18) ───────────────────────────────────
+ *
+ * The page's three added sections and the said-I'd-do switch. The data comes
+ * from the SAME Coming up read: Rust asks the PC for GET /api/today/cockpit
+ * (backend jarvis_today.py) and passes it through under `cockpit`. Nothing
+ * here creates a reminder: the buttons only put a prompt in the chat box (a
+ * private clipboard write, the app's own existing command) for the owner to
+ * send through the ordinary flow. The proposal shelf is OFF by default; the
+ * switch's own state is what the PC says, never this page's guess.
+ */
+
+/** The sections' words. */
+export const DUE_TITLE = "Due now";
+export const DUE_DETAIL =
+  "Reminders, alarms and timers whose time has come, or that went off in the last hour.";
+export const NEXT_TITLE = "Next steps";
+export const NEXT_DETAIL =
+  "The first step of each goal you are working on, and of each project's work list.";
+export const PROPOSALS_TITLE = "You said you would";
+export const PROPOSALS_DETAIL =
+  "Things your own words said you would do, that no reminder covers yet. Nothing is " +
+  "created until you act on one.";
+export const PROPOSALS_OFF =
+  "Said-I'd-do suggestions are off. Turning them on asks for your approval first: " +
+  "Jarvis reads your own words in recent chats (never a temporary or crisis chat).";
+export const PROPOSALS_ON_LABEL = "Turn on (asks first)";
+export const PROPOSALS_OFF_LABEL = "Turn off";
+export const PROPOSALS_WAITING = "Waiting for your approval. Nothing has changed yet.";
+export const PROPOSALS_TURNED_ON = "Said-I'd-do suggestions are on.";
+export const PROPOSALS_TURNED_OFF = "Said-I'd-do suggestions are off.";
+
+/** A due reminder's own controls. */
+export const DO_THIS_LABEL = "⚡ Do This With Jarvis";
+export const DO_THIS_COPIED = "Prompt copied - paste it into the Jarvis bar.";
+export const DO_THIS_COPY_FAILED = "Could not copy the prompt.";
+export const BREAK_LABEL = "✨ Break Into 3 Easy Steps";
+export const BREAK_COPIED = "Prompt copied - paste it into the Jarvis bar to break it up.";
+export const SNOOZE_LABEL = "⏱ Snooze";
+export const SNOOZED_SAID = "Snoozed.";
+export const SNOOZE_FAILED = "Could not snooze that.";
+export const SENSITIVE_NOTE =
+  "Sensitive: Jarvis will not offer to break this into steps.";
+
+/** A proposal's one tap: a prompt for the owner to send, never a reminder. */
+export const REMIND_LABEL = "Remind me…";
+
+/** The plain prompt when the PC sent no suggested one. */
+export function doThisPrompt(reminder) {
+  const title = String((reminder && reminder.text) || "").trim();
+  return title
+    ? `Help me with this reminder: ${title}.`
+    : "Help me with a reminder that is due.";
+}
+
+/** The prompt behind "Break Into 3 Easy Steps" - only when it may show. */
+export function breakStepsPrompt(reminder) {
+  const title = String((reminder && reminder.text) || "").trim();
+  return title
+    ? `Help me break this into 3 easy steps: ${title}.`
+    : "Help me break a reminder down into 3 easy steps.";
+}
+
+/** "Remind me to ..." for a proposal; the owner still sends it themselves. */
+export function remindPrompt(proposal) {
+  const text = String((proposal && proposal.text) || "").trim();
+  const due = String((proposal && proposal.suggested_due) || "").trim();
+  if (!text) return "Remind me to do the thing I mentioned.";
+  return due ? `Remind me to ${text} (${due}).` : `Remind me to ${text}.`;
+}
+
+/** The board inside `readSchedule`'s view, or null on an older PC. */
+export function cockpitOf(view) {
+  const c = view && view.cockpit;
+  return c && typeof c === "object" ? c : null;
+}
+
+/** Is the said-I'd-do switch on, as the PC said? OFF unless it says true. */
+export function unspokenEnabled(cockpit) {
+  return Boolean(cockpit && cockpit.unspoken_commitments_enabled === true);
+}
+
+const SNOOZABLE_KINDS = Object.freeze(["reminder", "alarm", "timer"]);
+
+/** When "Tonight" (19:00) and "Tomorrow" (09:00) fall, in seconds from now.
+ * A target that is past, or outside the PC's 1-minute..24-hour snooze range,
+ * is left out rather than sent to be refused. */
+export function snoozeOffers(nowMs = Date.now()) {
+  const offers = [{ label: "+15 min", seconds: 900 }, { label: "+1 hour", seconds: 3600 }];
+  const secondsUntil = (hour, dayAhead) => {
+    const d = new Date(nowMs);
+    d.setDate(d.getDate() + dayAhead);
+    d.setHours(hour, 0, 0, 0);
+    return Math.round((d.getTime() - nowMs) / 1000);
+  };
+  const tonight = secondsUntil(19, 0);
+  if (tonight >= 60 && tonight <= 86400) offers.push({ label: "Tonight", seconds: tonight });
+  const tomorrow = secondsUntil(9, 1);
+  if (tomorrow >= 60 && tomorrow <= 86400) offers.push({ label: "Tomorrow", seconds: tomorrow });
+  return offers;
+}
+
+/** One due reminder as a row: what to show, what to offer. A timer, alarm or
+ * reminder that WENT OFF can be snoozed (that is what the PC's snooze action
+ * takes); one merely overdue has not gone off yet, so it has no snooze. */
+export function dueRows(cockpit, nowMs = Date.now()) {
+  const list = cockpit && Array.isArray(cockpit.due_reminders) ? cockpit.due_reminders : [];
+  const offers = snoozeOffers(nowMs);
+  return list.filter((r) => r && typeof r === "object").map((r) => {
+    const text = String(r.text || "");
+    const hidden = r.hidden === true || !text;
+    const meta = [];
+    if (r.went_off === true) meta.push(r.when ? `Went off (${r.when})` : "Went off");
+    else if (r.overdue === true) meta.push(r.when ? `Overdue - ${r.when}` : "Overdue");
+    else if (r.when) meta.push(String(r.when));
+    const sensitive = r.sensitive === true;
+    return {
+      id: String(r.id || ""),
+      kind: String(r.kind || ""),
+      tag: String(r.kind || "reminder"),
+      title: hidden ? "(hidden) reminder" : text,
+      hidden,
+      meta,
+      overdue: r.overdue === true,
+      sensitive,
+      prompt: !hidden && typeof r.suggested_prompt === "string" && r.suggested_prompt.trim()
+        ? r.suggested_prompt.trim() : doThisPrompt(r),
+      breakPrompt: !hidden && r.stuck_hint === true && !sensitive
+        ? breakStepsPrompt(r) : null,
+      snooze: !hidden && r.went_off === true && SNOOZABLE_KINDS.includes(r.kind)
+        ? offers : null,
+    };
+  });
+}
+
+/** The first open step of each active goal and project work list, as rows. */
+export function nextRows(cockpit) {
+  const list = cockpit && Array.isArray(cockpit.active_next_steps)
+    ? cockpit.active_next_steps : [];
+  return list.filter((s) => s && typeof s === "object" && String(s.step || "").trim())
+    .map((s) => {
+      const meta = [];
+      if (s.name) meta.push(String(s.name));
+      if (s.kind === "project") meta.unshift("work list");
+      if (s.by) meta.push(String(s.by));
+      return {
+        id: String(s.id || ""),
+        kind: s.kind === "project" ? "project" : "goal",
+        tag: s.kind === "project" ? "project" : "goal",
+        title: String(s.step || ""),
+        meta,
+      };
+    });
+}
+
+/** The proposal chips: [{title, meta, prompt}] and nothing else. */
+export function proposalRows(cockpit) {
+  if (!unspokenEnabled(cockpit)) return [];
+  const list = cockpit && Array.isArray(cockpit.proposals) ? cockpit.proposals : [];
+  return list.filter((p) => p && typeof p === "object" && String(p.text || "").trim())
+    .map((p) => ({
+      title: String(p.text || ""),
+      meta: p.suggested_due ? [`a good day: ${String(p.suggested_due)}`] : [],
+      prompt: remindPrompt(p),
+    }));
+}
+
