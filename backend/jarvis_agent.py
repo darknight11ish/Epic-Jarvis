@@ -928,15 +928,28 @@ def _prepare_run_data_script(args: dict):
     code = args.get("code")
     if not isinstance(code, str) or not code.strip():
         raise ValueError("code must be the Python program as text, and cannot be empty")
-    raw_files = args.get("files") or {}
-    if not isinstance(raw_files, dict):
-        raise ValueError("files must be an object mapping a name to a path")
+    # A LIST of {name, path} pairs, not a name->path object: check_call validates
+    # the list's own item schema (type/items/properties/required are the five
+    # keywords it reads), and an object's additionalProperties is a keyword it
+    # does NOT read - jarvis_tool_schema.guard_tool_schemas() caught exactly
+    # that hole (2026-10-18): a call with a non-text path passed the schema
+    # check and was only stopped later. The list shape is validated by check_call
+    # itself, before this function gets the arguments.
+    raw_files = args.get("files") or []
+    if not isinstance(raw_files, list):
+        raise ValueError("files must be a list of {name, path} pairs")
     if len(raw_files) > SANDBOX_MAX_FILES:
         raise ValueError(f"a script may read at most {SANDBOX_MAX_FILES} files")
     files = []
-    for name, path in raw_files.items():
+    for item in raw_files:
+        if not isinstance(item, dict):
+            raise ValueError("every file the script reads needs a name and a path")
+        name = item.get("name")
+        path = item.get("path")
         if not isinstance(name, str) or not name.strip():
             raise ValueError("every file the script reads needs a plain-text name")
+        if not isinstance(path, str) or not path.strip():
+            raise ValueError(f"the file for {name!r} needs its path as text")
         real = _sandbox_allowed_file(path)
         if real is None:
             raise ValueError(
@@ -954,7 +967,7 @@ def _prepare_run_data_script(args: dict):
     return state, "\n".join(lines)
 
 
-def _latch_sandbox_file_read() -> bool:
+def _latch_sandbox_tool_read() -> bool:
     """Record that a local file was read in this answer (jarvis_gate.latch_taint).
 
     The same global latch the voiceprint and self-improvement reads set: once
@@ -963,7 +976,7 @@ def _latch_sandbox_file_read() -> bool:
     its own result says nothing was read if the sandbox refuses."""
     try:
         import jarvis_gate
-        return bool(jarvis_gate.latch_taint(why="sandbox_file_read"))
+        return bool(jarvis_gate.latch_taint(why="sandbox_tool_file"))
     except Exception:
         return False
 
@@ -979,7 +992,7 @@ def _run_run_data_script(args: dict, state, **_) -> dict:
     state = state or {}
     files = state.get("files") or {}
     if files:
-        _latch_sandbox_file_read()
+        _latch_sandbox_tool_read()
     return SANDBOX.run_data_script(state.get("code", ""),
                                    read_only_files=files or None)
 
@@ -1808,19 +1821,22 @@ TOOLS: dict = {
     SANDBOX_TOOL: Tool(
         SANDBOX_TOOL,
         "Run a small Python script for data or maths: add up a CSV, an average, "
-        "a percentage, a chart. It has no network, writes nothing, and can read "
-        "only the named files from folders the owner listed. Use read_csv(name) "
-        "and figure(name, data) inside it; print() the answer.",
+        "a percentage, a chart. It has no network, writes nothing, and reads "
+        "only the files given to it from folders the owner listed.",
         {"type": "object", "properties": {
             "code": {"type": "string", "description":
                      "Python source. Allowed imports: math, statistics, decimal, "
                      "fractions, datetime, collections, itertools, re, json, csv. "
                      "read_csv(name) reads one of the files; figure(name, value) "
                      "adds a chart; print() the answer."},
-            "files": {"type": "object", "additionalProperties": {"type": "string"},
+            "files": {"type": "array", "items": {
+                          "type": "object",
+                          "properties": {"name": {"type": "string"},
+                                         "path": {"type": "string"}},
+                          "required": ["name", "path"]},
                       "description":
-                      "name -> path of the files the script may read; each must "
-                      "be inside a folder Jarvis may look in."}},
+                      "files to read, as {name, path} pairs inside the owner's "
+                      "listed folders."}},
          "required": ["code"]},
         _prepare_run_data_script,
         _run_run_data_script,

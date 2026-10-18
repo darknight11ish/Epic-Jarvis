@@ -65,7 +65,7 @@ What it proves:
     outside "Folders Jarvis may look in" before anything runs, uses the code
     and files `prepare()` resolved (never a second lookup from the args), and
     dispatches to `jarvis_sandbox_exec.run_data_script` through a real
-    `run_local_turn` round - with `jarvis_gate.latch_taint(why="sandbox_file_read")`
+    `run_local_turn` round - with `jarvis_gate.latch_taint(why="sandbox_tool_file")`
     called exactly when a local file is read.
 """
 from __future__ import annotations
@@ -758,11 +758,39 @@ def t_the_chat_door_is_registered_and_maps_to_a_real_gate_action():
     if tool is None:
         return
     params = tool.parameters
-    check("its schema names a required text `code` and an optional `files` object",
+    check("its schema names a required text `code` and a files LIST of {name, path} pairs",
           params.get("required") == ["code"]
           and params.get("properties", {}).get("code", {}).get("type") == "string"
-          and params.get("properties", {}).get("files", {}).get("type") == "object",
+          and params.get("properties", {}).get("files", {}).get("type") == "array"
+          and (params.get("properties", {}).get("files", {}).get("items")
+               or {}).get("required") == ["name", "path"],
           params)
+    # THE SCHEMA VALIDATOR ITSELF (2026-10-18). The first shape was an object
+    # with `additionalProperties`; `_schema_problems()` does not read that
+    # keyword, so `check_call` passed a non-text path and only `prepare()`
+    # stopped it - jarvis_tool_schema.guard_tool_schemas() called that a hole.
+    # The list-of-pairs shape is made only of keywords check_call reads, and
+    # these checks bite if it ever moves back to one it does not.
+    args, problem = AG.check_call(AG.SANDBOX_TOOL,
+                                  {"code": "print(1)", "files": [{"name": "a", "path": 5}]},
+                                  {AG.SANDBOX_TOOL}, AG.TOOLS)
+    check("check_call refuses a non-text path in a files pair, before prepare or gate",
+          args is None and problem is not None and "path" in problem, problem)
+    args, problem = AG.check_call(AG.SANDBOX_TOOL,
+                                  {"code": "print(1)", "files": {"a": "b"}},
+                                  {AG.SANDBOX_TOOL}, AG.TOOLS)
+    check("the old name->path object shape is refused by the SCHEMA itself",
+          args is None and problem is not None and "list" in problem, problem)
+    args, problem = AG.check_call(
+        AG.SANDBOX_TOOL,
+        {"code": "print(1)", "files": [{"name": "a", "path": "C:/x"}]},
+        {AG.SANDBOX_TOOL}, AG.TOOLS)
+    check("a well-formed files list passes the schema check", args is not None
+          and problem is None, problem)
+    import jarvis_tool_schema as _TS
+    guard = _TS.guard_tool_schemas({AG.SANDBOX_TOOL: AG.TOOLS[AG.SANDBOX_TOOL]})
+    check("every keyword in this tool's schema is one check_call actually reads",
+          guard["ok"] is True, guard["problems"])
     homes = (1 if AG.SANDBOX_TOOL in AG.CORE_TOOLS else 0) + sum(
         1 for _g, _w, members in AG.TOOL_GROUPS if AG.SANDBOX_TOOL in members)
     check("it has exactly one home: one tool group, not the core", homes == 1, homes)
@@ -770,9 +798,9 @@ def t_the_chat_door_is_registered_and_maps_to_a_real_gate_action():
           tool.gate_lookup_name({"code": "print(1)"}) == AG.SANDBOX_GATE_PURE
           == "calculator", tool.gate_lookup_name({"code": "print(1)"}))
     check("a file read is decided under the gate's own file_read key",
-          tool.gate_lookup_name({"code": "x", "files": {"a": "b"}})
+          tool.gate_lookup_name({"code": "x", "files": [{"name": "a", "path": "b"}]})
           == AG.SANDBOX_GATE_FILE == "file_read",
-          tool.gate_lookup_name({"code": "x", "files": {"a": "b"}}))
+          tool.gate_lookup_name({"code": "x", "files": [{"name": "a", "path": "b"}]}))
     with fake_gate([]) as gate:
         check("both lookup keys are keys jarvis_gate._TOOL_ACTIONS already knows "
               "(this tool needs no gate change)",
@@ -795,14 +823,15 @@ def t_the_chat_door_refuses_files_outside_the_listed_folders():
         bad = None
         try:
             tool.prepare({"code": "print(1)",
-                          "files": {"secret": str(TMP.parent / "outside.txt")}})
+                          "files": [{"name": "secret",
+                                     "path": str(TMP.parent / "outside.txt")}]})
         except ValueError as exc:
             bad = str(exc)
         check("a file outside 'Folders Jarvis may look in' is refused in prepare(), "
               "before any gate or child", isinstance(bad, str)
               and "Folders Jarvis may look in" in bad, bad)
         state, description = tool.prepare(
-            {"code": "print(1)", "files": {"scores": str(CSV_PATH)}})
+            {"code": "print(1)", "files": [{"name": "scores", "path": str(CSV_PATH)}]})
         check("a file inside a listed folder is resolved to the path the file rule "
               "returned, in the state and on the plan",
               state["files"] == {"scores": str(RESOLVED_PATH)}
@@ -833,8 +862,8 @@ def t_the_chat_door_uses_the_checked_state_and_dispatches():
                   spy_calls == [("print(99)", {"scores": str(RESOLVED_PATH)})],
                   (spy_calls, result))
             check("reading a local file latches the turn as private "
-                  "(why='sandbox_file_read')",
-                  latch_calls == ["sandbox_file_read"], latch_calls)
+                  "(why='sandbox_tool_file')",
+                  latch_calls == ["sandbox_tool_file"], latch_calls)
             check("the sandbox's own result is what the tool returns", result == ran,
                   result)
             latch_calls.clear()
