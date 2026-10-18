@@ -893,6 +893,50 @@ def t_the_real_file():
           '"/api/hardware"' in s and '"/api/hardware/apply"' in s)
 
 
+def t_a_twin_named_card_is_never_called_only_by_its_name():
+    """The planned third card (2026-10-17) is a SECOND RTX 2080 SUPER 8 GB: two
+    cards with the same name AND the same size. Every sentence that names a
+    card must say WHICH one - the monitor first, the card's own id tail as the
+    honest last resort - and a card with no twin keeps the plain name it always
+    had, so nothing on today's PC changes."""
+    mon = P.Card(key="GPU-aaaa", name="NVIDIA GeForce RTX 2080 SUPER", total_gib=8.0, monitor=True)
+    head = P.Card(key="GPU-bbbb", name="NVIDIA GeForce RTX 2080 SUPER", total_gib=8.0, monitor=False)
+    check("a card with no twin keeps its plain name", P.card_label(mon, [mon]) == mon.name)
+    check("the monitor card and its headless twin are told apart",
+          P.card_label(mon, [mon, head]) == mon.name + " on your monitor"
+          and P.card_label(head, [mon, head]) == mon.name + " (headless)")
+    unknown = P.Card(key="GPU-cccc", name=mon.name, total_gib=8.0)
+    check("with the monitor unknown, the card's own id tail is the last resort - never a guess",
+          P.card_label(unknown, [mon, unknown]).endswith("(id ...cccc)")
+          and P.card_label(unknown, [mon, unknown]) != P.card_label(mon, [mon, unknown]))
+    row = {"key": "GPU-aaaa", "name": mon.name, "total_gib": 8.0, "route": "CUDA",
+           "monitor": True, "used": True, "why_unused": ""}
+    other_row = dict(row, key="GPU-bbbb", monitor=False)
+    check("the cards page's own line says which twin it is",
+          "on your monitor" in H._card_words(row, mon, P.card_label(mon, [mon, head]))
+          and "(headless)" in H._card_words(other_row, head, P.card_label(head, [mon, head])))
+    found = H._found_sentence([row, other_row], [mon, head], log="x")
+    check("the 'found' sentence tells them apart too",
+          "on your monitor" in found and "(headless)" in found, found)
+
+
+def t_three_cards_plan_names_the_one_left_out():
+    """A preset plans two slots. On a 3-card PC the third is left out IN WORDS -
+    and with two identical cards that sentence must still say which one."""
+    cards = [P.Card(key="GPU-1", name="NVIDIA GeForce RTX 2080 SUPER", total_gib=8.0, monitor=True),
+             P.Card(key="GPU-2", name="NVIDIA GeForce RTX 2060", total_gib=12.0, monitor=False),
+             P.Card(key="GPU-3", name="NVIDIA GeForce RTX 2080 SUPER", total_gib=8.0, monitor=False)]
+    lay = P.plan(cards, "features")
+    note = next((n for n in lay.notes if "left out" in n), "")
+    check("three cards: two are planned and exactly one is left out in words",
+          len(lay.cards) == 2 and bool(note), lay.notes)
+    check("... and the left-out twin is named, not just 'the RTX 2080 SUPER'",
+          "(headless)" in note or "on your monitor" in note, note)
+    one = P.plan([cards[1]], "smart")
+    check("one card: the plan still works and no card is called left out",
+          len(one.cards) == 1 and not any("left out" in n for n in one.notes), one.notes)
+
+
 def main():
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):

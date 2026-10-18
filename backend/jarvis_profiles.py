@@ -297,6 +297,29 @@ def desktop_share(card: Card) -> tuple:
     return (SHARE_NO_MONITOR_GIB if card.monitor is False else SHARE_MONITOR_GIB), "placeholder"
 
 
+def card_label(card: Card, cards: list) -> str:
+    """The card's own name, told apart from a twin when there is one.
+
+    The planned third card (2026-10-17) is a SECOND RTX 2080 SUPER, so two
+    cards on that PC will carry the same name and the same size - the only
+    honest difference a person can see is the monitor. A card with a twin is
+    therefore named "the RTX 2080 SUPER on your monitor" against "the RTX 2080
+    SUPER (headless)"; when even the monitor cannot separate them (both flags
+    unknown) the card's own id tail is the last resort, and the plain name is
+    never claimed for two different cards. With no twin this is byte-for-byte
+    the name it always was, so no existing sentence changes.
+    """
+    twins = [c for c in cards if c is not card and c.name == card.name]
+    if not twins:
+        return card.name
+    if card.monitor is True:
+        return f"{card.name} on your monitor"
+    if card.monitor is False:
+        return f"{card.name} (headless)"
+    tail = (card.key or card.uuid or "")[-4:]
+    return f"{card.name} (id ...{tail})" if tail else card.name
+
+
 def room(card: Card, processes: int = 1, gap: float = GAP_GIB) -> float:
     """Room for models on the card (section 4.2), before the cushion."""
     return card.total_gib - desktop_share(card)[0] - CUDA_START_GIB * processes - gap
@@ -553,7 +576,7 @@ def plan(cards: list, preset: str, *, gap: float = GAP_GIB, primary: str = "",
         return lay
     if len(ranked) > 2:
         ranked = _two_slots(ranked)
-        extra = ", ".join(c.name for c in ranked[2:])
+        extra = ", ".join(card_label(c, cards) for c in ranked[2:])
         lay.notes.append(f"Jarvis plans for up to two cards; the {extra} is left out.")
         ranked = ranked[:2]
         lay.cards = ranked
@@ -715,7 +738,11 @@ def _plan_two(lay: Layout, a: Card, b: Card, preset: str, gap: float, limits: di
         return
     lay.chat = chat
     other = b if chat.card is a else a
-    lay.notes.append(f"Chat runs on the {chat.card.name}"
+    # Name each card as a reader can tell it apart: with two identical cards
+    # (the planned second RTX 2080 SUPER) "the RTX 2080 SUPER" alone would not
+    # say WHICH one this sentence is about (2026-10-17).
+    lab_a, lab_b = card_label(a, [a, b]), card_label(b, [a, b])
+    lay.notes.append(f"Chat runs on the {card_label(chat.card, [a, b])}"
                      + (f" ({why_first})." if chat.card is a else
                         f", the slower card: the {chat.model.size} gets more room there, and "
                         f"answers come out more slowly."))
@@ -727,6 +754,7 @@ def _plan_two(lay: Layout, a: Card, b: Card, preset: str, gap: float, limits: di
             lay.off.append(f"Long conversations: no. Chat gets only {chat.ctx:,} tokens.")
         return
     okv = kv_type(other)[0]
+    other_label = lab_b if other is b else lab_a
     long = None
     for ref, ctx in LANE_CANDIDATES:
         if ctx <= chat.ctx or (limits.get("long") and ctx > limits["long"]):
@@ -742,19 +770,19 @@ def _plan_two(lay: Layout, a: Card, b: Card, preset: str, gap: float, limits: di
     if long is not None:
         lay.long = long
     elif lay.long_is_chat:
-        lay.off.append(f"A separate long-conversation model: off. The {other.name} cannot hold "
+        lay.off.append(f"A separate long-conversation model: off. The {other_label} cannot hold "
                        f"more conversation than chat already does ({chat.ctx:,} tokens).")
     else:
         lay.off.append(f"Long conversations: no. Chat gets only {chat.ctx:,} tokens, and the "
-                       f"{other.name} has no room for more.")
+                       f"{other_label} has no room for more.")
     if pics is not None:
         lay.pictures = pics
     else:
-        lay.off.append(f"Pictures: off. No picture model fits on the {other.name}.")
+        lay.off.append(f"Pictures: off. No picture model fits on the {other_label}.")
     if long is not None and pics is not None:
         lay.long = replace(long, mode="turns")
         lay.pictures = replace(pics, mode="turns")
-        lay.notes.append(f"Long conversations and pictures take turns on the {other.name}: "
+        lay.notes.append(f"Long conversations and pictures take turns on the {other_label}: "
                          f"one model is loaded there at a time.")
 
 

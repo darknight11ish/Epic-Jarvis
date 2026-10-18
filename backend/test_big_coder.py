@@ -37,6 +37,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -693,6 +694,46 @@ def t_the_both_cards_server_is_the_one_this_mode_owns():
     check("and it may never reach the cloud", env.get("OLLAMA_NO_CLOUD") == "1")
 
 
+def t_the_card_count_is_read_and_said_plainly():
+    """2026-10-17: the owner is adding a third RTX 2080 SUPER. The mode works
+    on 1, 2 or 3 cards: the measured two-card minimum keeps its exact words,
+    an extra card is used automatically, and the 28,672-token setting measured
+    on two is NOT raised for it until a new measurement says it fits. A PC the
+    code cannot read keeps the two-card words rather than inventing a count."""
+    two = B.cards_words(None)
+    check("unreadable hardware keeps the measured two-card words, exactly",
+          two.startswith("It needs BOTH graphics cards,"), two)
+    check("on today's two cards the sentence is unchanged too",
+          B.cards_words([object(), object()]) == two)
+    one = B.cards_words([object()])
+    check("one card: said plainly, and no claim it can run",
+          "this PC has 1" in one and "BOTH" not in one, one)
+    three = B.cards_words([object(), object(), object()])
+    check("three cards: at least two, spread across all of them",
+          "this PC has 3" in three and "split across all of them" in three, three)
+    check("no extra-card sentence on one or two cards",
+          B.cards_note(None) == "" and B.cards_note([object(), object()]) == "")
+    note = B.cards_note([object(), object(), object()])
+    check("an extra card is used automatically, and the measured setting is NOT raised for it",
+          "used automatically" in note and "measured on two cards" in note
+          and "not raised" in note, note)
+    with mock.patch.object(B, "cards_in_pc", return_value=None):
+        off = B.card_text_off()
+    check("the switch's words say both cards when the PC cannot be read",
+          "both graphics cards" in off, off)
+    for n in (1, 3):
+        with mock.patch.object(B, "cards_in_pc", return_value=[object()] * n):
+            start, off = B.card_text_start(), B.card_text_off()
+        check(f"{n} card(s): the start text says the real count",
+              f"this PC has {n}" in start, start)
+        check(f"{n} card(s): the switch text says the real count",
+              f"this PC has {n}" in off, off)
+    with mock.patch.object(B, "cards_in_pc", return_value=[object()] * 3):
+        start = B.card_text_start()
+    check("three cards: the measured token setting is named and left alone",
+          f"{B.NUM_CTX:,} tokens" in start and "not raised" in start, start)
+
+
 def main() -> int:
     for fn in (t_the_switch_is_off_by_default, t_the_card_names_both_lanes,
                t_turning_it_on_is_one_card_and_off_is_immediate,
@@ -712,6 +753,7 @@ def main() -> int:
                t_the_delivery_lists_carry_it,
                t_the_patch_order_allow_lists_carry_it,
                t_the_patch_order_allow_lists_carry_the_newest_patch_too,
+               t_the_card_count_is_read_and_said_plainly,
                t_the_both_cards_server_is_the_one_this_mode_owns):
         fn()
     print()

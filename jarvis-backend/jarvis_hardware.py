@@ -931,7 +931,7 @@ def _found_sentence(rows, planned, log) -> str:
         return ("No graphics card was found: Ollama's log, nvidia-smi and the registry said "
                 "nothing, so everything would run on the processor.")
     n = len(planned)
-    names = " and ".join(f"the {c.name}" for c in planned) or "none"
+    names = " and ".join(f"the {P.card_label(c, planned)}" for c in planned) or "none"
     head = (f"Found {len(rows)} graphics card{'s' if len(rows) != 1 else ''}; "
             f"Ollama can use {n}: {names}.")
     if log is None:
@@ -1255,7 +1255,7 @@ def _card_row(row: dict, planned: list, ranked_first: Optional[P.Card],
         "conversation_format": kv,
         "best_effort": P.best_effort(card) if card else None,
         "chat_first": ranked_first is not None and card is ranked_first,
-        "words": _card_words(row, card),
+        "words": _card_words(row, card, P.card_label(card, planned) if card else None),
         # I12 (2026-09-26): this card's heat, power, fan and load right now,
         # and the same in one line both apps show under the card.
         "health": ({k: v for k, v in health.items() if k not in ("index", "uuid")}
@@ -1264,9 +1264,13 @@ def _card_row(row: dict, planned: list, ranked_first: Optional[P.Card],
     }
 
 
-def _card_words(row: dict, card: Optional[P.Card]) -> str:
+def _card_words(row: dict, card: Optional[P.Card], label: Optional[str] = None) -> str:
     size = f"{row['total_gib']:.0f} GB" if row["total_gib"] else "memory unknown"
-    bits = [f"{row['name']}, {size}"]
+    # `label` is the SAME name, told apart from a twin (the planned second
+    # RTX 2080 SUPER) by the monitor, or the id tail when that cannot say
+    # (jarvis_profiles.card_label). It is absent for one card, so this line is
+    # unchanged on today's PC.
+    bits = [f"{label or row['name']}, {size}"]
     if row["route"]:
         bits.append(f"used by Ollama through {row['route']}")
     if row["monitor"] is True:
