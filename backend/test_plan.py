@@ -14,6 +14,7 @@ with a plain reason every time, never a bare False.
 """
 import datetime
 import json
+import os
 import sys
 import tempfile
 import traceback
@@ -363,6 +364,105 @@ def t_enabled_says_yes_once_the_real_bars_are_cleared():
         ok, why = P.enabled("jarvis-primary", results_path=p)
         check("enabled once both bars clear", ok is True, why)
         check("no reason needed when it says yes", why == "")
+
+
+def t_current_everyday_model_reads_the_same_source_as_chat():
+    """The model name is read the way chat reads it, and is injectable."""
+    old = os.environ.pop("JARVIS_LOCAL_MODEL", None)
+    try:
+        check("with nothing recorded, the everyday model is chat's own default",
+              P.current_everyday_model() == P.DEFAULT_EVERYDAY_MODEL,
+              P.current_everyday_model())
+        os.environ["JARVIS_LOCAL_MODEL"] = "qwen3.5:9b"
+        check("JARVIS_LOCAL_MODEL wins, exactly as chat's resolution does",
+              P.current_everyday_model() == "qwen3.5:9b",
+              P.current_everyday_model())
+    finally:
+        os.environ.pop("JARVIS_LOCAL_MODEL", None)
+        if old is not None:
+            os.environ["JARVIS_LOCAL_MODEL"] = old
+
+
+def t_enabled_refuses_a_fresh_pass_for_a_different_model():
+    """A result is evidence about ONE model; a fresh pass for another is not it."""
+    now = 1_800_000_000.0
+    with tempfile.TemporaryDirectory() as tmp:
+        p = _write(tmp, _passing_doc(), run_at=_iso_days_ago(1, now))
+        # The file's pass is for jarvis-primary; the everyday model is now the 9b.
+        ok, why = P.enabled("qwen3.5:9b", results_path=p, now=now,
+                            current_model="qwen3.5:9b")
+        check("a fresh passing result for another model is refused", ok is False, why)
+        check("  ...names both models, so the owner knows what changed",
+              "jarvis-primary" in why and "qwen3.5:9b" in why
+              and "not evidence" in why, why)
+        # Asked with no model: it resolves to the current one and still refuses,
+        # because the recorded result belongs to the old model.
+        ok2, why2 = P.enabled(results_path=p, now=now, current_model="qwen3.5:9b")
+        check("... and the same is true when the caller names no model",
+              ok2 is False and "qwen3.5:9b" in why2, why2)
+        # Asked about the OLD model while the current one is the 9b: refused
+        # rather than trusted, for the same reason.
+        ok3, why3 = P.enabled("jarvis-primary", results_path=p, now=now,
+                              current_model="qwen3.5:9b")
+        check("... and asking about the old model does not unlock it either",
+              ok3 is False and "qwen3.5:9b" in why3, why3)
+        # Even when the file also holds a fresh pass for the current model, a
+        # caller asking about a DIFFERENT model is refused: the asked model must
+        # be the current one (the comparison is not just "does the file have a
+        # row somewhere").
+        both = {"models": {
+            "jarvis-primary": {"summary": {"full": {
+                "multi": {"pass": 10, "of": 10}, "injection": {"carried": 0}}}},
+            "qwen3.5:9b": {"summary": {"full": {
+                "multi": {"pass": 10, "of": 10}, "injection": {"carried": 0}}}},
+        }}
+        both_p = _write(tmp, both, run_at=_iso_days_ago(1, now))
+        ok4, why4 = P.enabled("jarvis-primary", results_path=both_p, now=now,
+                              current_model="qwen3.5:9b")
+        check("... and a caller naming a model that is not the current one is refused",
+              ok4 is False and "jarvis-primary" in why4 and "qwen3.5:9b" in why4, why4)
+
+
+def t_enabled_refuses_a_matching_model_pass_that_is_too_old():
+    """The model matches, but #570's 90-day freshness still applies."""
+    now = 1_800_000_000.0
+    doc = {"models": {"qwen3.5:9b": {"summary": {"full": {
+        "multi": {"pass": 10, "of": 10}, "injection": {"carried": 0}}}}}}
+    with tempfile.TemporaryDirectory() as tmp:
+        p = _write(tmp, doc, run_at=_iso_days_ago(91, now))
+        ok, why = P.enabled("qwen3.5:9b", results_path=p, now=now,
+                            current_model="qwen3.5:9b")
+        check("a matching-model pass older than 90 days is refused", ok is False, why)
+        check("  ...with the age, not the model, named as the reason",
+              "91 days old" in why, why)
+
+
+def t_enabled_accepts_only_a_fresh_pass_for_the_current_model():
+    """Both bindings together: current model AND fresh result."""
+    now = 1_800_000_000.0
+    doc = {"models": {"qwen3.5:9b": {"summary": {"full": {
+        "multi": {"pass": 9, "of": 10}, "injection": {"carried": 0}}}}}}
+    with tempfile.TemporaryDirectory() as tmp:
+        p = _write(tmp, doc, run_at=_iso_days_ago(89, now))
+        ok, why = P.enabled("qwen3.5:9b", results_path=p, now=now,
+                            current_model="qwen3.5:9b")
+        check("a fresh pass for the current model unlocks the card", ok is True, why)
+        check("  ...and no reason is needed", why == "", why)
+        # A pass filed under the OTHER name must not be read as about this model:
+        # this is the cross-model attribution the binding exists to stop.
+        other = Path(tmp) / "other.json"
+        other_doc = {"models": {"jarvis-primary": {"summary": {"full": {
+            "multi": {"pass": 10, "of": 10}, "injection": {"carried": 0}}}}},
+            "run_at": _iso_days_ago(1, now)}
+        other.write_text(json.dumps(other_doc), encoding="utf-8")
+        ok2, why2 = P.enabled("qwen3.5:9b", results_path=other, now=now,
+                              current_model="qwen3.5:9b")
+        check("... and an old model's fresh pass is NOT attributed to the new one",
+              ok2 is False and "not evidence" in why2 and "jarvis-primary" in why2, why2)
+        # No result at all for the current model, only the old one.
+        ok3, why3 = P.enabled(results_path=other, now=now,
+                              current_model="qwen3.5:9b")
+        check("... even when the caller names no model", ok3 is False, why3)
 
 
 def _passing_doc():

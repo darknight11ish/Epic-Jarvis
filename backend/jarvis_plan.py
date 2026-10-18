@@ -50,6 +50,21 @@ own `propose()`/`run()` both refuse to do anything until it says yes. This
 mirrors the memory re-ranker (`docs/MEMORY-SCOREBOARD.md`): a real, run,
 measured result gates the feature, not a promise that it should be fine.
 
+`CLOSED_BY_MEASUREMENT` (2026-10-18, Gemini's ruling on the first real eval).
+The gate is not merely switched off: on this PC the multi-step suite passed
+`1/8 = 12.5%` against the `90%` bar, so the freeform chat-to-job plan card is
+**closed by measurement** on current 8B/9B local models - it is not waiting on
+a switch somebody forgot to flip. Two things keep it closed honestly:
+
+* **Freshness (#570):** a result older than `MAX_RESULT_AGE_DAYS` (90), or with
+  no date at all, is not evidence about today.
+* **Model binding:** a result is evidence about ONE model. `enabled()` requires
+  the recorded passing result and the model asked about to be the CURRENT
+  everyday model (`current_everyday_model()` below, read from `JARVIS_LOCAL_MODEL`
+  then `jarvis_models.current_model()`, the same order chat uses). Switching to
+  a future model therefore cannot inherit an old pass: it must run the eval
+  again before this card can unlock.
+
 WHAT ACTUALLY EXECUTES A STEP
 This module has no idea how to run any tool - the same design as
 `jarvis_ui_control.py`'s injected `read`/`act`. `run_step(step)` and
@@ -104,6 +119,37 @@ TOOL_LIST = "full"        # which of ollama_tool_eval's two lists gates this
 #: when it was run is refused too (fail closed), because it is not evidence
 #: about this build. The number is here, named, so it is not a hidden default.
 MAX_RESULT_AGE_DAYS = 90
+
+#: The everyday model's name when neither the environment nor the owner's own
+#: model state says one - the same default chat itself uses
+#: (`jarvis_chatbot.MAIN_MODEL_DEFAULT`), kept here as a literal so this module
+#: never imports the whole chatbot just to read a name.
+DEFAULT_EVERYDAY_MODEL = "jarvis-primary"
+
+
+def current_everyday_model() -> str:
+    """The name of the model everyday chat runs now, from the repository's own
+    sources, in the order chat resolves it (`import_history._chat_model`,
+    `jarvis_hud._extract_model`): `JARVIS_LOCAL_MODEL` first, then
+    `jarvis_models.current_model()` (the owner's pinned model, read from
+    `model-state.json`), then the default name above.
+
+    WHY IT IS READ HERE. A passing safety eval is evidence about ONE model.
+    This PC's result was measured on the model of the day; switching models
+    must not inherit it (Gemini's ruling, 2026-10-18). `enabled()` compares its
+    result against this name, and tests inject the name instead of setting the
+    environment, so the comparison itself is tested without touching the PC.
+    """
+    import os
+    name = os.environ.get("JARVIS_LOCAL_MODEL", "").strip()
+    if name:
+        return name
+    try:
+        import jarvis_models
+        name = str(jarvis_models.current_model() or "").strip()
+    except Exception:                     # not present in this checkout; fine
+        name = ""
+    return name or DEFAULT_EVERYDAY_MODEL
 
 #: A result-filled step (`from_step`) says WHERE the earlier result goes: an
 #: argument holding "{{step N}}" (N counted from 1, as the card counts). At
@@ -492,20 +538,45 @@ def _run_at_epoch(doc) -> Optional[float]:
         return None
 
 
-def enabled(model: str = "jarvis-primary", *, results_path: Optional[Path] = None,
-            now: Optional[float] = None) -> tuple:
+def enabled(model: Optional[str] = None, *, results_path: Optional[Path] = None,
+            now: Optional[float] = None,
+            current_model: Optional[str] = None) -> tuple:
     """(True, "") once a real, RECENT run of
-    tools/tool_eval/ollama_tool_eval.py on THIS model has cleared the bar;
-    (False, reason) otherwise, with `reason` a plain sentence naming exactly
-    what is missing - never a bare False with no way to know why. Reads a
-    file; never runs the eval itself.
+    tools/tool_eval/ollama_tool_eval.py on the CURRENT everyday model has
+    cleared the bar; (False, reason) otherwise, with `reason` a plain sentence
+    naming exactly what is missing - never a bare False with no way to know why.
+    Reads a file; never runs the eval itself.
 
-    A result older than `MAX_RESULT_AGE_DAYS` (90) is refused in words, and a
-    result file that does not say when it was run is refused too: a pass from
-    another model build or tool list is not evidence about this one. `now` is
-    injectable for the age tests; production leaves it out and uses the PC's
+    TWO BINDINGS make a passed number count (Gemini's ruling, 2026-10-18):
+
+    * **Freshness (#570):** a result older than `MAX_RESULT_AGE_DAYS` (90) is
+      refused in words, and one that does not say when it was run is refused
+      too.
+    * **Model:** a result is evidence about ONE model. `model` (or, when it is
+      None, the current everyday model) must BE the current everyday model -
+      `current_model` lets the tests inject it; production reads
+      `current_everyday_model()`. A fresh pass on another model is refused with
+      a sentence naming both models, so switching to a future model always
+      forces a fresh eval before this card unlocks.
+
+    A card closed by that combination is `CLOSED_BY_MEASUREMENT` (the module
+    docstring has the `1/8 = 12.5%` result and the reopen condition). `now` is
+    injectable for the age tests; production leaves it out and uses this PC's
     own clock."""
     import json
+    current = (current_model if current_model is not None
+               else current_everyday_model()).strip()
+    asked = (model if model is not None else current).strip()
+    if not asked or not current:
+        return False, ("The plan card cannot tell which model is the everyday one on "
+                       "this PC, so a safety-test result cannot be tied to it. This "
+                       "feature stays closed until that name is known.")
+    if asked != current:
+        return False, (f"The safety test's result on this PC is for the model "
+                       f"{asked!r}, but everyday chat currently uses {current!r}. A "
+                       "result for one model is not evidence about another, so this "
+                       "card stays closed until tools/tool_eval/ollama_tool_eval.py "
+                       "passes on the current model.")
     path = results_path or _results_path()
     if not path.is_file():
         # Name the place the next run will publish to, so "not run yet" and
@@ -531,11 +602,21 @@ def enabled(model: str = "jarvis-primary", *, results_path: Optional[Path] = Non
                        "list may have changed since; run tools/tool_eval/ollama_tool_eval.py "
                        "again.")
     models = doc.get("models") if isinstance(doc, dict) else None
-    row = models.get(model) if isinstance(models, dict) else None
+    if isinstance(models, dict) and models and current not in models:
+        # A pass exists, but it belongs to another model. Say WHICH, plainly:
+        # "no result for the current model" alone reads like a broken file when
+        # the real reason is that the everyday model changed (2026-10-18).
+        recorded = ", ".join(sorted(str(name) for name in models)[:3])
+        return False, (f"The safety test's result on this PC is for the model(s) "
+                       f"{recorded}, but everyday chat currently uses {current!r}. A "
+                       "result for one model is not evidence about another, so this "
+                       "card stays closed until tools/tool_eval/ollama_tool_eval.py "
+                       "passes on the current model.")
+    row = models.get(current) if isinstance(models, dict) else None
     summary = row.get("summary") if isinstance(row, dict) else None
     lst = summary.get(TOOL_LIST) if isinstance(summary, dict) else None
     if not isinstance(lst, dict):
-        return False, (f"The safety test has no result for {model!r} on the {TOOL_LIST!r} "
+        return False, (f"The safety test has no result for {current!r} on the {TOOL_LIST!r} "
                        "tool list yet. Run tools/tool_eval/ollama_tool_eval.py, then try again.")
     multi = lst.get("multi")
     if not isinstance(multi, dict) or not multi.get("of"):
