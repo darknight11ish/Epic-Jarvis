@@ -23,6 +23,7 @@
 //! The command [`read_selection`] is the same read for an explicit call. The
 //! bar itself is served by [`read_selection_quiet`] before it takes focus.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use tauri::AppHandle;
@@ -42,6 +43,60 @@ pub(crate) const SELECTION_UPDATE: &str =
 /// A loopback read of a few milliseconds; the bar-open path waits for it
 /// before taking focus, so the limit is short on purpose.
 const SELECTION_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// What the bar-open path must do, from the lock reading BEFORE it starts
+/// and the one AFTER the read answers (S-3).
+///
+/// The decision is a pure function of the two booleans so its four cases can
+/// be tested without a window: the app's own `toggle_quickbar` only wires it.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum BarRead {
+    /// Unlocked both times: read, show the bar with the answer.
+    Read,
+    /// Locked BEFORE: do not read at all; show the lock's own path.
+    DoNotRead,
+    /// Unlocked when it started, locked when the read answered: the text is
+    /// thrown away and the page is told (which also clears a chip drawn before
+    /// the lock); the show path still runs so the lock card can appear.
+    ReadThenClear,
+}
+
+pub(crate) fn bar_read(locked_before: bool, locked_after: bool) -> BarRead {
+    if locked_before {
+        BarRead::DoNotRead
+    } else if locked_after {
+        BarRead::ReadThenClear
+    } else {
+        BarRead::Read
+    }
+}
+
+/// The refusal the bar's page draws when App lock is on. It has the 24-A
+/// refusal shape, so the one chip rule that already exists (`ok !== true`
+/// means no chip) also clears a chip left over from before the lock (S-3).
+pub(crate) fn locked_answer() -> serde_json::Value {
+    serde_json::json!({
+        "ok": false, "refused": true, "why": "locked", "text": "", "app": "",
+        "chars": 0, "truncated": false, "scrubbed": false,
+        "words": "Jarvis is locked, so the highlighted text was not shown. \
+                  Unlock it and press the key again.",
+    })
+}
+
+/// One bar-open read at a time (S-5): two quick presses must not start two
+/// readers, and a slow first read must not have its chip erased by a refusal
+/// from a second read that found the bar in focus.
+static READ_PENDING: AtomicBool = AtomicBool::new(false);
+
+/// true when this caller may start the read; false while one is in flight.
+pub(crate) fn begin_bar_read() -> bool {
+    !READ_PENDING.swap(true, Ordering::SeqCst)
+}
+
+/// The read finished (whatever it found): the next bar open may start one.
+pub(crate) fn end_bar_read() {
+    READ_PENDING.store(false, Ordering::SeqCst);
+}
 
 /// One refusal in the 24-A shape, for a read the transport could not make.
 fn unavailable() -> serde_json::Value {
@@ -106,6 +161,41 @@ pub(crate) async fn read_selection_quiet(app: &AppHandle) -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::selection_answer;
+    use super::{bar_read, begin_bar_read, end_bar_read, locked_answer, BarRead};
+
+    #[test]
+    fn the_locked_paths_never_hand_the_selection_over() {
+        // S-3: locked before -> no read; locked while reading -> throw it away.
+        assert_eq!(bar_read(true, false), BarRead::DoNotRead);
+        assert_eq!(bar_read(true, true), BarRead::DoNotRead);
+        assert_eq!(bar_read(false, true), BarRead::ReadThenClear);
+        assert_eq!(bar_read(false, false), BarRead::Read);
+
+        let value = locked_answer();
+        assert_eq!(value["ok"], false);
+        assert_eq!(value["refused"], true);
+        assert_eq!(value["why"], "locked");
+        assert_eq!(value["text"], "");
+        // The word "locked" is in the sentence a person reads.
+        assert!(value["words"].as_str().unwrap_or("").contains("locked"));
+    }
+
+    #[test]
+    fn only_one_bar_read_runs_at_a_time() {
+        // S-5: the guard is process-wide; after the first read ends, the next
+        // bar open may start again. (No other test touches this flag.)
+        assert!(begin_bar_read(), "the first read may start");
+        assert!(
+            !begin_bar_read(),
+            "a second read while one is in flight must not start"
+        );
+        end_bar_read();
+        assert!(
+            begin_bar_read(),
+            "after the read ends the next one may start"
+        );
+        end_bar_read();
+    }
 
     /// The real shape `jarvis_ui_control.read_selection()` returns on success.
     const GOOD: &str = r#"{"ok":true,"refused":false,"why":"","text":"the selected words",

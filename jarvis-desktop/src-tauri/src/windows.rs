@@ -574,23 +574,46 @@ pub fn toggle_quickbar(app: &AppHandle) -> Result<bool, String> {
     // handed to the page as `selection-read`. The bar is revealed when the
     // answer is in (a loopback GET of a few milliseconds; 3 s at worst on a
     // backend that is not answering), so nothing steals the focus first.
-    if crate::lock::app_locked(app) {
-        // App lock: no look at the screen and no selection read. The show path
-        // raises the lock's own card; nothing is attached.
+    // S-3: the lock is read HERE and again when the read answers (pure
+    // decision in selection::bar_read, so both cases are tested without a
+    // window). Locked before: no read at all, and the page is told so a chip
+    // drawn before the lock is cleared - then the show path raises the lock's
+    // own card.
+    let locked_before = crate::lock::app_locked(app);
+    if locked_before {
+        crate::emit_quickbar(
+            app,
+            crate::events::SELECTION_READ,
+            crate::selection::locked_answer(),
+        );
         show_quickbar(app)?;
         return Ok(focus_quickbar_input(app));
+    }
+    // S-5: one read at a time. A second press while one is in flight does not
+    // start another (the first will show the bar with its own answer).
+    if !crate::selection::begin_bar_read() {
+        return Ok(true);
     }
     let target = app.clone();
     tauri::async_runtime::spawn(async move {
         let got = crate::selection::read_selection_quiet(&target).await;
+        // S-3 again: the lock may have engaged while the read was in flight.
+        // Then none of what was read is handed over, a chip from before the
+        // lock is cleared, and the show path still runs so the lock card can
+        // be raised.
+        let answer = match crate::selection::bar_read(false, crate::lock::app_locked(&target)) {
+            crate::selection::BarRead::ReadThenClear => crate::selection::locked_answer(),
+            _ => got,
+        };
         match show_quickbar(&target) {
             Ok(()) => {
                 if focus_quickbar_input(&target) {
-                    crate::emit_quickbar(&target, crate::events::SELECTION_READ, got);
+                    crate::emit_quickbar(&target, crate::events::SELECTION_READ, answer);
                 }
             }
             Err(err) => eprintln!("[jarvis] quickbar show failed: {err}"),
         }
+        crate::selection::end_bar_read();
     });
     Ok(true)
 }

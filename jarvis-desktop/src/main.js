@@ -2169,7 +2169,14 @@ function showSelectionChip(result) {
 function useSelection(text) {
   if (!state.selection) return;
   dom.prompt.value = attachPrompt(dom.prompt.value, text);
-  state.boxTag = boxTagAfter(state.boxTag, "typed");
+  // S-1 / R3: these words were read out of ANOTHER program's window, so they
+  // are not the owner's own typing. Tag them exactly as text INSERTED from
+  // outside is tagged (`chat-history.js` boxTagAfter "paste"): "pasted" stays
+  // until the box is emptied, so typing a "?" around it cannot turn a selected
+  // web page into "the owner's own words" - which the PC's provenance rules
+  // use for the no-card lights path, the "was pasted in, not typed" card
+  // lines, the no-model quick path, and automatic learning.
+  state.boxTag = boxTagAfter(state.boxTag, "paste");
   autoGrowPrompt();
   clearSelectionChip();
   focusInput({ selectAll: false });

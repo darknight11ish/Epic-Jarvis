@@ -20,11 +20,12 @@
  * other node tests.
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import * as C from "../src/selection-chip.js";
+import { boxTagAfter, sentProvenance } from "../src/chat-history.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const read = (p) => readFileSync(p, "utf8");
@@ -140,6 +141,28 @@ check("the label is bounded (a long preview cannot make a giant chip)", () => {
   assert.ok(chip.label.length <= C.LABEL_CHARS, chip.label.length);
 });
 
+/* ── 2b. S-1: the chip's words are NOT the owner's own typing ─────────── */
+
+check("R3's rule: text inserted from outside stays pasted until the box is emptied", () => {
+  const tag = boxTagAfter("typed", "paste");
+  assert.equal(tag, "pasted", "inserted text must be pasted, not typed");
+  assert.equal(boxTagAfter(tag, "edit", "with a ? around it"), "pasted",
+               "typing around it cannot make it the owner's own words");
+  assert.equal(sentProvenance(tag, false), "pasted");
+  assert.equal(sentProvenance(tag, true), "pasted",
+               "a picture does not upgrade pasted text");
+  assert.notEqual(sentProvenance(tag, false), "typed");
+});
+
+check("the chip attaches as PASTED, never as typed (S-1)", () => {
+  const at = mainJs.indexOf("function useSelection(text)");
+  assert.notEqual(at, -1, "no useSelection");
+  const block = mainJs.slice(at, at + 900);
+  assert.match(block, /boxTagAfter\(state\.boxTag, "paste"\)/, block);
+  assert.doesNotMatch(block, /boxTagAfter\(state\.boxTag, "typed"\)/,
+                      "the chip must not tag selection text as the owner's typing");
+});
+
 /* ── 3. the wiring in the real files ──────────────────────────────────── */
 
 check("the bar's attachment strip holds the chip and its four controls", () => {
@@ -184,6 +207,19 @@ check("the chip is hidden with the attachments when there is no selection", () =
   assert.notEqual(dismissAt, -1, "no dismiss()");
   assert.ok(mainJs.slice(dismissAt, dismissAt + 1400).includes("clearSelectionChip();"),
             "dismiss() must clear the chip too");
+});
+
+check("S-4 note: only the bar's own page listens for the selection event", () => {
+  // The event is emitted with emit_to(bar) - but this Tauri's global listeners
+  // receive an emit_to from any window (lib.rs's own comment). The guard is a
+  // convention, so pin it: exactly one page registers the event.
+  const src = join(HERE, "..", "src");
+  const files = readdirSync(src, { recursive: true })
+    .filter((f) => typeof f === "string" && f.endsWith(".js"))
+    .map((f) => String(f));
+  const listeners = files.filter((f) =>
+    readFileSync(join(src, f), "utf8").includes('listen("selection-read"'));
+  assert.deepEqual(listeners, ["main.js"], listeners);
 });
 
 check("the read happens before the bar takes focus, and is PC-read only", () => {
