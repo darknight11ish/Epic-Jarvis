@@ -52,6 +52,8 @@
 //! The order, and why it is that order, is written out on [`update_both`]
 //! itself.
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_store::StoreExt;
@@ -478,12 +480,49 @@ pub fn both_updated(steps: &[Step]) -> bool {
 /// **A second step that did not run is reported as `skipped`, and the whole
 /// outcome is `updated_both: false`.** Nothing here can leave the card showing
 /// one line where two things were asked for.
+/// One `update_both` at a time inside this app (S3).
+///
+/// The lock FILE stops two updates on the PC (a terminal run, another build);
+/// this stops a second press before it can stop the backend and only then be
+/// refused, and it covers the moment before the tool has written its own lock.
+static UPDATE_BOTH_RUNNING: AtomicBool = AtomicBool::new(false);
+
+/// Held for one run; dropping it lets the next press through.
+struct UpdateBothGuard;
+
+impl Drop for UpdateBothGuard {
+    fn drop(&mut self) {
+        UPDATE_BOTH_RUNNING.store(false, Ordering::SeqCst);
+    }
+}
+
+/// Take the in-app update slot, or `None` when one is already running.
+fn claim_update_both() -> Option<UpdateBothGuard> {
+    UPDATE_BOTH_RUNNING
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .ok()
+        .map(|_| UpdateBothGuard)
+}
+
 ///
 /// Never automatic: this is a `#[tauri::command]` reachable only from the one
 /// button, nothing spawns it, and there is no setting anywhere that turns it
 /// into a background job.
 #[tauri::command]
 pub async fn update_both(app: AppHandle, mode: String) -> Result<BothOutcome, String> {
+    // S3: one press at a time in this window, and no press while a run from
+    // anywhere else on this PC holds the update lock. Both refusals say plainly
+    // that nothing was started or changed.
+    let Some(_in_app) = claim_update_both() else {
+        return Err(
+            "A backend update is already running in this window. Wait for it \
+                    to finish; nothing was changed."
+                .to_string(),
+        );
+    };
+    if let Some(lock) = crate::backend_update::held_update_lock(&app) {
+        return Err(crate::backend_update::update_running_words(&lock));
+    }
     // ---- 0. the pace, read from the tool before anything runs -------------
     let here = crate::backend_update::locate(&app);
     if let Some(why) = here.blocked.clone() {
@@ -666,8 +705,8 @@ pub fn spawn_startup_check(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::{
-        both_updated, friendly, step_starting, Step, DESKTOP_SKIPPED_DETAIL, STEP_BACKEND,
-        STEP_DESKTOP,
+        both_updated, claim_update_both, friendly, step_starting, Step, DESKTOP_SKIPPED_DETAIL,
+        STEP_BACKEND, STEP_DESKTOP,
     };
 
     #[test]
@@ -803,5 +842,21 @@ mod tests {
         let step = step_starting(STEP_BACKEND, Some(words));
         assert_eq!(step.detail, words);
         assert_eq!(step.state, "running");
+    }
+
+    /// S3: a second press must be refused inside the app before it can stop the
+    /// backend - the lock file alone arrives too late for that.
+    #[test]
+    fn only_one_update_both_can_be_in_flight_in_this_app() {
+        let first = claim_update_both().expect("the first run takes the slot");
+        assert!(
+            claim_update_both().is_none(),
+            "a second press was allowed while the first run was in flight"
+        );
+        drop(first);
+        assert!(
+            claim_update_both().is_some(),
+            "the slot was not released when the first run ended"
+        );
     }
 }

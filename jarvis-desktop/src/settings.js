@@ -282,6 +282,10 @@ function problemWords(error) {
 
 /** Runs an action, reporting whatever it says or throws in the same place. */
 let busy = false;
+/** True while an "Update both" run is in flight (set in runBoth). Declared
+ *  here, before paintBackend, because that function reads it on every tick and
+ *  a `let` declared later in this module would be in its temporal dead zone. */
+let ubBusy = false;
 
 async function act(button, target, work) {
   if (busy) return;
@@ -461,9 +465,11 @@ async function paintBackend({ fields = false } = {}) {
     dom.cwd.value = status.backend.cwd || "";
   }
 
-  // While `act()` holds the button lock, it owns the disabled state.
+  // While `act()` holds the button lock, it owns the disabled state. While an
+  // "Update both" run is in flight, starting the backend is refused for real by
+  // Rust (S5); disabling the button says so before it is pressed.
   if (!busy) {
-    dom.startBackend.disabled = status.owned || !status.supervise;
+    dom.startBackend.disabled = status.owned || !status.supervise || ubBusy;
     dom.stopBackend.disabled = !status.owned;
   }
 
@@ -1755,7 +1761,6 @@ if (IS_TAURI) TAURI.event.listen("update-progress", (event) => paintProgress(eve
 /** The last `backend_update_status` answer, so the question can name the
  *  folders without asking Rust again mid-press. */
 let ubWhere = null;
-let ubBusy = false;
 
 /** The two folders, in the words the owner can act on. */
 function ubFoundLine(where) {
@@ -2324,6 +2329,8 @@ async function runBoth(modeId) {
     // Re-read WHICH folders there are, and leave the ending it just wrote on
     // screen alone — see `keepState` above.
     loadBoth(true);
+    // The Start-backend button was disabled for the duration; repaint it now.
+    paintBackend();
   }
 }
 

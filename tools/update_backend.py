@@ -49,15 +49,21 @@ THE UPDATE LOCK (exclusive update, one PC)
 Before a file is patched, this tool takes `update-in-progress.lock` in the
 folder Jarvis keeps its own data in (`OPENJARVIS_CONFIG_DIR`, then
 `JARVIS_CONFIG_DIR`, then `~/.openjarvis`), holding
-`{pid, started_at, updated_at, pace}`. The suites this update starts are told
+`{pid, started_at, updated_at, pace}`. The take is atomic (one winner; an
+existing live file is never overwritten). The suites this update starts are told
 to ignore it (`--ignore-update-lock`); everything else on the PC is not:
-`backend/run_suites.py` refuses immediately while a valid lock is held, and the
-desktop's backend watchdog does not auto-restart the backend while one is (see
-`sidecar.rs`). Validity is: the pid is really running, the heartbeat
-(`updated_at`) is less than 30 minutes old, and the run started less than 3
-hours ago (`N_placeholder` values, the design's). A dead pid is stale at once,
-so a crashed update never keeps the next one out; the heartbeat is refreshed as
-each suite finishes, so a two-hour `safe` run never expires its own lock.
+`backend/run_suites.py` refuses while a valid lock is held - once at the start
+and again just before the first suite - and the desktop's backend watchdog, its
+`update_both` press and every backend start path obey it (`sidecar.rs`,
+`update.rs`). Validity is: the pid is really running, the heartbeat
+(`updated_at`) is less than 30 minutes old. The heartbeat is refreshed as each
+suite finishes AND through the patch phase's progress lines (at most every five
+minutes), so a long patch or a two-hour `safe` run never expires its own lock.
+The 3-hour `started_at` window is a PID-REUSE guard only: a live run renews it
+while it keeps heartbeating, so a legitimately long run is not treated as
+stale; a dead pid is stale at once, so a crashed update never keeps the next one
+out. Non-finite or future timestamps mean the PC's clock moved and are read as
+stale, the same rule the Rust reader applies.
 
 THE SAFE FALLBACK (mandatory)
 
@@ -101,11 +107,13 @@ from __future__ import annotations
 
 import ast
 import json
+import math
 import os
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -206,9 +214,15 @@ class UpdateRefused(Exception):
 # running AND it is being kept fresh:
 #   * a DEAD pid is stale immediately - no waiting after a crash;
 #   * otherwise stale when `now - updated_at > LOCK_HEARTBEAT_SECONDS` (the
-#     writer refreshes it as each suite finishes), or when
-#     `now - started_at > LOCK_CEILING_SECONDS` - the hard ceiling that bounds a
-#     recycled PID number.
+#     writer refreshes it as each suite finishes and, bounded, as the patcher
+#     makes progress), or when `now - started_at > LOCK_CEILING_SECONDS`.
+#   * the ceiling is a PID-REUSE guard only: a live writer renews `started_at`
+#     as it heartbeats, so a real long run is never stale by accident;
+#   * non-finite or future timestamps mean the clock moved - stale, and the
+#     same rule in Rust so both readers agree about one file.
+# THE TAKE is ATOMIC: the new file is published whole and an existing file is
+# never overwritten (unique temp + hard-link/`O_EXCL`), so two updates starting
+# at the same instant have exactly one winner and the other is refused.
 # It is advisory, and it says so: a lock that cannot be written or read is
 # reported, never enforced by pretending.
 LOCK_NAME = "update-in-progress.lock"
@@ -216,8 +230,27 @@ LOCK_NAME = "update-in-progress.lock"
 #: section: 30 minutes), calibrated against a real `safe` run later.
 LOCK_HEARTBEAT_SECONDS = 1800.0
 #: Stale when the run started longer ago than this, whatever the heartbeat
-#: says. `N_placeholder` (3 hours), a ceiling above the longest measured run.
+#: says - a ceiling above the longest measured run (`N_placeholder`). Since the
+#: S2 review it is a PID-REUSE guard only: a live run that keeps heartbeating
+#: renews its own `started_at` before this can lapse (see `refresh_lock`), so
+#: this can only end a lock whose writer has stopped proving it is alive.
 LOCK_CEILING_SECONDS = 10800.0
+#: The patch phase refreshes the lock through its own progress lines, at most
+#: once per this many seconds (S1): the patcher can run for a long time before
+#: the first suite finishes, and "no finished suite" must not mean "abandoned".
+LOCK_PATCH_HEARTBEAT_SECONDS = 300.0
+#: Reading a lock recorded more than this far in the future means the PC's
+#: clock moved (S6); Python and Rust both reject it, so they agree about a file
+#: written before a clock correction.
+LOCK_CLOCK_SKEW_SECONDS = 60.0
+#: A lock file larger than this is not a lock (S7): bounded so a corrupt or
+#: hostile file can never make the desktop's watchdog or a test run read a
+#: whole disk's worth of bytes.
+LOCK_MAX_BYTES = 64 * 1024
+#: How many read/replace attempts `acquire_lock` makes when another updater
+#: publishes at the same instant (S3). Each attempt either wins or sees the
+#: winner's complete file; four is far more than a real race needs.
+LOCK_ACQUIRE_ATTEMPTS = 4
 #: The bypass for the update's OWN child suite run (its suites are supposed to
 #: run while the lock is held - they are what the lock protects).
 LOCK_BYPASS_ENV = "JARVIS_INSIDE_PATCHER"
@@ -329,27 +362,43 @@ def lock_refusal_words(lock: dict) -> str:
               "suite phase.")
 
 
+def _read_lock_bytes(target: Path):
+    """The lock file's first `LOCK_MAX_BYTES + 1` bytes, or None. Never raises."""
+    try:
+        with target.open("rb") as handle:
+            return handle.read(LOCK_MAX_BYTES + 1)
+    except OSError:
+        return None
+
+
 def read_lock(path=None, *, now=None, alive=None) -> dict:
     """The lock's state, read without ever raising.
 
     Returns a dict that always answers `present`, `valid`, `stale` and *why*.
-    A missing file, a file full of binary junk, half a JSON object or a
-    directory at that path are all "no valid lock" - never an exception on a
-    path the desktop's watchdog and the test runner both read.
+    A missing file, a file full of binary junk, a file that is not a lock, a
+    file too large to be one, a directory at that path - and a JSON document
+    nested so deeply that the parser would recurse (S7) - are all "no valid
+    lock", never an exception on a path the desktop's watchdog and the test
+    runner both read. Times must be real numbers (NaN and Infinity are rejected,
+    S6) and not in the future (a clock change is not evidence of a live update).
     """
     target = Path(path) if path is not None else lock_path()
     state = _lock_blank(target)
-    try:
-        # Bytes, then a replacing decode: a lock file that holds binary junk is
-        # "unreadable", which is a stale lock - not a Unicode exception on a
-        # file the desktop's watchdog also reads.
-        raw = target.read_bytes().decode("utf-8", "replace")
-    except OSError:
+    raw = _read_lock_bytes(target)
+    if raw is None:
         return state
     state["present"] = True
+    if len(raw) > LOCK_MAX_BYTES:
+        state.update(stale=True, why="the update lock file is too large to be one, "
+                                      "so it is treated as stale")
+        return state
     try:
-        data = json.loads(raw)
-    except ValueError:
+        # Bytes, then a replacing decode: binary junk is "unreadable", which is
+        # a stale lock - not a Unicode exception on a file two readers share.
+        # The broad catch is deliberate: `json.loads` raises RecursionError on a
+        # deeply nested document, and the promise here is never to raise (S7).
+        data = json.loads(raw.decode("utf-8", "replace"))
+    except Exception:                      # noqa: BLE001 - never a crash
         state.update(stale=True, why="the update lock file is unreadable, "
                                       "so it is treated as stale")
         return state
@@ -365,18 +414,25 @@ def read_lock(path=None, *, now=None, alive=None) -> dict:
         isinstance(pid, int) and not isinstance(pid, bool) and pid > 0
         and isinstance(started, (int, float)) and not isinstance(started, bool)
         and isinstance(updated, (int, float)) and not isinstance(updated, bool)
+        and math.isfinite(float(started)) and math.isfinite(float(updated))
         and isinstance(pace, str)
     )
     if not numbers_ok:
         state.update(pid=pid if isinstance(pid, int) and not isinstance(pid, bool)
                      else None,
                      stale=True,
-                     why="the update lock file is missing its pid, times or pace, "
-                         "so it is treated as stale")
+                     why="the update lock file is missing its pid, real times or "
+                         "pace, so it is treated as stale")
         return state
-    state.update(pid=int(pid), started_at=float(started),
-                 updated_at=float(updated), pace=pace)
+    started, updated = float(started), float(updated)
     now = time.time() if now is None else float(now)
+    state.update(pid=int(pid), started_at=started, updated_at=updated, pace=pace)
+    if (started > now + LOCK_CLOCK_SKEW_SECONDS
+            or updated > now + LOCK_CLOCK_SKEW_SECONDS):
+        state.update(stale=True, why="the update lock records a time in the future, "
+                                      "so the PC's clock has changed; it is treated "
+                                      "as stale")
+        return state
     check_alive = alive if callable(alive) else pid_alive
     try:
         running = bool(check_alive(int(pid)))
@@ -386,16 +442,16 @@ def read_lock(path=None, *, now=None, alive=None) -> dict:
         state.update(stale=True, why=f"the update process (pid {pid}) is no longer "
                                       "running, so the lock is stale")
         return state
-    if now - float(updated) > LOCK_HEARTBEAT_SECONDS:
+    if now - updated > LOCK_HEARTBEAT_SECONDS:
         minutes = int(LOCK_HEARTBEAT_SECONDS // 60)
         state.update(stale=True, why=f"the update has not updated its lock for over "
                                       f"{minutes} minutes, so it is treated as stale")
         return state
-    if now - float(started) > LOCK_CEILING_SECONDS:
+    if now - started > LOCK_CEILING_SECONDS:
         hours = int(LOCK_CEILING_SECONDS // 3600)
-        state.update(stale=True, why=f"the update started over {hours} hours ago, "
-                                      f"so the lock is treated as stale (the pid may "
-                                      "have been reused)")
+        state.update(stale=True, why=f"the update started over {hours} hours ago "
+                                      "without renewing that window, so the lock is "
+                                      "treated as stale (the pid may have been reused)")
         return state
     state.update(valid=True, why="")
     return state
@@ -407,50 +463,153 @@ def lock_held(path=None, *, now=None, alive=None) -> bool:
 
 
 def _write_lock(target: Path, data: dict) -> bool:
-    """Write the lock atomically. False when it cannot be written (never raises)."""
+    """Replace the lock atomically, with a UNIQUE temp name (S3).
+
+    False when it cannot be written (never raises). The unique name matters on
+    its own: two writers sharing one `.tmp` path made the loser fail for the
+    wrong reason, and made a writable folder look unwritable.
+    """
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
-        temp = target.with_name(target.name + ".tmp")
-        temp.write_text(json.dumps(data, indent=1, sort_keys=True) + "\n",
-                        encoding="utf-8")
-        os.replace(temp, target)
+        payload = json.dumps(data, indent=1, sort_keys=True) + "\n"
+        fd, temp_name = tempfile.mkstemp(prefix=target.name + ".",
+                                         suffix=".tmp", dir=str(target.parent))
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(payload)
+            os.replace(temp_name, target)
+        finally:
+            try:
+                os.unlink(temp_name)
+            except OSError:
+                pass
         return True
     except OSError:
         return False
 
 
+def _published_ours(target: Path, owner: int) -> bool:
+    """Is the complete lock file at `target` the one this call published?"""
+    raw = _read_lock_bytes(target)
+    if raw is None:
+        return False
+    try:
+        data = json.loads(raw.decode("utf-8", "replace"))
+    except Exception:                      # noqa: BLE001 - never a crash
+        return False
+    return isinstance(data, dict) and data.get("pid") == owner
+
+
+def _publish_new_lock(target: Path, data: dict) -> bool:
+    """Create the lock only if it does not exist. True = won, False = taken.
+
+    The bytes go to a unique temp file first and `os.link` publishes THAT file:
+    atomic, refuses an existing destination, and a reader never sees a
+    half-written lock, so two updaters starting at the same instant cannot both
+    win (S3). Filesystems without hard links fall back to an exclusive
+    `O_CREAT|O_EXCL` create, which still guarantees one winner. Raises OSError
+    only when the folder itself cannot be written.
+    """
+    target.parent.mkdir(parents=True, exist_ok=True)
+    payload = (json.dumps(data, indent=1, sort_keys=True) + "\n").encode("utf-8")
+    fd, temp_name = tempfile.mkstemp(prefix=target.name + ".", suffix=".tmp",
+                                     dir=str(target.parent))
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(payload)
+        try:
+            os.link(temp_name, target)
+            return True
+        except FileExistsError:
+            return False
+        except OSError:
+            pass                            # no hard links here: O_EXCL fallback
+        try:
+            fresh = os.open(str(target), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+        except FileExistsError:
+            return False
+        try:
+            os.write(fresh, payload)
+        finally:
+            os.close(fresh)
+        return True
+    finally:
+        try:
+            os.unlink(temp_name)
+        except OSError:
+            pass
+
+
 def acquire_lock(pace: str, *, path=None, now=None, pid=None, alive=None) -> dict:
     """Take the lock for this update, or refuse when a live one is held.
 
-    `{"ok": True, "lock": ...}` on success; `UpdateRefused("update_running",
-    ...)` when another valid lock is held. A STALE lock (dead pid, silent
-    heartbeat, ceiling passed) is replaced without ceremony - a crashed patcher
-    must not keep the next update out. If the file cannot be written the update
-    still runs, with `ok` False and `why` saying the lock is NOT protecting it:
-    a lock nobody enforced is said, never pretended.
+    The take is ATOMIC (S3): the file is published whole and an existing file
+    can never be overwritten, so of two updaters starting at the same instant
+    exactly one gets `ok: True` - the other gets `UpdateRefused` with a plain
+    reason, never a false "the folder is unwritable". A STALE lock (dead pid,
+    silent heartbeat, ceiling passed) is removed and replaced, so a crashed
+    patcher never keeps the next update out. If the folder really cannot be
+    written the update still runs with `ok` False and a `why` that says the lock
+    is NOT protecting it: a lock nobody enforced is said, never pretended.
     """
     target = Path(path) if path is not None else lock_path()
     now = time.time() if now is None else float(now)
-    current = read_lock(target, now=now, alive=alive)
-    if current["valid"]:
-        raise UpdateRefused("update_running", lock_refusal_words(current))
     owner = os.getpid() if pid is None else int(pid)
-    data = {"pid": owner, "started_at": now, "updated_at": now, "pace": str(pace)}
-    if not _write_lock(target, data):
-        return {"ok": False, "lock": current, "pid": owner,
-                "why": f"the update lock could not be written to {target}, so other "
-                       "test runs and the desktop will not know this update is running"}
-    return {"ok": True, "lock": read_lock(target, now=now, alive=alive or pid_alive),
-            "pid": owner, "why": ""}
+    for _attempt in range(LOCK_ACQUIRE_ATTEMPTS):
+        current = read_lock(target, now=now, alive=alive)
+        if current["valid"]:
+            raise UpdateRefused("update_running", lock_refusal_words(current))
+        if current["present"]:
+            # A stale lock is replaced, but one remover at a time: unlink, then
+            # loop so a racer's just-published lock is read and respected.
+            try:
+                target.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError as exc:
+                return {"ok": False, "lock": current, "pid": owner,
+                        "why": f"the stale update lock at {target} could not be "
+                               f"removed ({exc.strerror or exc}), so this update is "
+                               "NOT locked: other test runs and the desktop may start "
+                               "work beside it"}
+            continue
+        data = {"pid": owner, "started_at": now, "updated_at": now,
+                "pace": str(pace)}
+        try:
+            created = _publish_new_lock(target, data)
+        except OSError as exc:
+            return {"ok": False, "lock": current, "pid": owner,
+                    "why": f"the update lock could not be written to {target} "
+                           f"({exc.strerror or exc}), so other test runs and the "
+                           "desktop will not know this update is running"}
+        if not created:
+            continue                        # someone else published first
+        if _published_ours(target, owner):
+            return {"ok": True,
+                    "lock": read_lock(target, now=now, alive=alive or pid_alive),
+                    "pid": owner, "why": ""}
+        # The complete file was replaced or removed in the same instant: this
+        # update did not get the lock. Say so plainly and do not run beside it.
+        raise UpdateRefused(
+            "update_running",
+            "Another Jarvis backend update started at the same moment and holds "
+            "the lock. Wait for it to finish; nothing was patched here.")
+    raise UpdateRefused(
+        "update_running",
+        "Another Jarvis backend update is starting at the same moment. Wait a "
+        "moment and try again; nothing was patched here.")
 
 
 def refresh_lock(*, path=None, now=None, pid=None) -> bool:
-    """Move `updated_at` forward - the heartbeat, called as suites finish.
+    """Move `updated_at` forward - the heartbeat - and renew the ceiling (S2).
 
-    False when there is no lock to refresh, when the file cannot be written, or
-    when the lock belongs to another pid (a newer update replaced it, or this
-    process is a stale reader). Never raises, so a heartbeat failure cannot take
-    the update down.
+    While this process is alive it also renews `started_at` one heartbeat window
+    before the 3-hour PID-REUSE guard could lapse, so a legitimately long run
+    (the measured 2h8m, or a quick pass plus its safe fallback) is never treated
+    as stale while it is alive; a dead or reused pid cannot renew anything, so
+    the guard still ends that lock. False when there is no lock to refresh, when
+    the file cannot be written, or when the lock belongs to another pid. Never
+    raises, so a heartbeat failure cannot take the update down.
     """
     target = Path(path) if path is not None else lock_path()
     now = time.time() if now is None else float(now)
@@ -460,7 +619,10 @@ def refresh_lock(*, path=None, now=None, pid=None) -> bool:
         return False
     if int(state["pid"]) != owner:
         return False
-    data = {"pid": int(state["pid"]), "started_at": state["started_at"],
+    started = float(state["started_at"])
+    if now - started > LOCK_CEILING_SECONDS - LOCK_HEARTBEAT_SECONDS:
+        started = now
+    data = {"pid": int(state["pid"]), "started_at": started,
             "updated_at": now, "pace": str(state["pace"] or "")}
     return _write_lock(target, data)
 
@@ -1301,7 +1463,17 @@ def update(repo, backend, mode: str, *, requested_workers=None, timings_path=Non
         target = Path(timings_path).with_name(LOCK_NAME)
     else:
         target = lock_path()
-    taken = acquire_lock(mode, path=target, now=clock())
+    try:
+        taken = acquire_lock(mode, path=target, now=clock())
+    except UpdateRefused:
+        raise
+    except Exception as exc:               # noqa: BLE001 - a weird lock file must not
+        # stop an update before it patches (S7): say plainly that it is NOT
+        # protected, and let the patch/verify/check state machine run as before.
+        taken = {"ok": False,
+                 "why": f"the update lock could not be checked "
+                        f"({type(exc).__name__}: {exc}), so this update is NOT "
+                        "protected by it"}
     if taken.get("ok"):
         say(f"Update lock held: {target} (pid {taken['pid']}, pace {mode}). "
             "Other test runs will wait while this update is running.")
@@ -1395,11 +1567,19 @@ def _update_locked(repo, backend, mode: str, *, requested_workers,
         counter = _PatchCounter()
         patch_lines = []
         last_patch_event = [None]
+        # S1: the patch phase can run for a long time before the first suite
+        # finishes, so its own progress lines heartbeat the lock (bounded, not
+        # one file write per printed line).
+        last_heartbeat = [patch_start]
 
         def on_patch(line: str) -> None:
             patch_lines.append(line)
             say(line)
             counter.feed(line)
+            if (lock_file is not None
+                    and clock() - last_heartbeat[0] >= LOCK_PATCH_HEARTBEAT_SECONDS):
+                refresh_lock(path=lock_file, now=clock())
+                last_heartbeat[0] = clock()
             patch_estimate = (attempt_timings.get("patch_seconds")
                               or PLACEHOLDER_PATCH_SECONDS)
             remaining = None

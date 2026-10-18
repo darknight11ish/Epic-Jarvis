@@ -371,6 +371,16 @@ pub async fn ensure_backend(app: &AppHandle) -> Result<String, String> {
     if !read_supervise(app) {
         return Ok("Supervision is off; Jarvis Desktop will not start a backend.".to_string());
     }
+    // S5: a backend update is running, so it stopped (or is about to stop) the
+    // backend on purpose. This is the ONE gate every start path shares - the
+    // watchdog, the tray, the Settings button and app startup - so none of them
+    // can start a backend under the patcher. `start_blocked_words` is pure and
+    // unit-tested; `held_update_lock` treats a missing/stale lock as no update.
+    if let Some(words) = crate::backend_update::start_blocked_words(
+        crate::backend_update::held_update_lock(app).as_ref(),
+    ) {
+        return Ok(words);
+    }
     // A refused address is saved: nothing is started in its place either
     // (CLAUDE.md, 2026-09-26 - no quiet fallback to this PC).
     if let Some(problem) = commands::base_problem(app) {

@@ -248,23 +248,37 @@ beside it. So an update is now exclusive on this PC:
   data in (`OPENJARVIS_CONFIG_DIR`, then `JARVIS_CONFIG_DIR`, then
   `~/.openjarvis`), holding `{pid, started_at, updated_at, pace}`. It is taken
   before a file is patched and removed on every way out; a crash leaves it, and
-  the rule below makes it stale at once.
-- **When it is valid.** The pid must be a running process, the heartbeat
-  (`updated_at`, refreshed as each suite finishes) must be under **30 minutes**
-  old, and the run must have started under **3 hours** ago - the last two are
-  `N_placeholder` values from the design, the ceiling bounding a reused pid. A
-  dead pid is stale immediately.
+  the rule below makes it stale at once. The take is ATOMIC (an existing file is
+  never overwritten and two updates starting at the same instant have exactly one
+  winner); the loser is refused in plain words.
+- **When it is valid.** The pid must be a running process and the heartbeat
+  (`updated_at`) under **30 minutes** old. The heartbeat is refreshed as each
+  suite finishes, *and* through the patch phase's own progress lines at most once
+  every five minutes - a long patch can no longer make a live update look
+  abandoned. The **3-hour** window is a PID-REUSE guard only: a live run renews
+  its own `started_at` while it keeps heartbeating, so the measured 2h8m run, and
+  a quick pass plus its safe fallback, do not expire themselves. A dead pid is
+  stale immediately; non-finite or future timestamps are a clock problem and are
+  read as stale (Python and Rust agree).
 - **Who obeys it.** `backend/run_suites.py` refuses to start (exit 3) and names
-  the lock's pid, pace and start time; the update's own suite phase passes
-  `--ignore-update-lock` (or `JARVIS_INSIDE_PATCHER=1`), which is the only
-  bypass. The desktop's backend watchdog does not auto-restart the backend
-  while a valid lock is held (`sidecar.rs`), so it cannot fight the update for
-  the port.
+  the lock's pid, pace and start time - and asks again immediately before the
+  first suite, so a lock published while it was staging the backend still stops
+  it. The update's own suite phase passes `--ignore-update-lock` (or
+  `JARVIS_INSIDE_PATCHER=1`), which is the only bypass. The desktop's backend
+  watchdog does not auto-restart the backend while a valid lock is held
+  (`sidecar.rs`), `update_both` refuses a second press before touching the
+  backend, and every backend start path - tray, Settings "Start backend", app
+  startup and the watchdog - shares one `ensure_backend` gate that says an update
+  is running instead of starting one. **The gap, stated plainly:** a by-hand
+  `scripts/apply-patches.ps1` run does not read the lock (that script is the
+  owner's own tool and was deliberately not edited), and the desktop stops the
+  backend a moment before the tool has written the lock, so a sweep begun in that
+  instant can still overlap. The tool's lock is written before it patches; the
+  rest of the path is covered.
 - **One implementation.** The rules and the reader live in
-  `tools/update_backend.py` (Python) and are mirrored only as a small reader in
-  `backend_update.rs` for the watchdog; both are tested against the same three
-  rules. The lock is advisory: an unreadable lock file or a checkout without the
-  update tool means nothing is enforced, and nothing claims it was.
+  `tools/update_backend.py` (Python); `backend_update.rs` mirrors them for the
+  desktop. The lock is advisory: an unreadable lock file or a checkout without
+  the update tool means nothing is enforced, and nothing claims it was.
 
 ### The progress bar
 

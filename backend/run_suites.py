@@ -706,9 +706,11 @@ def main(only=(), jobs: int = 1, ignore_update_lock: bool = False) -> int:
     """Every suite, or only the ones named (`run_suites.py test_x.py ...`).
 
     Refuses immediately (exit 3, nothing staged, no suite started) while a
-    valid backend-update lock is held; see `update_lock_refusal`. The update's
-    own suite phase passes `ignore_update_lock=True` (or sets
-    JARVIS_INSIDE_PATCHER=1), which is the only thing that bypasses it.
+    valid backend-update lock is held; see `update_lock_refusal`. It asks AGAIN
+    after the backend has been staged, immediately before the first suite, so a
+    lock published while it was staging still stops it. The update's own suite
+    phase passes `ignore_update_lock=True` (or sets JARVIS_INSIDE_PATCHER=1),
+    which is the only thing that bypasses both checks.
 
     `jobs` is how many suites to run at once: **1 by default, and that is what
     CI runs**, so the ordinary output is byte-for-byte what it has always been.
@@ -740,7 +742,7 @@ def main(only=(), jobs: int = 1, ignore_update_lock: bool = False) -> int:
     root = Path(tempfile.mkdtemp(prefix=SWEEP_PREFIX))
     lock = claim(root, "sweep")
     try:
-        return _sweep(root, only, jobs)
+        return _sweep(root, only, jobs, ignore_update_lock)
     finally:
         # The lock goes FIRST: on Windows a file this process still holds open
         # cannot be deleted, so the marker would keep the whole folder alive -
@@ -863,9 +865,15 @@ def _sweep_parallel(suites: list, backend: Path, worker_envs: list, ran: dict,
                 _print_job(got, ran, passed, failed, skipped)
 
 
-def _sweep(root: Path, only=(), jobs: int = 1) -> int:
+def _sweep(root: Path, only=(), jobs: int = 1,
+           ignore_update_lock: bool = False) -> int:
     """One run, inside `root`: reap what a dead run left, stage, run each
-    suite, report. Never called except from `main`, which owns `root`."""
+    suite, report. Never called except from `main`, which owns `root`.
+
+    `ignore_update_lock` is the update's own suite phase (see `main`); the
+    second lock check below must respect the same bypass and must run after the
+    backend is staged, so an update that starts while this run is staging is
+    still refused."""
     jobs = max(1, int(jobs))
     reaped = reap_orphans(keep=(root,))
     if reaped:
@@ -874,6 +882,16 @@ def _sweep(root: Path, only=(), jobs: int = 1) -> int:
     real = os.environ.get("JARVIS_BACKEND")
     backend = Path(real).resolve() if real else stage(root)
     print(f"backend: {backend}" + ("" if real else "  (staged: every shipped module, flattened)"))
+    # S4: the check at the top of `main()` is not the last word - a lock can be
+    # published while this run is staging the backend (that staging can take a
+    # second). Ask again immediately before the first suite starts; on a
+    # refusal, stop here and let `main`'s `finally` remove the staging root.
+    late_refusal = update_lock_refusal(ignore_update_lock)
+    if late_refusal:
+        print(f"REFUSED  {late_refusal}", file=sys.stderr)
+        print("Not run: the backend was staged first, but no suite was started; "
+              "the staging folder is removed.", file=sys.stderr)
+        return 3
     known = sorted(HERE.glob("test_*.py"))
     suites = [s for s in known if s.name in only] if only else known
     names = {s.name for s in suites}

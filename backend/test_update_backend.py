@@ -48,14 +48,16 @@ Nothing here touches the owner's backend folder, starts a patch run, or reads
 from __future__ import annotations
 
 import json
+import io
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import traceback
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -115,6 +117,23 @@ def _make_repo(root: Path):
 
 def _make_root() -> Path:
     return Path(tempfile.mkdtemp(prefix="jarvis-update-backend-"))
+
+
+class _Clock:
+    """An injectable wall clock for the update's time-based decisions."""
+
+    def __init__(self, start: float):
+        self.t = float(start)
+
+    def __call__(self) -> float:
+        return self.t
+
+
+def _add_suites(repo: Path, count: int) -> None:
+    """More fake suites, so a test can drive the suite phase for a long time."""
+    for index in range(count):
+        (repo / "backend" / f"test_extra{index}.py").write_text(
+            "# a suite\n", encoding="utf-8")
 
 
 def _is_patcher(cmd) -> bool:
@@ -1467,6 +1486,229 @@ def t_the_heartbeat_keeps_a_long_update_s_alive():
           "heartbeat - with it, every check after a suite is still valid",
           code == 0 and seen == [True, True, True], (code, seen))
     check("... and the update released it afterwards", not lock.exists())
+
+
+# --------------------------------------------------------------------------
+#   The 2026-10-18 review fixes: S1, S2, S3, S4, S6, S7
+# --------------------------------------------------------------------------
+
+def t_the_lock_stays_valid_through_a_30_minute_patch_phase():
+    """S1: the patch phase must heartbeat, or a slow patch looks abandoned."""
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    lock = root / "update-in-progress.lock"
+    clock = _Clock(time.time())
+    seen = []
+
+    class PatchWatchingRun(FakeRun):
+        def __call__(self, cmd, cwd, on_line):
+            if not _is_patcher(cmd):
+                return super().__call__(cmd, cwd, on_line)
+            clock.t += 1801.0            # the patcher has run for 30m1s
+            code = super().__call__(cmd, cwd, on_line)  # its lines heartbeat
+            state = U.read_lock(lock, now=clock.t, alive=lambda pid: True)
+            seen.append((state["valid"], state["why"][:40]))
+            return code
+
+    fake = PatchWatchingRun(_staged_handler(repo, backend, suites="ok"))
+    code = U.update(repo, backend, "safe", run=fake, say=lambda line: None,
+                    clock=clock, timings_path=root / "timings.json")
+    check("a 30-minute patch phase does not make a live update's lock stale",
+          code == 0 and seen and all(valid for valid, _why in seen), (code, seen))
+    check("... because the patch phase's own progress lines refreshed it",
+          code == 0 and not any("not updated its lock" in why for _v, why in seen),
+          seen)
+
+
+def t_a_live_update_older_than_the_ceiling_is_not_stale():
+    """S2: the 3-hour ceiling is a pid-reuse guard, not a deadline for a live run."""
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    _add_suites(repo, 7)
+    lock = root / "update-in-progress.lock"
+    clock = _Clock(time.time())
+    states = []
+    start = clock.t
+
+    class LongRunWatcher(FakeRun):
+        def __call__(self, cmd, cwd, on_line):
+            if _is_patcher(cmd):
+                return super().__call__(cmd, cwd, on_line)
+
+            def wrapped(line):
+                on_line(line)
+                if line.startswith("ok "):
+                    clock.t += 1700.0    # each suite takes just under 30 minutes
+                    state = U.read_lock(lock, now=clock.t, alive=lambda pid: True)
+                    states.append((round(clock.t - start), state["valid"],
+                                   state["why"][:40]))
+            return self.handler(cmd, cwd, wrapped, self.state)
+
+    fake = LongRunWatcher(_staged_handler(repo, backend, suites="ok"))
+    code = U.update(repo, backend, "safe", run=fake, say=lambda line: None,
+                    clock=clock, timings_path=root / "timings.json")
+    check("a live run longer than 3 hours keeps its lock valid (heartbeats are "
+          "fresh; the ceiling is renewed)",
+          code == 0 and states and all(valid for _t, valid, _why in states)
+          and states[-1][0] > U.LOCK_CEILING_SECONDS,
+          (code, states[-3:]))
+    check("... and it was never called stale by the ceiling",
+          code == 0 and not any("started over" in why for _t, _v, why in states),
+          [state for state in states if not state[1]][:2])
+
+
+def t_a_published_lock_is_never_overwritten():
+    """S3: the publish is atomic - an existing lock file is never replaced."""
+    root = _make_root()
+    path = root / "race" / U.LOCK_NAME
+    first = {"pid": 111, "started_at": 1000.0, "updated_at": 1000.0,
+             "pace": "responsive"}
+    second = {"pid": 222, "started_at": 1001.0, "updated_at": 1001.0,
+              "pace": "safe"}
+    check("the first publish wins a fresh path", U._publish_new_lock(path, first)
+          and json.loads(path.read_text(encoding="utf-8"))["pid"] == 111)
+    check("a second publish cannot replace it (the take is atomic)",
+          U._publish_new_lock(path, second) is False)
+    check("... and the file is the first lock, untouched",
+          json.loads(path.read_text(encoding="utf-8")) == first)
+
+
+def t_two_updaters_cannot_both_take_the_lock():
+    """S3: the take is atomic - exactly one winner, and a plain reason for the loser."""
+    root = _make_root()
+    path = root / "race" / U.LOCK_NAME
+    barrier = threading.Barrier(2)
+    results = []
+
+    def go(owner):
+        barrier.wait(timeout=10)
+        try:
+            got = U.acquire_lock("safe", path=path, pid=owner,
+                                 alive=lambda pid: True)
+            results.append(("ok", owner, got.get("ok")))
+        except U.UpdateRefused as exc:
+            results.append(("refused", owner, exc.message))
+
+    threads = [threading.Thread(target=go, args=(owner,))
+               for owner in (111, 222)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    winners = [row for row in results if row[0] == "ok" and row[2] is True]
+    refused = [row for row in results if row[0] == "refused"]
+    check("of two updaters starting at the same instant exactly one takes the lock",
+          len(winners) == 1 and len(refused) == 1, results)
+    check("... and the loser gets a plain reason, never a false write failure",
+          bool(refused) and "could not be written" not in refused[0][2]
+          and ("already running" in refused[0][2]
+               or "starting at the same moment" in refused[0][2]), refused)
+    data = json.loads(path.read_text(encoding="utf-8"))
+    check("... and the single lock on disk belongs to the winner",
+          data["pid"] == winners[0][1], (data, winners))
+
+
+def t_a_lock_taken_after_the_first_check_stops_the_sweep():
+    """S4: the runner asks again after staging, just before the first suite."""
+    sys.path.insert(0, str(HERE))
+    import run_suites as R
+    root = _make_root()
+    settings = root / "settings"
+    lock = settings / U.LOCK_NAME
+    U._write_lock(lock, {"pid": os.getpid(), "started_at": time.time(),
+                         "updated_at": time.time(), "pace": "responsive"})
+    calls = []
+    real = R.update_lock_refusal
+
+    def fake(ignore=False):
+        calls.append(bool(ignore))
+        if len(calls) == 1:
+            return ""                    # the first check ran before the lock
+        return real(ignore)
+
+    out, err = io.StringIO(), io.StringIO()
+    R.update_lock_refusal = fake
+    try:
+        with _with_env({"OPENJARVIS_CONFIG_DIR": str(settings),
+                        "JARVIS_BACKEND": str(REPO / "backend")}):
+            with redirect_stdout(out), redirect_stderr(err):
+                code = R.main(only=("test_suite_state.py",))
+    finally:
+        R.update_lock_refusal = real
+    check("a lock taken after the first check is caught again after staging",
+          code == 3 and len(calls) >= 2, (code, calls, out.getvalue()[-200:]))
+    check("... and no suite was started, in as many words",
+          "no suite was started" in err.getvalue(), err.getvalue()[:200])
+    check("... and the update's own bypass is still respected by the second check",
+          calls and calls[-1] is False, calls)
+
+
+def t_a_nan_infinite_or_future_lock_is_not_a_lock():
+    """S6: non-finite or future times are a clock problem, not a live update."""
+    root = _make_root()
+    path = root / U.LOCK_NAME
+    now = time.time()
+    cases = [
+        ("NaN times", {"pid": os.getpid(), "started_at": float("nan"),
+                       "updated_at": float("nan"), "pace": "responsive"}),
+        ("an Infinite heartbeat", {"pid": os.getpid(), "started_at": now,
+                                   "updated_at": float("inf"),
+                                   "pace": "responsive"}),
+        ("a time in the future", {"pid": os.getpid(),
+                                  "started_at": now + 10 ** 6,
+                                  "updated_at": now + 10 ** 6,
+                                  "pace": "responsive"}),
+    ]
+    for label, payload in cases:
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        state = U.read_lock(path, now=now, alive=lambda pid: True)
+        check(f"{label} is not a valid lock (stale, with a reason)",
+              state["valid"] is False and state["stale"] is True
+              and bool(state["why"]), state)
+
+
+def t_a_deeply_nested_or_oversized_lock_never_raises():
+    """S7: the reader's 'never raises' promise has to survive a JSON bomb."""
+    root = _make_root()
+    path = root / U.LOCK_NAME
+    # 32 KiB of nesting: under the size cap, over Python's JSON recursion limit.
+    path.write_bytes(b"[" * 16000 + b"]" * 16000)
+    try:
+        state = U.read_lock(path, now=time.time(), alive=lambda pid: True)
+        raised = None
+    except BaseException as exc:          # noqa: BLE001 - the failure being tested
+        raised = f"{type(exc).__name__}: {exc}"
+        state = {}
+    check("a deeply nested lock file reads as stale, never raises",
+          raised is None and state.get("valid") is False, raised)
+    path.write_bytes(b"x" * (U.LOCK_MAX_BYTES + 10))
+    state = U.read_lock(path, now=time.time(), alive=lambda pid: True)
+    check("an oversized lock file is not read whole - it is stale",
+          state["valid"] is False and "large" in state["why"], state)
+
+
+def t_an_unexpected_lock_error_never_stops_the_update():
+    """S7: if the lock machinery itself breaks, the update runs with a NOTE."""
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    fake = FakeRun(_staged_handler(repo, backend, suites="ok"))
+    said = []
+    real = U.acquire_lock
+
+    def boom(*_args, **_kwargs):
+        raise ValueError("a lock file made no sense at all")
+
+    U.acquire_lock = boom
+    try:
+        code = U.update(repo, backend, "safe", run=fake, say=said.append,
+                        clock=time.time, timings_path=root / "timings.json")
+    finally:
+        U.acquire_lock = real
+    check("a raising lock check is a NOTE, not a crashed update",
+          code == 0 and any("NOT protected" in line for line in said),
+          (code, said[:3]))
+    check("... and the update still patched and proved itself",
+          code == 0 and U.verify_live_files(repo, backend) == [])
 
 
 # ==========================================================================
