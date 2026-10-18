@@ -4949,23 +4949,42 @@ def _cleaned(obj, depth: int = 0):
     return obj
 
 
+def _plain_for_scan(text: str) -> str:
+    """The text as a reader of Latin letters would see it, for the injection
+    flags: NFKC, then the Cyrillic/Greek look-alike swaps and invisible
+    characters from jarvis_auto_learn.plain_letters. Reused rather than
+    copied, so the two scanners cannot drift (security audit 2026-10-18, I4).
+    NFKC alone when that module is not installed; never raises."""
+    try:
+        import jarvis_auto_learn
+        return jarvis_auto_learn.plain_letters(text)
+    except Exception:
+        try:
+            import unicodedata
+            return unicodedata.normalize("NFKC", text)
+        except Exception:
+            return text
+
+
 def outside_flags(text: str) -> dict:
     """{code: why} for signs of planted instructions in outside text:
-    jarvis_intake.injection_flags, plus tag characters and chat markers.
-    Empty when there are none. Never raises."""
+    jarvis_intake.injection_flags (read through the look-alike normaliser
+    above), plus tag characters and chat markers on the original. Empty when
+    there are none. Never raises."""
     if not isinstance(text, str) or not text:
         return {}
     text = text[:_MAX_SCAN_CHARS]
+    plain = _plain_for_scan(text)[:_MAX_SCAN_CHARS]
     out: dict = {}
     try:
         import jarvis_intake
-        for f in jarvis_intake.injection_flags(text):
+        for f in jarvis_intake.injection_flags(plain):
             out.setdefault(str(f.get("code")), str(f.get("why")))
         if "encoded" in out:
             # Ordinary mail is full of links with long encoded tracking
             # codes. A long encoded block OUTSIDE any link is still a sign;
             # one inside a link is not, or every newsletter would warn.
-            unlinked = re.sub(r"(?:https?://|www\.)\S+", " ", text, flags=re.I)
+            unlinked = re.sub(r"(?:https?://|www\.)\S+", " ", plain, flags=re.I)
             if not any(f.get("code") == "encoded"
                        for f in jarvis_intake.injection_flags(unlinked)):
                 out.pop("encoded")
@@ -4973,6 +4992,109 @@ def outside_flags(text: str) -> dict:
         pass
     if _UNICODE_TAGS.search(text) or _CHAT_MARKER.search(text):
         out.setdefault("markup", _OWN_FLAG_WHY["markup"])
+    return out
+
+
+#: The role a client-supplied system message is demoted to before the model
+#: sees it. Only this server writes system turns (the rules, recalled facts,
+#: OUTSIDE_NOTE); an app's system message is text it attached, so it becomes a
+#: labelled user turn - data, never an instruction (security audit 2026-10-18,
+#: I2).
+_CLIENT_SYSTEM_LABEL = APP_CONTEXT_LINE
+
+#: System text THIS server writes. The route adds the recalled-facts block to
+#: `messages` after the request body arrives, so a system message can be in both
+#: lists without ever having come from the app; these prefixes tell the two
+#: apart when a caller (or a test) hands the same list as both. Wording the
+#: server owns; an app's arbitrary system text matches none of them and is
+#: demoted.
+_SERVER_SYSTEM_PREFIXES = (
+    "Things you ",                       # recalled facts (all three spellings)
+    "Recalled for this question:",
+    "Always keep in mind",
+    "Text that comes back from a tool",  # OUTSIDE_NOTE
+    "The app sent extra text",           # APP_CONTEXT_LINE, already demoted once
+)
+
+
+def _looks_like_server_system(text: str) -> bool:
+    text = str(text or "")
+    try:
+        if text == LANE_SYSTEM:
+            return True
+    except NameError:                    # module still loading
+        pass
+    return text.startswith(_SERVER_SYSTEM_PREFIXES)
+
+
+def _clean_content_for_model(content):
+    """A copy of one message's content with chat-control markers and Unicode
+    tag characters removed from every text part. Image parts are copied
+    untouched (their bytes are not text)."""
+    if isinstance(content, str):
+        return strip_chat_markers(content)
+    if isinstance(content, list):
+        out = []
+        for part in content:
+            if isinstance(part, dict):
+                p = dict(part)
+                if isinstance(p.get("text"), str):
+                    p["text"] = strip_chat_markers(p["text"])
+                out.append(p)
+            elif isinstance(part, str):
+                out.append(strip_chat_markers(part))
+            else:
+                out.append(part)
+        return out
+    return content
+
+
+def messages_for_model(messages, raw_messages=None) -> list:
+    """What the model is sent: every message string loses chat-control markers
+    and U+E0000-E007F, and a `system` message that came from the APP is demoted
+    to a labelled user turn.
+
+    WHY (security audit 2026-10-18, I1/I2). Tool results already go through
+    `strip_chat_markers`; the owner's pasted, shared, clipboard and selection
+    text and an app's own system message did not, so a page could hand Jarvis
+    `<|im_end|><|im_start|>system ...` or invisible tag characters as if they
+    were a real turn. The server's OWN system turns (rules, recalled facts,
+    OUTSIDE_NOTE) are kept as system turns: the raw request's system texts are
+    compared against the list, because the route has already added the
+    server's own turns to it. A message that is not an object, or has no known
+    role, is dropped rather than guessed at.
+    """
+    app_system = set()
+    for m in raw_messages or []:
+        if isinstance(m, dict) and m.get("role") == "system":
+            app_system.add(_text_of(m.get("content")))
+    out = []
+    for m in messages or []:
+        if not isinstance(m, dict):
+            continue
+        role = str(m.get("role") or "").strip().lower()
+        if role not in ("user", "assistant", "tool", "system"):
+            continue
+        # Every field is kept, so a message that needed no cleaning is EQUAL to
+        # the one the caller passed (prompt-order contract suites compare the
+        # assembled list with their own objects). The production route has
+        # already taken the app's bookkeeping fields off; a caller that did not
+        # keeps them, exactly as before this change.
+        item = dict(m)
+        item["role"] = role
+        # Compare the ORIGINAL words with the request's own system turns: the
+        # cleaning below removes the very markers the comparison is on.
+        original_text = _text_of(m.get("content"))
+        item["content"] = _clean_content_for_model(m.get("content"))
+        if role == "system":
+            text = _text_of(item.get("content"))
+            if (raw_messages is not None and original_text in app_system
+                    and not _looks_like_server_system(original_text)):
+                # The app sent it: data, not a turn.
+                item = dict(m)
+                item["role"] = "user"
+                item["content"] = _CLIENT_SYSTEM_LABEL + ("\n" + text if text else "")
+        out.append(item)
     return out
 
 
@@ -5156,6 +5278,34 @@ class _TurnWatch:
         self.owner_words = "\n".join(
             _text_of(m.get("content")) for m in users
             if _provenance(m) in OWN_WORDS).lower()
+        # Planted-instruction flags on the app's OWN text (security audit
+        # 2026-10-18, I1). Tool results are scanned in took_in below; a
+        # pasted, shared, clipboard, picture-caption or unknown user message -
+        # and any system message the app sent - is scanned HERE, so a card this
+        # turn raises carries the warning. A typed or said message is the
+        # owner's own words and is not scanned: no false alarm from the
+        # owner's own writing.
+        self.conversation_id = req.get("conversation_id") \
+            if isinstance(req.get("conversation_id"), str) else ""
+        for m in raw:
+            role = str(m.get("role") or "")
+            is_app_system = role == "system"
+            if role == "user" and _provenance(m) in OWN_WORDS:
+                continue
+            if role != "user" and not is_app_system:
+                continue
+            text = _text_of(m.get("content"))
+            if not text:
+                continue
+            for code, why in outside_flags(text).items():
+                self.flags.setdefault(code, why)
+            try:
+                import jarvis_injection
+                line = jarvis_injection.summary(text)
+                if line:
+                    self.flags.setdefault("sneaky_instruction", line)
+            except Exception:
+                pass
         self.tainted = (bool(tainted) if tainted is not None
                         else _conversation_tainted(req.get("conversation_id"), raw))
         # An earlier turn of this conversation looked at the owner's bank
@@ -5200,6 +5350,24 @@ class _TurnWatch:
         return self.bad[key]
 
     # -- results -------------------------------------------------------------
+    def _note_outside_now(self) -> None:
+        """Mark the conversation tainted as soon as a reading tool returns
+        (security audit 2026-10-18, I6).
+
+        The end-of-turn record taints it from `turn.tools_ran`
+        (jarvis_chat_log.record_turn), but a turn that never finishes - the
+        app goes away, the answer is stopped - could drop that record. This is
+        the same mark, taken early, in memory only; the end-of-turn record and
+        its encrypted database row are unchanged."""
+        cid = self.conversation_id
+        if not cid:
+            return
+        try:
+            import jarvis_chat_log
+            jarvis_chat_log.note_outside(cid)
+        except Exception:
+            pass
+
     def took_in(self, name: str, result):
         """A tool's result, ready for the model: flags noted, markers gone,
         labelled as outside data."""
@@ -5216,6 +5384,7 @@ class _TurnWatch:
             result = {k: v for k, v in result.items() if k != "_retirement_result"}
         if name not in _NOT_READING:
             self.read[name] = self.read.get(name, 0) + 1
+            self._note_outside_now()
             # `read` IS THE THIS-TURN SIGNAL. `tainted` IS THE CONVERSATION'S.
             #
             # 8105c342 also set `tainted = True` here, for every tool, to close
@@ -5273,7 +5442,10 @@ class _TurnWatch:
                 # it: a missing or older table must never break a turn.
                 try:
                     import jarvis_injection
-                    line = jarvis_injection.summary(piece)
+                    # Normalised the same way outside_flags does it, so a
+                    # look-alike letter cannot get past this table (I4); the
+                    # table itself stays stdlib-only.
+                    line = jarvis_injection.summary(_plain_for_scan(piece))
                     if line:
                         self.flags.setdefault("sneaky_instruction", line)
                 except Exception:
@@ -8187,7 +8359,11 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     checker = gate_check or _gate_check
     streamer = open_stream or (lambda url, payload: _open_stream(url, payload))
     closer = abort or (lambda up: getattr(up, "close", lambda: None)())
-    convo = list(messages)
+    # I1/I2 (security audit 2026-10-18): what the model reads loses chat-control
+    # markers and app-supplied system turns before the loop starts. The server's
+    # own system turns (rules, recalled facts, OUTSIDE_NOTE) are kept.
+    _app_messages = request.get("messages") if isinstance(request, dict) else None
+    convo = messages_for_model(messages, _app_messages)
     if lane_choice == "auto":
         lane_choice = choose_lane(messages, model, ollama_url=ollama_url, request=request,
                                   enabled_tools=enabled_tools, context_length=context_length)

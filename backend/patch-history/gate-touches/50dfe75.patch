@@ -1,0 +1,156 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -927,8 +927,139 @@ _PROTECTED = (
+ )
+ _PROTECTED_RE = re.compile("|".join(re.escape(x) for x in _PROTECTED), re.I)
+ 
++#: Every caller in this project hands the gate the model's own tool arguments
++#: as a JSON object: OpenJarvis's confirm prompt quotes the tool call, and
++#: jarvis_agent's own `_gate_prompt` writes `tool <name> {json}`. Greedy so a
++#: nested object is taken whole rather than cut at its first inner brace;
++#: whether a match really is JSON is decided by json.loads below, never by
++#: this pattern.
++_JSON_OBJECT_RE = re.compile(r"\{.*\}", re.S)
++
++#: The prompts this project uses for a TOOL CALL, matched from their first
++#: character to their last. OpenJarvis's confirm callback quotes the call
++#: (`Allow execution of tool '<name>' with args {json}?`); jarvis_agent writes
++#: `tool <name> {json}` for a tool and `plan step <name> {json}` for one step
++#: of a plan. Matching END TO END is what keeps this safe: a card's own text
++#: is a paragraph, never one of these lines, so no wording of a card can reach
++#: the rule (the failure _PROSE_KEYS' note records). The closing brace is NOT
++#: required, because a caller can still cut the arguments short: jarvis_mcp's
++#: `call` slices at 1500 and gate_tool below does too; that is the whole point
++#: of the pattern, and the cut is read at the end of _target_blobs below.
++_TOOL_CALL_PROMPTS = (
++    re.compile(r"\s*tool\s+[A-Za-z0-9_\-\.]+\s+(?P<args>\{.*)\s*\Z", re.S),
++    re.compile(r"\s*plan\s+step\s+[A-Za-z0-9_\-\.]+\s+(?P<args>\{.*)\s*\Z", re.S),
++    re.compile(r"\s*Allow execution of tool '[A-Za-z0-9_\-\.]+' with args "
++               r"(?P<args>\{.*)\s*\Z", re.S),
++)
++
++#: The keys in `detail` that hold the CARD'S OWN TEXT rather than a parameter.
++#: Every module that raises a card builds `{"text": <the card>, ...}` - it is
++#: what the apps show a person (`jarvis_backup`, `jarvis_asks_first`,
++#: `jarvis_schedule`, `jarvis_mcp`, `jarvis_note_capture`, and jarvis_agent's
++#: own `{"text": plan_text}`) - and "prompt" is the same thing for the modules
++#: that hand the card back under that name. A name in one of these is prose,
++#: never a target, so it is dropped before the search.
++#:
++#: THIS IS THE WHOLE FIX, so it is stated rather than inferred: a card that
++#: merely NAMES a protected file must be raisable, because the alternative -
++#: scanning the words a card uses - refused 45 of the owner's cards
++#: (2026-10-03..2026-10-10) before anybody was asked, with no card and no
++#: Windows Hello for any of them. A key that is NOT in this tuple is treated
++#: as a parameter and IS searched, so a new argument added to `detail`
++#: tomorrow is covered by default: what has to be argued for is prose, not
++#: protection.
++_PROSE_KEYS = ("text", "prompt", "card")
++
++
++def _target_blobs(action: str, detail: Any, prompt: str) -> tuple:
++    """The blobs the PROTECTED rule may read - the action's TARGET, not its card.
++
++    WHICH QUESTION THIS ANSWERS. The rule above the tier table exists so that
++    nothing an action the gate approves can rewrite the POLICY or the GATE:
++    "if the policy and the gate are writable by an action the gate itself
++    approves, there is no gate - just a longer path to the off switch". That
++    is a question about what the action would TOUCH - its target - and not
++    about the words printed on its card.
++
++    WHAT ARRIVES IN EACH ARGUMENT (measured across every caller, 2026-10-10):
++
++      `detail`  the action's own parameters. Every route that raises a card
++                builds it - {"what": ..., "path": ..., "settings": ..., "to":
++                ...} - and it is the same dict `_redact` describes as "the
++                recipient of the email, the path of the file, the body of the
++                shell command". Its values are searched, EXCEPT the keys in
++                _PROSE_KEYS, which hold the card's own text.
++
++      `prompt`  EITHER a tool call - OpenJarvis's confirm callback, whose
++                prompt is `Allow execution of tool '<name>' with args {json}?`,
++                and jarvis_agent's own `tool <name> {json}` (whole since
++                DEF-003; jarvis_mcp's `call` still cuts) - OR the card's text.
++                The route callers (jarvis_backup, jarvis_asks_first,
++                jarvis_mcp, jarvis_task_control and the rest) hand the gate the
++                card text as the prompt, because that is what a person reads.
++
++    So the prompt counts ONLY where it carries arguments: the JSON object
++    inside it is taken, and the prose around it is not. A prompt with no JSON
++    in it is prose, and prose is not a target. Nothing the model writes stops
++    being read - a model's arguments reach the gate as JSON on every path
++    (OpenJarvis quotes the tool call, jarvis_agent writes
++    `tool <name> {json}`, and a route card's arguments are in `detail`) - and
++    no wording of a card can reach this rule at all. A tool call whose
++    arguments were cut short is still read, from the raw text of the call
++    line: `_TOOL_CALL_PROMPTS` says why that cannot reach a card's words.
++
++    Returns the strings to search.
++    """
++    blobs = []
++    try:
++        if isinstance(detail, dict):
++            searchable = {k: v for k, v in detail.items()
++                          if str(k).lower() not in _PROSE_KEYS}
++        else:
++            searchable = detail
++        blobs.append(json.dumps(searchable, default=str))
++    except Exception:
++        blobs.append(str(detail))
++    # The action NAME too: the two terminal actions jarvis_agent makes for
++    # itself are the tool's own name (`unclassified_tool:file_write`), and a
++    # name is chosen by the tool's author, never by the model.
++    blobs.append(str(action or ""))
++    for m in _JSON_OBJECT_RE.findall(prompt or ""):
++        try:
++            json.loads(m)
++        except Exception:
++            continue                      # braces in prose, not arguments
++        blobs.append(m)
++    # A CUT TOOL CALL STILL CARRIES ITS ARGUMENTS. A caller can still hand the
++    # gate a line cut at 1500 characters - jarvis_mcp's `call` slices
++    # `plan.args_json` and gate_tool below slices the same way - and a JSON
++    # object cut in half does not parse, so the loop just above dropped exactly
++    # the arguments this rule exists to read: measured 2026-10-11, arguments
++    # 3453 characters long with a write to the gate's own file at character 62
++    # left `['{}', 'run_shell_on_host']`, and the action was offered as an
++    # ordinary card a person could approve. (jarvis_agent's lines cut the same
++    # way until DEF-003.) What the action would TOUCH does not change because
++    # the line recording it is too short to hold it, so the raw argument text
++    # of a prompt that IS a tool-call line, end to end, is read as it stands.
++    # This can only ever ADD text to the search - nothing that was refused
++    # before can become allowed - and the match is anchored at both ends, so a
++    # card's own words still cannot reach this rule at all.
++    for pat in _TOOL_CALL_PROMPTS:
++        m = pat.match(prompt or "")
++        if m:
++            blobs.append(m.group("args"))
++            break
++    return tuple(blobs)
++
+ 
+ def _touches_protected(*blobs) -> Optional[str]:
++    """The first protected name in these blobs, or None.
++
++    Callers pass TARGET material (_target_blobs above), never free prose: a
++    name found here refuses the action outright, at tier "never" and before
++    any card is raised, so a false positive is a card nobody can ever be
++    shown - the failure mode _target_blobs' own docstring records.
++    """
+     for b in blobs:
+         if not b:
+             continue
+@@ -1349,7 +1480,12 @@ def check(action: str,
+                        outcome="refused")
+ 
+     # The one rule above the tier table: nothing gets to edit the tier table.
+-    hit = _touches_protected(prompt, detail)
++    # It reads the action's TARGET - the arguments, the path or key it would
++    # write, the model's own tool call - and never the prose on the card,
++    # which is what _target_blobs decides between. A card that merely NAMES a
++    # protected file is raised like any other card; an action whose target IS
++    # one is still refused here, at "never", before any card exists.
++    hit = _touches_protected(*_target_blobs(action, detail, prompt))
+     if hit:
+         _audit("gate.refused_protected", {"action": action, "file": hit})
+         return Verdict(False, "never", action,

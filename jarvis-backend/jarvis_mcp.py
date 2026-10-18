@@ -1634,13 +1634,21 @@ class Bridge:
         return env
 
     def call(self, model_name: str, args) -> dict:
-        """Whole four steps, for call sites other than jarvis_agent."""
+        """Whole four steps, for call sites other than jarvis_agent.
+
+        THE ARGUMENTS GO OVER WHOLE (DEF-012, 2026-10-18). This used to hand
+        the gate `plan.args_json[:1500]`: a protected target past character
+        1,500 was then invisible to the gate's PROTECTED rule, so a write to
+        its own policy could come back as an ordinary card a person could
+        approve. The gate scans the line it is given, and what it WRITES DOWN
+        stays bounded inside check() - so the cut belongs there, never here.
+        """
         try:
             plan = self.plan_call(model_name, args)
         except ValueError as exc:
             return {"ok": False, "error": str(exc)}
         verdict = self._check(plan.action, {"text": self.describe(plan)},
-                              f"tool {model_name} {plan.args_json[:1500]}")
+                              f"tool {model_name} {plan.args_json}")
         return self.run(plan, verdict=verdict)
 
     # ---- stopping ----

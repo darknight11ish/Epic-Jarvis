@@ -145,7 +145,15 @@ PIN = {
     "attention-settings.patch":                (2, 13),    # position 125 - _stack.py: the new hunk invents the dispatch tuple's own lines
     "limits-read.patch":                       (2, 13),    # position 127 - _stack.py: names limits-read.patch: 2
     "retrieve-count.patch":                    (2, 17),    # position 131 - _stack.py: names retrieve-count.patch: 2
-    "gate-touches.patch":                      (2, 15),    # position 137
+    # position 137 - 2 hunks / 15 lines were the PROTECTED-rule change. RAISED
+    # 2026-10-18 to 5/59 for the DEF-012 and I6 hunks: gate_tool's whole-args
+    # prompt, latch_taint's process-local fallback, and clear_taint's reset are
+    # the owner's ORIGINAL gate text - no patch in this walk writes those
+    # lines - so the patch necessarily carries 44 more lines of it. Honest
+    # rather than drift, and checked: the three hunks were `git apply --check`ed
+    # against the published gate and test_gate_touches.py applies them forwards
+    # and reverses them out of it byte-for-byte.
+    "gate-touches.patch":                      (5, 59),   # position 137
     "initiative-payload.patch":                (1, 7),     # position 143
 }
 

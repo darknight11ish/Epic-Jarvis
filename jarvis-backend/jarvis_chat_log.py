@@ -1202,6 +1202,28 @@ class ChatLog:
                 del self._live[key]
 
     # -- taint for a conversation this process has not met ------------------
+    def note_outside(self, conversation_id) -> bool:
+        """Mark this conversation tainted NOW, before the turn is recorded.
+
+        WHY (security audit 2026-10-18, I6). The end-of-turn record taints a
+        conversation from `turn.tools_ran` (record_turn). A turn that reads an
+        email and then never finishes - the app goes away, the answer is
+        stopped - may never hand that record in, and the turn after it could
+        be offered a cloud lane. jarvis_agent calls this the moment a reading
+        tool returns, so the conversation is already tainted if the answer
+        does not finish. In memory only: the encrypted turn row is still
+        written by record_turn, exactly as before. Exactly once: an existing
+        taint is never moved or shortened; a bad conversation id is refused
+        rather than guessed at."""
+        if not (isinstance(conversation_id, str) and _CID.fullmatch(conversation_id)):
+            return False
+        with self._lock:
+            if conversation_id not in self._seen:
+                self._met(conversation_id)
+            if conversation_id not in self._taint:
+                self._taint[conversation_id] = 0    # tainted from before any turn
+        return True
+
     def _db_turns(self, cid: str):
         """(user rows, any turn read outside text) for `cid` in the history
         database, or None when there is no database or no row for it. Plain
@@ -3008,6 +3030,13 @@ def conversation_tainted(conversation_id, messages=None) -> bool:
     outside text? `messages`: the request's, as they arrived. Fails closed
     for a conversation this process has not met (G1)."""
     return _log().conversation_tainted(conversation_id, messages)
+
+
+def note_outside(conversation_id) -> bool:
+    """For jarvis_agent: mark this conversation tainted as soon as a reading
+    tool returns, before the turn is recorded (security audit 2026-10-18).
+    Same in-memory mark the end-of-turn record makes; no database write."""
+    return _log().note_outside(conversation_id)
 
 
 def conversation_money(conversation_id, messages=None) -> bool:

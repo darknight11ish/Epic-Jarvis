@@ -355,8 +355,19 @@ RATCHET = {
     #: entry in apply-patches.ps1), where both of its hunks apply to real
     #: context and nothing else moves.
     #:
-    #: A ratchet: it may still only go down.
-    "jarvis_gate.py": 25,
+    #: RAISED 2026-10-18, 25 -> 28, for gate-touches.patch's three new hunks and
+    #: all are honest rather than drift: (1) DEF-012, gate_tool's prompt now
+    #: carries the whole arguments so the PROTECTED rule can read a target past
+    #: character 1,500; (2) I6, latch_taint now keeps a process-local latch when
+    #: its own database write raises; (3) the same latch change's clear_taint
+    #: hunk. All three sit on lines of the owner's original `jarvis_gate.py` -
+    #: no patch in this walk writes them - so the walk must invent their
+    #: pre-image. Verified rather than assumed: the hunks were extracted and
+    #: `git apply --check`ed against this branch's published gate
+    #: (`jarvis-backend/jarvis_gate.py`, which holds those lines in the state
+    #: gate-touches.patch expects), and backend/test_gate_touches.py reruns
+    #: patch forward/reverse against it. A ratchet: it may still only go down.
+    "jarvis_gate.py": 28,
     "jarvis_extract.py": 9,
     "jarvis_models.py": 5,
     "jarvis_skills.py": 2,

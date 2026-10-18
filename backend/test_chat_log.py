@@ -404,6 +404,30 @@ def t_taint_from_a_turn_on():
         w.done()
 
 
+def t_a_reading_tool_taints_before_the_turn_is_recorded():
+    """Security audit 2026-10-18, I6: the conversation is marked tainted the
+    moment a reading tool returns (`note_outside`), not only when a completed
+    turn is recorded - so a turn that never finishes cannot leave the next one
+    looking clean. Exactly once: an existing mark is never moved."""
+    w = World()
+    try:
+        w.log.record_turn(req("hello"), turn=local("hi"))
+        cid = "conv-000001"
+        check("nothing read yet: not tainted",
+              w.log.conversation_tainted(cid) is False)
+        check("note_outside marks it at once",
+              w.log.note_outside(cid) is True
+              and w.log.conversation_tainted(cid) is True)
+        before = w.log.tainted_from(cid)
+        w.log.note_outside(cid)
+        check("... once: a second call does not move the mark",
+              w.log.tainted_from(cid) == before, w.log.tainted_from(cid))
+        check("a bad conversation id is refused rather than guessed",
+              w.log.note_outside("not a conversation id") is False)
+    finally:
+        w.done()
+
+
 # ------------------------------------------ taint across a restart (G1)
 
 EMAIL_ASKED = {"role": "user", "content": "check my email", "provenance": "typed"}

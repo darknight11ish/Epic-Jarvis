@@ -19,9 +19,9 @@
 +#: of a plan. Matching END TO END is what keeps this safe: a card's own text
 +#: is a paragraph, never one of these lines, so no wording of a card can reach
 +#: the rule (the failure _PROSE_KEYS' note records). The closing brace is NOT
-+#: required, because a caller can still cut the arguments short: jarvis_mcp's
-+#: `call` slices at 1500 and gate_tool below does too; that is the whole point
-+#: of the pattern, and the cut is read at the end of _target_blobs below.
++#: required, because a caller outside this project can still cut the arguments
++#: short; the cut is read at the end of _target_blobs below. (This project's own
++#: callers hand the whole arguments over since DEF-012, 2026-10-18.)
 +_TOOL_CALL_PROMPTS = (
 +    re.compile(r"\s*tool\s+[A-Za-z0-9_\-\.]+\s+(?P<args>\{.*)\s*\Z", re.S),
 +    re.compile(r"\s*plan\s+step\s+[A-Za-z0-9_\-\.]+\s+(?P<args>\{.*)\s*\Z", re.S),
@@ -70,7 +70,7 @@
 +      `prompt`  EITHER a tool call - OpenJarvis's confirm callback, whose
 +                prompt is `Allow execution of tool '<name>' with args {json}?`,
 +                and jarvis_agent's own `tool <name> {json}` (whole since
-+                DEF-003; jarvis_mcp's `call` still cuts) - OR the card's text.
++                DEF-003; jarvis_mcp's `call` whole since DEF-012) - OR the card's text.
 +                The route callers (jarvis_backup, jarvis_asks_first,
 +                jarvis_mcp, jarvis_task_control and the rest) hand the gate the
 +                card text as the prompt, because that is what a person reads.
@@ -107,9 +107,9 @@
 +        except Exception:
 +            continue                      # braces in prose, not arguments
 +        blobs.append(m)
-+    # A CUT TOOL CALL STILL CARRIES ITS ARGUMENTS. A caller can still hand the
-+    # gate a line cut at 1500 characters - jarvis_mcp's `call` slices
-+    # `plan.args_json` and gate_tool below slices the same way - and a JSON
++    # A CUT TOOL CALL STILL CARRIES ITS ARGUMENTS. A caller outside this
++    # project can still hand the gate a line cut at 1500 characters (this
++    # project's own callers stopped cutting in DEF-012, 2026-10-18), and a JSON
 +    # object cut in half does not parse, so the loop just above dropped exactly
 +    # the arguments this rule exists to read: measured 2026-10-11, arguments
 +    # 3453 characters long with a write to the gate's own file at character 62
@@ -154,3 +154,113 @@
      if hit:
          _audit("gate.refused_protected", {"action": action, "file": hit})
          return Verdict(False, "never", action,
+@@ -1735,9 +1735,16 @@
+     that mattered. Called from inside execute(), it sees every call.
+     """
+     action, _ = action_for_tool(name, params)
+-    detail = {"tool": name, "args": (params if isinstance(params, str)
+-                                     else json.dumps(params, default=str))[:1500]}
+-    v = check(action, detail, prompt=f"tool {name} {detail['args']}")
++    # THE WHOLE ARGUMENTS REACH THE SCAN; the stored copy stays bounded
++    # (DEF-012, 2026-10-18). This used to cut the prompt at 1,500 characters,
++    # so a protected target past that point was never scanned and the action
++    # came back as an ordinary card. The gate's own check() still writes at
++    # most 2,000 characters of the line on the approvals row, so what is
++    # RECORDED does not grow without limit - only what is READ.
++    raw_args = (params if isinstance(params, str)
++                else json.dumps(params, default=str))
++    detail = {"tool": name, "args": raw_args[:1500]}
++    v = check(action, detail, prompt=f"tool {name} {raw_args}")
+     if v.allowed:
+         return None
+     if v.timed_out:
+@@ -1769,29 +1776,74 @@
+ # some public questions answered by the local model; the alternative cost is
+ # personal material reaching a cloud lane.
+ 
++#: The process-local copy of the latch (security audit 2026-10-18, I6). The
++#: database row is the latch; this is what keeps a private read from becoming
++#: a cloud lane when the row cannot be WRITTEN - the old code returned False
++#: from that except, i.e. created no latch at all. taint_active() already
++#: fails closed when the row cannot be READ; this makes latch_taint() fail
++#: closed too. In memory only: a restart loses it, and the next private read
++#: sets it again.
++_TAINT_FALLBACK_UNTIL = 0.0
++_TAINT_FALLBACK_WHY = ""
++
++
++def _latch_in_memory(seconds: float, why: str) -> None:
++    """Keep the latch in this process, never shorter than one already held."""
++    global _TAINT_FALLBACK_UNTIL, _TAINT_FALLBACK_WHY
++    try:
++        until = time.time() + max(0.0, float(seconds))
++    except Exception:
++        until = time.time() + 30.0 * 60.0
++    if until > _TAINT_FALLBACK_UNTIL:
++        _TAINT_FALLBACK_UNTIL = until
++        _TAINT_FALLBACK_WHY = str(why or "")[:200]
++
++
++def _memory_taint_active() -> bool:
++    return _TAINT_FALLBACK_UNTIL > time.time()
++
++
+ def latch_taint(minutes: Optional[float] = None, why: str = "") -> bool:
+     if minutes is None:
+-        minutes = float(_cfg("notes.joplin", "taint_latch_minutes", 30) or 30)
++        try:
++            minutes = float(_cfg("notes.joplin", "taint_latch_minutes", 30) or 30)
++        except Exception:
++            minutes = 30.0
++    try:
++        seconds = max(0.0, float(minutes)) * 60.0
++    except Exception:
++        seconds = 30.0 * 60.0
+     try:
+         _init()
+-        until = time.time() + max(0.0, float(minutes)) * 60.0
++        until = time.time() + seconds
+         with closing(_connect()) as c:
+             row = c.execute("SELECT until FROM taint WHERE key='conversation'").fetchone()
+             if row and row["until"] > until:
++                _latch_in_memory(row["until"] - time.time(), why)
+                 return True                   # never shorten an existing latch
+             c.execute("INSERT INTO taint (key, until, why) VALUES ('conversation',?,?) "
+                       "ON CONFLICT(key) DO UPDATE SET until=excluded.until, why=excluded.why",
+                       (until, why[:200]))
+-        _audit("gate.taint_latched", {"minutes": minutes, "why": why})
++        try:
++            _audit("gate.taint_latched", {"minutes": minutes, "why": why})
++        except Exception:
++            pass
+         return True
+     except Exception:
+-        return False
++        # FAIL CLOSED (I6): a latch that could not be written still latches, in
++        # this process. The old `return False` was a fail-open: the read that
++        # set it was not private any more for anything reading the latch.
++        _latch_in_memory(seconds, why)
++        return True
+ 
+ 
+ def taint_active() -> bool:
+     """True while the latch holds. A failure to read it returns True, because
+     the safe answer to "is this conversation private?" when you cannot tell is
+-    yes."""
++    yes. A latch this process could not write (latch_taint's fallback) also
++    counts (security audit 2026-10-18, I6)."""
++    if _memory_taint_active():
++        return True
+     try:
+         _init()
+         with closing(_connect()) as c:
+@@ -1802,6 +1854,9 @@
+ 
+ 
+ def clear_taint() -> bool:
++    global _TAINT_FALLBACK_UNTIL, _TAINT_FALLBACK_WHY
++    _TAINT_FALLBACK_UNTIL = 0.0
++    _TAINT_FALLBACK_WHY = ""
+     try:
+         _init()
+         with closing(_connect()) as c:

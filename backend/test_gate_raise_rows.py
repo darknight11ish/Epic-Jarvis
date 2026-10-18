@@ -420,11 +420,19 @@ def t_no_other_patch_gives_either_action_a_row():
     # same row out of reach and put the two handoff actions in no set at all.
     # A pin that only ever moves up cannot tell those apart from honest drift,
     # so this names the patches that must stay materialised and the count.
-    check("... and no other patch's cost changed either: the walk still reads "
-          "25, and handoff-mode.patch is NOT among the patches invented",
-          _stack.materialised("jarvis_gate.py")["materialised"] == 25
-          and "handoff-mode.patch" not in by_patch,
+    # 25 -> 28 on 2026-10-18: gate-touches.patch gained three hunks for
+    # DEF-012 (the whole-arguments prompt) and I6 (the process-local latch),
+    # and all three sit on the owner's ORIGINAL gate_tool/latch text that no
+    # earlier patch writes. _stack.RATCHET records the same raise with the
+    # reason; this check stays a real pin, not "any number".
+    check("... and no other patch's cost changed either: the walk reads the "
+          "RATCHET pin, and handoff-mode.patch is NOT among the patches invented",
+          _stack.materialised("jarvis_gate.py")["materialised"]
+          == _stack.RATCHET["jarvis_gate.py"]
+          and "handoff-mode.patch" not in by_patch
+          and "gate-raise-rows.patch" not in by_patch,
           f"measured {_stack.materialised('jarvis_gate.py')['materialised']}, "
+          f"pinned {_stack.RATCHET['jarvis_gate.py']}, "
           f"by_patch {sorted(by_patch)}")
     check("the walk's pin for jarvis_gate.py is what it measures",
           _stack.materialised("jarvis_gate.py")["materialised"]

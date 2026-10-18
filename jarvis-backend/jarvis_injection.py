@@ -310,24 +310,49 @@ def _shown(matched: str) -> str:
     return text[:MATCH_CHARS - 1] + "…"
 
 
+def _plain_for_scan(text: str) -> str:
+    """The text with NFKC applied, for the scan (stdlib only, on purpose: this
+    module is the one table usable without any of Jarvis's other files).
+
+    The Cyrillic/Greek look-alike half of the normalisation lives one level up,
+    in `jarvis_auto_learn.plain_letters`; jarvis_agent applies it before it
+    calls this table (`outside_flags` / took_in), so the two scanners still
+    read the same normalised text without this module importing Jarvis's code
+    (security audit 2026-10-18, I4).
+
+    A miss here is only a missing warning line - this table is advisory.
+    Nothing raises."""
+    try:
+        import unicodedata
+        return unicodedata.normalize("NFKC", text)
+    except Exception:
+        return text
+
+
 def scan(text: str) -> list:
     """Every pattern that matched, as `{"name", "level", "match"}`.
 
     One entry per pattern, in the order `PATTERNS` lists them, holding that
     pattern's first match - cut to MATCH_CHARS characters. Only the first
-    SCAN_LIMIT characters are looked at. A string that is not a string, or is
-    empty, gives an empty list; nothing here raises."""
+    SCAN_LIMIT characters are looked at (of both the original and its
+    look-alike-normalised form). A string that is not a string, or is empty,
+    gives an empty list; nothing here raises."""
     if not isinstance(text, str) or not text:
         return []
-    hay = text[:SCAN_LIMIT]
+    hays = [text[:SCAN_LIMIT]]
+    plain = _plain_for_scan(text)[:SCAN_LIMIT]
+    if plain != hays[0]:
+        hays.append(plain)
     found = []
     for name, rx, level in PATTERNS:
-        try:
-            m = rx.search(hay)
-        except Exception:       # pragma: no cover - a regex is never this broken
-            continue
-        if m:
-            found.append({"name": name, "level": level, "match": _shown(m.group(0))})
+        for hay in hays:
+            try:
+                m = rx.search(hay)
+            except Exception:   # pragma: no cover - a regex is never this broken
+                continue
+            if m:
+                found.append({"name": name, "level": level, "match": _shown(m.group(0))})
+                break
     return found
 
 
