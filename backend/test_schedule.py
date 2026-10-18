@@ -1355,8 +1355,10 @@ def t_gtd_a_context_bundle_is_scrubbed_and_never_a_path():
           ["Sam Fisher", "Mum"], stored.get("linked_entities"))
     check("... and the suggested prompt is kept",
           stored.get("suggested_prompt") == "Help me finish the tax form", stored)
-    # Fail closed (privacy review F2): without the scrubber NOTHING is stored,
-    # because a file label or a name can carry a secret too.
+    # Fail closed (privacy review F2): without the scrubber every WORD is
+    # dropped, because a file label or a name can carry a secret too. GTD-1
+    # follow-up (2026-10-18): the ONE thing kept is the plain boolean saying
+    # the packet was dropped (and never a hash of it).
     real_scrubber = S._scrubber
     S._scrubber = lambda: None
     try:
@@ -1365,7 +1367,13 @@ def t_gtd_a_context_bundle_is_scrubbed_and_never_a_path():
     finally:
         S._scrubber = real_scrubber
     check("with no scrubber the whole packet is dropped, never raw",
-          bare == {}, bare)
+          bare == {S.CONTEXT_DROPPED: True}, bare)
+    check("... and the only thing kept is the plain boolean",
+          list(bare) == [S.CONTEXT_DROPPED] and bare[S.CONTEXT_DROPPED] is True,
+          bare)
+    check("... with no raw words in it",
+          "raw private words" not in json.dumps(bare) and "keep-me" not in json.dumps(bare),
+          bare)
 
 
 def t_gtd_old_rows_and_plain_reminders_grow_nothing():
@@ -1754,9 +1762,10 @@ def t_gtd_the_add_route_accepts_the_reminder_fields():
         S.get = real_get
 
 
-def t_gtd_scrubber_failure_stores_nothing():
+def t_gtd_scrubber_failure_stores_no_words():
     """Privacy review F1/F2: no scrubber, or a scrubber that raises, must never
-    store a raw word - not a summary, not a name, not a file label."""
+    store a raw word - not a summary, not a name, not a file label. GTD-1
+    follow-up (2026-10-18): what IS stored is the plain dropped boolean."""
     secret = "sk-live-FIXTURE-SECRET-1234567890"
 
     class Boom:
@@ -1773,7 +1782,8 @@ def t_gtd_scrubber_failure_stores_nothing():
         raised = S.scrub_context_bundle(bundle_in)
     finally:
         S._scrubber = real
-    check("a raising scrubber drops the WHOLE packet", raised == {}, raised)
+    check("a raising scrubber drops the WHOLE packet",
+          raised == {S.CONTEXT_DROPPED: True}, raised)
     check("... and no raw secret survives", secret not in json.dumps(raised))
     S._scrubber = lambda: None
     try:
@@ -1783,10 +1793,152 @@ def t_gtd_scrubber_failure_stores_nothing():
                          context_bundle=bundle_in)
     finally:
         S._scrubber = real
-    check("a missing scrubber drops the WHOLE packet", missing == {}, missing)
+    check("a missing scrubber drops the WHOLE packet",
+          missing == {S.CONTEXT_DROPPED: True}, missing)
     check("... and no raw secret survives", secret not in json.dumps(missing))
-    check("... so a reminder stores no context at all",
-          "has_context" not in w.s.job(job["id"]), w.s.job(job["id"]))
+    stored_view = w.s.job(job["id"])
+    check("... so the reminder stores no context words, and says it dropped them",
+          "has_context" not in stored_view
+          and stored_view.get(S.CONTEXT_DROPPED) is True
+          and secret not in json.dumps(stored_view), stored_view)
+
+
+def t_gtd_dropped_context_keeps_only_a_plain_boolean():
+    """GTD-1 follow-up (Gemini's Q2 ruling, 2026-10-18): when the scrubber is
+    missing or raising, the packet's words are gone and the reminder keeps ONE
+    plain true flag - no words, no ids, and no hash of them (a hash would be a
+    secret oracle). The flag is exposed additively on the reminder view."""
+    import sqlite3
+    secret = "sk-live-FIXTURE-SECRET-2345678901"
+    bundle_in = {"source_conv_id": "conv-9",
+                 "source_summary": "key " + secret,
+                 "linked_entities": ["name " + secret],
+                 "linked_files": ["doc-" + secret],
+                 "suggested_prompt": "use " + secret}
+    real = S._scrubber
+
+    class Boom:
+        def __call__(self, text):
+            raise RuntimeError("scrubber down")
+
+    S._scrubber = lambda: Boom()
+    try:
+        marker = S.scrub_context_bundle(bundle_in)
+        w = _gtd_world("gtd-drop-raise", S.wall_to_epoch(2026, 10, 20, 9, 0))
+        job = w.s.add_at("reminder", w.clock.t + 100.0, "Buy milk",
+                         context_bundle=bundle_in)
+    finally:
+        S._scrubber = real
+    check("a raising scrubber keeps only the plain boolean, no words",
+          marker == {S.CONTEXT_DROPPED: True}, marker)
+    check("... and no raw secret survives in the result",
+          secret not in json.dumps(marker), marker)
+
+    con = sqlite3.connect(str(w.s.path))
+    try:
+        raw_row = con.execute("SELECT context_bundle FROM jobs WHERE id = ?",
+                              (job["id"],)).fetchone()[0]
+    finally:
+        con.close()
+    view = w.s.job(job["id"])
+    stored = w.s.bundle(job["id"])
+    check("the stored row is the breadcrumb and nothing else",
+          json.loads(raw_row) == {S.CONTEXT_DROPPED: True}, raw_row)
+    check("... and the raw row holds no secret", secret not in str(raw_row))
+    check("the view exposes the boolean additively, and no context words",
+          view.get(S.CONTEXT_DROPPED) is True and "has_context" not in view
+          and "context_bundle" not in view, view)
+    check("... and no raw word or id survives in the view",
+          secret not in json.dumps(view) and "conv-9" not in json.dumps(view), view)
+    check("a scrubbed dropped marker never grows words when read again",
+          S.scrub_context_bundle(stored) == {S.CONTEXT_DROPPED: True}, stored)
+
+    latch, old = _fake_latch()
+    try:
+        out = S.enrich_and_check_condition(
+            dict(view, context_bundle=stored,
+                 condition_kind="", condition_target=""), readers={})
+    finally:
+        _restore_gate(old)
+    check("the enriched block says it was dropped and attaches nothing",
+          out.get(S.CONTEXT_DROPPED) is True and out.get("context") == {}
+          and out.get("context_attached") is False, out)
+    check("... the toast is the bare title, never the dropped words",
+          out.get("toast") == "Buy milk", out.get("toast"))
+    check("... no secret survives in any enriched field",
+          secret not in json.dumps(out), out)
+    check("... and no privacy latch was touched (no private words were read)",
+          latch == [], latch)
+
+    # A MISSING scrubber behaves the same as a raising one.
+    S._scrubber = lambda: None
+    try:
+        w2 = _gtd_world("gtd-drop-missing", S.wall_to_epoch(2026, 10, 20, 9, 0))
+        job2 = w2.s.add_at("reminder", w2.clock.t + 100.0, "Buy milk",
+                           context_bundle=bundle_in)
+    finally:
+        S._scrubber = real
+    check("a missing scrubber leaves the same plain boolean",
+          w2.s.bundle(job2["id"]) == {S.CONTEXT_DROPPED: True}
+          and w2.s.job(job2["id"]).get(S.CONTEXT_DROPPED) is True,
+          w2.s.job(job2["id"]))
+
+    # A snoozed copy keeps the breadcrumb (a new row, with no words to copy).
+    snoozed = S.snooze_reminder(job["id"], "1h", now=w.clock.t + 5.0, scheduler=w.s)
+    check("a snoozed copy keeps the plain boolean on the new row",
+          bool(snoozed.get("ok"))
+          and w.s.bundle(snoozed["snoozed_id"]) == {S.CONTEXT_DROPPED: True},
+          snoozed)
+
+    # A scrubber that WORKS leaves no breadcrumb at all.
+    w3 = _gtd_world("gtd-drop-clean", S.wall_to_epoch(2026, 10, 20, 9, 0))
+    job3 = w3.s.add_at("reminder", w3.clock.t + 100.0, "Buy milk",
+                       context_bundle={"source_summary": "we spoke about milk"})
+    stored3 = w3.s.bundle(job3["id"])
+    check("a scrubbed packet stores no breadcrumb",
+          S.CONTEXT_DROPPED not in stored3 and stored3.get("source_summary"),
+          stored3)
+    check("... and its view says it HAS context, not that it was dropped",
+          w3.s.job(job3["id"]).get("has_context") is True
+          and S.CONTEXT_DROPPED not in w3.s.job(job3["id"]),
+          w3.s.job(job3["id"]))
+
+
+def t_gtd_legacy_context_row_reads_cleanly_without_the_flag():
+    """A row written before the boolean existed has no key: it reads as an
+    ordinary packet, with no invented breadcrumb and no error."""
+    import sqlite3
+    now = S.wall_to_epoch(2026, 10, 20, 9, 0)
+    w = _gtd_world("gtd-legacy-context", now)
+    job = _gtd_reminder(w, "Buy milk", context_bundle={
+        "source_summary": "we spoke about milk", "linked_files": ["doc-9"]})
+    con = sqlite3.connect(str(w.s.path))
+    try:
+        row = con.execute("SELECT context_bundle FROM jobs WHERE id = ?",
+                          (job["id"],)).fetchone()[0]
+        legacy = json.loads(row)
+        legacy.pop(S.CONTEXT_DROPPED, None)      # as an older build wrote it
+        con.execute("UPDATE jobs SET context_bundle = ? WHERE id = ?",
+                    (json.dumps(legacy), job["id"]))
+        con.commit()
+    finally:
+        con.close()
+    view = w.s.job(job["id"])
+    check("a legacy packet without the key still reads as context",
+          view.get("has_context") is True and S.CONTEXT_DROPPED not in view, view)
+    check("... and the bundle reads with no invented flag",
+          S.CONTEXT_DROPPED not in w.s.bundle(job["id"])
+          and w.s.bundle(job["id"]) != {}, w.s.bundle(job["id"]))
+    latch, old = _fake_latch()
+    try:
+        out = S.enrich_and_check_condition(
+            dict(view, context_bundle=w.s.bundle(job["id"])), readers={})
+    finally:
+        _restore_gate(old)
+    check("... enrichment carries the words and no dropped flag",
+          S.CONTEXT_DROPPED not in out and bool(out.get("context")), out)
+    check("... and no secret is invented anywhere", "doc-9" in json.dumps(out["context"]),
+          out)
 
 
 def t_gtd_condition_target_is_a_name():
