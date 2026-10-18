@@ -88,12 +88,18 @@ MODEL = "qwen3-coder-30b-a3b-ud-q3-k-xl"
 MODEL_BYTES = 13806312608
 MODEL_SHA256 = "69cd7578d77dffc0b17e34bad9ef998d08ae0e20ccceef21bad4e7eb3d8c553b"
 
-#: The largest context measured to load with ZERO spill across both cards
+#: The largest context measured to load with ZERO spill across the two cards
 #: (BIG-MODELS section 6c). 32,768 is the first rung that spills, by 0.20 GB.
+#: NOT raised for a third card: that is unmeasured (2026-10-17 - the owner is
+#: adding a second RTX 2080 SUPER; the setting stays at the measured value
+#: until a new measurement on this PC says more fits).
 NUM_CTX = 28672
 
-#: Both cards, never one: the measured ceiling for one card is "no context
-#: fits, not even the smallest".
+#: The measured minimum is two cards, never one: on one card no context fits,
+#: not even the smallest. A third card, when present, is used automatically -
+#: the mode starts Ollama with no CUDA_VISIBLE_DEVICES pin, so the engine sees
+#: every card - but nothing is claimed about it until it is measured here.
+NEEDS_CARDS = 2
 BIG_PORT = 11450
 
 #: The opt-in switch, and the two gate actions this mode uses. Both already
@@ -450,24 +456,76 @@ def lane_lines() -> list:
             for lane in LANES]
 
 
+def cards_in_pc() -> Optional[list]:
+    """Every CUDA card in this PC, or None when it cannot be read.
+
+    None is the honest answer on another operating system, with nvidia-smi
+    missing, and in tests: the words below then keep their measured two-card
+    form rather than inventing a count. Never raises.
+    """
+    try:
+        import jarvis_hardware as H
+        cards = [c for c in (H._smi_cards() or ())
+                 if getattr(c, "route", "CUDA") == "CUDA"]
+        return cards or None
+    except Exception:
+        return None
+
+
+def cards_words(cards: Optional[list]) -> str:
+    """What the big model needs of this PC's graphics cards, in plain words,
+    for however many are in the PC (2026-10-17: N-card aware).
+
+    Two is the measured minimum (49/49 layers, zero spill at NUM_CTX) and the
+    two-card sentence is the one it always was. An extra card is used
+    automatically - the mode deliberately starts Ollama with no pin - but the
+    context stays at the value measured on two until a new measurement says
+    more fits, so a third card can never quietly change what was measured.
+    """
+    n = None if cards is None else len(cards)
+    if n is not None and n < NEEDS_CARDS:
+        return (f"It needs at least two graphics cards, and this PC has {n}: one card "
+                "cannot carry the model, so this is not started.")
+    if n is not None and n > NEEDS_CARDS:
+        return (f"It needs at least two graphics cards; this PC has {n}, so the big model is "
+                "split across all of them, and the two models running now are paused first, "
+                "and they are put back exactly as they are when you stop:")
+    return ("It needs BOTH graphics cards, so the two models running now are paused "
+            "first, and they are put back exactly as they are when you stop:")
+
+
+def cards_note(cards: Optional[list]) -> str:
+    """One sentence for a PC with more than the measured two cards, else ""."""
+    n = None if cards is None else len(cards)
+    if n is None or n <= NEEDS_CARDS:
+        return ""
+    return (f" The extra card is used automatically, but {NUM_CTX:,} tokens is the setting "
+            "measured on two cards: it is not raised for a third one until a new "
+            "measurement on this PC says it fits.")
+
+
 def card_text_start() -> str:
+    cards = cards_in_pc()
     return "\n".join([
         "Use the big coding model: qwen3-coder-30b-a3b-ud-q3-k-xl.",
         "",
-        "It needs BOTH graphics cards, so the two models running now are paused "
-        "first, and they are put back exactly as they are when you stop:",
+        cards_words(cards),
         "",
         *[f"  - pausing {line}" for line in lane_lines()],
         "",
         f"It loads at {NUM_CTX:,} tokens - the largest measured to fit both cards "
-        f"with no spill - and it stays until you stop it.",
+        f"with no spill - and it stays until you stop it." + cards_note(cards),
         "Nothing else changes, nothing leaves this PC, and nothing is downloaded.",
     ])
 
 
 def card_text_off() -> str:
+    cards = cards_in_pc()
+    n = None if cards is None else len(cards)
+    needs = ("both graphics cards" if (n is None or n == NEEDS_CARDS)
+             else f"at least two graphics cards (this PC has {n})")
     return ("Turn the big coding model on as a choice you can use. It is OFF until you "
-            "start it, it needs both graphics cards, and it pauses the two running "
+            f"start it, it needs {needs}, and it pauses the two running "
             "models while it is on. Nothing loads until you start it.")
 
 
