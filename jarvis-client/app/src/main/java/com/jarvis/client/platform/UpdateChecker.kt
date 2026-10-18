@@ -38,12 +38,25 @@ class UpdateChecker(private val settings: ClientSettings) {
 
     private val _state = MutableStateFlow(
         UpdateCheck.State(
-            newerLine = settings.updateNewerLine,
+            // A line cached against an older install must not survive the install
+            // of the very build it announced: Home would keep saying a newer build
+            // is on GitHub about the build already in the owner's hand.
+            newerLine = settings.updateNewerLine?.takeIf {
+                !UpdateCheck.lineNamesBuild(it, UpdateCheck.ownSha(BuildConfig.GIT_SHA))
+            },
             problem = settings.updateProblem,
             lastTryMs = settings.updateLastTryMs,
         ),
     )
     val state: StateFlow<UpdateCheck.State> = _state.asStateFlow()
+
+    init {
+        // Keep the stored file honest too: a cached line that names this
+        // build is forgotten now, not after the next check.
+        if (settings.updateNewerLine != null && _state.value.newerLine == null) {
+            settings.updateNewerLine = null
+        }
+    }
 
     private val _download = MutableStateFlow<UpdateCheck.Download>(UpdateCheck.Download.Idle)
 
