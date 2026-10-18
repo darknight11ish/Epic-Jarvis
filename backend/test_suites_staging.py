@@ -431,6 +431,66 @@ def t_private_state_gives_every_run_its_own_home():
         shutil.rmtree(scratch, ignore_errors=True)
 
 
+def t_private_state_makes_a_stray_model_download_fail_fast():
+    """Check 9 (2026-10-18): every run's environment is OFFLINE for model loaders.
+
+    THE DEFECT THIS CLOSES. `test_attention_phrases.py`'s header says "no
+    model, no network", but importing the memory store taught fastembed to
+    fetch its 5 model files on a cold cache - under the patcher that suite sat
+    for 900 s on a download it never wanted. The runner cannot stop a suite
+    importing a module; it CAN make the download fail at once in every suite's
+    environment (huggingface_hub and friends honour these), which is what this
+    checks. The values are the same set `jarvis_child_env` and `jarvis_voices`
+    already send, and the switches are FORCED because this is a hermetic-run
+    rule - unlike the real-home hatch, a download is never something a suite
+    run may opt into.
+    """
+    scratch, lock = _scratch("jarvis-offline-env-test-")
+    try:
+        state = scratch / R.STATE_NAME
+        expected = {
+            "HF_HUB_OFFLINE": "1",
+            "TRANSFORMERS_OFFLINE": "1",
+            "HF_DATASETS_OFFLINE": "1",
+            "HF_HUB_DISABLE_TELEMETRY": "1",
+            "DO_NOT_TRACK": "1",
+            "ANONYMIZED_TELEMETRY": "False",
+        }
+        env = R.private_state({}, HERE, state)
+        got = {k: env.get(k) for k in expected}
+        check("the suites' environment tells every model loader it is offline",
+              got == expected, got)
+        forced = R.private_state({"HF_HUB_OFFLINE": "0"}, HERE, state)
+        check("... and a caller's HF_HUB_OFFLINE=0 cannot switch it back on",
+              forced.get("HF_HUB_OFFLINE") == "1", forced.get("HF_HUB_OFFLINE"))
+        hatch = R.private_state({R.REAL_HOME_ENV: "1"}, HERE, state)
+        check("... and the real-home hatch changes where state lives, never "
+              "whether a download is allowed",
+              hatch.get("HF_HUB_OFFLINE") == "1"
+              and hatch.get("TRANSFORMERS_OFFLINE") == "1"
+              and not hatch.get("OPENJARVIS_HOME"),
+              {k: hatch.get(k) for k in expected})
+        # --state-env is the contract apply-patches.ps1 sets its suite loop
+        # from, so the switches have to be in what it prints.
+        saved = {k: os.environ.pop(k, None) for k in expected}
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf):
+                R.state_env(str(state))
+        finally:
+            for k, v in saved.items():
+                if v is not None:
+                    os.environ[k] = v
+        printed = buf.getvalue()
+        missing = [k for k, v in expected.items() if f"{k}={v}" not in printed]
+        check("--state-env prints the offline switches, so a patcher run gets "
+              "them too - no second list", missing == [], missing)
+    finally:
+        if lock is not None:
+            os.close(lock)
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
 def t_a_real_run_leaves_the_home_alone():
     """Check 7: run a real sweep with a fake HOME, and prove a sentinel in its
     ~/.openjarvis was not read into a write, created, or touched."""

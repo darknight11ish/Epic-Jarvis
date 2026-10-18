@@ -211,6 +211,24 @@ HOME_ENVS = ("OPENJARVIS_HOME", "JARVIS_HOME")
 #: (his databases, his inbox): `JARVIS_TESTS_USE_REAL_HOME=1`. Never the
 #: default, and a run that sets it SAYS SO in its header.
 REAL_HOME_ENV = "JARVIS_TESTS_USE_REAL_HOME"
+#: The model loaders must be OFFLINE in every suite's environment (2026-10-18).
+#: test_attention_phrases.py says "no model, no network" in its own header, but
+#: importing the memory store taught fastembed to fetch its 5 model files for a
+#: cold cache, and under the patcher the suite sat for 900 s. A suite cannot be
+#: fixed from here, but a stray download can be made to FAIL AT ONCE instead of
+#: hanging: huggingface_hub (and the transformers/datasets libraries) honour
+#: these, and the telemetry switches are the same names and values
+#: jarvis_child_env and jarvis_voices already send. Forced, not defaulted: this
+#: is a hermetic-run rule, so a caller's `HF_HUB_OFFLINE=0` cannot switch it off
+#: in a test run (it does not touch the owner's own environment, only `env`).
+OFFLINE_ENVS = {
+    "HF_HUB_OFFLINE": "1",
+    "TRANSFORMERS_OFFLINE": "1",
+    "HF_DATASETS_OFFLINE": "1",
+    "HF_HUB_DISABLE_TELEMETRY": "1",
+    "DO_NOT_TRACK": "1",
+    "ANONYMIZED_TELEMETRY": "False",
+}
 OWNER_MARKER = "_owner.json"
 #: A marked folder - one this runner made - may be reaped once its owner is
 #: gone and it is at least this old.
@@ -405,9 +423,17 @@ def private_state(env: dict, backend: Path, where: Path) -> dict:
     that way in both the 15:48 and the 19:09 runs on 2026-10-03, for a link
     its parser had correctly refused. jarvis_voices.py:2490 and
     backend/README.md's own preflight line already set this variable for
-    the same reason; the runners simply never did."""
+    the same reason; the runners simply never did.
+
+    THE MODEL LOADERS ARE OFFLINE HERE TOO (2026-10-18). `OFFLINE_ENVS` is
+    applied to every run's environment, so a suite that accidentally imports a
+    model loader stops at once instead of fetching a model (the 900 s
+    fastembed hang test_attention_phrases.py caused under the patcher). It is
+    outside the home hatch on purpose: the hatch is about WHERE state lives,
+    never about letting a download through."""
     out = dict(env)
     out["PYTHONIOENCODING"] = "utf-8"
+    out.update(OFFLINE_ENVS)
     cfg = where / "config"
     logs = where / "logs"
     cfg.mkdir(parents=True, exist_ok=True)
@@ -1020,7 +1046,7 @@ def state_env(where: str) -> int:
     backend = Path(os.environ.get("JARVIS_BACKEND") or HERE).resolve()
     env = private_state(dict(os.environ), backend, Path(where))
     for k in ("OPENJARVIS_CONFIG_DIR", "JARVIS_CONFIG_DIR", "JARVIS_FRAMEWORK_TOML",
-              "OPENJARVIS_HOME", "JARVIS_HOME", "PYTHONIOENCODING"):
+              "OPENJARVIS_HOME", "JARVIS_HOME", "PYTHONIOENCODING", *OFFLINE_ENVS):
         if env.get(k) and env.get(k) != os.environ.get(k):
             print(f"{k}={env[k]}")
     return 0
