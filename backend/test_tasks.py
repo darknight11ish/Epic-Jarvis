@@ -31,12 +31,23 @@ from OpenMuse (docs/COMPETITORS-OPENMUSE-2026-10-08.md):
 8. **Nothing here can approve anything, reach the network, or write to a
    client what it should not.** The source is read as text for the last
    group of checks, the same way test_gate_outcome.py reads the gate.
+9. **The tick's caller contract and its concurrency guarantee (2026-10-18
+   audit).** `tick()` cannot run a step without the caller's own executor and
+   approver, nothing in the module starts a thread or ticks itself, and the
+   ONE production heartbeat does not even import this module. Two ticks -
+   sequential or OVERLAPPING - cannot run a step twice, and a step, a card or
+   a ledger that raises is contained so later ticks still work. The audit's
+   verdict (not `run_due()`'s duplicate; deliberately left unwired until a
+   real background step executor exists) is written in the module's own "WHO
+   TICKS IT, AND WHY NOTHING IN THE PROGRAM DOES YET" docstring.
 """
 import json
 import os
 import sqlite3
+import subprocess
 import sys
 import tempfile
+import threading
 import traceback
 from pathlib import Path
 
@@ -830,6 +841,205 @@ def t_the_gate_adapter_reports_the_gates_own_words():
           T.gate_ask(lambda s: Verdict(True))({"tool": "x"}).allowed is True)
     check("a verdict with no outcome reads as a denial, not an approval",
           T.gate_ask(lambda s: Verdict(False))({"tool": "x"}).outcome == "denied")
+
+
+# --------------------------------------------------------------------------
+#   9. The tick's caller contract, and its concurrency guarantee (2026-10-18)
+# --------------------------------------------------------------------------
+#
+# The 2026-10-18 audit found `JobList.tick()` has no production caller and
+# decided - with evidence, in the module's own "WHO TICKS IT" docstring - to
+# leave it unwired rather than attach it to a heartbeat with a stand-in
+# runner. The three tests below pin that decision and the properties a real
+# wiring will depend on.
+
+def t_two_ticks_can_never_run_a_step_twice():
+    """Sequential AND overlapping ticks over the same rows.
+
+    The lease claim is a compare-and-set, and a `running` job is not due, so a
+    second tick - even one called from inside the first tick's own step -
+    cannot run that step again. This is the guarantee that would make a
+    future heartbeat safe to attach, proven BEFORE one is attached."""
+    jl, _ = fresh()
+    t = jl.enqueue("Two reads", "read twice",
+                   [{"tool": "read_calendar", "args": {"d": "1"}, "why": "one",
+                     "acts": False},
+                    {"tool": "read_notes", "args": {"d": "2"}, "why": "two",
+                     "acts": False}])
+    ran = []
+
+    def run_step(step):
+        ran.append(step["tool"])
+        return run_ok(step)
+
+    jl.tick(run_step)
+    jl.tick(run_step)
+    third = jl.tick(run_step)
+    check("two ticks in a row run each step once, not twice",
+          ran == ["read_calendar", "read_notes"], ran)
+    check("... and the job really finished",
+          jl.store.get_task(t.id).status == "succeeded",
+          jl.store.get_task(t.id).status)
+    check("... and a tick after the end claims nothing",
+          third["claimed"] == [], third["claimed"])
+
+    # Overlap: a SECOND ticker over the same rows, called from inside a step.
+    jl2, _ = fresh()
+    t2 = jl2.enqueue("One read", "read once",
+                     [{"tool": "read_calendar", "args": {}, "why": "once",
+                       "acts": False}])
+    ran2, inner = [], {}
+
+    def overlapping_run(step):
+        other = T.JobList(jl2.store)
+        inner["report"] = other.tick(overlapping_run)
+        ran2.append(step["tool"])
+        return run_ok(step)
+
+    outer = jl2.tick(overlapping_run)
+    check("an overlapping tick cannot claim the running step",
+          inner["report"]["claimed"] == [] and inner["report"]["deferred"] == [],
+          inner["report"])
+    check("... so the step ran exactly once", ran2 == ["read_calendar"], ran2)
+    check("... and the first tick still finished the job",
+          jl2.store.get_task(t2.id).status == "succeeded"
+          and outer["claimed"] == [t2.id],
+          (jl2.store.get_task(t2.id).status, outer["claimed"]))
+
+
+def t_a_failing_tick_never_stops_later_ticks():
+    """A step that raises, a card that cannot be raised, and a ledger that
+    raises are all contained: the tick returns, that job takes the blame, and
+    the NEXT tick still works. Nothing is left wedged for the ticker."""
+    jl, _ = fresh()
+    bad = jl.enqueue("Will fail", "fail once",
+                     [{"tool": "send_email", "args": {}, "why": "send"}])
+    good = jl.enqueue("Will work", "read once",
+                      [{"tool": "read_calendar", "args": {}, "why": "read",
+                        "acts": False}])
+
+    def exploding(step):
+        if step["tool"] == "send_email":
+            raise RuntimeError("the tool blew up")
+        return run_ok(step)
+
+    try:
+        first, raised = jl.tick(exploding), None
+    except Exception as exc:                 # noqa: BLE001 - the check IS this
+        first, raised = {}, exc
+    check("a step that raises fails its job instead of raising out of the tick",
+          raised is None, repr(raised))
+    check("... the tick says which job failed",
+          any(row.get("id") == bad.id for row in first.get("finished", [])), first)
+    check("... and the job is failed, not stuck running",
+          jl.store.get_task(bad.id).status == "failed",
+          jl.store.get_task(bad.id).status)
+    later_job = jl.enqueue("After the failure", "read once",
+                           [{"tool": "read_notes", "args": {}, "why": "read",
+                             "acts": False}])
+    later = jl.tick(exploding)
+    check("... and the NEXT tick still runs other work",
+          jl.store.get_task(good.id).status == "succeeded"
+          and any(row.get("id") == later_job.id for row in later["steps"]),
+          (jl.store.get_task(good.id).status, later["steps"]))
+
+    # A card that cannot be raised blocks that job, and only that job.
+    risky = jl.enqueue("Needs a card", "ask once",
+                       [{"tool": "send_email", "args": {}, "why": "send",
+                         "risky": True}])
+
+    def explode_ask(step):
+        raise RuntimeError("no card can be shown right now")
+
+    try:
+        report, ask_raised = jl.tick(lambda step: run_ok(step), ask=explode_ask), None
+    except Exception as exc:                 # noqa: BLE001 - the check IS this
+        report, ask_raised = {}, exc
+    check("a card that cannot be raised blocks that job instead of killing the tick",
+          ask_raised is None and report.get("blocked")
+          and jl.store.get_task(risky.id).status == "blocked",
+          (ask_raised, report.get("blocked"), jl.store.get_task(risky.id).status))
+
+    def yes(step):
+        return Verdict(True)
+
+    jl.retry(risky.id)
+    jl.tick(lambda step: run_ok(step), ask=yes)
+    check("... and a later tick runs it once the card can be answered",
+          jl.store.get_task(risky.id).status == "succeeded",
+          jl.store.get_task(risky.id).status)
+
+    # A ledger that raises is a view problem, not a job failure.
+    last = jl.enqueue("Ledger fails", "read once",
+                      [{"tool": "read_notes", "args": {}, "why": "read",
+                        "acts": False}])
+
+    def exploding_ledger(record):
+        raise RuntimeError("the activity list is not there")
+
+    try:
+        ledger_raised = None
+        jl.tick(lambda step: run_ok(step), ledger=exploding_ledger)
+    except Exception as exc:                 # noqa: BLE001 - the check IS this
+        ledger_raised = exc
+    check("a ledger that raises does not fail the job or the tick",
+          ledger_raised is None
+          and jl.store.get_task(last.id).status == "succeeded",
+          (ledger_raised, jl.store.get_task(last.id).status))
+
+
+def t_the_job_list_is_ticked_by_a_caller_and_never_starts_itself():
+    """The audit's DECISION, pinned so a later reader cannot mistake it for an
+    oversight: `tick()` cannot run a step without the caller's own executor,
+    nothing in this module starts a thread or ticks itself, and the ONE
+    production heartbeat does not even import this module - so `run_due()`'s
+    ticker is not quietly running the job list."""
+    jl, _ = fresh()
+    try:
+        jl.tick()
+        bare = "ran"
+    except TypeError:
+        bare = "refused"
+    check("tick() refuses to run without the caller's step executor",
+          bare == "refused", bare)
+
+    before = sorted(thread.name for thread in threading.enumerate())
+    jl2, _ = fresh()
+    t = jl2.enqueue("One read", "read once",
+                    [{"tool": "read_calendar", "args": {}, "why": "read",
+                      "acts": False}])
+    constructed = sorted(thread.name for thread in threading.enumerate())
+    check("constructing the list starts no ticker thread",
+          before == constructed, (before, constructed))
+    # The module's own restart/bookkeeping path must not tick anything either.
+    T.startup(jl2.store)
+    T.boot_once(jl2.store)
+    after = sorted(thread.name for thread in threading.enumerate())
+    check("... and booting it starts none either",
+          constructed == after, (constructed, after))
+    got = jl2.store.get_task(t.id)
+    check("... and the queued job is still queued, not silently worked",
+          got.status == "queued", got.status)
+
+    # The one heartbeat that runs run_due() must not even import this module.
+    candidates = [HERE / "rebuilt", HERE,
+                  HERE.parent / "backend" / "rebuilt", HERE.parent / "backend"]
+    path = os.pathsep.join(str(p) for p in candidates if p.is_dir())
+    env = dict(os.environ)
+    env["PYTHONPATH"] = (path + (os.pathsep + env["PYTHONPATH"]
+                                 if env.get("PYTHONPATH") else ""))
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env.pop("OPENJARVIS_CONFIG_DIR", None)
+    env.pop("JARVIS_CONFIG_DIR", None)
+    done = subprocess.run(
+        [sys.executable, "-B", "-c",
+         "import sys, jarvis_initiative; print('jarvis_tasks' in sys.modules)"],
+        cwd=str(HERE.parent), env=env, capture_output=True, text=True,
+        timeout=120)
+    check("the one production heartbeat does not import the job list, "
+          "so it cannot tick it",
+          done.returncode == 0 and done.stdout.strip() == "False",
+          f"rc={done.returncode} out={done.stdout!r} err={done.stderr[-400:]!r}")
 
 
 def main() -> int:

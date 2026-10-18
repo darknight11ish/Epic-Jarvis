@@ -2784,7 +2784,19 @@ they landed):
   beat runs a job, with nothing in the test calling `run_due()`), and it fails
   if the registration is removed. (The same missing-caller shape was found the
   same day in `jarvis_tasks.JobList.tick()`, which is a different feature and
-  wants `jarvis_schedule.register_kind`, not this heartbeat. Not fixed here.)
+  wants `jarvis_schedule.register_kind`, not this heartbeat. **Audited
+  2026-10-18 and deliberately still unwired, with the reasons measured:** it is
+  NOT a duplicate of `run_due()` - the two queues are drawn apart in
+  `docs/AUDIT-JOB-LIST-2026-10-08.md` section 3 - but nothing in the program
+  creates a job-list job (the plan card that would is switched off, and the HUD
+  routes only list and steer), and there is no background step executor to hand
+  `tick()`: it takes its executor and approver as arguments, and the only real
+  one is built inside a chat turn. Attaching it to this heartbeat with a
+  stand-in runner would move rows while no tool ran. `backend/test_tasks.py`
+  pins the caller contract, proves nothing in the module starts itself, and
+  proves two ticks - sequential or overlapping - cannot run a step twice; the
+  module's own "WHO TICKS IT" docstring carries the same decision for the next
+  reader.)
 
   **Which jobs may run while nobody is there, by name.** A call to
   `jarvis_jobs.create()` is an owner-present call, and the `caps` it writes on
