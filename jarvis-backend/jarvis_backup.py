@@ -157,6 +157,17 @@ EXPLICITLY NOT BACKED UP (CLAUDE.md rule 3; the owner's own words)
     telemetry.db is measurements of the machine with its writer switched off
     by design, and documents-index.db is a derived ranking rebuilt from the
     files it describes, holding no document text.
+  * The File Guardian's store, `$OPENJARVIS_HOME/guardian/`: its
+    `guardian.jsonl` journal, `pins.json` and `blobs/<sha256>.gz` (capped at
+    250 MiB, jarvis_file_guardian.py) are device-local file history, not
+    memory - the journal names paths on this PC, and the blob store must never
+    bloat an archive or carry one off it. `energy.jsonl` (machine measurements,
+    writer off by default, 500-row cap) and `ledger-anchors.jsonl` (anchors the
+    owner copies elsewhere, and an old anchor beside a restored ledger.db could
+    wrongly flag it) are the other non-SQLite stores left out. Each is recorded
+    with its reason in `NOT_BACKED_UP_PATHS`, and the coverage check in
+    test_backup.py fails if a module names a `.jsonl` store that is neither
+    carried nor written down there.
   * The `-wal`, `-shm` and `-journal` files beside a database: never copied,
     and never needed. The online backup API above reads one consistent view
     and folds the log into the snapshot, so the rows that live only in the log
@@ -539,6 +550,20 @@ NOT_BACKED_UP = {
     "documents-index.db": "derived word index; rebuilt from the folders on the next search",
 }
 
+#: Non-SQLite stores under the settings folder that are deliberately NOT
+#: carried, with a reason each (2026-10-18, the Frontier 2 backup audit). Kept
+#: beside NOT_BACKED_UP rather than in it: the values here are relative paths
+#: (a file, or a directory ending in "/"), so the coverage check in
+#: test_backup.py can see the `.jsonl` and blob stores its older `.db`-only
+#: scan could not. A path is a decision somebody wrote, not an omission.
+NOT_BACKED_UP_PATHS = {
+    "guardian/guardian.jsonl": "device-local file history; its path rows name this PC, not memory",
+    "guardian/pins.json": "the guardian pins which saved versions to keep; useful only with its blobs",
+    "guardian/blobs/": "saved file bytes, up to 250 MiB, device-local; must never bloat an archive",
+    "energy.jsonl": "energy measurements: GPU power draw, machine data; writer off by default, 500-row cap",
+    "ledger-anchors.jsonl": "tamper anchors the owner copies off the PC; stale ones would flag a restore",
+}
+
 #: The settings files the `*.json` glob cannot reach, because their extension is
 #: not `.json`, added 2026-10-13 (see the module docstring's "WHAT IS BACKED
 #: UP"). Written under the `settings/` prefix exactly like the JSON files, and
@@ -552,6 +577,38 @@ NOT_BACKED_UP = {
 SETTINGS_NAMES = ("config.toml", "speed.jsonl")
 
 STUDY_DB = "study.db"
+
+
+def not_backed_up_reason(path) -> str:
+    """The recorded reason the settings-folder `path` is deliberately not
+    carried, or "" when this module has no record of it.
+
+    `path` may be an absolute path, a relative path (`guardian/blobs/x.gz`) or
+    just the name a module uses (`guardian.jsonl`, `agents.db`). This is what
+    makes an exclusion checkable instead of inferred from absence: the tests
+    ask it about every store a backend module names, and about the guardian
+    store laid out for real. Backslashes are compared as forward slashes;
+    a directory entry (one ending in "/") covers everything below it.
+    """
+    raw = str(path or "").strip().replace("\\", "/")
+    while raw.startswith("./"):
+        raw = raw[2:]
+    raw = raw.strip("/")
+    if not raw:
+        return ""
+    base = raw.rsplit("/", 1)[-1]
+    if base in NOT_BACKED_UP:
+        return NOT_BACKED_UP[base]
+    for entry, why in NOT_BACKED_UP_PATHS.items():
+        e = entry.strip().replace("\\", "/").strip("/")
+        if not e:
+            continue
+        if raw == e or raw.endswith("/" + e) or base == e or e.endswith("/" + base):
+            return why
+        if raw.startswith(e + "/") or ("/" + e + "/") in ("/" + raw):
+            return why
+    return ""
+
 
 #: The backend's own program files, inside the archive (2026-10-05). Added
 #: after an audit found five sources - jarvis_hud.py, jarvis_gate.py,
@@ -1034,6 +1091,11 @@ def build_archive() -> tuple:
             for f in _walk_files(voice_root):
                 zf.write(f, arcname=f"voice/{f.relative_to(voice_root)}")
                 manifest["voice_files"] += 1
+            # Deliberately NOT walked: the guardian store (guardian/) and the
+            # two other non-SQLite files in NOT_BACKED_UP_PATHS. This module
+            # never recurses an arbitrary settings subfolder - the notes and
+            # voice walks above are the only two - so a 250 MiB blob store
+            # cannot bloat an archive. The recorded reasons are the decision.
             # The backend's own program files, so a backup brings the CODE back
             # with the data (2026-10-05). Top level only: `glob`, not
             # `_walk_files` - see SOURCE_GLOB above for why recursing here is
