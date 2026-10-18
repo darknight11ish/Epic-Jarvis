@@ -1003,6 +1003,20 @@ SHIPPED = (
     # and its 85-check suite, and the chat tool that uses it is a later,
     # separately-approved slice. No model call, no route, no file written.
     "jarvis_sandbox_exec.py",
+    # --- Pillar 18, 2026-10-17: the local "time machine" for files Jarvis changes ---
+    # Before anything writes over a file in a folder Jarvis is allowed to
+    # change (the owner's "Folders Jarvis may look in", or the Obsidian vault),
+    # this stores a gzip copy of the file's CURRENT bytes named by the sha256
+    # of those bytes - one copy per distinct content - and records the snapshot
+    # in guardian.jsonl with a receipt from the EXISTING jarvis_receipts.py.
+    # A bounded unified diff and a one-click restore: the restore raises the
+    # EXISTING undo_action card (a person's yes and nothing less), refuses a
+    # link or a path outside the allowed folders, and leaves a NEW receipt so
+    # Undo puts the restore back. The store prunes its oldest unpinned blobs to
+    # 250 MB and never removes a pinned one. No route, no chat tool and no
+    # caller yet: this is the module and its suite, and wiring it in is a
+    # later, separately-approved slice. Nothing it does leaves this PC.
+    "jarvis_file_guardian.py",
 )
 
 

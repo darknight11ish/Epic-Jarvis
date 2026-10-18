@@ -1945,6 +1945,15 @@ $SHIPPED = @(
 # tool that will use it is a later, separately-approved slice. No model call,
 # no route, no file written.
 'jarvis_sandbox_exec.py'
+# --- Pillar 18: the local "time machine" for files Jarvis changes (2026-10-17).
+# Before anything writes over a file in a folder Jarvis may change, this keeps a
+# gzip copy of the file's current bytes named by the sha256 of those bytes, and
+# records it in guardian.jsonl with a receipt from the EXISTING jarvis_receipts.
+# A bounded diff and a one-click restore raise the EXISTING undo_action card and
+# leave a NEW Undo receipt for the restore. Prunes the oldest UNPINNED blobs to
+# 250 MB and never removes a pinned one; refuses a link or a path outside the
+# allowed folders. No route, no chat tool and no caller yet.
+'jarvis_file_guardian.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.
