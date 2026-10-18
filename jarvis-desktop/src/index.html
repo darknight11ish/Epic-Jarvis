@@ -494,6 +494,32 @@
               <span class="sr-only">Remove clipboard context</span>
             </button>
           </div>
+
+          <!-- Pillar 24-B: the text the owner had highlighted when the bar
+               opened, read BEFORE the bar took focus (src-tauri/src/selection.rs,
+               GET /api/selection, backend jarvis_ui_control.read_selection()).
+               A chip is shown ONLY when a non-empty scrubbed selection was
+               read - never a fake empty one. The label names the PROGRAM and
+               the first ~40 scrubbed characters; the window title never reaches
+               page or payload. Nothing reaches the model by itself: Attach puts
+               the exact scrubbed text in the box, Explain and Summarize put a
+               local prompt there, and all three wait for the owner's Enter.
+               "Remind me about this" is deliberately NOT drawn yet: it is the
+               follow-up for GTD-1's context_bundle (Pillar 24-B scope note). -->
+          <div class="attachment attachment-text" id="attachment-selection" hidden>
+            <div class="attachment-body">
+              <button class="text-button" type="button" id="selection-attach">📎 Attach selection</button>
+            </div>
+            <button class="text-button" type="button" id="selection-explain">Explain</button>
+            <button class="text-button" type="button" id="selection-summarize">Summarize</button>
+            <button class="text-button" type="button" id="selection-remind" hidden>Remind me about this</button>
+            <button class="icon-button" type="button" id="selection-remove" title="Remove the selection">
+              <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <path d="M4 4l8 8M12 4l-8 8" />
+              </svg>
+              <span class="sr-only">Remove the selection</span>
+            </button>
+          </div>
         </div>
 
         <!-- "Photo to reminder": the proposal for the capture above - the

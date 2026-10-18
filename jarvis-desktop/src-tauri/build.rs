@@ -247,6 +247,10 @@ fn main() {
             // "PC help" (JARVIS-API section 84): five plain answers about
             // this PC, read-only. Settings window only.
             "get_pc_help",
+            // Pillar 24-B: the highlighted text of the window in front,
+            // read BEFORE the bar takes focus. Quickbar only; it only reads,
+            // writes nothing and raises no card.
+            "read_selection",
             "get_tutorials",
             "mark_tutorial",
             "get_faq",

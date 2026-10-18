@@ -21452,3 +21452,27 @@ The owner's surface for all of this is a pane in the Brain's **Projects** view (
 **Hidden whole, in Rust.** While App lock is locked OR "Hide memory lists and chat history" is on, `brain/guardian.rs` replaces the entire answer (`words_hidden`, both flags) with one sentence that names no file, no count, no folder - and while hidden neither the list section nor the two commands ask the PC for anything, so no file name crosses the loopback wire. A flag change also **clears the drawer's rows at once**, before the next read is asked for, and a restore answer that comes back after a flag changed is re-hidden before the page sees it (the card can wait twenty minutes, so the request may well have started while the drawer was still visible). That is the desktop-side half of the gap in 139.3, now built; the phone still has no page (ARCHITECTURE.md section 8).
 
 **Least privilege:** the list rides on the existing `brain_read` allowlist (`guardian_history`), and the two commands that need arguments live in one `brain-guardian` permission set (`allow-guardian-diff`, `allow-guardian-restore`) held by the Brain window only. `tools/check_command_acl.py` and `tools/check_invoke_grants.py` hold that agreement. The restore's Rust budget is twenty minutes because the card waits for a person (the PC's own gate allows fifteen). The `guardian_restore` command is also **held on a stale link**, the same `require_link_live` rule every other Brain write keeps - the page's disabled button is not the enforcement point (F6, 2026-10-18).
+
+## 141. The selection chip: what the owner highlighted when the bar opened (Pillar 24-B, added 2026-10-18)
+
+The owner's spotlight decision (Spotlight 6, 2026-10-18, on top of the 24-A backend): while reading in another program, he highlights text and presses **`Alt+Space`**. BEFORE the Jarvis bar takes focus, the PC reads that selection, with the screen's own privacy rules; if something non-empty (already scrubbed) comes back, the bar shows ONE chip above the input:
+
+`[📎 Attach selection from <program> — "<first ~40 scrubbed chars>…"]` plus `[Explain]` · `[Summarize]` · `[×]`.
+
+`[Remind me about this]` is **NOT drawn yet**: it is the deferred follow-up that waits for GTD-1's `context_bundle`, so no dead button is shown (Pillar 24-B scope note, 2026-10-18).
+
+**Nothing reaches the model by itself.** The chip only puts words in the box; the owner presses Enter. Attach puts the scrubbed selection in exactly as the PC returned it (a truncated one is not completed), Explain/Summarize put a local `Explain this:` / `Summarize this:` prompt there, and all three are local page work: no backend call from the chip. `×` dismisses it and the SAME selection (same program + same scrubbed words) will not come back by itself; a different selection on a later bar-open does. A refusal, an empty selection, an excluded window or a missing scrubber draws NO chip at all - never a fake empty one, and a chip only exists while the page holds the words (the bar's own dismiss clears it; "Hide memory lists and chat history" hides it with the rest).
+
+### 141.1 The route
+
+`GET /api/selection` (served by `jarvis_brain_reads.py`, answered by `jarvis_ui_control.read_selection()`) returns the 24-A dict **unchanged**:
+
+`{"ok": true, "refused": false, "why": "", "text": <scrubbed text>, "app": <program name>, "chars": int, "truncated": bool, "scrubbed": bool, "words": <plain sentence>}`
+
+and, when it will not read, the same keys with `ok: false`, `refused: true`, `why` one of the 24-A reasons (`no_selection`, `never_look`, `private_window`, `password_box`, `lock_screen`, `admin_prompt`, `jarvis`, `protected`, `cannot_check`, `list_unreadable`, `cannot_read`, `scrubber`, `secret`), `text: ""` and a plain `words` sentence. `app` is the PROGRAM's name - the window title is never in the payload and never drawn.
+
+* **Desktop only, on purpose.** The route is read-only and local. A request from another device is refused (`403`, the same dict with `why: "not_this_pc"`) by `jarvis_owner_check.from_this_pc` BEFORE anything is read: the phone has no way to read the PC's screen selection, and it is not a route a phone screen should ever call. See `docs/ARCHITECTURE.md` section 8.
+* **Before the bar takes focus.** Windows UI Automation reports the FOCUSED control's selection, so the page cannot ask after the bar is up. `windows::toggle_quickbar` (Rust) reads first, then reveals the bar and hands the answer to the page as the `selection-read` event. The bar-open delay is one loopback GET (a few milliseconds; at most 3 s, and then no chip, if the backend is not answering). This is documented, not measured on the owner's PC - the real UI Automation support per program is a measurement.
+* **What it does not do:** no card (a read), nothing written, nothing kept, no model and no tool can reach it, and no other window's words are read. The privacy rules are `jarvis_screen`'s own (the Never look at list, private browser windows, password boxes, lock screen, capture protection) and the scrubber is `jarvis_scrub.scrub_text` - not a second copy.
+* **An older backend** (no route) answers 404, and the app says "This PC's Jarvis does not have the selection reader yet. Update the backend by running apply-patches.ps1, then try again."
+* `tools/check_parity.py` classifies the route `deliberate` (desktop only), and the desktop's chip is in the Jarvis bar's existing attachment strip - no new window and no HUD change.

@@ -567,10 +567,32 @@ pub fn toggle_quickbar(app: &AppHandle) -> Result<bool, String> {
         hide_quickbar(app)?;
         return Ok(false);
     }
-    show_quickbar(app)?;
-    // `show_quickbar` returns `Ok` while Windows Hello waits, so ask the
-    // window itself rather than trusting the `Ok`: a locked PC emits nothing.
-    Ok(focus_quickbar_input(app))
+    // Pillar 24-B: read the selection BEFORE the bar takes focus. Windows UI
+    // Automation reports the FOCUSED control, so the moment the bar is shown
+    // the owner's selection is already "nothing" - the read has to happen on
+    // this path, while the previous window still has it, and the answer is
+    // handed to the page as `selection-read`. The bar is revealed when the
+    // answer is in (a loopback GET of a few milliseconds; 3 s at worst on a
+    // backend that is not answering), so nothing steals the focus first.
+    if crate::lock::app_locked(app) {
+        // App lock: no look at the screen and no selection read. The show path
+        // raises the lock's own card; nothing is attached.
+        show_quickbar(app)?;
+        return Ok(focus_quickbar_input(app));
+    }
+    let target = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let got = crate::selection::read_selection_quiet(&target).await;
+        match show_quickbar(&target) {
+            Ok(()) => {
+                if focus_quickbar_input(&target) {
+                    crate::emit_quickbar(&target, crate::events::SELECTION_READ, got);
+                }
+            }
+            Err(err) => eprintln!("[jarvis] quickbar show failed: {err}"),
+        }
+    });
+    Ok(true)
 }
 
 /// Resizes the quickbar to fit its answer card, clamped to sane bounds.

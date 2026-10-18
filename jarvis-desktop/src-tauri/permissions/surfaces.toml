@@ -337,6 +337,14 @@ permissions = [
   # gives. The Jarvis bar's alone: the button lives beside the box that holds
   # the words it reads.
   "allow-coach-prompt",
+  # Pillar 24-B: the text the owner had highlighted when the bar opened,
+  # read by the PC BEFORE the bar took focus (src-tauri/src/selection.rs,
+  # GET /api/selection). It reads only: the screen's own privacy list,
+  # private windows, password boxes and the scrubber decide what comes
+  # back, and the page only puts what did into the box when the owner
+  # clicks. Nothing is sent, nothing is stored, no card is raised. The
+  # Jarvis bar's alone: no other window has the box it would fill.
+  "allow-read-selection",
 ]
 
 # ---------------------------------------------------------------------------
