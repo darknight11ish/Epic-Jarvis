@@ -61,6 +61,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import traceback
 import types
@@ -2298,6 +2299,126 @@ def t_the_patch():
 def _where_SHIPPED():
     import _where
     return _where.SHIPPED
+
+
+def _a_database_with_two_rows(prefix: str):
+    """A scratch database with one table and two rows, under TMP."""
+    root = Path(tempfile.mkdtemp(prefix=f"backup-{prefix}-", dir=str(TMP)))
+    path = root / "one.db"
+    c = sqlite3.connect(str(path))
+    try:
+        c.execute("CREATE TABLE t (id INTEGER)")
+        c.execute("INSERT INTO t VALUES (1)")
+        c.execute("INSERT INTO t VALUES (2)")
+        c.commit()
+    finally:
+        c.close()
+    return root, path
+
+
+def t_the_snapshot_connections_ask_for_the_ten_second_wait():
+    """Spotlight 5: a backup runs while Jarvis is live and writing. Every
+    connection the manifest and the snapshot open must ASK for the same
+    10-second wait the rest of the backend asks for; sqlite3.connect's own
+    default is 5 seconds, and losing a database out of the archive because a
+    writer held it a moment too long is the failure this is about.
+    """
+    root, db = _a_database_with_two_rows("timeout")
+    dest = root / "copy.db"
+    calls = []
+    real_connect = sqlite3.connect
+
+    def spy(path, *args, **kwargs):
+        calls.append(kwargs.get("timeout"))
+        return real_connect(path, *args, **kwargs)
+
+    B.sqlite3.connect = spy
+    try:
+        counts = B._table_counts(db)
+        made = B._snapshot_db(db, dest)
+    finally:
+        B.sqlite3.connect = real_connect
+    check("the count read succeeds", counts == {"t": 2}, counts)
+    check("the snapshot copy is made", made is True and dest.is_file(), made)
+    check("every snapshot/table-count connection asks for the 10-second wait",
+          len(calls) == 3 and all(t == B.DB_BUSY_TIMEOUT_S for t in calls), calls)
+    check("and that wait is at least 10 seconds", B.DB_BUSY_TIMEOUT_S >= 10.0,
+          B.DB_BUSY_TIMEOUT_S)
+
+
+def t_a_read_waits_for_a_held_write_lock_instead_of_failing():
+    """The behaviour the timeout buys: another connection holds an EXCLUSIVE
+    lock for half a second; the count must WAIT and read the rows, not return
+    {} ("database is locked" swallowed by _table_counts)."""
+    root, db = _a_database_with_two_rows("locked")
+    holder = sqlite3.connect(str(db), timeout=10.0, check_same_thread=False)
+    holder.execute("BEGIN EXCLUSIVE")
+    released = threading.Event()
+
+    def release():
+        try:
+            holder.commit()
+        finally:
+            holder.close()
+            released.set()
+
+    timer = threading.Timer(0.5, release)
+    timer.start()
+    elapsed = None
+    try:
+        started = time.monotonic()
+        counts = B._table_counts(db)
+        elapsed = time.monotonic() - started
+    finally:
+        timer.cancel()
+        released.wait(10)
+        if not released.is_set():
+            try:
+                holder.close()
+            except Exception:
+                pass
+    check("a table count taken under a held write lock waits, then reads the rows",
+          counts == {"t": 2}, counts)
+    check("and it really waited for the lock (>= 0.25 s)",
+          elapsed is not None and elapsed >= 0.25, elapsed)
+
+
+def t_a_snapshot_closes_both_connections_even_when_the_target_cannot_open():
+    """Connection hygiene: the online backup API's source and target are
+    closed on success AND when the target cannot be opened. A leaked source
+    connection is a handle on a ~/.openjarvis database (and, in WAL, a reader
+    that can keep #493's TRUNCATE checkpoint busy)."""
+    root, db = _a_database_with_two_rows("closed")
+    ok_dest = root / "copy.db"
+    closed = []
+    real_connect = sqlite3.connect
+
+    class Tracker(sqlite3.Connection):
+        def close(self):
+            closed.append(1)
+            super().close()
+
+    def spy(path, *args, **kwargs):
+        kwargs.pop("factory", None)
+        return real_connect(path, *args, factory=Tracker, **kwargs)
+
+    B.sqlite3.connect = spy
+    try:
+        made = B._snapshot_db(db, ok_dest)
+    finally:
+        B.sqlite3.connect = real_connect
+    check("a snapshot that works", made is True and ok_dest.is_file(), made)
+    check("closes BOTH connections on the way out", len(closed) == 2, closed)
+
+    closed.clear()
+    B.sqlite3.connect = spy
+    try:
+        made = B._snapshot_db(db, root / "no-such-folder" / "copy.db")
+    finally:
+        B.sqlite3.connect = real_connect
+    check("a snapshot whose target cannot open returns False, never raises",
+          made is False, made)
+    check("and still closes its source connection", len(closed) == 1, closed)
 
 
 if __name__ == "__main__":
