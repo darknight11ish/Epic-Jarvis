@@ -4956,7 +4956,7 @@ What it understands:
 |---|---|
 | Timers | "set a timer for 10 minutes", "10 minute timer", "timer for 1h30", "set a pasta timer for 12 minutes", "cancel the timer", "cancel the pasta timer", "pause / resume the timer", "add 5 minutes to the timer", "5 more minutes" (only while a timer runs), "take 2 minutes off the timer", "how long is left" (only while a timer **or** a focus session is running) |
 | Alarms | "set an alarm for 7" (the next 7 o'clock), "alarm at 7:30am", "wake me up at 6", "set an alarm for tomorrow at 6" (an alarm on another day: the morning), "cancel my 7am alarm", "what alarms do I have" |
-| Reminders | "remind me to call Mum at 6", "remind me in 20 minutes to check the oven", "remind me tomorrow to call the bank" (no time: 09:00, and the reply says so), "remind me on Friday at 5pm to pay rent", "remind me every weekday at 7 to take my pills" (**no card** - a plain repeat), "remind me to stretch every 2 hours" (**no card** - a plain repeat) |
+| Reminders | "remind me to call Mum at 6", "remind me in 20 minutes to check the oven", "remind me tomorrow to call the bank" (no time: 09:00, and the reply says so), "remind me on Friday at 5pm to pay rent", "remind me every weekday at 7 to take my pills" (**no card** - a plain repeat), "remind me to stretch every 2 hours" (**no card** - a plain repeat). **Time-first works too** (2026-10-18): "remind me in 2 minutes to drink water", "remind in 2 minutes to drink water" (the phone's own shorthand, no "me"), and "in 10 minutes remind me to drink water" |
 | To-do list | "add milk to my to-do list", "what's on my to-do list", "mark milk as done", "tick off milk", "remove milk from my to-do list" |
 | Named lists (21.9) | "add milk to the shopping list", "add milk, eggs and bread to the shopping list", "what's on my shopping list", "cross milk off the shopping list", "remove eggs from the shopping list", "what lists do I have", "clear the shopping list" (changes nothing: it points to the app) |
 | Snooze (21.9) | "snooze", "snooze 5 minutes", "snooze the alarm", "remind me again in 10 minutes" |
@@ -4973,6 +4973,17 @@ which clock the owner meant. The explicit form ("how long is left on the
 timer") with no timer running is answered here instead, in words: "No timer is
 running." The same care shows in "cancel all timers" and "clear my to-do list"
 below: ambiguity is refused in words, never resolved by picking one.
+
+**A model answer cannot deny a reminder it just set (2026-10-18).** In the
+model path a `set_reminder` or `set_timer` tool can return ok and the model's
+own words can still say it cannot set reminders or timers - the phone field
+test heard exactly that ("I can't set reminders or timers yet") on a turn where
+the fast grammar had missed the shorthand. `jarvis_claims.schedule_correction`
+now catches it: when a scheduler step in the same answer RAN and returned ok,
+one deterministic line is added at the end of the answer - `Correction - `
+followed by the tool's own sentence, e.g. `Correction - Reminder set for 2
+minutes from now.` A refused or failed tool adds nothing, so an honest "I
+can't..." is left standing when it is true.
 
 **Which repeats raise a card, and which do not (owner, 2026-09-26).** A plain
 repeating **alarm** or **reminder** is set up **at once, with no card** - only

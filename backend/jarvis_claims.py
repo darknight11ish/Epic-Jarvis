@@ -24,6 +24,15 @@ drift apart:
     no action tool returned ok in this answer. jarvis_agent.run_local_turn
     then adds NOTHING_DONE_LINE (or NOTHING_DONE_SPOKEN on a voice turn) to
     the end of the answer, so the owner reads - or hears - the truth.
+  - refuses_schedule_capability(text) and schedule_correction(text, steps) -
+    the OTHER direction (2026-10-18): a model answer that denies it can set
+    reminders or timers, when a set_reminder/set_timer tool in the same answer
+    returned ok. That answer is a lie in the opposite direction, and the phone
+    field test heard it ("I can't set reminders or timers yet" after the
+    quick grammar had missed the wording). run_local_turn then says the tool's
+    own confirmation as an explicit `Correction - ...` line. Only a tool that
+    really ran and returned ok triggers it; a refused or failed one leaves an
+    honest limitation standing.
 
 "An action tool" is any tool that is not in READ_ONLY_TOOLS. The check is
 deliberately loose about WHICH action: an 8B model's wording ("I've set up
@@ -58,6 +67,30 @@ READ_ONLY_TOOLS = frozenset({
 NOTHING_DONE_LINE = "(Nothing was actually done - no action ran in this answer.)"
 #: The same, for an answer that is read aloud (no brackets to say).
 NOTHING_DONE_SPOKEN = "To be clear, nothing was actually done - no action ran in this answer."
+
+#: The scheduler tools whose success a refusal sentence can contradict. Only
+#: these two: "I can't set reminders/timers" is exactly what the phone heard on
+#: 2026-10-18 in a model turn, and a successful call is the proof it is false.
+SCHEDULE_SET_TOOLS = frozenset({"set_reminder", "set_timer"})
+#: A model's claim that it has no reminder/timer ability. Two shapes, both
+#: seen in the 2026-10-18 field-test answer ("I can't set reminders or timers
+#: yet..."): a "cannot ... set ... reminders" sentence, and a "reminders/timers
+#: are not available/supported" one. Only ever consulted when a scheduler tool
+#: in the SAME answer returned ok, so a real limitation said in a turn where
+#: nothing ran is left alone.
+_REFUSES_SCHEDULE = re.compile(
+    r"\b(?:can'?t|cannot|unable(?:\s+to)?|not\s+able\s+to|don'?t|do\s+not|"
+    r"no\s+way\s+to|no\s+ability\s+to|not\s+capable\s+of)\b"
+    r"[^.!?\n]{0,80}?\b(?:set|create|make|add|schedule|manage|change)\b"
+    r"[^.!?\n]{0,40}?\b(?:reminders?|timers?|alarms?)\b"
+    r"|\b(?:reminders?|timers?|alarms?)\b[^.!?\n]{0,60}?\b"
+    r"(?:aren'?t|isn'?t|are\s+not|is\s+not)\s+"
+    r"(?:available|supported|possible|something\s+i\s+can)",
+    re.I)
+
+#: What the correction line starts with. Plain words, and unmistakably a
+#: correction rather than a second answer.
+SCHEDULE_CORRECTION_HEAD = "Correction - "
 
 _SENTENCE = re.compile(r"[^.!?\n]+[.!?]*", re.M)
 #: A sentence that is a question, a condition or an offer - not a claim.
@@ -104,3 +137,41 @@ def unbacked_claim(text: str, steps) -> bool:
 
 def nothing_done_line(spoken: bool = False) -> str:
     return NOTHING_DONE_SPOKEN if spoken else NOTHING_DONE_LINE
+
+
+def refuses_schedule_capability(text: str) -> bool:
+    """True when `text` denies that Jarvis can set reminders or timers.
+
+    Read sentence-like, but a plain search of `text` is enough: the callers
+    only use it as the first half of `schedule_correction`, which also demands
+    a scheduler tool that returned ok. `text` is the model's own words.
+    """
+    return bool(_REFUSES_SCHEDULE.search(text or ""))
+
+
+def schedule_correction(text: str, steps) -> str:
+    """The correction line for an answer that denied a scheduler ability a
+    tool in the SAME answer proved it has; "" when nothing needs correcting.
+
+    `steps` are run_local_turn's records. Only a `set_reminder`/`set_timer`
+    step that RAN and returned ok counts - a refused or failed one leaves the
+    model's honest limitation standing. The line is the tool's own sentence
+    (`said`), never the model's, so the correction states what really happened;
+    without a sentence a plain fallback still says the job was set.
+    """
+    if not refuses_schedule_capability(text):
+        return ""
+    said = []
+    for step in steps or ():
+        if not isinstance(step, dict) or step.get("tool") not in SCHEDULE_SET_TOOLS:
+            continue
+        if not (step.get("ran") is True and step.get("ok") is True):
+            continue
+        line = str(step.get("said") or "").strip()
+        if not line:
+            line = ("the timer was set" if step["tool"] == "set_timer"
+                    else "the reminder was set")
+        said.append(line)
+    if not said:
+        return ""
+    return SCHEDULE_CORRECTION_HEAD + " ".join(said)

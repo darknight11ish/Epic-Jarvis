@@ -1499,11 +1499,29 @@ def _run_focus(intent: Intent) -> Result:
     return Result(str(out.get("said") or out.get("error") or ""), n)
 
 
-_REMIND = re.compile(r"(?:remind\s+me|set\s+(?:a|an)\s+reminder|make\s+(?:a|an)\s+reminder"
+_REMIND = re.compile(r"(?:remind(?:\s+me)?|set\s+(?:a|an)\s+reminder|make\s+(?:a|an)\s+reminder"
                      r"|create\s+(?:a|an)\s+reminder)")
 
 
 def _reminder(s: str, now: float) -> Optional[Intent]:
+    # "in 10 minutes remind me to drink water" / "at 6pm remind me to call"
+    # (2026-10-18): the time can come first, exactly as it can in
+    # "remind me in 20 minutes to ...". Found by the phone field test, whose
+    # actual words were "remind in 2 minutes to drink water" - the leading
+    # branch is what covers a time phrase before the command, and the optional
+    # "me" below covers the shorthand the owner really typed.
+    lead = re.fullmatch(r"(?P<lead>in|at|on)\s+(?P<when>.+?)\s+"
+                        r"(?:remind(?:\s+me)?|set\s+(?:a|an)\s+reminder|"
+                        r"make\s+(?:a|an)\s+reminder|create\s+(?:a|an)\s+reminder)"
+                        r"\s+(?:to|about|that)\s+(?P<text>.+)", s)
+    if lead:
+        text = lead.group("text").strip()
+        if text and len(text) <= 300 and text not in (
+                "it", "this", "that", "something", "things", "stuff"):
+            when = parse_when(lead.group("lead") + " " + lead.group("when"),
+                              now, "reminder")
+            if when is not None:
+                return Intent("reminder_set", {"text": text, "when": when})
     m = re.fullmatch(_REMIND.pattern + r"\s+(.+)", s)
     if not m:
         return None

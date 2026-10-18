@@ -2454,6 +2454,12 @@ def _schedule_call(name: str, args: dict, call: dict, convo: list, steps: list, 
             result = {"ok": False, "error": f"the scheduler is not available here "
                                             f"({type(exc).__name__})"}
         step["ok"] = result.get("ok") is True
+        if step["ok"] and name in ("set_reminder", "set_timer"):
+            # The tool's own confirmation, kept for the reply-honesty check at
+            # the end of the turn: if the model's words deny the ability, this
+            # is the deterministic line said instead (jarvis_claims.py,
+            # schedule_correction).
+            step["said"] = str(result.get("said") or "").strip()
         say_step("tool_finished", name, ok=step["ok"])
     convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
                   "content": _tool_content(result)})
@@ -8468,6 +8474,15 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         if line:
             claimed_undone = True
             tell_owner(line)
+        # The opposite lie (2026-10-18): a reminder/timer tool in this answer
+        # returned ok, yet the model said it could not set reminders or timers.
+        # The phone heard exactly that after the quick grammar missed its
+        # wording. The tool's own confirmation is said as a correction; a
+        # refused or failed tool leaves the model's honest limitation alone
+        # (jarvis_claims.schedule_correction).
+        correction = _schedule_refusal_line("".join(model_words), steps)
+        if correction:
+            tell_owner(correction)
         if watch.crisis:
             # W1 (or the short repeat line), after the model's own answer -
             # never counted as a tool call, never asked for, always said.
@@ -8639,6 +8654,18 @@ def _nothing_done_line(text: str, steps: list, *, spoken: bool = False) -> str:
     except Exception:
         pass
     return ""
+
+
+def _schedule_refusal_line(text: str, steps: list) -> str:
+    """The correction line when the model's answer denies a reminder/timer
+    ability that a set_reminder/set_timer step in this answer really used
+    (jarvis_claims.schedule_correction), or "". A missing or broken
+    jarvis_claims.py adds nothing - it never fails an answer."""
+    try:
+        import jarvis_claims
+        return jarvis_claims.schedule_correction(text, steps)
+    except Exception:
+        return ""
 
 
 def _settings_call(args: dict, call: dict, convo: list, steps: list, say_step,

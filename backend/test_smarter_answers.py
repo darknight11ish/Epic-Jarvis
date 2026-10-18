@@ -394,6 +394,126 @@ def t_a_read_is_not_an_action():
         AG.TOOLS["calculator"].execute = real
 
 
+# --------------------------------------------------------------------------
+#   4. The opposite lie (2026-10-18): denying an ability a tool just used
+# --------------------------------------------------------------------------
+
+REFUSES_REMINDERS = ("I can't set reminders or timers yet - that's something "
+                     "you'll need to handle directly.")
+
+
+def t_which_sentences_deny_reminder_or_timer_ability():
+    yes = [
+        REFUSES_REMINDERS,
+        "I'm not able to set reminders.",
+        "I cannot create timers.",
+        "I don't have a way to set reminders.",
+        "I have no ability to set timers.",
+        "Reminders aren't available here.",
+        "Timers are not supported in this chat.",
+    ]
+    no = [
+        "Reminder set for 2 minutes from now.",
+        "I can set reminders - what would you like?",
+        "I can't reach the server right now.",
+        "Should I set a reminder for 7pm?",
+        "The timer on your oven is broken.",
+    ]
+    for text in yes:
+        check(f"a denial of the reminder/timer ability: {text!r}",
+              CL.refuses_schedule_capability(text), text)
+    for text in no:
+        check(f"not a denial of the ability: {text!r}",
+              not CL.refuses_schedule_capability(text), text)
+
+
+def t_the_schedule_correction_is_the_tools_own_words():
+    ok = [{"tool": "set_reminder", "ran": True, "ok": True,
+           "said": "Reminder set for 2 minutes from now."}]
+    correction = CL.SCHEDULE_CORRECTION_HEAD + "Reminder set for 2 minutes from now."
+    check("a tool that set the reminder corrects the model's denial",
+          CL.schedule_correction(REFUSES_REMINDERS, ok) == correction,
+          CL.schedule_correction(REFUSES_REMINDERS, ok))
+    check("... and only when the model really denied it",
+          CL.schedule_correction("Reminder set for 2 minutes from now.", ok) == "")
+    check("a refused or failed tool leaves the honest limitation alone",
+          CL.schedule_correction(REFUSES_REMINDERS, [
+              {"tool": "set_reminder", "ran": True, "ok": False},
+              {"tool": "set_timer", "ran": False, "ok": False}]) == "")
+    check("... and so does no tool at all",
+          CL.schedule_correction(REFUSES_REMINDERS, []) == "")
+    fallback = CL.schedule_correction(REFUSES_REMINDERS, [
+        {"tool": "set_timer", "ran": True, "ok": True, "said": ""}])
+    check("without a sentence the fallback still says the job was set",
+          fallback == CL.SCHEDULE_CORRECTION_HEAD + "the timer was set", fallback)
+
+
+def _schedule_turn(model_says, *, ok=True, tool=True,
+                   said="Reminder set for 2 minutes from now."):
+    """One scripted turn whose first round calls set_reminder, with a fake
+    scheduler (never the owner's own). Returns _turn's own (res, stream)."""
+    fake = types.ModuleType("jarvis_schedule")
+
+    class _Sched:
+        def mark_command(self, _text):
+            pass
+    fake.get = lambda: _Sched()
+    real_mod = sys.modules.get("jarvis_schedule")
+    real_run = AG._schedule_run
+    sys.modules["jarvis_schedule"] = fake
+    AG._schedule_run = lambda name, args, sched, now: (
+        {"ok": True, "said": said} if ok else {"ok": False, "error": "the scheduler refused"})
+    try:
+        rounds = []
+        if tool:
+            rounds = [{"choices": [{"message": {"role": "assistant", "tool_calls": [
+                {"id": "1", "function": {"name": "set_reminder",
+                                         "arguments": json.dumps({
+                                             "text": "drink water",
+                                             "when": "in 2 minutes"})}}]}}]}]
+        return _turn(model_says, tool_rounds=rounds,
+                     tools={"set_reminder"} if tool else set())
+    finally:
+        AG._schedule_run = real_run
+        if real_mod is None:
+            sys.modules.pop("jarvis_schedule", None)
+        else:
+            sys.modules["jarvis_schedule"] = real_mod
+
+
+def t_a_model_denial_after_a_real_reminder_is_corrected():
+    res, blob = _schedule_turn(REFUSES_REMINDERS)
+    text = TA.answer_text([blob])
+    correction = CL.SCHEDULE_CORRECTION_HEAD + "Reminder set for 2 minutes from now."
+    check("the app is sent the model's words, then the tool's own confirmation",
+          text.startswith("I can't set reminders") and text.endswith(correction), text)
+    check("the correction comes before the finish chunk and [DONE]",
+          blob.rstrip().endswith(b"data: [DONE]")
+          and blob.index(correction.encode()) < blob.index(b'"finish_reason":"stop"'), text)
+    check("the turn's answer carries it too, and the tool is recorded as run",
+          res["answer"].endswith(correction) and "set_reminder" in res["tools_ran"],
+          res["answer"])
+
+
+def t_a_failed_reminder_leaves_the_honest_limitation_alone():
+    res, _blob = _schedule_turn(REFUSES_REMINDERS, ok=False)
+    check("a failed set_reminder gets no correction line",
+          CL.SCHEDULE_CORRECTION_HEAD not in res["answer"], res["answer"])
+
+
+def t_no_reminder_tool_gets_no_correction():
+    res, _blob = _schedule_turn(REFUSES_REMINDERS, tool=False)
+    check("a refusal with no set_reminder tool at all is left alone",
+          CL.SCHEDULE_CORRECTION_HEAD not in res["answer"], res["answer"])
+
+
+def t_an_honest_reminder_answer_gets_no_correction():
+    res, _blob = _schedule_turn("Reminder set for 2 minutes from now.")
+    check("the model's own true confirmation is enough - no second line",
+          CL.SCHEDULE_CORRECTION_HEAD not in res["answer"]
+          and "set_reminder" in res["tools_ran"], res["answer"])
+
+
 if __name__ == "__main__":
     for fn in (t_a_small_result_is_unchanged,
                t_one_long_text_keeps_its_start_and_end,
@@ -416,7 +536,13 @@ if __name__ == "__main__":
                t_a_voice_turn_says_it_without_brackets,
                t_an_honest_answer_gets_no_line,
                t_a_real_action_gets_no_line,
-               t_a_read_is_not_an_action):
+               t_a_read_is_not_an_action,
+               t_which_sentences_deny_reminder_or_timer_ability,
+               t_the_schedule_correction_is_the_tools_own_words,
+               t_a_model_denial_after_a_real_reminder_is_corrected,
+               t_a_failed_reminder_leaves_the_honest_limitation_alone,
+               t_no_reminder_tool_gets_no_correction,
+               t_an_honest_reminder_answer_gets_no_correction):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

@@ -530,6 +530,13 @@ OURS = {
     "what alarms do I have": ("alarm_list", {}),
     "remind me to call Mum at 6": ("reminder_set", {"text": "call Mum"}),
     "remind me in 20 minutes to check the oven": ("reminder_set", {"text": "check the oven"}),
+    # The phone's actual words on 2026-10-18 ("remind in 2 minutes to drink
+    # water" - no "me"), and the time-first form the lead named. Both used to
+    # go to the model (only task-first with "me" was understood) and the model
+    # refused; the quick grammar now answers them without a model.
+    "remind in 2 minutes to drink water": ("reminder_set", {"text": "drink water"}),
+    "in 10 minutes remind me to drink water": ("reminder_set", {"text": "drink water"}),
+    "in 10 minutes remind to drink water": ("reminder_set", {"text": "drink water"}),
     "remind me tomorrow to call the bank": ("reminder_set", {"text": "call the bank"}),
     "Remind me to call Mum tomorrow at 6pm.": ("reminder_set", {"text": "call Mum"}),
     "remind me to do the laundry at 5": ("reminder_set", {"text": "do the laundry"}),
@@ -603,6 +610,9 @@ def t_times_are_read_right():
         "remind me tomorrow to call": (2026, 9, 26, 9, 0),        # no time: 09:00, said
         "remind me tonight to call": (2026, 9, 25, 20, 0),
         "remind me in 20 minutes to call": (2026, 9, 25, 12, 20),
+        "remind in 2 minutes to drink water": (2026, 9, 25, 12, 2),
+        "in 10 minutes remind me to drink water": (2026, 9, 25, 12, 10),
+        "in 10 minutes remind to drink water": (2026, 9, 25, 12, 10),
         "remind me on Monday at 8:15 to call": (2026, 9, 28, 8, 15),
         "remind me on Friday at 9 to call": (2026, 10, 2, 9, 0),  # said on a Friday: next one
         "wake me at quarter to 7 tomorrow": (2026, 9, 26, 6, 45),
@@ -746,6 +756,40 @@ def t_acting_and_the_replies():
           "one at a time" in r.reply and len(w.s.timers()) == 1)
     r = Q.answer("set an alarm for 7am today", sched=w.s, now=now)
     check("a time that has passed today is said, not set", "already passed" in r.reply)
+
+
+def t_the_phone_phrasing_sets_the_claimed_reminder():
+    """The 2026-10-18 phone field test, end to end through the real grammar.
+
+    The owner typed "remind in 2 minutes to drink water"; the quick grammar
+    missed the shorthand (it required "remind me" and a task-first order), so
+    the model answered and refused - and a SEPARATE 5-minute timer/chip fired
+    minutes later (the timestamp evidence is in the task report). These are
+    the exact words, plus the time-first form the fix also accepts; the clock
+    is the test's own, and no model is called.
+    """
+    use_tz("Europe/London")
+    now = local(2026, 9, 25, 12, 0)
+    w = World(now, name="phone-remind")
+    for text, minutes, reply in (
+            ("remind in 2 minutes to drink water", 2,
+             "Reminder set for 12:02, in 2 minutes."),
+            ("remind me in 2 minutes to drink water", 2,
+             "Reminder set for 12:02, in 2 minutes."),
+            ("in 10 minutes remind me to drink water", 10,
+             "Reminder set for 12:10, in 10 minutes."),
+            ("in 10 minutes remind to drink water", 10,
+             "Reminder set for 12:10, in 10 minutes.")):
+        r = Q.answer(text, sched=w.s, now=now)
+        check(f"{text!r}: the quick path answers, without the model", r is not None)
+        if r is None:
+            continue
+        job = w.s.job(r.ids[0]) if r.ids else None
+        check(f"... a reminder due in {minutes} minutes, with the owner's task",
+              job is not None and job["kind"] == "reminder"
+              and job["text"] == "drink water"
+              and round(job["due"] - now) == minutes * 60, job)
+        check(f"... and the deterministic reply is {reply!r}", r.reply == reply, r.reply)
 
 
 def t_only_the_owners_own_words_act():
