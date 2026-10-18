@@ -325,6 +325,59 @@ class MainActivity : FragmentActivity() {
         micGrantedCallback = null
     }
 
+    /** Set once this process has asked for the LIVE microphone, so "don't ask again" is told apart. */
+    private var liveMicAsked = false
+
+    /**
+     * The Live card's own microphone ask (LM-3A). Its answer only re-reads what
+     * the platform really reports - it NEVER starts Live, and it never claims a
+     * grant (the owner presses Start again; the same rule as the talk button).
+     */
+    private val liveMicPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) {
+        permissionTick.intValue += 1
+        liveMicAsked = true
+        refreshLiveMicBlocked()
+    }
+
+    /**
+     * Reads the microphone permission FRESH and tells the Live card what to
+     * say (LM-3A). Called when the Live screen opens, after the ask, and on
+     * resume - so coming back from Android's app settings page clears the
+     * banner only once the platform really says the permission is held.
+     */
+    private fun refreshLiveMicBlocked() {
+        val granted = com.jarvis.client.platform.PlatformReadiness.micGranted(this)
+        JarvisRuntime.liveMicBlockedSet(
+            if (granted) {
+                null
+            } else {
+                com.jarvis.client.voice.LiveMicGate.decide(
+                    granted = false,
+                    rationale = shouldShowRequestPermissionRationale(
+                        Manifest.permission.RECORD_AUDIO,
+                    ),
+                    askedBefore = liveMicAsked,
+                )
+            },
+        )
+    }
+
+    /**
+     * Opens THIS app's Android settings page (LM-3A) - the only route when the
+     * owner answered "don't ask again" and the system will not re-prompt. False
+     * when no settings app would take it (said on the card by the PC's words
+     * never being needed: the sentence stays, and the phone simply does nothing).
+     */
+    private fun openAppPermissionSettings(): Boolean {
+        val intent = Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.fromParts("package", packageName, null),
+        )
+        return runCatching { startActivity(intent) }.isSuccess
+    }
+
     /** The system's own role-request dialog. Its result is a plain "did the
      *  owner pick us" - the readiness screen re-reads RoleManager itself on
      *  the next tick rather than trusting this callback's own resultCode,
@@ -2866,6 +2919,16 @@ class MainActivity : FragmentActivity() {
                         // "Talk about this in Live": held here until Send.
                         shared = liveSharedHeld,
                         onDropShared = { liveSharedHeld = null },
+                        // LM-3A: the microphone is checked every time the card
+                        // opens and on return from Android's settings; the card
+                        // draws the sentence and its two buttons, and never
+                        // starts Live on a grant.
+                        onCheckPermission = ::refreshLiveMicBlocked,
+                        onAskLiveMicrophone = {
+                            liveMicAsked = true
+                            liveMicPermission.launch(Manifest.permission.RECORD_AUDIO)
+                        },
+                        onOpenAppPermissionSettings = { openAppPermissionSettings() },
                         modifier = root,
                     )
 
@@ -4076,6 +4139,10 @@ class MainActivity : FragmentActivity() {
     override fun onResume() {
         super.onResume()
         permissionTick.intValue += 1
+        // LM-3A: the owner may just have come back from Android's app settings
+        // page. Read the microphone afresh so a granted one clears the Live
+        // card's banner (and a revoked one, Android 17, raises it again).
+        refreshLiveMicBlocked()
         // The rate can change under us — battery saver, brightness, heat — and
         // nothing reports why, so re-read rather than trust the request.
         DisplayRate.refresh(this)

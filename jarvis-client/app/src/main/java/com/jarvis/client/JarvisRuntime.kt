@@ -6954,6 +6954,28 @@ object JarvisRuntime {
     private val _liveNotice = MutableStateFlow<LiveNotice?>(null)
     val liveNoticeText: StateFlow<LiveNotice?> = _liveNotice.asStateFlow()
 
+    /**
+     * The Live card's microphone banner (LM-3A): null while the microphone is
+     * held, or the pure [com.jarvis.client.voice.LiveMicGate] decision when it
+     * is not. Set here before anything is sent or started, refined by
+     * MainActivity (which alone can ask about a rationale), and re-read on
+     * resume and after the owner's own ask. The permission itself is read
+     * FRESH every time - Android 17 can auto-revoke it while the app is idle.
+     */
+    private val _liveMicBlocked =
+        MutableStateFlow<com.jarvis.client.voice.LiveMicGate.Decision?>(null)
+    val liveMicBlocked: StateFlow<com.jarvis.client.voice.LiveMicGate.Decision?> =
+        _liveMicBlocked.asStateFlow()
+
+    /** Is the microphone permission held RIGHT NOW? Never cached from install. */
+    fun liveMicGrantedNow(): Boolean =
+        appContext?.let { com.jarvis.client.platform.PlatformReadiness.micGranted(it) } ?: false
+
+    /** The Live card's banner, from MainActivity's fresh read (rationale + whether it asked before). */
+    fun liveMicBlockedSet(decision: com.jarvis.client.voice.LiveMicGate.Decision?) {
+        _liveMicBlocked.value = decision
+    }
+
     /** When the status was last read, and how long ago (by the PC) it had ended then. */
     @Volatile private var liveEndedBase: Pair<Long, Int>? = null
 
@@ -7041,6 +7063,19 @@ object JarvisRuntime {
      */
     suspend fun liveStart(resume: Boolean = false, move: Boolean = false): String? {
         actionBlocker()?.let { return it }
+        // BEFORE anything is sent or started (LM-3A): the microphone is read
+        // FRESH at every start, so a permission Android 17 auto-revoked after
+        // install is caught here exactly like a denial. Nothing is sent to the
+        // PC, no LiveService starts, and the Live card shows one sentence and
+        // its buttons - the owner's Start tap is the only thing that starts.
+        if (!liveMicGrantedNow()) {
+            _liveMicBlocked.value = com.jarvis.client.voice.LiveMicGate.decide(
+                granted = false, rationale = true, askedBefore = true,
+            )
+            liveNotice(null)
+            return com.jarvis.client.voice.LiveMicGate.NEED
+        }
+        _liveMicBlocked.value = null
         liveNotice(null)
         // Which chat the session's words go in (the chat audit, 2026-09-28):
         // "Move it here" carries on the OTHER device's chat - the PC's Live
@@ -7428,6 +7463,15 @@ object JarvisRuntime {
 
     /** Live is on here: the microphone service and the watcher. False when Android refused the service. */
     private fun beginLiveHere(): Boolean {
+        // Defence in depth for the one moment the permission can vanish between
+        // the gate above and this call (a revocation mid-flight): the service is
+        // never started without it, and the card gets the same sentence.
+        if (!liveMicGrantedNow()) {
+            _liveMicBlocked.value = com.jarvis.client.voice.LiveMicGate.decide(
+                granted = false, rationale = true, askedBefore = true,
+            )
+            return false
+        }
         val started = appContext?.let { com.jarvis.client.service.LiveService.start(it) } ?: false
         watchLive()
         return started

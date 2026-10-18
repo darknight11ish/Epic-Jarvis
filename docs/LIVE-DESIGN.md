@@ -911,3 +911,34 @@ branch `studio-captcha-live-extras`. No new route; the rules are
 compiler here (CI is the only one) or tried on a real phone: the tile, the
 media session's button delivery, the Bluetooth routing and the share entry
 are written from Android's documentation and the app's own patterns.
+
+## The phone's microphone precheck (LM-3A, 2026-10-18)
+
+The Pixel 9 field test found the failure this section exists for: `RECORD_AUDIO`
+was not granted (`granted=false`, `USER_SET`), the owner pressed Start while
+away from adb, `LiveService` was refused and Live died instantly with no
+explanation. Nothing on the phone said why.
+
+From now on the phone reads `ContextCompat.checkSelfPermission(RECORD_AUDIO)`
+at every Live start (and again on resume), **never** a value remembered from
+install - Android 17 can auto-revoke a permission while the app sits unused, so
+a revoked one must fail exactly like a denied one. When it is missing:
+
+* Live does not start - no `LiveService`, and nothing is sent to the PC, so no
+  session is created that the phone cannot listen to;
+* the Live card draws one plain sentence, "Jarvis Live needs Microphone
+  permission on this phone.", with up to two honest buttons:
+  * **Allow microphone** - Android's own runtime ask, offered when the system
+    would still show it (a rationale is owed, or this process has not asked);
+  * **Open app permission settings** - always offered; it opens THIS app's
+    Android page (`ACTION_APPLICATION_DETAILS_SETTINGS`) because a "don't ask
+    again" / `USER_SET` permission will not be re-prompted;
+* returning from Settings re-reads the permission on resume and clears the
+  sentence once it is really held - it never auto-starts Live on the grant, and
+  it never claims a permission it does not have.
+
+The decision is pure (`voice/LiveMicGate.kt`) so `LiveMicGateTest` covers every
+branch on the JVM. Wiring: `JarvisRuntime.liveStart` refuses before anything is
+sent; `beginLiveHere` refuses again (a revocation can race the card); the
+launcher and the settings page live in `MainActivity` (which alone can ask
+`shouldShowRequestPermissionRationale`); the banner is drawn by `LiveScreen`.
