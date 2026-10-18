@@ -49,16 +49,27 @@ const VIEW = { width: 760, height: 1100 };
 const open = (data = {}) => K.open(browser, base, "settings.html", data, VIEW);
 const calls = (page) => page.evaluate(() => window.__calls.map((c) => c[0]));
 
-/** Opens the card, accepts the question, and hands back the question's text. */
-async function pressYes(page) {
+/** Opens the card, presses Update, picks a pace (the recommended one unless
+ *  told otherwise), and hands back the question's text. */
+async function pressYes(page, mode = "responsive") {
   const asked = [];
   page.on("dialog", (dialog) => {
     asked.push(dialog.message());
     dialog.accept();
   });
   await page.locator("#ub-go").click();
+  await page.waitForTimeout(200);
+  await page.locator(`#ub-mode-buttons [data-mode="${mode}"]`).click();
   await page.waitForTimeout(400);
   return asked;
+}
+
+/** The bar's width as a percentage, read off the real DOM. */
+async function barPercent(page) {
+  return page.evaluate(() => {
+    const fill = document.getElementById("ub-progress-fill");
+    return fill ? fill.style.width : "";
+  });
 }
 
 const UB = K.UPDATE_BOTH;
@@ -78,16 +89,20 @@ await check("opening the card runs nothing", async () => {
   assert.ok(!seen.includes("__installed"), "opening Settings installed the desktop half");
 });
 
-await check("a press asks before anything runs, and cancelling changes nothing", async () => {
+await check("a press asks the pace first, and cancelling changes nothing", async () => {
   // Playwright dismisses a dialog by default, which is exactly the Cancel
   // path. Nothing may have run when the question comes back "no".
   const page = await open();
   await page.waitForTimeout(300);
   await page.locator("#ub-go").click();
+  await page.waitForTimeout(200);
+  const offered = await page.locator("#ub-modes").isVisible();
+  await page.locator('#ub-mode-buttons [data-mode="responsive"]').click();
   await page.waitForTimeout(400);
   const seen = await calls(page);
   const status = await page.locator("#ub-status").innerText();
   await page.close();
+  assert.equal(offered, true, "the press did not offer the three paces");
   assert.ok(!seen.includes("__updatedBoth"), "cancelling still ran the update");
   assert.ok(!seen.includes("__installed"), "cancelling still installed the desktop half");
   assert.match(status, /Cancelled/i, `said "${status}"`);
@@ -117,6 +132,11 @@ await check("the question says exactly what will happen", async () => {
   assert.match(q, /NOT\s+updated/i, q);
   // ...and that it is not automatic.
   assert.match(q, /Nothing happens on its own/i, q);
+  // ...and the pace that was chosen, its worker count and its ETA range, with
+  // the first-run honesty label on it. The same checks run at every pace.
+  assert.match(q, /Pace: Balanced \(responsive\) - 14 checks at a time/, q);
+  assert.match(q, /first run - not measured yet/, q);
+  assert.match(q, /Every pace runs the same checks/i, q);
 });
 
 /* ── A half that did not finish is not a pass ────────────────────────────── */
@@ -245,7 +265,7 @@ await check("the line says the update has started, instead of nothing, while it 
   assert.notEqual(after, during, "the run's own ending never replaced the starting line");
 });
 
-await check("every phase the updater reports becomes one line, in counts and never a percentage", async () => {
+await check("every phase the updater reports becomes one line, in counts and never an invented percentage", async () => {
   const page = await open();
   await page.waitForTimeout(250);
   const line = () => page.locator("#ub-status").innerText();
@@ -257,19 +277,25 @@ await check("every phase the updater reports becomes one line, in counts and nev
   seen.rehearsing = await line();
   await emitProgress(page, { ...at, phase: "applying", done: 3, total: 145 });
   seen.applying = await line();
+  // No `total` here: the tool did not say one, so the line carries the count it
+  // does have and invents no denominator. The weighted bar is separate.
   await emitProgress(page, { ...at, phase: "testing", done: 7, failed: 2, skipped: 1 });
   seen.testing = await line();
   await emitProgress(page, { ...at, phase: "done", verdict: "ok" });
   seen.done = await line();
-  await page.close();
   assert.equal(seen.reading, "Working out what to update…");
-  assert.equal(seen.rehearsing, "Patching the backend — patch 12 of 145");
-  assert.equal(seen.applying, "Patching the backend — patch 3 of 145");
-  assert.equal(seen.testing, "Running the checks — 7 done, 2 failed");
-  // `total` is null while the suites run: a made-up denominator is worse than
-  // no denominator, and a percentage would be exactly that.
+  assert.equal(seen.rehearsing, "Patching the backend — 12 of 145 items");
+  assert.equal(seen.applying, "Patching the backend — 3 of 145 items");
+  assert.equal(seen.testing, "Checking the backend — 7 checks done, 2 failed");
+  // No `total` in that event: a denominator must not appear from nowhere.
   assert.doesNotMatch(seen.testing, /%|of \d/, `a denominator was invented: ${seen.testing}`);
   assert.match(seen.done, /No problems/, seen.done);
+  // ...and when the tool DOES say a total, the line says it, because it is the
+  // tool's own count and not a made-up one.
+  await emitProgress(page, { ...at, phase: "testing", done: 7, total: 356, failed: 2 });
+  const withTotal = await line();
+  await page.close();
+  assert.equal(withTotal, "Checking the backend — 7 of 356 checks, 2 failed");
 });
 
 await check("an event with nothing readable in it leaves the last line standing", async () => {
@@ -284,7 +310,7 @@ await check("an event with nothing readable in it leaves the last line standing"
     failed: 0, skipped: 0, verdict: null, bad: [] });
   const after = await page.locator("#ub-status").innerText();
   await page.close();
-  assert.match(good, /patch 5 of 145/, good);
+  assert.match(good, /5 of 145 items/, good);
   assert.equal(after, good, "an unknown phase blanked the line");
 });
 
@@ -399,6 +425,223 @@ await check("CONTROL: a progress event is read-only — it starts and changes no
   assert.ok(!seen.includes("__installed"), "a progress event installed something");
 });
 
+/* ── The three paces, chosen when Update is pressed ──────────────────────── */
+
+await check("pressing Update offers three paces in plain words, recommends Balanced, and runs nothing", async () => {
+  const page = await open();
+  await page.waitForTimeout(300);
+  await page.locator("#ub-go").click();
+  await page.waitForTimeout(250);
+  const shown = await page.locator("#ub-modes").isVisible();
+  const modes = await page.locator("#ub-mode-buttons button").evaluateAll(
+    (buttons) => buttons.map((button) => button.dataset.mode));
+  const labels = await page.locator("#ub-mode-buttons button").allInnerTexts();
+  const recommended = await page.locator('#ub-mode-buttons [data-recommended="true"]').count();
+  const status = await page.locator("#ub-status").innerText();
+  const seen = await calls(page);
+  await page.locator("#ub-mode-cancel").click();
+  await page.waitForTimeout(200);
+  const hidden = await page.locator("#ub-modes").isVisible();
+  const cancelled = await page.locator("#ub-status").innerText();
+  await page.close();
+  assert.equal(shown, true, "the press did not offer the three paces");
+  assert.deepEqual(modes, ["max_speed", "responsive", "safe"], `${modes}`);
+  assert.equal(recommended, 1, `${recommended} recommended buttons, expected exactly one`);
+  assert.match(labels[1] || "", /Balanced \(recommended\)/i, labels.join(" | "));
+  // Each pace is plain words + an ETA RANGE + honest labelling of the source.
+  labels.forEach((text) => {
+    assert.match(text, /not measured yet/, `a pace did not label its estimate: ${text}`);
+    // A RANGE, not one invented number: "about 1 minute to 5 minutes".
+    assert.match(text, /about \d+ (second|minute)s? to \d+ (second|minute)s?/,
+      `a pace did not give a range: ${text}`);
+  });
+  assert.match(status, /Choose how hard/i, status);
+  assert.ok(!seen.includes("__updatedBoth"), "offering the paces started a run");
+  assert.equal(hidden, false, "Cancel left the pace card on screen");
+  assert.match(cancelled, /Cancelled/, `Cancel said "${cancelled}"`);
+});
+
+await check("choosing a pace sends EXACTLY that pace, and the question names it", async () => {
+  for (const mode of ["max_speed", "safe"]) {
+    const page = await open();
+    await page.waitForTimeout(250);
+    const asked = await pressYes(page, mode);
+    const sent = await page.evaluate(() => window.__updatedMode);
+    await page.close();
+    assert.equal(sent, mode, `sent ${sent === undefined ? "nothing" : sent} for ${mode}`);
+    assert.equal(asked.length, 1, `${asked.length} questions for ${mode}`);
+    const title = mode === "safe" ? /Safest \(safe\)/ : /Fastest \(max_speed\)/;
+    assert.match(asked[0], title, asked[0]);
+    assert.match(asked[0], /at a time/, asked[0]);
+    assert.match(asked[0], /Every pace runs the same checks/i, asked[0]);
+  }
+});
+
+await check("a measured pace says where its numbers came from, instead of pretending it is new", async () => {
+  const measured = UB.where.modes.map((row) => ({ ...row, measured: true,
+    etaSeconds: 100, etaLowSeconds: 80, etaHighSeconds: 120 }));
+  const page = await open({ updateBoth: { where: { ...UB.where, modes: measured } } });
+  await page.waitForTimeout(300);
+  await page.locator("#ub-go").click();
+  await page.waitForTimeout(200);
+  const labels = await page.locator("#ub-mode-buttons button").allInnerTexts();
+  await page.close();
+  labels.forEach((text) => {
+    assert.match(text, /from this PC's own times/, `a measured pace hid its source: ${text}`);
+    assert.doesNotMatch(text, /not measured yet/, `a measured pace still said not measured: ${text}`);
+  });
+});
+
+/* ── The bar: painted only from the tool's real events ───────────────────── */
+
+/** One real progress event: `fraction` is the tool's completed-work share. */
+async function emitBar(page, payload) {
+  await emitProgress(page, payload);
+  await page.waitForTimeout(60);
+}
+
+const testingAt = (fraction, extra = {}) => ({
+  phase: "testing", done: 12, total: 356, failed: 0, skipped: 0, verdict: null, bad: [],
+  mode: "responsive", workers: 14, measured: false, fraction,
+  etaSeconds: 40, etaLowSeconds: 25, etaHighSeconds: 80, ...extra,
+});
+
+await check("the bar is hidden before any real event, then painted from the fraction's own work", async () => {
+  const page = await open({ updateBoth: { delayMs: 2500, outcome: UB.bothOk } });
+  await page.waitForTimeout(250);
+  const beforeRun = await page.locator("#ub-progress").isVisible();
+  await pressYes(page);
+  const beforeEvent = await page.locator("#ub-progress").isVisible();
+  await emitBar(page, testingAt(0.1));
+  const ten = await barPercent(page);
+  const visible = await page.locator("#ub-progress").isVisible();
+  const phase = await page.locator("#ub-progress-phase").innerText();
+  const count = await page.locator("#ub-progress-count").innerText();
+  const eta = await page.locator("#ub-progress-eta").innerText();
+  const mode = await page.locator("#ub-progress-mode").innerText();
+  await page.close();
+  assert.equal(beforeRun, false, "the bar is furniture on an idle card");
+  assert.equal(beforeEvent, false, "the bar appeared before any real progress event");
+  assert.equal(visible, true, "a real fraction event did not show the bar");
+  assert.equal(ten, "10%", `the bar does not match the tool's fraction: ${ten}`);
+  assert.equal(phase, "Checking the backend", phase);
+  assert.equal(count, "12 of 356 checks", count);
+  assert.match(eta, /left/, `the ETA is missing: ${eta}`);
+  assert.match(eta, /not measured yet/, `the first-run ETA is not labelled: ${eta}`);
+  assert.match(mode, /Pace: Balanced/, mode);
+  assert.match(mode, /14 checks at a time/, mode);
+});
+
+await check("the bar never goes backwards within a pass and never reaches 100% early", async () => {
+  const page = await open({ updateBoth: { delayMs: 2500, outcome: UB.bothOk } });
+  await page.waitForTimeout(250);
+  await pressYes(page);
+  await emitBar(page, testingAt(0.35));
+  const first = await barPercent(page);
+  await emitBar(page, testingAt(0.2));            // an out-of-order older event
+  const held = await barPercent(page);
+  await emitBar(page, testingAt(0.995));
+  const high = await barPercent(page);
+  const aria = await page.locator("#ub-progress-track").getAttribute("aria-valuenow");
+  await page.close();
+  assert.equal(first, "35%", first);
+  assert.equal(held, "35%", `the bar went backwards: ${held}`);
+  assert.equal(high, "99%", `a fraction event claimed 100%: ${high}`);
+  assert.equal(aria, "99", `the accessible value does not match: ${aria}`);
+});
+
+await check("an event with no fraction holds the last real value instead of guessing", async () => {
+  const page = await open({ updateBoth: { delayMs: 2500, outcome: UB.bothOk } });
+  await page.waitForTimeout(250);
+  await pressYes(page);
+  await emitBar(page, testingAt(0.42));
+  const held = await barPercent(page);
+  await emitBar(page, { phase: "verifying", measured: true });   // no fraction at all
+  const after = await barPercent(page);
+  const phase = await page.locator("#ub-progress-phase").innerText();
+  await emitBar(page, { phase: "a-phase-from-a-newer-build" });   // unknowable event
+  const unknown = await barPercent(page);
+  await page.close();
+  assert.equal(held, "42%", held);
+  assert.equal(after, "42%", `a fraction-less event moved the bar: ${after}`);
+  assert.equal(unknown, "42%", `an unknown event moved the bar: ${unknown}`);
+  assert.equal(phase, "Checking the patched files", phase);
+});
+
+await check("100% is painted only by the final verdict, and problems stay below it", async () => {
+  const page = await open({ updateBoth: { delayMs: 2500, outcome: UB.bothOk } });
+  await page.waitForTimeout(250);
+  await pressYes(page);
+  await emitBar(page, testingAt(0.99));
+  const almost = await barPercent(page);
+  await emitBar(page, { phase: "done", verdict: "ok", fraction: 1, mode: "responsive" });
+  const proved = await barPercent(page);
+  const aria = await page.locator("#ub-progress-track").getAttribute("aria-valuenow");
+  await page.close();
+  assert.equal(almost, "99%", almost);
+  assert.equal(proved, "100%", "the proven end did not complete the bar");
+  assert.equal(aria, "100", aria);
+
+  const bad = await open({ updateBoth: { delayMs: 2500, outcome: UB.backendRefused } });
+  await bad.waitForTimeout(250);
+  await pressYes(bad);
+  await emitBar(bad, testingAt(0.4));
+  await emitBar(bad, { phase: "done", verdict: "problems", fraction: 1,
+    mode: "responsive", failed: 1 });
+  const width = await barPercent(bad);
+  const tone = await bad.locator("#ub-progress").getAttribute("data-tone");
+  await bad.close();
+  assert.equal(width, "40%", `a failed run was painted as finished: ${width}`);
+  assert.equal(tone, "bad", "a failed run's bar was not marked as bad");
+});
+
+await check("a fallback resets the bar ONLY with the visible second-pass label and a new ETA", async () => {
+  const page = await open({ updateBoth: { delayMs: 2500, outcome: UB.bothOk } });
+  await page.waitForTimeout(250);
+  await pressYes(page);
+  await emitBar(page, testingAt(0.6));
+  const before = await barPercent(page);
+  await emitBar(page, {
+    phase: "fallback", fallback: true, fraction: 0.0, mode: "safe", workers: 1,
+    measured: false, etaSeconds: 500, etaLowSeconds: 250, etaHighSeconds: 1000,
+    passLabel: "second pass (safe mode)",
+    note: "quick check hit a problem - re-running the safe way, new ETA. " +
+      "Second pass (safe mode) started.",
+  });
+  const reset = await barPercent(page);
+  const pass = await page.locator("#ub-progress-pass").innerText();
+  const passShown = await page.locator("#ub-progress-pass").isVisible();
+  const eta = await page.locator("#ub-progress-eta").innerText();
+  const status = await page.locator("#ub-status").innerText();
+  await emitBar(page, testingAt(0.05, { mode: "safe", workers: 1, fallback: true,
+    passLabel: "second pass (safe mode)" }));
+  const secondPass = await barPercent(page);
+  await page.close();
+  assert.equal(before, "60%", before);
+  assert.equal(reset, "0%", `the fallback did not start a fresh visible pass: ${reset}`);
+  assert.equal(passShown, true, "the second pass has no visible label");
+  assert.match(pass, /second pass \(safe mode\)/i, pass);
+  assert.match(eta, /left/, `the new pass has no ETA: ${eta}`);
+  assert.match(status, /re-running the safe way/, status);
+  assert.equal(secondPass, "5%", `the second pass did not count its own work: ${secondPass}`);
+});
+
+await check("the patching phase shows its own real item count on the bar", async () => {
+  const page = await open({ updateBoth: { delayMs: 2500, outcome: UB.bothOk } });
+  await page.waitForTimeout(250);
+  await pressYes(page);
+  await emitBar(page, { phase: "patching", done: 3, total: 145, failed: 0, skipped: 0,
+    verdict: null, bad: [], mode: "responsive", workers: 14, measured: false,
+    fraction: 0.02, etaSeconds: 90, etaLowSeconds: 60, etaHighSeconds: 200 });
+  const phase = await page.locator("#ub-progress-phase").innerText();
+  const count = await page.locator("#ub-progress-count").innerText();
+  const width = await barPercent(page);
+  await page.close();
+  assert.equal(phase, "Patching the backend", phase);
+  assert.equal(count, "3 of 145 items", count);
+  assert.equal(width, "2%", width);
+});
+
 /* ── The two folders ────────────────────────────────────────────────────── */
 
 await check("the card says where each folder was read from, rather than implying it", async () => {
@@ -474,20 +717,30 @@ await check("CONTROL: only one boolean may be painted green, and it needs both h
 
 await check("CONTROL: nothing but the button can start it", async () => {
   const js = read("src/settings.js");
-  assert.equal((js.match(/invoke\("update_both"\)/g) || []).length, 1,
-    "update_both is invoked from more than one place");
-  // The one call site is inside runBoth, and runBoth is only reached through
-  // the question. If either of those changes, the ask stops being the gate.
-  const runAt = js.indexOf("async function runBoth()");
-  const callAt = js.indexOf('invoke("update_both")');
+  // One call site, and it carries the chosen pace (2026-10-18). The exact
+  // spelling is allowed to include the argument; what must not change is that
+  // there is ONE of them and it lives inside runBoth.
+  const callSites = (js.match(/invoke\("update_both"/g) || []).length;
+  assert.equal(callSites, 1, "update_both is invoked from more than one place");
+  const runAt = js.indexOf("async function runBoth(");
+  const callAt = js.indexOf('invoke("update_both"');
   assert.ok(runAt >= 0 && callAt > runAt, "update_both is called from outside runBoth");
   const runFn = js.slice(runAt, js.indexOf("if (dom.ubGo)"));
   assert.doesNotMatch(runFn, /setInterval|setTimeout/,
     "runBoth schedules itself — an update must never come back on a timer");
+  // The press asks for the PACE; a pace button asks the question; only the
+  // answer to that question reaches runBoth.
   const clickAt = js.indexOf("dom.ubGo.addEventListener");
   assert.ok(clickAt >= 0, "the button has no handler");
-  assert.match(js.slice(clickAt, clickAt + 700), /window\.confirm\(ubQuestion/,
-    "the button runs the update without asking first");
+  const clickHandler = js.slice(clickAt, clickAt + 400);
+  assert.match(clickHandler, /showModes\(\)/,
+    "the button starts without offering the three paces");
+  const chooseAt = js.indexOf("function chooseMode(");
+  assert.ok(chooseAt >= 0, "the pace buttons have no handler");
+  const chooseFn = js.slice(chooseAt, js.indexOf("async function runBoth("));
+  assert.match(chooseFn, /window\.confirm\(ubQuestion\(/,
+    "a pace runs the update without asking first");
+  assert.match(chooseFn, /runBoth\(row\.id\)/, "a pace does not run the pace it names");
 });
 
 await check("CONTROL: the two cards are not the same feature, and this one adds no route", async () => {

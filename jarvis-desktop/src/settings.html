@@ -2483,6 +2483,54 @@
             <button class="btn ghost" id="ub-no" type="button" hidden>Cancel</button>
             <span class="status" id="ub-status" role="status"></span>
           </div>
+
+          <!-- ── How hard the update should work ───────────────────────────
+               Shown when "Update everything" is pressed, before anything runs.
+               The three paces are the Python tool's own answer
+               (`tools/update_backend.py --modes-json`), read by Rust into
+               backend_update_status; this page draws them and sends the chosen
+               id to update_both. All three run the SAME checks - only the
+               number of suites in flight changes - and the estimate says
+               whether it is measured on this PC or a first-run guess. -->
+          <div id="ub-modes" hidden>
+            <p class="note">
+              How hard should the update work while it checks? All three run the
+              same checks; only how many run at once changes. You can pick again
+              next time.
+            </p>
+            <div class="row ub-modes-row" id="ub-mode-buttons" role="group"
+                 aria-label="How hard should the update work"></div>
+            <div class="row">
+              <button class="btn ghost" id="ub-mode-cancel" type="button">Cancel</button>
+              <span class="status" id="ub-mode-status" role="status"></span>
+            </div>
+          </div>
+
+          <!-- ── The progress bar ──────────────────────────────────────────
+               Painted ONLY from the tool's `backend-update-progress` events
+               (`JARVIS-EVENT` lines -> update_progress.rs). Its width is the
+               tool's own `fraction` of completed work: items applied, then the
+               finished suites weighted by their recorded times. There is no
+               timer in this file that moves it, and no CSS animation that
+               fakes movement; a missing event leaves it where it was. -->
+          <div id="ub-progress" class="ub-progress" hidden
+               data-phase="reading">
+            <div class="ub-progress-track" id="ub-progress-track"
+                 role="progressbar" aria-valuemin="0" aria-valuemax="100"
+                 aria-valuenow="0" aria-labelledby="ub-progress-phase">
+              <div class="ub-progress-fill" id="ub-progress-fill"></div>
+            </div>
+            <p class="ub-progress-line">
+              <strong id="ub-progress-phase">Working out what to update…</strong>
+              <span class="ub-progress-count" id="ub-progress-count"></span>
+            </p>
+            <p class="note ub-progress-meta">
+              <span id="ub-progress-eta"></span>
+              <span id="ub-progress-mode"></span>
+              <span id="ub-progress-pass" hidden></span>
+            </p>
+          </div>
+
           <!-- Shown only while a run is under way, and never before or after:
                it is about a question Windows asks DURING the install, and a
                line that stayed on the card all day would stop being read.

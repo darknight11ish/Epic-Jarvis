@@ -186,6 +186,20 @@ const dom = {
   ubSteps: $("ub-steps"),
   ubLog: $("ub-log"),
   ubLogBody: $("ub-log-body"),
+  // The pace choice and the real progress bar (2026-10-18). The bar is painted
+  // only from the update tool's own events - see `paintProgressBar`.
+  ubModes: $("ub-modes"),
+  ubModeButtons: $("ub-mode-buttons"),
+  ubModeCancel: $("ub-mode-cancel"),
+  ubModeStatus: $("ub-mode-status"),
+  ubProgress: $("ub-progress"),
+  ubProgressTrack: $("ub-progress-track"),
+  ubProgressFill: $("ub-progress-fill"),
+  ubProgressPhase: $("ub-progress-phase"),
+  ubProgressCount: $("ub-progress-count"),
+  ubProgressEta: $("ub-progress-eta"),
+  ubProgressMode: $("ub-progress-mode"),
+  ubProgressPass: $("ub-progress-pass"),
 
   hotkeyRows: $("hotkey-rows"),
   saveHotkeys: $("save-hotkeys"),
@@ -1771,6 +1785,8 @@ function paintBoth(where, { keepState = false } = {}) {
   // outcome has just written. Repainting "Nothing has been changed yet" over
   // "NOT fully updated" is exactly how a card would look like it had not run.
   if (keepState) return;
+  hideModes();
+  if (dom.ubProgress) dom.ubProgress.hidden = true;
   if (!ready) {
     report(dom.ubState, "Cannot update the backend on this PC yet — see the line above.",
       "bad");
@@ -1826,39 +1842,231 @@ function paintStep(step) {
       emits one `backend-update-progress` event per new line;
       `paintBackendProgress` turns each one into that same one line.
 
-   Counts, never percentages: `total` is null while the suites run (they are
-   globbed, so nobody knows how many there are until they are done), and a
-   made-up denominator is worse than an honest count. */
+   Counts and a real bar, never a faked percentage: the counts are the update
+   tool's own, and the bar is painted only from its `fraction` - completed
+   items, then finished suites weighted by their recorded times. Nothing in
+   this file advances it on a timer, and a missing event leaves it where it was. */
 
-/** The word the card shows before the patch program has said anything. */
+/** The word the card shows before anything has said anything. */
 const UPDATE_STARTING = "Starting the update…";
 
-/** One event payload -> the one line the owner reads. `""` means "nothing
+/** Seconds -> plain words. Never a single invented number: always the range. */
+function durationWords(seconds) {
+  const value = Math.max(0, Math.round(Number(seconds) || 0));
+  if (value < 90) return `${value} second${value === 1 ? "" : "s"}`;
+  const minutes = Math.max(1, Math.round(value / 60));
+  return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+}
+
+/** One honest phrase for an ETA range, saying where the numbers came from. */
+function etaRangeWords(low, high, measured) {
+  const hasLow = Number.isFinite(low);
+  const hasHigh = Number.isFinite(high);
+  if (!hasLow && !hasHigh) return "";
+  const span = hasLow && hasHigh && Math.round(low) !== Math.round(high)
+    ? `${durationWords(low)} to ${durationWords(high)}`
+    : durationWords(hasLow ? low : high);
+  const source = measured === true
+    ? "from this PC's own times"
+    : measured === false ? "first run - not measured yet" : "";
+  return `about ${span}${source ? ` · ${source}` : ""}`;
+}
+
+/** The pace table from the last backend_update_status answer. */
+function ubModes() {
+  return (ubWhere && Array.isArray(ubWhere.modes)) ? ubWhere.modes : [];
+}
+
+function ubModeRow(modeId) {
+  return ubModes().find((row) => row && row.id === modeId) || null;
+}
+
+/** The three pace buttons, each with its plain words and its own ETA range.
+ *  All three run the SAME checks; only the worker count and the time differ. */
+function paintModeChoices() {
+  if (!dom.ubModeButtons) return;
+  dom.ubModeButtons.replaceChildren();
+  ubModes().forEach((row) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "btn ub-mode";
+    button.dataset.mode = row.id;
+    if (row.recommended) button.dataset.recommended = "true";
+    const label = document.createElement("strong");
+    label.textContent = row.recommended ? `${row.label} (recommended)` : row.label;
+    const eta = document.createElement("span");
+    eta.className = "ub-mode-eta";
+    eta.textContent = etaRangeWords(row.etaLowSeconds, row.etaHighSeconds, row.measured)
+      || "time not known yet";
+    const plain = document.createElement("small");
+    plain.textContent = row.plain || "";
+    button.append(label, eta, plain);
+    button.addEventListener("click", () => chooseMode(row));
+    dom.ubModeButtons.append(button);
+  });
+}
+
+function showModes() {
+  if (!dom.ubModes) return false;
+  if (!ubModes().length) {
+    report(dom.ubStatus,
+      (ubWhere && ubWhere.modesNote)
+        || "The update paces could not be worked out on this PC, so nothing was run.",
+      "bad");
+    return false;
+  }
+  paintModeChoices();
+  dom.ubModes.hidden = false;
+  if (dom.ubModeStatus) report(dom.ubModeStatus, "", "");
+  report(dom.ubStatus, "Choose how hard the update should work.", "");
+  const recommended = dom.ubModeButtons
+    && (dom.ubModeButtons.querySelector('[data-recommended="true"]')
+      || dom.ubModeButtons.querySelector("button"));
+  if (recommended) recommended.focus();
+  return true;
+}
+
+function hideModes() {
+  if (dom.ubModes) dom.ubModes.hidden = true;
+}
+
+/** The bar's state. `shown` is the widest REAL fraction this pass has
+ *  reported. It never moves backwards, and 100% is painted only by the final
+ *  verdict. A fallback is the one event allowed to start a new pass, and it is
+ *  labelled "second pass (safe mode)". */
+const ubBar = { shown: 0, fractionSeen: false, done: false, pass: 0, fallback: false,
+  mode: "" };
+
+function resetProgressBar(row, modeId) {
+  ubBar.shown = 0;
+  ubBar.fractionSeen = false;
+  ubBar.done = false;
+  ubBar.pass = 0;
+  ubBar.fallback = false;
+  ubBar.mode = modeId || "";
+  if (dom.ubProgress) {
+    // Hidden until a real fraction arrives: a bar at 0% while an older updater
+    // (which sends no fraction) runs would be decoration pretending to be work.
+    dom.ubProgress.hidden = true;
+    dom.ubProgress.dataset.phase = "reading";
+    delete dom.ubProgress.dataset.tone;
+    dom.ubProgress.dataset.fallback = "false";
+  }
+  if (dom.ubProgressFill) dom.ubProgressFill.style.width = "0%";
+  if (dom.ubProgressTrack) dom.ubProgressTrack.setAttribute("aria-valuenow", "0");
+  if (dom.ubProgressPhase) dom.ubProgressPhase.textContent = "Working out what to update…";
+  if (dom.ubProgressCount) dom.ubProgressCount.textContent = "";
+  if (dom.ubProgressEta) dom.ubProgressEta.textContent = "";
+  const label = row ? row.label : modeId;
+  const workers = row ? row.workers : 1;
+  if (dom.ubProgressMode) {
+    dom.ubProgressMode.textContent =
+      `Pace: ${label} · ${workers} check${workers === 1 ? "" : "s"} at a time`;
+  }
+  if (dom.ubProgressPass) {
+    dom.ubProgressPass.hidden = true;
+    dom.ubProgressPass.textContent = "";
+  }
+}
+
+function progressPhaseWords(p) {
+  if (!p || typeof p.phase !== "string") return "";
+  switch (p.phase) {
+    case "reading": return "Working out what to update…";
+    case "plan": return "Ready to start";
+    case "rehearsing":
+    case "applying":
+    case "patching": return "Patching the backend";
+    case "verifying": return "Checking the patched files";
+    case "testing": return "Checking the backend";
+    case "fallback": return "Quick check hit a problem - re-running the safe way, new ETA";
+    case "done": return verdictWords(p.verdict);
+    default: return "";
+  }
+}
+
+function progressCountWords(p) {
+  if (!p || typeof p.phase !== "string") return "";
+  const done = Number.isInteger(p.done) ? p.done : 0;
+  const failed = Number.isInteger(p.failed) ? p.failed : 0;
+  if (p.phase === "patching" || p.phase === "rehearsing" || p.phase === "applying") {
+    return Number.isInteger(p.total) ? `${done} of ${p.total} items` : `${done} items done`;
+  }
+  if (p.phase === "testing") {
+    const count = Number.isInteger(p.total) ? `${done} of ${p.total} checks`
+      : `${done} checks done`;
+    return failed ? `${count}, ${failed} failed` : count;
+  }
+  return "";
+}
+
+function progressEtaWords(p) {
+  if (!p || p.phase === "done") return "";
+  const range = etaRangeWords(p.etaLowSeconds, p.etaHighSeconds, p.measured);
+  return range ? `${range} left` : "";
+}
+
+/** Paint the bar from ONE tool event. A field the event does not carry is
+ *  "not said": the last real value stands, and nothing guesses forward. */
+function paintProgressBar(p) {
+  if (!dom.ubProgress || !p) return;
+  if (p.phase === "fallback") {
+    // The only reset, and it is visible: a new labelled pass starts at zero.
+    ubBar.shown = 0;
+    ubBar.pass += 1;
+    ubBar.fallback = true;
+    ubBar.fractionSeen = false;
+    ubBar.done = false;
+  }
+  if (Number.isFinite(p.fraction) && p.phase !== "done") {
+    // The done event's own `fraction` is not used: 100% is decided by the
+    // VERDICT below, so a run that ends with problems cannot be painted full.
+    ubBar.fractionSeen = true;
+    ubBar.shown = Math.max(ubBar.shown,
+      Math.round(Math.min(1, Math.max(0, p.fraction)) * 100));
+  }
+  if (typeof p.mode === "string" && p.mode) ubBar.mode = p.mode;
+  if (p.phase === "done") {
+    ubBar.done = true;
+    if (p.verdict === "ok" || p.verdict === "unproven") ubBar.shown = 100;
+  }
+  // 100% belongs to the tool's final verdict, never to a fraction event.
+  if (!ubBar.done) ubBar.shown = Math.min(99, ubBar.shown);
+  ubBar.shown = Math.max(0, Math.min(100, ubBar.shown));
+  if (!ubBar.fractionSeen) return;    // no honest number yet: stay hidden
+  dom.ubProgress.hidden = false;
+  dom.ubProgress.dataset.phase = p.phase || "reading";
+  if (p.verdict === "problems") dom.ubProgress.dataset.tone = "bad";
+  else delete dom.ubProgress.dataset.tone;
+  const fellBack = Boolean(p.fallback) || ubBar.fallback;
+  dom.ubProgress.dataset.fallback = fellBack ? "true" : "false";
+  if (dom.ubProgressFill) dom.ubProgressFill.style.width = `${ubBar.shown}%`;
+  if (dom.ubProgressTrack) {
+    dom.ubProgressTrack.setAttribute("aria-valuenow", String(ubBar.shown));
+  }
+  if (dom.ubProgressPass) {
+    dom.ubProgressPass.hidden = !fellBack;
+    dom.ubProgressPass.textContent = fellBack
+      ? (p.passLabel || "second pass (safe mode)")
+      : "";
+  }
+  if (dom.ubProgressPhase) dom.ubProgressPhase.textContent = progressPhaseWords(p);
+  if (dom.ubProgressCount) dom.ubProgressCount.textContent = progressCountWords(p);
+  if (dom.ubProgressEta) dom.ubProgressEta.textContent = progressEtaWords(p);
+}
+
+/** One event payload -> the one line below the buttons. `""` means "nothing
  *  readable in this event", and the caller then leaves the line alone rather
  *  than blanking it. Phases are the Rust side's own (`update_progress.rs`). */
 function progressLine(p) {
   if (!p || typeof p.phase !== "string") return "";
-  const done = Number.isInteger(p.done) ? p.done : 0;
-  const failed = Number.isInteger(p.failed) ? p.failed : 0;
-  switch (p.phase) {
-    case "reading":
-      return "Working out what to update…";
-    case "rehearsing":
-    case "applying":
-      // `total` comes from the script's own "Rehearsing all 145" line. Without
-      // it, a bare count — never a guess at how many patches there are.
-      return Number.isInteger(p.total)
-        ? `Patching the backend — patch ${done} of ${p.total}`
-        : `Patching the backend — patch ${done}`;
-    case "testing":
-      // The phase where "if it's checking anything" is literal: this is the
-      // suites running, one at a time.
-      return `Running the checks — ${done} done, ${failed} failed`;
-    case "done":
-      return verdictWords(p.verdict);
-    default:
-      return "";
-  }
+  const head = progressPhaseWords(p);
+  if (!head) return "";
+  const count = progressCountWords(p);
+  const eta = progressEtaWords(p);
+  const scope = (p.mode === "safe" && p.fallback) ? " (safe mode)" : "";
+  const first = count ? `${head}${scope} — ${count}` : `${head}${scope}`;
+  return eta ? `${first} · ${eta}` : first;
 }
 
 /** The verdict in the card's own words. `ok` is the quiet one on purpose: a
@@ -1955,12 +2163,13 @@ function paintProblems(p) {
   box.hidden = false;
 }
 
-/** One `backend-update-progress` event, on screen.
+/** One `backend-update-progress` event: the line and the bar.
  *
  *  Named for the BACKEND run on purpose: `paintProgress` above is the desktop
  *  half's own download bar (downloaded/total), a different feature with a
  *  different source, and the two must not be confused in a later edit. */
 function paintBackendProgress(p) {
+  paintProgressBar(p);
   const line = progressLine(p);
   if (p && p.phase === "done") paintProblems(p);
   // Nothing readable: leave the last line standing. Blanking it here would put
@@ -2005,6 +2214,19 @@ function paintBothOutcome(outcome) {
   report(dom.ubState, said, updated ? "ok" : "bad");
   report(dom.ubStatus, steps.map((s) => s.detail).join(" "), updated ? "ok" : "bad");
   announce(said, "assertive");
+  // The bar's last state: 100% only now, and only when the run really proved
+  // both halves. A run with problems ends below full and in the warning colour.
+  hideModes();
+  if (ubBar.fractionSeen) {
+    paintProgressBar({
+      phase: "done",
+      verdict: updated ? "ok" : failed ? "problems" : "unproven",
+      fraction: 1,
+      mode: ubBar.mode,
+      fallback: ubBar.fallback,
+      passLabel: ubBar.fallback ? "second pass (safe mode)" : undefined,
+    });
+  }
   // The same Restart button the desktop-only install uses: either the new
   // executable is on disk, or Jarvis was stopped for the backend half.
   if (outcome && outcome.restartNeeded && dom.updateRestart) {
@@ -2016,10 +2238,19 @@ function paintBothOutcome(outcome) {
 }
 
 /** The question, in as many words. Every line of it is a fact the run will
- *  make true, so nobody has to find out afterwards. */
-function ubQuestion(where) {
+ *  make true, so nobody has to find out afterwards. The chosen pace is named
+ *  here, with its ETA range, because that is the thing that was just chosen. */
+function ubQuestion(where, modeRow) {
   const backend = (where && where.backend) || "your backend folder";
   const script = (where && where.script) || "scripts\\apply-patches.ps1";
+  const pace = modeRow
+    ? `   Pace: ${modeRow.label} (${modeRow.id}) - ${modeRow.workers} check` +
+      `${modeRow.workers === 1 ? "" : "s"} at a time` +
+      (Number.isFinite(modeRow.etaLowSeconds) || Number.isFinite(modeRow.etaHighSeconds)
+        ? `, about ${etaRangeWords(modeRow.etaLowSeconds, modeRow.etaHighSeconds,
+          modeRow.measured)}.`
+        : ".")
+    : "";
   return [
     "Update both halves of Jarvis?",
     "",
@@ -2031,6 +2262,10 @@ function ubQuestion(where) {
     "   this runs, and it can take several minutes.",
     "2. Jarvis Desktop. The newest signed release is downloaded, checked",
     "   against this copy's signing key, and installed over this one.",
+    "3. How hard the update works.",
+    pace,
+    "   Every pace runs the same checks; a quick one falls back to the safe",
+    "   pace if a check goes wrong, and you are told when it does.",
     "",
     "The backend goes first. If it does not finish, Jarvis Desktop is NOT",
     "updated, and you are told so. Nothing happens on its own.",
@@ -2039,14 +2274,28 @@ function ubQuestion(where) {
   ].join("\n");
 }
 
-async function runBoth() {
+/** A pace button was pressed: ask, then run that pace. */
+function chooseMode(row) {
+  hideModes();
+  if (!row) return;
+  if (!window.confirm(ubQuestion(ubWhere, row))) {
+    report(dom.ubStatus, "Cancelled. Nothing was changed.", "");
+    return;
+  }
+  runBoth(row.id);
+}
+
+async function runBoth(modeId) {
   if (ubBusy) return;
+  const row = ubModeRow(modeId);
   ubBusy = true;
   if (dom.ubGo) dom.ubGo.disabled = true;
   if (dom.ubYes) dom.ubYes.hidden = true;
   if (dom.ubNo) dom.ubNo.hidden = true;
   if (dom.ubSteps) dom.ubSteps.replaceChildren();
   if (dom.ubLog) dom.ubLog.hidden = true;
+  hideModes();
+  resetProgressBar(row, modeId);
   // NOT an empty line. The patch program takes about forty seconds to boot and
   // print its first line, and an empty line through that is indistinguishable
   // from a hang — which is the owner's actual complaint ("if its checking
@@ -2062,10 +2311,11 @@ async function runBoth() {
   showFallback(true);
   report(dom.ubState, "Working. Do not close this window.", "");
   try {
-    paintBothOutcome(await invoke("update_both"));
+    paintBothOutcome(await invoke("update_both", { mode: modeId }));
   } catch (error) {
-    // The command itself refused — a build with no update key, or a bridge
-    // that would not answer. Say so, and never as an update.
+    // The command itself refused — a build with no update key, a pace this
+    // build does not have, or a bridge that would not answer. Say so, and
+    // never as an update.
     report(dom.ubState, problemWords(error), "bad");
     report(dom.ubStatus, "Nothing was installed.", "bad");
   } finally {
@@ -2080,14 +2330,29 @@ async function runBoth() {
 if (dom.ubGo) {
   dom.ubGo.addEventListener("click", () => {
     if (ubBusy || !ubWhere) return;
-    // The press is the ask. `window.confirm` is this app's own "are you sure?"
-    // — the Brain, Backups and Projects all use it — and it is deliberately
-    // the only place this control can start from.
-    if (!window.confirm(ubQuestion(ubWhere))) {
+    // The press is the ask, and the ask is now a real choice: three paces with
+    // their own ETA ranges, the recommended one preselected. Nothing runs until
+    // a pace is chosen and the question after it is answered.
+    if (showModes()) return;
+    // A program folder older than this feature has no pace table. It can still
+    // update - the older one-at-a-time path - and it may only take the default
+    // pace: a pace this build cannot check is never silently accepted.
+    const fallback = {
+      id: "responsive", label: "Balanced", workers: 1, measured: false,
+      etaLowSeconds: null, etaHighSeconds: null,
+    };
+    if (!window.confirm(ubQuestion(ubWhere, fallback))) {
       report(dom.ubStatus, "Cancelled. Nothing was changed.", "");
       return;
     }
-    runBoth();
+    runBoth("responsive");
+  });
+}
+
+if (dom.ubModeCancel) {
+  dom.ubModeCancel.addEventListener("click", () => {
+    hideModes();
+    report(dom.ubStatus, "Cancelled. Nothing was changed.", "");
   });
 }
 
