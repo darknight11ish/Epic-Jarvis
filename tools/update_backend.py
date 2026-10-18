@@ -108,6 +108,7 @@ from __future__ import annotations
 import ast
 import json
 import math
+import ntpath
 import os
 import re
 import shutil
@@ -1060,23 +1061,35 @@ def shell_choice(which=None) -> str:
 
 
 def _is_windows_powershell_5(shell) -> bool:
-    """True for Windows PowerShell 5.1 (powershell.exe), never for pwsh."""
-    name = os.path.basename(str(shell or "")).lower()
+    """True for Windows PowerShell 5.1 (powershell.exe), never for pwsh.
+
+    `ntpath.basename`, not `os.path.basename`: the path being judged is a
+    Windows one even when this code is exercised on the required Linux
+    backend job (which runs the suite with fake paths), and a host-specific
+    basename would see the whole `C:\\...\\powershell.exe` string and say no.
+    """
+    name = ntpath.basename(str(shell or "")).lower()
     return name.startswith("powershell")
 
 
 def _windows_powershell_module_dirs(env) -> list:
     """The module directories a 5.1 child must be told about, built from the
-    child's own environment rather than hard-coded for one PC."""
+    child's own environment rather than hard-coded for one PC.
+
+    Windows path rules are used (`ntpath`) whatever host runs this: the child
+    is a Windows PowerShell and its module list is semicolon-separated, so the
+    composition is a pure function of `env` that behaves identically on the
+    Windows desk and the Linux backend job.
+    """
     root = env.get("SystemRoot") or env.get("windir") or r"C:\Windows"
     program_files = env.get("ProgramFiles") or r"C:\Program Files"
     user = env.get("USERPROFILE") or ""
     dirs = [
-        os.path.join(root, "System32", "WindowsPowerShell", "v1.0", "Modules"),
-        os.path.join(program_files, "WindowsPowerShell", "Modules"),
+        ntpath.join(root, "System32", "WindowsPowerShell", "v1.0", "Modules"),
+        ntpath.join(program_files, "WindowsPowerShell", "Modules"),
     ]
     if user:
-        dirs.append(os.path.join(user, "Documents", "WindowsPowerShell", "Modules"))
+        dirs.append(ntpath.join(user, "Documents", "WindowsPowerShell", "Modules"))
     return dirs
 
 
@@ -1088,14 +1101,19 @@ def _child_env(shell, base=None) -> dict:
     a child of a pwsh-hosted process can inherit a module path that hides 5.1's
     own modules. A `pwsh` child - and every non-shell child - gets the
     caller's copy unchanged.
+
+    PSModulePath is a WINDOWS environment value, so its entries are split and
+    joined with Windows' own separator (`ntpath.pathsep`, always ';'), never
+    with the host's: on the Linux backend job `os.pathsep` is ':' and would
+    split `C:\\Program Files\\...` into pieces.
     """
     env = dict(os.environ if base is None else base)
     if _is_windows_powershell_5(shell):
-        parts = [p for p in str(env.get("PSModulePath") or "").split(os.pathsep) if p]
+        parts = [p for p in str(env.get("PSModulePath") or "").split(ntpath.pathsep) if p]
         for path in _windows_powershell_module_dirs(env):
             if path not in parts:
                 parts.append(path)
-        env["PSModulePath"] = os.pathsep.join(parts)
+        env["PSModulePath"] = ntpath.pathsep.join(parts)
     return env
 
 

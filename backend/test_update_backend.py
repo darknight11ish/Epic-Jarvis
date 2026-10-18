@@ -887,16 +887,27 @@ def t_the_shell_choice_prefers_pwsh_then_falls_back_then_refuses():
 
 
 def t_the_5_1_fallback_gets_its_module_path_without_losing_the_caller_env():
+    # PSModulePath is a WINDOWS value (always ';'-separated), so these checks
+    # are host-independent by construction (ntpath in the tool) and run on the
+    # required Linux backend job too - no skip is needed and none is taken.
     windows = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
     base = {"PSModulePath": r"C:\Program Files\PowerShell\7\Modules",
             "KEEP_ME": "yes", "SystemRoot": r"C:\Windows",
             "ProgramFiles": r"C:\Program Files"}
     env = U._child_env(windows, base)
-    parts = env["PSModulePath"].split(os.pathsep)
+    raw = env["PSModulePath"]
+    check("PSModulePath keeps Windows' own ';' separator on every host",
+          ";" in raw and "\n" not in raw and raw.count(r"C:\Program Files\PowerShell\7\Modules") == 1,
+          raw)
+    parts = raw.split(";")
     check("the caller's own PSModulePath entry is kept",
           base["PSModulePath"] in parts, parts)
     check("the WindowsPowerShell v1.0 module directory is appended",
           any("WindowsPowerShell\\v1.0\\Modules" in part for part in parts), parts)
+    check("the 5.1 shell is recognised from a Windows path on every host",
+          U._is_windows_powershell_5(windows)
+          and not U._is_windows_powershell_5(r"C:\Program Files\PowerShell\7\pwsh.exe"),
+          (windows, r"C:\Program Files\PowerShell\7\pwsh.exe"))
     check("no other caller variable is lost", env.get("KEEP_ME") == "yes", env)
     check("the caller's own dict was not modified",
           base["PSModulePath"] == r"C:\Program Files\PowerShell\7\Modules", base)
