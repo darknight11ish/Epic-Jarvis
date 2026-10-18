@@ -191,7 +191,7 @@ SOURCE_PIN_CEILING: dict[str, int] = {
     "backend/test_voice_strict.py": 2,
     "backend/test_voice_upgrades.py": 4,
     "backend/test_voices.py": 5,
-    "backend/test_widget_sources.py": 6,
+    "backend/test_widget_sources.py": 3,
     "backend/test_widgets.py": 1,
     "backend/test_wiki.py": 5,
     "backend/test_work.py": 1,

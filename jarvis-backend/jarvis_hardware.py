@@ -342,6 +342,60 @@ def _smi_cards(fresh: bool = False) -> list:
         return []
 
 
+def gpu_memory_used(fresh: bool = False) -> tuple:
+    """(used, total) graphics memory in BYTES, summed over every card.
+
+    THE SHAPE IS THE CALLER'S, not a preference: `jarvis_widgets._gpu()` returns
+    this pair straight into `fill()`'s `gpu_memory` branch, which reads
+    **total == 0 as "could not read it"** (empty value and the "Could not read
+    the graphics card just now" note) and any real total as a measurement. So
+    the unknown value is (0.0, 0.0) - and a card that is genuinely EMPTY must
+    not be confused with it: it comes back as (0.0, <its real total in bytes>),
+    which the same branch prints as "0.0 GB used of 8.0 GB". Never a fake zero
+    with a total, and never a count dressed up as a reading.
+
+    This name was claimed as a widget source and called by the widget from
+    2026-09-29, but until 2026-10-17 no file defined it - so the tile fell
+    through to (0.0, 0.0) on every PC and said "could not read" for ever
+    (docs/CLAIMS.tsv row A12, `backend/test_widget_sources.py`'s A12 section).
+
+    REUSES THIS MODULE'S OWN READER (`_smi_cards` -> jarvis_compute.query_cards,
+    the same query and parser the hardware page uses): no second nvidia-smi
+    parser, no second process. That reader caches for 30 s
+    (jarvis_compute._CACHE_SECONDS), so a polled widget pays one nvidia-smi
+    process for the FIRST read and arithmetic after that. MEASURED on this PC
+    2026-10-17, two cards: 75.8 ms cold (one nvidia-smi) and a median 1.60 us
+    per warm poll over 1000 polls, the same answer both times. `fresh` forces
+    the one cold read (tests, and a "measure now" path); the widget does not
+    pass it.
+
+    Never raises: an unreachable nvidia-smi, a non-NVIDIA machine, or cards that
+    report no memory all answer (0.0, 0.0), the value the caller already reads
+    as "could not read". Used bytes are total minus free per card, so a driver
+    that reports free > total (never seen, but not worth trusting) is clamped
+    rather than producing negative use.
+    """
+    try:
+        cards = _smi_cards(fresh)
+    except Exception:
+        return (0.0, 0.0)
+    total_mib = used_mib = 0
+    for card in cards or ():
+        try:
+            total = int(getattr(card, "total_mb", 0) or 0)
+            free = int(getattr(card, "free_mb", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+        if total <= 0:
+            continue
+        total_mib += total
+        used_mib += total - min(max(free, 0), total)
+    if total_mib <= 0:
+        return (0.0, 0.0)
+    mib = 1024.0 * 1024.0
+    return (used_mib * mib, total_mib * mib)
+
+
 # --------------------------------------------------------------------------
 #   Each card's health: heat, power, fan, load, "slowing down because hot"
 # --------------------------------------------------------------------------

@@ -35,7 +35,7 @@ WHAT IS PROVEN BY BEHAVIOUR, NOT BY READING THE SOURCE
   * that NO VERSION IS READ OR COMPARED, proved twice: the source holds no
     version comparison at all, and two answers that differ ONLY in a
     version-shaped value classify identically (tests 12 and 13). This is the
-    design `jarvis_hardware.py:952` states - "a new Ollama version does not
+    design `jarvis_hardware.py` states - "a new Ollama version does not
     forget that a size did not fit";
   * that the probe asks one read-only endpoint, writes nothing and (with `ask`
     injected) never touches the network (test 14).
@@ -745,22 +745,45 @@ def t_no_version_is_read_or_compared():
           f"{third.verdict!r} / {third.missing!r}")
 
 
+#: The sentence in `jarvis_hardware.py` this design rests on. Asserted by its
+#: WORDS, never by its line number - a line number is a fact about how much code
+#: sits above it, and this project has had four line pins break for that reason.
+RULE_SENTENCE = "a new Ollama version does not forget"
+
+
 def t_a_new_version_does_not_forget_what_a_model_can_do():
-    """The rule itself, from `jarvis_hardware.py:952`, pinned by its own line."""
+    """The rule itself, pinned by its WORDS, not by its line number.
+
+    This used to read `jarvis_hardware.py:952` and assert `lines[951]`. A line
+    number is not a property of anything - it is a fact about how much code
+    happens to sit above it - so #525 inserting a function higher in the file
+    moved the sentence down and turned three checks red on a tree where nothing
+    was wrong. That is the same failure as `origin/main`'s copy of a file and
+    the checkout's own topology: a test measuring the weather.
+
+    A line pin in this project has now broken four times. A sentence that must
+    exist, asserted anywhere in the file, breaks for exactly one reason: the
+    sentence is gone.
+    """
     if not HARDWARE.is_file():
         skip(f"{missing('jarvis_hardware.py')} - the citation cannot be checked")
     else:
-        lines = HARDWARE.read_text(encoding="utf-8", errors="replace").splitlines()
-        check(f"jarvis_hardware.py still carries the line at 952 that this "
-              f"design rests on",
-              len(lines) >= 952
-              and "a new Ollama version does not forget" in lines[951],
-              f"line 952 is {lines[951]!r}" if len(lines) >= 952
-              else f"the file has only {len(lines)} lines")
-        check("... and the probe's own docstring cites it, so the reasoning "
-              "travels with the code",
-              "jarvis_hardware.py:952" in MODULE.read_text(encoding="utf-8",
-                                                            errors="replace"),
+        # WHITESPACE-NORMALISED, both sides. The sentence WRAPS in both files,
+        # and comparing the raw text fails on a line break that is not a change
+        # of meaning - the same class of mistake as the line number this test
+        # used to pin. `split()` alone would need the exact spacing; a sentence
+        # is a sentence however it is wrapped.
+        flat = " ".join(HARDWARE.read_text(encoding="utf-8",
+                                           errors="replace").split())
+        check("jarvis_hardware.py still carries the sentence that this design "
+              "rests on",
+              RULE_SENTENCE in flat,
+              "the sentence is gone from jarvis_hardware.py")
+        probe = " ".join(MODULE.read_text(encoding="utf-8",
+                                         errors="replace").split())
+        check("... and the probe's own docstring cites where it comes from, so "
+              "the reasoning travels with the code",
+              "jarvis_hardware.py" in probe and RULE_SENTENCE in probe,
               "the citation was dropped from jarvis_ollama_contract.py")
 
     low = {"capabilities": ["completion"], "version": "0.1.0",
