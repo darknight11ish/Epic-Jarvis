@@ -2521,3 +2521,56 @@ What that means, and what it does not:
   be spoken; this gate stands in front of the same call, it does not replace
   it.
 
+## 2026-10-18 - said-I'd-do suggestions stay opt-in, and speculative decoding is measured and turned down
+
+Put to the owner on 2026-10-18 as a set of multiple-choice questions. The
+answers below are his choices; they decide what gets built when each slice
+starts.
+
+**Decided:**
+
+* **Said-I'd-do suggestions are OFF by default, and opt-in in Settings.** Jarvis
+  may read the owner's OWN words for a promise he made ("I'll send that
+  Tuesday") and offer it as a proposal - only when he turns the setting on,
+  only tap-to-accept (never auto-created), and **a proposal that is not taken
+  lapses after three days** (`PROPOSAL_TTL_DAYS=3`). Temporary and crisis words
+  are never scanned, assistant and tool words are never scanned, and everything
+  is withheld while memory lists are hidden or the app is locked.
+* **Pillar 24 (selection co-pilot): the trigger is reading the highlighted
+  selection when the Jarvis bar opens.** No new global hotkey is added -
+  Alt+Space already belongs to the bar.
+* **Pillar 27 (routines): Option B is the default** - a saved routine may also
+  make changes, with everything it did listed in one consolidated receipt.
+  Settings offer **Option A** (read-only / low-risk steps, allow-listed when the
+  routine is saved; anything riskier raises a normal card) and **Option C** (a
+  card every run). **Caveat, still to be confirmed with the owner:** in Option B
+  high-risk actions raise a card whatever the setting says - moving money,
+  credentials or API keys, sending email or messages to other people, deleting
+  data, public posting. That is an assumption he can override explicitly, not
+  something he has already agreed to.
+* **Pillar 25 (life-log): Option B is the default** - read-only plates, plus a
+  local-model tool that may read the timeline to answer "what did I do
+  Tuesday". Settings offer **Option A** (plates only; no model sees the
+  timeline). Local model only; withheld under hide-memory / App-lock; a
+  timeline read taint-latches the answer.
+* **Pillar 12 (Scribe): full meeting capture is the default** - all voices,
+  transcript kept - and the owner-only / transient-audio mode is available in
+  Settings. Scribe is still **OFF by default**: starting a session offers the
+  mode choice, a persistent red banner shows while recording, one tap stops it,
+  and raw-audio retention is its own switch. (Exact retention length and the
+  per-app banner wording are still open, to settle when that pillar starts.)
+* **Pillar 13 (speculative decoding): tried, measured, DO NOT BUILD.** The owner
+  asked to try the model-switch MTP route anyway; it was measured on this PC on
+  2026-10-18. Only `qwen3.5:0.8b/2b/4b` in the local store carry MTP heads;
+  `qwen3.5:9b` has none and the engine refuses it ("model doesn't contain MTP
+  layers"); every MTP-capable model is smaller than today's `qwen3:8b`. The best
+  lossless result was `qwen3.5:4b` MTP at **0.90x** plain decode (n-max 1 was
+  0.96x and changed the answer) - below the `N_placeholder` 1.15x gate.
+  `jarvis-primary` was never evicted and both cards were restored; no Modelfile
+  or model was created. Evidence: `.dsh-scratch/PILLAR29-MEASUREMENT.md` section
+  9 and `.dsh-scratch/pillar29-raw/`. **Reopen only if a future MTP-capable
+  8-9B model lands.**
+* **Priority order until further notice:** GTD end-to-end -> Pillar 24
+  (selection chip) -> Pillar 27 (routines) -> Pillar 17 (code visual docs) ->
+  the rest of the queued work, as much as can reasonably be done.
+
