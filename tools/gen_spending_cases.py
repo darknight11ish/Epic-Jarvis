@@ -116,6 +116,27 @@ def example_tables() -> dict:
         "two_currencies": _table(d / "multi.csv"),
         "one_category": _table(d / "a_signed.csv", category="Food and groceries"),
     }
+    # The subscriptions answer (Pillar 10, the my_spending action
+    # "subscriptions"): every column shape it can carry in one table - a monthly
+    # rise, an annual subscription with no rise, and a double charge (with an
+    # account number that must be hidden). The rise appears on a price that then
+    # REPEATS, which is the 2026-10-17 fix: a rise billed twice must still read
+    # as a rise, so this contract case pins the fixed comparison in both apps.
+    _fresh()
+    subs = _work("Subscriptions", text={"subs.csv": (
+        "Date,Description,Amount\n"
+        "2026-01-05,NETFLIX.COM 4832,-9.99\n"
+        "2026-02-05,NETFLIX.COM 4832,-9.99\n"
+        "2026-03-05,NETFLIX.COM 4832,-12.99\n"
+        "2026-04-05,NETFLIX.COM 4832,-12.99\n"
+        "2025-06-01,SPOTIFY P2E4X7,-59.99\n"
+        "2026-05-27,SPOTIFY P2E4X7,-59.99\n"
+        "2026-04-02,GYM 12345678901,-25.00\n"
+        "2026-04-05,GYM 12345678901,-25.00\n")})
+    _listed(subs)
+    _setup(subs / "subs.csv")
+    out["subscriptions"] = SP.run_tool({"action": "subscriptions", "path": str(subs / "subs.csv")},
+                                       roots=[str(subs)])["_table"]
     _fresh()
     return out
 
