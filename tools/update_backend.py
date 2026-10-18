@@ -39,9 +39,25 @@ WHAT IT DOES, IN ORDER
    with the chosen worker count. `run_suites.py`'s default is 1, so CI is
    untouched.
 4. Records each suite's own time in `<backend>/_jarvis-logs/update-timings.json`
-   so the next update's estimate is measured rather than guessed. The first
-   run has no timings: it shows a RANGE and says, in words, that it is not
-   measured yet.
+   **per pace** - the same suites take different wall time at 22 workers and at
+   1, so a `safe` run is not evidence for `max_speed`. A pace that has not
+   completed a run yet says "unmeasured for this pace" and shows a wide range;
+   the first run of each pace measures it.
+
+THE UPDATE LOCK (exclusive update, one PC)
+
+Before a file is patched, this tool takes `update-in-progress.lock` in the
+folder Jarvis keeps its own data in (`OPENJARVIS_CONFIG_DIR`, then
+`JARVIS_CONFIG_DIR`, then `~/.openjarvis`), holding
+`{pid, started_at, updated_at, pace}`. The suites this update starts are told
+to ignore it (`--ignore-update-lock`); everything else on the PC is not:
+`backend/run_suites.py` refuses immediately while a valid lock is held, and the
+desktop's backend watchdog does not auto-restart the backend while one is (see
+`sidecar.rs`). Validity is: the pid is really running, the heartbeat
+(`updated_at`) is less than 30 minutes old, and the run started less than 3
+hours ago (`N_placeholder` values, the design's). A dead pid is stale at once,
+so a crashed update never keeps the next one out; the heartbeat is refreshed as
+each suite finishes, so a two-hour `safe` run never expires its own lock.
 
 THE SAFE FALLBACK (mandatory)
 
@@ -58,10 +74,13 @@ same way is not a second opinion.
 WHAT IT WRITES, AND WHAT IT DOES NOT
 
 - Writes: the patcher's own `_jarvis-backup-*` folders (by the patcher), its
-  own logs (by the patcher), and `update-timings.json` beside them. Nothing
-  else, nowhere else.
+  own logs (by the patcher), `update-timings.json` beside them, and the
+  `update-in-progress.lock` in the folder Jarvis keeps its own data in (it is
+  removed when the update ends; a crash leaves it to the dead-pid rule).
+  Nothing else, nowhere else.
 - Does NOT write: `scripts/apply-patches.ps1` or any other repository file,
-  the desktop app's settings, or anything in the owner's `~/.openjarvis`.
+  the desktop app's settings, or anything else in the owner's
+  `~/.openjarvis`.
 - Does NOT talk to the network. The only process it starts are PowerShell (the
   patcher) and Python (`run_suites.py`).
 
@@ -165,6 +184,307 @@ class UpdateRefused(Exception):
 
 
 # ---------------------------------------------------------------------------
+#   The update lock - one update at a time, on this PC
+# ---------------------------------------------------------------------------
+#
+# WHY IT EXISTS. An update patches the backend and then runs several hundred
+# suites against it. Two things must not happen at once: a second update (it
+# would patch files the first is proving), and a test run or the desktop's
+# watchdog starting the backend in the middle of it (the watchdog restarted the
+# backend twice during a real 2h8m update, and the restarted process refused the
+# port while the first one still held it).
+#
+# THE FILE. `update-in-progress.lock` in the folder Jarvis keeps its own data
+# in: OPENJARVIS_CONFIG_DIR, then JARVIS_CONFIG_DIR, then `~/.openjarvis` - the
+# same order `jarvis_framework._config_dir`, `backup.rs` and every other reader
+# uses. It holds one JSON object:
+#
+#     {"pid": 12345, "started_at": 1760000000.0,
+#      "updated_at": 1760000300.0, "pace": "responsive"}
+#
+# WHAT MAKES IT VALID. The lock is trusted only while its writer is really
+# running AND it is being kept fresh:
+#   * a DEAD pid is stale immediately - no waiting after a crash;
+#   * otherwise stale when `now - updated_at > LOCK_HEARTBEAT_SECONDS` (the
+#     writer refreshes it as each suite finishes), or when
+#     `now - started_at > LOCK_CEILING_SECONDS` - the hard ceiling that bounds a
+#     recycled PID number.
+# It is advisory, and it says so: a lock that cannot be written or read is
+# reported, never enforced by pretending.
+LOCK_NAME = "update-in-progress.lock"
+#: Stale when no suite has finished for this long. `N_placeholder` (design
+#: section: 30 minutes), calibrated against a real `safe` run later.
+LOCK_HEARTBEAT_SECONDS = 1800.0
+#: Stale when the run started longer ago than this, whatever the heartbeat
+#: says. `N_placeholder` (3 hours), a ceiling above the longest measured run.
+LOCK_CEILING_SECONDS = 10800.0
+#: The bypass for the update's OWN child suite run (its suites are supposed to
+#: run while the lock is held - they are what the lock protects).
+LOCK_BYPASS_ENV = "JARVIS_INSIDE_PATCHER"
+LOCK_BYPASS_FLAG = "--ignore-update-lock"
+
+
+def settings_dir() -> Path:
+    """The folder Jarvis keeps its own data in - the repository's real rule.
+
+    `OPENJARVIS_CONFIG_DIR`, then `JARVIS_CONFIG_DIR`, then `~/.openjarvis`.
+    The lock lives here, not in the clone or the backend folder: it is about
+    this PC, and the desktop app, the update tool and `run_suites.py` all have
+    to find the same file.
+    """
+    for name in ("OPENJARVIS_CONFIG_DIR", "JARVIS_CONFIG_DIR"):
+        value = os.environ.get(name)
+        if value:
+            return Path(os.path.expanduser(value))
+    return Path(os.path.expanduser("~")) / ".openjarvis"
+
+
+def lock_path(settings=None) -> Path:
+    """The lock file's path: `settings` when a caller names one (the tests),
+    else the folder rule above."""
+    return (Path(settings) if settings else settings_dir()) / LOCK_NAME
+
+
+def pid_alive(pid) -> bool:
+    """Is `pid` a running process on THIS machine? Never raises.
+
+    Windows answers through OpenProcess/GetExitCodeProcess rather than
+    `os.kill(pid, 0)`: on Windows `os.kill` is not an existence probe - it ends
+    processes - and the wrong signal here would kill the update it is checking.
+    POSIX uses `kill(pid, 0)`, the documented existence probe.
+    """
+    try:
+        pid = int(pid)
+    except (TypeError, ValueError):
+        return False
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        try:
+            import ctypes
+            from ctypes import wintypes
+            kernel32 = ctypes.windll.kernel32
+            kernel32.OpenProcess.restype = wintypes.HANDLE
+            kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL,
+                                             wintypes.DWORD]
+            kernel32.GetExitCodeProcess.restype = wintypes.BOOL
+            kernel32.GetExitCodeProcess.argtypes = [wintypes.HANDLE,
+                                                    ctypes.POINTER(wintypes.DWORD)]
+            kernel32.CloseHandle.restype = wintypes.BOOL
+            kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+            # PROCESS_QUERY_LIMITED_INFORMATION (0x1000) is enough to ask about
+            # the process; SYNCHRONIZE (0x00100000) is kept because it was the
+            # pair the design named. A pid that has ended gives no handle.
+            handle = kernel32.OpenProcess(0x1000 | 0x00100000, False, pid)
+            if not handle:
+                return False
+            try:
+                code = wintypes.DWORD()
+                if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                    return True        # it exists; we just cannot read its code
+                return code.value == 259      # STILL_ACTIVE
+            finally:
+                kernel32.CloseHandle(handle)
+        except Exception:                  # noqa: BLE001 - never a crash
+            return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True                        # it exists, we cannot signal it
+    except OSError:
+        return False
+
+
+def _lock_blank(path: Path) -> dict:
+    return {"path": str(path), "present": False, "valid": False, "stale": False,
+            "pid": None, "started_at": None, "updated_at": None,
+            "pace": "", "why": "no backend update is running"}
+
+
+def _lock_words(time_value) -> str:
+    try:
+        return time.strftime("%Y-%m-%d %H:%M", time.localtime(float(time_value)))
+    except (TypeError, ValueError, OSError):
+        return "an unreadable time"
+
+
+def lock_words(lock: dict) -> str:
+    """The plain sentence naming a HELD lock: pid, pace and when it started."""
+    pace = str((lock or {}).get("pace") or "")
+    if pace in MODES:
+        pace = f"{pace} ({MODES[pace]['label']})"
+    return (f"A Jarvis backend update is already running (pid "
+            f"{(lock or {}).get('pid')}, pace {pace or 'unknown'}, started "
+            f"{_lock_words((lock or {}).get('started_at'))}).")
+
+
+def lock_refusal_words(lock: dict) -> str:
+    """The same sentence, plus what the reader can do about it."""
+    return (lock_words(lock)
+            + " Wait for it to finish. Pass `--ignore-update-lock` (or set "
+              f"{LOCK_BYPASS_ENV}=1) only when this run is that update's own "
+              "suite phase.")
+
+
+def read_lock(path=None, *, now=None, alive=None) -> dict:
+    """The lock's state, read without ever raising.
+
+    Returns a dict that always answers `present`, `valid`, `stale` and *why*.
+    A missing file, a file full of binary junk, half a JSON object or a
+    directory at that path are all "no valid lock" - never an exception on a
+    path the desktop's watchdog and the test runner both read.
+    """
+    target = Path(path) if path is not None else lock_path()
+    state = _lock_blank(target)
+    try:
+        # Bytes, then a replacing decode: a lock file that holds binary junk is
+        # "unreadable", which is a stale lock - not a Unicode exception on a
+        # file the desktop's watchdog also reads.
+        raw = target.read_bytes().decode("utf-8", "replace")
+    except OSError:
+        return state
+    state["present"] = True
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        state.update(stale=True, why="the update lock file is unreadable, "
+                                      "so it is treated as stale")
+        return state
+    if not isinstance(data, dict):
+        state.update(stale=True, why="the update lock file is unreadable, "
+                                      "so it is treated as stale")
+        return state
+    pid = data.get("pid")
+    started = data.get("started_at")
+    updated = data.get("updated_at")
+    pace = data.get("pace")
+    numbers_ok = (
+        isinstance(pid, int) and not isinstance(pid, bool) and pid > 0
+        and isinstance(started, (int, float)) and not isinstance(started, bool)
+        and isinstance(updated, (int, float)) and not isinstance(updated, bool)
+        and isinstance(pace, str)
+    )
+    if not numbers_ok:
+        state.update(pid=pid if isinstance(pid, int) and not isinstance(pid, bool)
+                     else None,
+                     stale=True,
+                     why="the update lock file is missing its pid, times or pace, "
+                         "so it is treated as stale")
+        return state
+    state.update(pid=int(pid), started_at=float(started),
+                 updated_at=float(updated), pace=pace)
+    now = time.time() if now is None else float(now)
+    check_alive = alive if callable(alive) else pid_alive
+    try:
+        running = bool(check_alive(int(pid)))
+    except Exception:                      # noqa: BLE001 - never a crash
+        running = False
+    if not running:
+        state.update(stale=True, why=f"the update process (pid {pid}) is no longer "
+                                      "running, so the lock is stale")
+        return state
+    if now - float(updated) > LOCK_HEARTBEAT_SECONDS:
+        minutes = int(LOCK_HEARTBEAT_SECONDS // 60)
+        state.update(stale=True, why=f"the update has not updated its lock for over "
+                                      f"{minutes} minutes, so it is treated as stale")
+        return state
+    if now - float(started) > LOCK_CEILING_SECONDS:
+        hours = int(LOCK_CEILING_SECONDS // 3600)
+        state.update(stale=True, why=f"the update started over {hours} hours ago, "
+                                      f"so the lock is treated as stale (the pid may "
+                                      "have been reused)")
+        return state
+    state.update(valid=True, why="")
+    return state
+
+
+def lock_held(path=None, *, now=None, alive=None) -> bool:
+    """True while a valid update lock is held. The one question every reader asks."""
+    return bool(read_lock(path, now=now, alive=alive).get("valid"))
+
+
+def _write_lock(target: Path, data: dict) -> bool:
+    """Write the lock atomically. False when it cannot be written (never raises)."""
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temp = target.with_name(target.name + ".tmp")
+        temp.write_text(json.dumps(data, indent=1, sort_keys=True) + "\n",
+                        encoding="utf-8")
+        os.replace(temp, target)
+        return True
+    except OSError:
+        return False
+
+
+def acquire_lock(pace: str, *, path=None, now=None, pid=None, alive=None) -> dict:
+    """Take the lock for this update, or refuse when a live one is held.
+
+    `{"ok": True, "lock": ...}` on success; `UpdateRefused("update_running",
+    ...)` when another valid lock is held. A STALE lock (dead pid, silent
+    heartbeat, ceiling passed) is replaced without ceremony - a crashed patcher
+    must not keep the next update out. If the file cannot be written the update
+    still runs, with `ok` False and `why` saying the lock is NOT protecting it:
+    a lock nobody enforced is said, never pretended.
+    """
+    target = Path(path) if path is not None else lock_path()
+    now = time.time() if now is None else float(now)
+    current = read_lock(target, now=now, alive=alive)
+    if current["valid"]:
+        raise UpdateRefused("update_running", lock_refusal_words(current))
+    owner = os.getpid() if pid is None else int(pid)
+    data = {"pid": owner, "started_at": now, "updated_at": now, "pace": str(pace)}
+    if not _write_lock(target, data):
+        return {"ok": False, "lock": current, "pid": owner,
+                "why": f"the update lock could not be written to {target}, so other "
+                       "test runs and the desktop will not know this update is running"}
+    return {"ok": True, "lock": read_lock(target, now=now, alive=alive or pid_alive),
+            "pid": owner, "why": ""}
+
+
+def refresh_lock(*, path=None, now=None, pid=None) -> bool:
+    """Move `updated_at` forward - the heartbeat, called as suites finish.
+
+    False when there is no lock to refresh, when the file cannot be written, or
+    when the lock belongs to another pid (a newer update replaced it, or this
+    process is a stale reader). Never raises, so a heartbeat failure cannot take
+    the update down.
+    """
+    target = Path(path) if path is not None else lock_path()
+    now = time.time() if now is None else float(now)
+    owner = os.getpid() if pid is None else int(pid)
+    state = read_lock(target, now=now)
+    if not state["present"] or state["pid"] is None:
+        return False
+    if int(state["pid"]) != owner:
+        return False
+    data = {"pid": int(state["pid"]), "started_at": state["started_at"],
+            "updated_at": now, "pace": str(state["pace"] or "")}
+    return _write_lock(target, data)
+
+
+def release_lock(*, path=None, pid=None) -> bool:
+    """Remove the lock, but only when this pid owns it. Never raises.
+
+    A crash never reaches this line - that is what the dead-pid rule is for.
+    Removing another update's lock is the one thing this must not do, so the
+    owner is read back first and a mismatch leaves the file alone.
+    """
+    target = Path(path) if path is not None else lock_path()
+    owner = os.getpid() if pid is None else int(pid)
+    state = read_lock(target)
+    if state["present"] and state["pid"] is not None and int(state["pid"]) != owner:
+        return False
+    try:
+        target.unlink()
+        return True
+    except OSError:
+        return False
+
+
+# ---------------------------------------------------------------------------
 #   Modes and workers - pure, and the only place a pace is decided
 # ---------------------------------------------------------------------------
 
@@ -214,18 +534,30 @@ def timings_path_for(backend) -> Path:
     return Path(backend) / LOG_DIR / TIMINGS_NAME
 
 
+def _blank_pace() -> dict:
+    """One pace's own timing record: patch phase, per-suite seconds, run count."""
+    return {"patch_seconds": None, "suites": {}, "runs": 0}
+
+
 def _blank_timings() -> dict:
-    return {"kind": KIND, "version": 1, "patch_seconds": None, "suites": {},
-            "runs": 0}
+    """The v2 timing file: a record PER PACE, because a pace changes the wall
+    time a suite takes and a `safe` measurement is not a `max_speed` one. A
+    pace with no record says "unmeasured for this pace" (wide range), never
+    inherits another pace's numbers."""
+    return {"kind": KIND, "version": 2,
+            "paces": {mode: _blank_pace() for mode in MODE_ORDER}, "runs": 0}
 
 
 def load_timings(path) -> dict:
-    """The recorded timings, or a blank set. A corrupt file is a blank set.
+    """The recorded timings, per pace, or a blank set. A corrupt file is a
+    blank set.
 
-    Never raises: a broken timing file costs an estimate, not an update. The
-    caller cannot tell whether the file was absent or corrupt on purpose - in
-    both cases nothing has been measured for this PC yet, and the estimate
-    says so.
+    Version 1 (the first merged tool's single shared set) is deliberately NOT
+    read as a measurement: it was recorded at an unknown pace, so it cannot say
+    any named pace is measured. The owner loses one estimate range and gains a
+    claim that is true; the first run of each pace measures it again.
+
+    Never raises: a broken timing file costs an estimate, not an update.
     """
     blank = _blank_timings()
     try:
@@ -233,40 +565,75 @@ def load_timings(path) -> dict:
         data = json.loads(raw)
     except (OSError, ValueError):
         return blank
-    if not isinstance(data, dict):
+    if not isinstance(data, dict) or data.get("version") != 2:
         return blank
     out = _blank_timings()
-    patch = data.get("patch_seconds")
-    if isinstance(patch, (int, float)) and patch >= 0 and not isinstance(patch, bool):
-        out["patch_seconds"] = float(patch)
-    suites = data.get("suites")
-    if isinstance(suites, dict):
-        for name, seconds in suites.items():
-            if (isinstance(name, str) and isinstance(seconds, (int, float))
-                    and not isinstance(seconds, bool) and seconds >= 0):
-                out["suites"][name] = float(seconds)
+    paces = data.get("paces")
+    if not isinstance(paces, dict):
+        return blank
+    for mode in MODE_ORDER:
+        got = paces.get(mode)
+        if not isinstance(got, dict):
+            continue
+        pace = out["paces"][mode]
+        patch = got.get("patch_seconds")
+        if isinstance(patch, (int, float)) and patch >= 0 and not isinstance(patch, bool):
+            pace["patch_seconds"] = float(patch)
+        suites = got.get("suites")
+        if isinstance(suites, dict):
+            for name, seconds in suites.items():
+                if (isinstance(name, str) and isinstance(seconds, (int, float))
+                        and not isinstance(seconds, bool) and seconds >= 0):
+                    pace["suites"][name] = float(seconds)
+        runs = got.get("runs")
+        if isinstance(runs, int) and not isinstance(runs, bool) and runs >= 0:
+            pace["runs"] = runs
     runs = data.get("runs")
     if isinstance(runs, int) and not isinstance(runs, bool) and runs >= 0:
         out["runs"] = runs
     return out
 
 
-def save_timings(path, *, patch_seconds=None, durations=None) -> dict:
-    """Merge this run's times into the recorded set, atomically.
+def pace_timings(timings: dict, mode: str) -> dict:
+    """One pace's records, in the shape `estimate`/`live_eta` take.
 
-    Returns the stored set. **Never raises into the update**: a timing file
-    that cannot be written must not fail the update it was measuring - it only
-    costs the next estimate. The file is written beside itself and moved into
-    place, so a crash mid-write leaves the previous times intact rather than
-    a half file.
+    This is the only bridge between the file's per-pace structure and the maths:
+    every caller that asks "what would this pace take?" gets its own pace's
+    numbers, so `max_speed` cannot report a `safe` measurement as its own.
+    """
+    paces = (timings or {}).get("paces")
+    got = (paces or {}).get(mode) if isinstance(paces, dict) else None
+    if not isinstance(got, dict):
+        return _blank_pace()
+    suites = got.get("suites")
+    return {"patch_seconds": got.get("patch_seconds"),
+            "suites": dict(suites) if isinstance(suites, dict) else {},
+            "runs": int(got.get("runs") or 0)}
+
+
+def save_timings(path, *, mode: str, patch_seconds=None, durations=None) -> dict:
+    """Merge this run's times into the records FOR ITS PACE, atomically.
+
+    `mode` is the pace that actually ran (the safe fallback records under
+    `safe`, because that is the pass the numbers came from). The other paces'
+    records are left exactly as they were.
+
+    Returns the stored set. **Never raises into the update**: a timing file that
+    cannot be written must not fail the update it was measuring - it only costs
+    the next estimate. The file is written beside itself and moved into place,
+    so a crash mid-write leaves the previous times intact rather than a half
+    file.
     """
     path = Path(path)
     stored = load_timings(path)
+    mode = mode if mode in MODES else DEFAULT_MODE
+    pace = stored["paces"][mode]
     if isinstance(patch_seconds, (int, float)) and not isinstance(patch_seconds, bool):
-        stored["patch_seconds"] = float(patch_seconds)
+        pace["patch_seconds"] = float(patch_seconds)
     for name, seconds in (durations or {}).items():
         if isinstance(name, str) and isinstance(seconds, (int, float)):
-            stored["suites"][name] = float(seconds)
+            pace["suites"][name] = float(seconds)
+    pace["runs"] = int(pace.get("runs") or 0) + 1
     stored["runs"] = int(stored.get("runs") or 0) + 1
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -392,22 +759,25 @@ def mode_plan(repo, backend, *, timings_path=None, requested=None) -> dict:
 
     One implementation of the maths, called by `--modes-json` (which the
     desktop's status command runs). The card is honest about what it does not
-    know: `measured` is False until this PC has actually timed the suites, and
-    the card shows a range either way.
+    know: each pace's `measured` is False until THAT pace has been timed on this
+    PC (a `safe` measurement is not a `max_speed` one, because the wall time a
+    suite takes changes with the worker count), and the card shows a range
+    either way.
     """
     names = suite_names(repo)
-    timings = load_timings(timings_path or timings_path_for(backend))
+    whole = load_timings(timings_path or timings_path_for(backend))
     rows = []
     for mode in MODE_ORDER:
         spec = mode_spec(mode)
-        row = estimate(mode, names, timings, requested=requested)
+        row = estimate(mode, names, pace_timings(whole, mode), requested=requested)
         row["id"] = mode
         row["label"] = spec["label"]
         row["plain"] = spec["plain"]
         row["recommended"] = bool(spec["recommended"])
         rows.append(row)
     return {"kind": KIND, "version": 1, "modes": rows,
-            "suite_count": len(names), "measured": _measured(timings, names),
+            "suite_count": len(names),
+            "measured": any(bool(row["measured"]) for row in rows),
             "default": DEFAULT_MODE}
 
 
@@ -509,9 +879,14 @@ def suites_command(repo, workers: int) -> list:
     """run_suites.py with ONLY the worker count changed. Default stays 1.
 
     A mode that changed which suites run would not be a pace, it would be a
-    different update; the list is the same glob for all three."""
+    different update; the list is the same glob for all three.
+
+    `--ignore-update-lock` is passed because this IS the update's own suite
+    phase: the update holds the lock (see `acquire_lock`), and its own checks
+    are exactly what the lock exists to protect. Without it, run_suites.py
+    would refuse the very run that holds the lock."""
     return [sys.executable, "-B", str(Path(repo) / SUITES_REL),
-            "--jobs", str(int(workers))]
+            "--jobs", str(int(workers)), LOCK_BYPASS_FLAG]
 
 
 def preflight(repo, backend) -> None:
@@ -893,13 +1268,23 @@ def _fallback_words(restore: dict) -> str:
 
 
 def update(repo, backend, mode: str, *, requested_workers=None, timings_path=None,
-           say=print, run=_run, clock=time.time) -> int:
+           say=print, run=_run, clock=time.time, lock_file=None) -> int:
     """Run one backend update at `mode`'s pace; return 0 only when it proved it.
 
-    The whole state machine is here so the fallback can be driven end to end
-    with a fake runner: patch, verify, test; if a quick mode cannot prove
-    itself, restore the newest backup and do the same three steps with one
-    worker, and judge the update by that second pass.
+    The whole state machine is in `_update_locked`, so the fallback can be
+    driven end to end with a fake runner: patch, verify, test; if a quick mode
+    cannot prove itself, restore the newest backup and do the same three steps
+    with one worker, and judge the update by that second pass.
+
+    THE EXCLUSIVE LOCK is taken HERE, before a file is patched and before the
+    suites start, and released on every way out (the `finally`); the suites this
+    very update starts are told about it (`suites_command` passes
+    `--ignore-update-lock`), everything else on the PC is not. A live lock held
+    by another update is a refusal (`UpdateRefused("update_running", ...)`)
+    naming its pid, pace and start time. `lock_file` overrides the path; when
+    only `timings_path` is given (a caller naming its own state folder, which is
+    how the tests keep the owner's `~/.openjarvis` untouched), the lock sits
+    BESIDE that file rather than in the shared settings folder.
 
     Exit codes: 0 = no problems (proven or, with skips, unproven - the words
     say which), 1 = problems/ambiguous/failed. The desktop's `read_verdict`
@@ -907,12 +1292,46 @@ def update(repo, backend, mode: str, *, requested_workers=None, timings_path=Non
     """
     repo = Path(repo)
     backend = Path(backend)
-    spec = mode_spec(mode)                 # unknown mode: refused here, first
+    mode_spec(mode)                        # unknown mode: refused here, first
     requested_workers = workers_for(mode, requested_workers)
     preflight(repo, backend)
+    if lock_file is not None:
+        target = Path(lock_file)
+    elif timings_path is not None:
+        target = Path(timings_path).with_name(LOCK_NAME)
+    else:
+        target = lock_path()
+    taken = acquire_lock(mode, path=target, now=clock())
+    if taken.get("ok"):
+        say(f"Update lock held: {target} (pid {taken['pid']}, pace {mode}). "
+            "Other test runs will wait while this update is running.")
+    else:
+        say(f"NOTE  {taken.get('why') or 'the update lock is not held'}.")
+    try:
+        return _update_locked(repo, backend, mode,
+                              requested_workers=requested_workers,
+                              timings_path=timings_path, say=say, run=run,
+                              clock=clock,
+                              lock_file=target if taken.get("ok") else None)
+    finally:
+        if taken.get("ok"):
+            released = release_lock(path=target)
+            if not released:
+                say("NOTE  the update lock could not be removed. A later run will "
+                    "treat it as stale once this update's process is gone.")
+
+
+def _update_locked(repo, backend, mode: str, *, requested_workers,
+                   timings_path=None, say=print, run=_run, clock=time.time,
+                   lock_file=None) -> int:
+    """The update itself. The lock is already held by `update()`; `lock_file`
+    is refreshed as suites finish (the heartbeat) and released by the caller."""
+    repo = Path(repo)
+    backend = Path(backend)
+    spec = mode_spec(mode)                 # unknown mode: refused here, first
     names = suite_names(repo)
     path = Path(timings_path) if timings_path is not None else timings_path_for(backend)
-    timings = load_timings(path)
+    timings = pace_timings(load_timings(path), mode)
     plan = estimate(mode, names, timings, requested=requested_workers)
     first_patch, first_suite, first_share = plan_split(timings, names, requested_workers)
     emit_event(say, "reading", mode=mode, workers=requested_workers,
@@ -939,7 +1358,7 @@ def update(repo, backend, mode: str, *, requested_workers=None, timings_path=Non
     while True:
         attempt_number += 1
         workers = workers_for(attempt_mode, requested_workers)
-        attempt_timings = load_timings(path)
+        attempt_timings = pace_timings(load_timings(path), attempt_mode)
         plan = estimate(attempt_mode, names, attempt_timings)
         patch_est, suite_est, this_share = plan_split(attempt_timings, names, workers)
         weights = suite_weights(names, attempt_timings)
@@ -1003,6 +1422,10 @@ def update(repo, backend, mode: str, *, requested_workers=None, timings_path=Non
 
         exit_code = _call(run, patcher_command(repo, backend), repo, on_patch)
         patch_seconds = max(0.0, clock() - patch_start)
+        if lock_file is not None:
+            # The patch phase can be minutes long; put a fresh heartbeat down
+            # before the suite phase so a slow patch never looks abandoned.
+            refresh_lock(path=lock_file, now=clock())
         verdict = patcher_result(exit_code, patch_lines)
         if not verdict["ok"]:
             came_back = None
@@ -1064,6 +1487,11 @@ def update(repo, backend, mode: str, *, requested_workers=None, timings_path=Non
                 name, seconds = got
                 durations[name] = seconds
                 done_names.append(name)
+                if lock_file is not None:
+                    # THE HEARTBEAT: every finished suite says this update is
+                    # still alive, so a 2-hour safe run never expires its own
+                    # lock at minute 31 (the design's one crucial refinement).
+                    refresh_lock(path=lock_file, now=clock())
                 weight_done[0] += weights.get(name, PLACEHOLDER_SUITE_SECONDS)
                 eta = live_eta(attempt_mode, names, attempt_timings, done_names,
                                durations, requested=requested_workers)
@@ -1098,7 +1526,7 @@ def update(repo, backend, mode: str, *, requested_workers=None, timings_path=Non
                 say(_fallback_words(restore))
                 attempt_mode = "safe"
                 continue
-            save_timings(path, patch_seconds=patch_seconds, durations=durations)
+            save_timings(path, mode=attempt_mode, patch_seconds=patch_seconds, durations=durations)
             emit_progress("done", verdict="problems", fallback=fell_back,
                           failed=len(result["failed_names"]),
                           ambiguous=result["ambiguous"],
@@ -1109,7 +1537,7 @@ def update(repo, backend, mode: str, *, requested_workers=None, timings_path=Non
             return 1
 
         # ---- it proved itself -------------------------------------------
-        save_timings(path, patch_seconds=patch_seconds, durations=durations)
+        save_timings(path, mode=attempt_mode, patch_seconds=patch_seconds, durations=durations)
         unproven = result["unproven"]
         fallback_note = ("The quick check hit a problem, so it was re-run the safe "
                          "way; this result is that safe pass." if fell_back else None)

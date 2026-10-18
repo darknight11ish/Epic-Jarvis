@@ -1868,7 +1868,7 @@ function etaRangeWords(low, high, measured) {
     : durationWords(hasLow ? low : high);
   const source = measured === true
     ? "from this PC's own times"
-    : measured === false ? "first run - not measured yet" : "";
+    : measured === false ? "not measured for this pace yet" : "";
   return `about ${span}${source ? ` · ${source}` : ""}`;
 }
 

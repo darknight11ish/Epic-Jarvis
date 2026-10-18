@@ -46,7 +46,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_store::StoreExt;
 
 use crate::commands;
@@ -106,6 +106,157 @@ pub struct ModePlan {
     /// [`DEFAULT_MODE`] as the tool names it.
     pub default: String,
     pub measured: bool,
+}
+
+// ---------------------------------------------------------------------------
+//   The update lock - one update at a time, read the same way everywhere
+// ---------------------------------------------------------------------------
+//
+// The Python tool (`tools/update_backend.py`) writes this file while it
+// patches and checks the backend; `backend/run_suites.py` refuses to start a
+// sweep beside it; and THIS module's answer is used by the watchdog in
+// `sidecar.rs` so the desktop does not restart the backend the update just
+// stopped. The rules and the format are the Python lock section's, word for
+// word: `{pid, started_at, updated_at, pace}`, a DEAD pid is stale at once,
+// otherwise stale when the heartbeat is over 30 minutes old or the run started
+// over 3 hours ago (`N_placeholder` values from the design). The file lives in
+// the folder Jarvis keeps its own data in - the same directory rule
+// `jarvis_framework._config_dir`, `tools/update_backend.py` and `backup.rs` use.
+pub const LOCK_NAME: &str = "update-in-progress.lock";
+/// Stale when no suite has finished for this long (`N_placeholder`).
+pub const LOCK_HEARTBEAT_SECONDS: f64 = 1800.0;
+/// Stale when the run started longer ago than this, whatever the heartbeat
+/// says - a ceiling above the longest measured run (`N_placeholder`).
+pub const LOCK_CEILING_SECONDS: f64 = 10_800.0;
+
+/// The lock file's contents, once it parses. Only the four keys the design
+/// names; an unknown key is ignored, a missing or wrongly typed one is not a
+/// lock at all.
+#[derive(Debug, Clone, PartialEq)]
+pub struct UpdateLock {
+    pub pid: u32,
+    pub started_at: f64,
+    pub updated_at: f64,
+    pub pace: String,
+}
+
+#[derive(Deserialize)]
+struct LockJson {
+    pid: u32,
+    started_at: f64,
+    updated_at: f64,
+    pace: String,
+}
+
+/// One lock file's text as a lock, or `None` when it is not one.
+///
+/// Pure, and deliberately strict: a half-written file, a wrong type, a zero
+/// pid or a pace that is not one of the three known words is NOT a lock - it is
+/// stale garbage, and the caller treats it as no lock. Never panics.
+pub fn parse_update_lock(text: &str) -> Option<UpdateLock> {
+    let got: LockJson = serde_json::from_str(text).ok()?;
+    if got.pid == 0 || !got.started_at.is_finite() || !got.updated_at.is_finite() {
+        return None;
+    }
+    if !["max_speed", "responsive", "safe"].contains(&got.pace.as_str()) {
+        return None;
+    }
+    Some(UpdateLock {
+        pid: got.pid,
+        started_at: got.started_at,
+        updated_at: got.updated_at,
+        pace: got.pace,
+    })
+}
+
+/// Is this lock valid right now? The three rules, in the design's order.
+///
+/// `pid_alive` is passed in (not read here) so the rule is a test: `now` and
+/// liveness are the two things that change, and everything else is arithmetic.
+pub fn update_lock_is_valid(lock: &UpdateLock, now: f64, pid_alive: bool) -> bool {
+    if !pid_alive {
+        return false;
+    }
+    if now - lock.updated_at > LOCK_HEARTBEAT_SECONDS {
+        return false;
+    }
+    if now - lock.started_at > LOCK_CEILING_SECONDS {
+        return false;
+    }
+    true
+}
+
+/// Is `pid` a running process on this machine?
+///
+/// Windows asks the kernel with OpenProcess/GetExitCodeProcess rather than
+/// `tasklist` (no subprocess, no parsing); a process that has ended gives no
+/// handle. Unix uses `kill(pid, 0)`, the documented existence probe.
+#[cfg(windows)]
+fn pid_is_running(pid: u32) -> bool {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Threading::{
+        GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    /// `STILL_ACTIVE`: the exit code a process that has not ended reports.
+    const STILL_ACTIVE: u32 = 259;
+    if pid == 0 {
+        return false;
+    }
+    // SAFETY: OpenProcess takes no pointer; the handle is checked before use
+    // and closed exactly once on every path after it is non-null.
+    unsafe {
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if handle.is_null() {
+            return false;
+        }
+        let mut code: u32 = 0;
+        let ok = GetExitCodeProcess(handle, &mut code) != 0;
+        CloseHandle(handle);
+        ok && code == STILL_ACTIVE
+    }
+}
+
+#[cfg(not(windows))]
+fn pid_is_running(pid: u32) -> bool {
+    if pid == 0 {
+        return false;
+    }
+    // SAFETY: signal 0 performs the existence check and sends nothing.
+    unsafe { libc::kill(pid as i32, 0) == 0 }
+}
+
+/// The folder Jarvis keeps its own data in: `OPENJARVIS_CONFIG_DIR`, then
+/// `JARVIS_CONFIG_DIR`, then `~/.openjarvis` - the same order the backend and
+/// the Python tool use.
+fn lock_dir(app: &AppHandle) -> Option<PathBuf> {
+    for name in ["OPENJARVIS_CONFIG_DIR", "JARVIS_CONFIG_DIR"] {
+        if let Some(explicit) = std::env::var_os(name) {
+            return Some(PathBuf::from(explicit));
+        }
+    }
+    app.path()
+        .home_dir()
+        .ok()
+        .map(|home| home.join(".openjarvis"))
+}
+
+/// The lock file's path, when this PC has a data folder it can name.
+pub fn update_lock_path(app: &AppHandle) -> Option<PathBuf> {
+    lock_dir(app).map(|dir| dir.join(LOCK_NAME))
+}
+
+/// The VALID update lock held right now, or `None`. Never panics and never
+/// raises: a missing file, junk in it, a dead pid and a silent heartbeat are
+/// all "no update is running".
+pub fn held_update_lock(app: &AppHandle) -> Option<UpdateLock> {
+    let path = update_lock_path(app)?;
+    let text = std::fs::read_to_string(path).ok()?;
+    let lock = parse_update_lock(&text)?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_secs_f64();
+    update_lock_is_valid(&lock, now, pid_is_running(lock.pid)).then_some(lock)
 }
 
 /// How long the patch run may take before it is treated as wedged.
@@ -940,8 +1091,10 @@ pub fn set_update_folders(
 #[cfg(test)]
 mod tests {
     use super::{
-        backend_folder, folder_of_hud, known_mode, parse_mode_plan, read_verdict, refuse, tail_of,
-        tool_args, unknown_mode_words, ModeInfo, Verdict, BACKEND_ENV, HUD,
+        backend_folder, folder_of_hud, known_mode, parse_mode_plan, parse_update_lock,
+        read_verdict, refuse, tail_of, tool_args, unknown_mode_words, update_lock_is_valid,
+        ModeInfo, UpdateLock, Verdict, BACKEND_ENV, HUD, LOCK_CEILING_SECONDS,
+        LOCK_HEARTBEAT_SECONDS,
     };
 
     fn args(items: &[&str]) -> Vec<String> {
@@ -1236,6 +1389,70 @@ mod tests {
             "Nothing was changed",
         ] {
             assert!(words.contains(expected), "{expected} missing from {words}");
+        }
+    }
+
+    // -- the update lock's pure rules (the sidecar watchdog reads them) -----
+
+    fn a_lock(pid: u32, started_at: f64, updated_at: f64) -> UpdateLock {
+        UpdateLock {
+            pid,
+            started_at,
+            updated_at,
+            pace: "responsive".to_string(),
+        }
+    }
+
+    #[test]
+    fn a_dead_pid_ends_the_lock_immediately() {
+        let got = a_lock(4321, 1000.0, 1000.0);
+        assert!(!update_lock_is_valid(&got, 1000.0, false));
+        assert!(update_lock_is_valid(&got, 1000.0, true));
+    }
+
+    #[test]
+    fn the_heartbeat_expires_after_thirty_minutes() {
+        let got = a_lock(7, 1000.0, 1000.0);
+        assert!(update_lock_is_valid(
+            &got,
+            1000.0 + LOCK_HEARTBEAT_SECONDS,
+            true
+        ));
+        assert!(!update_lock_is_valid(
+            &got,
+            1000.0 + LOCK_HEARTBEAT_SECONDS + 0.001,
+            true
+        ));
+        // A heartbeat refreshed past the window is dead again: the window is
+        // about `updated_at`, never about when the run started.
+        assert!(!update_lock_is_valid(&got, 5000.0, true));
+    }
+
+    #[test]
+    fn the_three_hour_ceiling_bounds_a_reused_pid() {
+        let got = a_lock(7, 0.0, LOCK_CEILING_SECONDS);
+        assert!(update_lock_is_valid(&got, LOCK_CEILING_SECONDS, true));
+        assert!(!update_lock_is_valid(
+            &got,
+            LOCK_CEILING_SECONDS + 1.0,
+            true
+        ));
+    }
+
+    #[test]
+    fn only_a_complete_real_lock_parses() {
+        let good = r#"{"pid": 1, "started_at": 1.0, "updated_at": 2.0, "pace": "safe"}"#;
+        let lock = parse_update_lock(good).expect("the real shape parses");
+        assert_eq!((lock.pid, lock.pace.as_str()), (1, "safe"));
+        for bad in [
+            "",
+            "{}",
+            "not json",
+            r#"{"pid": 0, "started_at": 1.0, "updated_at": 2.0, "pace": "safe"}"#,
+            r#"{"pid": 1, "started_at": 1.0, "updated_at": 2.0, "pace": "turbo"}"#,
+            r#"{"pid": "x", "started_at": 1.0, "updated_at": 2.0, "pace": "safe"}"#,
+        ] {
+            assert!(parse_update_lock(bad).is_none(), "parsed junk: {bad}");
         }
     }
 }

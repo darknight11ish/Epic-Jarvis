@@ -50,9 +50,12 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
+import time
 import traceback
+from contextlib import contextmanager
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -268,7 +271,8 @@ def t_every_mode_runs_the_same_checks():
     patchers = {tuple(U.patcher_command(repo, backend)) for _ in U.MODE_ORDER}
     check("all three modes run the SAME patcher command", len(patchers) == 1,
           patchers)
-    plans = [U.estimate(mode, names, U.load_timings(root / "none.json"))
+    plans = [U.estimate(mode, names,
+                        U.pace_timings(U.load_timings(root / "none.json"), mode))
              for mode in U.MODE_ORDER]
     check("all three modes plan over the same suite count",
           {plan["suite_count"] for plan in plans} == {3},
@@ -276,11 +280,13 @@ def t_every_mode_runs_the_same_checks():
     listed = []
     for mode in U.MODE_ORDER:
         cmd = U.suites_command(repo, U.workers_for(mode))
-        listed.append((cmd[:-2], cmd[-2], cmd[-1]))
-    check("the run_suites command differs ONLY in the worker count",
-          len({tuple(prefix) for prefix, _flag, _jobs in listed}) == 1,
+        listed.append((cmd[:-2], cmd[-1], cmd[-2]))
+    check("the run_suites command differs ONLY in the worker count, and carries "
+          "the update's own lock bypass",
+          len({tuple(prefix) for prefix, _flag, _jobs in listed}) == 1
+          and all(_flag == U.LOCK_BYPASS_FLAG for _prefix, _flag, _jobs in listed),
           listed)
-    check("... and the editor is told the worker count, one per mode",
+    check("... and the updater is told the worker count, one per mode",
           sorted(int(jobs) for _prefix, _flag, jobs in listed) == [1, 14, 22],
           listed)
 
@@ -311,7 +317,8 @@ def t_the_first_run_eta_is_a_range_labelled_not_measured():
     root = _make_root()
     repo, backend = _make_repo(root)
     names = U.suite_names(repo)
-    timings = U.load_timings(root / "never-written.json")
+    timings = U.pace_timings(U.load_timings(root / "never-written.json"),
+                             "responsive")
     plan = U.estimate("responsive", names, timings)
     check("with no recorded times the estimate says it is not measured",
           plan["measured"] is False, plan)
@@ -335,13 +342,15 @@ def t_recorded_timings_make_the_estimate_measured_and_narrower():
     repo, backend = _make_repo(root)
     names = U.suite_names(repo)
     path = root / "timings.json"
-    blank = U.load_timings(path)
+    blank = U.pace_timings(U.load_timings(path), "responsive")
     before = U.estimate("responsive", names, blank)
-    stored = U.save_timings(path, patch_seconds=3.0,
+    stored = U.save_timings(path, mode="responsive", patch_seconds=3.0,
                             durations={name: 1.0 for name in names})
-    after = U.estimate("responsive", names, U.load_timings(path))
-    check("recorded per-suite times make the estimate measured",
-          after["measured"] is True and stored["runs"] == 1, after)
+    after = U.estimate("responsive", names,
+                       U.pace_timings(U.load_timings(path), "responsive"))
+    check("one pace's recorded per-suite times make THAT pace's estimate measured",
+          after["measured"] is True
+          and stored["paces"]["responsive"]["runs"] == 1, after)
     check("... and its range is narrower than the first-run guess",
           (after["eta_high_seconds"] - after["eta_low_seconds"])
           < (before["eta_high_seconds"] - before["eta_low_seconds"]),
@@ -350,8 +359,58 @@ def t_recorded_timings_make_the_estimate_measured_and_narrower():
           after["eta_seconds"] == int(round(3.0 + 3.0 * (1 / 14 + U.PARALLEL_OVERHEAD))),
           after)
     table = U.mode_plan(repo, backend, timings_path=path)
-    check("... and the choice-card table now says measured on every pace",
-          all(row["measured"] is True for row in table["modes"]),
+    measured = {row["id"]: row["measured"] for row in table["modes"]}
+    check("... and the choice-card table says measured for that pace only - the "
+          "other two are still unmeasured for their own pace",
+          measured == {"max_speed": False, "responsive": True, "safe": False},
+          measured)
+
+
+def t_each_pace_measures_itself_only():
+    """A pace changes the wall time, so a `safe` run does not measure `responsive`."""
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    names = U.suite_names(repo)
+    path = root / "timings.json"
+
+    U.save_timings(path, mode="safe", patch_seconds=20.0,
+                   durations={name: 5.0 for name in names})
+    table = U.mode_plan(repo, backend, timings_path=path)
+    rows = {row["id"]: row for row in table["modes"]}
+    check("after one safe run, only the safe pace is measured",
+          rows["safe"]["measured"] is True
+          and rows["responsive"]["measured"] is False
+          and rows["max_speed"]["measured"] is False,
+          {mode: row["measured"] for mode, row in rows.items()})
+    check("... and an unmeasured pace still shows the WIDE first-run range",
+          rows["responsive"]["eta_high_seconds"]
+          >= 2 * rows["responsive"]["eta_low_seconds"],
+          rows["responsive"])
+
+    U.save_timings(path, mode="responsive", patch_seconds=2.0,
+                   durations={name: 1.0 for name in names})
+    table = U.mode_plan(repo, backend, timings_path=path)
+    rows = {row["id"]: row for row in table["modes"]}
+    check("a second pace measures only itself; the first keeps its own record",
+          rows["responsive"]["measured"] is True
+          and rows["safe"]["measured"] is True
+          and rows["max_speed"]["measured"] is False, rows)
+    whole = U.load_timings(path)
+    check("... and the file holds a separate record per pace, with its own runs",
+          whole["paces"]["safe"]["runs"] == 1
+          and whole["paces"]["responsive"]["runs"] == 1
+          and whole["paces"]["max_speed"]["runs"] == 0
+          and whole["runs"] == 2, whole["paces"])
+
+    legacy = root / "old-timings.json"
+    legacy.write_text(json.dumps({"kind": U.KIND, "version": 1,
+                                  "patch_seconds": 9.0,
+                                  "suites": {name: 3.0 for name in names},
+                                  "runs": 4}), encoding="utf-8")
+    table = U.mode_plan(repo, backend, timings_path=legacy)
+    check("the first merged tool's shared v1 timings are NOT claimed as a "
+          "measurement for any pace (it was recorded at an unknown pace)",
+          all(row["measured"] is False for row in table["modes"]),
           [(row["id"], row["measured"]) for row in table["modes"]])
 
 
@@ -359,9 +418,12 @@ def t_eta_is_monotonic_across_the_three_paces():
     root = _make_root()
     repo, backend = _make_repo(root)
     names = U.suite_names(repo)
-    timings = U.save_timings(root / "timings.json", patch_seconds=30.0,
-                             durations={name: 100.0 for name in names})
-    rows = {mode: U.estimate(mode, names, timings) for mode in U.MODE_ORDER}
+    for mode in U.MODE_ORDER:
+        U.save_timings(root / "timings.json", mode=mode, patch_seconds=30.0,
+                       durations={name: 100.0 for name in names})
+    whole = U.load_timings(root / "timings.json")
+    rows = {mode: U.estimate(mode, names, U.pace_timings(whole, mode))
+            for mode in U.MODE_ORDER}
     check("the fastest pace has the lowest ETA",
           rows["max_speed"]["eta_seconds"] < rows["responsive"]["eta_seconds"],
           rows)
@@ -416,14 +478,14 @@ def t_the_live_eta_adapts_to_checks_that_are_slower_than_predicted():
 def t_timings_round_trip_and_a_corrupt_file_is_simply_not_measured():
     root = _make_root()
     path = root / "timings.json"
-    U.save_timings(path, patch_seconds=12.5, durations={"a.py": 2.0})
-    first = U.load_timings(path)
-    U.save_timings(path, patch_seconds=None, durations={"b.py": 4.0})
-    second = U.load_timings(path)
-    check("saved times are read back",
+    U.save_timings(path, mode="safe", patch_seconds=12.5, durations={"a.py": 2.0})
+    first = U.pace_timings(U.load_timings(path), "safe")
+    U.save_timings(path, mode="safe", patch_seconds=None, durations={"b.py": 4.0})
+    second = U.pace_timings(U.load_timings(path), "safe")
+    check("saved times are read back for the pace that recorded them",
           first["patch_seconds"] == 12.5 and first["suites"] == {"a.py": 2.0},
           first)
-    check("a second run merges its times instead of replacing them",
+    check("a second run merges its times into that pace instead of replacing them",
           second["patch_seconds"] == 12.5
           and second["suites"] == {"a.py": 2.0, "b.py": 4.0}
           and second["runs"] == 2, second)
@@ -431,9 +493,10 @@ def t_timings_round_trip_and_a_corrupt_file_is_simply_not_measured():
     broken = U.load_timings(path)
     check("a corrupt timings file reads as 'nothing measured', never a crash",
           broken == U._blank_timings(), broken)
-    path.write_text(json.dumps({"patch_seconds": "soon", "suites": {"x": "long"}}),
+    path.write_text(json.dumps({"version": 2, "paces": {
+        "responsive": {"patch_seconds": "soon", "suites": {"x": "long"}}}}),
                     encoding="utf-8")
-    odd = U.load_timings(path)
+    odd = U.pace_timings(U.load_timings(path), "responsive")
     check("the wrong types are ignored rather than used",
           odd["patch_seconds"] is None and odd["suites"] == {}, odd)
 
@@ -442,10 +505,11 @@ def t_a_timings_file_that_cannot_be_written_never_fails_the_update():
     root = _make_root()
     blocker = root / "a-file-where-the-folder-should-be"
     blocker.write_text("not a folder", encoding="utf-8")
-    stored = U.save_timings(blocker / "timings.json", patch_seconds=1.0,
-                            durations={"a.py": 1.0})
+    stored = U.save_timings(blocker / "timings.json", mode="max_speed",
+                            patch_seconds=1.0, durations={"a.py": 1.0})
     check("a timing file that cannot be written is swallowed, not raised",
-          isinstance(stored, dict) and stored["suites"] == {"a.py": 1.0}, stored)
+          isinstance(stored, dict)
+          and stored["paces"]["max_speed"]["suites"] == {"a.py": 1.0}, stored)
 
 
 # --------------------------------------------------------------------------
@@ -672,7 +736,7 @@ def t_a_failed_quick_pass_restores_then_reruns_the_safe_way():
               and "new ETA" in line for line in said),
           [line for line in said if '"phase": "fallback"' in line][:2])
     check("... and the timing file was recorded for next time",
-          U.load_timings(root / "timings.json")["suites"] != {})
+          U.pace_timings(U.load_timings(root / "timings.json"), "safe")["suites"] != {})
     check("... and the live files really are the repository's now",
           U.verify_live_files(repo, backend) == [])
 
@@ -850,16 +914,19 @@ def t_the_update_records_the_measured_times_for_the_next_estimate():
     fake = FakeRun(_staged_handler(repo, backend, suites="ok"))
     U.update(repo, backend, "responsive", run=fake, say=lambda line: None,
              clock=lambda: 0.0, timings_path=path)
-    stored = U.load_timings(path)
-    check("after a proven update the per-suite times are recorded",
+    stored = U.pace_timings(U.load_timings(path), "responsive")
+    check("after a proven update the per-suite times are recorded for its pace",
           stored["suites"] == {"test_a.py": 0.1, "test_b.py": 0.1,
                                "test_c.py": 0.1}, stored)
     check("... and the patch phase time is recorded too",
           stored["patch_seconds"] is not None, stored)
     table = U.mode_plan(repo, backend, timings_path=path)
-    check("... so the next choice card says measured, not guessed",
+    measured = {row["id"]: row["measured"] for row in table["modes"]}
+    check("... so the next choice card says measured for THAT pace, and still "
+          "unmeasured for the two it has not run",
           table["measured"] is True
-          and all(row["measured"] for row in table["modes"]), table["measured"])
+          and measured == {"max_speed": False, "responsive": True, "safe": False},
+          measured)
 
 
 def _events(said):
@@ -931,7 +998,7 @@ def t_the_bar_events_are_monotonic_and_only_the_verdict_reaches_full():
     root = _make_root()
     repo, backend = _make_repo(root)
     path = root / "timings.json"
-    U.save_timings(path, patch_seconds=10.0,
+    U.save_timings(path, mode="responsive", patch_seconds=10.0,
                    durations={"test_a.py": 1.0, "test_b.py": 2.0,
                               "test_c.py": 10.0})
     fake = FakeRun(_staged_handler(repo, backend, suites="ok"))
@@ -985,6 +1052,421 @@ def t_a_fallback_resets_the_bar_only_with_the_second_pass_label():
     done = events[-1]
     check("... and the final verdict is still the only 100%",
           done["phase"] == "done" and done["fraction"] == 1.0, done)
+
+
+# --------------------------------------------------------------------------
+#   The exclusive update lock
+# --------------------------------------------------------------------------
+
+@contextmanager
+def _with_env(updates: dict):
+    """Set/unset environment variables for one block, restoring them after."""
+    saved = {name: os.environ.get(name) for name in updates}
+    try:
+        for name, value in updates.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+        yield
+    finally:
+        for name, value in saved.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+
+def _write_lock_file(path: Path, **over) -> dict:
+    data = {"pid": 4321, "started_at": 1000.0, "updated_at": 1000.0,
+            "pace": "responsive"}
+    data.update(over)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return data
+
+
+def t_the_lock_path_follows_the_real_settings_dir_rule():
+    root = _make_root()
+    one, two = root / "cfg-one", root / "cfg-two"
+    with _with_env({"OPENJARVIS_CONFIG_DIR": str(one),
+                    "JARVIS_CONFIG_DIR": str(two)}):
+        check("OPENJARVIS_CONFIG_DIR wins, as it does everywhere else",
+              U.settings_dir() == one and U.lock_path() == one / U.LOCK_NAME,
+              (U.settings_dir(), U.lock_path()))
+    with _with_env({"OPENJARVIS_CONFIG_DIR": None,
+                    "JARVIS_CONFIG_DIR": str(two)}):
+        check("JARVIS_CONFIG_DIR is the second choice",
+              U.settings_dir() == two and U.lock_path() == two / U.LOCK_NAME,
+              U.lock_path())
+    with _with_env({"OPENJARVIS_CONFIG_DIR": None, "JARVIS_CONFIG_DIR": None}):
+        path = U.lock_path()
+        check("with neither variable the lock is in ~/.openjarvis, never the clone",
+              path.name == U.LOCK_NAME and path.parent.name == ".openjarvis"
+              and not str(path).lower().startswith(str(REPO).lower()),
+              path)
+
+
+def t_a_dead_pid_is_stale_immediately():
+    root = _make_root()
+    path = root / U.LOCK_NAME
+    _write_lock_file(path)
+    dead = U.read_lock(path, now=1000.0, alive=lambda pid: False)
+    check("a lock whose pid is gone is present but NOT valid",
+          dead["present"] is True and dead["valid"] is False, dead)
+    check("... and it is stale at once, not after the heartbeat window",
+          dead["stale"] is True and "no longer running" in dead["why"], dead["why"])
+    check("... and the state still says which pid it was",
+          dead["pid"] == 4321, dead)
+    live = U.read_lock(path, now=1000.0, alive=lambda pid: True)
+    check("the SAME file with a live pid is a valid lock",
+          live["valid"] is True and live["stale"] is False and live["why"] == "",
+          live)
+
+
+def t_the_heartbeat_expires_after_30_minutes():
+    root = _make_root()
+    path = root / U.LOCK_NAME
+    _write_lock_file(path, started_at=1000.0, updated_at=1000.0)
+    check("the design's two windows are the configured ones (30 min / 3 hours)",
+          U.LOCK_HEARTBEAT_SECONDS == 1800.0 and U.LOCK_CEILING_SECONDS == 10800.0,
+          (U.LOCK_HEARTBEAT_SECONDS, U.LOCK_CEILING_SECONDS))
+    at_edge = U.read_lock(path, now=2800.0, alive=lambda pid: True)
+    check("a live pid with a heartbeat exactly 30 minutes old is still valid",
+          at_edge["valid"] is True, at_edge)
+    expired = U.read_lock(path, now=2801.0, alive=lambda pid: True)
+    check("one second past the heartbeat window it is stale",
+          expired["valid"] is False and expired["stale"] is True
+          and ("1800" in expired["why"] or "30 minutes" in expired["why"]),
+          expired)
+
+
+def t_the_three_hour_ceiling_bounds_a_reused_pid():
+    root = _make_root()
+    path = root / U.LOCK_NAME
+    _write_lock_file(path, started_at=0.0, updated_at=10800.0)
+    edge = U.read_lock(path, now=10800.0, alive=lambda pid: True)
+    check("a fresh heartbeat at exactly the 3-hour ceiling is valid",
+          edge["valid"] is True, edge)
+    capped = U.read_lock(path, now=10801.0, alive=lambda pid: True)
+    check("past the ceiling the lock is stale even though its heartbeat is fresh "
+          "(the pid may have been reused)", capped["valid"] is False
+          and "3 hours" in capped["why"], capped)
+
+
+def t_reading_a_lock_never_raises():
+    root = _make_root()
+    missing = U.read_lock(root / "nothing-here.json")
+    check("a missing lock reads as no update, never an error",
+          missing["present"] is False and missing["valid"] is False, missing)
+    folder = root / "a-folder"
+    folder.mkdir()
+    as_folder = U.read_lock(folder)
+    check("a directory where the lock should be reads as no valid lock",
+          as_folder["valid"] is False, as_folder)
+    junk = root / "junk.lock"
+    junk.write_bytes(b"\x00\xff this is not json")
+    check("binary junk in the lock file is stale, not a crash",
+          U.read_lock(junk)["stale"] is True, U.read_lock(junk))
+    for payload in ([1, 2, 3], "just a string", {"pid": "x"},
+                    {"pid": 1, "pace": "responsive"}, {}):
+        path = root / "shape.lock"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        got = U.read_lock(path)
+        check(f"a lock with the wrong shape ({payload!r}) is stale, never raised",
+              got["valid"] is False and got["stale"] is True, got)
+    bad_alive = root / "alive.lock"
+    _write_lock_file(bad_alive)
+
+    def explode(_pid):
+        raise RuntimeError("the process table could not be read")
+    try:
+        got = U.read_lock(bad_alive, now=1000.0, alive=explode)
+        raised = False
+    except Exception:                          # noqa: BLE001
+        raised = True
+        got = {}
+    check("an alive-check that raises is treated as not running, not a crash",
+          not raised and got.get("valid") is False, raised)
+
+
+def t_acquire_refresh_and_release_lifecycle():
+    root = _make_root()
+    path = root / "nested" / "update-in-progress.lock"
+    taken = U.acquire_lock("responsive", path=path, now=1000.0, pid=111)
+    check("acquire creates the folder and the lock", taken["ok"] is True
+          and path.is_file(), taken)
+    stored = json.loads(path.read_text(encoding="utf-8"))
+    check("the lock carries exactly pid, started_at, updated_at and pace",
+          stored == {"pid": 111, "started_at": 1000.0, "updated_at": 1000.0,
+                     "pace": "responsive"}, stored)
+    check("... and a fresh read with a live pid sees it as valid",
+          U.read_lock(path, now=1000.0, alive=lambda pid: pid == 111)["valid"] is True)
+    try:
+        U.acquire_lock("safe", path=path, now=1001.0, pid=222,
+                       alive=lambda pid: pid == 111)
+        refused = None
+    except U.UpdateRefused as exc:
+        refused = exc
+    check("a second update is refused while the lock is valid",
+          refused is not None and refused.code == "update_running", refused)
+    check("... and the refusal names the pid, pace and start in plain words",
+          refused is not None and "111" in refused.message
+          and "responsive" in refused.message and "started" in refused.message,
+          getattr(refused, "message", ""))
+    check("... and the first update's file is untouched",
+          json.loads(path.read_text(encoding="utf-8"))["pid"] == 111)
+    check("a heartbeat from another pid does nothing",
+          U.refresh_lock(path=path, now=1500.0, pid=222) is False
+          and json.loads(path.read_text(encoding="utf-8"))["updated_at"] == 1000.0)
+    check("a heartbeat from the owner moves updated_at only",
+          U.refresh_lock(path=path, now=1500.0, pid=111) is True
+          and json.loads(path.read_text(encoding="utf-8")) == {
+              "pid": 111, "started_at": 1000.0, "updated_at": 1500.0,
+              "pace": "responsive"})
+    check("a reader with the new heartbeat sees it valid again",
+          U.read_lock(path, now=1500.0, alive=lambda pid: True)["valid"] is True)
+    check("release by another pid leaves the lock alone",
+          U.release_lock(path=path, pid=222) is False and path.is_file())
+    check("release by the owner removes it", U.release_lock(path=path, pid=111) is True
+          and not path.exists())
+    check("releasing twice is a quiet False, never an error",
+          U.release_lock(path=path, pid=111) is False)
+
+
+def t_acquire_replaces_a_stale_lock_and_says_when_it_cannot_write():
+    root = _make_root()
+    path = root / U.LOCK_NAME
+    _write_lock_file(path, pid=999999, started_at=1000.0, updated_at=1000.0)
+    taken = U.acquire_lock("safe", path=path, now=1000.0, pid=222,
+                           alive=lambda pid: False)
+    check("a crashed patcher's lock is replaced without ceremony",
+          taken["ok"] is True
+          and json.loads(path.read_text(encoding="utf-8"))["pid"] == 222, taken)
+    blocker = root / "a-file"
+    blocker.write_text("not a folder", encoding="utf-8")
+    unwritable = U.acquire_lock("safe", path=blocker / U.LOCK_NAME, now=1000.0,
+                                pid=333)
+    check("an unwritable lock is reported as NOT protecting the update, "
+          "never raised and never pretended",
+          unwritable["ok"] is False and "not" in unwritable["why"]
+          and "could not be written" in unwritable["why"], unwritable)
+
+
+def t_the_lock_refusal_words_are_the_ones_both_readers_show():
+    root = _make_root()
+    path = root / U.LOCK_NAME
+    _write_lock_file(path, pid=777, started_at=1000.0, updated_at=1000.0,
+                     pace="max_speed")
+    state = U.read_lock(path, now=1000.0, alive=lambda pid: True)
+    words = U.lock_words(state)
+    check("the sentence names the pid and the pace's plain label",
+          "777" in words and "max_speed" in words and "Fastest" in words, words)
+    full = U.lock_refusal_words(state)
+    check("... and the refusal says how to bypass it, naming both ways",
+          U.LOCK_BYPASS_FLAG in full and U.LOCK_BYPASS_ENV in full
+          and "already running" in full, full)
+
+
+def t_run_suites_refuses_a_valid_lock_and_both_bypasses_work():
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    settings = root / "settings"
+    lock = settings / U.LOCK_NAME
+    env = dict(os.environ, OPENJARVIS_CONFIG_DIR=str(settings),
+               JARVIS_BACKEND=str(backend), PYTHONDONTWRITEBYTECODE="1",
+               PYTHONIOENCODING="utf-8")
+    U.acquire_lock("responsive", path=lock, pid=os.getpid())
+    runner = REPO / "backend" / "run_suites.py"
+    try:
+        r = subprocess.run([sys.executable, "-B", str(runner),
+                            "test_not_a_suite.py"], cwd=str(REPO), env=env,
+                           capture_output=True, text=True, timeout=120,
+                           encoding="utf-8", errors="replace")
+        out = (r.stdout or "") + (r.stderr or "")
+        check("run_suites refuses immediately while a valid update lock is held",
+              r.returncode == 3, (r.returncode, out[-400:]))
+        check("... in plain words naming the pid, pace and start time",
+              "REFUSED" in out and str(os.getpid()) in out
+              and "responsive" in out and "started" in out, out[-400:])
+        check("... and it started nothing", "Not run:" in out, out[-300:])
+        bypass = subprocess.run([sys.executable, "-B", str(runner),
+                                 "--ignore-update-lock", "test_not_a_suite.py"],
+                                cwd=str(REPO), env=env, capture_output=True,
+                                text=True, timeout=120, encoding="utf-8",
+                                errors="replace")
+        bout = (bypass.stdout or "") + (bypass.stderr or "")
+        check("--ignore-update-lock is the update's own bypass: the runner goes on "
+              "(and reports the unknown suite)",
+              bypass.returncode != 3 and "no suite here is named" in bout,
+              (bypass.returncode, bout[-300:]))
+        env_var = dict(env, **{U.LOCK_BYPASS_ENV: "1"})
+        var = subprocess.run([sys.executable, "-B", str(runner),
+                              "test_not_a_suite.py"], cwd=str(REPO), env=env_var,
+                             capture_output=True, text=True, timeout=120,
+                             encoding="utf-8", errors="replace")
+        vout = (var.stdout or "") + (var.stderr or "")
+        check(f"{U.LOCK_BYPASS_ENV}=1 is the other bypass",
+              var.returncode != 3 and "no suite here is named" in vout,
+              (var.returncode, vout[-300:]))
+        _write_lock_file(lock, pid=999999, started_at=time.time(),
+                         updated_at=time.time())
+        stale = subprocess.run([sys.executable, "-B", str(runner),
+                                "test_not_a_suite.py"], cwd=str(REPO), env=env,
+                               capture_output=True, text=True, timeout=120,
+                               encoding="utf-8", errors="replace")
+        sout = (stale.stdout or "") + (stale.stderr or "")
+        check("a stale lock (dead pid) does not block a run",
+              stale.returncode != 3 and "REFUSED" not in sout,
+              (stale.returncode, sout[-300:]))
+    finally:
+        U.release_lock(path=lock)
+        try:
+            lock.unlink()
+        except OSError:
+            pass
+
+
+def t_the_runner_does_not_claim_a_lock_check_it_could_not_make():
+    sys.path.insert(0, str(HERE))
+    import run_suites as R
+    root = _make_root()
+    settings = root / "settings"
+    _write_lock_file(settings / U.LOCK_NAME, pid=os.getpid(),
+                     started_at=time.time(), updated_at=time.time())
+    with _with_env({"OPENJARVIS_CONFIG_DIR": str(settings),
+                    R.LOCK_BYPASS_ENV: None}):
+        check("the two readers agree on the bypass flag and variable",
+              (R.LOCK_BYPASS_FLAG, R.LOCK_BYPASS_ENV)
+              == (U.LOCK_BYPASS_FLAG, U.LOCK_BYPASS_ENV),
+              (R.LOCK_BYPASS_FLAG, R.LOCK_BYPASS_ENV))
+        check("a valid lock produces the refusal sentence",
+              "already running" in R.update_lock_refusal(), R.update_lock_refusal())
+        check("--ignore-update-lock bypasses it",
+              R.update_lock_refusal(ignore=True) == "")
+        os.environ[R.LOCK_BYPASS_ENV] = "1"
+        try:
+            check("... as does the environment variable",
+                  R.update_lock_refusal() == "")
+        finally:
+            os.environ.pop(R.LOCK_BYPASS_ENV, None)
+
+
+def t_a_missing_reader_is_not_a_claim_of_enforcement():
+    sys.path.insert(0, str(HERE))
+    import run_suites as R
+    root = _make_root()
+    settings = root / "settings"
+    _write_lock_file(settings / U.LOCK_NAME, pid=os.getpid(),
+                     started_at=time.time(), updated_at=time.time())
+    saved = R._update_lock_api
+    try:
+        with _with_env({"OPENJARVIS_CONFIG_DIR": str(settings)}):
+            check("with a valid lock on disk, the runner asks and refuses",
+                  "already running" in R.update_lock_refusal())
+            R._update_lock_api = lambda: None          # no update tool here
+            check("with NO reader it says nothing and blocks nothing - it does "
+                  "not claim the lock was checked",
+                  R.update_lock_refusal() == "")
+            os.environ[R.LOCK_BYPASS_ENV] = "1"
+            R._update_lock_api = saved
+            check("... and the bypass still answers nothing",
+                  R.update_lock_refusal() == "")
+            os.environ.pop(R.LOCK_BYPASS_ENV, None)
+    finally:
+        R._update_lock_api = saved
+        os.environ.pop(R.LOCK_BYPASS_ENV, None)
+
+
+def t_the_update_holds_the_lock_and_releases_it_on_every_way_out():
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    lock = root / "update-in-progress.lock"
+
+    class WatchingRun(FakeRun):
+        def __init__(self, handler):
+            super().__init__(handler)
+            self.lock_states = []
+
+        def __call__(self, cmd, cwd, on_line):
+            self.lock_states.append(U.read_lock(lock).get("valid"))
+            return super().__call__(cmd, cwd, on_line)
+
+    fake = WatchingRun(_staged_handler(repo, backend, suites="ok"))
+    said = []
+    code = U.update(repo, backend, "responsive", run=fake, say=said.append,
+                    clock=time.time, timings_path=root / "timings.json")
+    check("a normal update takes the lock before its first child process",
+          fake.lock_states and all(state is True for state in fake.lock_states),
+          fake.lock_states)
+    check("... and the lock is gone when it finishes", code == 0
+          and not lock.exists(), (code, lock.exists()))
+    check("... saying so, so a reader knows the exclusivity was real",
+          any("Update lock held" in line for line in said), said[:3])
+
+    def exploding(cmd, cwd, on_line):
+        raise RuntimeError("the patcher could not be started")
+    said = []
+    code = U.update(repo, backend, "safe", run=exploding, say=said.append,
+                    clock=lambda: 1000.0, timings_path=root / "timings.json")
+    check("a crashed child still releases the lock (the finally ran)",
+          code == 1 and not lock.exists(), (code, lock.exists()))
+
+    _write_lock_file(lock, pid=os.getpid(), started_at=time.time(),
+                     updated_at=time.time(), pace="responsive")
+    fake = FakeRun(_staged_handler(repo, backend, suites="ok"))
+    try:
+        U.update(repo, backend, "responsive", run=fake, say=lambda line: None,
+                 clock=lambda: time.time(), timings_path=root / "timings.json")
+        refused = None
+    except U.UpdateRefused as exc:
+        refused = exc
+    finally:
+        U.release_lock(path=lock)
+        try:
+            lock.unlink()
+        except OSError:
+            pass
+    check("an update started while another LIVE one holds the lock is refused",
+          refused is not None and refused.code == "update_running"
+          and fake.calls == [], getattr(refused, "message", fake.calls))
+
+
+def t_the_heartbeat_keeps_a_long_update_s_alive():
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    lock = root / "update-in-progress.lock"
+
+    class Clock:
+        t = 1000.0
+
+        def __call__(self):
+            return self.t
+
+    clock = Clock()
+    seen = []
+
+    class HeartbeatWatchingRun(FakeRun):
+        def __call__(self, cmd, cwd, on_line):
+            if _is_patcher(cmd):
+                return super().__call__(cmd, cwd, on_line)
+
+            def wrapped(line):
+                on_line(line)
+                if line.startswith("ok "):
+                    # A suite finished; skip the clock 1700s (just under the
+                    # 30-minute window) and check the lock is still valid.
+                    clock.t += 1700.0
+                    seen.append(U.read_lock(lock, now=clock.t).get("valid"))
+            return self.handler(cmd, cwd, wrapped, self.state)
+
+    fake = HeartbeatWatchingRun(_staged_handler(repo, backend, suites="ok"))
+    code = U.update(repo, backend, "safe", run=fake, say=lambda line: None,
+                    clock=clock, timings_path=root / "timings.json")
+    check("three suites at 1700s each would expire a 30-minute lock without the "
+          "heartbeat - with it, every check after a suite is still valid",
+          code == 0 and seen == [True, True, True], (code, seen))
+    check("... and the update released it afterwards", not lock.exists())
 
 
 # ==========================================================================

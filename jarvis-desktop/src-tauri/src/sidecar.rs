@@ -779,6 +779,10 @@ struct WatchdogInner {
     /// app: restarting again from here is the owner's own call at that
     /// point (the tray, or Settings), not something to keep guessing at.
     gave_up: bool,
+    /// The pid of the update lock this watchdog last logged, so a running
+    /// update is said ONCE rather than every 15 seconds. Cleared as soon as
+    /// no valid lock is held.
+    update_lock_pid: Option<u32>,
 }
 
 impl WatchdogState {
@@ -831,6 +835,22 @@ impl WatchdogState {
 
     fn reset_unreachable(&self) {
         self.lock().consecutive_unreachable = 0;
+    }
+
+    /// Record that a VALID update lock is held by `pid`; true only the first
+    /// tick that pid is seen, so the "not restarting" line is logged once.
+    fn note_update_lock(&self, pid: u32) -> bool {
+        let mut inner = self.lock();
+        if inner.update_lock_pid == Some(pid) {
+            return false;
+        }
+        inner.update_lock_pid = Some(pid);
+        true
+    }
+
+    /// No valid update lock this tick. The next one is logged again.
+    fn clear_update_lock_note(&self) {
+        self.lock().update_lock_pid = None;
     }
 }
 
@@ -888,6 +908,26 @@ pub fn spawn_watchdog(app: AppHandle) {
                 watchdog.reset_unreachable();
                 continue;
             }
+
+            // A backend update is running. It stopped the backend ON PURPOSE
+            // and holds the update lock while it patches and checks, so this
+            // watchdog must not restart it: that is the bug the lock exists to
+            // end (a real 2h8m update lost ~30s twice to an auto-restart whose
+            // process then refused the port the first one still held). Log it
+            // once per update; the next tick re-checks, so the moment the lock
+            // is released a genuinely crashed backend is restarted as before.
+            if let Some(lock) = crate::backend_update::held_update_lock(&app) {
+                if watchdog.note_update_lock(lock.pid) {
+                    logfile::log(&format!(
+                        "[jarvis] watchdog: a backend update is running (pid {}, \
+                         pace {}); not restarting the backend until it finishes",
+                        lock.pid, lock.pace
+                    ));
+                }
+                watchdog.reset_unreachable();
+                continue;
+            }
+            watchdog.clear_update_lock_note();
 
             let exited = matches!(snapshot, Some((_, true)));
             let hung = !exited && watchdog.bump_unreachable() >= HANG_THRESHOLD;

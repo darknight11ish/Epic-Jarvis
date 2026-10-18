@@ -32,12 +32,15 @@ calls one cannot.
    `scripts/apply-patches.ps1 -SkipTests` is run first (with
    `powershell -NoProfile -ExecutionPolicy Bypass -File`), then the SAME suites
    from `backend/run_suites.py --jobs <workers>`, then the recorded times are
-   kept for the next estimate. **Nothing about patching is reimplemented in Rust
-   or in JavaScript**, so the script's own rehearsal rule — a run that would
-   fail changes nothing, because the whole list is tried on a copy first — is
-   inherited rather than restated; `-SkipTests` only hands the suites to step 3
-   of the tool, it does not drop them. The three paces, the ETAs and the bar are
-   section 8 below.
+   kept for the next estimate. Before any of that the tool takes the exclusive
+   `update-in-progress.lock` (2026-10-18): a second update is refused, a test
+   sweep beside it is refused, and the desktop's watchdog does not restart the
+   backend until the update finishes - section 8 below. **Nothing about patching
+   is reimplemented in Rust or in JavaScript**, so the script's own rehearsal
+   rule — a run that would fail changes nothing, because the whole list is
+   tried on a copy first — is inherited rather than restated; `-SkipTests` only
+   hands the suites to step 3 of the tool, it does not drop them. The three
+   paces, the ETAs and the bar are section 8 below.
 3. **This app.** Only if step 2 finished: the newest signed release is
    downloaded, checked against the public key compiled into this build, and
    installed. Nothing about that check changed.
@@ -218,18 +221,50 @@ the tool may still update at `responsive` only (the older one-at-a-time path).
 
 ### The ETAs
 
-- **First run: a RANGE, labelled "first run - not measured yet".** The tool has
-  no times for this PC yet, so it shows `etaLowSeconds`–`etaHighSeconds` and
-  says so. It never shows a single invented number.
-- **After a run: measured.** Each suite's own seconds are saved in
-  `<backend>/_jarvis-logs/update-timings.json` and the next card says "from
-  this PC's own times". The range narrows with the recorded data.
+- **First run at a pace: a RANGE, labelled "not measured for this pace yet".**
+  The tool has no times for THAT pace on this PC yet, so it shows
+  `etaLowSeconds`–`etaHighSeconds` and says so. It never shows a single invented
+  number. Timings are recorded PER PACE in `update-timings.json` (a `safe` run
+  at one worker is not evidence for `max_speed` at 22), so a pace the owner has
+  not run yet keeps the honest wide range even after another pace has measured.
+- **After a run of that pace: measured.** Each suite's own seconds are saved
+  under that pace in `<backend>/_jarvis-logs/update-timings.json` and the next
+  card says "from this PC's own times". The range narrows with the recorded
+  data.
 - **While it runs: refined live.** Every finished suite updates the remaining
   estimate; the card shows the new range, still labelled with its source.
 
 One implementation of the maths lives in Python (`estimate`, `live_eta`,
 `mode_plan`); Rust only reads the tool's `--modes-json` answer, and the card
 draws it. There is no second copy in Rust to drift.
+
+### The exclusive update lock (2026-10-18)
+
+An update patches the backend and then runs several hundred suites against it;
+tonight's real run measured 2h8m, and part of that was a second thing happening
+beside it. So an update is now exclusive on this PC:
+
+- **The file.** `update-in-progress.lock` in the folder Jarvis keeps its own
+  data in (`OPENJARVIS_CONFIG_DIR`, then `JARVIS_CONFIG_DIR`, then
+  `~/.openjarvis`), holding `{pid, started_at, updated_at, pace}`. It is taken
+  before a file is patched and removed on every way out; a crash leaves it, and
+  the rule below makes it stale at once.
+- **When it is valid.** The pid must be a running process, the heartbeat
+  (`updated_at`, refreshed as each suite finishes) must be under **30 minutes**
+  old, and the run must have started under **3 hours** ago - the last two are
+  `N_placeholder` values from the design, the ceiling bounding a reused pid. A
+  dead pid is stale immediately.
+- **Who obeys it.** `backend/run_suites.py` refuses to start (exit 3) and names
+  the lock's pid, pace and start time; the update's own suite phase passes
+  `--ignore-update-lock` (or `JARVIS_INSIDE_PATCHER=1`), which is the only
+  bypass. The desktop's backend watchdog does not auto-restart the backend
+  while a valid lock is held (`sidecar.rs`), so it cannot fight the update for
+  the port.
+- **One implementation.** The rules and the reader live in
+  `tools/update_backend.py` (Python) and are mirrored only as a small reader in
+  `backend_update.rs` for the watchdog; both are tested against the same three
+  rules. The lock is advisory: an unreadable lock file or a checkout without the
+  update tool means nothing is enforced, and nothing claims it was.
 
 ### The progress bar
 
@@ -238,8 +273,9 @@ the `backend-update-progress` event):
 
 - **Fraction = completed work**, not time: items applied in the patch phase,
   then finished suites weighted by their recorded seconds (the same weights the
-  ETA uses). Before any timing exists, the weights are the first-run
-  placeholders; the label says "not measured yet", exactly as the ETA does.
+  ETA uses). Before a pace has timed anything, the weights are the first-run
+  placeholders; the label says "not measured for this pace yet", exactly as the
+  ETA does.
 - **Monotonic within a pass, never over 100%, never 100% before the final
   verdict.** A missing or out-of-order event holds the last real value; the
   page never guesses forward and has no timer that moves the bar.
