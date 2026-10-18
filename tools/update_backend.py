@@ -659,7 +659,13 @@ def restore_backup(backend) -> dict:
     deleted** - an owner may still need them by hand, and a restore that
     destroys its own evidence is the second failure. Returns what it did so the
     card can say it in words.
-    """
+
+    The BYTES are what is put back, not the backup's metadata: copying a
+    read-only backup file's mode onto the live file would hand the safe pass a
+    backend it cannot patch. For the same reason a live file the owner or
+    Windows has made read-only is cleared for the copy (what the patcher's own
+    `Copy-Item -Force` restore line does) - the clear happens on the LIVE file
+    only; the backup that supplies the bytes is never altered."""
     backend = Path(backend)
     folders = newest_backup_set(backend)
     if not folders:
@@ -673,7 +679,14 @@ def restore_backup(backend) -> dict:
                     continue
                 target = backend / source.relative_to(folder)
                 target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(source, target)
+                try:
+                    shutil.copyfile(source, target)
+                except PermissionError:
+                    # A read-only live file (Windows attribute, or a POSIX
+                    # owner chmod). Make the destination writable, then copy:
+                    # the backup is only ever READ.
+                    os.chmod(target, 0o666)
+                    shutil.copyfile(source, target)
                 restored += 1
     except OSError as exc:
         return {"ok": False, "restored": restored,

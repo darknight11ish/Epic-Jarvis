@@ -23,7 +23,8 @@ under 30 seconds):
   * a failed suite, a worker that crashes, an unreadable/ambiguous suite run,
     or a live-file mismatch each:
         - restore the newest `_jarvis-backup-*` byte for byte (and never delete
-          it),
+          or otherwise alter it; a read-only LIVE file is cleared for the copy,
+          never the backup),
         - re-run the patcher and then ALL the same suites with one worker,
         - and the update is judged by that safe pass, with the card's own
           sentence ("quick check hit a problem - re-running the safe way, new
@@ -47,6 +48,7 @@ Nothing here touches the owner's backend folder, starts a patch run, or reads
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -488,8 +490,15 @@ def t_a_backup_restores_byte_for_byte_and_is_never_deleted():
     (old / "one.py").write_bytes(b"ONE FROM THE OLD BACKUP\n")
     (endings / "two.py").write_bytes(b"TWO FROM THE ENDINGS\n")
     (newer / "one.py").write_bytes(b"ONE FROM THE NEW BACKUP\n")
-    for folder in (old, endings, newer):
-        shutil.copystat(backend / "jarvis_hud.py", folder)
+    # Distinct mtimes test the "newest by mtime" rule deliberately. NEVER
+    # `shutil.copystat(a_file, a_folder)`: on POSIX that copies the file's
+    # 0o644 mode onto the folder, which removes the folder's execute bit, so
+    # nothing can read the backup it is meant to restore - that was exactly
+    # the CI red this test had (2026-10-17). `os.utime` sets times only and
+    # touches no permission.
+    for folder, stamp in ((old, 1_700_000_000), (endings, 1_700_000_050),
+                          (newer, 1_700_000_100)):
+        os.utime(folder, (stamp, stamp))
     # The newest backup is the -000002 one; its folder must win.
     (backend / "one.py").write_bytes(b"LIVE NOW\n")
     result = U.restore_backup(backend)
@@ -503,6 +512,40 @@ def t_a_backup_restores_byte_for_byte_and_is_never_deleted():
     check("an older backup set is left alone",
           (old / "one.py").read_bytes() == b"ONE FROM THE OLD BACKUP\n"
           and (endings / "two.py").read_bytes() == b"TWO FROM THE ENDINGS\n")
+
+
+def t_a_read_only_live_file_is_still_put_back():
+    """A live file can be read-only (a Windows attribute, or an owner's chmod).
+
+    The patcher's own restore line is `Copy-Item -Force`, which overwrites one;
+    the fallback's job is to put the bytes back so the safe pass can run. The
+    restore clears the bit on the LIVE file only, copies the content, and
+    leaves the backup it read from exactly as it was - so "the backup is never
+    deleted or altered" still holds. Reverting the retry makes the first check
+    here red on Windows and on POSIX as a normal user; the backup bytes check
+    below is what catches a restore that "succeeds" without copying."""
+    root = _make_root()
+    repo, backend = _make_repo(root)
+    backup = backend / "_jarvis-backup-2026-10-17-000003"
+    backup.mkdir()
+    (backup / "one.py").write_bytes(b"ONE FROM THE BACKUP\n")
+    (backend / "one.py").write_bytes(b"LIVE BUT READ-ONLY\n")
+    os.chmod(backend / "one.py", 0o444)
+    try:
+        result = U.restore_backup(backend)
+        check("a read-only live file is put back too",
+              result["ok"] is True and result["restored"] == 1, result)
+        check("... with the backup's bytes, not the read-only file's",
+              (backend / "one.py").read_bytes() == b"ONE FROM THE BACKUP\n",
+              (backend / "one.py").read_bytes())
+        check("... and it is writable again, for the safe pass that follows",
+              os.access(backend / "one.py", os.W_OK),
+              oct((backend / "one.py").stat().st_mode))
+        check("... and the read-only backup itself is untouched",
+              (backup / "one.py").read_bytes() == b"ONE FROM THE BACKUP\n")
+    finally:
+        # So the temporary folder can be removed on every platform.
+        os.chmod(backend / "one.py", 0o644)
 
 
 def t_no_backup_is_said_plainly():

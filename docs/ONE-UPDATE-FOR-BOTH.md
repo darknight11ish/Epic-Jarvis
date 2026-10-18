@@ -251,11 +251,14 @@ the `backend-update-progress` event):
 
 Any failed or ambiguous suite, a worker that crashes, or a live-file
 verification mismatch in `max_speed`/`responsive` is not trusted: every file is
-put back from the newest `_jarvis-backup-*` (copying, never deleting it), then
-the patcher and ALL the same suites run again with one worker. **That safe pass
-is what the update is judged by.** A `safe`-mode failure is reported and not
-re-run, because re-running the same checks the same way is not a second
-opinion. The final honesty lines are unchanged: `ALL DONE - the backend is
-patched and proven`, `DONE - no problems, but NOT fully proven`, or `DONE WITH
+put back from the newest `_jarvis-backup-*` (copying, never deleting it; the
+**bytes** are what is restored, and a read-only LIVE file is made writable for
+the copy so the safe pass can rewrite it - the read-only backup itself is never
+altered), then the patcher and ALL the same suites run again with one worker.
+**That safe pass is what the update is judged by.** A `safe`-mode failure is
+reported and not re-run, because re-running the same checks the same way is not
+a second opinion. The final honesty lines are unchanged: `ALL DONE - the
+backend is patched and proven`, `DONE - no problems, but NOT fully proven`, or
+`DONE WITH
 PROBLEMS - do not trust this update yet`, and `updatedBoth` still needs both
 halves `ok`.
