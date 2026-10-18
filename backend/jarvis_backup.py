@@ -473,6 +473,16 @@ SOURCE_DBS = ("memory.db", "chat-history.db", "schedule.db", "feedback.db", "pro
               "tasks.db", "knowledge.db", "traces.db",
               "receipts.db", "voiceprint.db")
 
+#: How long a snapshot/table-count connection waits for a lock before giving
+#: up. `sqlite3.connect(timeout=...)` IS SQLite's busy handler (it passes the
+#: seconds to `sqlite3_busy_timeout` in milliseconds), so this is the same
+#: 10-second wait the rest of the backend asks for - `jarvis_receipts.py`,
+#: `jarvis_ledger.py`, `jarvis_tasks.py` and the rest. A backup runs while
+#: Jarvis is live and writing; the connect default is 5 seconds, which is
+#: short enough for a busy writer to lose a whole database out of the archive
+#: instead of waiting for it.
+DB_BUSY_TIMEOUT_S = 10.0
+
 #: Databases in the settings folder this module leaves out ON PURPOSE
 #: (2026-10-13). Named here, with the reason, so an exclusion is a decision
 #: written down rather than a name somebody forgot - the same rule
@@ -841,7 +851,7 @@ def _table_counts(db_path: Path) -> dict:
     if not db_path.is_file():
         return {}
     try:
-        conn = sqlite3.connect(str(db_path))
+        conn = sqlite3.connect(str(db_path), timeout=DB_BUSY_TIMEOUT_S)
     except sqlite3.DatabaseError:
         return {}
     try:
@@ -868,11 +878,11 @@ def _snapshot_db(src: Path, dest: Path) -> bool:
     if not src.is_file():
         return False
     try:
-        source = sqlite3.connect(str(src))
+        source = sqlite3.connect(str(src), timeout=DB_BUSY_TIMEOUT_S)
     except sqlite3.DatabaseError:
         return False
     try:
-        target = sqlite3.connect(str(dest))
+        target = sqlite3.connect(str(dest), timeout=DB_BUSY_TIMEOUT_S)
         try:
             source.backup(target)
         finally:

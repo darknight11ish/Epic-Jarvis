@@ -4355,6 +4355,104 @@ def _schema_problems(schema: dict, value, where: str, depth: int = 0) -> list:
     return out
 
 
+# --------------------------------------------------------------------------
+#   The shipped schema sanitiser, on both sides of a tool call
+#   (jarvis_tool_schema.py, #461; wired here 2026-10-18, Part III.1 item 4)
+# --------------------------------------------------------------------------
+#   A tool's schema has to pass TWO honesty checks before it is sent:
+#     1. jarvis_tool_schema.sanitise_schema(), default REFUSE: the local model's
+#        grammar really expresses every keyword left in it (otherwise the
+#        constraint is believed and silently ignored).
+#     2. jarvis_tool_schema.guard_tool_schemas(): every keyword left is one
+#        `_schema_problems()` actually reads, so the call is VALIDATED before a
+#        tool is prepared (otherwise the constraint is enforced by nobody).
+# Anything that fails either is NOT SENT, never sent weakened. The SAME returned
+# schema is the one `check_call()` validates arguments against, so what the model
+# was asked for and what is checked are one object, not two. A tool that cannot
+# be sent is not dropped silently: if the model calls it anyway (it may remember
+# it from an earlier turn), `check_call` refuses in plain words saying the tool
+# was not offered and nothing ran.
+
+#: What the model reads when a tool's own argument shape could not be sent. It
+#: has to say three things: which tool, that nothing ran, and what to tell the
+#: owner - never a bare "no such tool".
+TOOL_SCHEMA_UNSENDABLE = (
+    "{name} was not run: its argument shape uses something the local model's "
+    "tool grammar accepts but does not enforce, so this tool was not offered in "
+    "this answer. Nothing was run. Tell the owner {name} is unavailable until "
+    "its argument shape is fixed ({why}).")
+
+
+def _tool_schema_module():
+    """jarvis_tool_schema, or None on a backend older than it.
+
+    Imported inside the function, the way every optional module here is: the
+    agent must still import and run on a backend that predates it. None means
+    today's behaviour (schemas sent as they are), NOT that every tool is
+    refused - a missing module must not take every tool away from the owner."""
+    try:
+        import jarvis_tool_schema
+        return jarvis_tool_schema
+    except Exception:
+        return None
+
+
+def _parameters_to_send(tool):
+    """(the parameters this build can honestly send for `tool`, "") or (None, why).
+
+    `tool` is a Tool object (has `.parameters`) or a bare schema mapping, or an
+    OpenAI tool object carrying `function.parameters`. Runs the shipped
+    sanitiser in its DEFAULT refuse mode, then the shipped guard over the result:
+    the schema must be one the grammar really expresses AND one `_schema_problems`
+    really validates. Returns a fresh schema object so the caller can never be
+    handed the tool's own dict to mutate."""
+    raw = None
+    if isinstance(tool, dict):
+        raw = tool.get("parameters")
+        if raw is None and isinstance(tool.get("function"), dict):
+            raw = tool["function"].get("parameters")
+    else:
+        raw = getattr(tool, "parameters", None)
+    module = _tool_schema_module()
+    if module is None:
+        return raw, ""
+    try:
+        answer = module.sanitise_schema(raw)          # default: on_unsupported=REFUSE
+    except Exception as exc:      # sanitise_schema never raises by contract; belt
+        return None, f"its argument shape could not be checked ({type(exc).__name__})"
+    if not answer.get("ok"):
+        return None, str(answer.get("reason") or "its argument shape could not be checked")
+    sent = answer.get("schema")
+    if not isinstance(sent, dict):
+        return None, "its argument shape could not be checked"
+    try:
+        guard = module.guard_tool_schemas({"tool": {"parameters": sent}})
+    except Exception as exc:      # same belt-and-braces rule
+        return None, f"its argument shape could not be checked ({type(exc).__name__})"
+    if not guard.get("ok"):
+        problem = (guard.get("problems") or [{}])[0]
+        keyword = str(problem.get("keyword") or "a keyword")
+        return None, (f"its argument shape uses {keyword!r}, which Jarvis cannot "
+                      f"check before running the tool")
+    return sent, ""
+
+
+def _schema_for_sending(tool, shown: list):
+    """`tool.schema(shown)` with its parameters replaced by the checked copy.
+
+    None when the tool's argument shape cannot be sent honestly - the caller
+    leaves the tool out of the request (and `check_call` gives the plain reason
+    if the model calls it anyway)."""
+    sent, _why = _parameters_to_send(tool)
+    if sent is None:
+        return None
+    item = tool.schema(shown)
+    item = dict(item)
+    item["function"] = dict(item.get("function") or {})
+    item["function"]["parameters"] = sent
+    return item
+
+
 def check_call(name, raw_args, names, tools=None) -> tuple:
     """(args, None) when this call may go on to prepare() and the gate;
     (None, problem) when it may not, `problem` one plain sentence for the
@@ -4365,6 +4463,13 @@ def check_call(name, raw_args, names, tools=None) -> tuple:
         real = ", ".join(names) if names else "none - no tools are on"
         return None, (f"no such tool: {name!r}. The tools you can use here are: "
                       f"{real}.")
+    # THE ONE SCHEMA, BOTH SIDES (2026-10-18): the parameters checked here are
+    # the ones the request was built with, by the same sanitiser call. A tool
+    # whose shape cannot be sent becomes a PLAIN refusal that names it - never a
+    # silent drop and never a call validated against a schema the model never saw.
+    sent_schema, why = _parameters_to_send(tools[name])
+    if sent_schema is None:
+        return None, TOOL_SCHEMA_UNSENDABLE.format(name=name, why=why)
     if raw_args is None or (isinstance(raw_args, str) and not raw_args.strip()):
         args = {}                                   # no arguments given at all
     elif isinstance(raw_args, str):
@@ -4386,7 +4491,7 @@ def check_call(name, raw_args, names, tools=None) -> tuple:
         args = {k: (str(int(v) if isinstance(v, float) and v.is_integer() else v)
                     if isinstance(v, (int, float)) and not isinstance(v, bool) else v)
                 for k, v in args.items()}
-    problems = _schema_problems(tools[name].parameters, args, name)
+    problems = _schema_problems(sent_schema, args, name)
     if problems:
         shown = "; ".join(problems[:_MAX_PROBLEMS])
         more = len(problems) - _MAX_PROBLEMS
@@ -5718,18 +5823,33 @@ def tool_text_tokens(names, *, extra=None) -> int:
 
 
 def _schemas_for(shown: list, groups: list, extra: dict) -> list:
+    """The tool schemas a request may carry, every one checked by the shipped
+    sanitiser first (`_schema_for_sending`). A tool whose shape cannot be sent
+    honestly is LEFT OUT here rather than sent weakened; `check_call` turns a
+    call to it into a plain refusal that names it. `more_tools`' own schema goes
+    through the same check, and so do plug-in programs' tools (`extra`)."""
     out = []
     for n in shown:
         if n == MORE_TOOLS:
             continue
         tool = TOOLS.get(n) or extra.get(n)
         if tool is not None:
-            out.append(tool.schema(shown))
+            item = _schema_for_sending(tool, shown)
+            if item is not None:
+                out.append(item)
     for n, tool in extra.items():
         if n not in shown:
-            out.append(tool.schema(shown))
+            item = _schema_for_sending(tool, shown)
+            if item is not None:
+                out.append(item)
     if MORE_TOOLS in shown and groups:
-        out.append(more_tools_schema(groups))
+        more = more_tools_schema(groups)
+        params, _why = _parameters_to_send(more)
+        if params is not None:
+            more = dict(more)
+            more["function"] = dict(more.get("function") or {})
+            more["function"]["parameters"] = params
+            out.append(more)
     return out
 
 

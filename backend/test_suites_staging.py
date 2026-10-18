@@ -37,12 +37,24 @@ WHAT IS CHECKED, and why each check can fail:
   5. A folder too fresh to be abandoned, a folder with no marker that is not a
      day old, and a folder that is not this runner's shape at all, are all left
      alone.
+  6. THE SUITES' HOME IS A THROWAWAY FOLDER (2026-10-18, Spotlight 2). Each
+     run's OPENJARVIS_HOME / JARVIS_HOME point inside its state folder - never
+     at the owner's real ~/.openjarvis - and --state-env prints them so a
+     patcher run gets the same folder without a second list.
+  7. A REAL SWEEP LEAVES A FAKE OWNER'S HOME ALONE: a sentinel file in a fake
+     HOME/.openjarvis is unchanged, with nothing made beside it, after a run
+     whose header names the throwaway home.
+  8. THE ONE ESCAPE HATCH IS EXPLICIT: `JARVIS_TESTS_USE_REAL_HOME=1` keeps
+     the caller's own home, says in the header that the run is NOT hermetic,
+     and prints no home line from --state-env; it is never the default.
 
 No network, no model, no file of the owner's. Standard library only.
 """
 from __future__ import annotations
 
 import ast
+import contextlib
+import io
 import os
 import shutil
 import subprocess
@@ -363,6 +375,145 @@ def t_a_finished_direct_run_leaves_no_folder():
               bool(leaked) and r2.returncode == 0, _names(temp))
         for name in _names(temp):
             shutil.rmtree(temp / name, ignore_errors=True)
+    finally:
+        if lock is not None:
+            os.close(lock)
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def t_private_state_gives_every_run_its_own_home():
+    """Check 6: the suites' HOME is a throwaway folder, never the owner's.
+
+    OPENJARVIS_CONFIG_DIR was only half the owner's data. OPENJARVIS_HOME /
+    JARVIS_HOME are checked BEFORE it by the modules that keep databases,
+    receipts and the inbox, so a run that leaves them unset falls through to
+    ~/.openjarvis - the owner's real data, on a patcher run. This is the
+    mechanism that stops it, and the header and --state-env are how the other
+    two runners learn where it is.
+    """
+    scratch, lock = _scratch("jarvis-home-test-")
+    try:
+        state = scratch / R.STATE_NAME
+        env = R.private_state({}, HERE, state)
+        home = state / R.HOME_NAME
+        check("private_state sets OPENJARVIS_HOME to a folder inside the run's state",
+              env.get("OPENJARVIS_HOME") == str(home), env.get("OPENJARVIS_HOME"))
+        check("... and JARVIS_HOME to the same folder (modules read either name)",
+              env.get("JARVIS_HOME") == env.get("OPENJARVIS_HOME"),
+              env.get("JARVIS_HOME"))
+        check("... and the folder is really made, so a module can write there",
+              home.is_dir(), str(home))
+        owner_home = Path(os.path.expanduser("~")) / ".openjarvis"
+        check("... and it is NOT the owner's real ~/.openjarvis",
+              os.path.realpath(str(home)) != os.path.realpath(str(owner_home)),
+              (str(home), str(owner_home)))
+        words = R.home_words(env)
+        check("the run's header names the throwaway home it used",
+              str(home) in words and "throwaway" in words, words)
+
+        saved = {k: os.environ.pop(k, None) for k in R.HOME_ENVS}
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf):
+                R.state_env(str(state))
+        finally:
+            for k, v in saved.items():
+                if v is not None:
+                    os.environ[k] = v
+        printed = buf.getvalue()
+        check("--state-env prints the home variables, so apply-patches.ps1's own "
+              "loop sets them and the patcher needs no second list",
+              f"OPENJARVIS_HOME={home}" in printed and f"JARVIS_HOME={home}" in printed,
+              printed[-600:])
+    finally:
+        if lock is not None:
+            os.close(lock)
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def t_a_real_run_leaves_the_home_alone():
+    """Check 7: run a real sweep with a fake HOME, and prove a sentinel in its
+    ~/.openjarvis was not read into a write, created, or touched."""
+    scratch, lock = _scratch("jarvis-home-run-test-")
+    try:
+        temp = scratch / "temp"
+        temp.mkdir()
+        owner_home = scratch / "owner-home"
+        oj = owner_home / ".openjarvis"
+        oj.mkdir(parents=True)
+        sentinel = oj / "sentinel.json"
+        sentinel.write_text('{"owner": "real data"}', encoding="utf-8")
+        before = (sentinel.read_bytes(), sentinel.stat().st_mtime_ns,
+                  sorted(p.name for p in oj.iterdir()))
+        env = _env(temp)
+        env["HOME"] = str(owner_home)
+        env["USERPROFILE"] = str(owner_home)
+        for k in R.HOME_ENVS:
+            env.pop(k, None)
+        env.pop(R.REAL_HOME_ENV, None)
+        r = _run([HERE / "run_suites.py", SUITE], env)
+        check("CONTROL: the run passed on its own terms",
+              r.returncode == 0,
+              f"exit {r.returncode}\n{r.stdout[-1500:]}\n{r.stderr[-800:]}")
+        home_line = next((l for l in r.stdout.splitlines() if l.startswith("home: ")), "")
+        used = home_line[len("home: "):].split("  ", 1)[0].strip() if home_line else ""
+        check("the run's header names a throwaway home",
+              bool(used) and "throwaway" in home_line, home_line or r.stdout[:800])
+        check("... under this run's own temp area (the fake HOME was not used)",
+              bool(used) and os.path.realpath(used).startswith(
+                  os.path.realpath(str(scratch))),
+              (used, str(scratch)))
+        after = (sentinel.read_bytes(), sentinel.stat().st_mtime_ns,
+                 sorted(p.name for p in oj.iterdir()))
+        check("the fake owner's sentinel file was not written, and nothing new "
+              "appeared beside it",
+              after == before, (before, after))
+    finally:
+        if lock is not None:
+            os.close(lock)
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def t_the_real_home_hatch_is_explicit_and_off_by_default():
+    """Check 8: the one way into the real home says so, and is never assumed."""
+    scratch, lock = _scratch("jarvis-home-hatch-test-")
+    try:
+        real = scratch / "owner-home"
+        real.mkdir()
+        default = R.private_state({"OPENJARVIS_HOME": str(real)}, HERE,
+                                  scratch / "state-default")
+        check("by DEFAULT an existing OPENJARVIS_HOME is replaced by the throwaway "
+              "one (never the real home by accident)",
+              default.get("OPENJARVIS_HOME") != str(real)
+              and str(scratch / "state-default" / R.HOME_NAME)
+              == default.get("OPENJARVIS_HOME"), default.get("OPENJARVIS_HOME"))
+        hatched = R.private_state({"OPENJARVIS_HOME": str(real),
+                                   R.REAL_HOME_ENV: "1"}, HERE,
+                                  scratch / "state-hatch")
+        check("with JARVIS_TESTS_USE_REAL_HOME=1 the caller's own home is left alone",
+              hatched.get("OPENJARVIS_HOME") == str(real),
+              hatched.get("OPENJARVIS_HOME"))
+        words = R.home_words(hatched)
+        check("... and the header says plainly that the run is NOT hermetic",
+              "NOT hermetic" in words and R.REAL_HOME_ENV in words, words)
+        saved = {k: os.environ.get(k) for k in (*R.HOME_ENVS, R.REAL_HOME_ENV)}
+        try:
+            os.environ[R.REAL_HOME_ENV] = "1"
+            os.environ["OPENJARVIS_HOME"] = str(real)
+            os.environ.pop("JARVIS_HOME", None)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                R.state_env(str(scratch / "state-hatch2"))
+            check("--state-env prints NO home line under the hatch, so the "
+                  "caller's real home stays theirs",
+                  "OPENJARVIS_HOME=" not in buf.getvalue()
+                  and "JARVIS_HOME=" not in buf.getvalue(), buf.getvalue()[-400:])
+        finally:
+            for k, v in saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
     finally:
         if lock is not None:
             os.close(lock)

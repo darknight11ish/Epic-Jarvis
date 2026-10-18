@@ -36,14 +36,28 @@ import okhttp3.Request
  */
 class UpdateChecker(private val settings: ClientSettings) {
 
+    /**
+     * The version this APK runs (`BuildConfig.VERSION_NAME`): stored beside
+     * the cached line, so a line cached by a previous install can never
+     * survive the install of a newer APK (see [UpdateCheck.cachedLineForBuild]).
+     */
+    private val ownVersion = BuildConfig.VERSION_NAME
+
+    /**
+     * The cached line this build may show, or null. A line cached against an
+     * older install must not survive the install of the very build it
+     * announced, and a line naming this build must not be shown as "newer".
+     */
+    private val cachedLine = UpdateCheck.cachedLineForBuild(
+        settings.updateNewerLine,
+        settings.updateNewerLineVersion,
+        ownVersion,
+        UpdateCheck.ownSha(BuildConfig.GIT_SHA),
+    )
+
     private val _state = MutableStateFlow(
         UpdateCheck.State(
-            // A line cached against an older install must not survive the install
-            // of the very build it announced: Home would keep saying a newer build
-            // is on GitHub about the build already in the owner's hand.
-            newerLine = settings.updateNewerLine?.takeIf {
-                !UpdateCheck.lineNamesBuild(it, UpdateCheck.ownSha(BuildConfig.GIT_SHA))
-            },
+            newerLine = cachedLine,
             problem = settings.updateProblem,
             lastTryMs = settings.updateLastTryMs,
         ),
@@ -51,10 +65,11 @@ class UpdateChecker(private val settings: ClientSettings) {
     val state: StateFlow<UpdateCheck.State> = _state.asStateFlow()
 
     init {
-        // Keep the stored file honest too: a cached line that names this
-        // build is forgotten now, not after the next check.
-        if (settings.updateNewerLine != null && _state.value.newerLine == null) {
-            settings.updateNewerLine = null
+        // Keep the stored file honest too: a cached line this build cannot
+        // show is forgotten now, with the version it was cached on, not after
+        // the next check. Nothing else stored there is touched.
+        if (settings.updateNewerLine != null && cachedLine == null) {
+            settings.setUpdateNewerLine(null, null)
         }
     }
 
@@ -130,7 +145,10 @@ class UpdateChecker(private val settings: ClientSettings) {
                 BuildConfig.GIT_COMMIT_TIME,
                 now,
             )
-            settings.updateNewerLine = next.newerLine
+            // The line and the version that cached it are stored in ONE
+            // commit, so a crash between two writes cannot leave a line that
+            // looks newer than it is.
+            settings.setUpdateNewerLine(next.newerLine, next.newerLine?.let { ownVersion })
             settings.updateProblem = next.problem
             _state.value = next
         } finally {

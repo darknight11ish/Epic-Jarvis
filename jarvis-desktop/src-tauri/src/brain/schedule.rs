@@ -127,6 +127,18 @@ pub(crate) fn valid_id(id: &str) -> bool {
             .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
 }
 
+/// The Today board's own read (GTD-2, 2026-10-18; backend `jarvis_today.py`,
+/// answered by the already-wrapped `jarvis_brain_reads.py`): due reminders,
+/// the first open step of each active goal/project work list, and the
+/// said-I'd-do proposals. It is ADDED to this list's answer under `cockpit`;
+/// when the board has nothing to show the key is not added at all, and a
+/// failed board read never fails the list itself.
+const COCKPIT_PATH: &str = "/api/today/cockpit";
+
+/// The board sections that are a list; each is copied only when it has
+/// something in it.
+const COCKPIT_KEYS: &[&str] = &["due_reminders", "active_next_steps", "proposals"];
+
 /// [`brain_schedule`]'s reading of the answer.
 pub(crate) fn list_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
     if (200..300).contains(&status) {
@@ -234,8 +246,56 @@ pub(crate) fn redact_list(mut list: serde_json::Value) -> serde_json::Value {
                 }
             }
         }
+        // The Today board's words are the owner's own too (GTD-2): reminder
+        // titles, goal and project steps, said-I'd-do proposals. Each list is
+        // emptied and counted, exactly like the jobs above; the board's own
+        // yes/no switch state stays (it says nothing about the owner).
+        if let Some(serde_json::Value::Object(board)) = obj.get_mut("cockpit") {
+            for key in COCKPIT_KEYS {
+                if let Some(serde_json::Value::Array(items)) = board.get_mut(*key) {
+                    count += items.len();
+                    items.clear();
+                }
+            }
+        }
         obj.insert("hidden".into(), serde_json::json!(true));
         obj.insert("hidden_count".into(), serde_json::json!(count));
+    }
+    list
+}
+
+/// The Today board added to this list's answer, with every existing field
+/// untouched. Only the board's own sections are copied, and only when they
+/// have something in them (`cockpit` is not added for a quiet day, and the
+/// switch's own state and the honest empty `rollover_cards` ride along so the
+/// page can draw its opt-in row). A missing board changes nothing.
+pub(crate) fn merge_cockpit(
+    mut list: serde_json::Value,
+    cockpit: Option<serde_json::Value>,
+) -> serde_json::Value {
+    let Some(serde_json::Value::Object(board)) = cockpit else {
+        return list;
+    };
+    let Some(out) = list.as_object_mut() else {
+        return list;
+    };
+    let mut section = serde_json::Map::new();
+    if board.get("available") == Some(&serde_json::Value::Bool(true)) {
+        for key in ["unspoken_commitments_enabled", "rollover_cards"] {
+            if let Some(value) = board.get(key) {
+                section.insert((*key).to_string(), value.clone());
+            }
+        }
+        for key in COCKPIT_KEYS {
+            if let Some(items) = board.get(*key) {
+                if items.as_array().is_some_and(|a| !a.is_empty()) {
+                    section.insert((*key).to_string(), items.clone());
+                }
+            }
+        }
+    }
+    if !section.is_empty() {
+        out.insert("cockpit".to_string(), serde_json::Value::Object(section));
     }
     list
 }
@@ -893,6 +953,29 @@ pub async fn brain_schedule(app: AppHandle) -> Result<serde_json::Value, String>
     let status = response.status().as_u16();
     let body = response.text().await.unwrap_or_default();
     let answer = list_answer(status, &body)?;
+    // The Today board rides on this same read (GTD-2): one more GET to the
+    // PC, added under `cockpit`. A board that fails or is missing is not the
+    // list's failure - the list is what Coming up and the phones need.
+    let board = match commands::jarvis_client(Some(READ_TIMEOUT)) {
+        Ok(client) => match commands::jarvis_headers(&app) {
+            Ok(headers) => {
+                match client
+                    .get(format!("{base}{COCKPIT_PATH}"))
+                    .headers(headers)
+                    .send()
+                    .await
+                {
+                    Ok(response) if response.status().is_success() => {
+                        response.text().await.ok().and_then(|b| parsed(&b))
+                    }
+                    _ => None,
+                }
+            }
+            Err(_) => None,
+        },
+        Err(_) => None,
+    };
+    let answer = merge_cockpit(answer, board);
     Ok(
         if crate::lock::private_hidden(&app) && answer.get("available") != Some(&false.into()) {
             redact_list(answer)
@@ -971,6 +1054,20 @@ pub async fn brain_schedule_add_today(
     post(&app, "/api/schedule/add", body).await
 }
 
+/// The said-I'd-do switch (GTD-2, 2026-10-18; backend `jarvis_today.py`'s
+/// `request_unspoken`: OFF by default, OFF immediate, ON is ONE approval card
+/// at tier "ask"). Neither direction is held on a stale link: turning it OFF
+/// only stops Jarvis reading the owner's words (the stricter direction), and
+/// turning it ON changes nothing until the PC's own card is approved - the
+/// same shape as the other privacy switches (`set_prompt_coach`).
+#[tauri::command]
+pub async fn brain_schedule_set_unspoken(
+    app: AppHandle,
+    enabled: bool,
+) -> Result<serde_json::Value, String> {
+    post(&app, COCKPIT_PATH, serde_json::json!({"enabled": enabled})).await
+}
+
 async fn post(
     app: &AppHandle,
     path: &str,
@@ -992,6 +1089,73 @@ async fn post(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// GTD-2: the Today board is ADDED under `cockpit`; every field of the
+    /// list's own answer is untouched, a quiet board adds nothing, and a
+    /// missing or failed board changes nothing at all.
+    #[test]
+    fn the_today_board_is_added_without_changing_the_list() {
+        let list =
+            serde_json::json!({"available": true, "jobs": [{"id": "s0123456789"}], "todo": []});
+        let quiet = merge_cockpit(
+            list.clone(),
+            Some(
+                serde_json::json!({"available": true, "unspoken_commitments_enabled": false,
+                                    "rollover_cards": []}),
+            ),
+        );
+        assert_eq!(quiet["jobs"], list["jobs"]);
+        assert_eq!(quiet["todo"], list["todo"]);
+        assert_eq!(quiet["cockpit"]["unspoken_commitments_enabled"], false);
+        assert_eq!(quiet["cockpit"]["rollover_cards"], serde_json::json!([]));
+        assert!(quiet["cockpit"].get("due_reminders").is_none());
+        let full = merge_cockpit(
+            list.clone(),
+            Some(serde_json::json!({"available": true, "due_reminders": [
+                {"id": "s0123456789", "text": "Call the vet"}], "proposals": []})),
+        );
+        assert_eq!(full["jobs"], list["jobs"]);
+        assert_eq!(full["cockpit"]["due_reminders"][0]["text"], "Call the vet");
+        assert!(full["cockpit"].get("proposals").is_none());
+        assert_eq!(merge_cockpit(list.clone(), None), list);
+        assert_eq!(
+            merge_cockpit(list.clone(), Some(serde_json::json!({"available": false}))),
+            list
+        );
+    }
+
+    /// GTD-2: while the private lists are hidden, the board's words go too -
+    /// and only the words; the board's own yes/no switch state stays.
+    #[test]
+    fn hidden_private_lists_blank_the_today_board_words() {
+        let list = serde_json::json!({
+            "available": true, "jobs": [], "todo": [],
+            "cockpit": {
+                "unspoken_commitments_enabled": true,
+                "rollover_cards": [],
+                "due_reminders": [
+                    {"id": "s0123456789", "text": "Call the vet", "suggested_prompt": "Draft it"}],
+                "active_next_steps": [{"kind": "goal", "step": "Call two installers"}],
+                "proposals": [{"text": "send the report"}]
+            }
+        });
+        let hidden = redact_list(list);
+        assert_eq!(hidden["hidden"], true);
+        assert_eq!(hidden["hidden_count"], 3);
+        for key in ["due_reminders", "active_next_steps", "proposals"] {
+            assert_eq!(hidden["cockpit"][key], serde_json::json!([]), "{key}");
+        }
+        let text = hidden.to_string();
+        for words in [
+            "Call the vet",
+            "Call two installers",
+            "send the report",
+            "Draft it",
+        ] {
+            assert!(!text.contains(words), "{words} leaked: {text}");
+        }
+        assert_eq!(hidden["cockpit"]["unspoken_commitments_enabled"], true);
+    }
 
     #[test]
     fn a_job_changed_elsewhere_takes_its_toast_away_but_never_a_tell_me_when() {

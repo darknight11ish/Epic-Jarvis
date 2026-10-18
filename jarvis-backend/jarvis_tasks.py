@@ -71,6 +71,40 @@ returns. A card that needs the owner is not waited on inside a tick either:
 `ask(step)` returns a verdict, or `None` for "not decided yet", the task
 sits in `waiting_approval`, and a later tick asks again. That is why a job
 can take an hour without the Jarvis bar freezing for an hour.
+
+WHO TICKS IT, AND WHY NOTHING IN THE PROGRAM DOES YET (audited 2026-10-18)
+
+`JobList.tick()` has NO production caller. That is recorded here rather than
+left to be rediscovered, and it is deliberate: the honest caller does not
+exist yet. It is NOT a duplicate of `jarvis_jobs.run_due()` - `run_due()` runs
+Long Fuse jobs whole, against the capability set frozen on their row, while
+this runs ONE step of a job-list job whose steps were enumerated up front and
+whose approver the caller supplies. Two different queues with similar names;
+`docs/AUDIT-JOB-LIST-2026-10-08.md` section 3 draws the line and both apps put
+them under one heading for exactly that reason.
+
+It is deliberately left unwired in this audit, because both halves of a real
+caller are missing:
+
+  * **nothing creates a job in this list.** The plan card that would
+    (`jarvis_plan.enabled()`) is switched off, and the HUD routes only list
+    and steer; no production code calls `from_plan()`.
+  * **nothing can run a step.** `tick()` takes the step's executor and its
+    approver as ARGUMENTS, on purpose: the only real executor is a chat
+    turn's own (`jarvis_agent._plan_step_dispatch`, built from that turn's
+    watcher, gate checker and output object), and there is no background
+    executor to hand it.
+
+Calling it from the initiative heartbeat with a stand-in runner would be
+pretend wiring: the tick would claim rows and move them while no tool ran.
+When it IS wired it belongs with `jarvis_schedule.register_kind` (the one
+clock; see `docs/ARCHITECTURE.md`'s "The background job queue" note), with the
+real executor and the real gate, under the same safe-heartbeat rules
+`jarvis_jobs.tick()` follows: ONE registration, no thread or timer of its own,
+idempotent, and a step that raises fails that job and never the tick.
+`backend/test_tasks.py` pins the caller contract, proves nothing in this
+module starts itself, and proves two ticks - sequential or overlapping -
+cannot run a step twice.
 """
 from __future__ import annotations
 
@@ -1136,6 +1170,15 @@ class JobList:
         which case the job waits and a later tick asks again. `ledger`, if
         given, is handed one small record per finished step, for the
         existing read-only activity list.
+
+        WIRING (audited 2026-10-18): there is NO production caller, and that
+        is deliberate - see "WHO TICKS IT" in this module's docstring. This
+        method cannot run a step on its own: the executor and the approver are
+        the caller's, and giving it a stand-in runner would move rows while
+        nothing ran. It is not `jarvis_jobs.run_due()`'s duplicate; when it is
+        eventually attached to a clock it follows that ticker's safe-heartbeat
+        rules (one registration, no thread of its own, idempotent, and a
+        raising step fails that job rather than the tick).
         """
         now = now if now is not None else _now()
         report: dict = {"now": _iso(now), "stop": self.stop_requested(),

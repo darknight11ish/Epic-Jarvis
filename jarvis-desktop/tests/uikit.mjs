@@ -1782,7 +1782,10 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             if (sc.fails) throw new Error(sc.fails);
             const out = JSON.parse(JSON.stringify({ available: true, jobs: sc.jobs, todo: sc.todo,
               ...(sc.went_off ? { went_off: sc.went_off } : {}),
-              ...(sc.lists ? { lists: sc.lists } : {}) }));
+              ...(sc.lists ? { lists: sc.lists } : {}),
+              // The Today board (GTD-2): what brain/schedule.rs adds under
+              // `cockpit` from GET /api/today/cockpit.
+              ...(sc.cockpit ? { cockpit: sc.cockpit } : {}) }));
             const sec = window.__security;
             if (sec.hidden && !sec.revealed) {
               // As Rust's redact_list: words out, list names replaced.
@@ -1797,9 +1800,33 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                 j.text = ""; j.hidden = true;
                 if (j.list) j.list = standIn(j.list);
               }
+              // The board's words go too; its own yes/no switch state stays.
+              if (out.cockpit) {
+                for (const key of ["due_reminders", "active_next_steps", "proposals"]) {
+                  if (Array.isArray(out.cockpit[key])) out.cockpit[key] = [];
+                }
+              }
               out.hidden = true;
             }
             return out;
+          }
+          case "brain_schedule_set_unspoken": {
+            // GTD-2: the said-I'd-do switch. OFF immediate; ON is one card
+            // that waits (the real PC answers 202 and changes nothing until
+            // the card is approved). Nothing here is held on a stale link.
+            window.__scheduleCalls.push({ cmd, ...args });
+            const sc = window.__schedule;
+            if (!sc) throw new Error("Your PC's Jarvis does not have timers and " +
+              "reminders yet - run apply-patches.ps1 on the PC.");
+            if (args.enabled === true) {
+              return { ok: true, waiting: true, enabled: false,
+                message: "Waiting for your approval. Suggestions turn on only if you " +
+                  "approve the card, on your PC or phone." };
+            }
+            sc.cockpit = { ...(sc.cockpit || {}), unspoken_commitments_enabled: false,
+              rollover_cards: [] };
+            return { ok: true, waiting: false, enabled: false,
+              message: "Said-I'd-do suggestions are off. The Today page shows none." };
           }
           case "brain_schedule_act": {
             window.__scheduleCalls.push({ cmd, ...args });
