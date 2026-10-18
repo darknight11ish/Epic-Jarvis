@@ -299,9 +299,11 @@ class ClientSettings(context: Context) {
         prefs.edit {
             putBoolean(KEY_UPDATE_CHECKS, on)
             // Off forgets what the last check found, so nothing stale is
-            // shown if it is turned back on later.
+            // shown if it is turned back on later. The version the line was
+            // cached on goes with it.
             if (!on) {
                 remove(KEY_UPDATE_NEWER)
+                remove(KEY_UPDATE_NEWER_VERSION)
                 remove(KEY_UPDATE_PROBLEM)
             }
         }
@@ -317,6 +319,36 @@ class ClientSettings(context: Context) {
     var updateNewerLine: String?
         get() = prefs.getString(KEY_UPDATE_NEWER, null)
         set(value) = prefs.edit { if (value == null) remove(KEY_UPDATE_NEWER) else putString(KEY_UPDATE_NEWER, value) }
+
+    /** The app's own version (`BuildConfig.VERSION_NAME`) that was running when
+     * [updateNewerLine] was stored, or null for a cache written before this
+     * was recorded.
+     *
+     * ADDITIVE, on purpose: an existing install keeps every stored setting.
+     * A missing value simply reads as "cached by an older APK", which is
+     * exactly what it is, and the update checker then drops only that one
+     * cached line - never the "check for new versions" switch, the last-try
+     * time, or anything else on the phone.
+     */
+    var updateNewerLineVersion: String?
+        get() = prefs.getString(KEY_UPDATE_NEWER_VERSION, null)
+        set(value) = prefs.edit {
+            if (value == null) remove(KEY_UPDATE_NEWER_VERSION) else putString(KEY_UPDATE_NEWER_VERSION, value)
+        }
+
+    /**
+     * Store the cached line and the app version that cached it in ONE commit
+     * (or forget both). The pair is read together by
+     * [com.jarvis.client.platform.UpdateChecker], so a crash between two
+     * separate writes must never leave a line that looks newer than it is:
+     * this way there is no gap to crash in.
+     */
+    fun setUpdateNewerLine(line: String?, version: String?) {
+        prefs.edit {
+            if (line == null) remove(KEY_UPDATE_NEWER) else putString(KEY_UPDATE_NEWER, line)
+            if (version == null) remove(KEY_UPDATE_NEWER_VERSION) else putString(KEY_UPDATE_NEWER_VERSION, version)
+        }
+    }
 
     /** Why the last check did not get an answer, for Checks only, or null. */
     var updateProblem: String?
@@ -360,6 +392,8 @@ class ClientSettings(context: Context) {
         const val KEY_UPDATE_CHECKS = "update_checks"
         const val KEY_UPDATE_LAST_TRY = "update_last_try_ms"
         const val KEY_UPDATE_NEWER = "update_newer_line"
+        /** Additive key: absent on installs that cached a line before it existed. */
+        const val KEY_UPDATE_NEWER_VERSION = "update_newer_line_version"
         const val KEY_UPDATE_PROBLEM = "update_problem"
         const val KEY_LISTEN_WANTED = "phone_listening_wanted"
         /** `quick_tile_0`, `quick_tile_1`, ... - one per tile slot. */
