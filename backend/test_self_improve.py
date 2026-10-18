@@ -933,20 +933,56 @@ def t_the_repository_ships_this_module_in_all_three_lists():
           "backend/<file> has no jarvis-backend/ twin")
 
 
-def t_the_module_has_no_route_and_no_install():
-    """Section 5.4 and the design's refusal list: this is not a route, is not on
-    the phone, and opens nothing for a client to call."""
-    source = (HERE / "jarvis_self_improve.py").read_text(encoding="utf-8")
-    check("there is no install() for a route to come from", "def install(" not in source)
-    check("... and no request handler",
-          not re.search(r"def do_(GET|POST)|self\._send\(|add_route|handle_route", source),
-          "a handler or a route registration was found")
-    check("... and the only endpoint it ever names is the local model's own",
-          set(re.findall(r"/api/[a-z_/]+", source)) == {"/api/generate"},
-          sorted(set(re.findall(r"/api/[a-z_/]+", source))))
-    check("... and no thread, timer or background loop",
-          not re.search(r"threading|Thread\(|schedule|Timer\(", source))
-    check("... and it writes no file", not re.search(r"\.write_text\(|\.write_bytes\(|open\([^)]*[\"'][wa]", source))
+def t_the_only_route_is_two_read_only_gets_and_no_way_to_draft():
+    """Section 5.4 and the design's refusal list, kept by what the route CANNOT do.
+
+    Phase 3 was originally wired with "no route", so that nothing could apply
+    anything. The wiring queue (the read-only diagnostic route, wired
+    2026-10-17) exposed the READ-ONLY half only: two GETs, for the owner, so a
+    question about the program's own source can be asked without opening the
+    source by hand. Phase 5 - applying a change - is still not here.
+
+    This check proves the wall BEHAVIOURALLY rather than by reading the source:
+    after install(), the class gains a GET wrapper and NO POST wrapper, every
+    other path still reaches the core, there is no route for draft(), and the
+    diagnosis route refuses a request that carries no question. The route's own
+    answers and refusals are in `test_self_improve_diagnostic.py`."""
+    core, sent = [], []
+
+    class Handler:
+        def __init__(self, path="/"):
+            self.path = path
+
+        def do_GET(self):
+            core.append(("GET", self.path))
+
+        def do_POST(self):
+            core.append(("POST", self.path))
+
+        def _send(self, code, payload):
+            sent.append((code, payload))
+            return payload
+
+    post0, get0 = Handler.do_POST, Handler.do_GET
+    line = M.install(Handler, origin_ok=lambda r: True, token_ok=lambda r: True,
+                     read_body=lambda r: b"{}")
+    check("install() exists and returns a banner line for the start-up banner",
+          isinstance(line, str) and "self-improve" in line, line)
+    check("... and the class gained NO POST handler: a read cannot become a write",
+          Handler.do_POST is post0)
+    check("... and it did wrap do_GET, so the two read-only GETs are served",
+          Handler.do_GET is not get0)
+    Handler("/api/other").do_GET()
+    check("... and every other path still reaches the core",
+          core == [("GET", "/api/other")], core)
+    Handler("/api/self-improve/draft").do_GET()
+    check("... and there is no draft route: the draft path reaches the core too",
+          core[-1] == ("GET", "/api/self-improve/draft"), core)
+    Handler("/api/self-improve/diagnose").do_GET()
+    check("... and the diagnosis route refuses a request with no question",
+          sent and sent[-1][0] == 400 and "empty" in str(sent[-1][1]), sent)
+    check("... and nothing was written: the core saw no POST",
+          all(method == "GET" for method, _ in core), core)
 
 
 if __name__ == "__main__":
@@ -980,7 +1016,7 @@ if __name__ == "__main__":
         t_no_confidence_is_asked_for_or_reported,
         t_the_real_tree_answers_with_a_real_line,
         t_the_repository_ships_this_module_in_all_three_lists,
-        t_the_module_has_no_route_and_no_install,
+        t_the_only_route_is_two_read_only_gets_and_no_way_to_draft,
     )
     for fn in RUN:
         print(f"\n--- {fn.__name__} ---")

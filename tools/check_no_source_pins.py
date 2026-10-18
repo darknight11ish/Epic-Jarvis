@@ -171,7 +171,12 @@ SOURCE_PIN_CEILING: dict[str, int] = {
     "backend/test_second_card.py": 11,
     "backend/test_second_card_suggest.py": 15,
     "backend/test_security_pc.py": 2,
-    "backend/test_self_improve.py": 12,
+    # LOWERED 2026-10-17 (self-improve diagnostic route, task-5): the old
+    # `t_the_module_has_no_route_and_no_install` was six pins on the module's
+    # source text; the module now HAS a read-only route, so that pin was
+    # replaced with a behavioural stand-in-Handler check in the same file. The
+    # six that remain are other tests' pins. The ratchet only turns DOWN.
+    "backend/test_self_improve.py": 6,
     "backend/test_selftest_preflight.py": 2,
     "backend/test_shipped_modules.py": 5,
     "backend/test_skill_hub.py": 1,

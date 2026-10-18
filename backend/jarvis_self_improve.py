@@ -86,9 +86,28 @@ WHAT PROTECTS WHAT IS QUOTED
     conversation cannot later be offered a cloud lane.
   * The only thing this module ever sends anywhere is the prompt to the LOCAL
     model, and `_loopback_url()` refuses a host that is not loopback. There is no
-    other network call, no route, and no client of any kind.
+    other network call and no client of any kind.
   * There is no field anywhere in this file for a model's self-reported
     confidence. Section 4.4: it is not evidence.
+
+THE TWO ROUTES, AND WHY THEY ARE THE ONLY ONES (added 2026-10-17)
+
+The design's Phase 3 was written with "no route" so that nothing could apply
+anything, and Phase 5 is still not here: this module applies nothing, writes
+nothing, cards nothing and reverts nothing. What IS here now is the read-only
+exposure the wiring queue asked for (2026-10-17): two
+GET routes, behind the core's own origin and token checks, answered by
+`install()` - the same shape every drop-in module's install() has, called from
+`plugins/ready/self-improve/`:
+
+    GET /api/self-improve/diagnose?q=<question>   diagnose()'s answer, cited
+    GET /api/self-improve/contract?model=<name>   jarvis_ollama_contract.probe()
+
+Both only read. The diagnosis reads this program's own source and asks the
+LOCAL model; the contract route asks the local Ollama for `POST /api/show`,
+which reads the model's own metadata and loads nothing. Neither writes a file,
+approves anything, starts a program, or leaves this PC. There is NO POST route
+and no route for `draft()`: a drafted change still has no way out of the box.
 
 WHAT PHASE 4 DRAFTS, AND WHAT IT REFUSES
 
@@ -110,10 +129,14 @@ obeyed. The suite drives it with diffs that exist only in the test.
 
 WHAT THIS DELIBERATELY DOES NOT DO
 
-  * It applies nothing, writes nothing, cards nothing, and has no route. Phase 5.
+  * It applies nothing, writes nothing and cards nothing, and there is no route
+    for `draft()`. Phase 5 - applying a change with an approval card and a
+    one-click undo - is still not here.
   * It does not read the owner's memory, mail, calendar or documents.
-  * It is not on the phone: the phone is a remote, not a second brain
-    (`docs/ARCHITECTURE.md` section 8).
+  * No app calls the two read-only GET routes: this is a PC-side diagnostic for
+    the owner, and this slice adds no desktop or Android face. The routes are
+    answered to any client that passes the core's own checks, and that is all
+    that is claimed.
 
 Standard library only. No import of a shipped module happens at import time: the
 scrubber and the gate are imported inside the functions that need them, each
@@ -1184,3 +1207,259 @@ def proposal_text(proposal: Proposal) -> str:
     lines.append("")
     lines.append("Nothing was changed. This is a draft for you to apply by hand.")
     return "\n".join(lines)
+
+
+# --------------------------------------------------------------------------
+#   The route - two READ-ONLY GETs, added 2026-10-17
+#
+#   This is the wiring queue's own item (the master guide's Part III.1 item 3):
+#   the merged self-diagnosis and Ollama-contract libraries had no caller an
+#   owner could reach. `install()` below is the call the drop-in folder
+#   `plugins/ready/self-improve/` makes - exactly the shape
+#   jarvis_receipts.install and jarvis_vault.install use, and the reason this
+#   feature needs no patch at all.
+#
+#   The boundary is the ABSENCE of things, and it is the point:
+#
+#     * GET only. `do_GET` is wrapped and `do_POST`, `do_PUT` and the rest are
+#       never touched, so a caller cannot turn a read into a write. There is no
+#       route for draft(): applying a change stays Phase 5 and is not here.
+#     * The two routes read. `diagnose()` reads this program's own source and
+#       asks the LOCAL model; `jarvis_ollama_contract.probe()` makes ONE
+#       read-only POST to the local Ollama's `/api/show`. Nothing writes a file,
+#       approves anything, starts a program or leaves this PC.
+#     * No raw evidence line is returned. `diagnose()` scrubs its answer, and
+#       the citations are scrubbed HERE before they are serialised: their
+#       `text` field is the line as re-read from disk, and returning it raw
+#       would be a second display path with one fewer guard than `text()` has.
+# --------------------------------------------------------------------------
+
+#: The two routes this module answers. Only these exact paths are handled;
+#: every other path, including another feature's, goes straight to the core's
+#: own do_GET untouched.
+DIAGNOSE_PATH = "/api/self-improve/diagnose"
+CONTRACT_PATH = "/api/self-improve/contract"
+PATHS = frozenset((DIAGNOSE_PATH, CONTRACT_PATH))
+
+#: How long a question may be, in characters. A question is a sentence and 500
+#: characters is far more than one; a longer one is refused rather than read.
+#: This is a limit, not a timing: nothing here is measured per answer.
+MAX_QUESTION_CHARS = 500
+
+
+def _quiet(line: str) -> None:
+    """The probe's log seam for the route.
+
+    `probe()` normally writes one line to the backend's own stderr the first
+    time it sees a finding. Called from a route, that sentence is already in
+    the answer, so it is not written a second time.
+    """
+    return None
+
+
+def _query_values(query: str) -> dict:
+    """The query string's values, the way every other route reads them."""
+    from urllib.parse import parse_qs
+    try:
+        return parse_qs(str(query or ""), keep_blank_values=True)
+    except Exception:                                          # noqa: BLE001
+        return {}
+
+
+def _one(values) -> str:
+    """The first value of a repeated query key, trimmed; "" when there is none."""
+    return str(values[0]).strip() if values else ""
+
+
+def _asked(query: str):
+    """(question, None), or ("", (400, refusal)) for a question that is refused.
+
+    Empty and over-long are the two refusals, and both are decided BEFORE the
+    source is searched or a model is asked: a bad request must cost nothing.
+    """
+    question = _one(_query_values(query).get("q"))
+    if not question:
+        return "", (400, {
+            "ok": False,
+            "error": "question is empty",
+            "message": ("ask a question about the program's own source, for example "
+                        "GET /api/self-improve/diagnose?q=where+is+the+taint+latch+written"),
+        })
+    if len(question) > MAX_QUESTION_CHARS:
+        return "", (400, {
+            "ok": False,
+            "error": "question is too long",
+            "message": (f"a question longer than {MAX_QUESTION_CHARS} characters is "
+                        f"refused, and nothing was read; this route reads the "
+                        f"program's own source, it is not a chat"),
+        })
+    return question, None
+
+
+def _citation_view(citation: Citation) -> dict:
+    """One citation as JSON: the scrubber's output, or a plain withholding note.
+
+    The scrubber runs HERE because `Citation.text` is the line re-read from
+    disk, not the explanation. `text()` scrubs at display time, and a route
+    that serialised the raw field would be a second display path with one
+    fewer guard.
+    """
+    clean = _scrubbed(citation.text)
+    out = {"path": citation.path, "line": citation.line,
+           "where": citation.where, "quote": ""}
+    if clean is None:
+        out["withheld"] = "the scrubber is not available, so the line was not read out"
+        return out
+    shown = clean.strip()
+    if len(shown) > MAX_QUOTE:
+        shown = shown[:MAX_QUOTE] + " ... (line truncated when shown)"
+    out["quote"] = shown
+    return out
+
+
+def _diagnosis_view(question: str, diagnosis: Diagnosis) -> dict:
+    """`Diagnosis` as JSON - the fields the dataclass gives, and no more.
+
+    `evidence` is deliberately NOT here: those lines were never scrubbed, so
+    serialising them would expose more than `text()` allows. `found` False is
+    an ordinary answer ("this PC could not establish it"), not a route failure,
+    so `ok` stays true and `why` says what happened in plain words.
+    """
+    return {
+        "ok": True,
+        "read_only": True,
+        "route": "diagnose",
+        "question": question,
+        "found": bool(diagnosis.found),
+        "answer": diagnosis.answer if diagnosis.found else "",
+        "citations": ([_citation_view(c) for c in diagnosis.citations]
+                      if diagnosis.found else []),
+        "why": "" if diagnosis.found else diagnosis.why,
+        "tainted": bool(diagnosis.tainted),
+        "latched": bool(diagnosis.latched),
+        "model": diagnosis.model,
+        "words": text(diagnosis),
+    }
+
+
+def _answer_diagnose(query: str, *, ask=None) -> tuple:
+    """(200, the diagnosis) for a question that may be asked; else the refusal."""
+    question, refusal = _asked(query)
+    if refusal is not None:
+        return refusal
+    return 200, _diagnosis_view(question, diagnose(question, ask=ask))
+
+
+def _answer_contract(query: str, *, ask_ollama=None) -> tuple:
+    """(200, the contract report) or (503, why it could not be read at all).
+
+    A missing `model=` uses the module's own default - the same model a
+    diagnosis would ask (`JARVIS_MODEL`, else `qwen3.5:9b`).
+    """
+    model = _one(_query_values(query).get("model")) or _model_name(None)
+    try:
+        import jarvis_ollama_contract as contract       # noqa: PLC0415
+    except Exception:                                   # noqa: BLE001
+        return 503, {
+            "ok": False,
+            "error": "the Ollama contract module is not installed",
+            "message": ("jarvis_ollama_contract.py is not in this backend, so the "
+                        "contract cannot be read; nothing was changed"),
+        }
+    # `_loopback_url()` with no argument checks OLLAMA_HOST and falls back to
+    # loopback, so this route cannot be pointed at another machine either.
+    report = contract.probe(model, url=_loopback_url(), ask=ask_ollama,
+                            log=_quiet, when="self-improve route")
+    return 200, {
+        "ok": True,
+        "read_only": True,
+        "route": "contract",
+        "model": report.model,
+        "url": report.url,
+        "verdict": report.verdict,
+        "usable": bool(report.usable),
+        "said": list(report.said) if report.said is not None else None,
+        "unknown": list(report.unknown),
+        "missing": list(report.missing),
+        "note": report.note,
+        "when": report.when,
+        "words": contract.text(report),
+    }
+
+
+def handle_get(route: str, query: str = "", *, ask=None, ask_ollama=None) -> tuple:
+    """(status, JSON object) for one route - the route's whole answer, no socket.
+
+    Public so the suite drives every refusal and every outcome without a
+    handler and without an Ollama; `install()` is the only caller in the
+    backend. `ask` and `ask_ollama` are the same seams `diagnose()` and
+    `probe()` already expose, not new behaviour.
+    """
+    if route == DIAGNOSE_PATH:
+        return _answer_diagnose(query, ask=ask)
+    if route == CONTRACT_PATH:
+        return _answer_contract(query, ask_ollama=ask_ollama)
+    return 404, {
+        "ok": False,
+        "error": "no such route",
+        "message": (f"this module answers two read-only GET routes: "
+                    f"{DIAGNOSE_PATH} and {CONTRACT_PATH}"),
+    }
+
+
+def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
+    """Wrap `handler_cls.do_GET` so the two read-only diagnostic routes are
+    answered here, after the server's own origin and token checks.
+
+    Every other request goes straight to the original do_GET. `do_POST` is NOT
+    wrapped, because both routes read and a read must not be reachable by POST.
+    The same shape jarvis_receipts.install and jarvis_vault.install use - and
+    the reason this feature needs no patch: `plugins/ready/self-improve/plugin.json`
+    names this module and `jarvis_plugins.py` makes the call the patch would
+    have made.
+
+    `read_body` is accepted because every install() takes the core's three
+    callbacks; a GET route has no body to read, and this one reads none.
+    """
+    from urllib.parse import urlsplit
+    del read_body  # a GET route has no body; accepted for the loader's shape
+
+    get0 = handler_cls.do_GET
+    if getattr(get0, "_jarvis_self_improve", False):
+        return "  self-improve   read-only diagnosis and Ollama contract (already on)"
+
+    def _allowed(self) -> bool:
+        try:
+            if not origin_ok(self):
+                self._send(403, {"error": "cross-origin request refused"})
+                return False
+            if not token_ok(self):
+                self._send(401, {"error": "bad or missing X-Jarvis-Token"})
+                return False
+        except Exception:                                   # noqa: BLE001
+            self._send(401, {"error": "bad or missing X-Jarvis-Token"})
+            return False
+        return True
+
+    def do_GET(self):
+        parts = urlsplit(str(getattr(self, "path", "") or ""))
+        route = parts.path.rstrip("/")
+        if route not in PATHS:
+            return get0(self)
+        if not _allowed(self):
+            return None
+        try:
+            code, out = handle_get(route, parts.query)
+        except Exception as exc:                            # noqa: BLE001
+            # The exception's NAME only. Nothing in the answer is a traceback,
+            # and the owner is told plainly that nothing changed.
+            code, out = 503, {
+                "ok": False,
+                "error": type(exc).__name__,
+                "message": "the diagnostic could not be completed, and nothing was changed",
+            }
+        return self._send(code, out)
+
+    do_GET._jarvis_self_improve = True
+    handler_cls.do_GET = do_GET
+    return "  self-improve   read-only diagnosis and Ollama contract: on"

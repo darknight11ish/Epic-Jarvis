@@ -21196,3 +21196,130 @@ not to express, and guards the set of keywords a tool's own schema may use
 against the ones `jarvis_agent.check_call()` actually validates. It has no
 caller yet, so it has nothing to document here beyond that sentence; the
 `format`-on-a-tool-call design it warns about is recorded in its own docstring.
+
+## 139. Self-improvement diagnostics: two read-only GETs, and everything they cannot do (added 2026-10-17)
+
+Two modules this repository already ships - `backend/jarvis_self_improve.py`
+(file:line-cited diagnosis of Jarvis's own source) and
+`backend/jarvis_ollama_contract.py` (the three-outcome check that Ollama is
+telling Jarvis the truth about the local model) - had no caller an owner could
+reach. This section is the wiring: a drop-in folder,
+`plugins/ready/self-improve/`, whose `plugin.json` names the module and whose
+`install()` the loader calls. **No patch is replaced, no `$SHIPPED` entry is
+added (both modules were already shipped), and nothing in `jarvis_hud.py`
+changes.**
+
+The two routes are answered by `jarvis_self_improve.install()`, behind the
+server's own origin and token checks like every other route. **Only `do_GET` is
+wrapped.** `do_POST` is never touched, so a read cannot be reached by POST, and
+there is no route for `draft()` at all - applying a change is Phase 5 of the
+self-improvement design and is not here.
+
+### 139.1 `GET /api/self-improve/diagnose?q=<question>`
+
+Read the program's own text files, ask the LOCAL model which of the matching
+lines answers the question, and quote the lines that were cited. A citation is
+re-read from the file at the moment it is reported, so the quote beside
+`file:line` is the line that is really there.
+
+```json
+{
+  "ok": true,
+  "read_only": true,
+  "route": "diagnose",
+  "question": "where is the taint latch written",
+  "found": true,
+  "answer": "the explanation, in the model's words, over those lines",
+  "citations": [
+    {"path": "backend/jarvis_gate.py", "line": 1772,
+     "where": "backend/jarvis_gate.py:1772", "quote": "def latch_taint(...)"}
+  ],
+  "why": "",
+  "tainted": false,
+  "latched": false,
+  "model": "qwen3.5:9b",
+  "words": "the same answer and citations as one plain block of text"
+}
+```
+
+- **`ok` is "the route answered". `found` is "this PC established it".** They
+  are different questions and are reported separately. `found: false` comes
+  back with `why` saying what happened in plain words (no line mentions the
+  question, the scrubber is missing, the local model could not be asked, the
+  model named no line). It always carries NO citation - a "could not establish
+  it" must never look like an answer with a `file:line` attached.
+- **Refusals:**
+  - `400` and `{"ok": false, "error": "question is empty", ...}` when `q` is
+    missing or only spaces;
+  - `400` and `"question is too long"` when it is over **500 characters**.
+    Nothing is searched and no model is asked for either refusal.
+- **`tainted` / `latched`** are the module's own private-material latch: a
+  question that touches it, or a line read from a module that holds it, marks
+  this conversation local-only via `jarvis_gate.latch_taint`. No text about
+  the private material is added to the answer by this route.
+- **What is deliberately NOT returned:** `diagnose()`'s raw `evidence` lines.
+  Those lines are never scrubbed, so returning them would be more than the
+  module's own display path allows. Citation quotes are scrubbed by the route
+  before they are serialised; if the scrubber is missing the quote is withheld
+  and says so.
+- **It is a synchronous read.** The HTTP request stays open while the local
+  model answers. `_run` stops waiting after 120 seconds, and the diagnosis then
+  comes back as "could not establish it". It is owner-initiated on the PC - no
+  background job, no approval card, no file written.
+- An internal exception is `503` with
+  `{"ok": false, "error": "<exception type>", "message": "plain words, nothing changed"}` -
+  never a traceback.
+
+### 139.2 `GET /api/self-improve/contract?model=<name>`
+
+One READ-ONLY `POST` to the local Ollama's `/api/show`, which reads the model's
+own metadata and loads nothing. The verdict is the contract module's three
+outcomes; `null` is its honest fourth state and is never a pass.
+
+```json
+{
+  "ok": true,
+  "read_only": true,
+  "route": "contract",
+  "model": "qwen3.5:9b",
+  "url": "http://127.0.0.1:11434",
+  "verdict": "understood",
+  "usable": true,
+  "said": ["completion", "tools", "vision", "thinking"],
+  "unknown": [],
+  "missing": [],
+  "note": "Ollama says this model can do: ... Jarvis knows every one of those names.",
+  "when": "self-improve route",
+  "words": "qwen3.5:9b: <the same sentence>"
+}
+```
+
+- `verdict` is `"understood"`, `"unknown_capabilities"` (Ollama lists a name
+  Jarvis has never heard of - news, not an error), `"missing_expected"` (the
+  model plainly has a capability that Ollama's list omits, so Jarvis would
+  under-use it), or **`null`** when Ollama sent no usable capability list.
+- **`null` is not a pass.** `usable` is then `false` and `note` says "NOT a
+  pass" in words. `said` is `null` too, not an empty list.
+- A missing `model=` uses the module's own default: `JARVIS_MODEL` if that
+  environment variable names one, otherwise `qwen3.5:9b` - the same model a
+  diagnosis would ask.
+- **It cannot be pointed at another machine.** The route passes the probe the
+  `jarvis_self_improve` loopback guard, so an `OLLAMA_HOST` naming a host that
+  is not `127.0.0.1`, `::1`, `localhost` or `0.0.0.0` is not used; the probe
+  falls back to loopback.
+- `503` when `jarvis_ollama_contract.py` is not in the backend at all; nothing
+  was changed.
+
+### 139.3 App surface: PC-only in this slice, said plainly
+
+**Neither app calls either route, and this slice adds no desktop or Android
+face.** That is deliberate: the wiring queue asked for a diagnostic the owner
+can query, not a product button - and a button that shows source snippets needs
+its own redaction/placement design first. `tools/check_parity.py` scans the two
+apps' own source for routes they call, so a backend route no app calls is
+outside what it decides, and it stays clean. No app menu, no Brain read
+section, and no `features/features.json` entry are added.
+
+`docs/CLAIMS.tsv` gets no row for this: it is a read-only exposure of two
+modules whose own claims are already registered, and adding a row would force
+an ABOUT recount against every open PR.
