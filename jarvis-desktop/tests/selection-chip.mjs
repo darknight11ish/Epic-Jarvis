@@ -1,7 +1,7 @@
 /**
  * selection-chip.js + the Jarvis bar's selection chip (Pillar 24-B;
  * src-tauri/src/selection.rs, GET /api/selection, backend
- * jarvis_ui_control.read_selection(); JARVIS-API section 139).
+ * jarvis_ui_control.read_selection(); JARVIS-API section 141).
  *
  * Two halves, both here because they are one interaction:
  *
@@ -50,7 +50,7 @@ const check = (name, fn) => {
   }
 };
 
-// The real backend shape (JARVIS-API section 139; the Python function's dict).
+// The real backend shape (JARVIS-API section 141; the Python function's dict).
 const GOOD = {
   ok: true, refused: false, why: "", text: "the selected words of a paragraph",
   app: "notepad", chars: 32, truncated: false, scrubbed: true,

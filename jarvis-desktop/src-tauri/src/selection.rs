@@ -1,6 +1,6 @@
 //! The Jarvis bar's one read: what the owner had highlighted when the bar
 //! opened (Pillar 24-B; backend `jarvis_ui_control.read_selection()`, through
-//! `jarvis_brain_reads.py`'s `GET /api/selection`, JARVIS-API section 139).
+//! `jarvis_brain_reads.py`'s `GET /api/selection`, JARVIS-API section 141).
 //!
 //! WHY THIS IS RUST AND NOT THE PAGE. The bar takes the focus the moment it is
 //! shown, and Windows UI Automation reports the FOCUSED control's selection -
