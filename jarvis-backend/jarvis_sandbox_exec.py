@@ -120,10 +120,20 @@ WHAT A SCRIPT'S WORLD LOOKS LIKE
 
 WHAT THIS MODULE DOES NOT DO, SAID PLAINLY
 
-  * It does not decide WHETHER a script should run. There is no route, no tool,
-    no approval card and no caller yet: an integration that offers this to the
-    model must put its own gate (the one permission model, `jarvis_gate`) in
-    front of it. This module only makes the running safe.
+  * It does not decide WHETHER a script should run. This module only makes the
+    running safe: the ONE switch below (`sandbox_exec_enabled`, default OFF)
+    says whether `jarvis_agent.offered_tools()` offers the model the tool at
+    all, and every actual run is decided by the agent under the existing
+    `file_read` / `calculator` gate actions. The switch is changed through
+    `request_enabled()`: ON is ONE normal settings approval card
+    (`change_own_config`, tier ask), OFF is immediate. There is no HTTP route
+    for it in this slice and no static Settings toggle is wired yet - the
+    reachable path tonight is the chat/voice one from either app
+    ("turn on the data sandbox"), which comes through
+    `jarvis_settings_registry` to `request_enabled()`.
+  * The switch never weakens a refusal: with it ON, every AST refusal, the wall
+    clock, the output cap, the memory cap and the files-only rule behave
+    exactly as they do with it OFF.
   * It is not a kernel sandbox. It is an allow-list plus a separate, scrubbed
     interpreter, which is the right shape for a local-first PC but is not
     SELinux or a container. On Windows the job object bounds the child's RAM;
@@ -162,6 +172,13 @@ import subprocess
 import sys
 import threading
 import time
+from pathlib import Path
+from typing import Callable, Optional
+
+try:
+    import jarvis_framework as fw
+except Exception:  # pragma: no cover - shipped beside it on the PC
+    fw = None  # type: ignore
 
 __all__ = ("run_data_script", "validate_sandbox_ast", "TIMEOUT_S", "OUTPUT_CAP",
            "MAX_INPUT_BYTES", "MAX_SCRIPT_BYTES", "MAX_MEMORY_BYTES",
@@ -1104,3 +1121,277 @@ def run_data_script(code: str, read_only_files: dict | None = None) -> dict:
         return refused
     result.update(cap)
     return result
+
+
+# --------------------------------------------------------------------------
+#   THE SWITCH (LM-1, 2026-10-18): is the sandbox offered to the AI model?
+# --------------------------------------------------------------------------
+# `run_data_script` is wired into jarvis_agent.py (#543) and is not in the
+# shipped `[tools].enabled` list, so the model is not offered it. That is not a
+# setting the owner can reach, and this section adds ONE boolean,
+# `sandbox_exec_enabled`, default FALSE, kept as sandbox.json beside the other
+# settings (the same per-feature file pattern jarvis_screen_picture.py and
+# jarvis_browser_engine.py use).
+#
+# OFF: jarvis_agent.offered_tools() does not offer the tool at all - even if
+# someone put its name in `[tools].enabled` by hand. ON: it is offered. Nothing
+# else about the sandbox changes: every AST refusal, the wall clock, the output
+# cap, the memory cap and the files-only rule apply exactly as before. The
+# switch decides only whether the model is TOLD the tool exists; it weakens no
+# refusal, and turning it off never changes code the sandbox runs.
+#
+# Turning it ON raises ONE normal settings approval card (gate action
+# `change_own_config`, tier "ask"): 202 while it waits, and nothing is written
+# until a person says yes. Turning it OFF is immediate and withdraws a waiting
+# card. A missing gate, a gate that cannot be asked, or a damaged settings file
+# leaves it OFF - fail closed, never a guess.
+#
+# NOT YET WIRED TO A STATIC SETTINGS TOGGLE: no route and no page click calls
+# this (LM-1 adds no HUD/patcher edit). The reachable path today is the
+# chat/voice one from either app: "turn on the data sandbox" -> jarvis_quick ->
+# jarvis_settings_registry's BoolSetting -> request_enabled() below, which
+# raises the same card. A real clickable switch on both apps is the follow-up
+# slice (LM-1C), not a claim made here.
+
+SWITCH_FILE = "sandbox.json"
+SWITCH_ACTION = "change_own_config"
+SWITCH_ON_WORDS = "On. The AI model is offered the data and maths sandbox."
+SWITCH_OFF_WORDS = "Off. The AI model is not offered the data and maths sandbox."
+SWITCH_ALREADY_WORDS = "The data sandbox is already on."
+SWITCH_WAITING_WORDS = ("Waiting for your approval. The AI model is offered the data sandbox "
+                        "only if you approve the card.")
+SWITCH_CARD = "\n".join([
+    "Let Jarvis offer its AI model the data and maths sandbox?",
+    "",
+    "Jarvis could then write and run a small Python script for sums, averages and percentages, "
+    "in its own separate process. The sandbox has no network, writes no file and keeps no "
+    "secret: it may read only files you have already listed for Jarvis, and it has a hard time "
+    "limit, a hard output limit, a memory cap where this PC has one, and refuses dangerous code "
+    "before it starts anything.",
+    "",
+    "Turning this on only OFFERS the tool to the model. Every one of the sandbox's own refusals "
+    "stays exactly as it is.",
+    "",
+    "You can turn it off at any time from either app, and that is instant.",
+    "",
+    "If you did not just ask for this, say no.",
+    "",
+    "If you say no: nothing changes - the AI model is still not offered the sandbox.",
+])
+SWITCH_LAST_WORDS = {
+    "enabled": "You approved the card, so the AI model is now offered the data sandbox.",
+    "denied": "The card was turned down, so the AI model is still not offered the data sandbox.",
+    "timed_out": "Nobody answered the card in time, so the AI model is still not offered the "
+                 "data sandbox.",
+    "refused": "Your PC did not allow the change, so the AI model is still not offered the data "
+               "sandbox.",
+    "withdrawn": "You turned it off while the card waited, so approving it changed nothing.",
+    "failed": "It was approved, but the setting could not be saved, so the AI model is still not "
+              "offered the data sandbox.",
+}
+
+_LOCK = threading.Lock()
+_SWITCH = threading.Lock()
+_PENDING: dict = {}
+_WITHDRAWN: set = set()
+_LAST_CARD: dict = {}
+
+
+def _config_dir() -> Path:
+    # The environment wins over the module constant: apply-patches.ps1 sets
+    # OPENJARVIS_CONFIG_DIR before the backend starts, and the suites set it
+    # after importing this module. Reading it live is also what lets a run be
+    # pointed at a private folder without touching the owner's state.
+    env = os.environ.get("OPENJARVIS_CONFIG_DIR") or os.environ.get("JARVIS_CONFIG_DIR")
+    if env:
+        return Path(os.path.expanduser(env))
+    mod = sys.modules.get("jarvis_framework") or fw
+    if mod is not None:
+        try:
+            return Path(mod.CONFIG_DIR)
+        except Exception:
+            pass
+    return Path(os.path.expanduser("~")) / ".openjarvis"
+
+
+def settings_path() -> Path:
+    """sandbox.json in the Jarvis settings folder (the owner's own data)."""
+    return _config_dir() / SWITCH_FILE
+
+
+def settings() -> dict:
+    """{"enabled": bool, "why": str}. A missing file is OFF (the default). An
+    unreadable or damaged file is OFF too, with the reason in `why`."""
+    path = settings_path()
+    try:
+        if not path.is_file():
+            return {"enabled": False, "why": ""}
+        got = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(got, dict):
+            raise ValueError("not a settings object")
+        return {"enabled": got.get("enabled") is True, "why": ""}
+    except Exception as exc:
+        return {"enabled": False,
+                "why": f"the data sandbox's settings file could not be read "
+                       f"({type(exc).__name__}), so it stays off"}
+
+
+def enabled() -> bool:
+    """True only when the owner's switch is ON and readable - never a guess."""
+    return settings()["enabled"]
+
+
+def set_enabled(on: bool) -> dict:
+    """Write the switch. OFF also withdraws a waiting card. Never raises."""
+    on = bool(on)
+    path = settings_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(json.dumps({"enabled": on}), encoding="utf-8")
+        os.replace(tmp, path)
+    except Exception as exc:
+        return {"ok": False, "enabled": enabled(),
+                "error": f"the data sandbox setting could not be saved "
+                         f"({type(exc).__name__}), so it did not change"}
+    return {"ok": True, "enabled": on,
+            "message": SWITCH_ON_WORDS if on else SWITCH_OFF_WORDS}
+
+
+def _audit(event: str, detail: dict) -> None:
+    try:
+        mod = sys.modules.get("jarvis_framework") or fw
+        if mod is not None:
+            mod.audit_log(event, detail)
+    except Exception:
+        pass
+
+
+def _gate(action: str, detail: dict, prompt: str):
+    import jarvis_gate
+    return jarvis_gate.check(action, detail, prompt=prompt)
+
+
+def _tier(action: str) -> str:
+    try:
+        mod = sys.modules.get("jarvis_framework") or fw
+        return str(mod.action_tier(action))
+    except Exception as exc:
+        return f"unreadable ({type(exc).__name__})"
+
+
+def _start_card_thread(fn: Callable[[], None]) -> None:
+    """Run the card's decide() off the caller's thread (named for the log)."""
+    threading.Thread(target=fn, name="jarvis-sandbox-switch-card", daemon=True).start()
+
+
+def _finish(pid: str, outcome: str, why: str = "") -> None:
+    with _LOCK:
+        if _PENDING.get("id") == pid:
+            _PENDING.clear()
+        _WITHDRAWN.discard(pid)
+        _LAST_CARD.clear()
+        _LAST_CARD.update(outcome=outcome, at=time.time(), why=why,
+                          message=SWITCH_LAST_WORDS.get(outcome, ""))
+    _audit("sandbox.switch.card", {"outcome": outcome})
+
+
+def _decide(pid: str, gate: Callable, tier_of: Callable) -> None:
+    detail = {"text": SWITCH_CARD,
+              "what": "offer the AI model a read-only data and maths sandbox",
+              "setting": "sandbox_exec_enabled", "to": True, "leaves_this_pc": False}
+    try:
+        v = gate(SWITCH_ACTION, detail, SWITCH_CARD)
+    except Exception as exc:
+        return _finish(pid, "refused", f"the approval gate failed ({type(exc).__name__})")
+    vtier = getattr(v, "tier", "unknown")
+    allowed = getattr(v, "allowed", False) is True
+    outcome = getattr(v, "outcome", None)
+    if outcome is None:
+        outcome = "approved" if (allowed and vtier == "ask") else "refused"
+    if vtier != "ask" or tier_of(SWITCH_ACTION) != "ask":
+        return _finish(pid, "refused",
+                       f"the gate answered at tier {vtier!r}, which is not a person saying yes")
+    if not (allowed and outcome == "approved"):
+        if outcome in ("denied", "timed_out"):
+            return _finish(pid, outcome)
+        return _finish(pid, "refused", str(getattr(v, "reason", "refused")))
+    with _SWITCH:
+        with _LOCK:
+            withdrawn = pid in _WITHDRAWN
+        if withdrawn:
+            return _finish(pid, "withdrawn", "you turned it off while the card was waiting")
+        out = set_enabled(True)
+        if out.get("ok") is False:
+            return _finish(pid, "failed", str(out.get("error", "")))
+        _finish(pid, "enabled")
+
+
+def request_enabled(on, *, gate: Optional[Callable] = None,
+                    tier_of: Optional[Callable[[str], str]] = None,
+                    spawn: Optional[Callable] = None) -> tuple:
+    """Ask for the sandbox switch to change. (http code, body).
+
+    ON is NEVER applied here: it raises ONE normal approval card and answers
+    202 {"waiting": true} - nothing is written until a person says yes. OFF is
+    immediate (200), withdraws a waiting card and never asks. A gate that
+    cannot be asked, a tier that is not "ask", or a settings file that cannot
+    be written changes nothing and says so."""
+    gate = gate or _gate
+    tier_of = tier_of or _tier
+    spawn = spawn or _start_card_thread
+    if not isinstance(on, bool):
+        return 400, {"ok": False, "error": 'need {"enabled": true|false}'}
+    if not on:
+        with _SWITCH:
+            with _LOCK:
+                if _PENDING:
+                    _WITHDRAWN.add(_PENDING["id"])
+                    _PENDING.clear()
+            out = dict(set_enabled(False) or {})
+        out.setdefault("ok", True)
+        out.update(enabled=False, waiting=False, message=SWITCH_OFF_WORDS)
+        _audit("sandbox.switch.off", {})
+        return 200, out
+    if enabled():
+        return 200, {"ok": True, "enabled": True, "waiting": False,
+                     "message": SWITCH_ALREADY_WORDS}
+    t = tier_of(SWITCH_ACTION)
+    if t != "ask":
+        return 503, {"ok": False, "enabled": False, "waiting": False,
+                     "error": (f"{SWITCH_ACTION} is tier {t!r} in the settings file; offering "
+                               "a tool to the AI model needs a person to say yes, so it must be "
+                               "'ask'")}
+    with _LOCK:
+        if _PENDING:
+            return 202, {"ok": True, "enabled": False, "waiting": True,
+                         "message": "A card to turn on the data sandbox is already waiting for "
+                                    "your approval."}
+        pid = secrets.token_hex(12)
+        _PENDING.update(id=pid, since=time.time())
+    _audit("sandbox.switch.asked", {})
+    try:
+        spawn(lambda: _decide(pid, gate, tier_of))
+    except Exception:
+        with _LOCK:
+            _PENDING.clear()
+        return 503, {"ok": False, "enabled": False, "waiting": False,
+                     "error": "could not raise the approval card, so nothing changed"}
+    return 202, {"ok": True, "enabled": False, "waiting": True,
+                 "message": SWITCH_WAITING_WORDS}
+
+
+def switch_state() -> dict:
+    """{"enabled", "waiting", "last"} - what a future settings row would read.
+    Not on a route and not drawn by either app yet (see the section note)."""
+    with _LOCK:
+        pending = dict(_PENDING)
+        last = dict(_LAST_CARD)
+    return {"enabled": enabled(), "waiting": bool(pending), "last": last or None}
+
+
+def _reset_for_tests() -> None:
+    with _LOCK:
+        _PENDING.clear()
+        _WITHDRAWN.clear()
+        _LAST_CARD.clear()

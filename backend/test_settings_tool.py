@@ -690,7 +690,7 @@ def t_one_call_routes_it_without_the_generic_gate():
           repr(convo2))
 
 
-def t_every_one_of_the_21_switches_resolves_from_its_own_names():
+def t_every_one_of_the_22_switches_resolves_from_its_own_names():
     """The tool's resolver must reach every switch the spoken grammar reaches -
     a name that resolves for the phrase path but not for the tool would leave
     exactly the gap this tool exists to close."""
@@ -702,8 +702,8 @@ def t_every_one_of_the_21_switches_resolves_from_its_own_names():
                 missing.append((b.key, name, None if got is None else got.key))
     check(f"all {len(R.BOOL_SETTINGS)} switches answer to every one of their names",
           not missing, repr(missing))
-    check("the count is still the 21 the settings audit measured",
-          len(R.BOOL_SETTINGS) == 21, str(len(R.BOOL_SETTINGS)))
+    check("the count is still the 22 LM-1 measured (21 before it)",
+          len(R.BOOL_SETTINGS) == 22, str(len(R.BOOL_SETTINGS)))
 
 
 def gate_signs_in(source: str, fn_name: str) -> list:
@@ -881,7 +881,7 @@ if __name__ == "__main__":
                t_a_phrase_that_names_no_setting_is_refused,
                t_every_setter_calls_a_function_that_exists,
                t_a_pending_change_cannot_back_an_i_did_it_claim,
-               t_every_one_of_the_21_switches_resolves_from_its_own_names,
+               t_every_one_of_the_22_switches_resolves_from_its_own_names,
                t_it_ships_on_so_a_turn_really_offers_it,
                t_its_description_tells_the_model_to_call_it,
                t_the_tier_rule_is_untouched_by_the_wording):

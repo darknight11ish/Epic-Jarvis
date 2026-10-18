@@ -213,11 +213,14 @@ def t_setting_links_are_real():
     # all on this page (two are on the Brain's Memory tab, one is a row inside
     # "What asks first"), and two are the phone's own. `big_coder` joined them
     # on 2026-10-11: the 30B coder's opt-in has a route and a spoken switch,
-    # and no page row yet.
+    # and no page row yet. `sandbox_exec` joined on 2026-10-18 (LM-1): the one
+    # tool whose switch is its own, with a real card and no clickable row yet -
+    # a row that cannot be clicked would be a dead toggle, so it deliberately
+    # has none until LM-1C wires the surfaces.
     orphans = sorted(keys - {r.setting for r in R.DESKTOP_ROWS if r.setting})
-    check("...and the BoolSettings with no desktop row are the known six",
+    check("...and the BoolSettings with no desktop row are the known seven",
           orphans == ["background_learning", "big_coder", "learn_sensitive_topics",
-                      "lights_without_card", "phone_notifications",
+                      "lights_without_card", "phone_notifications", "sandbox_exec",
                       "smartwatch_notifications"], str(orphans))
     phone_linked = sorted(r.setting for r in R.SETTINGS_ROWS
                           if r.owner == "phone" and r.setting)
@@ -277,6 +280,11 @@ def t_bool_settings_is_the_measured_thirteen():
     They raise the rows they are the same switch as from seven to fifteen,
     which this file's other check states.
 
+    Twenty-two since 2026-10-18 (LM-1): `sandbox_exec`, the data and maths
+    sandbox. It is a spoken switch with a real approval card and deliberately
+    NO page row yet - a toggle that cannot be clicked is worse than none - so
+    it is the seventh orphan in the check above. LM-1C gives it the rows.
+
     Neither is a row added "beside" the spoken table: each is a switch the
     owner can say out loud, which is what this table is. The growth is argued
     where each lives - the BoolSetting's own comment and the setter's docstring
@@ -284,8 +292,8 @@ def t_bool_settings_is_the_measured_thirteen():
     phrase and dispatches on the same key, so both phrases really work. Any
     further growth has to be argued the same way.
     """
-    check("BOOL_SETTINGS holds its twenty-one spoken settings",
-          len(R.BOOL_SETTINGS) == 21, str(len(R.BOOL_SETTINGS)))
+    check("BOOL_SETTINGS holds its twenty-two spoken settings",
+          len(R.BOOL_SETTINGS) == 22, str(len(R.BOOL_SETTINGS)))
 
 
 def main() -> int:
