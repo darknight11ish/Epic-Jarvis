@@ -1938,6 +1938,13 @@ $SHIPPED = @(
 # prompt byte-identical and the KV prefix intact. Reads nothing, writes
 # nothing, opens no route; the optional model condensation is off by default.
 'jarvis_compaction.py'       # What a long conversation keeps, exactly
+# --- Pillar 15: the hermetic Python data/maths sandbox (2026-10-17).
+# A local model may one day write a small Python script for the owner; that
+# script is untrusted text, and this module is the one place it runs. Called
+# by nothing yet - the module and its 85-check suite ship first, and the chat
+# tool that will use it is a later, separately-approved slice. No model call,
+# no route, no file written.
+'jarvis_sandbox_exec.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.

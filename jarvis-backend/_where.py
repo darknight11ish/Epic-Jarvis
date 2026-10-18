@@ -994,6 +994,15 @@ SHIPPED = (
     # the only optional model call is off by default and off the hot path.
     # Standard library only.
     "jarvis_compaction.py",
+    # --- Pillar 15, 2026-10-17: the hermetic Python data/maths sandbox ---
+    # A local model may one day write a small Python script for the owner (add
+    # up a CSV, take an average). That script is untrusted text; this module is
+    # the one place it runs - AST allowlist, then a `python -B -I` child with a
+    # scrubbed environment, a hard wall clock and output cap, then a
+    # nonce-verified JSON envelope. Called by nothing yet: this is the module
+    # and its 85-check suite, and the chat tool that uses it is a later,
+    # separately-approved slice. No model call, no route, no file written.
+    "jarvis_sandbox_exec.py",
 )
 
 
