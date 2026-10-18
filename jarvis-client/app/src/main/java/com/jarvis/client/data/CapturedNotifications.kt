@@ -70,10 +70,25 @@ class CapturedNotifications(context: Context) {
         .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     init {
-        // One-time move of rows an older build stored as plain text.
-        synchronized(LOCK) {
-            if (prefs.contains(KEY_ITEMS) && !prefs.contains(KEY_ENC)) loadOrNull()?.let { save(it) }
-        }
+        migrateLegacyAtStartup()
+    }
+
+    /**
+     * L6: eagerly move rows an older build stored as PLAIN TEXT, instead of
+     * waiting for the next notification to arrive (the old migration ran only
+     * inside [add]). Called from the constructor and from `JarvisApp.onCreate`,
+     * so a phone that upgrades and then captures nothing new still loses the
+     * plaintext copy at the next start.
+     *
+     * If both the old plain blob and the encrypted blob exist, the plain one is
+     * stale (the encrypted save always removes it) and is removed. If the
+     * encrypted save cannot run right now, the plain blob is removed anyway:
+     * keeping a readable copy of notifications is the worse outcome.
+     */
+    fun migrateLegacyAtStartup() = synchronized(LOCK) {
+        if (!prefs.contains(KEY_ITEMS)) return@synchronized
+        if (!prefs.contains(KEY_ENC)) loadOrNull()?.let { save(it) }
+        prefs.edit { remove(KEY_ITEMS) }
     }
 
     /** Adds one, already-redacted notification, then trims to the caps. */

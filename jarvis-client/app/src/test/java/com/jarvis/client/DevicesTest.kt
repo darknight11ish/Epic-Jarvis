@@ -246,4 +246,34 @@ class DevicesTest {
         assertFalse(shown, "AAAAAAAAAAAAAAAAAAAAb_-" in shown)
         assertTrue(shown, "100.64.0.1" in shown)
     }
+
+    // --- M10: Unpair & clear the token ---
+
+    @Test
+    fun `the remove route is the one the phone's own unpair uses`() {
+        val key = "jdk1.d3f9a1c2e." + "A".repeat(43)
+        val id = DeviceKey.idOf(key)
+        assertEquals("d3f9a1c2e", id)
+        assertEquals("""{"id":"d3f9a1c2e"}""", Devices.removeBody(id!!))
+        assertTrue(Devices.REMOVE_PATH in Devices.POST_PATHS)
+    }
+
+    @Test
+    fun `the unpair sentence is honest about which half happened`() {
+        val removed = Devices.unpairSaid(removedOnPc = true)
+        assertTrue(removed.startsWith("Unpaired."))
+        assertTrue(removed.contains("token is cleared"))
+        assertTrue(removed.contains("PC removed it"))
+        assertTrue(removed.contains("Pair again"))
+
+        val offline = Devices.unpairSaid(removedOnPc = false)
+        assertTrue(offline.startsWith("Unpaired."))
+        assertTrue(offline.contains("token is cleared"))
+        assertTrue(offline.contains("could not be reached"))
+        assertTrue(offline.contains("Settings, Devices"))
+        // The button and prompt name the secret this action destroys.
+        assertTrue(Devices.UNPAIR_BUTTON.contains("clear the token"))
+        assertTrue(Devices.UNPAIR_PROMPT.contains("clears its pairing token"))
+        assertTrue(Devices.UNPAIR_PROMPT.contains("pair again"))
+    }
 }

@@ -679,6 +679,14 @@ object JarvisRuntime {
     private val _notice = MutableStateFlow<String?>(null)
     val notice: StateFlow<String?> = _notice.asStateFlow()
 
+    /**
+     * Bumped by [unpairAndClearToken] (M10). The activity listens so the
+     * pairing screen comes back at once, instead of leaving Home on a link
+     * whose token and address are already gone.
+     */
+    private val _unpaired = MutableStateFlow(0)
+    val unpairedTick: StateFlow<Int> = _unpaired.asStateFlow()
+
     private val _problem = MutableStateFlow<com.jarvis.client.net.PlainErrors.Shown?>(null)
 
     /**
@@ -1092,6 +1100,18 @@ object JarvisRuntime {
     /** True once there is somewhere to talk to and something to talk with. */
     fun isPaired(): Boolean =
         started && !settings.baseUrl().isNullOrEmpty() && tokens.hasToken()
+
+    /**
+     * M12: notification CONTENT is redacted when App lock/private lists say so,
+     * or when the phone's own lock screen is not secure. One rule for every
+     * notifier, so a swipe-only lock screen cannot show a reminder or an
+     * approval body in the clear. If the context is absent, redact.
+     */
+    private fun notificationsLocked(security: com.jarvis.client.data.Security): Boolean =
+        com.jarvis.client.data.SecurityRules.notificationsLocked(
+            security,
+            appContext?.let { com.jarvis.client.platform.DeviceSecure.isSecure(it) } ?: false,
+        )
 
     // -------------------------------------------------------- handshake ----
 
@@ -5108,6 +5128,44 @@ object JarvisRuntime {
             is ApiResult.Failed -> ("Not removed. " + describe(r.error)) to false
         }
 
+    /**
+     * M10: "Unpair & clear the token" in Settings -> Devices. Reuses the
+     * EXISTING `/api/devices/remove` route (the PC's device list is the
+     * revoke/rotation surface - no backend route was added), then clears the
+     * local Keystore token, the saved address and the event stream.
+     *
+     * Order matters in the safe direction: the PC is asked FIRST (only while
+     * this phone still has its key to authenticate with), and the local secret
+     * is cleared afterwards whatever the PC answered. A PC that cannot be
+     * reached leaves the token cleared locally and says so; it can still be
+     * removed from the PC's own Settings, Devices list.
+     *
+     * @return the sentence to show and to keep in [notice].
+     */
+    suspend fun unpairAndClearToken(): String {
+        val token = tokens.token()
+        val id = com.jarvis.client.net.DeviceKey.idOf(token)
+        var removedOnPc = false
+        if (id != null) {
+            val r = api.devicesPost(
+                com.jarvis.client.net.Devices.REMOVE_PATH,
+                com.jarvis.client.net.Devices.removeBody(id),
+            )
+            removedOnPc = r is ApiResult.Ok && r.value.first == 200
+        }
+        stopStream()
+        tokens.clear()
+        settings.setHost("")
+        settings.clearResumePoint()
+        com.jarvis.client.net.KeyRefusal.clear()
+        _pending.value = emptyList()
+        appContext?.let { com.jarvis.client.service.EventService.stop(it) }
+        val said = com.jarvis.client.net.Devices.unpairSaid(removedOnPc)
+        _notice.value = said
+        _unpaired.value = _unpaired.value + 1
+        return said
+    }
+
     /** "Retire for other devices" - stricter, so immediate (design §6.4). @return the sentence to show. */
     suspend fun retireSharedKey(): String =
         when (val r = api.devicesPost(com.jarvis.client.net.Devices.SHARED_PATH, com.jarvis.client.net.Devices.RETIRE_BODY)) {
@@ -6869,7 +6927,7 @@ object JarvisRuntime {
             val security = settings.security.value
             // A notification is outside the app: a lock that is ON counts,
             // whether or not the lists were shown a moment ago.
-            val locked = security.appLock || security.privateLists
+            val locked = notificationsLocked(security)
             val (title, text) = com.jarvis.client.net.Schedule.notification(kind, job, locked)
             val lockScreen = job?.lockScreen?.takeIf { it.isNotEmpty() }
                 ?: com.jarvis.client.net.Schedule.lockScreen(kind)
@@ -6917,7 +6975,7 @@ object JarvisRuntime {
             }
             if (!fresh) return@launch
             val security = settings.security.value
-            val locked = security.appLock || security.privateLists
+            val locked = notificationsLocked(security)
             val (title, text) = com.jarvis.client.net.Schedule.notification(kind, job, locked)
             val late = com.jarvis.client.net.Schedule.heardLate(job?.alertAt ?: job?.firedAt, arrived / 1000.0, job?.ageSeconds)
             com.jarvis.client.service.ScheduleNotifier.post(
@@ -7685,7 +7743,7 @@ object JarvisRuntime {
             }
             if (!fresh) return@launch
             val security = settings.security.value
-            val locked = security.appLock || security.privateLists
+            val locked = notificationsLocked(security)
             val (title, text) = com.jarvis.client.net.Schedule.brokenNotification(job, locked)
             com.jarvis.client.service.ScheduleNotifier.post(
                 context, id, kind, title, text, com.jarvis.client.net.Schedule.TELLME_BROKEN_LOCK_SCREEN,
@@ -8123,7 +8181,7 @@ object JarvisRuntime {
         if (handoffAlerted == o.key) return
         handoffAlerted = o.key
         val security = settings.security.value
-        com.jarvis.client.service.HandoffNotifier.post(ctx, o, locked = security.appLock || security.privateLists)
+        com.jarvis.client.service.HandoffNotifier.post(ctx, o, locked = notificationsLocked(security))
     }
 
     /**

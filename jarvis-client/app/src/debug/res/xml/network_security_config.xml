@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  DEBUG-BUILD OVERLAY of app/src/main/res/xml/network_security_config.xml.
+
+  The release file allows cleartext only to the two mesh products
+  (*.ts.net and *.nord, apps security audit L7). This debug copy adds loopback
+  for local tests and the emulator, where a test server may listen on
+  127.0.0.1: the app's own address check (data/PhoneAddress.kt) still refuses
+  loopback for a real desktop, so this is a test-only allowance.
+
+  Nothing in a release APK comes from here: Android resource merging only uses
+  src/debug for the debug variant.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">ts.net</domain>
+        <domain includeSubdomains="true">nord</domain>
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>

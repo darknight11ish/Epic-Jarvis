@@ -117,12 +117,14 @@ class PhoneAddressTest {
     fun `matching is the platform's`() {
         val yes = listOf(
             "ts.net", "desk.ts.net", "desktop.tail1234.ts.net", "DESK.TS.NET", "desk.ts.net.",
-            "nord", "my-pc.nord", "a.b.nord", "localhost", "foo.localhost", "127.0.0.1",
+            "nord", "my-pc.nord", "a.b.nord",
         )
         val no = listOf(
             "", ".", ".nord", "notmyts.net", "ts.net.evil.com", "mynord.com", "127.0.0.10",
             "1.127.0.0.1", "192.168.1.20", "10.0.0.5", "100.64.0.1", "fd7a:115c:a1e0::1", "::1",
             "homeassistant.local", "desk.lan", "nas.home.arpa", "jarvis-pc", "evil.com",
+            // L7: loopback is DEBUG-only; the release file must refuse it.
+            "localhost", "foo.localhost", "127.0.0.1",
         )
         for (h in yes) {
             assertTrue(h, PhoneAddress.cleartextPermitted(h))
@@ -132,6 +134,30 @@ class PhoneAddressTest {
             assertFalse(h, PhoneAddress.cleartextPermitted(h))
             assertFalse(h, fileAllows(h))
         }
+    }
+
+    /**
+     * L7: loopback cleartext exists only in the debug overlay. The release
+     * file is the one that ships, and it must not name localhost/127.0.0.1.
+     */
+    @Test
+    fun `the release config refuses loopback and the debug overlay keeps it for tests`() {
+        val release = repoFile(CONFIG).readText()
+        assertFalse("the release config names localhost", release.contains(">localhost<"))
+        assertFalse("the release config names 127.0.0.1", release.contains(">127.0.0.1<"))
+        val debug = DocumentBuilderFactory.newInstance().newDocumentBuilder()
+            .parse(repoFile(DEBUG_CONFIG)).documentElement
+        val debugBlock = children(debug, "domain-config").single()
+        val debugRules = children(debugBlock, "domain").map {
+            it.textContent.trim().lowercase() to (it.getAttribute("includeSubdomains") == "true")
+        }
+        assertEquals(
+            listOf("ts.net" to true, "nord" to true, "localhost" to true, "127.0.0.1" to false),
+            debugRules,
+        )
+        // The debug overlay also keeps the release's strict default.
+        val base = children(debug, "base-config").single()
+        assertEquals("false", base.getAttribute("cleartextTrafficPermitted"))
     }
 
     /**
@@ -169,9 +195,15 @@ class PhoneAddressTest {
     /** What the owner types, through [BaseUrl.normalise] as the app does. */
     @Test
     fun `mesh names pair, home-network forms are refused with the reason`() {
-        for (typed in listOf("my-pc.nord", "desktop.tail1234.ts.net/", "localhost")) {
+        for (typed in listOf("my-pc.nord", "desktop.tail1234.ts.net/")) {
             assertNull(typed, PhoneAddress.problem(BaseUrl.normalise(typed)!!))
         }
+        // L7: loopback is a debug-only cleartext allowance, and the app's own
+        // check refuses it in every build - no real setup needs it.
+        assertEquals(
+            PhoneAddress.message(BaseUrl.normalise("localhost")!!),
+            PhoneAddress.problem(BaseUrl.normalise("localhost")!!),
+        )
         val refused = listOf(
             "192.168.1.20", "10.0.0.5", "172.16.0.1", "homeassistant.local", "desk.lan",
             "nas.home.arpa", "jarvis-pc", "100.64.12.3", "100.101.102.103:4719", "[fd7a:115c:a1e0::1]",
@@ -224,6 +256,7 @@ class PhoneAddressTest {
 
     private companion object {
         const val CONFIG = "jarvis-client/app/src/main/res/xml/network_security_config.xml"
+        const val DEBUG_CONFIG = "jarvis-client/app/src/debug/res/xml/network_security_config.xml"
         const val MANIFEST = "jarvis-client/app/src/main/AndroidManifest.xml"
     }
 }

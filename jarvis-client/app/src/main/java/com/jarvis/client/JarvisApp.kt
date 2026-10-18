@@ -30,6 +30,12 @@ class JarvisApp : Application() {
         // screen reads it. On this phone only; nothing leaves the device.
         CrashLog.recordHangIfAny(this)
 
+        // L6: an older build could have left captured notifications in a plain
+        // preferences blob. Move (or remove) it at every start, not only when a
+        // new notification happens to arrive - and never let a failure here
+        // stop the app starting.
+        runCatching { com.jarvis.client.data.CapturedNotifications(this).migrateLegacyAtStartup() }
+
         // Asks the graphics driver what it is, on a background thread, so a
         // software renderer (an emulator) has the face at Low before it first
         // draws. Once per process; see GpuProbe.

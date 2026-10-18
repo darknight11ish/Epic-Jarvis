@@ -21,8 +21,13 @@ class PlatformReadinessTest {
         assertTrue(PlatformReadiness.cleartextPermitted("desktop.tail1234.ts.net"))
         assertTrue(PlatformReadiness.cleartextPermitted("desk.ts.net"))
         assertTrue(PlatformReadiness.cleartextPermitted("ts.net"))
-        assertTrue(PlatformReadiness.cleartextPermitted("localhost"))
-        assertTrue(PlatformReadiness.cleartextPermitted("127.0.0.1"))
+    }
+
+    /** L7: loopback is debug-only, and the readiness screen mirrors the release file. */
+    @Test
+    fun `loopback is refused by the release policy`() {
+        assertFalse(PlatformReadiness.cleartextPermitted("localhost"))
+        assertFalse(PlatformReadiness.cleartextPermitted("127.0.0.1"))
     }
 
     @Test
@@ -40,6 +45,8 @@ class PlatformReadinessTest {
         assertFalse(PlatformReadiness.cleartextPermitted("evilts.net"))
         assertFalse(PlatformReadiness.cleartextPermitted("mylocalhost"))
         assertFalse(PlatformReadiness.cleartextPermitted("not127.0.0.1"))
+        assertFalse(PlatformReadiness.cleartextPermitted("localhost"))
+        assertFalse(PlatformReadiness.cleartextPermitted("127.0.0.1"))
         // Same shape of false positive, for the newer suffix: "mynord.com" and
         // "anordable.net" contain "nord" but are not the "nord" TLD or a label
         // beneath it.
