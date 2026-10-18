@@ -226,6 +226,10 @@ import { buildSayableList } from "./sayable.js";
 // and every name in it comes from the generated menu catalogue.
 import { HINT_LABEL, WORDS as PALETTE_WORDS } from "./palette.js";
 import { buildPaletteHint, close as closePalette, isOpen as paletteOpen, mountPalette, openPalette } from "./palette-ui.js";
+// Clipboard history (Pillar 14B): the transform drawer Alt+Shift+C opens. The
+// ring itself is Rust's, RAM-only and off until the drawer's own switch; this
+// module is the view over six commands (clipboard-drawer.js's own doc).
+import { mountClipboardDrawer } from "./clipboard-drawer.js";
 // A timer said aloud while hands-free listening is on (2026-09-25).
 import { aloudFor } from "./coming-up.js";
 import { READING as PHOTO_READING, mountProposal } from "./photo-reminder.js";
@@ -461,6 +465,25 @@ const dom = {
   // the box, and the panel the critique is drawn in (prompt-coach-panel.js).
   promptField: $("prompt-field"),
   coachPanel: $("coach-panel"),
+  // Clipboard history (Pillar 14B): the drawer Alt+Shift+C opens, and every
+  // part clipboard-drawer.js paints. All text goes in with textContent.
+  clipboard: $("clipboard-drawer"),
+  clipboardStatus: $("clipboard-status"),
+  clipboardLine: $("clipboard-line"),
+  clipboardList: $("clipboard-list"),
+  clipboardEnable: $("clipboard-enable"),
+  clipboardDisable: $("clipboard-disable"),
+  clipboardForget: $("clipboard-forget"),
+  clipboardLock: $("clipboard-lock"),
+  clipboardClose: $("clipboard-close"),
+  clipboardResult: $("clipboard-result"),
+  clipboardResultKind: $("clipboard-result-kind"),
+  clipboardResultLine: $("clipboard-result-line"),
+  clipboardResultText: $("clipboard-result-text"),
+  clipboardResultCopy: $("clipboard-result-copy"),
+  clipboardResultClose: $("clipboard-result-close"),
+  clipboardPrivacy: $("clipboard-privacy"),
+  clipboardKeys: $("clipboard-keys"),
   spendingTable: $("spending-table"),
   approvalPicture: $("approval-picture"),
   clipboardChip: $("attachment-clipboard"),
@@ -515,6 +538,11 @@ const heavyGate = new HeavyGate({
   scrollEl: dom.approvalPreview,
   onChange: () => syncApprovalButtons(),
 });
+
+/** The clipboard history drawer (Pillar 14B), mounted in the Boot section
+ * below; `null` until then. The bar's hide button and "dismiss" close it
+ * first, so no copied word is left in a hidden page. */
+let clipboardDrawer = null;
 
 /* ==========================================================================
    State
@@ -5312,6 +5340,10 @@ async function setPinned(pinned, { silent = false } = {}) {
 
 /** Clears the composer and hides the window. */
 async function dismiss() {
+  // A drawer inside the bar is closed first, and its copied words cleared:
+  // the bar is about to leave the screen, and clipboard history never leaves
+  // a private copy lying in a hidden page.
+  if (clipboardDrawer) clipboardDrawer.close();
   // Jarvis Live: Esc only hides the bar. The conversation, the answer on
   // screen and Live itself carry on (the review's #1 - it used to forget
   // the conversation mid-Live). End Live ends it.
@@ -5613,6 +5645,9 @@ dom.pin.addEventListener("click", () => setPinned(!state.pinned));
 // (`allow-hide-quickbar`), so this added no new command and no new grant.
 if (dom.hideBar) {
   dom.hideBar.addEventListener("click", () => {
+    // A drawer inside the bar goes first, so nothing private is left in a
+    // hidden page: clipboard history clears its own words on close.
+    if (clipboardDrawer) clipboardDrawer.close();
     invoke("hide_quickbar");
   });
 }
@@ -5948,6 +5983,38 @@ mountPalette({
   onClose: () => syncWindowHeight(),
 });
 renderPaletteHint();
+// Clipboard history (Pillar 14B, clipboard-drawer.js): the drawer Alt+Shift+C
+// opens, with the three transforms over a kept copy. The ring itself is Rust's
+// - RAM-only, off until the drawer's own switch, wiped on lock - so this is
+// only the view. Mounted here so every listener above is already wired.
+clipboardDrawer = mountClipboardDrawer({
+  dom: {
+    section: dom.clipboard,
+    shell: dom.shell,
+    status: dom.clipboardStatus,
+    line: dom.clipboardLine,
+    list: dom.clipboardList,
+    enable: dom.clipboardEnable,
+    disable: dom.clipboardDisable,
+    forget: dom.clipboardForget,
+    lock: dom.clipboardLock,
+    close: dom.clipboardClose,
+    result: dom.clipboardResult,
+    resultKind: dom.clipboardResultKind,
+    resultLine: dom.clipboardResultLine,
+    resultText: dom.clipboardResultText,
+    resultCopy: dom.clipboardResultCopy,
+    closeResult: dom.clipboardResultClose,
+    privacy: dom.clipboardPrivacy,
+    keys: dom.clipboardKeys,
+  },
+  invoke,
+  listen,
+  // The drawer changes the page's height; the bar sizes itself from what is
+  // on it (syncWindowHeight) and Rust clamps it, so both open and close ask.
+  onOpen: () => syncWindowHeight(),
+  onClose: () => syncWindowHeight(),
+});
 syncTaskControls();
 startVoice(dom.root);
 // Subscribed before the link starts, so the first state it reports counts.

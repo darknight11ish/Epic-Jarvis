@@ -43,7 +43,7 @@ await check("every bindable action is listed", async () => {
   const page = await open();
   const list = await rows(page);
   await page.close();
-  assert.equal(list.length, 10, `${list.length} rows, expected 10`);
+  assert.equal(list.length, 11, `${list.length} rows, expected 11`);
   // "Look at this" (2026-09-29): the old "Attach a screen capture" key, renamed
   // (the owner's decision of 2026-09-28) - the same key, not a second one.
   const look = list.find((r) => r.name === "Look at this");
@@ -65,6 +65,13 @@ await check("every bindable action is listed", async () => {
   const talk = list.find((r) => r.name === "Talk-to-type");
   assert.ok(talk, "Talk-to-type is not listed");
   assert.equal(talk.key, "Alt + Shift + T");
+  // Clipboard history (Pillar 14B, 2026-10-17): the drawer Alt+Shift+C opens.
+  // The key only OPENS it - whether anything is kept is the drawer's own
+  // switch, off by default - so it can ship bound while keeping nothing.
+  const clipboard = list.find((r) => r.name === "Clipboard history");
+  assert.ok(clipboard, "Clipboard history is not listed");
+  assert.equal(clipboard.key, "Alt + Shift + C");
+  assert.equal(clipboard.state, "working");
 });
 
 await check("talk-to-type is the one action that reads key-up, and Stop everything ends it", async () => {

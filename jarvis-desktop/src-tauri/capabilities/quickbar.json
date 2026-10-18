@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/windows-schema.json",
   "identifier": "quickbar",
-  "description": "The Alt+Space spotlight. Streams chat, renders approval gates, shows the daily brief, records the microphone on push-to-talk and plays back a spoken reply, and owns its own window geometry. It cannot reach the connection settings or backend supervision.",
+  "description": "The Alt+Space spotlight. Streams chat, renders approval gates, shows the daily brief, records the microphone on push-to-talk and plays back a spoken reply, and owns its own window geometry. It also holds its own clipboard history: an opt-in, RAM-only ring of what the owner copied AFTER turning that switch on (off at every launch, wiped on lock, nothing on disk), read only by this window for its transform drawer. It cannot reach the connection settings or backend supervision.",
   "windows": [
     "quickbar"
   ],
@@ -30,6 +30,7 @@
     "live",
     "live-hold",
     "screen-watch",
-    "model-lane"
+    "model-lane",
+    "clipboard-time-machine"
   ]
 }
