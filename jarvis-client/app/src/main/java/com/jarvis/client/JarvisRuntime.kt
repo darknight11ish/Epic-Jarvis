@@ -4269,16 +4269,35 @@ object JarvisRuntime {
      * queue you cannot confirm is live is the hazard the whole gate exists to
      * prevent, and it is exactly what a cached inbox invites.
      *
-     * Deliberately silent on `needsChoice`: this blocker gates BOTH decisions,
-     * and denying a multi-option item needs no option ("refusing is always
-     * the safe direction" - see [decide]'s own check, which is where that one
-     * lives, gated on `approve` in a way this shared function cannot be).
+     * THE STALE ARM IS APPROVE'S ALONE (2026-10-17). The promise is
+     * "refusing is never held, approving can be", and holding Deny left the
+     * owner unable to say no exactly while the link caught up. A stale deny is
+     * safe by construction: an explicit polarity that cannot approve anything,
+     * a card that transitions once, a late one refused by the server's own
+     * expired / duplicate / no-longer-pending arm, and no standing rule
+     * (`_NO_RULE_FROM_DENIAL`). [ApprovalDecisions] is the one rule.
+     *
+     * Deliberately silent on `needsChoice`: denying a multi-option item needs
+     * no option ("refusing is always the safe direction" - see [decide]'s own
+     * check, which gates that one on `approve`).
+     *
+     * @param approve which answer is being asked about. The card greys its two
+     *   buttons from two calls, so the polarity has to be a parameter.
      */
-    fun decisionBlocker(item: PendingItem, nowMs: Long = System.currentTimeMillis()): String? {
-        // Two states, two sentences (LinkWords): "not connected" only when
-        // the PC really is out of reach, "catching up" when the link is up
-        // but not trusted yet. Both still refuse - rule 4.
-        LinkWords.decisionBlocked(_link.value, _stale.value)?.let { return it }
+    fun decisionBlocker(
+        item: PendingItem,
+        nowMs: Long = System.currentTimeMillis(),
+        approve: Boolean = true,
+    ): String? {
+        // Being unable to deliver at all is not "held" - it is a link that is
+        // gone, and the sentence says so. It applies to both answers, as it
+        // always has: a deny cannot reach a PC that is not there either.
+        if (_link.value != LinkState.CONNECTED) return LinkWords.DECISION_NOT_CONNECTED
+        // "Catching up" is the one state that holds an answer, and it holds
+        // APPROVE only.
+        if (ApprovalDecisions.heldOnStale(approve, _stale.value)) {
+            return LinkWords.DECISION_APPROVE_CATCHING_UP
+        }
         if (item.id in _deciding.value) {
             // A double-tap on Approve sent two POSTs: both taps reached here
             // before the first reply came back, and the test below reads
@@ -4346,7 +4365,7 @@ object JarvisRuntime {
             _notice.value = msg
             return ApiResult.Failed(ApiError.Unreachable(msg))
         }
-        val blocker = decisionBlocker(item)
+        val blocker = decisionBlocker(item, approve = approve)
         if (blocker != null) {
             _notice.value = blocker
             return ApiResult.Failed(ApiError.Unreachable(blocker))
@@ -5123,7 +5142,7 @@ object JarvisRuntime {
      * in the notice.
      */
     suspend fun beginSignedApproval(item: PendingItem): SignedApproval.ChallengeAnswer.Got? {
-        decisionBlocker(item)?.let {
+        decisionBlocker(item, approve = true)?.let {
             _notice.value = it
             return null
         }

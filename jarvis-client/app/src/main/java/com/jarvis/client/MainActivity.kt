@@ -3558,7 +3558,14 @@ class MainActivity : FragmentActivity() {
                                     scope.launch { chat.retryLast() }
                                 },
                                 blockerFor = { item: PendingItem ->
-                                    JarvisRuntime.decisionBlocker(item)
+                                    JarvisRuntime.decisionBlocker(item, approve = true)
+                                },
+                                // The other direction: a stale link holds Approve and
+                                // never Deny (2026-10-17, page 7's "refusing is never
+                                // held"). Keeping its other arms (expired, duplicate,
+                                // no-longer-pending) is what refuses a late deny.
+                                denyBlockerFor = { item: PendingItem ->
+                                    JarvisRuntime.decisionBlocker(item, approve = false)
                                 },
                                 onVoiceBegin = ::beginVoice,
                                 onVoiceRelease = ::releaseVoice,

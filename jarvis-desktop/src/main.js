@@ -2942,8 +2942,15 @@ function closeApproval() {
 /**
  * Enables or disables the two buttons from the link state.
  *
- * A stale stream means the queue cannot be confirmed live, and answering one
- * that cannot be confirmed is how the same action gets approved twice.
+ * Rule 4 blocks acting on a stale stream, and answering a queue that cannot be
+ * confirmed is how the same action gets approved twice - so a stale stream
+ * greys APPROVE. It never greys Deny (2026-10-17): the page's own promise is
+ * "refusing is never held, approving can be", and a deny is an explicit
+ * polarity that cannot approve anything, cannot fire twice (the card
+ * transitions once), and cannot write a standing rule. The server's expired /
+ * duplicate / no-longer-pending arm refuses a late deny with a 409, which is a
+ * refusal and not an approval. Holding Deny was the one direction of rule 4
+ * that left the owner unable to say no while the link caught up.
  */
 function syncApprovalButtons() {
   const link = currentLink();
@@ -2957,7 +2964,9 @@ function syncApprovalButtons() {
   // something unread costs a retry, approving it is the thing to prevent.
   dom.approvalApprove.disabled =
     blocked || Boolean(state.approval && state.approval.cutOff) || heavyBlocked;
-  dom.approvalDeny.disabled = blocked;
+  // Deny is held by one thing only: a decision already on its way (the latch
+  // that stops a double-tap sending twice). Never by the stale stream.
+  dom.approvalDeny.disabled = state.deciding;
   paintApprovalClock();
   // Not `= blocked`: the option buttons `renderOptions` builds are already
   // permanently disabled (see its own comment on why), and setting this to
@@ -2966,9 +2975,11 @@ function syncApprovalButtons() {
   if (blocked) for (const opt of dom.approvalOptions.children) opt.disabled = true;
   if (link.stale && state.approval) {
     // "Offline" was wrong when the stream is connected and only the queue
-    // could not be read; linkWords says which it is.
+    // could not be read; linkWords says which it is. And since Deny stays
+    // live, this must not claim nothing can be answered: it says which
+    // direction is waiting.
     dom.approvalHint.textContent =
-      `${linkWords(link).short} — the approval queue cannot be confirmed, so nothing can be answered from here.`;
+      `${linkWords(link).short} — the approval queue cannot be confirmed, so approving waits until it reconnects. Deny still works.`;
     state.hintIsStale = true;
   } else if (state.hintIsStale && state.approval && !state.deciding) {
     // Back to the risk line once the link catches up: it used to keep saying
@@ -3096,6 +3107,12 @@ async function decideApproval(approved, optionId = null) {
   syncApprovalButtons();
   dom.approvalHint.textContent = approved ? "Approving…" : "Denying…";
 
+  /** The outcome, kept until `finally` so `syncApprovalButtons` cannot erase
+   *  it. On a stale link the queue will not update to close the card - that is
+   *  what stale means - so a refusal sentence painted one line before the
+   *  standing hint repaints over it is the same as no feedback at all. */
+  let outcomeHint = "";
+
   try {
     await decideOnBackend(approval.id, approved, optionId);
     // An inbox tidy approved here: its Undo strip shows as soon as the PC has done it.
@@ -3119,7 +3136,7 @@ async function decideApproval(approved, optionId = null) {
     // decided. That is not a failure to report as one — someone answered it,
     // possibly on the phone — so say so and let the queue update close the card.
     const handled = /409|already/i.test(message);
-    dom.approvalHint.textContent = handled
+    outcomeHint = handled
       ? "Already handled somewhere else."
       // "Nothing was approved. Windows Hello is not set up ..." (lock/rules.rs
       // not_approved_words) already says what happened and what to do.
@@ -3136,6 +3153,8 @@ async function decideApproval(approved, optionId = null) {
   } finally {
     state.deciding = false;
     syncApprovalButtons();
+    // The decision's own outcome outranks the standing link hint.
+    if (outcomeHint) dom.approvalHint.textContent = outcomeHint;
     // Only if nothing is still streaming. `closeApproval` is careful about
     // exactly this and this path was not: answering a gate that arrived
     // mid-answer unpinned the window under the running stream, so clicking
@@ -3155,8 +3174,9 @@ async function decideApproval(approved, optionId = null) {
  *
  * **It decides nothing on its own.** The decision goes to `decideApproval` -
  * the same function the two buttons call - so the one-decision latch, the
- * stale-link refusal and the Windows Hello check (in `decide_approval`) all
- * apply to it unchanged.
+ * stale-link hold on APPROVING (a typed deny goes through, as the Deny button
+ * does) and the Windows Hello check (in `decide_approval`) all apply to it
+ * unchanged.
  *
  * Two things are deliberately not done here:
  *
@@ -6890,8 +6910,9 @@ onLink((link) => {
   // The offline bar, and the one thing there is to do about it. Also shown
   // while connected but stale - the stream is up and the queue could not be
   // read, so nothing can be approved - which used to show no words at all
-  // while Approve and Deny quietly went grey. The words are the shared ones
-  // (linkWords); before the first hello it says "Connecting…" rather than
+  // while Approve and Deny quietly went grey (Deny stays live since 2026-10-17;
+  // the words name the direction that is waiting). The words are the shared
+  // ones (linkWords); before the first hello it says "Connecting…" rather than
   // naming an address that failed, because nothing has failed yet.
   const words = linkWords(link);
   const wasOffline = !dom.offline.hidden;

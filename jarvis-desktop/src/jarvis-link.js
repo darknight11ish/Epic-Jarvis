@@ -797,9 +797,17 @@ export function onEvent(fn) {
  * Answers an approval.
  *
  * Every surface calls this, and this calls the one Rust command, which is the
- * one place a decision is sent. Refuses while the stream is stale, because
- * approving against a queue that cannot be confirmed live is how something gets
- * approved twice — DESKTOP-BUILD's checklist asks for exactly this.
+ * one place a decision is sent. Refuses an APPROVE while the stream is stale,
+ * because approving against a queue that cannot be confirmed live is how
+ * something gets approved twice — DESKTOP-BUILD's checklist asks for exactly
+ * this.
+ *
+ * A DENY is never refused here (2026-10-17). The project's promise is
+ * "refusing is never held, approving can be": a deny is an explicit polarity
+ * that cannot approve anything, the card transitions once, and a late deny is
+ * refused by the server's own expired / duplicate / no-longer-pending answer
+ * (a 409 the callers already show as "already handled"). Holding it left the
+ * owner unable to say no exactly when the picture was least certain.
  *
  * `optionId`, added for docs/AUTONOMY-PROPOSALS.md §3a, names WHICH of a
  * plan's options is being approved when there is more than one - omitted for
@@ -809,9 +817,10 @@ export function onEvent(fn) {
  */
 export async function decide(id, approved, optionId = null) {
   if (!IS_TAURI) throw new Error("no desktop backend to send the decision to");
-  if (link.stale) {
+  if (approved && link.stale) {
     throw new Error(
-      "the event stream is offline, so the approval queue cannot be confirmed live"
+      "the event stream is stale, so the approval queue cannot be confirmed live - " +
+        "approving waits until it reconnects. Deny still works."
     );
   }
   const args = { id: String(id), approved };
