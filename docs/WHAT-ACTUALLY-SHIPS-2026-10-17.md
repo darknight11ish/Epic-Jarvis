@@ -1,14 +1,21 @@
 # What actually ships in Jarvis today
 
 **A map of what is built, what the owner can reach, and what is still only a
-library on a shelf.** It was written against `origin/main` at `7ddb5b8c`
-(2026-10-17). Every row names the file and line it came from, and the commands
-to re-run them are in [the evidence appendix](#how-this-page-was-checked).
+library on a shelf.** It was first written against `origin/main` at `7ddb5b8c`
+(2026-10-17). **This edition was re-measured against `origin/main` at
+`76ee5abf` (2026-10-18)** after the merge train landed several of the changes
+the first edition listed as "in flight"; every changed row is re-asked of that
+tree. Every row names the file and line it came from, and the commands to
+re-run them are in [the evidence appendix](#how-this-page-was-checked).
 
 The short answer: most of what Jarvis does is built and reachable. A small,
-named set of working modules has no caller. Two Volume III pillars are in open
-pull requests, one is "measure first", and three have no code at all. Ten pull
-requests are open and none of them is on `main`.
+named set of working modules still has no caller - but two from the first
+edition (the sandbox and the file guardian) have since been wired by merged
+PRs #543 and #544, and one new module (the red-team decision lab, #538) shipped
+with no caller. Two Volume III pillars have now shipped (#541 page watch,
+#545 PC doctor), one is "measure first" (#29), and three have no code at all
+(24, 25, 27). Nine pull requests are open and none of them is on `main` as this
+edition is written.
 
 This page describes the repository tree, **not** the copy of the backend that
 runs on the owner's PC. That copy lives outside this repository
@@ -120,12 +127,14 @@ are the ones checked for this page.
 
 | What the owner can do | Client evidence (phone / desktop) | What answers on the PC | Label |
 |---|---|---|---|
-| Chat with the local model, with tools | phone `net/JarvisApi.kt:3643`; desktop `commands.rs:2581`, `hud_proxy.rs:269` | `POST /api/chat` at `jarvis-backend/jarvis_hud.py:4447`; 31 tools in `backend/jarvis_agent.py:1675` (8 core at `:5139`) | **SHIPPED, REACHABLE** |
+| Chat with the local model, with tools | phone `net/JarvisApi.kt:3643`; desktop `commands.rs:2581`, `hud_proxy.rs:269` | `POST /api/chat` at `jarvis-backend/jarvis_hud.py:4447`; 32 tools in `backend/jarvis_agent.py:1799` (8 core at `:5287`) | **SHIPPED, REACHABLE** |
+| Run a small Python script it writes, in a sealed box (Pillar 15; wired by #543) | either app's chat - the model calls the `run_data_script` tool | `backend/jarvis_agent.py` names it `SANDBOX_TOOL = "run_data_script"` (`:892`), imports the module at `:988` and calls it at `:996`; the module itself still has no route (`backend/jarvis_sandbox_exec.py:123`) | **SHIPPED, REACHABLE** |
+| Undo a safety net for Jarvis's own file writes (Pillar 18; wired by #544) | approved note/project writes from either app | `backend/jarvis_notes.py:263` and `backend/jarvis_projects.py:2224` call `jarvis_file_guardian.snapshot_before_write` (the module's own docstring line at `jarvis_file_guardian.py:123` still says "no call site yet" - stale wording, the call sites are real) | **SHIPPED, REACHABLE** |
 | Answer approval cards | phone `net/GateHistory.kt:13`; desktop `hud_proxy.rs:36` | `/api/pending` at `jarvis_hud.py:3231`; approve/deny at `:4416` | **SHIPPED, REACHABLE** |
 | Memory and the Brain | phone `ui/screens/BrainScreen.kt:201`; desktop `brain/routes.rs:51` | `jarvis_hud.py:3072` and `:3206`; facts in base-only `jarvis-backend/jarvis_memory.py` (§9) | **SHIPPED, REACHABLE** |
 | Talk to Jarvis and hear it | phone `net/JarvisApi.kt:3366` | `jarvis_hud.py:3321`; voice modules ship whole | **SHIPPED, REACHABLE** |
 | Review study decks | phone `JarvisRuntime.kt:6655`; desktop `brain/decks.rs:10` and `src/decks.js:144` | `backend/jarvis_decks.py:1351-1352` | **SHIPPED, REACHABLE** |
-| Ask the PC doctor for help | phone `net/PcHelp.kt:14`; desktop `hardware.rs:18` | `backend/jarvis_pc_help.py:93`, installed by `jarvis_brain_reads.py:70` | **SHIPPED, REACHABLE** |
+| Ask the PC doctor for help | phone `net/PcHelp.kt:14`; desktop `hardware.rs:18` | `backend/jarvis_pc_help.py:109` (its route path), installed by `jarvis_brain_reads.py:70`; #545 added four silent-failure checks | **SHIPPED, REACHABLE** |
 | Spending summaries | phone `JarvisRuntime.kt:5429`; desktop `spending.rs:23` | `backend/jarvis_spending.py:102` | **SHIPPED, REACHABLE** |
 | Goals and their steps | phone `JarvisRuntime.kt:5981`; desktop `brain/goals.rs:7` | `backend/jarvis_goals.py:936` | **SHIPPED, REACHABLE** |
 | Projects | phone `net/Projects.kt:21`; desktop `brain/projects.rs:15` | `backend/jarvis_projects.py:2736` | **SHIPPED, REACHABLE** |
@@ -134,43 +143,49 @@ are the ones checked for this page.
 | Page watches | phone `net/Watch.kt:19`; desktop `brain/routes.rs:47` | `jarvis_hud.py:2359`; topics in shipped `jarvis_tellme.py` | **SHIPPED, REACHABLE** |
 | Turn on second-card features | phone `net/SecondCard.kt:37`; desktop `commands.rs:4099` | `backend/jarvis_second_card.py:643` (7 features) | **OFF / OWNER-GATED** |
 
-Routes and section numbers in `docs/JARVIS-API.md`: chat §4 (line 390),
+Routes and section numbers in `docs/JARVIS-API.md` (line numbers re-measured
+on `76ee5abf`; the sections are the stable part): chat §4 (line 390),
 approvals §3 (line 222), memory §6 (line 1214), voice §5 (line 967), decks §102
-(line 16898), PC help §84 (line 13586), spending §100 (line 16524), goals §59
-(line 10338), projects §88 (line 14842), backups §45 (line 8710), pairing §90
-(line 15154), watches §70 (line 12010), second card §108 (line 17468).
+(line 16960), PC help §84 (line 13586), spending §100 (line 16586), goals §59
+(line 10338), projects §88 (line 14904), backups §45 (line 8710), pairing §90
+(line 15216), watches §70 (line 12010), second card §108 (line 17530).
 
-**The numbers this map rests on** (all measured; commands in the appendix):
+**The numbers this map rests on** (all measured on `76ee5abf`; commands in the
+appendix):
 
-- **205 entries** in the shipped list `backend/_where.py`, of which **10** are
-  the rebuilt modules the base also carries.
-- **315** patch files under `backend/`; **213** `.py` files in
-  `jarvis-backend/`.
+- **206 entries** in the shipped list `backend/_where.py` (205 when the first
+  edition was written; #538 added `jarvis_decision_lab.py`), of which **10**
+  are the rebuilt modules the base also carries.
+- **315** patch files under `backend/`; **214** `.py` files in
+  `jarvis-backend/` (213 at the first edition; the decision lab added one).
 - `docs/JARVIS-API.md` has **135** top-level sections, and **852** lines that
   mention an `/api/` path.
 - The phone's Java source has **270** lines that mention an `/api/` path; the
   desktop Rust source has **400**; the desktop web source has **195**. These are
-  **lines that mention a path, not a count of calls.**
-- `jarvis_agent.py` offers **31** tools; the optional short list keeps **8**
-  core tools in front of the model.
+  **lines that mention a path, not a count of calls.** (These three were not
+  re-measured for this edition: no app source file changed in the merged PRs.)
+- `jarvis_agent.py` offers **32** tools (31 at the first edition; #543 added
+  `run_data_script`); the optional short list keeps **8** core tools in front
+  of the model.
 
 ---
 
 ## 4. Ready, not wired: the shelf
 
-Seven shipped modules have no production caller today. The guide that ordered
-this page calls this the "shipped library with zero callers" queue. Two of the
-seven are being wired right now by open pull requests, and those PRs are **not**
-on `main` (section 6).
+**Six shipped modules have no production caller on `main` today.** That is a
+change from the first edition in both directions: the sandbox
+(`jarvis_sandbox_exec.py`) and the file guardian (`jarvis_file_guardian.py`)
+have since been wired by merged PRs #543 and #544 (they are in section 3 now),
+and #538 added one new module with no caller (the decision lab). Three of the
+six are being wired by open pull requests that are **not** on `main` (section 6).
 
 | Shelf item | What it can do, in plain words | Called today | What wiring would unlock |
 |---|---|---|---|
-| `jarvis_sandbox_exec.py` | Runs a small untrusted Python script in a sealed box: no network, only files handed in, capped output and time. | Nothing. Its own docstring says "no route, no tool, no approval card and no caller yet" (`backend/jarvis_sandbox_exec.py:97-98`); the installer comment agrees (`scripts/apply-patches.ps1:1947`). | A chat tool for small maths and data jobs that the model writes but cannot escape. **Open PR #543** wires this. |
-| `jarvis_file_guardian.py` | Keeps a compressed copy of a file's bytes before Jarvis overwrites it, so one click can put it back. | Nothing. "No route, no chat tool and no call site yet" (`backend/jarvis_file_guardian.py:115`); installer comment (`apply-patches.ps1:1956`). | Undo for approved file writes, beyond the receipt that only records that a write happened. **Open PR #544** wires this. |
-| `jarvis_self_improve.py` | Reads Jarvis's own source, answers a question with real `file:line` citations, and drafts a fix; it applies nothing. | Nothing. "No route, and no client of any kind" (`backend/jarvis_self_improve.py:89`, `:113`). | A self-diagnosis the owner can ask for from an app, with an evidence trail. |
-| `jarvis_ollama_contract.py` | Asks the local model what it can do, then reports where Jarvis's picture of the model is wrong. It reads no version number. | Nothing. "Has no call site yet" (`scripts/apply-patches.ps1:1915`); no route (`backend/jarvis_ollama_contract.py:90`). | A PC-help row that says "Jarvis is under-using this model" instead of guessing. |
+| `jarvis_decision_lab.py` (new since the first edition, #538) | Builds a red-team / pre-mortem decision: a 1-3-1 brief, counter-arguments, failure modes with a likelihood and an impact, one recommendation, grounded in the owner's own figures; the deterministic mode needs no model. | Nothing. Its own docstring says "This is the BACKEND SLICE, deliberately unwired: there is no route" (`backend/jarvis_decision_lab.py:95`); its registration lines are `backend/_where.py:1037` and `scripts/apply-patches.ps1:1971`, and no app file names it. | A decision card in both apps, and a `jarvis_gate` card in front of any action a plan proposes. |
+| `jarvis_self_improve.py` | Reads Jarvis's own source, answers a question with real `file:line` citations, and drafts a fix; it applies nothing. | Nothing. "No route, and no client of any kind" (`backend/jarvis_self_improve.py:89`, `:113`). | A self-diagnosis the owner can ask for from an app, with an evidence trail. **Open PR #549** adds two read-only GET routes through a drop-in folder (not on `main`). |
+| `jarvis_ollama_contract.py` | Asks the local model what it can do, then reports where Jarvis's picture of the model is wrong. It reads no version number. | Nothing. "Has no call site yet" (`scripts/apply-patches.ps1:1915`); no route (`backend/jarvis_ollama_contract.py:90`). | A PC-help row that says "Jarvis is under-using this model" instead of guessing. **The same open PR #549** exposes the read-only probe as its second route (not on `main`). |
 | `jarvis_tool_schema.py` | Checks a JSON schema before it is sent to Ollama as a tool or format contract, and refuses a malformed one in plain words. | Nothing. "It has NO CALLER YET" (`scripts/apply-patches.ps1:1911`); no import outside its own test. | Safer tool calls: a bad schema is refused before the model sees it. |
-| `jarvis_hf_inspect.py` | Reads a Hugging Face repository's file listing **before** a download: what is in it, sizes, quant labels, missing pieces, and the cache a hybrid model really grows. | Only its own command line (`backend/jarvis_hf_inspect.py:402`). "No call site yet" (`apply-patches.ps1:1917`). | A warning before the owner downloads the wrong or over-large model. |
+| `jarvis_hf_inspect.py` | Reads a Hugging Face repository's file listing **before** a download: what is in it, sizes, quant labels, missing pieces, and the cache a hybrid model really grows. | Only its own command line (`backend/jarvis_hf_inspect.py:402`). "No call site yet" (`apply-patches.ps1:1917`). | A warning before the owner downloads the wrong or over-large model. **Open PR #551** also wires the formula into the hardware page's live "Now running" bar (not on `main`). |
 | `jarvis_task_lease.py` | A lease: a time-limited permission slip that names one surface, the sites or windows it may touch, the actions, a time limit and a step budget, checked step by step. | **Consumer side only.** `jarvis_browser_control.py` imports it at its one integration point (`:3256`) and checks each step (`:3344`); no production caller ever opens one - `create()` is called only by its test (`apply-patches.ps1:1913`). | A bounded browser run that does not raise one approval card per step. |
 
 One more shelf item has no route at all, even though its module is reachable:
@@ -185,8 +200,11 @@ One more shelf item has no route at all, even though its module is reachable:
 
 One correction to the guide this page was built from: it says "6 unwired
 `$SHIPPED` modules", but the rows it lists name **seven** modules (one row pairs
-`jarvis_self_improve` with `jarvis_ollama_contract`), and the measurement here
-finds seven. The count is seven.
+`jarvis_self_improve` with `jarvis_ollama_contract`), and the first edition of
+this page measured seven on `7ddb5b8c`. On `main` today the shelf is **six**
+again - but for a different reason: #543 and #544 wired two of the seven, and
+#538 added the decision lab with no caller. The guide's number matching again
+is a coincidence of the merge train; the rows above are the list.
 
 ---
 
@@ -210,32 +228,35 @@ feature on one app is not automatically an oversight - check that list first.
 
 ## 6. In flight: open pull requests are not shipped
 
-Ten pull requests are open against `main` (checked with `gh pr list`), numbered
-**#536** and **#538-#546**. **#537 is not in this list: it merged at
-`7ddb5b8c`.** Nothing below is on `main`; each line is the PR's own title,
-shortened.
+Nine pull requests are open against `main` (checked with `gh pr list` on
+2026-10-18). Seven entries from this page's first-edition "in flight" list have
+since merged into `main`: #538 (decision lab), #539 (README), #541 (page
+watch), #542 (handover fixes), #543 (sandbox chat tool), #544 (guardian
+pre-write hooks) and #545 (PC doctor silent failures). **#537 merged at
+`7ddb5b8c`; this page's own PR #547 merged at `ca244558`.** Nothing below is on
+`main`; each line is the PR's own title, shortened.
 
 | PR | Branch | What it adds, in one line |
 |---|---|---|
 | #536 | `feat/clipboard-time-machine-backend` | An opt-in, RAM-only clipboard time machine (backend half). |
-| #538 | `feat/decision-lab-redteam-premortem` | A red-team pre-mortem (Pillar 21) that needs no cloud lane or second model pass. |
-| #539 | `docs/readme-today` | A README update about what October 2026 changed. |
 | #540 | `feat/personal-crm-and-pre-meeting-dossier` | A pre-meeting dossier from the owner's own local data (Pillar 16). |
-| #541 | `feat/tell-me-what-changed` | A page-watch that reports what changed, without the page noise (Pillar 26). |
-| #542 | `fix/handover-f09-patcher-failures-and-injection-trace` | Handover fixes: claim evidence, patcher failures, the injection trace. |
-| #543 | `feat/sandbox-agent-tool-and-memory-caps` | The sandbox as a read-only chat tool, with a real Windows memory cap (wiring slice 1). |
-| #544 | `feat/file-guardian-prewrite-hooks-and-size-cap` | Guardian snapshots before approved writes, plus a 25 MiB large-file refusal (wiring slice 2). |
-| #545 | `feat/pc-help-silent-failures` | Four silent PC failures the doctor names (Pillar 28). |
-| #546 | `feat/update-modes-with-eta` | Three update paces with honest ETAs and a progress bar. |
+| #546 | `feat/update-modes-with-eta` | Three update paces with honest ETAs, and a progress bar that only shows real progress. |
+| #548 | `feat/desktop-clipboard-time-machine` | The clipboard time machine's desktop half: a hotkey and a transform drawer (Pillar 14B). |
+| #549 | `feat/self-improve-diagnostic-plugin` | Two read-only diagnostic GETs, switched on by a drop-in folder (wiring slice 4b). |
+| #550 | `feat/phone-deck-review` | Fading-card radar on the phone, and a typed answer the PC marks (Pillar 22B). |
+| #551 | `feat/hybrid-kv-vram-fit` | Prices a hybrid model's VRAM from the layers that keep its cache (wiring slice 4a). |
+| #552 | `fix/update-banner-after-install` | The cached "newer build" line ends when that build is installed. |
+| #553 | `chore/deny-zbus-unmaintained-advisories` | Ignores the three unmaintained zbus advisories, with a reason (the informational `audit` job). |
 
-`gh` reported all ten as `MERGEABLE` at the time of writing. Mergeable is not
+`gh` reported all nine as `MERGEABLE` at the time of writing. Mergeable is not
 the same as tested or merged: the six required CI checks decide that, and they
 are read on each PR's page, not here.
 
-Two of these are the shelf work in section 4: **#543 wires the sandbox** and
-**#544 wires the guardian**; when they merge, the shelf loses two rows. The
-clipboard (#536) is the opposite case: not on `main` at all, so there is
-nothing in this tree to call yet.
+Three of these are the shelf work in section 4: **#549** adds the self-improve
+and Ollama-contract diagnostic routes, **#551** wires the hybrid KV formula into
+the VRAM bar. The clipboard pair - **#536** backend and **#548** desktop - is
+the opposite case: neither is on `main`, so there is nothing in this tree to
+call yet.
 
 ---
 
@@ -248,15 +269,15 @@ the evidence under it.
 flowchart LR
   P24["Pillar 24<br/>Active-window selection copilot<br/>NOT STARTED"]
   P25["Pillar 25<br/>Temporal life-log search<br/>NOT STARTED"]
-  P26["Pillar 26<br/>Structured page watch<br/>IN FLIGHT, PR #541"]
+  P26["Pillar 26<br/>Structured page watch<br/>SHIPPED, PR #541"]
   P27["Pillar 27<br/>Voice and tap routines<br/>NOT STARTED"]
-  P28["Pillar 28<br/>Silent-failure doctor<br/>IN FLIGHT, PR #545"]
+  P28["Pillar 28<br/>Silent-failure doctor<br/>SHIPPED, PR #545"]
   P29["Pillar 29<br/>Model replay scorecard<br/>MEASURE FIRST"]
   classDef notstarted fill:#f2f2f2,stroke:#9e9e9e,color:#424242
-  classDef inflight fill:#e3f2fd,stroke:#1565c0,color:#0d47a1
+  classDef shipped fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20
   classDef measure fill:#fff8e1,stroke:#f9a825,color:#6d4c00
   class P24,P25,P27 notstarted
-  class P26,P28 inflight
+  class P26,P28 shipped
   class P29 measure
 ```
 
@@ -264,9 +285,9 @@ flowchart LR
 |---|---|---|---|
 | 24 - Active-window selection copilot | Press a key, and Jarvis reads whatever text is highlighted in the window in front, after blocking password and banking apps. | **NOT STARTED** | No `jarvis_active_context.py` on `main`; `TextPattern` and `GetSelection` (the Windows pieces it needs) appear **zero** times in the tree; no open PR for it. |
 | 25 - Unified temporal life-log search | "What did I work on, spend or decide last week?", answered read-only across the local stores. | **NOT STARTED** | No `jarvis_timeline.py` on `main`; no open PR. |
-| 26 - Structured page watch | Page-change alerts that show the price, version or stock change without the page noise. | **IN FLIGHT, PR #541** | The guide's plan is to extend the existing, reachable `jarvis_tellme.py` (watch route at `jarvis_hud.py:2359`); the PR is open, not merged. |
+| 26 - Structured page watch | Page-change alerts that show the price, version or stock change without the page noise. | **SHIPPED, #541 merged `7d72b200`** | It extended the existing reachable `jarvis_tellme.py` (watch route at `jarvis_hud.py:2359`) with the noise-stripped price/version/stock delta extractor; the desktop and phone both get the better alert through the route they already call. |
 | 27 - Deterministic voice and tap routines | One spoken phrase or one tap runs a fixed chain of low-risk steps with one Undo receipt. | **NOT STARTED** | No `jarvis_routines.py` on `main`; no open PR. |
-| 28 - Silent-failure doctor | Names four failures that look like nothing: a dead mic after sleep, a bloated database log, an unreachable phone, a wedged Ollama socket. | **IN FLIGHT, PR #545** | The guide's plan is to extend the existing, reachable `jarvis_pc_help.py` route (§84, `docs/JARVIS-API.md:13586`); the PR is open, not merged. |
+| 28 - Silent-failure doctor | Names four failures that look like nothing: a dead mic after sleep, a bloated database log, an unreachable phone, a wedged Ollama socket. | **SHIPPED, #545 merged `2146ae65`** | It extended the existing reachable `jarvis_pc_help.py` route (§84, `docs/JARVIS-API.md:13586`) with the four silent-failure checks; both apps render that card generically. |
 | 29 - Golden tool-call and contract replay | Replays a fixed set of real tool scenarios against a candidate local model and prints a pass/fail scorecard. | **MEASURE FIRST, NOT STARTED** | No replay module on `main`. `tools/model_tryout/chat_tryout.py` is the older model-tryout timer, not this suite; no open PR. The guide's rule is measure on this PC first, and if it does not win, record "not worth it" rather than build it. |
 
 The same measure-first rule covers **Pillar 13, speculative decoding** (a small
@@ -274,6 +295,10 @@ draft model guesses tokens so the big one answers faster). It is a research idea
 in this repository (`docs/FEATURE-REVIEW-2026-10-04.md:216`), not code: all ten
 mentions of "speculative" in the tree are design pages, research notes or
 explanatory comments, and none is an implementation of it.
+
+Not Volume III but shipped in the same merge train: **Pillar 21, the red-team
+decision lab** (#538, merged `df01bd0c`). It is backend-only with no route and
+no app screen, so it is on the shelf in section 4 rather than reachable.
 
 ---
 
@@ -304,31 +329,34 @@ Built is not the same as on. These are the deliberate "not yet" switches.
   Its backend functions merged at `7ddb5b8c` and no route or screen calls them
   (section 4). That is the ordinary "built beside the system" case, not a
   privacy decision.
-- **The clipboard time machine (#536) is opt-in and not on `main`.** The open PR
-  describes a RAM-only history of copied text. Treat it as in flight until it
-  merges.
+- **The clipboard time machine (#536 backend, #548 desktop) is opt-in and not
+  on `main`.** The open PRs describe a RAM-only history of copied text and the
+  drawer that uses it; treat both as in flight until they merge.
 
 ---
 
 ## How this page was checked
 
-**The tree asked.** Every claim about the code was asked of `origin/main` at
-`7ddb5b8c`, by naming that revision in the command - not of a working checkout,
-which can be on another branch. One checkout available while writing this page
-reported itself 43 commits behind `origin/main` (`git status`); a search there
-would have answered a different question.
+**The tree asked.** Every claim about the code in this edition was asked of
+`origin/main` at `76ee5abf` (2026-10-18), by naming that revision in the
+command - not of a working checkout, which can be on another branch. The first
+edition asked the same questions of `7ddb5b8c`; where files changed between the
+two, the line numbers here were re-measured, and the sections whose files did
+not change keep their first-edition numbers. One checkout on this PC is
+another session's and can be on a branch or behind `origin/main`; a search
+there would have answered a different question.
 
 The commands (run from any checkout of this repository, after `git fetch origin`):
 
 | Question | Command |
 |---|---|
-| What is the revision? | `git ls-remote origin refs/heads/main` (gave `7ddb5b8c`) |
+| What is the revision? | `git ls-remote origin refs/heads/main` (gave `76ee5abf` at this refresh; `7ddb5b8c` at the first edition) |
 | What files exist on main? | `git ls-tree -r --name-only origin/main -- path` |
 | What does a file say on main? | `git show origin/main:path` |
 | Who mentions this name? | `git grep -n 'name' origin/main` (and `-l` for files only) |
 | Is this PR open or merged? | `gh pr list --repo darknight11ish/Epic-Jarvis --state open --limit 60 --json number,title,headRefName,mergeable`; `gh pr view 537 --json state,mergeCommit` |
 | What is in the shipped list? | `git show origin/main:backend/_where.py` (parsed with Python's `ast`) |
-| What tools does the agent offer? | `git show origin/main:backend/jarvis_agent.py` (parsed with Python's `ast`) |
+| What tools does the agent offer? | `git show origin/main:backend/jarvis_agent.py` (parsed with Python's `ast`; the `TOOLS` dict is at line 1799 and `CORE_TOOLS` at 5287 on `76ee5abf`) |
 | Do the docs count and size agree? | `python -B tools/check_docs_map.py` |
 
 Reproduce the shelf rows in one step each:
@@ -336,6 +364,7 @@ Reproduce the shelf rows in one step each:
 ```powershell
 git grep -n 'jarvis_sandbox_exec' origin/main
 git grep -n 'jarvis_file_guardian' origin/main
+git grep -n 'jarvis_decision_lab' origin/main
 git grep -n 'jarvis_self_improve' origin/main
 git grep -n 'jarvis_ollama_contract' origin/main
 git grep -n 'jarvis_tool_schema' origin/main
@@ -344,10 +373,12 @@ git grep -n 'jarvis_task_lease' origin/main
 ```
 
 Each result is the module, its twin, its test, and its registration lines in
-`backend/_where.py` and `scripts/apply-patches.ps1` - except `jarvis_task_lease`,
-whose consumer-side import in `jarvis_browser_control.py:3256` is the one extra
-hit and is named in section 4. A zero-caller claim is a claim about this tree;
-the installed backend's own copy is not read here.
+`backend/_where.py` and `scripts/apply-patches.ps1` - plus, for the modules
+that are now wired, the real call sites: `jarvis_agent.py` for the sandbox,
+`jarvis_notes.py`/`jarvis_projects.py` for the guardian. `jarvis_task_lease`
+additionally shows its one consumer-side import in
+`jarvis_browser_control.py:3256`, named in section 4. A zero-caller claim is a
+claim about this tree; the installed backend's own copy is not read here.
 
 **Nothing on this page is a check.** No test, checker or bite was added, so
 there is no "bite proof" to show and none is claimed. What protects the page is
@@ -371,6 +402,10 @@ symbol names still find it.
   change that, and it is not in this repository.
 - **Whether any live backend copy calls the deck voice-review functions.** The
   zero-caller finding is about `origin/main`; the owner's folder is outside it.
+- **Whether this edition's numbers are still today's.** They were measured on
+  `76ee5abf` (2026-10-18), and `main` moves; re-run the commands above rather
+  than trusting a number on this page. The same applies to the "in flight" table
+  in section 6 - read `gh pr list` for the current state.
 
 Cross-references: [ARCHITECTURE.md](ARCHITECTURE.md) (rules and invariants),
 [JARVIS-API.md](JARVIS-API.md) (every route and its call sites),
