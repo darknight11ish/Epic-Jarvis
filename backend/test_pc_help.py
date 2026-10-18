@@ -39,6 +39,7 @@ import subprocess
 import sys
 import tempfile
 import traceback
+import types
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -70,8 +71,9 @@ def _const(v):
 def fake(**kw) -> PCH.Readers:
     base = dict(programs=None, memory=None, disks=None, uptime=None, cards=None, models=None)
     base.update(kw)
-    return PCH.Readers(**{k: _const(v) for k, v in base.items()}, now=_const(1790589600.0),
-                       own_pid=4242)
+    apps = _const(base.pop("apps", None))
+    return PCH.Readers(**{k: _const(v) for k, v in base.items()}, apps=apps,
+                       now=_const(1790589600.0), own_pid=4242)
 
 
 PROGRAMS = {
@@ -89,6 +91,40 @@ PROGRAMS = {
 }
 CARD = {"name": "NVIDIA GeForce RTX 2080 SUPER", "used_mib": 6000, "total_mib": 8192,
         "temp_c": 70, "hot_slowdown": None, "load_percent": 50}
+
+#: The richer card reading jarvis_hardware sends since 2026-10-17 (identity,
+#: per-card memory, heat/power/fan/load, pstate and the state word), and
+#: nvidia-smi's own process list with no amounts - the measured shape on this
+#: PC (2026-10-17: used_memory is [N/A] for every process).
+U_2080S = "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+U_2060 = "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23"
+U_TWIN = "GPU-7d1c5b93-2a4e-4f60-8b17-c3e9a04f6d28"
+WORKING = {"name": "NVIDIA GeForce RTX 2080 SUPER", "uuid": U_2080S,
+           "pci_id": "00000000:0a:00.0", "display_active": True, "index": 0,
+           "used_mib": 6200, "total_mib": 8192, "free_mib": 1992,
+           "temp_c": 67, "hot_slowdown": False, "load_percent": 88,
+           "power_w": 182.4, "power_limit_w": 250.0, "fan_percent": 48,
+           "pstate": "P0", "clock_mhz": 1935, "max_clock_mhz": 2100,
+           "idle": False, "power_capped": False, "state": "working"}
+RESTING = {"name": "NVIDIA GeForce RTX 2060", "uuid": U_2060,
+           "pci_id": "00000000:0b:00.0", "display_active": False, "index": 1,
+           "used_mib": 11919, "total_mib": 12288, "free_mib": 369,
+           "temp_c": 29, "hot_slowdown": False, "load_percent": 0,
+           "power_w": 11.6, "power_limit_w": 184.0, "fan_percent": 0,
+           "pstate": "P8", "clock_mhz": 300, "max_clock_mhz": 2145,
+           "idle": False, "power_capped": True, "state": "idle"}
+HOT = dict(WORKING, temp_c=87, hot_slowdown=True, used_mib=7800, free_mib=392,
+           state="hot")
+TWIN = dict(WORKING, uuid=U_TWIN, pci_id="00000000:0c:00.0", display_active=False,
+            index=2, used_mib=1000, free_mib=7192)
+_OLLAMA = (r"C:\Users\pcadmin\AppData\Local\Programs\Ollama\lib\ollama"
+           r"\llama-server.exe")
+APPS = [
+    {"pid": 18120, "name": _OLLAMA, "uuid": U_2060, "used_mib": None},
+    {"pid": 42708, "name": _OLLAMA, "uuid": U_2060, "used_mib": None},
+    {"pid": 17548, "name": r"C:\Windows\explorer.exe", "uuid": U_2080S,
+     "used_mib": None},
+]
 
 
 def t_reading_powershell():
@@ -147,8 +183,9 @@ def t_the_words():
                                      models=[{"name": "qwen3:8b", "vram_bytes": 5.0 * GB}]))
     check("graphics card: memory in use, the model loaded, other programs",
           "5.9 GB of 8.0 GB of its memory in use, 50% busy." in gpu
-          and "Jarvis's AI model qwen3:8b (5.0 GB) is loaded on it." in gpu
-          and "Other programs using its memory: chrome (0.4 GB)." in gpu and gnames, gpu)
+          and "Jarvis's AI model qwen3:8b (5.0 GB) is loaded." in gpu
+          and ("Other programs using graphics memory on this PC (their total, not one card): "
+               "chrome (0.4 GB).") in gpu and gnames, gpu)
     check("graphics card: Ollama's own process is not listed twice", gpu.count("Jarvis's AI") == 1,
           gpu)
     heat = PCH.heat_words(fake(cards=[dict(CARD, temp_c=88, hot_slowdown=True)]))
@@ -161,6 +198,184 @@ def t_the_words():
           and PCH.FAST_STARTUP in up, up)
     check("restart: a fresh start has no caveat",
           PCH.FAST_STARTUP not in PCH.restart_words(fake(uptime=600.0)))
+
+
+def t_reading_compute_apps():
+    """The per-process query the doctor reads: which card a program is on is
+    real; the amount is [N/A] on this PC (measured 2026-10-17), and must stay
+    None - never a made-up 0."""
+    import jarvis_compute as CP
+    text = (f"GPU-1ba0, 18120, C:\\Program Files\\Ollama\\llama-server.exe, [N/A]\n"
+            f"GPU-e428, 992, C:\\Windows\\explorer.exe, [N/A]\n")
+    rows = CP.parse_apps(text)
+    check("compute-apps: each process, its card and '[N/A]' as no reading",
+          len(rows) == 2 and rows[0]["pid"] == 18120 and rows[0]["uuid"] == "GPU-1ba0"
+          and rows[0]["used_mib"] is None and rows[0]["name"].endswith("llama-server.exe"),
+          rows)
+    old = "18120, llama-server.exe, GPU-1ba0, [N/A]\n"
+    check("... the older field order parses too",
+          CP.parse_apps(old, CP.APP_FIELDS_OLD) == [
+              {"pid": 18120, "name": "llama-server.exe", "uuid": "GPU-1ba0",
+               "used_mib": None}])
+    check("... a driver that DOES report an amount is read, in MiB",
+          CP.parse_apps("GPU-1ba0, 5, a.exe, 1024\n")[0]["used_mib"] == 1024)
+    check("... a malformed line is skipped, never guessed at",
+          CP.parse_apps("garbage\nnot, a, row\n") == []
+          and CP.parse_apps("") == [])
+    calls, real = [], CP._run_smi
+    CP._run_smi = lambda args: calls.append(args) or "GPU-1ba0, 5, a.exe, [N/A]\n"
+    CP._app_cache.update(at=-1e9, apps=None)
+    try:
+        first = CP.query_apps(fresh=True)
+        second = CP.query_apps()
+    finally:
+        CP._run_smi = real
+        CP._app_cache.update(at=-1e9, apps=None)
+    check("query_apps: exactly one nvidia-smi call, then the 30-second cache answers",
+          len(calls) == 1 and first == second and first[0]["pid"] == 5, (calls, first))
+
+
+def t_reading_the_cards_however_many():
+    """The doctor's own card reading, with the nvidia-smi readers replaced:
+    one reading per card for **1, 2 and 3** cards (N=2 is today; the third is
+    planned), each with its identity, its measured used memory and - when
+    nothing was read - a state of None, never a guess."""
+    import jarvis_hardware as HW
+    saved_cards, saved_health = HW._smi_cards, HW._read_health
+
+    def dev(i, total, free, uuid, pci, monitor):
+        return types.SimpleNamespace(index=i, name="NVIDIA GeForce RTX 2080 SUPER",
+                                     total_mb=total, free_mb=free, uuid=uuid, pci_id=pci,
+                                     display_active=monitor, compute_cap=7.5)
+    try:
+        for n in (1, 2, 3):
+            devs = [dev(i, 8192, 7000, f"GPU-{i}", f"00000000:0{i}:00.0", i == 0)
+                    for i in range(n)]
+            HW._smi_cards = lambda fresh=False, d=devs: d
+            HW._read_health = lambda: []
+            rows = PCH._read_cards() or []
+            check(f"{n} card(s): one reading per card, in nvidia-smi order",
+                  len(rows) == n and [r["index"] for r in rows] == list(range(n))
+                  and all(r["uuid"] and r["pci_id"] for r in rows), rows)
+            check(f"{n} card(s): used memory is the measured total minus free",
+                  bool(rows) and rows[0]["used_mib"] == 8192 - 7000
+                  and rows[0]["free_mib"] == 7000 and rows[0]["total_mib"] == 8192,
+                  rows[0] if rows else rows)
+            check(f"{n} card(s): no health reading means no state, never a guess",
+                  all(r["state"] is None for r in rows), [r.get("state") for r in rows])
+    finally:
+        HW._smi_cards, HW._read_health = saved_cards, saved_health
+    saved = HW._smi_cards
+    HW._smi_cards = lambda fresh=False: []
+    try:
+        check("no card at all: an empty list, never a made-up card",
+              PCH._read_cards() == [])
+    finally:
+        HW._smi_cards = saved
+
+
+def t_doctor_cards_every_card_in_plain_words():
+    """Pillar 20: every card is named with its own measured memory, its state,
+    its fullness and the programs holding it - and no amount is invented when
+    the driver reports none (measured on this PC, 2026-10-17: [N/A])."""
+    gpu, names = PCH.gpu_words(fake(programs=PROGRAMS, cards=[RESTING, WORKING],
+                                    models=[{"name": "qwen3:8b",
+                                             "vram_bytes": 11.4 * GB}], apps=APPS))
+    check("two cards: each is named with its own memory in use",
+          "NVIDIA GeForce RTX 2060: 11.6 GB of 12.0 GB" in gpu
+          and "NVIDIA GeForce RTX 2080 SUPER: 6.1 GB of 8.0 GB" in gpu, gpu)
+    check("... the resting card says so, and the working one is not called resting",
+          gpu.count("not doing any work right now") == 1, gpu)
+    check("... the nearly full card says so, with what to do about it",
+          "nearly full" in gpu and "smaller model in Brain > Model" in gpu, gpu)
+    check("... each card lists the programs holding it",
+          "Programs holding it: Jarvis's AI model." in gpu
+          and "Programs holding it: explorer." in gpu, gpu)
+    check("... and no amount is invented when the driver reports none",
+          "driver does not report how much graphics memory" in gpu
+          and "(0.0 GB)" not in gpu and "None" not in gpu, gpu)
+    check("... naming another program makes the answer private", names)
+    with_amounts = [dict(a, used_mib=5700) for a in APPS]
+    gpu2, _ = PCH.gpu_words(fake(cards=[RESTING, WORKING], apps=with_amounts))
+    check("... while a driver that DOES report an amount gets it shown",
+          "(11.1 GB)" in gpu2, gpu2)
+    many = list(APPS) + [
+        {"pid": 11, "name": r"C:\Windows\zzz.exe", "uuid": U_2080S, "used_mib": None},
+        {"pid": 12, "name": r"C:\Windows\aaa.exe", "uuid": U_2080S, "used_mib": None},
+        {"pid": 13, "name": r"C:\Windows\mmm.exe", "uuid": U_2080S, "used_mib": None}]
+    gpu3, _ = PCH.gpu_words(fake(cards=[RESTING, WORKING], apps=many))
+    check("a card with many programs lists three, then says how many more",
+          "Programs holding it: aaa, explorer, mmm and 1 more." in gpu3, gpu3)
+
+
+def t_doctor_twin_names_say_which_card():
+    """A second identical RTX 2080 SUPER is planned: the same name and size.
+    The doctor reuses jarvis_profiles.card_label (monitor first, id tail last)
+    and one card keeps its plain name, so today's PC reads as it always did."""
+    cards = [WORKING, TWIN]
+    labels = PCH._labels(cards)
+    check("two identical cards are told apart by the monitor",
+          labels == ["NVIDIA GeForce RTX 2080 SUPER on your monitor",
+                     "NVIDIA GeForce RTX 2080 SUPER (headless)"], labels)
+    gpu, _ = PCH.gpu_words(fake(cards=cards))
+    check("... and the doctor's words use those names", labels[0] in gpu and labels[1] in gpu, gpu)
+    check("one card keeps its plain name", PCH._labels([WORKING]) == [WORKING["name"]])
+    both_unknown = [dict(WORKING, display_active=None), dict(TWIN, display_active=None)]
+    unknown = PCH._labels(both_unknown)
+    check("with the monitor unknown, the id tail is the last resort, never a guess",
+          unknown[0] != unknown[1] and "(id ..." in unknown[0] + unknown[1], unknown)
+
+
+def t_doctor_heat_says_resting_or_hot():
+    heat = PCH.heat_words(fake(cards=[RESTING, WORKING]))
+    check("heat: the resting card is called resting, not hot",
+          "NVIDIA GeForce RTX 2060 is at 29 °C: fine - and not doing any work right now"
+          in heat, heat)
+    check("heat: a working card below the warm band is just fine, and nothing is called hot",
+          "NVIDIA GeForce RTX 2080 SUPER is at 67 °C: fine." in heat
+          and "hot" not in heat.lower(), heat)
+    hot = PCH.heat_words(fake(cards=[HOT]))
+    check("heat: the hot card names the reason and what to do",
+          "87 °C" in hot and "slowing itself down" in hot
+          and "Stop the model that is running" in hot and "fans and vents" in hot, hot)
+
+
+def t_doctor_slow_quiet_names_a_full_or_hot_card():
+    calm = {"cores": 8, "cpu_percent": 6.0,
+            "procs": [{"name": "explorer", "pid": 10, "cpu": 16.0, "mem_bytes": 0.2 * GB}],
+            "gpu": []}
+    said, names = PCH.slow_words(fake(
+        programs=calm, memory={"total_bytes": 32 * GB, "available_bytes": 24 * GB},
+        cards=[RESTING]))
+    check("slow, calm PC: a nearly full card is named as the likely reason, with what to do",
+          "If Jarvis feels slow" in said and "nearly full" in said
+          and "smaller model in Brain > Model" in said, said)
+    check("... and the card sentence names no program of its own",
+          "Programs holding it" not in said)
+    hot, _ = PCH.slow_words(fake(
+        programs=calm, memory={"total_bytes": 32 * GB, "available_bytes": 24 * GB},
+        cards=[HOT]))
+    check("... a hot card is named instead, with what to do",
+          "running hot" in hot and "stop the model that is running" in hot, hot)
+    busy, _ = PCH.slow_words(fake(
+        programs=PROGRAMS, memory={"total_bytes": 16 * GB, "available_bytes": 4 * GB},
+        cards=[RESTING]))
+    check("slow, busy PC: a card is not blamed over a busy processor",
+          "If Jarvis feels slow" not in busy, busy)
+
+
+def t_doctor_never_invents_a_reading():
+    """An older backend's card reading (no state keys) and a process whose card
+    id matches nothing: the words say less, never something guessed."""
+    old = {"name": "NVIDIA GeForce RTX 2080 SUPER", "used_mib": 6000,
+           "total_mib": 8192, "temp_c": 70, "hot_slowdown": None, "load_percent": 50}
+    gpu, _ = PCH.gpu_words(fake(cards=[old]))
+    check("a card reading without state keys invents no state sentence",
+          "not doing any work" not in gpu and "power limit" not in gpu, gpu)
+    gpu2, _ = PCH.gpu_words(fake(cards=[old], apps=[
+        {"pid": 1, "name": "mystery.exe", "uuid": "GPU-zzzz", "used_mib": 5}]))
+    check("a process whose card is not in the card list is not attributed to a card",
+          "mystery" not in gpu2, gpu2)
 
 
 def t_nothing_read_never_raises():
@@ -329,7 +544,11 @@ def t_same_labels_both_apps():
 
 
 if __name__ == "__main__":
-    for fn in (t_reading_powershell, t_programs_merged, t_the_words, t_nothing_read_never_raises,
+    for fn in (t_reading_powershell, t_programs_merged, t_reading_compute_apps,
+               t_reading_the_cards_however_many, t_the_words,
+               t_doctor_cards_every_card_in_plain_words, t_doctor_twin_names_say_which_card,
+               t_doctor_heat_says_resting_or_hot, t_doctor_slow_quiet_names_a_full_or_hot_card,
+               t_doctor_never_invents_a_reading, t_nothing_read_never_raises,
                t_private, t_real_readers_off_windows, t_grammar, t_the_fast_path,
                t_route_and_fixture, t_not_a_tool_and_shipped, t_same_labels_both_apps):
         print(f"\n--- {fn.__name__} ---")

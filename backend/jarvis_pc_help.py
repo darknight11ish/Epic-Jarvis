@@ -7,12 +7,20 @@ phone maker's "Device help"). docs/JARVIS-API.md section 84 is the contract.
     "why is my PC slow?"              how busy the processor is, how full the
                                       memory is, and the top three programs
                                       using each - with Jarvis's own AI model
-                                      named as such when it is one of them
+                                      named as such when it is one of them; and,
+                                      when the processor and memory look calm,
+                                      the graphics card that is hot or nearly
+                                      full and what to do about it
     "how full is my disk?"            every fixed drive: free GB and %
-    "what's using my graphics card?"  each NVIDIA card's memory in use, the AI
-                                      models Ollama has loaded on it, and the
-                                      other programs using its memory
-    "how hot is my graphics card?"    each NVIDIA card's temperature
+    "what's using my graphics card?"  every NVIDIA card, by a name a person
+                                      can tell apart: its memory in use, how
+                                      busy it is, whether it is resting, hot,
+                                      at its power limit or nearly full, the
+                                      programs nvidia-smi names on it (no
+                                      amounts - this PC's driver reports none),
+                                      and the AI models Ollama has loaded
+    "how hot is my graphics card?"    every NVIDIA card's temperature, what it
+                                      means, and what to do when it is hot
     "when did my PC last restart?"    when Windows last started
 
 WHO ASKS. jarvis_quick.py answers the five questions WITHOUT the AI model
@@ -55,10 +63,15 @@ not in requirements.lock, so it is not used):
   * memory, drives and the last start: ctypes calls into kernel32
     (GlobalMemoryStatusEx, GetLogicalDrives/GetDriveTypeW with
     shutil.disk_usage, GetTickCount64).
-  * graphics cards: jarvis_compute.query_cards (nvidia-smi) and
-    jarvis_hardware's health reading (temperature), the same readings the
-    Hardware and models screen shows; Ollama's own /api/ps on loopback for
-    which models are loaded and how much card memory each uses.
+  * graphics cards: jarvis_compute.query_cards (nvidia-smi), jarvis_hardware's
+    health reading (heat, power, fan, load, pstate, clocks, and the driver's
+    reason flags - the same readings the Hardware and models screen shows) and
+    jarvis_compute.query_apps (--query-compute-apps: WHICH programs hold a
+    card; this PC's driver reports no per-program amount, and that is kept as
+    "not told", never a guess); Ollama's own /api/ps on loopback for which
+    models are loaded and how much card memory each uses. Two cards with the
+    same name and size are told apart by jarvis_profiles.card_label (the
+    monitor first, the card's own id tail last) - the Hardware page's rule.
 
 TESTED WITHOUT WINDOWS: every reading is one field of Readers; the tests
 pass fakes. A reading that fails is None, and its answer says plainly that
@@ -136,9 +149,19 @@ class Readers:
     memory()   -> {"total_bytes", "available_bytes"}
     disks()    -> [{"drive": "C:", "total_bytes", "free_bytes"}]
     uptime()   -> seconds since Windows started
-    cards()    -> [{"name", "used_mib", "total_mib", "temp_c", "hot_slowdown",
-                   "load_percent"}]
+    cards()    -> [{"name", "uuid", "pci_id", "display_active", "index",
+                    "used_mib", "total_mib", "free_mib", "temp_c", "hot_slowdown",
+                    "load_percent", "power_w", "power_limit_w", "fan_percent",
+                    "pstate", "clock_mhz", "max_clock_mhz", "idle", "power_capped",
+                    "state"}]
+        Only the keys a reading could fill are present; `state` is
+        jarvis_hardware.card_state's one of "hot"/"idle"/"power_limited"/
+        "working"/"unknown". `display_active` is True/False/None.
     models()   -> [{"name", "vram_bytes"}]   Ollama's loaded models
+    apps()     -> [{"pid", "name", "uuid", "used_mib"}]  nvidia-smi's own
+        process list. `used_mib` is None when the driver does not report it
+        (measured on this PC 2026-10-17: it is [N/A] for every process), and
+        must stay None - never a made-up 0.
     """
     programs: Callable[[], Optional[dict]]
     memory: Callable[[], Optional[dict]]
@@ -146,6 +169,7 @@ class Readers:
     uptime: Callable[[], Optional[float]]
     cards: Callable[[], Optional[list]]
     models: Callable[[], Optional[list]]
+    apps: Optional[Callable[[], Optional[list]]] = None
     now: Callable[[], float] = field(default=time.time)
     own_pid: int = field(default_factory=os.getpid)
 
@@ -303,6 +327,12 @@ def _read_uptime() -> Optional[float]:
 # ---- graphics cards and Ollama: what the Hardware screen already reads -----
 
 def _read_cards() -> Optional[list]:
+    """Each NVIDIA card's own facts, from the same two readings the Hardware
+    and models screen uses (nvidia-smi's card list and its health query).
+    Identity (`uuid`, `pci_id`, `display_active`) is kept so two identical
+    cards can be told apart in words, and `used_mib` is measured memory in
+    use, never a guess. A card whose health could not be read still gets its
+    memory line, with the state honestly None."""
     try:
         import jarvis_hardware as HW
     except Exception:
@@ -314,6 +344,7 @@ def _read_cards() -> Optional[list]:
         return None
     if not cards:
         return []
+    state_of = getattr(HW, "card_state", None)
     out = []
     for c in cards:
         h = HW.health_for({"uuid": getattr(c, "uuid", ""), "index": getattr(c, "index", None)},
@@ -323,9 +354,34 @@ def _read_cards() -> Optional[list]:
         used = (total - free) if isinstance(total, (int, float)) and isinstance(
             free, (int, float)) and total > 0 else None
         out.append({"name": str(getattr(c, "name", "") or "Graphics card"),
-                    "used_mib": used, "total_mib": total, "temp_c": h.get("temp_c"),
-                    "hot_slowdown": h.get("hot_slowdown"), "load_percent": h.get("load_percent")})
+                    "uuid": str(getattr(c, "uuid", "") or ""),
+                    "pci_id": str(getattr(c, "pci_id", "") or ""),
+                    "display_active": getattr(c, "display_active", None),
+                    "index": getattr(c, "index", None),
+                    "used_mib": used, "total_mib": total,
+                    "free_mib": free if isinstance(free, (int, float)) else None,
+                    "temp_c": h.get("temp_c"), "hot_slowdown": h.get("hot_slowdown"),
+                    "load_percent": h.get("load_percent"),
+                    "power_w": h.get("power_w"), "power_limit_w": h.get("power_limit_w"),
+                    "fan_percent": h.get("fan_percent"),
+                    "pstate": h.get("pstate"), "clock_mhz": h.get("clock_mhz"),
+                    "max_clock_mhz": h.get("max_clock_mhz"),
+                    "idle": h.get("idle"), "power_capped": h.get("power_capped"),
+                    "state": (state_of(h) if callable(state_of) and h else None)})
     return out
+
+
+def _read_apps() -> Optional[list]:
+    """nvidia-smi's own list of the programs using a card, or None when it
+    cannot be read. On this PC the list is real and the per-program amounts
+    are not (the driver answers [N/A]); jarvis_compute keeps that distinction
+    as None, and so does this reader."""
+    try:
+        import jarvis_compute as CP
+        reader = getattr(CP, "query_apps", None)
+        return reader() if callable(reader) else None
+    except Exception:
+        return None
 
 
 def _read_models() -> Optional[list]:
@@ -357,7 +413,8 @@ def _read_models() -> Optional[list]:
 
 def real_readers() -> Readers:
     return Readers(programs=_cached_programs, memory=_read_memory, disks=_read_disks,
-                   uptime=_read_uptime, cards=_read_cards, models=_read_models)
+                   uptime=_read_uptime, cards=_read_cards, models=_read_models,
+                   apps=_read_apps)
 
 
 _CACHE: dict = {"at": -1e9, "value": None}
@@ -441,6 +498,116 @@ def _programs(reading: dict, own_pid: int) -> list:
     return list(merged.values())
 
 
+def _program_label(name: str) -> str:
+    """A program's own file name, without its folder: the nvidia-smi process
+    list names a full path, and the owner reads the short name."""
+    base = str(name or "").replace("\\", "/").rsplit("/", 1)[-1]
+    return _clean_name(base) or "a program"
+
+
+def _profile_card(c, key: str):
+    """The jarvis_profiles.Card a reader's plain dict describes, for the
+    shared twin-naming rule (jarvis_profiles.card_label). None when profiles
+    cannot be imported, so the doctor falls back to the plain name."""
+    import jarvis_profiles as P
+    total = c.get("total_mib")
+    try:
+        gib = float(total) / 1024.0 if total is not None else 0.0
+    except (TypeError, ValueError):
+        gib = 0.0
+    return P.Card(key=key, name=str(c.get("name") or "A graphics card"),
+                  total_gib=gib, monitor=c.get("display_active"),
+                  uuid=str(c.get("uuid") or ""))
+
+
+def _labels(cards: list) -> list:
+    """Each card's name, told apart from a twin the same way the Hardware and
+    models page tells them apart (jarvis_profiles.card_label: the monitor
+    first, the card's own id tail when that cannot say). One card keeps its
+    plain name, so today's PC reads exactly as it always did. Never raises."""
+    plain = [str(c.get("name") or "A graphics card") for c in cards]
+    try:
+        pcs = [_profile_card(c, str(c.get("uuid") or c.get("pci_id") or c.get("index") or i))
+               for i, c in enumerate(cards)]
+        import jarvis_profiles as P
+        return [P.card_label(pc, pcs) for pc in pcs]
+    except Exception:
+        return plain
+
+
+def _apps_by_card(cards: list, apps: Optional[list]) -> dict:
+    """{card index: [{"pid", "name", "used_mib"}]} from nvidia-smi's own
+    process list. A process whose card id matches nothing here is left out
+    (it is not the doctor's to guess which card it is on)."""
+    by_uuid: dict = {}
+    for a in apps or []:
+        if not isinstance(a, dict):
+            continue
+        uuid = str(a.get("uuid") or "").lower()
+        if uuid:
+            by_uuid.setdefault(uuid, []).append(a)
+    out: dict = {}
+    for i, c in enumerate(cards or []):
+        uuid = str(c.get("uuid") or "").lower()
+        out[i] = by_uuid.get(uuid, []) if uuid else []
+    return out
+
+
+def _held_words(held: list) -> tuple:
+    """(one card's "Programs holding it: ..." sentence or "", names_programs).
+    At most `TOP_N` names are shown - the same limit the processor and memory
+    answers use - because a desktop card can easily have twenty programs on it
+    (measured: 23 on this PC's 2080 SUPER), and a wall of names helps nobody;
+    "and N more" says the rest. Amounts are printed only when the driver
+    reports one for EVERY program there; on this PC it reports none, and the
+    words say so instead of inventing a number."""
+    merged: dict = {}
+    for a in held:
+        label = _program_label(a.get("name"))
+        key = "model" if _is_model(label) else label.lower()
+        row = merged.setdefault(key, {"name": MODEL_WORDS if key == "model" else label,
+                                      "used_mib": 0, "amounts": True})
+        used = a.get("used_mib")
+        if isinstance(used, int) and not isinstance(used, bool):
+            row["used_mib"] += used
+        else:
+            row["amounts"] = False
+    rows = sorted(merged.values(),
+                  key=lambda r: (0 if r["name"] == MODEL_WORDS else 1, r["name"].lower()))
+    shown = rows[:TOP_N]
+    parts = []
+    for row in shown:
+        part = MODEL_WORDS if row["name"] == MODEL_WORDS else row["name"]
+        if row["amounts"]:
+            part += f" ({_gb(row['used_mib'] * 1024 ** 2)})"
+        parts.append(part)
+    extra = len(rows) - len(shown)
+    if extra > 0:
+        parts.append(f"{extra} more")
+    return _join(parts), any(r["name"] != MODEL_WORDS for r in rows)
+
+
+def _card_used_fraction(c):
+    used, total = c.get("used_mib"), c.get("total_mib")
+    if isinstance(used, (int, float)) and isinstance(total, (int, float)) and total > 0:
+        return max(0.0, min(1.0, float(used) / float(total)))
+    return None
+
+
+def _card_worry(cards: list) -> tuple:
+    """(card label, why) for the first card worth mentioning on its own -
+    "hot" (the driver's own thermal slow-down reason) or "nearly_full" (90 %
+    or more measured memory in use) - else ("", ""). Used by "why is my PC
+    slow" when the processor and memory look calm."""
+    for i, c in enumerate(cards):
+        if c.get("hot_slowdown") is True:
+            return i, "hot"
+        frac = _card_used_fraction(c)
+        if frac is not None and frac >= 0.9:
+            return i, "nearly_full"
+    return -1, ""
+
+
 def slow_words(r: Readers) -> tuple:
     """(words, names_programs)."""
     reading = r.programs()
@@ -485,6 +652,27 @@ def slow_words(r: Readers) -> tuple:
             "Jarvis's own AI model is one of them - it works hardest while it is answering.")
     if verdict:
         bits.append(verdict)
+    # If the processor and memory look calm and a card is hot or nearly full,
+    # say so: that is the measured reason answers can still be slow, and the
+    # action that helps. No program is named here, so this stays not-private.
+    calm = cpu is not None and mem_pct is not None and cpu < 50 and mem_pct < 75
+    if calm:
+        try:
+            cards = r.cards() or []
+        except Exception:
+            cards = []
+        if cards:
+            i, why = _card_worry(cards)
+            if i >= 0:
+                label = _labels(cards)[i]
+                if why == "hot":
+                    bits.append(f"If Jarvis feels slow, its AI model is on the {label}, which "
+                                f"is running hot - stop the model that is running, or check the "
+                                f"PC's fans and vents, then try again.")
+                else:
+                    bits.append(f"If Jarvis feels slow, its AI model is on the {label}, which "
+                                f"is nearly full - use a smaller model in Brain > Model, or turn "
+                                f"off a feature you are not using.")
     return " ".join(bits), bool(by_cpu or by_mem)
 
 
@@ -512,60 +700,122 @@ def disk_words(r: Readers) -> str:
 
 
 def gpu_words(r: Readers) -> tuple:
-    """(words, names_programs)."""
+    """(words, names_programs). Every card, in plain words: memory in use and
+    how busy it is, what state it is in, whether it is nearly full, the
+    programs holding it, and Jarvis's own loaded model. True when it names a
+    program other than Jarvis's own (that answer then stays private).
+
+    MEASURED ON THIS PC (2026-10-17): nvidia-smi names the programs holding a
+    card but reports no amount for any of them (`used_memory` is [N/A]), so
+    the amount is shown only when the driver reports it, and the words say
+    plainly when it does not. Windows' own counter gives a program's total
+    graphics memory across every card, so it is labelled as a total and never
+    presented as one card's number."""
     cards = r.cards()
     models = r.models()
     reading = r.programs()
+    apps = None
+    try:
+        if callable(getattr(r, "apps", None)):
+            apps = r.apps()
+    except Exception:
+        apps = None
     bits = []
+    names = False
     if cards:
-        for c in cards:
-            line = c["name"]
+        labels = _labels(cards)
+        by_card = _apps_by_card(cards, apps)
+        no_amounts = False
+        for i, c in enumerate(cards):
+            line = labels[i]
             if c.get("used_mib") is not None and c.get("total_mib"):
                 line += (f": {_gb(c['used_mib'] * 1024 ** 2)} of "
                          f"{_gb(c['total_mib'] * 1024 ** 2)} of its memory in use")
             if c.get("load_percent") is not None:
                 line += f", {c['load_percent']}% busy"
-            bits.append(line + ".")
-    loaded = [m for m in (models or []) if m.get("name")]
-    on_card = [m for m in loaded if (m.get("vram_bytes") or 0) > 0]
-    if on_card:
-        bits.append("Jarvis's AI " + ("model " if len(on_card) == 1 else "models ")
-                    + _join([f"{m['name']} ({_gb(m['vram_bytes'])})" for m in on_card])
-                    + (" is" if len(on_card) == 1 else " are") + " loaded on it.")
-    elif models is not None:
-        bits.append("Jarvis's AI model is not loaded on the card right now.")
+            line += "."
+            if c.get("hot_slowdown") is True:
+                line += (" It is slowing itself down to cool off, which makes answers slower. "
+                         "Stop the model that is running, or check the PC's fans and vents, then "
+                         "try again in a minute.")
+            elif c.get("state") == "idle":
+                line += " It is not doing any work right now - that is normal."
+            elif c.get("state") == "power_limited":
+                line += " It is at its power limit, which is normal while it is working hard."
+            frac = _card_used_fraction(c)
+            if frac is not None and frac >= 0.9:
+                free = max(0.0, (c["total_mib"] - c["used_mib"]) * 1024 ** 2)
+                line += (f" It is nearly full: only {_gb(free)} free, so a bigger model will "
+                         f"not fit. Use a smaller model in Brain > Model, or turn off a feature "
+                         f"you are not using.")
+            held = by_card.get(i) or []
+            if held:
+                said, held_names = _held_words(held)
+                if said:
+                    line += f" Programs holding it: {said}."
+                    names = names or held_names
+                    measured = all(isinstance(a.get("used_mib"), int)
+                                   and not isinstance(a.get("used_mib"), bool) for a in held)
+                    if not measured:
+                        no_amounts = True
+            bits.append(line)
+        if no_amounts:
+            bits.append("This PC's driver does not report how much graphics memory each "
+                        "program uses, so Jarvis can only list the programs holding a card.")
+        loaded = [m for m in (models or []) if m.get("name")]
+        on_card = [m for m in loaded if (m.get("vram_bytes") or 0) > 0]
+        if on_card:
+            bits.append("Jarvis's AI " + ("model " if len(on_card) == 1 else "models ")
+                        + _join([f"{m['name']} ({_gb(m['vram_bytes'])})" for m in on_card])
+                        + (" is" if len(on_card) == 1 else " are") + " loaded.")
+        elif models is not None:
+            bits.append("Jarvis's AI model is not loaded on a card right now.")
     others = []
     if reading:
         rows = [p for p in _programs(reading, r.own_pid)
                 if not p["model"] and p["gpu_bytes"] >= 50 * 1024 ** 2]
         others = sorted(rows, key=lambda p: -p["gpu_bytes"])[:TOP_N]
     if others:
-        bits.append("Other programs using its memory: "
-                    + _join([f"{p['name']} ({_gb(p['gpu_bytes'])})" for p in others]) + ".")
+        bits.append("Other programs using graphics memory on this PC (their total, not one "
+                    "card): " + _join([f"{p['name']} ({_gb(p['gpu_bytes'])})" for p in others]) + ".")
+        names = True
     if not bits:
         return (NO_NVIDIA if cards == [] else COULD_NOT), False
-    return " ".join(bits), bool(others)
+    return " ".join(bits), names
 
 
 def heat_words(r: Readers) -> str:
+    """Every card's temperature in plain words, with what it means and what to
+    do. The driver's own thermal slow-down reason is the only thing called
+    "slowing itself down"; a card that is merely resting says so, because an
+    idle card is not a hot card (measured 2026-10-17: both cards sit at
+    P8/300 MHz and 29-35 °C on this PC)."""
     cards = r.cards()
     if cards is None:
         return COULD_NOT
     temps = [c for c in cards if c.get("temp_c") is not None]
     if not temps:
         return NO_TEMP
+    labels = _labels(cards)
     parts = []
-    for c in temps:
+    for i, c in enumerate(cards):
+        if c.get("temp_c") is None:
+            continue
         t = c["temp_c"]
+        state = c.get("state")
         if c.get("hot_slowdown") is True:
-            say = "hot - it is slowing itself down to cool off"
+            say = ("hot - it is slowing itself down to cool off, which makes answers slower. "
+                   "Stop the model that is running, or check the PC's fans and vents, then try "
+                   "again in a minute")
         elif t >= 85:
             say = "hot, near where cards like it start slowing down"
+        elif state == "idle" and t < 75:
+            say = "fine - and not doing any work right now, which is normal"
         elif t >= 75:
             say = "warm, which is normal while it is working hard"
         else:
             say = "fine"
-        parts.append(f"{c['name']} is at {t} °C: {say}.")
+        parts.append(f"{labels[i]} is at {t} °C: {say}.")
     return " ".join(parts)
 
 

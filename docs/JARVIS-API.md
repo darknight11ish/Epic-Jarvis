@@ -13598,11 +13598,27 @@ Said or typed to Jarvis in either app, answered on the PC by
 
 | Topic | Said like | The answer |
 |---|---|---|
-| `slow` | "why is my PC slow?", "my computer is really slow", "what's using all my memory?" | how busy the processor is, how full the memory (RAM) is, the top three programs for each, and the likely reason. Jarvis's own model shows as "Jarvis's AI model" (any Ollama process), this backend as "Jarvis itself". |
+| `slow` | "why is my PC slow?", "my computer is really slow", "what's using all my memory?" | how busy the processor is, how full the memory (RAM) is, the top three programs for each, and the likely reason. Jarvis's own model shows as "Jarvis's AI model" (any Ollama process), this backend as "Jarvis itself". When the processor and memory look calm, it also names a graphics card that is nearly full or running hot, and what to do about it (2026-10-17). |
 | `disk` | "how full is my disk?", "how much space do I have left?", "is my C drive full?" | every fixed drive: GB free of GB, and % free; "nearly full" under 10%. |
-| `gpu` | "what's using my graphics card?", "how much VRAM is used?" | each NVIDIA card's memory in use and how busy it is, the models Ollama has loaded on it (from Ollama's own `/api/ps`), and the other programs using its memory. |
-| `heat` | "how hot is my graphics card?", "what's my GPU temperature?" | each NVIDIA card's temperature, and whether it is slowing itself down because it is hot (the same reading as Hardware and models, §20). |
+| `gpu` | "what's using my graphics card?", "how much VRAM is used?" | each NVIDIA card, by the name a person can tell apart: its memory in use and how busy it is; whether it is resting, hot, at its power limit or nearly full, with what to do; the programs nvidia-smi names on that card; and the models Ollama has loaded (from Ollama's own `/api/ps`). A program's amount is shown only where the driver reports it - on this PC it reports none, so the words say so rather than inventing a number (2026-10-17). |
+| `heat` | "how hot is my graphics card?", "what's my GPU temperature?" | each NVIDIA card's temperature with what it means - resting, fine, warm, hot, or slowing itself down because it is hot - and, for the last, what to do (stop the model that is running, check the PC's fans and vents). The driver's own thermal slow-down reason is the only thing called "slowing itself down" (2026-10-17). |
 | `restart` | "when did my PC last restart?", "how long has my PC been on?" | when Windows last started, and - after two days - that with Fast Startup on, "Shut down" does not count as a restart. |
+
+**Cards, however many (2026-10-17).** Every card answer is written for any
+number of cards: one, the two installed today, or three when the planned
+second RTX 2080 SUPER arrives. Two cards with the same name and size are told
+apart the same way Settings -> Hardware and models tells them apart - "on your
+monitor" and "(headless)", and the card's own id tail when the monitor cannot
+say - never a bare identical name repeated twice. A card's state is read from
+`pstate`, its clocks and its load, **not from one driver flag**: measured on
+this PC (driver 617.42), both cards rest at P8/300 MHz, the RTX 2060 reports
+its power-cap reason active while resting, and the RTX 2080 SUPER reports the
+idle reason active. So the words say "resting", only the driver's thermal
+slow-down reason is called "slowing itself down", and "at its power limit" is
+said as normal, never as a fault. The per-program amounts are the one thing
+this PC's Windows driver does not measure: nvidia-smi lists which programs
+hold a card but answers `[N/A]` for every amount, so the words list the
+programs and say plainly that it cannot show amounts.
 
 Each pattern must be the whole sentence, so a longer question ("why is my
 PC slow to boot after the update, should I reinstall?") goes to the model as
@@ -13667,7 +13683,16 @@ not in `requirements.lock`):
   (`GlobalMemoryStatusEx`, `GetLogicalDrives`/`GetDriveTypeW` with
   `shutil.disk_usage`, `GetTickCount64`).
 - graphics cards: `nvidia-smi` through `jarvis_compute` and
-  `jarvis_hardware`'s health reading - the Hardware screen's own readings.
+  `jarvis_hardware`'s health reading - the Hardware screen's own readings. Two
+  questions: `--query-gpu` for each card's memory, heat, power, fan, load,
+  `pstate`, clocks and the driver's reason flags, and `--query-compute-apps`
+  for **which** programs hold a card. The second answers with the card id but
+  **no amount on this PC** (measured 2026-10-17: `used_memory` is `[N/A]` for
+  every process, including the two `llama-server.exe` on the 2060), and that
+  is kept as "not told", never turned into 0 or an estimate. Windows' own
+  counter gives a program's **total** graphics memory across every card; the
+  words label it as a total and never present it as one card's number. A
+  card's state (`pstate` + clocks + load) is read from the same answer.
 
 Program names are **never logged, printed, audited or written to a file**;
 the PowerShell reading is held in memory for at most 5 seconds (so both apps
@@ -13688,7 +13713,10 @@ asking at once run it once), then dropped.
 - Untested on Windows: the PowerShell reading's JSON shape on 5.1, whether
   the first formatted-counter sample reads 0 (hence the two samples), and
   whether the graphics-card memory counters exist on the owner's driver.
-  Each fails to "could not read", never to a wrong number.
+  Each fails to "could not read", never to a wrong number. What **is**
+  measured (2026-10-17, driver 617.42): nvidia-smi answers the state fields
+  (`pstate`, clocks, idle and power-cap reasons) and the per-card memory, and
+  reports **no** per-program amount; the words treat both as measured facts.
 
 ## 85. Bring in chats from ChatGPT, Claude, Gemini or DeepSeek (added 2026-09-28)
 
