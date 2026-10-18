@@ -2574,3 +2574,22 @@ starts.
   (selection chip) -> Pillar 27 (routines) -> Pillar 17 (code visual docs) ->
   the rest of the queued work, as much as can reasonably be done.
 
+
+* **The chat-to-job plan card is `CLOSED_BY_MEASUREMENT` (2026-10-18).** The
+  first real multi-step tool-planning eval on this PC passed **1/8 = 12.5%**
+  against the **90%** bar (`tools/tool_eval/ollama_tool_eval.py`, eight
+  multi-step cases), so `jarvis_plan.py`'s freeform "one card, several steps"
+  card is not merely dark: it is closed by that measurement on the current
+  8B/9B local models. `jarvis_plan.enabled()` now also binds a passing result
+  to the **current everyday model name** - read the way chat reads it
+  (`JARVIS_LOCAL_MODEL`, then `jarvis_models.current_model()`, else chat's own
+  `jarvis-primary` default) - on top of #570's **90-day** freshness. A fresh
+  pass for another model, or a file whose recorded model does not match the
+  model of the day, is refused in plain words naming both. **Reopen only after
+  a fresh eval on the everyday model of the day clears `MULTI_PASS_RATE = 90%`
+  with `carried == 0`; switching to a future model forces that fresh run by
+  construction, because the recorded model no longer matches.** Evidence: the
+  2026-10-18 competitive-benchmark review (Part I Q3) and the measured run it
+  cites; the wiring tests are in `backend/test_plan.py`
+  (`t_enabled_refuses_a_fresh_pass_for_a_different_model`,
+  `t_enabled_accepts_only_a_fresh_pass_for_the_current_model`).
