@@ -76,17 +76,35 @@ a washing machine already off when the watch starts is not "finished".
 links elsewhere, never acts on what it reads") - a third source, "page":
 one plain GET of one address the owner typed (no account to sign in to, so
 no readiness "is it set up?" - only the tier), never a redirect anywhere
-the check below would refuse. The changedetection.io pattern: only a SHA-256
-fingerprint of the page's bytes is kept (reusing the same `last_state`
+the check below would refuse. The changedetection.io pattern: the look keeps
+a SHA-256 fingerprint of the page's words (reusing the same `last_state`
 column Home Assistant's state uses - it is a hash there too, just of a
-device's state word instead of a page's bytes), never the page's actual
-text - a match is "the fingerprint changed", never a diff or a quote. Every
-address is refused if it resolves - by a REAL DNS lookup, not spelling - to
-this PC or a private network address (`jarvis_local_http.private_fetch_problem`),
-checked again immediately before every look, not only when the address is
-added: a name's DNS answer can change (DNS rebinding), and a page's own
-redirect could otherwise point back at the home network after the check
-already passed once.
+device's state word), never the page's actual text - and a match is never a
+diff or a quote of the page. Every address is refused if it resolves - by a
+REAL DNS lookup, not spelling - to this PC or a private network address
+(`jarvis_local_http.private_fetch_problem`), checked again immediately
+before every look, not only when the address is added: a name's DNS answer
+can change (DNS rebinding), and a page's own redirect could otherwise point
+back at the home network after the check already passed once.
+  * "PRICE, VERSION OR STOCK - WHAT ACTUALLY CHANGED" (Pillar 26,
+    2026-10-17; Blueprint C of Volume III): a look now understands the
+    page's structure too. `strip_page_noise` removes what changes on a page
+    nobody changed (the script/style/noscript/svg/nav/footer/aside
+    elements' text, timestamps, view counts, CSRF/session nonces, utm_*
+    parameters and the SecAlign chat/tool markers), `extract_watch_signals`
+    reads - by plain code, never the model - every price in whole cents,
+    every version/release tag, a three-state stock state and the hash of the
+    clean words, and `diff_watch_snapshot` says what changed ("The price is
+    now 199.99 (it was 249.99)."). When the two looks differ only in the
+    stripped noise the answer is the `[SILENT]` watermark (`PAGE_SILENT`)
+    and nothing is notified; a failed fetch is stale, keeps the old
+    snapshot and its `last_good_at`, and never alerts. A real change is
+    outside text, so it latches the gate's conversation taint
+    (`jarvis_gate.latch_taint(why="page_watch")`). The page's words
+    themselves are still never kept, shown or quoted - only the
+    noise-stripped hash and those short structured facts - so this is still
+    a reader that only tells the owner, on both apps, through the same
+    generic alert.
 
 THE GATE, EVERY LOOK
 Each look asks jarvis_gate first, like the morning briefing's reads:
@@ -198,7 +216,12 @@ rule in schedule.db, like a reminder's words. This module's own table,
 `tellme` in the same file, keeps per job only: the mailbox position (a
 number), the device's last state (a short word), when it last looked and
 how that went (a fixed sentence), and when it last matched. No sender, no
-subject, no email text, ever.
+subject, no email text, ever. A page watch keeps in the same `last_state`
+column a small JSON snapshot (Pillar 26): the SHA-256 of the page's
+noise-stripped words, every price in whole cents (integers), every version
+tag, one of three stock states, the plain words for the last real change and
+when the last good look was - never the page's words, never a quote, and
+nothing from it is sent to the AI model.
 """
 from __future__ import annotations
 
@@ -420,9 +443,11 @@ class Deps:
     idle_connect: Optional[Callable] = None
     #: Is Jarvis on standby? (jarvis_power)
     standby: Optional[Callable[[], bool]] = None
-    #: (url) -> a hex fingerprint of the page's text right now, or raises.
-    #: None: the real one (_default_page_fetch) - one GET, no proxy, capped,
-    #: hashed; a test never opens a real socket.
+    #: (url) -> the page's current state right now (a "t2:" PAGE_STATE
+    #: string), or raises. An old-format fingerprint string is accepted too,
+    #: so a test written before Pillar 26 keeps its meaning. None: the real
+    #: one (_default_page_fetch) - one GET, no proxy, capped; a test never
+    #: opens a real socket.
     page_fetch: Optional[Callable[[str], str]] = None
     #: (url) -> the price read from the page (a float), or None when there is
     #: none, or raises. None: the real one (_default_price_fetch).
@@ -857,7 +882,9 @@ def alert_words(watch: dict, count: int = 1, st: Optional[dict] = None) -> str:
             return f"{count} emails from {watch['sender']} arrived."
         return f"An email from {watch['sender']} arrived."
     if watch.get("source") == "page":
-        return f"The page you're watching changed: {watch['url']}"
+        base = f"The page you're watching changed: {watch['url']}"
+        last = str(_page_state_fields(st.get("last_state")).get("words") or "")
+        return base + (" " + last if last else "")
     if watch.get("source") == "price":
         now = _price_of_state(st.get("last_state"))
         tail = f" It is now {money(now, watch)}." if now is not None else ""
@@ -934,8 +961,12 @@ def card(rule: dict, text: str, now: float) -> str:
             f"Watching for: {w['url']} - when its text changes.",
             f"How: {every}, Jarvis fetches that address (a plain GET, never a link on the "
             "page - it never follows anything else there) and compares a short fingerprint "
-            "of its text to the one from the look before. The page's actual words are never "
-            "shown, kept, or sent to the AI model - only whether the fingerprint changed.",
+            "of its words, with timestamps, view counts, session nonces, tracking parameters "
+            "and the site's own chrome stripped out first, plus every price (in whole cents), "
+            "every version tag and the stock state read by plain code. It tells you what "
+            "changed - a price, a version, a stock state - or that the text changed. The "
+            "page's actual words are never shown, kept, or sent to the AI model; only the "
+            "fingerprint and those short facts are kept.",
             "Refused if that address turns out to lead to this PC or a private network "
             "address, checked again on every look (never only when you add it), so a web "
             "address can never become a way to reach your own network.",
@@ -1360,7 +1391,19 @@ class _PageRedirect(urllib.request.HTTPRedirectHandler):
 #: (security tokens, ad ids, script timestamps), so a page nobody changed
 #: could match on every look. A fingerprint in the old form is re-recorded
 #: once, silently, rather than compared (see _look_page).
+#:
+#: "t2:" is what a look keeps now (Pillar 26, 2026-10-17; Blueprint C of
+#: Volume III): a JSON snapshot of the signals `extract_watch_signals` reads -
+#: the hash of the noise-stripped words, every price in whole cents, every
+#: version tag, a three-state stock state - plus the last real change's plain
+#: words and the last good look's time (see the Pillar 26 section below).
+#: Both older kinds are still recognised so an upgraded PC re-records once,
+#: silently.
 PAGE_PRINT = "t1:"
+PAGE_STATE = "t2:"
+#: The watermark rule: `diff_watch_snapshot` returns this instead of words
+#: when the page differs only in dynamic noise, so a look cannot ring for it.
+PAGE_SILENT = "[SILENT]"
 
 #: Elements whose contents a reader never sees. Their text is left out of
 #: the fingerprint (the same list changedetection.io strips before it
@@ -1433,9 +1476,10 @@ def _default_page_fetch(url: str) -> str:
     """ONE GET, through jarvis_local_http.public_urlopen (never a proxy, and
     the private-address check made again on the connection itself), a
     redirect followed only where the check above would allow it,
-    the body capped at PAGE_MAX_BYTES. Returns the fingerprint of the page's
-    visible words (_page_print); the bytes and the words themselves are never
-    kept or returned."""
+    the body capped at PAGE_MAX_BYTES. Returns the page's current SNAPSHOT
+    (_page_state): the signals extract_watch_signals() read from its
+    noise-stripped words, prices in whole cents, versions and stock. The
+    bytes and the words themselves are never kept or returned."""
     import jarvis_local_http as LH
     req = urllib.request.Request(url, headers={"User-Agent": "Jarvis (tell me when this page "
                                                               "changes)"})
@@ -1445,12 +1489,17 @@ def _default_page_fetch(url: str) -> str:
     with LH.public_urlopen(req, PAGE_TIMEOUT, _PageRedirect()) as resp:
         body = resp.read(PAGE_MAX_BYTES + 1)
         content_type = resp.headers.get("Content-Type", "") if resp.headers else ""
-    return _page_print(body, content_type)
+    return _page_state(body, content_type)
 
 
 def _print_kind(digest: str) -> str:
-    """"t1:" for a fingerprint of the visible words; "" for the old kind."""
-    return digest[:3] if isinstance(digest, str) and digest.startswith(PAGE_PRINT) else ""
+    """"t2:" for a current page snapshot, "t1:" for the pre-Pillar-26
+    fingerprint of the visible words, "" for the oldest kind (raw bytes)."""
+    if not isinstance(digest, str):
+        return ""
+    if digest.startswith(PAGE_STATE):
+        return PAGE_STATE
+    return PAGE_PRINT if digest.startswith(PAGE_PRINT) else ""
 
 
 def _look_page(job_id: str, watch: dict, st: dict, deps: Deps, sched) -> tuple:
@@ -1464,9 +1513,10 @@ def _look_page(job_id: str, watch: dict, st: dict, deps: Deps, sched) -> tuple:
     if problem:
         return 0, f"Could not look: {problem}"
     text = (f"Jarvis would like to fetch {url} for a \"tell me when\": one plain GET, to see "
-            "if its text changed since the look before - never a link on the page, and the "
-            "page's own words are never read out, kept, or shown, only whether a fingerprint "
-            "of them changed.")
+            "what changed since the look before - the page's price, version and stock state "
+            "read by plain code, and a fingerprint of its words with timestamps, session "
+            "nonces, view counts and site chrome stripped out first. Never a link on the page, "
+            "and the page's own words are never read out, kept, or shown.")
     if not _ok_to_read(PAGE_ACTION, "fetch a web page for a \"tell me when\"", text, deps):
         return 0, ("Could not look: your settings ask for a yes each time Jarvis fetches a "
                    "web page.")
@@ -1474,17 +1524,40 @@ def _look_page(job_id: str, watch: dict, st: dict, deps: Deps, sched) -> tuple:
     try:
         digest = fetch(url)
     except Exception as exc:
+        # A failed look changes nothing: the last-known-good snapshot stays,
+        # and the owner is told once through the broken-watch notice.
         return 0, f"Could not look: the page did not answer ({type(exc).__name__})."
+    if digest is None:
+        return 0, "Could not look: the page did not answer."
+    now = sched.now()
     before = st.get("last_state")
+    if before is None or _print_kind(before) != _print_kind(digest):
+        # The first look, or a snapshot recorded by an older Jarvis (raw
+        # bytes, or the pre-Pillar-26 visible-words fingerprint): the two
+        # cannot be compared, so this look only records the new kind - a page
+        # nobody changed must not match once just because Jarvis was updated.
+        fields = _page_state_fields(digest)
+        if _print_kind(digest) == PAGE_STATE:
+            fields["last_good_at"] = now
+            _save(job_id, sched, last_state=_page_state_text(fields))
+        else:
+            _save(job_id, sched, last_state=digest)
+        return 0, ""
+    if _print_kind(digest) == PAGE_STATE:
+        old, new = _page_state_fields(before), _page_state_fields(digest)
+        delta = diff_watch_snapshot(old, new)
+        fields = dict(new)
+        fields["last_good_at"] = now
+        # Keep the last REAL change's words, so the app can still say what
+        # changed when it reads the alert after a later quiet look.
+        fields["words"] = (delta["status"] if delta["changed"]
+                           else (old.get("words") or ""))
+        _save(job_id, sched, last_state=_page_state_text(fields))
+        if delta["changed"]:
+            _latch_page_watch()
+            return 1, ""
+        return 0, ""
     _save(job_id, sched, last_state=digest)
-    if before is None:
-        return 0, ""
-    if _print_kind(before) != _print_kind(digest):
-        # Recorded by an older Jarvis, over the page's raw bytes: the two
-        # cannot be compared, so this look only records the new kind - a
-        # page nobody changed must not match once just because Jarvis was
-        # updated.
-        return 0, ""
     return (1 if digest != before else 0), ""
 
 
@@ -1648,6 +1721,359 @@ def _look_price(job_id: str, watch: dict, st: dict, deps: Deps, sched) -> tuple:
     below = float(watch["below"])
     was_below = before is not None and before < below
     return (1 if float(price) < below and not was_below else 0), ""
+
+
+# --------------------------------------------------------------------------
+#   Pillar 26 (2026-10-17): a noise-immune structured page-watch delta
+# --------------------------------------------------------------------------
+#
+# Blueprint C of Volume III. The page watch above used to compare one
+# fingerprint of the visible words, so a clock stamp, a rotating ad or a view
+# counter changed the fingerprint of a page nobody changed. A look is now a
+# small deterministic pipeline, all plain code - no model call and no network
+# in it; every function takes the text the one GET already returned:
+#
+#   strip_page_noise(html_or_text)   the words, with the noise removed
+#   extract_watch_signals(text)      prices in whole cents, versions, stock,
+#                                    and the hash of the clean words
+#   diff_watch_snapshot(prev, curr)  what changed - and "[SILENT]" when
+#                                    nothing meaningful did
+#
+# The look keeps a small JSON snapshot (PAGE_STATE) of those signals, so a
+# match can say WHAT changed ("The price is now 199.99 (it was 249.99).")
+# without keeping or quoting the page's words. A fetch that fails is
+# stale=True with last_good_at preserved: the old snapshot is never
+# overwritten and nothing is alerted. A page that really changed latches the
+# gate's conversation taint (why="page_watch"), because outside text was read.
+
+PAGE_SILENT = "[SILENT]"
+#: The page-state kinds a look keeps. "t2:" is the current JSON snapshot;
+#: "t1:" and the raw kind are what older Jarvis versions kept - those can
+#: only be compared for equality and are re-recorded once, silently.
+PAGE_STATE = "t2:"
+#: The chat/tool marker families a page could use to pretend to be a turn
+#: ("SecAlign markers"): removed before anything is compared, so a page
+#: cannot smuggle a role or tool marker into what the watch keeps or says.
+_SEC_ALIGN_MARKERS = ("<|im_start|>", "<|im_end|>", "<|endoftext|>", "<tool_call>",
+                      "</tool_call>", "<tool_response>", "</tool_response>",
+                      "<think>", "</think>", "<|system|>", "<|user|>",
+                      "<|assistant|>")
+
+#: The elements whose TEXT is not page content, or is site chrome rather than
+#: the page: script/style/noscript/svg/nav/footer/aside (Blueprint C), plus
+#: their kin a reader never sees.
+_NO_CONTENT_TAGS = frozenset({"script", "style", "noscript", "svg", "nav", "footer",
+                              "aside", "template", "iframe", "object", "canvas"})
+
+#: Relative timestamps: "Updated 3 minutes ago", "Just now".
+_REL_TIME = re.compile(
+    r"\b(?:just now|moments? ago|today|yesterday|"
+    r"\d[\d,.]*\s*(?:seconds?|secs?|minutes?|mins?|hours?|hrs?|days?|weeks?|"
+    r"months?|years?)\s+ago)\b", re.I)
+#: Absolute clock stamps: an ISO date/time, or a bare clock time. Both change
+#: on a page nobody changed.
+_ABS_TIME = re.compile(
+    r"\b\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?"
+    r"(?:Z|[+-]\d{2}:?\d{2})?)?\b"
+    r"|(?<![\w.$\u00a3\u20ac])\b\d{1,2}:\d{2}(?::\d{2})?\b(?![\w.])")
+#: "1,234 views", "1.2k visitors", "12 people are viewing": a different number
+#: on every visit.
+_VIEW_COUNTS = re.compile(
+    r"\b\d[\d,.]*\s*k?\s*(?:views?|viewers?|visitors?|people\s+(?:are\s+)?viewing|"
+    r"watching(?:\s+now)?|sold|sales|shoppers?)\b", re.I)
+#: CSRF/session nonces written as key=value.
+_NONCE_PAIR = re.compile(
+    r"\b(?:csrf[a-z_]*|xsrf[a-z_]*|session[a-z_]*|nonce|authenticity_token|_token|token)"
+    r"\s*=\s*[\"']?[A-Za-z0-9+/_.:-]{8,}[\"']?", re.I)
+#: A long hex token, a UUID, or a long mixed letter/digit token: a session id.
+_HEX_TOKEN = re.compile(r"\b[0-9a-f]{16,}\b", re.I)
+_UUID_TOKEN = re.compile(
+    r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I)
+_MIXED_TOKEN = re.compile(
+    r"\b(?=[A-Za-z0-9_]{20,}\b)(?=[A-Za-z0-9_]*\d)(?=[A-Za-z0-9_]*[A-Za-z])"
+    r"[A-Za-z0-9_]{20,}\b")
+#: A utm_* tracking parameter in any address on the page.
+_UTM_PARAM = re.compile(r"[?&]utm_[A-Za-z0-9_]+=[^&\s#]*", re.I)
+#: Chat/tool markers, matched case-insensitively in one pass.
+_SEC_ALIGN_RX = re.compile("|".join(re.escape(m) for m in _SEC_ALIGN_MARKERS), re.I)
+
+#: A version a page names: "Version 2.4.0", "v1.2.3", "release 4.0". The
+#: prefix is required, so a price ("$199.99") is never read as a version.
+_VERSION = re.compile(r"\b(?:version|ver\.?|release|v)\s*"
+                      r"([0-9]+(?:\.[0-9]+){1,3}(?:[-+][0-9A-Za-z.]+)?)", re.I)
+#: Stock words. Fixed phrases in a fixed order; only one of the three states
+#: is kept, never the page's own sentence.
+_OUT_OF_STOCK = re.compile(
+    r"\b(?:out of stock|sold out|out of print|not available|no longer available|"
+    r"unavailable|discontinued)\b", re.I)
+_IN_STOCK = re.compile(
+    r"\b(?:in stock|back in stock|add to (?:cart|basket)|buy now|available(?: now)?)\b",
+    re.I)
+
+
+def strip_sec_align_markers(text: str) -> str:
+    """Remove the chat/tool marker families ("SecAlign markers") from text, so
+    a watched page cannot pretend to be a chat turn in anything this module
+    keeps or says. Case-insensitive and local."""
+    return _SEC_ALIGN_RX.sub("", str(text or ""))
+
+
+def _html_words(text: str) -> str:
+    """The words a reader would see, with the no-content and chrome elements
+    (script/style/noscript/svg/nav/footer/aside and their kin) left out. Text
+    with no HTML in it is returned as it is."""
+    import html.parser
+    if not re.search(r"<\s*(?:html|body|div|p|span|head|nav|footer|aside|script)\b",
+                     text[:4096], re.I):
+        return text
+
+    class _Words(html.parser.HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.hidden = 0
+            self.words = []
+
+        def handle_starttag(self, tag, attrs):
+            if tag in _NO_CONTENT_TAGS:
+                self.hidden += 1
+
+        def handle_startendtag(self, tag, attrs):
+            pass  # <br/>, <img/>: nothing is opened, so nothing to close
+
+        def handle_endtag(self, tag):
+            if tag in _NO_CONTENT_TAGS and self.hidden:
+                self.hidden -= 1
+
+        def handle_data(self, data):
+            if not self.hidden:
+                self.words.append(data)
+
+    p = _Words()
+    try:
+        p.feed(text)
+        p.close()
+    except Exception:
+        return re.sub(r"<[^>]*>", " ", text)
+    return " ".join(p.words)
+
+
+def strip_page_noise(html_or_text: str) -> str:
+    """The page's words with everything that changes on a page nobody changed
+    removed - deterministically and locally, never with a model:
+      * the script/style/noscript/svg/nav/footer/aside elements' text;
+      * relative timestamps ("Updated 3 minutes ago", "Just now") and
+        absolute clock stamps;
+      * view counts ("1,234 views", "12 people are viewing");
+      * CSRF/session nonces, UUIDs, long hex and long mixed tokens;
+      * utm_* tracking parameters in any address;
+      * the SecAlign chat/tool markers.
+    The real words are kept in order; only whitespace is tidied."""
+    text = _html_words(str(html_or_text or ""))
+    text = strip_sec_align_markers(text)
+    text = _UTM_PARAM.sub("", text)
+    text = _NONCE_PAIR.sub(" ", text)
+    text = _UUID_TOKEN.sub(" ", text)
+    text = _HEX_TOKEN.sub(" ", text)
+    text = _MIXED_TOKEN.sub(" ", text)
+    text = _REL_TIME.sub(" ", text)
+    text = _ABS_TIME.sub(" ", text)
+    text = _VIEW_COUNTS.sub(" ", text)
+    text = re.sub(r"[?&]{2,}", lambda m: m.group(0)[0], text)
+    return " ".join(text.split())
+
+
+def extract_watch_signals(text: str) -> dict:
+    """The structured signals a page shows, read by plain code - never a
+    model, and never a float price:
+      * "prices_cents": every currency amount as an INTEGER whole-cent value
+        ("$199.99" is 19999), in the order a reader meets them;
+      * "versions": every version/release tag, its prefix dropped ("v1.2.3"
+        is "1.2.3"), first-seen order, no repeats;
+      * "stock_state": "in_stock", "out_of_stock" or "unknown";
+      * "clean_sha256": the SHA-256 hex digest of the noise-stripped words,
+        case folded - what "the page's text changed" means."""
+    import hashlib
+    clean = strip_page_noise(str(text or ""))
+    prices = []
+    for m in _SHOWN_PRICE.finditer(clean):
+        value = parse_number(m.group("a") or m.group("b") or "")
+        if value is not None and 0 < value <= PRICE_MAX:
+            cents = int(round(float(value) * 100))
+            if cents > 0:
+                prices.append(cents)
+    versions = []
+    for m in _VERSION.finditer(clean):
+        version = m.group(1)
+        if version not in versions:
+            versions.append(version)
+    if _OUT_OF_STOCK.search(clean):
+        stock = "out_of_stock"
+    elif _IN_STOCK.search(clean):
+        stock = "in_stock"
+    else:
+        stock = "unknown"
+    return {"prices_cents": prices, "versions": versions, "stock_state": stock,
+            "clean_sha256": hashlib.sha256(clean.casefold().encode("utf-8")).hexdigest()}
+
+
+def _cents_words(cents) -> str:
+    """19999 -> "199.99": a whole-cent price said the way a page shows it."""
+    try:
+        return f"{int(cents) / 100:.2f}"
+    except (TypeError, ValueError):
+        return ""
+
+
+def _stock_words(state) -> str:
+    return {"in_stock": "in stock", "out_of_stock": "out of stock",
+            "unknown": "unknown"}.get(state, "unknown")
+
+
+def _diff_words(prev: dict, curr: dict) -> list:
+    """The plain sentences for one changed page, in a fixed order - price,
+    version, stock. Fixed words and numbers only: never the page's text."""
+    words = []
+    before, after = list(prev.get("prices_cents") or []), list(curr.get("prices_cents") or [])
+    if before and after and before[0] != after[0]:
+        words.append(f"The price is now {_cents_words(after[0])} "
+                     f"(it was {_cents_words(before[0])}).")
+    elif before != after:
+        if after and not before:
+            words.append(f"It now shows a price of {_cents_words(after[0])}.")
+        elif before and not after:
+            words.append("It no longer shows a price.")
+        else:
+            words.append("The prices it shows changed.")
+    was_versions, now_versions = list(prev.get("versions") or []), list(curr.get("versions") or [])
+    if was_versions != now_versions:
+        added = [v for v in now_versions if v not in was_versions]
+        removed = [v for v in was_versions if v not in now_versions]
+        if len(added) == 1 and len(removed) == 1:
+            words.append(f"The version is now {added[0]} (it was {removed[0]}).")
+        elif added:
+            words.append("It now names version " + ", ".join(added) + ".")
+        elif removed:
+            words.append("It no longer names version " + ", ".join(removed) + ".")
+    was_stock, now_stock = prev.get("stock_state"), curr.get("stock_state")
+    if was_stock != now_stock:
+        if was_stock in ("in_stock", "out_of_stock") and now_stock in ("in_stock",
+                                                                      "out_of_stock"):
+            words.append(f"It is now {_stock_words(now_stock)} "
+                         f"(it was {_stock_words(was_stock)}).")
+        elif now_stock in ("in_stock", "out_of_stock"):
+            words.append(f"It now says {_stock_words(now_stock)}.")
+        elif was_stock in ("in_stock", "out_of_stock"):
+            words.append(f"It no longer says {_stock_words(was_stock)}.")
+    if not words:
+        words.append("The page's text changed.")
+    return words
+
+
+def diff_watch_snapshot(prev, curr, *, watch_mode: str = "any") -> dict:
+    """Compare two page snapshots and say what changed - pure and
+    deterministic: no clock, no network, no model.
+
+    `prev` and `curr` are extract_watch_signals()'s dicts (a stored snapshot
+    may also carry "words" and "last_good_at"). `watch_mode` is "any" (the
+    default), "price", "release" or "stock": it chooses which signal a watch
+    cares about. In "price" mode a page whose words changed but whose prices
+    did not is [SILENT]; "release"/"stock" watch their own signal only; "any"
+    is the noise-stripped words plus every signal.
+
+    Returns {"changed", "status", "stale", "last_good_at",
+    "price_delta_cents", "versions", "stock", "words"}:
+      * unchanged answers {"changed": False, "status": "[SILENT]"} - the
+        watermark rule, never a notification;
+      * a real change answers plain words in "status"/"words" and, when the
+        first price changed, "price_delta_cents" (new minus old: a
+        $249.99 -> $199.99 drop is -5000);
+      * curr is None means the fetch FAILED: stale is True, changed is False,
+        "[SILENT]", and last_good_at is carried from prev - the caller keeps
+        the old snapshot and never alerts on a fetch error."""
+    if watch_mode not in ("any", "price", "release", "stock"):
+        raise ValueError('watch_mode is "any", "price", "release" or "stock"')
+    prev = prev or {}
+    if curr is None:
+        return {"changed": False, "status": PAGE_SILENT, "stale": True,
+                "last_good_at": prev.get("last_good_at"), "price_delta_cents": None,
+                "versions": {"from": list(prev.get("versions") or []), "to": []},
+                "stock": {"from": prev.get("stock_state"),
+                          "to": prev.get("stock_state")},
+                "words": ""}
+    before_prices = list(prev.get("prices_cents") or [])
+    after_prices = list(curr.get("prices_cents") or [])
+    price_delta = None
+    if before_prices and after_prices and before_prices[0] != after_prices[0]:
+        price_delta = int(after_prices[0]) - int(before_prices[0])
+    if not prev:
+        changed = False
+    elif watch_mode == "price":
+        changed = before_prices != after_prices
+    elif watch_mode == "release":
+        changed = list(prev.get("versions") or []) != list(curr.get("versions") or [])
+    elif watch_mode == "stock":
+        changed = prev.get("stock_state") != curr.get("stock_state")
+    else:
+        changed = (prev.get("clean_sha256") != curr.get("clean_sha256")
+                   or before_prices != after_prices
+                   or list(prev.get("versions") or []) != list(curr.get("versions") or [])
+                   or prev.get("stock_state") != curr.get("stock_state"))
+    words = _diff_words(prev, curr) if changed else []
+    return {"changed": changed,
+            "status": (" ".join(words) if changed else PAGE_SILENT),
+            "stale": False,
+            "last_good_at": curr.get("last_good_at", prev.get("last_good_at")),
+            "price_delta_cents": price_delta if changed else None,
+            "versions": {"from": list(prev.get("versions") or []),
+                         "to": list(curr.get("versions") or [])},
+            "stock": {"from": prev.get("stock_state"),
+                      "to": curr.get("stock_state")},
+            "words": " ".join(words)}
+
+
+def _page_state_text(fields: dict) -> str:
+    """One page snapshot as the string the look keeps - compact and
+    sort-keyed, so the same page always gives the same bytes."""
+    return PAGE_STATE + json.dumps(fields, sort_keys=True, separators=(",", ":"))
+
+
+def _page_state_fields(state) -> dict:
+    """The JSON fields of a "t2:" snapshot, or {} for an older kind and a
+    damaged value."""
+    if isinstance(state, dict):
+        return dict(state)
+    if isinstance(state, str) and state.startswith(PAGE_STATE):
+        try:
+            got = json.loads(state[len(PAGE_STATE):])
+        except ValueError:
+            return {}
+        return got if isinstance(got, dict) else {}
+    return {}
+
+
+def _page_state(body: bytes, content_type: str = "") -> str:
+    """A page's current snapshot: the signals extract_watch_signals() read
+    from its one GET (a noise-stripped hash, prices in whole cents, versions,
+    stock), plus the empty change words and last-good time the look fills in.
+    Never the page's words, and nothing here is sent anywhere."""
+    text = _decode_body(body[:PAGE_MAX_BYTES], content_type)
+    fields = extract_watch_signals(text)
+    fields["words"] = ""
+    fields["last_good_at"] = None
+    return _page_state_text(fields)
+
+
+def _latch_page_watch() -> bool:
+    """A changed page was outside text, so latch the gate's conversation
+    taint (why="page_watch") - the one place this module says "what I just
+    read is not the owner's words". Optional: a backend folder without
+    jarvis_gate.py (this repository's base has it; repo-mode tests do not)
+    simply does not latch, and nothing fails."""
+    try:
+        import jarvis_gate
+        return bool(jarvis_gate.latch_taint(why="page_watch"))
+    except Exception:
+        return False
 
 
 # --------------------------------------------------------------------------
