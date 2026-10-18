@@ -824,14 +824,17 @@ select:focus-visible {
 }
 
 /* The "segments": a fixed overlay, not movement. It is the same on every frame
-   and says nothing about how far along the update is. */
+   and says nothing about how far along the update is. The highlight is the
+   theme's own `--sheen-rgb` token rather than a literal white, so a light
+   theme draws it dark instead of washing the bar out (and the frontend token
+   check stays at zero unreachable colours). */
 .ub-progress-fill::after {
   content: "";
   position: absolute;
   inset: 0;
   background-image: repeating-linear-gradient(
     90deg,
-    rgb(255 255 255 / 0.16) 0 2px,
+    rgb(var(--sheen-rgb) / 0.16) 0 2px,
     transparent 2px 10px
   );
   pointer-events: none;
