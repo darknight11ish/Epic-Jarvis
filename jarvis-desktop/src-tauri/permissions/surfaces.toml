@@ -1175,6 +1175,18 @@ permissions = [
   "allow-guardian-restore",
 ]
 
+# "Person dossier" (LM-4; JARVIS-API section 143; brain/people.rs): ONE read
+# for the card that opens when a person is clicked in "People and things". It
+# asks the PC for NOTHING while App lock or the hidden lists are on, and the
+# hidden answer is one sentence with no name, no fact and no count. The Brain
+# window only: no other page carries a person's dossier.
+[[set]]
+identifier = "brain-people"
+description = "Read one person's dossier - their saved facts, kept chat turns, mail headers, open to-dos and next shared event - for the card in People and things. Hidden whole under App lock and the hidden lists. Writes nothing; raises no card."
+permissions = [
+  "allow-people-dossier",
+]
+
 # The three controls, and ONLY the three controls: which is on, what draws, and
 # where the pictures are kept. The backend refuses all three from anywhere but
 # this PC, so this is the only window that can call them at all. No approval

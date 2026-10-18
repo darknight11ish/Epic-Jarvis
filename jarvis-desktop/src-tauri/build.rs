@@ -899,6 +899,12 @@ fn main() {
             // Rust, before any of this is asked.
             "guardian_diff",
             "guardian_restore",
+            // "Person dossier" (LM-4; JARVIS-API section 143,
+            // brain/people.rs): ONE read - the dossier the owner's own
+            // records already hold, for the person clicked in "People and
+            // things". Hidden whole under App lock and the hidden lists, in
+            // Rust, before the PC is asked at all.
+            "people_dossier",
             "choose_pictures_folder",
             // The model lane the PC's chat is pointed at (commands.rs; backend
             // jarvis_model_lanes.py, model-lanes.patch, JARVIS-API section 133;

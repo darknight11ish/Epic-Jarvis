@@ -412,6 +412,19 @@
     ]
   },
   {
+    "id": "people-dossier",
+    "group": "Memory",
+    "title": "Person dossier",
+    "what": "One person's dossier: what Jarvis already knows about them, the kept chats and mail that name them, the open to-dos and the next shared event, all read-only.",
+    "where": "Brain, Memory, People and things - click (or tap) a person's name.",
+    "asks": "No card: it only reads. Nothing is changed by opening a dossier.",
+    "limit": "Opens a person's dossier from People and things on both apps; while App lock or hidden lists are on it shows nothing but one sentence.",
+    "surface": "both",
+    "covers": [
+      "brain.memory.people-things"
+    ]
+  },
+  {
     "id": "pinned-facts",
     "group": "Memory",
     "title": "Always keep in mind",

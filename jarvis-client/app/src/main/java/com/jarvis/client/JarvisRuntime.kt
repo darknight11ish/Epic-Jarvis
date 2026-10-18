@@ -5388,6 +5388,26 @@ object JarvisRuntime {
     /** `GET /api/memory/entities`. */
     suspend fun memoryEntities(): ApiResult<JsonObject> = api.memoryEntities()
 
+    /**
+     * `GET /api/people/dossier?name=` - the read-only dossier shown when a
+     * person is tapped in People and things ([com.jarvis.client.net.PeopleDossier],
+     * LM-4). The phone is already inside the hidden section that replaces the
+     * whole plate while the lists are hidden, so a name cannot be tapped then.
+     * A read: never held on a stale link, and nothing is kept on the phone.
+     */
+    suspend fun peopleDossier(name: String): com.jarvis.client.net.PeopleDossier.Read =
+        when (val r = api.peopleDossier(name)) {
+            is ApiResult.Ok -> com.jarvis.client.net.PeopleDossier.parse(r.value)
+                ?: com.jarvis.client.net.PeopleDossier.Read.Failed(
+                    com.jarvis.client.net.PeopleDossier.UNREADABLE,
+                )
+            is ApiResult.Failed -> if (com.jarvis.client.net.PeopleDossier.missing(r.error)) {
+                com.jarvis.client.net.PeopleDossier.Read.Missing
+            } else {
+                com.jarvis.client.net.PeopleDossier.Read.Failed(describe(r.error))
+            }
+        }
+
     // ----------------------------- "Where this came from" (I42/I132, 2026-09-27) ----
     // See [com.jarvis.client.net.ChatSources]: this answer's own reading-tool
     // receipts and its quote check, read by turn_id when the owner opens the

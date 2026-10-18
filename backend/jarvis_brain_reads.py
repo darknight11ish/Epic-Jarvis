@@ -57,6 +57,16 @@ The owner's choice of 2026-09-28 (docs/RESEARCH-AUDIT-2026-09-28.md section
         GET form) and a request from another device is refused BEFORE the
         request body is read.
 
+    GET /api/people/dossier?name=<the owner's own word for them>
+        (2026-10-18, LM-4; JARVIS-API section 143) "Who is this, before I meet
+        them?": one person's read-only dossier from jarvis_people_crm - saved
+        facts, kept chat turns, mail headers, open to-dos and the next shared
+        event, as the module already builds it. The module owns every privacy
+        rule: the apps withhold it whole while the hidden lists or App lock are
+        on, and the route itself is this PC's only - another device is refused
+        before the name is read or the module imported. A read: no card, no
+        model, nothing stored.
+
     GET /api/pc/help
         (2026-09-28; JARVIS-API section 84) "PC help": five plain answers
         about this PC - why it is slow, how full the drives are, what is using
@@ -128,12 +138,33 @@ COCKPIT_PATH = "/api/today/cockpit"
 #: chip (Pillar 24-B). Desktop-only: a request from another device is refused
 #: before anything is read (see `handle_get`'s `peer`/`local`).
 SELECTION_PATH = "/api/selection"
+#: One person's dossier (Pillar 16's read-only builder, #540's module), opened
+#: by clicking a person in the apps' "People and things" (LM-4). A GET; the
+#: module is the authority on the answer and on its own privacy rule.
+PEOPLE_DOSSIER_PATH = "/api/people/dossier"
 PATHS = (SEARCH_PATH, FACT_HISTORY_PATH, CONVERSATION_FACTS_PATH, PC_HELP_PATH,
          FACT_CHAT_PATH, COCKPIT_PATH, GUARDIAN_SNAPSHOTS_PATH,
-         GUARDIAN_DIFF_PATH, SELECTION_PATH)
+         GUARDIAN_DIFF_PATH, SELECTION_PATH, PEOPLE_DOSSIER_PATH)
 
 UPDATE = ("This PC's Jarvis is missing part of this feature. Run apply-patches.ps1 on the PC "
           "to update it.")
+
+#: The dossier's own refusals, in the shape `jarvis_people_crm` answers with
+#: (the page renders `why`). No dossier word, name included, is ever added.
+PEOPLE_NOT_THIS_PC = ("Reading a person's dossier is for this PC only, so "
+                      "nothing was read.")
+PEOPLE_EMPTY_NAME = "Say whose dossier to put together - a name."
+
+
+def _dossier_refusal(why: str, words: str) -> dict:
+    """A refusal in the dossier's own shape, with no name and nothing read."""
+    # `why` is the PLAIN SENTENCE, exactly as jarvis_people_crm's own refusals
+    # write it (`EMPTY_NAME`, the two withheld sentences): the page renders
+    # `why` and never has to know a route-level code.
+    return {"ok": False, "withheld": False, "why": words, "name": "",
+            "private": True, "made": 0.0, "states": {}, "read": [],
+            "text": words}
+
 
 #: One page of guardian history: newest first, 50 by default, 200 at most. The
 #: answer never carries the whole journal, however long it has grown.
@@ -405,6 +436,38 @@ def handle_get(path: str, query: str = "", *, peer=None, local=None) -> tuple:
     `jarvis_owner_check.from_this_pc` answers for a request with no peer the
     way it always has.
     """
+    if path == PEOPLE_DOSSIER_PATH:
+        # Owner-only FIRST, before the name is looked at or the module that
+        # reads personal records is imported: another device learns nothing,
+        # not even whether that name has a dossier. A refusal never echoes the
+        # name, so a denied request cannot be used to probe names either.
+        if not _from_this_pc(peer, local):
+            return 403, _dossier_refusal("not_this_pc", PEOPLE_NOT_THIS_PC)
+        try:
+            name = str((parse_qs(query or "", keep_blank_values=True).get("name")
+                        or [""])[0]).strip()
+        except Exception:
+            name = ""
+        if not name:
+            return 400, _dossier_refusal("bad_request", PEOPLE_EMPTY_NAME)
+        try:
+            import jarvis_people_crm as people
+        except Exception:
+            return 501, _dossier_refusal("update", UPDATE)
+        build = getattr(people, "build_person_dossier", None)
+        if not callable(build):
+            return 501, _dossier_refusal("update", UPDATE)
+        try:
+            answer = build(name)
+        except Exception:
+            return 500, _dossier_refusal(
+                "unreadable", "The person's dossier could not be put together, so nothing "
+                "was returned.")
+        if not isinstance(answer, dict):
+            return 500, _dossier_refusal(
+                "unreadable", "The person's dossier could not be put together, so nothing "
+                "was returned.")
+        return 200, dict(answer)          # the module's own answer, unchanged
     if path in (GUARDIAN_SNAPSHOTS_PATH, GUARDIAN_DIFF_PATH):
         if not _from_this_pc(peer, local):
             return 403, _guardian_refusal("not_this_pc", NOT_THIS_PC, path)
@@ -558,8 +621,8 @@ def install(handler_cls, *, origin_ok, token_ok, read_body=None) -> str:
     if (getattr(handler_cls.do_GET, "_jarvis_brain_reads", False)
             or handler_cls.__dict__.get("_jarvis_brain_reads_on")):
         return ("  brain      Search old chats, fact history, a chat's facts, PC help, "
-                "the file guardian's history, its one gated restore and the "
-                "highlighted text (already on)" + widgets)
+                "the file guardian's history, its one gated restore, the "
+                "highlighted text and a person's dossier (already on)" + widgets)
     get0 = handler_cls.do_GET
     post0 = getattr(handler_cls, "do_POST", None)
 
@@ -649,7 +712,8 @@ def install(handler_cls, *, origin_ok, token_ok, read_body=None) -> str:
     handler_cls.do_POST = do_POST
     handler_cls._jarvis_brain_reads_on = True
     return ("  brain      Search old chats, fact history, a chat's facts, PC help, "
-            "the file guardian's history and its one gated restore: on" + widgets)
+            "the file guardian's history, its one gated restore and a person's "
+            "dossier: on" + widgets)
 
 
 def _install_widgets(handler_cls, origin_ok, token_ok, read_body) -> str:

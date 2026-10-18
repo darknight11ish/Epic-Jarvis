@@ -21,6 +21,7 @@ import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.Entities
 import com.jarvis.client.net.MemoryUsed
+import com.jarvis.client.net.PeopleDossier
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Kicker
 import com.jarvis.client.ui.parts.Pill
@@ -187,6 +188,15 @@ private fun EntityFacts(
     var loading by remember(entity.id) { mutableStateOf(false) }
     var failed by remember(entity.id) { mutableStateOf<String?>(null) }
     var attempt by remember(entity.id) { mutableIntStateOf(0) }
+    var dossier by remember(entity.id) { mutableStateOf<PeopleDossier.Read?>(null) }
+
+    // LM-4: one person's read-only dossier, read only for a PERSON and only
+    // while this plate is on screen (the whole plate is replaced by
+    // HiddenSection while the memory lists are hidden, so this can never be
+    // reached with them hidden).
+    LaunchedEffect(entity.id) {
+        if (entity.kind == "person") dossier = JarvisRuntime.peopleDossier(entity.name)
+    }
 
     suspend fun loadNext() {
         val ids = Entities.pageIds(entity, consumed)
@@ -216,6 +226,24 @@ private fun EntityFacts(
     Gap(6)
     Text(entity.name, style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
     Text(Entities.heading(entity.count), style = MaterialTheme.typography.labelLarge, color = chrome.textMid)
+
+    if (entity.kind == "person") {
+        Gap(8)
+        Kicker(PeopleDossier.TITLE)
+        val read = dossier
+        Text(
+            when (read) {
+                null -> PeopleDossier.READING
+                is PeopleDossier.Read.Shown -> read.body
+                PeopleDossier.Read.Missing -> PeopleDossier.MISSING
+                is PeopleDossier.Read.Failed -> read.why
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = if (read is PeopleDossier.Read.Failed) chrome.warnInk else chrome.textHi,
+        )
+        Gap(10)
+        Rule()
+    }
 
     // The Galaxy's connections, in words. Worked out from the names already
     // read, so this is the one part of the panel that is always right - it

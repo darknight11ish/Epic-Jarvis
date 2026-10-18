@@ -885,6 +885,15 @@ class JarvisApi(
     suspend fun memoryEntities(): ApiResult<JsonObject> = probe(Entities.PATH)
 
     /**
+     * `GET /api/people/dossier?name=`: one person's read-only dossier
+     * ([PeopleDossier]), opened by tapping their name in People and things
+     * (LM-4; JARVIS-API section 143). The word `name` is the PC's own name
+     * for them and is %-encoded here. A read.
+     */
+    suspend fun peopleDossier(name: String): ApiResult<JsonObject> =
+        probe(PeopleDossier.path(name))
+
+    /**
      * `GET /api/schedule`: "Coming up" - the timers, alarms, reminders and
      * the to-do list ([Schedule.parse]). A 404 or 501 is a PC without the
      * scheduler ([Schedule.missing]). A read.
