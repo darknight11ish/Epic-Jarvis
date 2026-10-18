@@ -41,6 +41,11 @@ from _where import REPO, require_shipped  # noqa: E402
 
 require_shipped("jarvis_note_capture.py", "jarvis_notes.py", "jarvis_agent.py")
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-obsidian-"))
+#: The pre-write hook now calls the guardian, so this suite's copy of the
+#: time-machine store and its receipts DB live in this temp folder too - a
+#: test run may never write the owner's real ~/.openjarvis store.
+os.environ["OPENJARVIS_HOME"] = str(_TMP / "guardian-home")
+os.environ["JARVIS_RECEIPTS_DB"] = str(_TMP / "receipts.db")
 fw = types.ModuleType("jarvis_framework")
 fw.CONFIG_DIR = _TMP
 fw.LOG_DIR = _TMP
@@ -669,6 +674,17 @@ def t_the_fixture_is_what_the_producer_makes_today():
                      f"{exc} - run: python3 test_obsidian_notes.py --write")
     check("the shared fixture matches the producer (else run with --write)",
           have == json.loads(json.dumps(build_fixture())))
+
+
+def t_the_guardian_store_is_this_suites_own():
+    """The hook an approved daily-note append now calls must stay in temp."""
+    import jarvis_file_guardian as GF
+    home = os.path.realpath(str(GF.home_dir()))
+    check("the guardian store the vault append uses is under this suite's temp folder",
+          home.startswith(os.path.realpath(str(_TMP))), (home, str(_TMP)))
+    receipts = os.path.realpath(str(os.environ.get("JARVIS_RECEIPTS_DB", "")))
+    check("... and the receipts DB it links is under the same temp folder",
+          receipts.startswith(os.path.realpath(str(_TMP))), receipts)
 
 
 if __name__ == "__main__":

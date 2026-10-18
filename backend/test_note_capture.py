@@ -36,6 +36,11 @@ from _where import BACKEND, REPO, missing, require_shipped  # noqa: E402
 
 require_shipped("jarvis_note_capture.py")
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-notes-"))
+#: The pre-write hook now calls the guardian, so this suite's copy of the
+#: time-machine store and its receipts DB live in this temp folder too - a
+#: test run may never write the owner's real ~/.openjarvis store.
+os.environ["OPENJARVIS_HOME"] = str(_TMP / "guardian-home")
+os.environ["JARVIS_RECEIPTS_DB"] = str(_TMP / "receipts.db")
 fw = types.ModuleType("jarvis_framework")
 fw.CONFIG_DIR = _TMP
 fw.LOG_DIR = _TMP
@@ -516,6 +521,17 @@ def t_the_real_file():
     s = (BACKEND / "jarvis_hud.py").read_text(encoding="utf-8")
     check("the backend's jarvis_hud.py has the notes route (note-capture.patch applied)",
           '"/api/notes/capture"' in s)
+
+
+def t_the_guardian_store_is_this_suites_own():
+    """The hook a note append now calls must not touch the owner's real store."""
+    import jarvis_file_guardian as GF
+    home = os.path.realpath(str(GF.home_dir()))
+    check("the guardian store the note hook uses is under this suite's temp folder",
+          home.startswith(os.path.realpath(str(_TMP))), (home, str(_TMP)))
+    receipts = os.path.realpath(str(os.environ.get("JARVIS_RECEIPTS_DB", "")))
+    check("... and the receipts DB it links is under the same temp folder",
+          receipts.startswith(os.path.realpath(str(_TMP))), receipts)
 
 
 if __name__ == "__main__":

@@ -2208,15 +2208,64 @@ def _read_mode() -> dict:
         return {}
 
 
-def _write_mode(doc: dict) -> None:
+def _snapshot_mode_file(path: Path) -> dict:
+    """Best-effort guardian copy of `project-mode.json` before it is replaced.
+
+    This file is Jarvis's own small pointer (which project the next turn
+    belongs to), not the owner's data, so a broken time-machine store must
+    never block Project Mode: the answer is recorded honestly in the audit
+    row either way. The guardian's own rules still apply - a link is refused,
+    and the config folder is the explicit root this one caller allows it to
+    look in - because the guardian's default list is the owner's folders.
+    Never raises.
+    """
+    try:
+        import jarvis_file_guardian as guardian
+        return guardian.snapshot_before_write(
+            str(path), reason="before Project Mode's pointer file is replaced",
+            roots=[str(path.parent)])
+    except Exception as exc:                                # noqa: BLE001
+        return {"ok": False,
+                "error": f"guardian_unavailable ({type(exc).__name__})",
+                "words": "The time machine could not save a copy of the Project "
+                         "Mode file."}
+
+
+def _snapshot_detail(snapshot) -> dict:
+    """The ids an audit row may carry for a guardian copy - never a path or words.
+
+    `snapshot_ok`/`snapshot_error` say truthfully whether a copy happened: a
+    failed or refused snapshot is never reported as one that worked.
+    """
+    if not isinstance(snapshot, dict) or not snapshot:
+        return {"snapshot_ok": False, "snapshot_reason": "no file was there to copy"}
+    if snapshot.get("ok") is True:
+        return {"snapshot_ok": True,
+                "snapshot_id": str(snapshot.get("snapshot_id") or ""),
+                "receipt_id": str(snapshot.get("receipt_id") or ""),
+                "before_sha256": str(snapshot.get("before_sha256") or "")}
+    return {"snapshot_ok": False,
+            "snapshot_error": str(snapshot.get("error") or "the copy failed")}
+
+
+def _write_mode(doc: dict, *, reason: str = "") -> dict:
     """Replace the file whole, through a temporary name, so a reader never
-    sees half a file (the shape jarvis_limits.py uses for the settings file)."""
+    sees half a file (the shape jarvis_limits.py uses for the settings file).
+
+    The file that is there now is copied by the guardian BEFORE the replace
+    (when one is there to copy), and its answer is returned so the caller can
+    link the saved version's ids. Never raises for a failed copy: Project
+    Mode is Jarvis's own pointer, and a time-machine problem must not make
+    switching impossible - the audit row says plainly whether a copy happened.
+    """
     path = mode_path()
     path.parent.mkdir(parents=True, exist_ok=True)
+    snapshot = _snapshot_mode_file(path) if path.is_file() else {}
     tmp = path.with_name(path.name + ".tmp")
     with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(doc, fh)
     tmp.replace(path)
+    return snapshot
 
 
 def active_project_id() -> Optional[str]:
@@ -2234,14 +2283,15 @@ def set_active_project(pid: Optional[str], *,
     """Enter Project Mode for one project; None leaves it. Leaving is instant."""
     store = store or get()
     if pid in (None, ""):
-        _write_mode({})
-        _audit("projects.mode", {"active": False})
+        snapshot = _write_mode({}, reason="leaving Project Mode")
+        _audit("projects.mode", {"active": False, **_snapshot_detail(snapshot)})
         return None
     if not isinstance(pid, str) or not _ID.fullmatch(pid):
         raise ValueError("no such project")
     store.get(pid)                      # KeyError when it is not there at all
-    _write_mode({"active_project_id": pid})
-    _audit("projects.mode", {"active": True})
+    snapshot = _write_mode({"active_project_id": pid},
+                           reason="entering Project Mode")
+    _audit("projects.mode", {"active": True, **_snapshot_detail(snapshot)})
     return pid
 
 

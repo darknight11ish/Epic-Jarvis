@@ -114,6 +114,16 @@ note TEMPLATE is not applied, because only Obsidian applies it, and the card
 says so. Missing folders on the way (a new month's folder, say) are made,
 the way Obsidian makes them. The resolved path, after `..` and every link,
 must stay inside the vault, or nothing is written.
+
+FIRST, A COPY (added with the file guardian, Pillar 18): before a byte is
+appended, the existing daily note's bytes are copied by
+`jarvis_notes.snapshot_vault_before_write(...)`, which calls the EXISTING
+`jarvis_file_guardian.snapshot_before_write(...)`. The answer carries the
+copy's `before_sha256`, `snapshot_id` and `receipt_id`, so the append is one
+click away from Undo. If that copy cannot be taken - the guardian is absent,
+the file is over its 25 MiB ceiling, or any refusal - NOTHING is appended
+and the owner is told in plain words: no copy, no append. A daily note that
+does not exist yet has nothing to lose, so it is made exactly as before.
 """
 
 from __future__ import annotations
@@ -203,6 +213,23 @@ def _vault():
         return None, f"jarvis_notes.py is not available here ({type(exc).__name__})"
     v = jarvis_notes.obsidian_vault()
     return v, jarvis_notes.vault_problem(v)
+
+
+def _snapshot_daily_note(path: Path) -> dict:
+    """The guardian copy an append takes FIRST, before a byte is added.
+
+    `jarvis_notes.snapshot_vault_before_write` is the vault's one guarded
+    door: it calls the existing `jarvis_file_guardian.snapshot_before_write`
+    with the configured vault as the allowed root. Never raises; the caller
+    decides what a refusal means (here: no copy means no append).
+    """
+    try:
+        import jarvis_notes
+        return jarvis_notes.snapshot_vault_before_write(
+            path, reason="before appending to today's daily note")
+    except Exception as exc:                                # noqa: BLE001
+        return {"ok": False, "error": f"guardian_failed ({type(exc).__name__})",
+                "words": "The copy of the daily note could not be saved."}
 
 
 def _joplin_token() -> str:
@@ -649,6 +676,19 @@ def _append_obsidian(p: Plan) -> dict:
         return {"ok": False, "reason": f"today's daily note is over "
                                        f"{MAX_JOURNAL_BYTES // (1024 * 1024)} MB, which is "
                                        f"not normal; nothing was written"}
+    # THE COPY COMES BEFORE THE APPEND, never after: if the daily note on disk
+    # cannot be copied first, nothing is added to it and the owner is told in
+    # plain words. A note that is not there yet has nothing to lose, so a new
+    # file is made exactly as before.
+    snapshot = {}
+    if path.exists():
+        snapshot = _snapshot_daily_note(path)
+        if snapshot.get("ok") is not True:
+            return {"ok": False,
+                    "reason": "the current daily note could not be copied first, so "
+                              "nothing was appended",
+                    "snapshot_error": str(snapshot.get("error")
+                                          or "the copy could not be saved")}
     lead = ""
     if size:
         with open(path, "rb") as f:
@@ -668,7 +708,10 @@ def _append_obsidian(p: Plan) -> dict:
         return {"ok": False, "reason": "the note was written but could not be read back; "
                                        "open the daily note to check"}
     rel = os.path.relpath(str(path), root).replace(os.sep, "/")
-    return {"ok": True, "target": "obsidian", "file": rel, "day": p.day}
+    return {"ok": True, "target": "obsidian", "file": rel, "day": p.day,
+            "before_sha256": str(snapshot.get("before_sha256") or ""),
+            "snapshot_id": str(snapshot.get("snapshot_id") or ""),
+            "receipt_id": str(snapshot.get("receipt_id") or "")}
 
 
 def _create_joplin(p: Plan, call: Callable) -> dict:

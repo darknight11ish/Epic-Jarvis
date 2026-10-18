@@ -1952,7 +1952,11 @@ $SHIPPED = @(
 # A bounded diff and a one-click restore raise the EXISTING undo_action card and
 # leave a NEW Undo receipt for the restore. Prunes the oldest UNPINNED blobs to
 # 250 MB and never removes a pinned one; refuses a link or a path outside the
-# allowed folders. No route, no chat tool and no caller yet.
+# allowed folders. It IS wired on the consumer side: jarvis_notes.py imports it
+# for the vault's pre-write copy (the vault append writes nothing if the copy
+# fails), and jarvis_projects.py imports it before Project Mode's pointer file
+# is replaced (best-effort, so a broken store never blocks Project Mode). No
+# route and no chat tool expose it yet - that is still the owner's decision.
 'jarvis_file_guardian.py'
 # --- A red-team / pre-mortem decision simulator, on this PC only (2026-10-17) ---
 # Takes a one-sentence decision and returns a 1-3-1 decision brief (checked by

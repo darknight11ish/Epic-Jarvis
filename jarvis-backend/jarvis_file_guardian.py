@@ -38,16 +38,24 @@ point `OPENJARVIS_HOME` at a scratch folder and never touch the owner's own.
 
 THE API
 
-    snapshot_before_write(path, *, reason="") -> dict
+    snapshot_before_write(path, *, reason="", max_file_bytes=MAX_FILE_BYTES) -> dict
         Refuse a link, a path outside an allowed folder, a folder, a missing
-        or unreadable file - in plain words, touching nothing. Otherwise hash
-        the CURRENT bytes, store the compressed copy, record a receipt with
-        the EXISTING `jarvis_receipts.py` (`record()`, tool `guardian_snapshot`,
-        before snapshot carrying the path and sha256, so the receipt's own Undo
-        puts the previous bytes back), append the row, then prune the store to
-        the quota. Returns `{ok, path, before_sha256, size, stored, receipt_id,
-        pruned, prune_words, words}`; `ok` False carries `error`/`words` in
-        plain English and a `refused` flag when it was the path rules.
+        or unreadable file - in plain words, touching nothing. A file bigger
+        than `max_file_bytes` (25 MiB by default) is refused BEFORE its bytes
+        are read, with the machine-readable `error` value
+        `"file_too_large_for_guardian"` plus `size_bytes` and `max_file_bytes`
+        (and `words`, the same sentence a person reads); the file, the store
+        and the journal are untouched. Otherwise hash the CURRENT bytes, store
+        the compressed copy, record a receipt with the EXISTING
+        `jarvis_receipts.py` (`record()`, tool `guardian_snapshot`, before
+        snapshot carrying the path and sha256, so the receipt's own Undo puts
+        the previous bytes back), append the row, then prune the store to the
+        quota. Returns `{ok, path, before_sha256, snapshot_id, size, stored,
+        receipt_id, pruned, prune_words, words}`; `snapshot_id` is the opaque
+        copy id the receipt and the journal row carry, so a caller can link
+        its own record of the write to the saved version. `ok` False carries
+        `error`/`words` in plain English and a `refused` flag; a refusal by
+        the size ceiling also carries `too_large: True`.
 
     diff_versions(path, sha_before) -> dict
         The unified diff between that saved version and the file now, oldest
@@ -119,8 +127,10 @@ WHAT THIS MODULE DOES NOT DO, SAID PLAINLY
     that can read that folder; nothing here sends them anywhere, and nothing
     here survives the folder being deleted. `jarvis_backup.py` is the backup.
   * It keeps ordinary files, not a whole disk: one file bigger than
-    MAX_FILE_BYTES (64 MiB) is refused in plain words, so a single huge file
-    cannot blow the quota or the memory the copy is compressed in.
+    MAX_FILE_BYTES (25 MiB, an N_placeholder) is refused before a byte of it
+    is read (`error="file_too_large_for_guardian"`), so a single huge file
+    cannot blow the quota or the memory the copy is compressed in. A caller
+    that legitimately guards a bigger file passes its own `max_file_bytes`.
   * It does not keep every version for ever: the quota pruning above removes
     the oldest unpinned ones, and says so.
 
@@ -165,11 +175,12 @@ MAX_DIFF_BYTES = 64 * 1024
 #: hold up the call that shows one difference.
 MAX_TEXT_BYTES = 1024 * 1024
 
-#: One file bigger than this is refused in plain words rather than read: the
-#: copy is compressed in memory, and a single huge file must not be able to
-#: blow the quota (or this process) in one snapshot. 64 MiB is far above any
-#: note, project file or script this feature is for.
-MAX_FILE_BYTES = 64 * 1024 * 1024
+#: One file bigger than this is refused rather than read: the copy is
+#: compressed in memory, and a single huge file must not be able to blow the
+#: quota (or this process) in one snapshot. 25 MiB (an N_placeholder, not a
+#: measurement) is far above any note, project file or script this feature is
+#: for. A caller passes its own `max_file_bytes` when it guards bigger files.
+MAX_FILE_BYTES = 25 * 1024 * 1024
 
 #: A snapshot's own reason is one short line.
 MAX_REASON = 200
@@ -1019,11 +1030,48 @@ def _ask(gate, detail: dict, prompt: str) -> tuple:
 # --------------------------------------------------------------------------
 
 
-def snapshot_before_write(path, *, reason: str = "", roots=None, now=None) -> dict:
+def _file_limit(value) -> int:
+    """The per-file limit this call uses: `max_file_bytes`, or MAX_FILE_BYTES.
+
+    A caller that legitimately guards a bigger file passes its own. Anything
+    that is not a positive whole number falls back to the ceiling rather than
+    refusing everything: a broken argument must not become a limit nobody
+    asked for.
+    """
+    if value is None:
+        return MAX_FILE_BYTES
+    try:
+        limit = int(value)
+    except (TypeError, ValueError):
+        return MAX_FILE_BYTES
+    return limit if limit > 0 else MAX_FILE_BYTES
+
+
+def _plain_refusal(path, exc) -> dict:
+    """The result a `Refused` becomes: plain words, nothing touched, no receipt."""
+    return {"ok": False, "refused": True, "path": str(path),
+            "error": str(exc), "words": str(exc), "receipt_id": ""}
+
+
+def _too_large(path, size: int, limit: int) -> dict:
+    """The structured refusal a file over the ceiling gets, before any read."""
+    return {"ok": False, "refused": True, "too_large": True,
+            "error": "file_too_large_for_guardian",
+            "size_bytes": int(size), "max_file_bytes": int(limit),
+            "path": str(path), "receipt_id": "",
+            "words": WORDS["too_big"].format(limit=_size_words(limit))}
+
+
+def snapshot_before_write(path, *, reason: str = "", roots=None, now=None,
+                          max_file_bytes=None) -> dict:
     """Save the file's CURRENT bytes, and record that a change is coming.
 
     Refuses - plainly, touching nothing - a link, a path outside the allowed
-    folders, a folder, a missing or unreadable file. Otherwise it hashes the
+    folders, a folder, a missing or unreadable file. A file bigger than
+    `max_file_bytes` (MAX_FILE_BYTES, 25 MiB, when the caller passes nothing)
+    is refused BEFORE a single byte of it is read: the answer carries
+    `error="file_too_large_for_guardian"`, `size_bytes` and `max_file_bytes`,
+    and neither the store nor the journal changes. Otherwise it hashes the
     bytes, stores one compressed copy per distinct content, records a receipt
     with the existing jarvis_receipts.py, appends the journal row and prunes
     the store to the quota. Returns a dict; it never raises.
@@ -1032,9 +1080,29 @@ def snapshot_before_write(path, *, reason: str = "", roots=None, now=None) -> di
     bytes when there is no way back without them.
     """
     reason_text = _clean_reason(reason)
+    limit = _file_limit(max_file_bytes)
     try:
         real, _root_list = _check_path(path, roots)
-        data = _check_file(real)
+        try:
+            if os.path.isdir(real):
+                raise Refused(WORDS["folder"])
+            if not os.path.isfile(real):
+                raise Refused(WORDS["missing"])
+            size = os.path.getsize(real)
+            if size > limit:
+                return _too_large(real, size, limit)
+            data = _read_bytes(real)
+        except Refused:
+            raise
+        except OSError as exc:
+            if not os.path.isfile(real):
+                raise Refused(WORDS["missing"])
+            raise Refused(WORDS["read_failed"].format(why=type(exc).__name__))
+        # THE FILE CAN GROW between getsize and the read. The read has happened
+        # by now, so this is the second half of the same ceiling: a file over
+        # the limit is still refused before it is hashed, stored or recorded.
+        if len(data) > limit:
+            return _too_large(real, len(data), limit)
         sha = sha256_bytes(data)
         blob, packed_size, created = _store_blob(data, sha)
         copy_id = _new_copy_id()
@@ -1047,7 +1115,8 @@ def snapshot_before_write(path, *, reason: str = "", roots=None, now=None) -> di
         try:
             _append_row(row)
         except Exception as exc:
-            return {"ok": False, "path": real, "before_sha256": sha, "size": len(data),
+            return {"ok": False, "path": real, "before_sha256": sha,
+                    "snapshot_id": copy_id, "size": len(data),
                     "stored": created, "receipt_id": receipt_id, "row": row,
                     "error": (f"The copy was saved, but its record could not be written "
                               f"({type(exc).__name__}), so the list of versions is not "
@@ -1063,13 +1132,13 @@ def snapshot_before_write(path, *, reason: str = "", roots=None, now=None) -> di
             words += " One Undo puts it back."
         else:
             words += WORDS["saved_no_receipt"]
-        return {"ok": True, "path": real, "before_sha256": sha, "size": len(data),
+        return {"ok": True, "path": real, "before_sha256": sha,
+                "snapshot_id": copy_id, "size": len(data),
                 "stored": created, "blob_bytes": packed_size, "receipt_id": receipt_id,
                 "row": row, "pruned": pruned.get("pruned", []),
                 "prune_words": pruned.get("words", ""), "words": words}
     except Refused as exc:
-        return {"ok": False, "refused": True, "path": str(path),
-                "error": str(exc), "words": str(exc), "receipt_id": ""}
+        return _plain_refusal(path, exc)
     except Exception as exc:                    # pragma: no cover - last resort
         return {"ok": False, "path": str(path), "receipt_id": "",
                 "error": f"the copy could not be saved ({type(exc).__name__}), so nothing "

@@ -1013,9 +1013,13 @@ SHIPPED = (
     # EXISTING undo_action card (a person's yes and nothing less), refuses a
     # link or a path outside the allowed folders, and leaves a NEW receipt so
     # Undo puts the restore back. The store prunes its oldest unpinned blobs to
-    # 250 MB and never removes a pinned one. No route, no chat tool and no
-    # caller yet: this is the module and its suite, and wiring it in is a
-    # later, separately-approved slice. Nothing it does leaves this PC.
+    # 250 MB and never removes a pinned one. It IS wired on the consumer side:
+    # `jarvis_notes.py` imports it for the vault's pre-write copy (the vault
+    # append calls it first and writes nothing if the copy fails), and
+    # `jarvis_projects.py` imports it before Project Mode's pointer file is
+    # replaced (best-effort, so a broken store never blocks Project Mode).
+    # No route and no chat tool expose it yet - that is still the owner's
+    # decision - and nothing it does leaves this PC.
     "jarvis_file_guardian.py",
     # A red-team / pre-mortem decision simulator, on this PC only (2026-10-17,
     # Pillar 21): takes one-sentence decision and returns a 1-3-1 decision
