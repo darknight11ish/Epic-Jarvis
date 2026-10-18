@@ -125,6 +125,7 @@ in the right place, doing nothing else.
 from __future__ import annotations
 
 import ast
+import os
 import re
 import shutil
 import subprocess
@@ -861,6 +862,12 @@ def t_the_deleted_active_project_clears_project_mode():
         return
     saved = sys.modules.pop("jarvis_projects", None)
     scratch = Path(tempfile.mkdtemp(prefix="jarvis-s4-mode-"))
+    #: Project Mode now copies its pointer file through the guardian first;
+    #: that copy must land in this scratch folder, never in the real store.
+    saved_home = os.environ.get("OPENJARVIS_HOME")
+    saved_receipts = os.environ.get("JARVIS_RECEIPTS_DB")
+    os.environ["OPENJARVIS_HOME"] = str(scratch / "guardian-home")
+    os.environ["JARVIS_RECEIPTS_DB"] = str(scratch / "receipts.db")
     try:
         import importlib.util
         spec = importlib.util.spec_from_file_location("jarvis_projects_real", real)
@@ -872,6 +879,11 @@ def t_the_deleted_active_project_clears_project_mode():
         mod.set_active_project(pid)
         check("the real store has that project active",
               mod.active_project_id() == pid, mod.active_project_id())
+        import jarvis_file_guardian as _guardian
+        home = os.path.realpath(str(_guardian.home_dir()))
+        check("the guardian store this Project Mode write used is under its own "
+              "scratch folder", home.startswith(os.path.realpath(str(scratch))),
+              (home, str(scratch)))
         mod.get().delete_full(pid)
         check("deleting the ACTIVE project leaves Project Mode (no dead id)",
               mod.active_project_id() is None, mod.active_project_id())
@@ -879,6 +891,14 @@ def t_the_deleted_active_project_clears_project_mode():
         check("... so the guard's read answers local on that state",
               _lanes_from_patch(pid=None, rows={}) == [], "guard did not answer []")
     finally:
+        if saved_home is None:
+            os.environ.pop("OPENJARVIS_HOME", None)
+        else:
+            os.environ["OPENJARVIS_HOME"] = saved_home
+        if saved_receipts is None:
+            os.environ.pop("JARVIS_RECEIPTS_DB", None)
+        else:
+            os.environ["JARVIS_RECEIPTS_DB"] = saved_receipts
         shutil.rmtree(scratch, ignore_errors=True)
         sys.modules.pop("jarvis_projects_real", None)
         if saved is not None:

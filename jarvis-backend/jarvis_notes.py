@@ -49,6 +49,17 @@ See backend/README.md's `notes-wiring` section for the exact `jarvis_gate`/
 pure read defaults to auto" reasoning `jarvis_calendar.py`'s docstring gives
 applies here unchanged.
 
+THE ONE PRE-WRITE DOOR (added with the file guardian, Pillar 18)
+`snapshot_vault_before_write(path, *, reason="")` is the helper a WRITER
+calls before an approved write to a vault file (`jarvis_note_capture.py`'s
+`append_obsidian_daily` is its first caller). It does not write anything: it
+asks the EXISTING `jarvis_file_guardian.snapshot_before_write(...)` for a
+copy of the bytes that are about to change, scoped to this vault, so the
+writer's change can be put back with the guardian's own Undo. This module's
+own contract stays read-only; the door is here because the vault path rules
+are here, so the search and the writer cannot disagree about which vault a
+copy belongs to.
+
 WHY THE TOKEN IS NEVER IN THE URL `describe()` PRINTS
 Joplin's own API takes its token as a query-string parameter
 (`?token=...`), not a header - there is no other option in its documented
@@ -219,6 +230,40 @@ def vault_problem(vault: Optional[Path]) -> str:
         return (f"{vault} is not an Obsidian vault (it has no .obsidian folder) - "
                 f"open it in Obsidian once, or point the setting at the vault itself")
     return ""
+
+
+def snapshot_vault_before_write(path, *, reason: str = "") -> dict:
+    """Save a vault file's CURRENT bytes before an approved write changes it.
+
+    THIS MODULE STAYS READ-ONLY. It searches notes and writes none; this is
+    the one helper a WRITER calls first (`jarvis_note_capture.py`'s
+    `append_obsidian_daily`, immediately before its append), so the vault has
+    one guarded door for "the bytes that are about to change". It asks the
+    existing `jarvis_file_guardian.snapshot_before_write(...)` - the guardian's
+    own call surface, no new API - and gives it the configured vault as the
+    allowed root, so a file outside the vault is refused there exactly as it
+    would be anywhere else. This call itself changes nothing and never raises.
+
+    Answers the guardian's own dict: `ok` True with `before_sha256`,
+    `snapshot_id`, `receipt_id` and `size`; `ok` False with `error`/`words` -
+    including `error="file_too_large_for_guardian"` for a file over the
+    guardian's 25 MiB ceiling, and `error="guardian_unavailable"` when the
+    guardian module is not on this backend (the fail-closed direction: a
+    caller that will not write without a copy can say so in plain words).
+    """
+    try:
+        import jarvis_file_guardian as guardian
+    except Exception:                                       # noqa: BLE001
+        return {"ok": False, "error": "guardian_unavailable",
+                "words": "The time machine that saves a copy first is not on this "
+                         "backend, so nothing was copied."}
+    try:
+        vault = obsidian_vault()
+        roots = [str(vault)] if vault is not None else []
+        return guardian.snapshot_before_write(str(path), reason=reason, roots=roots)
+    except Exception as exc:                                # noqa: BLE001
+        return {"ok": False, "error": f"guardian_failed ({type(exc).__name__})",
+                "words": "The copy of the note could not be saved."}
 
 
 def _resolve_backend() -> Optional[str]:
