@@ -44,6 +44,11 @@ const acl = (...parts) =>
   readFileSync(join(HERE, "..", "src-tauri", ...parts), "utf8");
 const SETTINGS_CAP = acl("capabilities", "settings.json");
 const ONBOARDING_CAP = acl("capabilities", "onboarding.json");
+/** A document that repeats a fact about this page, so the two cannot drift. */
+const DOC = (name) => readFileSync(join(HERE, "..", "..", "docs", name), "utf8");
+const ARCHITECTURE = DOC("ARCHITECTURE.md");
+const UI_AUDIT_1005 = DOC("UI-AUDIT-2026-10-05.md");
+const TUTORIALS = DOC("TUTORIALS-DESIGN.md");
 
 /** The body of one Rust function, from its `fn` line to its closing brace. */
 const rustFn = (src, name) => {
@@ -111,9 +116,10 @@ check("the walkthrough can be skipped at any point, and never comes back", () =>
   // does; the marker is a version in Rust, so "once" is a fact about the
   // store and not about the page.
   assert.match(HTML, /event\.key === "Escape"/, "there is no way out but the button");
-  assert.match(HTML, /if \(event\.key === "Escape"\) finish\(\)/,
-    "Escape does not close the walkthrough");
-  assert.match(HTML, /invoke\("finish_onboarding"\)/, "the walkthrough never marks itself seen");
+  assert.match(HTML, /if \(event\.key === "Escape" && !finishing\) finish\(\)/,
+    "Escape does not close the walkthrough (or ignores the busy guard)");
+  assert.match(HTML, /call\("finish_onboarding", \{\}, "action"\)/,
+    "the walkthrough never marks itself seen through the shared budget");
   assert.match(RUST, /pub const ONBOARDING_VERSION: u64 = \d;/);
   assert.match(RUST, /store\.set\(\s*ONBOARDING_VERSION_KEY/, "the marker is never written");
   assert.ok(!/onboarding_seen/.test(HTML), "the page reads the old yes/no marker");
@@ -221,9 +227,58 @@ check("the last screen's button says it finishes, not just Next", () => {
 check("CONTROL: the walkthrough still asks for nothing but the theme", () => {
   // It is the first window anyone sees, before the backend exists. It may
   // read the theme and close itself - nothing else.
-  const calls = [...HTML.matchAll(/invoke\("([a-z_]+)"/g)].map((m) => m[1]);
+  const calls = [...HTML.matchAll(/\bcall\("([a-z_]+)"/g)].map((m) => m[1]);
   assert.deepEqual([...new Set(calls)].sort(), ["finish_onboarding", "get_theme"],
     `the walkthrough asks Rust for: ${calls.join(", ")}`);
+  assert.ok(!/\.invoke\s*\(/.test(HTML),
+    "a raw unbudgeted IPC call is back in the page");
+});
+
+check("both of its commands go through the one shared budget", () => {
+  // The 2026-10-16 freeze: an unbudgeted invoke left its caller waiting for
+  // ever. The house rule is src/invoke-budget.js's `call()` - no page may reach
+  // for TAURI.core.invoke itself (tests/invoke-budget.mjs holds the module).
+  assert.match(HTML, /import \{ call \} from "\.\/invoke-budget\.js";/,
+    "the page does not import the shared budget helper");
+  assert.match(HTML, /call\("get_theme"\)/, "the theme read is not a budgeted READ");
+  assert.match(HTML, /call\("finish_onboarding", \{\}, "action"\)/,
+    "finishing the walkthrough is not a budgeted ACTION");
+  assert.ok(!/TAURI\.core\.invoke\s*\(/.test(HTML),
+    "TAURI.core.invoke is still called directly, so that call has no budget");
+});
+
+check("the last button and Escape cannot finish it twice", () => {
+  // Both entry points share one busy flag: a second finish while the first is
+  // in flight must be ignored (the button is disabled and the flag is set
+  // before the command is awaited). It is released on a late answer so the
+  // button never stays dead - a late ACTION is "not known", not "failed".
+  assert.match(HTML, /let finishing = false;/, "no busy flag is declared");
+  assert.match(HTML, /if \(!IS_TAURI \|\| finishing\) return;/,
+    "a second finish is not refused while the first is in flight");
+  assert.match(HTML, /if \(finishing\) return;\s*\n\s*if \(step === STEPS\)/,
+    "the last button can start a second finish while one is running");
+  assert.match(HTML, /if \(event\.key === "Escape" && !finishing\) finish\(\)/,
+    "Escape can start a second finish while one is running");
+  assert.match(HTML, /btnNext\.disabled = true;/,
+    "the last button is not disabled while the finish is in flight");
+  assert.match(HTML, /finishing = false;\s*\n\s*btnNext\.disabled = false;/,
+    "a late answer leaves the only button disabled for ever");
+});
+
+check("the capability and the docs say five screens, not three", () => {
+  // The page has drawn five screens since the 2026-10-05 audit's two new ones
+  // landed; the capability description and three documents still said three.
+  assert.match(ONBOARDING_CAP, /five static screens/,
+    "capabilities/onboarding.json does not say five static screens");
+  assert.doesNotMatch(ONBOARDING_CAP, /three static screens/);
+  assert.match(ARCHITECTURE, /The five-screen walkthrough/,
+    "ARCHITECTURE.md still calls it a 3-screen walkthrough");
+  assert.match(ARCHITECTURE, /The desktop's five screens are/,
+    "ARCHITECTURE.md still lists three screens");
+  assert.match(UI_AUDIT_1005, /\*\*five static screens\*\*/,
+    "UI-AUDIT-2026-10-05.md still measures three static screens as today's state");
+  assert.match(TUTORIALS, /it is five screens/,
+    "TUTORIALS-DESIGN.md still says the walkthrough is three screens");
 });
 
 /* ── Replayable on demand (the owner, 2026-10-10) ───────────────────────────
@@ -320,10 +375,10 @@ check("the intro still appears by itself exactly once, and only through the mark
   }
   // And finishing a replay is still an ordinary finish: the page's only write
   // is the same one Escape and the last screen always made.
-  assert.match(HTML, /await TAURI\.core\.invoke\("finish_onboarding"\)/,
-    "the walkthrough no longer marks itself seen when it is finished");
-  assert.match(HTML, /if \(event\.key === "Escape"\) finish\(\)/,
-    "Escape no longer finishes the walkthrough");
+  assert.match(HTML, /await call\("finish_onboarding", \{\}, "action"\)/,
+    "the walkthrough no longer marks itself seen through the shared budget");
+  assert.match(HTML, /if \(event\.key === "Escape" && !finishing\) finish\(\)/,
+    "Escape no longer finishes the walkthrough (or ignores the busy guard)");
   assert.match(HTML, /step === STEPS \? "Got it/,
     "the last screen no longer finishes the walkthrough");
 });

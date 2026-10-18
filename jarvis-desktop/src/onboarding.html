@@ -275,15 +275,26 @@
   </div>
 </div>
 
-<script>
+<script type="module">
+  import { call } from "./invoke-budget.js";
+
   const TAURI = globalThis.__TAURI__;
   const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
   // Five screens. Screens 1-3 are the walkthrough the earlier version
   // shipped (tray, approvals, memory) and are unchanged apart from the
   // counter; 4 and 5 answer "how do I talk to it" and "where is everything",
   // which the UI audit of 2026-10-05 (section 5) found the old walkthrough
-  // never taught. `commands.rs`'s ONBOARDING_VERSION stays 2 on purpose: a
-  // new owner has no marker at all, so they see all five.
+  // never taught.
+  //
+  // BOTH of this page's commands go through the ONE shared budget,
+  // `invoke-budget.js`'s `call()` (the 2026-10-16 freeze: an unbudgeted invoke
+  // left its caller waiting for ever). `get_theme` is a READ, `finish_onboarding`
+  // is an ACTION - the budget kinds pick the truthful late sentence. There is
+  // deliberately no `TAURI.core.invoke` left in this page: tests/onboarding.mjs
+  // fails if a raw unbudgeted call comes back.
+  //
+  // `commands.rs`'s ONBOARDING_VERSION stays 2 on purpose: a new owner has no
+  // marker at all, so they see all five.
   //
   // This page is shown ONCE BY ITSELF — `lib.rs` opens it unprompted only
   // while the marker is missing. It is no longer a one-shot: Settings'
@@ -293,6 +304,13 @@
   // only thing this page itself can do is still `finish_onboarding` below.
   const STEPS = 5;
   let step = 1;
+  // The last button and Escape both finish; while a finish is in flight a
+  // second one must be ignored. `clearTimeout` inside the budget stops the
+  // timer when the command answers, so the flag is released on both endings:
+  // success (the window closes) and a late answer (the PC may still have
+  // marked it seen - a second press is harmless, and staying disabled for
+  // ever is the very freeze the budget exists to prevent).
+  let finishing = false;
 
   const screens = [...document.querySelectorAll(".screen")];
   const dots = [...document.querySelectorAll(".dots span")];
@@ -307,12 +325,23 @@
   }
 
   async function finish() {
-    if (!IS_TAURI) return;
-    try { await TAURI.core.invoke("finish_onboarding"); }
-    catch (error) { console.error("[onboarding] could not finish the walkthrough:", error); }
+    if (!IS_TAURI || finishing) return;
+    finishing = true;
+    btnNext.disabled = true;
+    try {
+      await call("finish_onboarding", {}, "action");
+    } catch (error) {
+      console.error("[onboarding] could not finish the walkthrough:", error);
+      // Let the owner try again rather than leaving the only button dead: a
+      // late ACTION is "not known", not "failed" (invoke-budget.js says so in
+      // its own words), and finish_onboarding is idempotent.
+      finishing = false;
+      btnNext.disabled = false;
+    }
   }
 
   btnNext.addEventListener("click", () => {
+    if (finishing) return;
     if (step === STEPS) { finish(); return; }
     step += 1;
     render();
@@ -323,16 +352,17 @@
     render();
   });
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") finish();
+    if (event.key === "Escape" && !finishing) finish();
   });
 
   render();
 
   // Applied on top of the anti-flash guess in <head>, same as every other
   // window: the store is the source of truth, this only corrects a stale or
-  // absent localStorage copy.
+  // absent localStorage copy. A late read only means the theme may be stale,
+  // so the budget's READ sentence is the truthful one.
   if (IS_TAURI) {
-    TAURI.core.invoke("get_theme")
+    call("get_theme")
       .then((theme) => { if (theme) document.documentElement.setAttribute("data-theme", theme); })
       .catch(() => {});
   }

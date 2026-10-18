@@ -246,7 +246,7 @@ Read-only research. Base: `origin/main` 9cdb056. Branches read with `git show` /
 | Tray icon with Power row | | MAIN | PC | `tray.rs` | c |
 | Global hotkeys (Shortcuts settings) | Clash wording fixed | MAIN | PC | `hotkeys.rs` | c |
 | Faces window + face tuning + Portable output | 20 faces | MAIN | PC | `faces.html`, `jarvis-visual-spec.json` | c |
-| 3-screen walkthrough | First run | MAIN | PC | `onboarding.html` | c |
+| Five-screen walkthrough | First run | MAIN | PC | `onboarding.html` | c |
 | FAQ | | MAIN | Both | settings.html, `FaqScreen.kt` | c |
 | Starts/stops backend, restart watchdog, hang/crash notes | | MAIN | PC | `sidecar.rs`, `crash_notes.rs` | c |
 | Autostart, logs, "Show me where" | | MAIN | PC | `autostart.rs` | c |
