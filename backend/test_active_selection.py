@@ -32,13 +32,15 @@ import shutil
 import sys
 import tempfile
 import traceback
+import types
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from _where import require_shipped  # noqa: E402
 
-require_shipped("jarvis_ui_control.py", "jarvis_screen.py", "jarvis_scrub.py")
+require_shipped("jarvis_ui_control.py", "jarvis_screen.py", "jarvis_scrub.py",
+                 "jarvis_brain_reads.py")
 
 #: A scratch settings folder, so the REAL "Never look at" list is the built-in
 #: one (password managers, private banks, streaming sites) and not the owner's.
@@ -410,6 +412,125 @@ def t_reading_the_selection_is_not_writing_anything_else():
            __import__("inspect").signature(U.read_selection).parameters.values()])
 
 
+# --------------------------------------------------------------------------
+#   5. The backend door (Pillar 24-B): GET /api/selection
+# --------------------------------------------------------------------------
+
+GOOD = {"ok": True, "refused": False, "why": "", "text": "selected words",
+        "app": "notepad", "chars": 14, "truncated": False, "scrubbed": True,
+        "words": "Read the highlighted text from notepad."}
+BAD = {"ok": False, "refused": True, "why": "no_selection", "text": "", "app": "",
+       "chars": 0, "truncated": False, "scrubbed": False,
+       "words": "There is no highlighted text in the window in front."}
+
+
+class FakeHandler:
+    """A stand-in for the server's Handler: the original do_GET is recorded."""
+
+    def __init__(self, path):
+        self.path = path
+        self.sent = None
+        self.client_address = ("127.0.0.1", 50000)
+        self.connection = types.SimpleNamespace(
+            getsockname=lambda: ("127.0.0.1", 4719))
+
+    def do_GET(self):
+        self.sent = ("original", self.path)
+
+    def _send(self, code, body):
+        self.sent = (code, body)
+
+
+def installed(origin=True, token=True):
+    import jarvis_brain_reads as B
+    class Hd(FakeHandler):
+        pass
+    B.install(Hd, origin_ok=lambda s: origin, token_ok=lambda s: token, read_body=None)
+    return Hd
+
+
+def t_the_door_passes_the_24a_answer_back_unchanged():
+    import jarvis_brain_reads as B
+    real = U.read_selection
+    calls = []
+    try:
+        U.read_selection = lambda: (calls.append(1), dict(GOOD))[1]
+        code, out = B.handle_get(B.SELECTION_PATH)
+        check("GET /api/selection answers 200 with the 24-A dict unchanged",
+              code == 200 and out == GOOD, (code, out))
+        check("... and asks the one reader exactly once", calls == [1], calls)
+        U.read_selection = lambda: dict(BAD)
+        code, out = B.handle_get(B.SELECTION_PATH)
+        check("a 24-A REFUSAL is a 200 answer too, not an HTTP error and not reshaped",
+              code == 200 and out == BAD, (code, out))
+    finally:
+        U.read_selection = real
+
+
+def t_another_device_is_refused_before_anything_is_read():
+    import jarvis_brain_reads as B
+    real_reader, real_from = U.read_selection, B._from_this_pc
+    calls = []
+    U.read_selection = lambda: (calls.append(1), dict(GOOD))[1]
+    B._from_this_pc = lambda peer, local: False
+    try:
+        code, out = B.handle_get(B.SELECTION_PATH, peer="100.64.0.9",
+                                 local="100.64.0.1")
+    finally:
+        B._from_this_pc = real_from
+        U.read_selection = real_reader
+    check("a request from another device: 403, refused, nothing read",
+          code == 403 and calls == [], (code, calls))
+    check("... in the 24-A shape, with plain words and no text",
+          out.get("ok") is False and out.get("refused") is True
+          and out.get("why") == "not_this_pc" and out.get("text") == ""
+          and "this PC only" in str(out.get("words")), out)
+
+
+def t_the_door_obeys_the_servers_own_checks():
+    import jarvis_brain_reads as B
+    real = U.read_selection
+    calls = []
+    U.read_selection = lambda: (calls.append(1), dict(GOOD))[1]
+    try:
+        h = installed(origin=True, token=False)("/api/selection")
+        h.do_GET()
+        check("install(): no token -> 401 and the reader is never reached",
+              h.sent[0] == 401 and calls == [], (h.sent, calls))
+        h = installed(origin=False, token=True)("/api/selection")
+        h.do_GET()
+        check("install(): another origin -> 403 and nothing read",
+              h.sent[0] == 403 and calls == [], (h.sent, calls))
+        h = installed()("/api/selection")
+        h.do_GET()
+        check("install(): the bar's own request is answered with the 24-A dict",
+              h.sent[0] == 200 and h.sent[1] == GOOD, h.sent)
+        check("install(): ... through the reader exactly once", calls == [1], calls)
+        h = installed()("/api/not-a-route")
+        h.do_GET()
+        check("install(): every other request still goes to the original handler",
+              h.sent == ("original", "/api/not-a-route"), h.sent)
+        check("install(): the banner names the new read",
+              "highlighted text" in B.install(installed(), origin_ok=lambda s: True,
+                                              token_ok=lambda s: True, read_body=None))
+    finally:
+        U.read_selection = real
+
+
+def t_an_older_backend_says_update_in_the_same_shape():
+    import jarvis_brain_reads as B
+    real = U.read_selection
+    try:
+        del U.read_selection
+        code, out = B.handle_get(B.SELECTION_PATH)
+    finally:
+        U.read_selection = real
+    check("an older jarvis_ui_control.py: 501 in the same refusal shape",
+          code == 501 and out.get("ok") is False and out.get("refused") is True
+          and out.get("text") == "" and "apply-patches.ps1" in str(out.get("words")),
+          (code, out))
+
+
 if __name__ == "__main__":
     TESTS = (t_the_selected_text_is_returned, t_no_selection_is_a_plain_refusal,
              t_long_selection_is_cut_and_said_so,
@@ -423,7 +544,11 @@ if __name__ == "__main__":
              t_reading_the_selection_is_not_writing_anything_else,
              t_a_control_from_another_window_returns_no_text,
              t_a_matching_focused_window_still_returns_text,
-             t_a_window_that_changes_during_the_read_returns_nothing)
+             t_a_window_that_changes_during_the_read_returns_nothing,
+             t_the_door_passes_the_24a_answer_back_unchanged,
+             t_another_device_is_refused_before_anything_is_read,
+             t_the_door_obeys_the_servers_own_checks,
+             t_an_older_backend_says_update_in_the_same_shape)
     try:
         for fn in TESTS:
             print(f"\n--- {fn.__name__} ---")

@@ -771,11 +771,11 @@ def t_the_api_document_has_the_section_and_it_matches_this_code():
 #: writes down that they meant to. That is the price of a check that bites, and
 #: it is why the failure message below spells out the difference instead of
 #: saying "the document changed".
-EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 141))   # 129 ..= 140
+EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 142))   # 129 ..= 141
 #: 139 is PR #549's self-improvement diagnostics section (it merges FIRST),
-#: and 140 is THIS branch's file-guardian history (PR #568, added after it).
-#: They are stacked in that merge order, so the tail reads 129 ..= 140 with
-#: no hole and no repeat. When the branches land this list stays the same.
+#: 140 is PR #568's file-guardian history, and 141 is PR #562's selection chip -
+#: the branches are stacked in that merge order, so the tail reads 129 ..= 141
+#: with no hole and no repeat. When the branches land this list stays the same.
 
 
 def t_every_section_from_129_up_is_still_in_the_document():

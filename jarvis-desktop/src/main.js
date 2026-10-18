@@ -230,6 +230,11 @@ import { buildPaletteHint, close as closePalette, isOpen as paletteOpen, mountPa
 // ring itself is Rust's, RAM-only and off until the drawer's own switch; this
 // module is the view over six commands (clipboard-drawer.js's own doc).
 import { mountClipboardDrawer } from "./clipboard-drawer.js";
+// Pillar 24-B: the highlighted-text chip. The PC reads the selection
+// before the bar takes focus; this module turns that answer into the
+// chip's one line and the prompts the quick actions put in the box
+// (pure functions, tests/selection-chip.mjs).
+import { attachPrompt, chipFor, dismissed, explainPrompt, summarizePrompt } from "./selection-chip.js";
 // A timer said aloud while hands-free listening is on (2026-09-25).
 import { aloudFor } from "./coming-up.js";
 import { READING as PHOTO_READING, mountProposal } from "./photo-reminder.js";
@@ -489,6 +494,11 @@ const dom = {
   clipboardChip: $("attachment-clipboard"),
   clipboardMeta: $("clipboard-meta"),
   clipboardRemove: $("clipboard-remove"),
+  selectionChip: $("attachment-selection"),
+  selectionAttach: $("selection-attach"),
+  selectionExplain: $("selection-explain"),
+  selectionSummarize: $("selection-summarize"),
+  selectionRemove: $("selection-remove"),
   pictureNotice: $("picture-notice"),
   pictureNoticeText: $("picture-notice-text"),
   pictureTextOnly: $("picture-text-only"),
@@ -650,6 +660,10 @@ const state = {
   capture: null,
   /** Pending clipboard context. */
   clipboard: null,
+  /** The highlighted-text chip (Pillar 24-B), or null. */
+  selection: null,
+  /** A selection the owner dismissed with ×, so it never returns by itself. */
+  selectionDismissed: "",
   /** The owner chose "Send it anyway" for the attached picture, once. */
   pictureCleared: false,
   /** The words held back while the picture notice asks what to do. */
@@ -2107,7 +2121,8 @@ function syncAttachments() {
   }
   dom.captureChip.hidden = !state.capture;
   dom.clipboardChip.hidden = !state.clipboard;
-  dom.attachments.hidden = !state.capture && !state.clipboard;
+  dom.selectionChip.hidden = !state.selection;
+  dom.attachments.hidden = !state.capture && !state.clipboard && !state.selection;
   syncWindowHeight();
 }
 
@@ -2130,6 +2145,41 @@ function attachClipboard(text) {
       ? `${preview.slice(0, CLIPBOARD_PREVIEW)}…`
       : preview;
   syncAttachments();
+}
+
+/** The highlighted-text chip (Pillar 24-B). NOTHING reaches the model by
+    itself: this only shows what the PC read, and a click puts words in the
+    box - the owner presses Enter. A refused or empty answer draws nothing. */
+function clearSelectionChip() {
+  state.selection = null;
+  syncAttachments();
+}
+
+function showSelectionChip(result) {
+  const chip = chipFor(result);
+  if (!chip.show || dismissed(chip.fingerprint, state.selectionDismissed)) {
+    clearSelectionChip();
+    return;
+  }
+  state.selection = chip;
+  dom.selectionAttach.textContent = chip.label;
+  syncAttachments();
+}
+
+function useSelection(text) {
+  if (!state.selection) return;
+  dom.prompt.value = attachPrompt(dom.prompt.value, text);
+  // S-1 / R3: these words were read out of ANOTHER program's window, so they
+  // are not the owner's own typing. Tag them exactly as text INSERTED from
+  // outside is tagged (`chat-history.js` boxTagAfter "paste"): "pasted" stays
+  // until the box is emptied, so typing a "?" around it cannot turn a selected
+  // web page into "the owner's own words" - which the PC's provenance rules
+  // use for the no-card lights path, the "was pasted in, not typed" card
+  // lines, the no-model quick path, and automatic learning.
+  state.boxTag = boxTagAfter(state.boxTag, "paste");
+  autoGrowPrompt();
+  clearSelectionChip();
+  focusInput({ selectAll: false });
 }
 
 /* ==========================================================================
@@ -5360,6 +5410,7 @@ async function dismiss() {
   syncNoteChip();
   state.capture = null;
   state.clipboard = null;
+  clearSelectionChip();
   dom.captureThumb.removeAttribute("src");
   syncAttachments();
   closeCard();
@@ -5837,6 +5888,8 @@ listen("focus-input", () => {
 listen("private-hidden", () => {
   // The spending table goes at once, before anything else is decided.
   if (spendingView) spendingView.hide();
+  // A highlighted-text chip is a piece of the screen: hidden with the rest.
+  clearSelectionChip();
   if (state.threadHidden) return;
   state.threadHidden = true;
   renderPreviousAnswer({ open: dom.previousAnswer.open });
@@ -5875,6 +5928,28 @@ listen("clipboard-inject", (event) => {
     state.boxTag = boxTagAfter(state.boxTag, "clipboard");
     autoGrowPrompt();
   }
+  focusInput({ selectAll: false });
+});
+
+// Pillar 24-B: the PC read the highlighted text BEFORE the bar took focus.
+// Show its chip if it read something (a refusal or an empty answer draws
+// nothing here), and keep the same selection hidden once × dismissed it.
+listen("selection-read", (event) => {
+  showSelectionChip(event && event.payload);
+});
+
+dom.selectionAttach.addEventListener("click", () => {
+  if (state.selection) useSelection(state.selection.text);
+});
+dom.selectionExplain.addEventListener("click", () => {
+  if (state.selection) useSelection(explainPrompt(state.selection.text));
+});
+dom.selectionSummarize.addEventListener("click", () => {
+  if (state.selection) useSelection(summarizePrompt(state.selection.text));
+});
+dom.selectionRemove.addEventListener("click", () => {
+  if (state.selection) state.selectionDismissed = state.selection.fingerprint;
+  clearSelectionChip();
   focusInput({ selectAll: false });
 });
 

@@ -207,6 +207,43 @@ await check("a pasted prompt recalled with Up is sent as pasted again", async ()
   assert.equal(sent[1].messages.at(-1).provenance, "pasted");
 });
 
+await check("a selection attached from another window is pasted, edited or not", async () => {
+  // S-1: the chip's words were read out of another program's window, so they
+  // are R3's pasted class - never "typed", however much is typed around them.
+  const page = await open({ chatReplies: ["a1", "a2", "a3"] });
+  const emit = (text) => page.evaluate((words) => {
+    window.__emit("selection-read", {
+      ok: true, refused: false, why: "", text: words, app: "notepad",
+      chars: words.length, truncated: false, scrubbed: false,
+      words: "Read the highlighted text from notepad.",
+    });
+  }, text);
+  await emit("selected words");
+  await page.waitForTimeout(100);
+  await page.locator("#selection-attach").click();
+  await page.waitForTimeout(100);
+  await pressEnter(page);
+  await emit("another selection");
+  await page.waitForTimeout(100);
+  await page.locator("#selection-explain").click();
+  await page.locator("#prompt").press("End");
+  await page.keyboard.type("?");
+  await pressEnter(page);
+  await page.locator("#prompt").fill("typed clearly");
+  await pressEnter(page);
+  const sent = await calls(page);
+  await page.close();
+  assert.equal(sent[0].messages.at(-1).content, "selected words");
+  assert.equal(sent[0].messages.at(-1).provenance, "pasted",
+               "the attached selection is not the owner's typing");
+  assert.match(sent[1].messages.at(-1).content, /Explain this:/);
+  assert.equal(sent[1].messages.at(-1).provenance, "pasted",
+               "an edit made the selection the owner's own words (S-1 / R3)");
+  assert.equal(sent[2].messages.at(-1).content, "typed clearly");
+  assert.equal(sent[2].messages.at(-1).provenance, "typed",
+               "a genuinely typed message is still typed");
+});
+
 await check("CONTROL: stream_chat takes the two fields and passes on only good ones", async () => {
   const rust = read("src-tauri/src/commands.rs");
   assert.match(rust, /pub async fn stream_chat\([\s\S]*?conversation_id: Option<String>,\s*device: Option<String>,/);

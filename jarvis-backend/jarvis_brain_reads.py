@@ -73,11 +73,22 @@ The owner's choice of 2026-09-28 (docs/RESEARCH-AUDIT-2026-09-28.md section
         hidden or App lock is on asks for it that way), and the desktop ALSO
         blanks the same sections in Rust. Read-only.
 
+    GET /api/selection
+        (2026-10-18; JARVIS-API section 141, Pillar 24-B) "What did I
+        highlight?": the text the owner has selected in the window in front,
+        for the Jarvis bar's own chip. jarvis_ui_control.read_selection() does
+        the work and its dict is passed back UNCHANGED - text, app name,
+        chars, truncated, scrubbed, or its own plain refusal. The screen's
+        privacy rules are that module's, not a second copy. TWO THINGS ARE
+        THIS MODULE'S: the request must come from THIS PC (a phone on the
+        same Tailnet is refused before anything is read), and an older backend
+        answered with the same refusal shape and a sentence saying to update.
+        It is a read: no card, nothing stored, no model, no route to a phone.
+
 All of them are READS for the apps' Brain screens, behind the pairing token
 and the origin check like every memory and history read. None is a tool: nomodel and no chat turn can call them (jarvis_agent.py offers nothing that
 reaches here), so what they return never reaches the AI model. None writes
 anything.
-
 "Widgets you describe" (2026-09-28; JARVIS-API section 86) rides on this
 module's install() too, so it needs no patch of its own: install() also
 calls jarvis_widgets.install(), which wraps do_GET and do_POST for the
@@ -113,8 +124,13 @@ GUARDIAN_DIFF_PATH = "/api/guardian/diff"
 #: this module is only the door the server already wraps, so it needs no
 #: patch of its own.
 COCKPIT_PATH = "/api/today/cockpit"
+#: The owner's highlighted text, read from THIS PC for the Jarvis bar's own
+#: chip (Pillar 24-B). Desktop-only: a request from another device is refused
+#: before anything is read (see `handle_get`'s `peer`/`local`).
+SELECTION_PATH = "/api/selection"
 PATHS = (SEARCH_PATH, FACT_HISTORY_PATH, CONVERSATION_FACTS_PATH, PC_HELP_PATH,
-         FACT_CHAT_PATH, COCKPIT_PATH, GUARDIAN_SNAPSHOTS_PATH, GUARDIAN_DIFF_PATH)
+         FACT_CHAT_PATH, COCKPIT_PATH, GUARDIAN_SNAPSHOTS_PATH,
+         GUARDIAN_DIFF_PATH, SELECTION_PATH)
 
 UPDATE = ("This PC's Jarvis is missing part of this feature. Run apply-patches.ps1 on the PC "
           "to update it.")
@@ -150,6 +166,7 @@ def _from_this_pc(peer, local) -> bool:
     a program on the PC can ask, and a phone on the same private network
     cannot.
     """
+
     try:
         import jarvis_owner_check
         return bool(jarvis_owner_check.from_this_pc(peer, local))
@@ -157,6 +174,9 @@ def _from_this_pc(peer, local) -> bool:
         return False
 
 
+SELECTION_NOT_THIS_PC = (
+    "Reading what is highlighted on this PC is for this PC only, so "
+    "nothing was read.")
 def _guardian_refusal(why: str, words: str, path: str) -> dict:
     """A refusal in the SAME shape that route's success answer has."""
     if path == GUARDIAN_SNAPSHOTS_PATH:
@@ -296,6 +316,11 @@ def _diff_answer(query: str, differ) -> tuple:
             "unreadable", "The difference could not be worked out.", GUARDIAN_DIFF_PATH)
     return 200, dict(answer)          # the module's own answer, unchanged
 
+def _selection_refusal(why: str, words: str) -> dict:
+    """A refusal in the SAME shape `jarvis_ui_control.read_selection` returns."""
+    return {"ok": False, "refused": True, "why": why, "text": "", "app": "",
+            "chars": 0, "truncated": False, "scrubbed": False, "words": words}
+
 
 def _restore_refusal(why: str, words: str) -> dict:
     """A refusal in the shape the restore route's answer has."""
@@ -374,10 +399,11 @@ def handle_get(path: str, query: str = "", *, peer=None, local=None) -> tuple:
     """(http status, reply) for one of PATHS. Never raises.
 
     `peer` and `local` are the request's own socket addresses, handed in by
-    `install()`; the guardian history uses them to refuse another device
-    BEFORE it reads anything. A direct in-process call omits them (there is no
-    network request to place), and `jarvis_owner_check.from_this_pc` answers
-    for a request with no peer the way it always has.
+    `install()`; the guardian history and the selection read use them to
+    refuse another device BEFORE they read anything. A direct in-process call
+    omits them (there is no network request to place), and
+    `jarvis_owner_check.from_this_pc` answers for a request with no peer the
+    way it always has.
     """
     if path in (GUARDIAN_SNAPSHOTS_PATH, GUARDIAN_DIFF_PATH):
         if not _from_this_pc(peer, local):
@@ -403,6 +429,21 @@ def handle_get(path: str, query: str = "", *, peer=None, local=None) -> tuple:
         except Exception:
             return 500, _guardian_refusal(
                 "unreadable", "The difference could not be worked out.", path)
+    if path == SELECTION_PATH:
+        if not _from_this_pc(peer, local):
+            return 403, _selection_refusal("not_this_pc", SELECTION_NOT_THIS_PC)
+        try:
+            import jarvis_ui_control
+        except Exception:
+            return 501, _selection_refusal("update", UPDATE)
+        reader = getattr(jarvis_ui_control, "read_selection", None)
+        if reader is None:
+            return 501, _selection_refusal("update", UPDATE)
+        try:
+            return 200, reader()
+        except Exception:
+            return 500, _selection_refusal(
+                "unreadable", "The highlighted text could not be read, so nothing was returned.")
     if path == SEARCH_PATH:
         try:
             import jarvis_chat_log
@@ -516,14 +557,16 @@ def install(handler_cls, *, origin_ok, token_ok, read_body=None) -> str:
     widgets = _install_widgets(handler_cls, origin_ok, token_ok, read_body)
     if (getattr(handler_cls.do_GET, "_jarvis_brain_reads", False)
             or handler_cls.__dict__.get("_jarvis_brain_reads_on")):
-        return ("  brain      Search old chats, fact history, a chat's facts, PC help, the "
-                "file guardian's history and its one gated restore (already on)" + widgets)
+        return ("  brain      Search old chats, fact history, a chat's facts, PC help, "
+                "the file guardian's history, its one gated restore and the "
+                "highlighted text (already on)" + widgets)
     get0 = handler_cls.do_GET
     post0 = getattr(handler_cls, "do_POST", None)
 
     def _peer_local(self) -> tuple:
-        """(peer, local) for this request, best effort. The guardian routes
-        fail CLOSED when they cannot be had (jarvis_owner_check's own rule)."""
+        """(peer, local) for the request, best effort; the guardian and the
+        selection routes fail CLOSED when they cannot be had
+        (jarvis_owner_check's own rule)."""
         peer = local = None
         try:
             peer = self.client_address[0]

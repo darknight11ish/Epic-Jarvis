@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-read-selection"
+description = "Enables the read_selection command without any pre-configured scope."
+commands.allow = ["read_selection"]
+
+[[permission]]
+identifier = "deny-read-selection"
+description = "Denies the read_selection command without any pre-configured scope."
+commands.deny = ["read_selection"]

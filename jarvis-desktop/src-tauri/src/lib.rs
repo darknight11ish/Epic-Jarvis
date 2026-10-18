@@ -56,6 +56,7 @@ pub mod prompt_coach;
 pub mod pyfind;
 pub mod reach;
 pub mod screen_work;
+pub mod selection;
 pub mod sidecar;
 pub mod sky;
 pub mod spec;
@@ -133,6 +134,11 @@ pub const CLOUD_LANE_STATUS_PATH: &str = "/api/chatbot/money";
 pub mod events {
     /// Payload: none. The quickbar should select and focus its input.
     pub const FOCUS_INPUT: &str = "focus-input";
+    /// Payload: the 24-A selection dict (`ok`, `refused`, `why`, `text`,
+    /// `app`, `chars`, `truncated`, `scrubbed`, `words`), read by Rust
+    /// BEFORE the bar took focus (Pillar 24-B, src-tauri/src/selection.rs).
+    /// The page only draws the chip from it; nothing is sent.
+    pub const SELECTION_READ: &str = "selection-read";
     /// Payload: `String` — clipboard text to pre-load into the quickbar.
     pub const CLIPBOARD_INJECT: &str = "clipboard-inject";
     /// Payload: none. The clipboard history drawer (Pillar 14B) should open and
@@ -1124,6 +1130,7 @@ pub fn run() {
             hardware::hardware_step,
             hardware::measure_hardware,
             hardware::get_pc_help,
+            selection::read_selection,
             tutorials::get_tutorials,
             tutorials::mark_tutorial,
             tutorials::get_faq,
