@@ -1156,6 +1156,19 @@ today's "Second graphics card" section):
 5. **Details** (collapsed) - every number with its arithmetic, as in 8.2.
 6. The existing five lane switches stay, under "Extra features".
 
+**A hybrid model's bar, calculated honestly.** When the everyday model is not
+one of the design table's five, but Ollama's own metadata - `/api/show`'s
+`model_info`, read on this PC - proves it is a *hybrid* (full attention on some
+layers, a recurrent state on the rest, like the owner's `qwen3.5:9b`), the bar
+counts a growing KV cache only for the full-attention layers. That is what the
+model really keeps, so a four-times-too-big figure is the thing this avoids.
+Everything else stays as it was: a model the metadata does not prove hybrid
+keeps the plain "Everyday chat uses ..." line instead of a guessed bar, and a
+missing field means no bar rather than a zero standing in for it. The figure is
+a floor - a separate picture reader (vision projector) is not in it, and the
+working space is a placeholder until a hybrid model is measured on this PC
+(`jarvis_profiles.COMPUTE_GIB_PLACEHOLDER` says how to measure it).
+
 **Phone (Brain → "Hardware")**: your cards (names and memory only), the
 current preset and whether it is measured, the recommended preset, and
 **Apply**, which asks the PC to start the steps in 4.5 - each still an
