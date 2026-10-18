@@ -554,11 +554,28 @@ round-trips unchanged):
    ignored here and cannot hide a subscription; every other gap must fall in the
    same band, so a missed month is not vouched for as monthly.
 2. `price_hikes`: a recurring merchant whose **latest charge is higher than the
-   charge before it**, with `previous_*`, `latest_*` and `delta_cents = latest -
-   previous`, exact and positive (+300 is +3.00). **Only a rise counts**: an
-   equal amount and a decrease are never reported as one. The delta is per
-   billing period, exactly as the two charges state it; it is not turned into a
-   monthly figure, because that would have to round.
+   price before it** - the most recent earlier charge at a **different amount**
+   that is **also at least one billing cycle earlier** (26 days for a monthly
+   subscription, 350 for an annual one), not merely the row before it.
+   `previous_*`, `latest_*` and
+   `delta_cents = latest - previous`, exact and positive (+300 is +3.00). **Only
+   a rise counts**: an equal amount and a decrease are never reported as one.
+   The delta is per billing period, exactly as the two charges state it; it is
+   not turned into a monthly figure, because that would have to round.
+   **Gemini review 2026-10-17, a real bug fixed the same day:** comparing the
+   literal latest two charges lost a genuine rise whenever the new price
+   repeated (a second month at it, or the new price billed twice in a week) -
+   9.99, 12.99, 12.99 compared the last two, got 0, and reported nothing. The
+   comparison is now against the price before the latest charge, so a repeat of
+   a new price can never erase the rise that produced it.
+   **And the same review's case B, also fixed the same day:** a different
+   amount charged inside the SAME bill (a one-off rental beside the monthly
+   subscription) is not a price change. The previous price must therefore be a
+   whole billing cycle earlier, and when the newest bill day carries several
+   **different** amounts, which one is the price cannot be known, so that
+   merchant is not compared at all - a missed rise is reported as no rise,
+   because an invented one would be a false alarm about the owner's money
+   (the module's standing rule: a false alarm is worse than a missed match).
 3. `duplicate_charges`: the same merchant stem and amount charged twice **within
    6 days or fewer** - `"< 7 days"` really means 6 - each entry one pair of
    consecutive charges, so a third charge in the same week is a second entry and
@@ -584,7 +601,8 @@ there). It then draws the ordinary table block - kind `"spending"`, version 1, s
 apps' existing renderers draw it unchanged - with five columns: **What**, **How often**
 ("Every month" / "Every year" / "Charged twice"), **Last charged** (a date written out),
 **Amount** and **Went up by**. One section per currency; the `rows` are the subscriptions
-(the rise filled in only where the latest charge is higher than the one before) and the
+(the rise filled in only where the current price is higher than the price before it - the
+most recent charge at a different amount) and the
 `also` rows are the double charges, each with both dates. There are **no totals rows**:
 billing periods differ, so a sum would mean nothing. The title is "Subscriptions and price
 rises", "Subscriptions" or "Charged twice" depending on what was found. The two word columns
@@ -597,20 +615,27 @@ spending answer). **When nothing was found**, no empty table is drawn: the answe
 plain line "I found no subscriptions, price rises or double charges in your bank files."
 
 **What it costs and what it proves.** The audit function is file-free and clock-free, so its
-tests are too: `backend/test_spending.py` section 11 adds 14 test functions and 62 checks
+tests are too: `backend/test_spending.py` section 11 adds 16 test functions and 74 checks
 calling the real function with `Txn` lists and asserting on the returned dict - including the
 boundaries at both ends (25/26 and 35/36 days monthly, 349/350 and 380/381 annual, exactly 6
 and exactly 7 days for a duplicate), an equal amount and a lower amount that must not be a
-hike, a double charge that must not hide a subscription or its rise, two currencies that must
+hike, a **new price that repeats still reading as a rise** (the 2026-10-17 fix), **a
+different amount inside the same bill never reading as a rise and a bill with several
+different amounts on its newest day never being compared** (the review's case B), a double
+charge that must not hide a subscription or its rise, two currencies that must
 not match, a bad transaction that must be refused, and the same rows in reverse order giving
-the identical dict. Test section 12 adds 6 test functions and 36 checks for the answer: the
+the identical dict. Test section 12 adds 7 test functions and 38 checks for the answer: the
 block is validated against the strict shape both apps' readers enforce, the doubling is found
 end to end through `read_rows`/`normalise` (so the account-number hiding is proven on the way
 in), the model's payload is proven to hold the stems and figures and no table, date or raw
 description, an invented figure and a wrong year are dropped, a quiet radar says so in one
 line, and a whole scripted chat turn shows the table under the checked sentence - including
-the one-table-an-answer refusal. Every check in both sections was made to fail on purpose
-before it was trusted (the mutations and their red output are in the pull requests).
+the one-table-an-answer refusal. **The answer is also a case in the generated cross-app
+contract** (`spending-cases.json`, table `subscriptions`): the desktop renderer and the
+phone's strict reader are tested against the same figure list, including a rise on a price
+that repeats, so the two apps cannot drift from the backend's numbers. Every check was made
+to fail on purpose before it was trusted (the mutations and their red output are in the pull
+requests).
 
 **Deliberately not built here.** The pillar's second half - scanning mail for
 trial-ending and delivery messages - belongs with `jarvis_email.py`, which owns IMAP
@@ -665,8 +690,10 @@ python3 tools/gen_spending_cases.py --check    # compare only (test_spending.py 
 ```
 
 Both apps' tests load it. It holds `words` (every shared sentence, exact), `sign_sentences`,
-`errors`, `tables` (six tables: by_category, by_month, by_category_and_month,
-two_files_overlapping, two_currencies, one_category) and the `GET /api/spending` and
+`errors`, `tables` (seven tables: by_category, by_month, by_category_and_month,
+two_files_overlapping, two_currencies, one_category, and `subscriptions` - the Pillar 10
+answer, with a rise on a price that repeats and a hidden double charge, added 2026-10-17) and
+the `GET /api/spending` and
 column-check answers in named situations (`view_pc_*`, `view_phone_*`, `proposal_*`).
 Neither app writes a word or a figure of its own for the table; it draws what the file says.
 

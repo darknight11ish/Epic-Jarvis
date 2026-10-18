@@ -77,9 +77,12 @@ class SpendingTest {
     // ------------------------------------------------------------ tables ---
 
     @Test
-    fun `all six real tables are read`() {
+    fun `all seven real tables are read`() {
         assertEquals(
-            setOf("by_category", "by_month", "by_category_and_month", "two_files_overlapping", "two_currencies", "one_category"),
+            setOf(
+                "by_category", "by_month", "by_category_and_month", "two_files_overlapping",
+                "two_currencies", "one_category", "subscriptions",
+            ),
             tables.keys,
         )
         for (name in tables.keys) parsed(name)
@@ -155,6 +158,41 @@ class SpendingTest {
             b.also.map { it.cells },
         )
         assertEquals("From: a_signed.csv (layout: " + word("SAVED_LAYOUT") + ")", Spending.sourcesLine(t))
+    }
+
+    @Test
+    fun `worked subscriptions table, the rise on a repeated price and the double charge`() {
+        val t = parsed("subscriptions")
+        assertEquals("Subscriptions and price rises", t.title)
+        assertEquals("1 June 2025 to 27 May 2026", t.period)
+        assertEquals(
+            listOf("What", "How often", "Last charged", "Amount", "Went up by"),
+            t.columns.map { it.label },
+        )
+        // Only the two money columns are right-aligned; the date is words, and
+        // the page puts no figure of its own in the table.
+        assertEquals(listOf(false, false, false, true, true), t.columns.map { it.rightAligned })
+        val b = t.blocks.single()
+        assertEquals("", b.heading)
+        assertEquals(
+            listOf(
+                listOf("NETFLIX.COM 4832", "Every month", "5 April 2026", "12.99", "3.00"),
+                listOf("SPOTIFY P2E4X7", "Every year", "27 May 2026", "59.99", ""),
+            ),
+            b.rows.map { it.cells },
+        )
+        // A double charge is its own "also" row with both dates, and the account
+        // number in its description was hidden before it reached either app.
+        assertEquals(
+            listOf(listOf("GYM [hidden]", "Charged twice", "2 April 2026 and 5 April 2026", "25.00", "")),
+            b.also.map { it.cells },
+        )
+        assertEquals(0, b.totals.size)
+        // The rise sits on a price that REPEATS (March and April were both
+        // 12.99). The table still says 3.00, which is the 2026-10-17 fix: a rise
+        // billed twice must not read as no rise. This fixture is the contract
+        // both apps read, so it cannot drift back.
+        assertEquals("3.00", b.rows.first().cells[4])
     }
 
     @Test

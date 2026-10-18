@@ -60,8 +60,12 @@ quoted data (at most 20, at most 40 characters each).
 SUBSCRIPTIONS AND PRICE HIKES (Pillar 10, the first half). audit_subscriptions
 reads transactions that are already normalised and answers three questions with
 plain arithmetic: which merchants charge on a recurring interval (monthly or
-annual), which of those went up since the charge before it (the exact rise, in
-whole cents), and where the same shop charged the same amount twice within six
+annual), which of those went up since the price before it (the exact rise, in
+whole cents - compared with the most recent earlier charge at a different
+amount at least one billing cycle earlier, so a new price that repeats cannot
+erase the rise and a one-off inside the same bill cannot invent one), and where
+the same
+shop charged the same amount twice within six
 days. The owner reaches it in chat as the `my_spending` action "subscriptions":
 code builds a table both apps draw (the same block shape as a spending table, so
 neither app needed a change) and the model gets the shop stems and exact
@@ -1597,10 +1601,26 @@ def audit_subscriptions(transactions) -> dict:
                          reported as a monthly subscription. A merchant billed
                          in two currencies is two entries, never one.
       price_hikes        a subscription whose LATEST charge is higher than the
-                         charge before it, with delta_cents = latest - previous.
-                         Only a rise is here: an equal amount and a fall are
-                         not hikes and are never reported as one. The delta is
-                         per billing period, exactly as the two charges say.
+                         price BEFORE it - the most recent earlier charge at a
+                         DIFFERENT amount that is ALSO at least one billing
+                         cycle earlier (26 days for a monthly subscription, 350
+                         for an annual one). Comparing with the charge before it
+                         literally was wrong: a new price that repeats (a second
+                         month at it, or the new price billed twice in a week)
+                         made the last two amounts equal and the rise vanished
+                         from the answer. Requiring a whole billing cycle also
+                         stops a same-day add-on - a different amount inside the
+                         same bill, e.g. a one-off rental beside the monthly
+                         subscription - from being read as a price rise; and
+                         when the newest bill day carries several DIFFERENT
+                         amounts, which one is the price cannot be known, so
+                         that merchant is not compared at all (a missed rise is
+                         reported as no rise; an invented one would be a false
+                         alarm about money). delta_cents
+                         = latest - previous, as whole cents. Only a rise is here: a
+                         fall and an unchanged price are not hikes and are never
+                         reported as one. The delta is per billing period, exactly
+                         as the two charges say.
       duplicate_charges  the same merchant stem and amount charged twice within
                          6 days or fewer (0 means the same day). Each entry is
                          one pair of consecutive charges, so a third charge in
@@ -1636,7 +1656,30 @@ def audit_subscriptions(transactions) -> dict:
         interval = _interval_of(rows)
         if interval is None:
             continue
-        latest, previous = rows[-1], rows[-2]
+        latest = rows[-1]
+        # The price BEFORE the latest charge, not merely the row before it (audit
+        # finding, Gemini review 2026-10-17): a new price that repeats - two
+        # months at it, or the new price billed twice in one week - made the
+        # literal last two amounts equal, so a genuine rise read as no rise at
+        # all. The previous price is the most recent charge at a DIFFERENT
+        # amount; when every earlier charge has the latest amount there is no
+        # change to report.
+        # It must also be a whole billing cycle earlier: a different amount
+        # charged inside the SAME cycle (a one-off rental beside the monthly
+        # subscription) is not a price change and must not read as a hike
+        # (Gemini review-10, 2026-10-17, case B).
+        # And when the newest bill day carries SEVERAL different amounts, which
+        # one is the subscription's price cannot be known - so no comparison is
+        # made for that merchant. A missed rise is reported as no rise; an
+        # invented one would be a false alarm about the owner's money, which
+        # this module treats as worse than missing a match.
+        newest_distinct = {c["amount_cents"] for c in rows if c["date"] == latest["date"]}
+        cycle_floor = MONTHLY_DAYS[0] if interval == "monthly" else ANNUAL_DAYS[0]
+        previous = None
+        if len(newest_distinct) == 1:
+            previous = next((c for c in reversed(rows[:-1])
+                             if c["amount_cents"] != latest["amount_cents"]
+                             and (latest["date"] - c["date"]).days >= cycle_floor), None)
         subscriptions.append({
             "merchant_stem": latest["stem"],
             "description": latest["desc"],
@@ -1647,7 +1690,7 @@ def audit_subscriptions(transactions) -> dict:
             "latest_date": latest["date"].isoformat(),
             "latest_amount_cents": latest["amount_cents"],
         })
-        if latest["amount_cents"] > previous["amount_cents"]:
+        if previous is not None and latest["amount_cents"] > previous["amount_cents"]:
             price_hikes.append({
                 "merchant_stem": latest["stem"],
                 "description": latest["desc"],

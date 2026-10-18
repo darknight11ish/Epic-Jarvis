@@ -16585,8 +16585,13 @@ answer: a second table-producing call in the same turn is refused.
 table block both apps already draw (kind `"spending"`, version `1`), so neither app needed a
 change: columns are `What`, `How often` ("Every month" / "Every year" / "Charged twice"),
 `Last charged` (a date written out) and the money columns `Amount` and `Went up by`; one
-section per currency; `rows` are the subscriptions (the rise only where the latest charge is
-higher than the one before it) and the `also` rows are the double charges, each with its two
+section per currency; `rows` are the subscriptions (the rise only where the current price is
+higher than the price before it - the most recent charge at a *different* amount **and at
+least a whole billing cycle earlier**, so a new price that repeats can never make a genuine
+rise invisible and a one-off inside the same bill can never invent one; when the newest bill
+day carries several different amounts the merchant is not compared at all; Gemini reviews
+2026-10-17) and the
+`also` rows are the double charges, each with its two
 dates. There are no `totals` rows (charging periods differ, so a sum would mean nothing). The
 title is "Subscriptions and price rises", "Subscriptions" or "Charged twice" depending on what
 was found; the caveats carry the counted-once/skipped/currency/hidden lines as usual plus "A

@@ -780,6 +780,95 @@
    "words": {
     "hidden": "Spending table hidden"
    }
+  },
+  "subscriptions": {
+   "kind": "spending",
+   "version": 1,
+   "title": "Subscriptions and price rises",
+   "period": "1 June 2025 to 27 May 2026",
+   "sources": [
+    "subs.csv (layout: Saved layout)"
+   ],
+   "columns": [
+    {
+     "key": "what",
+     "label": "What",
+     "align": "left"
+    },
+    {
+     "key": "how",
+     "label": "How often",
+     "align": "left",
+     "money": false
+    },
+    {
+     "key": "last",
+     "label": "Last charged",
+     "align": "left",
+     "money": false
+    },
+    {
+     "key": "amount",
+     "label": "Amount",
+     "align": "right"
+    },
+    {
+     "key": "rise",
+     "label": "Went up by",
+     "align": "right"
+    }
+   ],
+   "sections": [
+    {
+     "heading": "",
+     "currency": "",
+     "rows": [
+      {
+       "kind": "subscription",
+       "cells": [
+        "NETFLIX.COM 4832",
+        "Every month",
+        "5 April 2026",
+        "12.99",
+        "3.00"
+       ]
+      },
+      {
+       "kind": "subscription",
+       "cells": [
+        "SPOTIFY P2E4X7",
+        "Every year",
+        "27 May 2026",
+        "59.99",
+        ""
+       ]
+      }
+     ],
+     "totals": [],
+     "also": [
+      {
+       "kind": "duplicate",
+       "cells": [
+        "GYM [hidden]",
+        "Charged twice",
+        "2 April 2026 and 5 April 2026",
+        "25.00",
+        ""
+       ]
+      }
+     ]
+    }
+   ],
+   "caveats": [
+    "Account and card numbers in the descriptions are hidden.",
+    "A subscription is a shop that charged about once a month (26 to 35 days apart) or once a year (350 to 380). A shop written two different ways is not matched."
+   ],
+   "private": true,
+   "read_aloud": false,
+   "remember": false,
+   "words": {
+    "hidden": "Spending table hidden"
+   }
   }
  },
  "view_pc_nothing_saved": {

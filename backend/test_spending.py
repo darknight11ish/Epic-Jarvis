@@ -2221,6 +2221,85 @@ def t_only_a_rise_is_a_hike_never_an_equal_or_lower_charge():
           [h["delta_cents"] for h in small["price_hikes"]] == [1], small["price_hikes"])
 
 
+def t_a_new_price_that_repeats_still_reads_as_a_rise():
+    """Gemini review 2026-10-17, a real bug: the comparison used the literal
+    latest two charges, so a genuine rise billed twice read as no rise at all -
+    9.99 -> 12.99 -> 12.99 compared the last two, got 0, and reported nothing.
+    The price before the latest charge is what it must be compared with: the
+    most recent charge at a DIFFERENT amount."""
+    got = SP.audit_subscriptions(_monthly_charges(999, 1299, 1299))
+    check("a new price that repeats still reads as a rise",
+          [(h["previous_amount_cents"], h["latest_amount_cents"], h["delta_cents"])
+           for h in got["price_hikes"]] == [(999, 1299, 300)], got["price_hikes"])
+    check("... and the previous date is the charge at the OLD price",
+          got["price_hikes"]
+          and got["price_hikes"][0]["previous_date"] == "2026-01-05"
+          and got["price_hikes"][0]["latest_date"] == "2026-03-08", got["price_hikes"])
+    longer = SP.audit_subscriptions(_monthly_charges(999, 1299, 1299, 1299))
+    check("... it does not fade after more months at the new price",
+          [h["delta_cents"] for h in longer["price_hikes"]] == [300], longer["price_hikes"])
+    # The new price charged twice inside the duplicate window: both findings.
+    got = SP.audit_subscriptions([
+        _audit_txn(_dt.date(2026, 1, 5), -999),
+        _audit_txn(_dt.date(2026, 2, 5), -1299),
+        _audit_txn(_dt.date(2026, 2, 8), -1299)])
+    check("... a duplicate charge of the new price hides neither finding",
+          [h["delta_cents"] for h in got["price_hikes"]] == [300]
+          and [(d["dates"], d["days_apart"]) for d in got["duplicate_charges"]]
+          == [(["2026-02-05", "2026-02-08"], 3)], got)
+    check("a price that never changed is not a hike, even after a fall",
+          SP.audit_subscriptions(_monthly_charges(1299, 999, 999))["price_hikes"] == [])
+    check("a fall after a rise is not a hike",
+          SP.audit_subscriptions(_monthly_charges(1299, 999))["price_hikes"] == [])
+    back = SP.audit_subscriptions(_monthly_charges(1299, 999, 1299))
+    check("a rise back to a price seen before is still a rise",
+          [(h["previous_amount_cents"], h["delta_cents"]) for h in back["price_hikes"]]
+          == [(999, 300)], back["price_hikes"])
+
+
+def t_a_charge_inside_the_same_bill_is_not_a_price_rise():
+    """Gemini review-10's case B, 2026-10-17: a different amount charged on the
+    same day as the subscription - a one-off rental beside it - is NOT a price
+    change. The price before the latest charge must be at least one whole
+    billing cycle earlier, or a $14.99 subscription with a $2.99 rental beside
+    it reads as a $12.00 rise."""
+    def rows(*txns):
+        return [_audit_txn(day, -amount) for day, amount in txns]
+    # The same bill: $14.99 monthly, and a $2.99 rental on the same day.
+    same_bill = SP.audit_subscriptions(rows(
+        (_dt.date(2026, 1, 5), 1499),
+        (_dt.date(2026, 2, 5), 1499),
+        (_dt.date(2026, 2, 5), 299)))
+    check("a different amount inside the same bill is not a price rise",
+          same_bill["price_hikes"] == [], same_bill["price_hikes"])
+    # ... and it is not a duplicate either: the amounts differ.
+    check("... and the same bill is not a duplicate charge",
+          same_bill["duplicate_charges"] == [], same_bill["duplicate_charges"])
+    # A rental HIGHER than the subscription, same day: still no rise.
+    higher_addon = SP.audit_subscriptions(rows(
+        (_dt.date(2026, 1, 5), 1499),
+        (_dt.date(2026, 2, 5), 1499),
+        (_dt.date(2026, 2, 5), 2999)))
+    check("an add-on higher than the subscription is not a price rise",
+          higher_addon["price_hikes"] == [], higher_addon["price_hikes"])
+    # A REAL rise with an add-on on the new bill: which amount on that day is
+    # the price cannot be known, so the comparison is SKIPPED - a missed rise,
+    # never an invented one (a false alarm about money is worse than no alarm).
+    real = SP.audit_subscriptions(rows(
+        (_dt.date(2026, 1, 5), 1299),
+        (_dt.date(2026, 2, 5), 1599),
+        (_dt.date(2026, 2, 5), 299)))
+    check("a bill with several different amounts on its newest day is not compared",
+          real["price_hikes"] == [], real["price_hikes"])
+    # ... and a single amount on the newest day is still compared normally.
+    plain = SP.audit_subscriptions(rows(
+        (_dt.date(2026, 1, 5), 1299),
+        (_dt.date(2026, 2, 5), 1599)))
+    check("an unambiguous newest bill still reports its rise",
+          [(h["previous_amount_cents"], h["delta_cents"]) for h in plain["price_hikes"]]
+          == [(1299, 300)], plain["price_hikes"])
+
+
 def t_a_one_off_or_irregular_charge_is_not_a_subscription():
     one = SP.audit_subscriptions([_audit_txn(_dt.date(2026, 1, 5), -999)])
     check("a single charge is not a subscription",

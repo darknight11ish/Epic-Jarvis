@@ -140,7 +140,7 @@ await check("the stream's table line is read, and nothing else is taken for it",
   assert.equal(tableIdFromBody(null), null);
 });
 
-/* ── reading and drawing the six real tables ──────────────────────────── */
+/* ── reading and drawing the seven real tables ────────────────────────── */
 
 await check("every real table reads, every cells list is one string per column", () => {
   const names = Object.keys(TABLES);
@@ -212,6 +212,36 @@ await check("each real table is drawn: figures as sent, a real table per currenc
     // Every row carries the screen-reader summary.
     for (const tr of box.byTag("tr").filter((r) => r.dataset.kind)) assert.ok(tr.attrs["aria-label"], name);
   }
+});
+
+await check("the subscriptions answer: the rise on a repeated price and the double charge, exactly as sent", () => {
+  const raw = TABLES.subscriptions;
+  const t = readTable(raw);
+  assert.ok(t);
+  assert.equal(t.title, "Subscriptions and price rises");
+  assert.equal(t.period, "1 June 2025 to 27 May 2026");
+  assert.deepEqual(t.columns.map((c) => c.label), ["What", "How often", "Last charged", "Amount", "Went up by"]);
+  assert.deepEqual(t.columns.map((c) => c.align), ["left", "left", "left", "right", "right"]);
+  const b = t.sections[0];
+  assert.deepEqual(b.rows.map((r) => r.cells), [
+    ["NETFLIX.COM 4832", "Every month", "5 April 2026", "12.99", "3.00"],
+    ["SPOTIFY P2E4X7", "Every year", "27 May 2026", "59.99", ""],
+  ]);
+  // A double charge is its own "also" row; the account number in it was hidden
+  // before it reached either app.
+  assert.deepEqual(b.also.map((r) => r.cells), [
+    ["GYM [hidden]", "Charged twice", "2 April 2026 and 5 April 2026", "25.00", ""],
+  ]);
+  assert.equal(b.totals.length, 0);
+  // The rise sits on a price that REPEATS (March and April were both 12.99):
+  // the table still says 3.00, which is the 2026-10-17 fix. This fixture is the
+  // contract both apps read, so it cannot drift back.
+  assert.equal(b.rows[0].cells[4], "3.00");
+  // Drawn as text: the rise reaches the page, the raw account digits never do.
+  const box = buildTable(makeDoc(), t);
+  const texts = box.all((c) => c.tag === "td").map((c) => c.textContent);
+  assert.ok(texts.includes("3.00"), texts.join("|"));
+  assert.ok(!texts.some((x) => x.includes("12345678901")), texts.join("|"));
 });
 
 await check("two currencies are two tables, each under its heading, never merged", () => {
