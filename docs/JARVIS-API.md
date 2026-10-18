@@ -21548,3 +21548,61 @@ the row disabled with one sentence naming the command
 `docs/ARCHITECTURE.md` §8 needs no one-sided row: both apps carry the switch,
 and the phone deliberately only asks the PC - the same shape as every other
 approval-card setting.
+
+## 143. The person dossier: one click in "People and things", read-only (LM-4, added 2026-10-18)
+
+Pillar 16's dossier builder (`backend/jarvis_people_crm.py`, #540) already put
+one person's own records in one dict: saved facts (current and retired), the
+last kept chat turns that mention them, the newest mail headers that name them,
+the open to-dos that name them, and the next shared calendar event. It had no
+door an owner could reach. This is the door, on **both apps**: click (or tap)
+a person's name in **People and things** and their dossier opens - a read-only
+card on the PC's Brain, and the same words under the name on the phone.
+
+### 143.1 `GET /api/people/dossier?name=<the owner's own word for them>`
+
+Served by the EXISTING `jarvis_brain_reads.py` install (no new module, no new
+patch, no `$SHIPPED` or registration change) and answered by
+`jarvis_people_crm.build_person_dossier()`. The module's own dict is passed
+back **unchanged** - `{ok, withheld, why, name, private, aliases, known,
+active_facts, retired_facts, recent_chat, recent_email, commitments,
+next_event, states, why, read, counts, text}` - so the apps draw the module's
+`text` and never a second rendering. The words are the records' own; the model
+never writes any of it and never sees it.
+
+* **This PC only.** A request from another device is refused (`403`, in the
+  dossier's own shape with `withheld: false`, `name: ""` and one plain
+  sentence) by `jarvis_owner_check.from_this_pc` **BEFORE the name is read and
+  before the module is imported** - so a phone or other device learns nothing,
+  not even whether a name has a dossier, and a refusal never echoes a name.
+* **Hidden whole, in the apps.** The backend cannot see App lock or "Hide
+  memory lists and chat history" (both are the apps' state). The desktop's
+  `people_dossier` command (Rust `brain/people.rs`, granted to the Brain window
+  only) asks the PC for **nothing** while either is on and answers one
+  sentence with no name, fact, count or mail; it checks again after the answer
+  arrives, because the lock can turn on while the read is out. On the phone the
+  whole "People and things" plate is already replaced by its hidden section, so
+  a name cannot be tapped then and the dossier lives inside the same section.
+  The module itself also withholds the dossier when a caller passes either flag
+  (`build_person_dossier(hide_memory_lists=..., app_locked=...)`), which is the
+  same rule for any future caller.
+* **A refusal is one plain sentence:** an empty name is `400` (`"Say whose
+  dossier to put together - a name."`); a PC whose backend predates the route
+  answers `501` with the apply-patches sentence; an unreadable module or store
+  answers `500` with one sentence. An unknown but real name is **not** an
+  error: the module answers `ok: true` with no facts and the sentence "Jarvis
+  has no saved facts about them."
+* **What it does not do:** no card, no write, nothing stored, no model call,
+  no chat tool and no route a phone can use to read the PC's screen. Mail and
+  the calendar are read only in the bounded shape the morning briefing already
+  uses, and only when the owner's settings and the gate's tier allow that read
+  without a person - a dossier never raises an approval card by itself.
+* **Older backend:** `404`/`501`, and both apps say
+  "Your PC's Jarvis does not have the person dossier yet. Run
+  apply-patches.ps1 on the PC."
+* **Both apps, on purpose**, and `tools/check_parity.py` calls the route
+  `ported`: the desktop's `people_dossier` command (`brain/people.rs`) and
+  `brain.js` card, and the phone's `PeopleDossier` read under
+  `EntitiesPlate`. There is no other window and no new screen: the card opens
+  in the Brain, where People and things already is, and the phone shows it
+  under the name it already lists.

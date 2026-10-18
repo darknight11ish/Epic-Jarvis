@@ -771,25 +771,26 @@ def t_the_api_document_has_the_section_and_it_matches_this_code():
 #: writes down that they meant to. That is the price of a check that bites, and
 #: it is why the failure message below spells out the difference instead of
 #: saying "the document changed".
-EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 143))   # 129 ..= 142
+EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 144))   # 129 ..= 143
 #: 137 is a REAL section, not a gap: `## 137. Starting the local model when
 #: it is not running`; 138 is `skills.lock` (PR #455). The tail reads
 #: 129 ..= 138 with no hole.
 #:
-#: THE FOUR SECTIONS ABOVE 138 ARE FOUR PR FAMILIES, merged in this order:
+#: THE FIVE SECTIONS ABOVE 138 ARE FIVE PR FAMILIES, merged in this order:
 #: 139 self-improve's diagnostic routes (PR #549); 140 the guardian's history
 #: and restore routes (#568/#569/#571); 141 the selection chip (#562); 142
-#: the data-and-maths sandbox's own switch (LM-1C, this branch, the drop-in
-#: `/api/sandbox`), landing last. The Lead owns that numbering plan. The first
-#: three are on main; 142 is this branch's one new section, so the released
-#: tail is 129 ..= 142 with no hole and no repeat.
+#: the data-and-maths sandbox's own switch (LM-1C, #583); 143 the person
+#: dossier click door (LM-4, this branch, the drop-in `/api/people/dossier`),
+#: landing last. The Lead owns that numbering plan. The first four are on
+#: main; 143 is this branch's one new section, so the released tail is
+#: 129 ..= 143 with no hole and no repeat.
 #:
 #: This list names the RELEASED tail, so a dropped section anywhere in it is
 #: caught, and a section above it is reported rather than silently accepted.
 #:
-#: Measured, not reasoned: on main `^## 139\.`, `^## 140\.` and `^## 141\.`
-#: each match once, on this branch `^## 142\.` matches once, and the tail
-#: reads 129 ..= 142 with no hole.
+#: Measured, not reasoned: on main `^## 139\.` .. `^## 142\.` each match once,
+#: on this branch `^## 143\.` matches once, and the tail reads 129 ..= 143
+#: with no hole.
 
 
 def t_every_section_from_129_up_is_still_in_the_document():

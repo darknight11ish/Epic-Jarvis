@@ -1003,6 +1003,7 @@ pub fn run() {
             brain::pictures::choose_pictures_folder,
             brain::guardian::guardian_diff,
             brain::guardian::guardian_restore,
+            brain::people::people_dossier,
             brain::quiz::brain_quiz_start,
             brain::quiz::brain_quiz_get,
             brain::quiz::brain_quiz_answer,

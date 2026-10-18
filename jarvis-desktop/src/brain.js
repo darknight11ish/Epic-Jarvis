@@ -39,6 +39,7 @@ import {
   start as startLink,
 } from "./jarvis-link.js";
 import { addToWiki, readWiki, renderWiki } from "./wiki.js";
+import { dossierBody, dossierTitle } from "./people-dossier.js";
 import { mountCardLink } from "./card-link.js";
 import { createMenuManager, WORDS } from "./menu-visibility.js";
 import {
@@ -713,6 +714,9 @@ const dom = {
   memoryAboutCard: $("memory-about-card"),
   memoryAboutTitle: $("memory-about-title"),
   memoryAbout: $("memory-about"),
+  personDossierCard: $("person-dossier-card"),
+  personDossierTitle: $("person-dossier-title"),
+  personDossierBody: $("person-dossier"),
   jobs: $("jobs"),
   undo: $("undo"),
   activity: $("activity"),
@@ -13050,6 +13054,10 @@ function wireConstellation() {
     const node = state.graph?.byId?.get(nodeIdOf(button));
     if (!node) return;
     select(node);
+    // LM-4: ONE click on a person opens their read-only dossier. A row's own
+    // action buttons (galaxyPanel's "Open in Memory") are above this overlay
+    // and never reach this listener; only a person's NODE does this.
+    if (node.group === "person") openPersonDossier(node.label);
     centreOn(node);
   });
   // Hovering a dot lights it and everything joined to it, exactly as the canvas
@@ -13245,6 +13253,10 @@ const galaxyPanel = createGalaxyPanel({
     live: dom.galaxyFactsLive,
     foot: dom.galaxyFactsFoot,
   },
+  // LM-4 does NOT touch this callback: it is the panel's per-row
+  // "Open in Memory" action, and it must keep opening the About page for
+  // every row, person or thing. The dossier has its own two doors below
+  // (a person's node click and the inspector's "Person dossier" button).
   onOpen: (entityId) => openAboutFromGalaxy(entityId),
 });
 
@@ -13272,9 +13284,17 @@ function select(node) {
   if (node.also.length) add("Also known as", node.also.join(", "));
   add("Shares facts with", `${node.deg} ${node.deg === 1 ? "name" : "names"}`);
 
-  dom.nodeActions?.replaceChildren(
+  const nodeButtons = [
     button(aboutTitle(node.label), () => openAboutFromGalaxy(node.entityId),
-      { title: "Opens the Memory tab at this name: its facts, word for word." }));
+      { title: "Opens the Memory tab at this name: its facts, word for word." }),
+  ];
+  if (node.group === "person") {
+    // LM-4: the one-click dossier. Read-only; Rust withholds it whole while
+    // App lock or the hidden lists are on.
+    nodeButtons.push(button("Person dossier", () => openPersonDossier(node.label),
+      { title: "What Jarvis already keeps about this person, from this PC's own records." }));
+  }
+  dom.nodeActions?.replaceChildren(...nodeButtons);
 
   // "Facts behind this dot": their words, read by id, newest 20 first.
   galaxyPanel.show(node);
@@ -13321,6 +13341,85 @@ function select(node) {
 async function openAboutFromGalaxy(entityId) {
   await showView("memory");
   await openAbout(entityId);
+}
+
+/* ==========================================================================
+   "Person dossier" (LM-4; JARVIS-API section 143; backend jarvis_people_crm.py)
+
+   One click on a person in People and things opens what the PC already keeps
+   about them - saved facts, kept chat turns, mail headers, open to-dos and the
+   next shared event. Read-only. The page asks the `people_dossier` command and
+   draws EXACTLY what it answers: while App lock or "Hide memory lists and chat
+   history" is on, Rust answers one sentence and asks the PC for nothing, and
+   the page shows that sentence (no name, no fact, no count). A refusal never
+   reaches a renderer with anything in it to leak.
+   ========================================================================== */
+
+const peopleL = { name: "", view: null, error: "", loading: false };
+
+function paintPersonDossier() {
+  const card = dom.personDossierCard;
+  const box = dom.personDossierBody;
+  if (!card || !box) return;
+  if (!peopleL.name) {
+    card.hidden = true;
+    box.replaceChildren();
+    return;
+  }
+  card.hidden = false;
+  if (dom.personDossierTitle) {
+    dom.personDossierTitle.textContent = dossierTitle(peopleL.name, peopleL.view);
+  }
+  box.replaceChildren();
+  if (peopleL.loading) {
+    box.append(el("p", "empty", "Reading…"));
+    return;
+  }
+  if (peopleL.error) {
+    box.append(el("p", "empty failed", `Could not read this person's dossier: ${peopleL.error}`));
+    return;
+  }
+  if (!peopleL.view) return;
+  // `textContent` through el(): a dossier is plain record lines, never markup.
+  box.append(el("p", "person-dossier-lines", dossierBody(peopleL.view)));
+}
+
+async function openPersonDossier(name) {
+  peopleL.name = String(name || "");
+  peopleL.view = null;
+  peopleL.error = "";
+  peopleL.loading = true;
+  paintPersonDossier();
+  dom.personDossierCard?.scrollIntoView({ block: "nearest" });
+  if (!IS_TAURI) {
+    peopleL.loading = false;
+    peopleL.error = "Not connected to the PC.";
+    return paintPersonDossier();
+  }
+  try {
+    peopleL.view = await invoke("people_dossier", { name: peopleL.name });
+  } catch (error) {
+    peopleL.error = errorText(error);
+  } finally {
+    peopleL.loading = false;
+  }
+  paintPersonDossier();
+}
+
+function closePersonDossier() {
+  peopleL.name = "";
+  peopleL.view = null;
+  peopleL.error = "";
+  paintPersonDossier();
+}
+
+// A dossier is a piece of the memory lists: if they are hidden, or the lock
+// turns on, the card goes AT ONCE rather than waiting for the next read. The
+// command withholds it too; this keeps a dossier already on screen from
+// staying there after the switch moved.
+if (IS_TAURI && TAURI.event && TAURI.event.listen) {
+  TAURI.event.listen("private-hidden", () => closePersonDossier());
+  TAURI.event.listen("security-changed", () => closePersonDossier());
 }
 
 /* ---- Finding a name (the research audit's B3) ---------------------------
