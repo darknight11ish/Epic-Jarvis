@@ -331,6 +331,10 @@
       "title": "Jarvis wants to run a command on this PC"
     },
     {
+      "action": "sandbox_file_run",
+      "title": "Jarvis wants to run a small script that reads the files you listed"
+    },
+    {
       "action": "schedule_repeat",
       "title": "Jarvis wants to set up something that repeats"
     },
@@ -1383,6 +1387,18 @@
         "summary": "Jarvis wants to run a command on this PC.",
         "full": "a shell can do anything, including reach the network. nothing has happened yet.",
         "body": "a shell can do anything, including reach the network. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "sandbox_file_run",
+      "notice": {
+        "title": "Jarvis wants to run a small script that reads the files you listed",
+        "summary": "Jarvis wants to run a script that reads your files.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false

@@ -105,6 +105,10 @@ def t_every_action_that_can_raise_a_card_has_short_words():
     missing = {a: w for a, w in known.items() if a not in W.SUMMARY}
     check("every one has a SHORT row in jarvis_card_words.SUMMARY", not missing,
           "\n        ".join(f"{a}  (from {w})" for a, w in sorted(missing.items())))
+    # M7: the short row for the file-reading sandbox run says what it reads.
+    sandbox = W.SUMMARY.get("sandbox_file_run", "")
+    check("the sandbox file run's short row says it reads your files",
+          "read" in sandbox and "file" in sandbox, sandbox)
     # The other direction: a row nothing can raise is a row nobody will read.
     extra = {a for a in W.SUMMARY if a not in known}
     check("and no row is left over for an action nothing raises", not extra, sorted(extra))

@@ -99,6 +99,11 @@ def t_every_action_the_gate_knows_has_a_plain_title():
     missing = {a: w for a, w in known.items() if a not in W.TITLES}
     check("every one has a phrase in jarvis_card_words.TITLES", not missing,
           "\n        ".join(f"{a}  (from {w})" for a, w in sorted(missing.items())))
+    # M7: the file-reading sandbox run's card must SAY it reads files - the
+    # phrase is the owner's one line for a per-run yes.
+    sandbox = W.TITLES.get("sandbox_file_run", "")
+    check("the sandbox file run's phrase says it reads the files you listed",
+          "read" in sandbox and "file" in sandbox, sandbox)
 
 
 def t_the_phrases_are_plain_words():

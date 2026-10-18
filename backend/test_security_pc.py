@@ -702,10 +702,27 @@ def t_no_setting_claims_a_sandbox_that_does_not_exist():
     for f in list((REPO / "backend").rglob("*.py")) + list((REPO / "backend").glob("*.patch")):
         if f.name == Path(__file__).name or "patch-history" in f.parts:
             continue
-        if re.search(r"sandbox_(web|code|file|email)", f.read_text(encoding="utf-8",
-                                                                   errors="replace")):
+        raw = f.read_text(encoding="utf-8", errors="replace")
+        # `sandbox_file_run` is an ACTION NAME (M7, 2026-10-18), not a setting:
+        # a sandbox run that reads the files the caller listed is decided under
+        # it and gets its own [autonomy.tiers] line. It is NOT one of the four
+        # `sandbox_*` SETTINGS this guard exists for (`sandbox_web_research`,
+        # `sandbox_code_execution`, `sandbox_file_work`,
+        # `sandbox_email_calendar` - none of which this module ever read).
+        # Strip that ONE action token and keep scanning the whole file for the
+        # settings family, so the guard still fails the moment any file really
+        # reads one of the retired settings.
+        raw = raw.replace("sandbox_file_run", "")
+        if re.search(r"sandbox_(web|code|file|email)", raw):
             readers.append(f.name)
     check("... and nothing in the backend reads one", readers == [], readers)
+    check("... the one action token above is M7's own, not a setting",
+          getattr(AG, "SANDBOX_FILES_ACTION", "") == "sandbox_file_run"
+          and "sandbox_file_run" in (REPO / "backend" / "jarvis_agent.py")
+          .read_text(encoding="utf-8"), getattr(AG, "SANDBOX_FILES_ACTION", ""))
+    check("... and it is a real asking tier line, not an alias for a retired setting",
+          (cfg.get("autonomy", {}).get("tiers", {}).get("sandbox_file_run")
+           == "ask"), cfg.get("autonomy", {}).get("tiers", {}).get("sandbox_file_run"))
 
 
 if __name__ == "__main__":
