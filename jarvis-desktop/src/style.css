@@ -2639,6 +2639,240 @@ html[data-state="approval"] .pulse {
   color: var(--text-faint);
 }
 
+/* --------------------------------------------------------------------------
+   Clipboard history (Pillar 14B; clipboard-drawer.js, index.html
+   #clipboard-drawer, src-tauri/src/clipboard_time_machine.rs).
+
+   A drawer inside the bar, like the palette above and for the same reason. It
+   hangs UNDER the input row: the row stays where the owner is typing, and the
+   drawer grows the window (main.js syncWindowHeight) up to the same 720px
+   clamp Rust enforces. The rows are previews only - a kept copy can be long -
+   so the list scrolls inside itself and the privacy line stays visible.
+   -------------------------------------------------------------------------- */
+
+.clipboard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px 12px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--surface-sunken);
+}
+
+.clipboard[hidden] {
+  display: none;
+}
+
+/* While the drawer is open it is the surface: the primer and any answer card
+   below are still in the stack, and both would otherwise push the rows out of
+   the window at the 720px clamp. Same rule the palette uses. */
+.shell[data-clipboard="open"] .stack {
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.clipboard-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.clipboard-title {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 650;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* The switch, in words as well as a colour: "Off" and "On" say what the two
+   states are, where a dot alone would leave the owner guessing which is
+   which. */
+.clipboard-state {
+  padding: 1px 7px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-chip);
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.clipboard[data-state="on"] .clipboard-state {
+  border-color: var(--border-accent);
+  color: var(--accent);
+}
+
+.clipboard-close {
+  margin-left: auto;
+  padding: 4px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.clipboard-close:hover,
+.clipboard-close:focus-visible {
+  color: var(--text);
+  border-color: var(--border-accent);
+}
+
+.clipboard-line {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.clipboard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.clipboard-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-width: thin;
+}
+
+.clipboard-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 9px 7px 8px;
+  border: 1px solid transparent;
+  border-left: 2px solid transparent;
+  border-radius: 7px;
+}
+
+.clipboard-row:hover,
+.clipboard-row:focus-within {
+  background: var(--surface-hover);
+  border-left-color: var(--accent);
+}
+
+.clipboard-row-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.clipboard-row-preview {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+
+.clipboard-row-from {
+  flex: 0 1 auto;
+  max-width: 45%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.clipboard-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.clipboard-transform {
+  font-size: var(--text-xs);
+}
+
+.clipboard-transform:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* The transform's answer, under the list it came from. A <pre> because the
+   three results are exactly that: a table, a JSON document, a link. It is
+   bounded in height and scrolls; a huge JSON blob must not move the drawer's
+   own buttons off the window. */
+.clipboard-result {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-1);
+}
+
+.clipboard-result[hidden] {
+  display: none;
+}
+
+.clipboard-result-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.clipboard-result-kind {
+  flex: 1 1 auto;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.clipboard-result-line {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.clipboard-result-line:empty {
+  display: none;
+}
+
+.clipboard-result-text {
+  max-height: 220px;
+  margin: 0;
+  overflow: auto;
+  user-select: text;
+  -webkit-user-select: text;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.clipboard-result-text:empty {
+  display: none;
+}
+
+/* One quiet line, always visible while the drawer is: the rules the feature
+   actually holds, so the owner never has to take them on trust. */
+.clipboard-privacy,
+.clipboard-keys {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--text-faint);
+}
+
 /* The way out of an offline state. Mirrors `.parked` — same thin bar, same
    place in the stack — because they are the same kind of thing: a one-line
    statement of something unresolved, with the action that resolves it. */

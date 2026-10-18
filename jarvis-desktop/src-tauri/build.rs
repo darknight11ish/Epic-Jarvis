@@ -765,6 +765,17 @@ fn main() {
             "set_quickbar_pinned",
             "write_clipboard",
             "write_clipboard_private",
+            // Clipboard history (Pillar 14B, 2026-10-17): the opt-in, RAM-only
+            // ring and the transform drawer's whole IPC surface. The ring starts
+            // OFF, is never written to disk, and wipes on lock; the quickbar is
+            // the only window granted these
+            // (permissions/surfaces.toml's `clipboard-time-machine` set).
+            "clipboard_tm_state",
+            "clipboard_tm_enable",
+            "clipboard_tm_disable",
+            "clipboard_tm_clear",
+            "clipboard_tm_lock",
+            "clipboard_tm_transform",
             "open_external_url",
             // Diagnostics and startup. Settings window only: the log path is
             // a filesystem path and the startup entry is a registry write,

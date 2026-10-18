@@ -32,6 +32,7 @@ pub mod brain;
 pub mod browser_engine;
 pub mod chatbot_money;
 pub mod clipboard_privacy;
+pub mod clipboard_time_machine;
 pub mod commands;
 pub mod crash_notes;
 pub mod devices;
@@ -134,6 +135,15 @@ pub mod events {
     pub const FOCUS_INPUT: &str = "focus-input";
     /// Payload: `String` — clipboard text to pre-load into the quickbar.
     pub const CLIPBOARD_INJECT: &str = "clipboard-inject";
+    /// Payload: none. The clipboard history drawer (Pillar 14B) should open and
+    /// read its state through `clipboard_tm_state` - sent by the hotkey, which
+    /// never carries a copied word itself.
+    pub const CLIPBOARD_TM_OPEN: &str = "clipboard-tm-open";
+    /// Payload: none. A copied text was kept, or the ring was wiped by App lock
+    /// or the Windows lock screen: an open drawer re-reads it. It carries no
+    /// text; the command is the only way to read a copy, and it fails closed
+    /// while locked.
+    pub const CLIPBOARD_TM_CHANGED: &str = "clipboard-tm-changed";
     /// Payload: [`crate::commands::CapturePayload`] — the CLEANED picture of a
     /// "Look at this" look, as a PNG data URI (the PC's own
     /// `jarvis_picture.clean` output; see `look.rs`).
@@ -862,6 +872,11 @@ pub fn run() {
         // Windows Hello: when the owner was last here, and whether the
         // Brain's private lists are shown (lock.rs).
         .manage(lock::LockState::default())
+        // Clipboard history (Pillar 14B): the opt-in, RAM-only ring and the
+        // clipboard sequence it last acted on. Registered here with every
+        // other managed type - the watcher and the drawer's commands read it,
+        // and `state` panics on a type that was never managed.
+        .manage(clipboard_time_machine::TimeMachineState::default())
         // The HUD's own chat stream, apart from the Jarvis bar's (hud_proxy.rs).
         .manage(hud_proxy::HudChatState::default())
         // Every window's focus changes reach the app lock: a Jarvis bar,
@@ -1253,6 +1268,17 @@ pub fn run() {
             commands::set_quickbar_pinned,
             commands::write_clipboard,
             commands::write_clipboard_private,
+            // Clipboard history (Pillar 14B): the drawer's whole IPC surface.
+            // The ring itself is RAM-only and off at every launch; these six
+            // are the only ways to read it, switch it, forget it, or ask for
+            // one of the three transforms. Quickbar only
+            // (`permissions/surfaces.toml`'s `clipboard-time-machine` set).
+            clipboard_time_machine::clipboard_tm_state,
+            clipboard_time_machine::clipboard_tm_enable,
+            clipboard_time_machine::clipboard_tm_disable,
+            clipboard_time_machine::clipboard_tm_clear,
+            clipboard_time_machine::clipboard_tm_lock,
+            clipboard_time_machine::clipboard_tm_transform,
             commands::open_external_url,
             commands::get_log_info,
             commands::open_log_folder,
@@ -1411,6 +1437,14 @@ pub fn run() {
                         // one. Start is held on a stale link and under App lock,
                         // like the tray's row; stopping never is.
                         "toggle_watch" => look::toggle(app, "hotkey"),
+                        // Clipboard history (Pillar 14B): opens the transform
+                        // drawer at the Jarvis bar, under App lock like every
+                        // other way in. It captures nothing by itself - the
+                        // history is a separate switch, off until the owner
+                        // turns it on in the drawer.
+                        "clipboard_time_machine" => {
+                            crate::clipboard_time_machine::open_from_hotkey(app)
+                        }
                         other => eprintln!("[jarvis] no handler for hotkey action `{other}`"),
                     }
                 })
@@ -1611,6 +1645,12 @@ pub fn run() {
             // Settings once the owner has been away longer than "Lock again
             // after" (lock.rs). Does nothing while the lock is off.
             lock::spawn_watch(handle.clone());
+
+            // Clipboard history's watcher (Pillar 14B, clipboard_time_machine.rs):
+            // the lock wipe for its RAM-only ring, and - only while the owner has
+            // turned the switch on - reading the clipboard after it changes. Off
+            // at every launch, nothing written to disk, no word of it logged.
+            clipboard_time_machine::spawn_watch(handle.clone());
 
             // A Deny clicked on a toast while Jarvis was CLOSED. The
             // single-instance callback above only fires when a process is

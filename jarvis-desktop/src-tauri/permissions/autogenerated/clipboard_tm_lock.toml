@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-clipboard-tm-lock"
+description = "Enables the clipboard_tm_lock command without any pre-configured scope."
+commands.allow = ["clipboard_tm_lock"]
+
+[[permission]]
+identifier = "deny-clipboard-tm-lock"
+description = "Denies the clipboard_tm_lock command without any pre-configured scope."
+commands.deny = ["clipboard_tm_lock"]

@@ -507,6 +507,10 @@ export const HOTKEYS = [
   // Jarvis Live's key ships OFF (the owner's decision of 2026-09-28).
   { id: "toggle_live", label: "Start or end Jarvis Live", hint: "Off until you pick a key - Alt+Shift+L is free for it. Starting is held while the connection is catching up or App lock would ask; ending never is.",
     accelerator: "", default: "", registered: false, error: null },
+  // Clipboard history (Pillar 14B, 2026-10-17): the key only OPENS the
+  // drawer; whether anything is kept is its own switch, off by default.
+  { id: "clipboard_time_machine", label: "Clipboard history", hint: "Open the clipboard history drawer at the Jarvis bar. History is off until you turn it on there - nothing is kept before that, and it is all forgotten on the next lock.",
+    accelerator: "Alt+Shift+C", default: "Alt+Shift+C", registered: true, error: null },
 ];
 
 export const UPDATE_NONE = {

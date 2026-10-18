@@ -339,6 +339,33 @@ permissions = [
   "allow-coach-prompt",
 ]
 
+# ---------------------------------------------------------------------------
+# Clipboard history (Pillar 14B, 2026-10-17; src-tauri/src/
+# clipboard_time_machine.rs, src/clipboard-drawer.js). One window's own
+# memory: a RAM-only ring of the texts the OWNER copied after turning the
+# switch on, and three deterministic transforms over one of them.
+#
+# It is a set of its own rather than a lump in quickbar-surface above, and it
+# is granted to the quickbar only, because these six commands are the only way
+# to READ a copied word. The ring is off at every launch, every command here
+# fails closed while App lock would ask, no text ever travels in an event, and
+# nothing is written to disk - the transform answers are the one copy that
+# leaves a command, back into the page that asked (which is where they are
+# drawn, in that window's own memory). The backend, the phone and every other
+# window are not told anything exists.
+# ---------------------------------------------------------------------------
+[[set]]
+identifier = "clipboard-time-machine"
+description = "The clipboard history drawer's own RAM-only ring: read it, switch capture on or off, forget it, wipe it on lock, and transform one kept copy. Quickbar only; off by default; nothing written to disk."
+permissions = [
+  "allow-clipboard-tm-state",
+  "allow-clipboard-tm-enable",
+  "allow-clipboard-tm-disable",
+  "allow-clipboard-tm-clear",
+  "allow-clipboard-tm-lock",
+  "allow-clipboard-tm-transform",
+]
+
 # "Used in this answer" under the quickbar's answer, and "Jarvis remembered N
 # things" in the Brain (the owner's decision, 2026-09-25): the words of the
 # few facts an answer used or automatic learning just saved, by id (brain/

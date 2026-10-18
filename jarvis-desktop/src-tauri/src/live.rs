@@ -774,8 +774,12 @@ pub(crate) fn locked_from_desktop(name: Option<&str>, access_denied: bool) -> Op
 
 /// `Some(true)` on the lock screen, `Some(false)` when not, `None` when it
 /// cannot be told - and Live pauses then.
+///
+/// `pub(crate)` since 2026-10-17: the clipboard history's watcher
+/// (`clipboard_time_machine.rs`) uses the same answer to wipe its RAM-only ring,
+/// so the two features cannot disagree about what "locked" means.
 #[cfg(windows)]
-fn windows_locked() -> Option<bool> {
+pub(crate) fn windows_locked() -> Option<bool> {
     use windows_sys::Win32::Foundation::{GetLastError, ERROR_ACCESS_DENIED};
     use windows_sys::Win32::System::StationsAndDesktops::{
         CloseDesktop, GetUserObjectInformationW, OpenInputDesktop, DESKTOP_READOBJECTS, UOI_NAME,
@@ -813,7 +817,7 @@ fn windows_locked() -> Option<bool> {
 }
 
 #[cfg(not(windows))]
-fn windows_locked() -> Option<bool> {
+pub(crate) fn windows_locked() -> Option<bool> {
     None
 }
 
