@@ -102,6 +102,11 @@ import jarvis_local_http
 # copy against `jarvis_injection.PATTERNS` both ways - every marker that rule
 # names is stripped here, and every marker it matches is really gone from a
 # fence - and it fails when either side changes without the other.
+#
+# The SAME restriction is why the quiz carries an injection FINDING but never
+# scans for one: the caller that owns its outside text (jarvis_youtube.py) runs
+# `jarvis_injection`'s own scan and hands the answer in as plain data to
+# `start_outside`. This module cannot import that table, so it must not try.
 
 # ---- the frozen contract (docs/STUDY-FROM-TEXT-DESIGN.md section 11) -------
 
@@ -113,6 +118,14 @@ MAX_OPEN = 3
 EXPIRY_SECONDS = 60 * 60
 TITLE_MAX = 80
 DEFAULT_TITLE = "Quiz on your text"
+#: The longest advisory sentence a CALLER may hand in about its own outside
+#: text, and the levels it may name (see `start_outside`). This module carries
+#: that finding and nothing else: it does not scan, because it may not import
+#: the table that scans (see the note beside the imports). Both are clamped, so
+#: a caller cannot put a paragraph or an unknown level in front of the owner
+#: through this door.
+INJECTION_MAX = 400
+INJECTION_LEVELS = ("high", "medium", "low")
 KINDS = ("recall", "explain", "apply")
 MODES = ("text", "spanish")
 CEFR_LEVELS = ("A1", "A2", "B1", "B2", "C1", "C2")
@@ -716,7 +729,8 @@ _CLOCK = {"now": time.time}
 
 class _Quiz:
     def __init__(self, title: str, questions: list, now: float, *, mode: str = "text",
-                 level=None, key_source=None, provenance=None, source=None):
+                 level=None, key_source=None, provenance=None, source=None,
+                 injection=None, injection_level=None):
         self.id = secrets.token_hex(8)
         self.title = title
         self.questions = [dict(q, mark=None) for q in questions]
@@ -727,6 +741,13 @@ class _Quiz:
         self.model = ""                 # the model that last wrote or marked here ("" = everyday)
         self.provenance = provenance    # "outside" for text the owner did not write (YouTube captions), else None
         self.source = source            # a short label for where outside text came from, e.g. "youtube"
+        # "This outside text LOOKS like it is trying to instruct Jarvis": the
+        # sentence `jarvis_injection.summary()` writes and the level it found,
+        # handed in by the caller as PLAIN DATA (see `start_outside`). A poisoned
+        # video must not be invisible: the line rides out with the quiz to both
+        # apps, so "this video tried to instruct me" is shown, not only stripped.
+        self.injection = injection
+        self.injection_level = injection_level
         # For the cloud "grade this better" button (jarvis_quiz_cloud.py); all in memory, gone with the quiz.
         self.crisis_seen = False        # a crisis answer was typed here: the quiz never goes to a cloud service
         self.private = False            # something marked this quiz private: it never goes to a cloud service
@@ -756,6 +777,14 @@ def _view(s: _Quiz) -> dict:
         # Additive (JARVIS-API section 98/112): only a quiz on OUTSIDE text carries these.
         v["provenance"] = s.provenance
         v["source"] = s.source
+    if s.injection:
+        # Additive, and only when the CALLER's scan of its own outside text
+        # matched something: the sentence to show, and the level it found.
+        # Advisory, as jarvis_injection says of itself - it never blocks this
+        # quiz, never changes a gate tier and never removes a card.
+        v["injection"] = s.injection
+        if s.injection_level:
+            v["injection_level"] = s.injection_level
     return v
 
 
@@ -820,13 +849,27 @@ def start(body: dict) -> dict:
     return _register(lambda: write_questions(text, count), title)
 
 
-def start_outside(text, count, title, source: str) -> dict:
+def start_outside(text, count, title, source: str, *,
+                  injection=None, injection_level=None) -> dict:
     """A quiz on OUTSIDE text - text the owner did not write and did not paste,
     handed in by another module (jarvis_youtube.py: a video's caption text,
     fetched after the owner's own card). Same limits, same fenced-data model
     calls, same crisis check on every answer, nothing learned or written; the
     quiz is only marked `provenance: "outside"` and `source`, so the apps can
-    say so. The caller cuts a long text to TEXT_MAX itself (and says it did)."""
+    say so. The caller cuts a long text to TEXT_MAX itself (and says it did).
+
+    THE CALLER ALSO SCANS THE TEXT AND HANDS IN THE FINDING, as `injection`
+    (the advisory sentence from `jarvis_injection.summary()`) and
+    `injection_level` ("high"/"medium"/"low"). Two reasons it is the caller's
+    job: this module may import only `jarvis_local_http` and `jarvis_wellbeing`
+    (test_quiz.py walks the tree and checks - a lazy import counts too), and a
+    caption is the caller's own text, so the caller is where it enters. The
+    finding is ADVISORY, exactly as that table says of itself: it never blocks
+    a quiz, never changes a gate tier and never removes a card. A poisoned
+    video is then not invisible - the sentence rides out with the quiz to both
+    apps, and `jarvis_youtube` records the level (never a caption word) in its
+    own audit. Both values are clamped here, so a caller cannot put a paragraph
+    or an unknown level in front of the owner through this door."""
     if not isinstance(text, str) or len(text.strip()) < TEXT_MIN:
         raise QuizError("text_too_short")
     if len(text) > TEXT_MAX:
@@ -834,7 +877,13 @@ def start_outside(text, count, title, source: str) -> dict:
     n = _count_of({"count": count})
     label = _clean_line(title, TITLE_MAX) or DEFAULT_TITLE
     tag = _clean_line(source, 20) or "outside"
-    return _register(lambda: write_questions(text, n), label, provenance="outside", source=tag)
+    line = _clean_line(injection, INJECTION_MAX) if injection else ""
+    level = str(injection_level or "")
+    if level not in INJECTION_LEVELS:
+        level = ""
+    return _register(lambda: write_questions(text, n), label, provenance="outside",
+                     source=tag, injection=(line or None),
+                     injection_level=(level or None))
 
 
 def _start_spanish(body: dict) -> dict:

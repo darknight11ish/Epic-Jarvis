@@ -332,7 +332,8 @@ def t_caption_text_is_outside_text_and_cannot_be_kept():
     q_src = (HERE / "jarvis_quiz.py").read_text(encoding="utf-8")
     y_src = (HERE / "jarvis_youtube.py").read_text(encoding="utf-8")
     check("a quiz on captions is marked outside, and says where it came from",
-          'start_outside(text, count, title, "youtube")' in y_src
+          'jarvis_quiz.start_outside(text, count, title, "youtube",' in y_src
+          and "injection_level=" in y_src
           and "provenance" in y_src and '"outside"' in y_src, "")
     check("... and the quiz module itself is what marks it",
           'provenance="outside"' in q_src and "def start_outside(" in q_src, "")

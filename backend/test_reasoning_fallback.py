@@ -49,6 +49,15 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
+# THE PUBLISHED BASE MUST CARRY NO BYTECODE. `jarvis-backend/` is the tracked
+# copy of the whole program - the folder a stranger clones - and importing a
+# module from it writes `jarvis-backend/__pycache__/`, which
+# backend/test_base_matches_repo.py then fails on ("bytecode; it embeds absolute
+# paths, and git ignores it"). This suite is run by scripts/apply-patches.ps1's
+# own test loop WITHOUT -B, so it turns bytecode writing off itself before the
+# first import from the base. (CI's run_suites.py passes -B, which is why this
+# only ever bit the patcher's run.)
+sys.dont_write_bytecode = True
 sys.path.insert(0, str(REPO / "jarvis-backend"))
 
 import jarvis_chatbot_api as API  # noqa: E402

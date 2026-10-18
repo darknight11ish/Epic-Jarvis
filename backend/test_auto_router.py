@@ -445,10 +445,23 @@ TAINT_REASON = "taint_latched_local_only"
 
 def t_gate2_refuses_when_the_latch_cannot_be_read():
     """THE REAL STATE OF A CLONE: jarvis_gate.py is a base file, not a backend
-    one, so it is absent here. Gate 2 must refuse, not shrug."""
+    one, so it is absent on a clone. Gate 2 must refuse, not shrug.
+
+    ON THE OWNER'S PC THAT STATE CANNOT BE REACHED: the real gate is installed
+    beside the backend (`apply-patches.ps1` later runs this suite against that
+    folder, with JARVIS_BACKEND set), so "jarvis_gate is genuinely absent" is a
+    check that COULD NOT RUN here. It is therefore said out loud as a skip -
+    never counted as a pass and never as a failure (BLOCKED is never a pass) -
+    and the gate-2 checks that follow use a stand-in either way.
+    """
     real = AR._gate_module()
-    check("gate 2: (about this machine) jarvis_gate is genuinely absent on a clone",
-          real is None, "it is present here, so the next check is about a stand-in only")
+    if real is None:
+        check("gate 2: (about this machine) jarvis_gate is genuinely absent on a clone",
+              real is None)
+    else:
+        skip("(about this machine) jarvis_gate is installed here, so the "
+             "'genuinely absent on a clone' check was NOT RUN on this PC; the gate-2 "
+             "checks below use a stand-in")
     with stubs(**clean(_gate_module=lambda: None)):
         out = AR.evaluate_route(HARD, context_tokens=3000, active_project=PROJECT_OK)
     check("gate 2: a latch that cannot be read is a HARD BLOCK",
