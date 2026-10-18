@@ -771,10 +771,15 @@ def t_the_api_document_has_the_section_and_it_matches_this_code():
 #: writes down that they meant to. That is the price of a check that bites, and
 #: it is why the failure message below spells out the difference instead of
 #: saying "the document changed".
-EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 139))   # 129 ..= 138
+EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 140))   # 129 ..= 139
+#: 139 is the self-improvement diagnostics section added 2026-10-17 by this
+#: branch's own two read-only GET routes (`## 139. Self-improvement diagnostics:
+#: two read-only GETs, and everything they cannot do`). The list must name it in
+#: the same commit that adds it, which is exactly how the check below says a new
+#: section is meant to arrive: one visible line, on purpose.
 #: 137 is a REAL section in this tree, not a gap: `## 137. Starting the local
 #: model when it is not running` is this branch's own model-lanes section, and it
-#: is in `docs/JARVIS-API.md` here, so the tail reads 129 ..= 138 with no hole.
+#: is in `docs/JARVIS-API.md` here, so the tail reads 129 ..= 139 with no hole.
 #:
 #: On `main` alone the tail is 129 ..= 136 and then 138 - `range(129, 137) +
 #: (138,)` - because 137 was reserved for `skills.lock` (PR #455) and that
