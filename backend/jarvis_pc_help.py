@@ -40,6 +40,21 @@ thing), so those are written down as a later step (CHANGES_LATER) rather
 than built here. Nothing is gated because nothing acts; Lockdown has nothing
 to stop, since nothing leaves this PC.
 
+THE SILENT-FAILURE DOCTOR (Pillar 28, 2026-10-17). Alongside the five
+answers, `diagnose_silent_failures()` runs four checks for things that fail
+quietly, and read() appends ONE warning section per finding: a microphone
+whose last three voice attempts were 100% digital zeros (peak RMS exactly 0.0
+- the state some PCs leave it in after sleep), a SQLite write-ahead log past
+64 MiB in Jarvis's home folder (the database is named; a passive checkpoint
+is offered with its exact safe statement and never run), a paired phone that
+has stopped checking in, and the model service not running vs running with its
+TCP port open but `/api/ps` timed out. It only reads: it stats files, reads the
+pairing registry, asks Ollama one loopback question, and reads the peak RMS
+jarvis_speech already remembered for its last three attempts - it never opens
+the microphone itself, never checkpoints a database and never restarts
+anything.
+
+
 PRIVATE. Program names say what the owner is doing, so:
   * never logged, printed, audited or written to any file here;
   * the program reading is held in memory for at most CACHE_SECONDS (so a
@@ -88,6 +103,7 @@ import subprocess
 import threading
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable, Optional
 
 PATH = "/api/pc/help"
@@ -130,6 +146,31 @@ CACHE_SECONDS = 5.0
 PS_TIMEOUT = 12   # under the phone's 20-second limit for a read
 GIB = 1024 ** 3
 
+# --------------------------------------------------------------------------
+#   Pillar 28 (2026-10-17): the silent-failure doctor
+# --------------------------------------------------------------------------
+# Four checks that run inside "Check now" and add their own warning section
+# only when something has failed quietly (the healthy answer is still exactly
+# the five the apps know). None of them changes anything: the WAL check only
+# reads file sizes (a passive checkpoint is OFFERED in words through
+# `safe_passive_checkpoint_statement()` and never run here), the phone check
+# only reads the pairing registry (it cannot test the network), the Ollama
+# check asks one loopback question, and the microphone check reads the peak
+# RMS jarvis_speech already remembered for the last three voice attempts - PC
+# help itself never opens the microphone.
+#:
+#: The four check ids, in the order `silent.checked` lists them. Stable - the
+#: apps may rely on these names, never on a section existing.
+SILENT_CHECKS = ("digital_zero_mic", "wal_bloat", "phone_unreachable",
+                 "ollama_wedged")
+#: N_placeholder (Law 9): 64 MiB, three attempts and seven days are the
+#: blueprint's thresholds, not measured on this PC; recalibrate when the
+#: owner's own logs and phone habits have been observed.
+WAL_LIMIT_BYTES = 64 * 1024 * 1024
+MIC_ZERO_ATTEMPTS = 3
+PHONE_STALE_SECONDS = 7 * 24 * 3600
+OLLAMA_TIMEOUT = 2.0                   # the phone's whole read budget is 20 s
+
 #: Counter rows that are not programs.
 _NOT_PROGRAMS = frozenset({"_total", "idle", "system idle process"})
 
@@ -162,6 +203,16 @@ class Readers:
         process list. `used_mib` is None when the driver does not report it
         (measured on this PC 2026-10-17: it is [N/A] for every process), and
         must stay None - never a made-up 0.
+    mic()      -> jarvis_speech.voice_attempts_status(): {"attempts",
+                   "zeros_in_a_row", "digital_zero", "device", "last_peak_rms",
+                   "last_at"} (Pillar 28: the last 3 voice attempts' peak RMS)
+    databases()-> [{"name", "path", "wal_bytes"}] for the .db-wal files in
+                   Jarvis's home folder (Pillar 28)
+    devices()  -> jarvis_devices.paired_status(): {"devices": [{"id", "name",
+                   "kind", "created", "last_seen", "reach"}], "readable",
+                   "why"} (Pillar 28)
+    ollama()   -> {"state": "ok" | "not_running" | "wedged" | "error",
+                   "why": <name>} - one loopback /api/ps question (Pillar 28)
     """
     programs: Callable[[], Optional[dict]]
     memory: Callable[[], Optional[dict]]
@@ -170,6 +221,10 @@ class Readers:
     cards: Callable[[], Optional[list]]
     models: Callable[[], Optional[list]]
     apps: Optional[Callable[[], Optional[list]]] = None
+    mic: Optional[Callable[[], Optional[dict]]] = None
+    databases: Optional[Callable[[], Optional[list]]] = None
+    devices: Optional[Callable[[], Optional[dict]]] = None
+    ollama: Optional[Callable[[], Optional[dict]]] = None
     now: Callable[[], float] = field(default=time.time)
     own_pid: int = field(default_factory=os.getpid)
 
@@ -411,10 +466,97 @@ def _read_models() -> Optional[list]:
     return out if any_ok else None
 
 
+# ---- Pillar 28: the four silent-failure readings (all read-only) ----------
+
+def _home_dir() -> Path:
+    """Jarvis's own settings/data folder. OPENJARVIS_HOME (the name the
+    Pillar 28 blueprint uses) is honoured first, then this codebase's
+    OPENJARVIS_CONFIG_DIR / JARVIS_CONFIG_DIR, else ~/.openjarvis."""
+    env = (os.environ.get("OPENJARVIS_HOME") or os.environ.get("OPENJARVIS_CONFIG_DIR")
+           or os.environ.get("JARVIS_CONFIG_DIR"))
+    if env:
+        return Path(os.path.expanduser(env))
+    return Path(os.path.expanduser("~")) / ".openjarvis"
+
+
+def _read_mic() -> Optional[dict]:
+    """The peak RMS of the last few voice attempts, from jarvis_speech's
+    in-memory meter. PC help never opens the microphone."""
+    try:
+        import jarvis_speech as S
+        reader = getattr(S, "voice_attempts_status", None)
+        return reader() if callable(reader) else None
+    except Exception:
+        return None
+
+
+def _read_databases() -> Optional[list]:
+    """The .db-wal files in Jarvis's home folder ($OPENJARVIS_HOME/*.db-wal),
+    with their size. A stat() per file, nothing else - a passive checkpoint is
+    never run here. None when the folder cannot be listed at all."""
+    root = _home_dir()
+    try:
+        paths = sorted(root.glob("*.db-wal"))
+    except Exception:
+        return None
+    rows = []
+    for p in paths:
+        try:
+            rows.append({"name": p.name[:-len("-wal")], "path": str(p),
+                         "wal_bytes": p.stat().st_size})
+        except OSError:
+            continue
+    return rows
+
+
+def _read_devices() -> Optional[dict]:
+    """The paired devices, when each was last heard from, and whether it has
+    remote reach, from jarvis_devices. Read-only; never a token or key."""
+    try:
+        import jarvis_devices as D
+        reader = getattr(D, "paired_status", None)
+        return reader() if callable(reader) else None
+    except Exception:
+        return None
+
+
+def _read_ollama() -> Optional[dict]:
+    """One loopback question to this PC's Ollama's /api/ps, and - the point -
+    WHY it failed when it did: the TCP port refused (the process is not
+    running) or it accepted and /api/ps did not answer in time (running, but
+    wedged). Those need different words and different fixes. Never raises; a
+    missing Ollama answers "not_running"."""
+    try:
+        import jarvis_hardware as HW
+        base = HW._main_url()
+    except Exception:
+        return None
+    url = f"{base}/api/ps"
+    try:
+        import jarvis_local_http
+        with jarvis_local_http.opener().open(url, timeout=OLLAMA_TIMEOUT) as reply:
+            reply.read(1024)
+        return {"state": "ok"}
+    except Exception as exc:
+        # Deliberately NO urllib import (test_pc_help checks this module never
+        # imports it): the exception already carries what is needed. urllib
+        # wraps a refused connect as URLError(reason=ConnectionRefusedError)
+        # and a timeout as URLError(reason=TimeoutError) or TimeoutError.
+        reason = getattr(exc, "reason", exc)
+        if isinstance(reason, ConnectionRefusedError):
+            return {"state": "not_running"}
+        if isinstance(reason, TimeoutError) or isinstance(exc, TimeoutError):
+            return {"state": "wedged"}
+        if "timed out" in str(reason).lower() or "timed out" in str(exc).lower():
+            return {"state": "wedged"}
+        return {"state": "error", "why": type(reason).__name__}
+
+
 def real_readers() -> Readers:
     return Readers(programs=_cached_programs, memory=_read_memory, disks=_read_disks,
                    uptime=_read_uptime, cards=_read_cards, models=_read_models,
-                   apps=_read_apps)
+                   apps=_read_apps, mic=_read_mic, databases=_read_databases,
+                   devices=_read_devices, ollama=_read_ollama)
 
 
 _CACHE: dict = {"at": -1e9, "value": None}
@@ -856,6 +998,190 @@ def restart_words(r: Readers) -> str:
 
 
 # --------------------------------------------------------------------------
+#   Pillar 28: the silent-failure checks
+# --------------------------------------------------------------------------
+#
+# `diagnose_silent_failures()` is the one public entry: a list of findings
+# (0..4), each {"id", "title", "words"} using the four ids in SILENT_CHECKS
+# and in that order. A check that cannot read - or has too little to tell -
+# returns nothing: it must not claim a failure it did not see. All four are
+# read-only; the WAL finding OFFERS a passive checkpoint through
+# `safe_passive_checkpoint_statement()` and never runs one.
+
+def _mb(n: float) -> str:
+    return f"{n / (1024 ** 2):.0f} MB"
+
+
+def _is_time(value) -> bool:
+    """A reading that means seconds: a real number, but never a bool (True is
+    1 in Python and would read as a 1970 timestamp)."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _now(r: Readers) -> float:
+    try:
+        return float(r.now())
+    except Exception:
+        return time.time()
+
+
+def _reading(r: Readers, name: str):
+    """One of the silent-failure readings, or None. Never raises."""
+    fn = getattr(r, name, None)
+    if not callable(fn):
+        return None
+    try:
+        return fn()
+    except Exception:
+        return None
+
+
+def safe_passive_checkpoint_statement() -> str:
+    """The one safe repair for a bloated write-ahead log, OFFERED as a
+    diagnostic and never run by PC help (it only reads). SQLite's PASSIVE
+    checkpoint waits for no one, removes no data and leaves the database
+    usable throughout: the log is folded back into the database."""
+    return "PRAGMA wal_checkpoint(PASSIVE);"
+
+
+def _digital_zero_mic(r: Readers) -> Optional[dict]:
+    """Three voice attempts in a row whose peak RMS was exactly 0.0: a
+    microphone that has gone deaf (the state some PCs leave it in after
+    sleep), not a quiet room. Names the input device Jarvis heard it from."""
+    status = _reading(r, "mic")
+    if not isinstance(status, dict) or status.get("digital_zero") is not True:
+        return None
+    tries = status.get("zeros_in_a_row")
+    tries = tries if isinstance(tries, int) and tries >= MIC_ZERO_ATTEMPTS else MIC_ZERO_ATTEMPTS
+    device = str(status.get("device") or "the microphone")
+    return {"id": "digital_zero_mic",
+            "title": "The microphone is giving Jarvis silence",
+            "words": (f"Every one of the last {tries} voice attempts from {device} was pure "
+                      "digital silence - every sample exactly 0.000 - so a quiet room does "
+                      "not explain it. A microphone can go deaf like this after the PC wakes "
+                      "from sleep. Unplug the microphone and plug it back in, or restart the "
+                      "PC (or the phone, if that is where the sound came from), then press "
+                      "Check now again.")}
+
+
+def _wal_bloat(r: Readers) -> Optional[dict]:
+    """A SQLite write-ahead log past 64 MiB in Jarvis's home folder: the
+    database is healthy but its writes have not been folded back. Names each
+    database; a passive checkpoint is the safe repair, offered here and NOT
+    run."""
+    rows = _reading(r, "databases")
+    if not isinstance(rows, list):
+        return None
+    big = []
+    for d in rows:
+        if not isinstance(d, dict):
+            continue
+        size = d.get("wal_bytes")
+        if _is_time(size) and size > WAL_LIMIT_BYTES:
+            big.append((str(d.get("name") or "a database"), size))
+    if not big:
+        return None
+    big.sort(key=lambda item: -item[1])
+    shown = _join([f"{_mb(size)} for {name}" for name, size in big[:TOP_N]])
+    more = f", and {len(big) - TOP_N} more" if len(big) > TOP_N else ""
+    return {"id": "wal_bloat",
+            "title": "Jarvis's database log is very large",
+            "words": ("Jarvis's database write-ahead logs have grown very large: "
+                      f"{shown}{more}. They are the .db-wal files in Jarvis's own folder "
+                      f"({_home_dir()}). The databases are healthy, but recent writes have not "
+                      "been folded back into them for a while. A passive checkpoint would fold "
+                      f"a log back - that is SQLite's {safe_passive_checkpoint_statement()!r}, a "
+                      "safe diagnostic that deletes nothing - and PC help does not run it "
+                      "because it only reads. Restart Jarvis on the PC: a clean shutdown "
+                      "checkpoints these logs, and nothing is deleted.")}
+
+
+def _phone_unreachable(r: Readers) -> Optional[dict]:
+    """A paired phone with remote reach that has not checked in past the
+    staleness threshold: its changes have silently stopped syncing. This PC
+    can only read the last-check-in time - it cannot test Tailscale or Meshnet
+    reachability - so the words say so."""
+    status = _reading(r, "devices")
+    if not isinstance(status, dict) or status.get("readable") is False:
+        return None
+    now = _now(r)
+    stale = []
+    for d in status.get("devices") or []:
+        if not isinstance(d, dict) or d.get("kind") != "phone":
+            continue
+        if d.get("reach") is False:
+            continue
+        seen = d.get("last_seen")
+        created = d.get("created")
+        if _is_time(seen):
+            if now - seen > PHONE_STALE_SECONDS:
+                stale.append((d, seen))
+        elif _is_time(created) and now - created > PHONE_STALE_SECONDS:
+            stale.append((d, None))
+    if not stale:
+        return None
+    row, seen = sorted(stale, key=lambda item: -item[0].get("last_seen")
+                       if _is_time(item[0].get("last_seen")) else 0)[0]
+    name = str(row.get("name") or "your phone")
+    if seen is None:
+        since = f"it has not checked in since it was paired {_ago(now - row['created'])}"
+    else:
+        since = f"it was last heard from {_ago(now - seen)} ({_when(seen, now)})"
+    return {"id": "phone_unreachable",
+            "title": "Your phone has not checked in",
+            "words": (f"The phone {name} has not checked in: {since}, so nothing from it has "
+                      "synced since then. Jarvis cannot tell from this PC whether the phone is "
+                      "on your own network. Open Jarvis on the phone, check it is on the same "
+                      "Tailscale or NordVPN Meshnet network as this PC, and use it once; then "
+                      "press Check now again.")}
+
+
+def _ollama_wedged(r: Readers) -> Optional[dict]:
+    """The model service's two silent failures, said differently because the
+    fixes differ: the process is not running (its TCP port refused) vs running
+    but wedged (the port opened and /api/ps timed out)."""
+    status = _reading(r, "ollama")
+    if not isinstance(status, dict):
+        return None
+    state = str(status.get("state") or "")
+    if state == "not_running":
+        return {"id": "ollama_wedged",
+                "title": "Jarvis's model service is not running",
+                "words": ("The program that writes Jarvis's answers on this PC (Ollama) is not "
+                          "running - its port refused the connection - so no answer can be "
+                          "written until it is. Open Ollama from the Start menu (or let Jarvis "
+                          "start it), then press Check now again.")}
+    if state == "wedged":
+        return {"id": "ollama_wedged",
+                "title": "Jarvis's model service is not answering",
+                "words": ("The program that writes Jarvis's answers on this PC (Ollama) is "
+                          "running: its TCP port is open, but /api/ps did not answer within "
+                          f"{OLLAMA_TIMEOUT:.0f} seconds. That is why answers seem to never "
+                          "arrive. Quit Ollama from its icon by the clock, then open it again "
+                          "from the Start menu, and press Check now again.")}
+    return None
+
+
+def diagnose_silent_failures(readers: Optional[Readers] = None) -> list:
+    """The Pillar 28 silent-failure doctor: a list of findings, 0 to 4, in
+    SILENT_CHECKS' order. Each finding is {"id", "title", "words"} - the id is
+    one of SILENT_CHECKS, and `words` is the one plain paragraph the apps show
+    for it. A check that cannot read returns nothing rather than a guess, and
+    no check changes anything. Never raises."""
+    r = readers or real_readers()
+    found = []
+    for check in (_digital_zero_mic, _wal_bloat, _phone_unreachable,
+                  _ollama_wedged):
+        try:
+            got = check(r)
+        except Exception:
+            got = None
+        if got:
+            found.append(got)
+    return found
+
+
+# --------------------------------------------------------------------------
 #   The two ways in
 # --------------------------------------------------------------------------
 
@@ -883,7 +1209,10 @@ def answer(topic: str, readers: Optional[Readers] = None) -> dict:
 
 
 def read(readers: Optional[Readers] = None) -> dict:
-    """GET /api/pc/help: the five answers, in the order of TOPICS."""
+    """GET /api/pc/help: the five answers, in the order of TOPICS, plus one
+    warning section per Pillar 28 silent failure found (so a healthy answer
+    still has exactly five). `silent` says what was checked and what failed,
+    for anything that wants the facts rather than the words."""
     r = readers or real_readers()
     sections = []
     for topic in TOPICS:
@@ -894,8 +1223,16 @@ def read(readers: Optional[Readers] = None) -> dict:
         at = int(r.now())
     except Exception:
         at = int(time.time())
+    findings = diagnose_silent_failures(r)
+    for finding in findings:
+        sections.append({"id": finding["id"], "title": finding["title"],
+                         "words": finding["words"], "programs": False})
     return {"ok": True, "at": at, "sections": sections, "changes": CHANGES_LATER,
-            "private": PRIVATE_NOTE}
+            "private": PRIVATE_NOTE,
+            "silent": {"checked": list(SILENT_CHECKS),
+                       "failed": [f["id"] for f in findings], "at": at}}
+
+
 
 
 def handle_get(query: str = "", readers: Optional[Readers] = None) -> tuple:
