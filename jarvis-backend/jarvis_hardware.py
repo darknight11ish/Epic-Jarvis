@@ -1408,6 +1408,14 @@ def _now(det: dict, planned: list, ch: dict, current: Optional[str], user: dict,
     if out["context"] is None:
         out["context"] = _num_ctx(show)
     base = _match_model(show)
+    priced_hybrid = base is None
+    if priced_hybrid:
+        # The design table knows five models. A HYBRID model outside it (the
+        # owner's qwen3.5:9b is one) keeps a growing KV cache on only some of
+        # its layers, so the dense formula would overprice it; Ollama's own
+        # /api/show metadata proves which layers those are. A dense model the
+        # metadata does not prove hybrid stays on the table's path, unchanged.
+        base = _hybrid_model_from_show(show, current)
     if base and out["context"] and planned:
         first = P.rank(planned, _primary_setting())[0][0]
         # The format Ollama started with (its "server config" line), else
@@ -1426,7 +1434,10 @@ def _now(det: dict, planned: list, ch: dict, current: Optional[str], user: dict,
                       "total_gib": round(first.total_gib, 2), "blocks": bar.blocks,
                       "words": f"{need:.2f} + {bar.fixed_gib:.2f} = {bar.used_gib:.2f} of "
                                f"{first.total_gib:.0f} GB"}
-        out["words"] = (f"{current} is {base.ref} with room for {out['context']:,} tokens"
+        # A model the design table names is "current is that model"; a hybrid
+        # model priced from Ollama's own metadata is the current model itself.
+        said = current if priced_hybrid else f"{current} is {base.ref}"
+        out["words"] = (f"{said} with room for {out['context']:,} tokens"
                         + (f"; calculated about {over:.2f} GB over the card, so part of it is "
                            f"probably on the processor. Press Measure to check."
                            if over > 0.005 else "."))
@@ -1459,6 +1470,86 @@ def _match_model(show: Optional[dict]) -> Optional[P.Model]:
             if lo <= n <= hi:
                 return P.MODELS[ref]
     return None
+
+
+def _hybrid_model_from_show(show: Optional[dict],
+                            current: Optional[str]) -> Optional[P.Model]:
+    """The shape of a model Ollama's own metadata says is HYBRID, or None.
+
+    A hybrid model keeps a growing KV cache on only its full-attention layers:
+    Qwen3.5 runs full attention every fourth block and a Gated DeltaNet
+    recurrent state on the other three, so a recurrent layer has no KV cache
+    at all. Counting every block - what the design table's dense arithmetic
+    does - gives four times the cache on that model. Ollama's `/api/show`
+    `model_info` is the GGUF's own metadata and it names which blocks are
+    recurrent, so this reads it instead of trusting the parameter count alone.
+
+    STRICT ON PURPOSE. It prices a model only when the metadata PROVES it is
+    hybrid (`attention.recurrent_layers` is a list as long as `block_count`,
+    and at least one layer is recurrent) AND every field the price needs is
+    present (`block_count`, `attention.head_count_kv`,
+    `attention.key_length`, `general.parameter_count`). A missing field
+    returns None - the page then keeps today's words rather than guessing a
+    figure from a zero.
+
+    WEIGHTS AND CACHE DO NOT DOUBLE-COUNT. The weights come from
+    `general.parameter_count` at the same Q4_K_M figure the design table uses
+    (`jarvis_profiles.Model.weights_gib`); the cache comes separately from the
+    shared formula over the full-attention layers. `/api/ps`'s `size` is NOT
+    used for the weights: that figure is the whole loaded model - cache
+    included - so adding the formula's cache onto it would count the
+    conversation memory twice.
+
+    WHAT IT DOES NOT PRICE, said plainly. A picture reader (the vision
+    projector some hybrid models ship) is a separate part the GGUF parameter
+    count does not cover, so the figure is a FLOOR - the same direction the
+    design documents for its own estimates. The working space is
+    `jarvis_profiles.COMPUTE_GIB_PLACEHOLDER`, an N_placeholder, because no
+    hybrid model has been measured on this PC; the words already say
+    "calculated", and the page offers Measure to check.
+    """
+    info = (show or {}).get("model_info")
+    if not isinstance(info, dict) or not info:
+        return None
+    arch = str(info.get("general.architecture") or "").strip()
+    if not arch:
+        return None
+
+    def whole(name) -> int:
+        """A positive whole number from the metadata, else 0 (never a guess)."""
+        value = info.get(f"{arch}.{name}")
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return 0
+        return int(value) if value >= 1 else 0
+
+    layers = whole("block_count")
+    kv_heads = whole("attention.head_count_kv")
+    head_dim = whole("attention.key_length")
+    raw_params = info.get("general.parameter_count")
+    params = (int(raw_params)
+              if isinstance(raw_params, (int, float)) and not isinstance(raw_params, bool)
+              and raw_params >= 1 else 0)
+    recurrent = info.get(f"{arch}.attention.recurrent_layers")
+    if not (layers and kv_heads and head_dim and params):
+        return None
+    if not isinstance(recurrent, list) or len(recurrent) != layers:
+        return None
+    full = sum(1 for r in recurrent if not r)
+    if not 0 < full < layers:        # every layer full: a dense model, not ours
+        return None
+    details = (show or {}).get("details") or {}
+    # embedding/heads/max_ctx are carried for the record; the fit figure this
+    # is used for needs only the size label and the fields read above. 0 means
+    # the metadata did not say - never a made-up shape.
+    return P.Model(
+        ref=str(current or ""),
+        size=str(details.get("parameter_size") or ""),
+        params=params, reader_params=0,
+        layers=layers, kv_heads=kv_heads, head_dim=head_dim,
+        embedding=whole("embedding_length"), heads=whole("attention.head_count"),
+        compute_gib=P.COMPUTE_GIB_PLACEHOLDER, max_ctx=whole("context_length"),
+        source="Ollama /api/show model_info on this PC",
+        full_attention_layers=full)
 
 
 def _measured_for(fp: str, preset: str) -> Optional[dict]:
