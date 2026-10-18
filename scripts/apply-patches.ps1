@@ -24,8 +24,9 @@
     4. Puts jarvis-framework.toml (the settings file) in place ONLY if there
        is none yet. Yours is never overwritten; if it differs from this
        repository's copy, the differences are listed for you to decide on.
-    5. Installs the Python packages in backend/requirements.txt into the real
-       Python (not the Microsoft Store shortcut that is also called `python`).
+    5. Installs the Python packages from the hash-locked
+       backend/requirements.lock into the real Python (not the Microsoft Store
+       shortcut that is also called `python`).
     6. Runs the test suites and prints a summary.
 
   Safe to run again. Four starting points work:
@@ -70,8 +71,8 @@
   a reason to refuse. Close Jarvis and run again; -Force skips that check.
 
 .PARAMETER SkipPackages
-  Do not run pip. The packages in backend/requirements.txt are then yours to
-  install; the features that need them stay off until you do.
+  Do not run pip. The packages in the hash-locked backend/requirements.lock are
+  then yours to install; the features that need them stay off until you do.
 
 .PARAMETER SkipMissing
   Leave out any patch that needs a backend file which is not there, and apply
@@ -5096,11 +5097,19 @@ if ($ManifestPath) {
 # memory search by meaning, the voice features and the window-reading tool
 # are off until they are installed. backend\requirements.txt says which
 # package carries what. pip leaves a package that is already installed alone.
+#
+# What gets INSTALLED is requirements.lock, not requirements.txt: pip's
+# --require-hashes mode refuses any package whose bytes do not match the
+# SHA-256 recorded here, and refuses a lock that does not fit this Python.
+# Installing the loose requirements.txt would let a newer upload inside a
+# range run without the hashes this repository audited (security audit,
+# 2026-10-18: supply chain H-3).
 $reqs = Join-Path $PatchDir 'requirements.txt'
+$lock = Join-Path $PatchDir 'requirements.lock'
 if ($SkipPackages) {
     Say ""
     Warn "Python packages (-SkipPackages). To install them yourself:"
-    Say "          py -3 -m pip install -r `"$reqs`"" Cyan
+    Say "          py -3 -m pip install --require-hashes -r `"$lock`"" Cyan
     Add-Note "Python packages were not installed (-SkipPackages); the features that need them stay off until you install them."
 } elseif (-not $py) {
     Say ""
@@ -5109,23 +5118,24 @@ if ($SkipPackages) {
     Add-Problem "Python packages were not installed, because there is no working Python (winget install Python.Python.3.12, then open a NEW PowerShell window and run again)."
 } else {
     Say ""
-    Say "Installing the Python packages in backend\requirements.txt (a minute or two the first time)." Cyan
+    Say "Installing the Python packages in backend\requirements.lock (hash-checked; a minute or two the first time)." Cyan
     $prevEap = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
-        $pipOut = @(& $py.Exe -m pip install --disable-pip-version-check -r $reqs 2>&1)
+        $pipOut = @(& $py.Exe -m pip install --disable-pip-version-check --require-hashes -r $lock 2>&1)
         $pipOk = ($LASTEXITCODE -eq 0)
     } finally {
         $ErrorActionPreference = $prevEap
     }
     if ($pipOk) {
-        Ok "Python packages are installed."
+        Ok "Python packages are installed, every one from the hash-locked list."
     } else {
-        Bad "pip could not install everything. The last lines it printed:"
+        Bad "pip could not install everything from the hash-locked list. The last lines it printed:"
         Say (($pipOut | Select-Object -Last 15 | ForEach-Object { "        $_" }) -join "`n")
+        Say "        Nothing was installed from the loose requirements.txt: a missing or wrong hash is refused." Cyan
         Say "        The backend still starts; the features those packages carry stay off." Cyan
         Say "        Send the lines above back if the reason is not clear." Cyan
-        Add-Problem "pip could not install everything in backend\requirements.txt; the features those packages carry stay off. The last lines pip printed are above."
+        Add-Problem "pip could not install everything from backend\requirements.lock (hash-checked); the features those packages carry stay off. The last lines pip printed are above."
     }
 }
 

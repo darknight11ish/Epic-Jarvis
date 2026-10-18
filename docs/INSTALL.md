@@ -1337,16 +1337,15 @@ version after that appears in Settings → Updates. `scripts\update-jarvis.ps1`
 uses that same published installer for the desktop half from then on (before it
 exists, that script builds the app from this folder instead).
 
-**One limit worth knowing, said plainly.** `scripts\update-jarvis.ps1`
-downloads the installer over HTTPS from this project's own release page - the
-same file that page offers anyone - and then runs it with no clicks. It cannot
-check the signature published beside it: PowerShell has no way to check that
-kind of signature, and the Tauri command line tool has no `signer verify`
-command (checked: its `signer` subcommands are `generate` and `sign`). So the
-script prints the file's SHA-256 and says this on screen. The app's own
-**Settings → Updates** button is the route that does check the signature; add
-`-FromSource` to build the app from this folder if you would rather nothing was
-downloaded at all.
+**What it checks before running it.** `scripts\update-jarvis.ps1` downloads the
+installer over HTTPS from this project's own release page and then verifies its
+minisign signature against the app's own update public key (through
+`scripts\verify_minisign.py` and Python's `cryptography` package) before it
+runs the file. Only a verified download is installed: a missing verifier, a
+missing key, or a signature that does not verify means nothing is run, and the
+script builds the app from this folder instead. The app's own
+**Settings → Updates** button checks the same signature; add `-FromSource` to
+build from this folder if you would rather nothing was downloaded at all.
 
 **What a signing key is, in one line.** Two files made together: the
 **private** key stamps each installer (kept secret, on your PC and in

@@ -140,6 +140,11 @@ def mini_repo(root: Path, suites: dict | None = None, leave_out: tuple = (),
             continue
         if src.name == "requirements.txt" and requirements is not None:
             continue
+        # The patcher installs requirements.lock (hash-checked) now, so a test
+        # that supplies its own bad requirements file must supply it as the lock
+        # too, and must not inherit the real lock beside the symlink.
+        if src.name == "requirements.lock" and requirements is not None:
+            continue
         if src.name in ("__pycache__", ".pytest_cache"):
             continue
         # `exists()` follows the link, so a BROKEN one is skipped rather than
@@ -157,6 +162,7 @@ def mini_repo(root: Path, suites: dict | None = None, leave_out: tuple = (),
         (root / "backend" / src.name).symlink_to(src)
     if requirements is not None:
         (root / "backend" / "requirements.txt").write_text(requirements, encoding="utf-8")
+        (root / "backend" / "requirements.lock").write_text(requirements, encoding="utf-8")
     for name, body in (suites or {}).items():
         (root / "backend" / name).write_text(body, encoding="utf-8")
     lock = HERE.parent / "jarvis-desktop" / "src-tauri" / "Cargo.lock"
