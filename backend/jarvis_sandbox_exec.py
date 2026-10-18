@@ -71,6 +71,20 @@ THE THREE LAYERS (each is checked by backend/test_sandbox_exec.py)
     KILLED and a clean refusal is returned on either. The outcome is not read
     from the exit status alone; see layer 3.
 
+    AN OS BOUNDARY WHERE WINDOWS HAS ONE (the 2026-10-18 security audit,
+    M7): the same Win32 Job Object also sets JOB_OBJECT_UILIMIT_ALL, so a
+    script cannot read or write the clipboard, read the screen, open a
+    desktop or window, or change system parameters - a language escape does
+    not become a desktop. The child's environment has proxy variables
+    (HTTP_PROXY, HTTPS_PROXY, ALL_PROXY, NO_PROXY and their neighbours)
+    stripped even if jarvis_child_env's allow-list ever let one through.
+    WHAT IT CANNOT CONTAIN, said plainly: a Job Object is not a network
+    sandbox (a language escape could still open a socket through allowed
+    modules), it does not restrict which files the process may open at the OS
+    level, and it is not a restricted token or AppContainer. Those remain the
+    next step; this module does not claim them. `OS_BOUNDARY_NOTE` is the
+    same sentence in code so a test can hold it.
+
     A HARD MEMORY CAP where the operating system has one. On Windows the child
     is put in a Win32 Job Object BEFORE the script's payload is sent to it, with
     `MAX_MEMORY_BYTES` (256 MiB, `JobObjectExtendedLimitInformation`, the
@@ -650,7 +664,7 @@ def _child_env() -> dict:
         if not isinstance(key, str) or not isinstance(value, str):
             continue
         up = key.upper()
-        if up.startswith("PYTHON") or _looks_secret(key):
+        if up.startswith("PYTHON") or up in _CHILD_ENV_DROPPED or _looks_secret(key):
             continue
         env[key] = value
     return env
@@ -799,6 +813,29 @@ _IS_WINDOWS = sys.platform == "win32"
 _JOB_OBJECT_EXTENDED_LIMIT_INFORMATION = 9
 _JOB_OBJECT_LIMIT_PROCESS_MEMORY = 0x00000100
 _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000
+#: JobObjectBasicUIRestrictions is its own information class (4), separate
+#: from the extended limit information above. UILIMIT_ALL is every UI
+#: restriction Win32 defines (handles, read/write clipboard, global atoms,
+#: desktop, system parameters, display settings).
+_JOB_OBJECT_BASIC_UI_RESTRICTIONS = 4
+_JOB_OBJECT_UILIMIT_ALL = 0x000000FF
+
+#: What a Win32 Job Object CANNOT contain, in the module's own words - shown
+#: by "What Jarvis can reach", kept beside the feature it limits, and read by
+#: the suite so the claim cannot quietly widen.
+OS_BOUNDARY_NOTE = (
+    "A Windows Job Object stops a run touching the clipboard, the screen, a "
+    "desktop or a window, and caps its memory. It cannot stop network access "
+    "or restrict which files the process may open at the OS level - those "
+    "still rest on the language allow-list."
+)
+
+#: Proxy/network variables dropped from the child even if an allow-list ever
+#: let one through. Upper case: comparison is case-insensitive.
+_CHILD_ENV_DROPPED = frozenset({
+    "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "FTP_PROXY",
+    "SOCKS_PROXY", "SOCKS5_PROXY", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE",
+})
 
 
 #: The honest cap dict for a return where NO child ran. A copy is made per
@@ -839,6 +876,9 @@ def _attach_job_limit(proc) -> bool:
             "ReadOperationCount", "WriteOperationCount", "OtherOperationCount",
             "ReadTransferCount", "WriteTransferCount", "OtherTransferCount")]
 
+    class _BasicUiRestrictions(ctypes.Structure):
+        _fields_ = [("UIRestrictionsClass", wintypes.DWORD)]
+
     class _ExtendedLimit(ctypes.Structure):
         _fields_ = [
             ("BasicLimitInformation", _BasicLimit),
@@ -867,6 +907,15 @@ def _attach_job_limit(proc) -> bool:
     set_ok = bool(kernel32.SetInformationJobObject(
         job, _JOB_OBJECT_EXTENDED_LIMIT_INFORMATION, ctypes.byref(info),
         ctypes.sizeof(info)))
+    # THE UI BOUNDARY (M7): the same job also denies clipboard/screen/desktop/
+    # window access. If it cannot be applied, do not attach a job that would
+    # let the caller believe the boundary is there: report no cap/boundary.
+    ui = _BasicUiRestrictions()
+    ui.UIRestrictionsClass = _JOB_OBJECT_UILIMIT_ALL
+    ui_ok = bool(kernel32.SetInformationJobObject(
+        job, _JOB_OBJECT_BASIC_UI_RESTRICTIONS, ctypes.byref(ui),
+        ctypes.sizeof(ui)))
+    set_ok = bool(set_ok and ui_ok)
     assigned = bool(set_ok) and bool(
         kernel32.AssignProcessToJobObject(job, int(proc._handle)))
     if not assigned:

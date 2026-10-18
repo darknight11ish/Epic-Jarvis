@@ -17,7 +17,7 @@
  */
 
 import { onQueue } from "./jarvis-link.js";
-import { readReach, rowLines } from "./reach.js";
+import { ENFORCEMENT_LABEL, enforcementLine, readReach, rowLines } from "./reach.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -32,6 +32,7 @@ const el = {
   tools: $("reach-tools"),
   toolsNone: $("reach-tools-none"),
   rest: $("reach-rest"),
+  enforcement: $("reach-enforcement"),
   refresh: $("reach-refresh"),
 };
 
@@ -70,6 +71,11 @@ function paint(v) {
     return li;
   }));
   el.toolsTitle.textContent = v.toolsTitle;
+  if (el.enforcement) {
+    const line = enforcementLine(v);
+    el.enforcement.textContent = line ? `${ENFORCEMENT_LABEL}: ${line}` : "";
+    el.enforcement.hidden = !line;
+  }
   el.tools.replaceChildren(...v.tools.map((t) => node("li", "", t.name)));
   el.tools.hidden = v.tools.length === 0;
   el.toolsNone.textContent = v.toolsNone;

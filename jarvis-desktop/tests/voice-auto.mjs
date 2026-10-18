@@ -188,7 +188,7 @@ await check("CONTROL (Rust): asking to turn \"hey Jarvis\" on is held on a stale
 });
 
 await check("CONTROL (Rust): changing the server address in Settings stops \"hey Jarvis\" listening", async () => {
-  const set = fnBody(rustSrc("commands.rs"), "pub fn set_api_settings(");
+  const set = fnBody(rustSrc("commands.rs"), "pub async fn set_api_settings(");
   const save = set.lastIndexOf(".save()");
   const stop = set.indexOf("crate::voice::stop_listening_because(");
   assert.ok(stop > save, "set_api_settings does not stop listening after the address changes");

@@ -144,7 +144,7 @@ await check("CONTROL: Rust refuses the wildcard before it is persisted", async (
   assert.match(rust, /fn validate_bind_address/, "no validate_bind_address function");
   // Everything refusable is checked before ANYTHING is written - so a refused
   // address cannot leave a half-saved token (or base) behind either.
-  const set = rust.slice(rust.indexOf("pub fn set_api_settings"));
+  const set = rust.slice(rust.indexOf("pub async fn set_api_settings("));
   const body = set.slice(0, set.indexOf("\n}\n"));
   const check = body.indexOf("validate_bind_address(");
   const firstWrite = body.search(/store\.(set|delete)\(|token_store::(write|delete)\(/);

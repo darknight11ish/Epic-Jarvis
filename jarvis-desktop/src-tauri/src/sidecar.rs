@@ -277,6 +277,20 @@ pub fn supervisor_status(app: AppHandle) -> SupervisorStatus {
     }
 }
 
+/// Does this supervision change need a person's second factor?
+///
+/// Switching supervision ON, or saving a program/arguments it may run, can
+/// persist a program that `start_backend` runs later; turning supervision OFF
+/// alone only ever takes that ability away. Pure, so the matrix is tested
+/// without a window.
+pub(crate) fn supervision_change_needs_hello(supervise: Option<bool>, backend: bool) -> bool {
+    supervise == Some(true) || backend
+}
+
+/// The one sentence the Windows Hello prompt shows for this change.
+const SUPERVISION_HELLO: &str = "Windows Hello: letting Jarvis start a program on this \
+     PC, or changing the program it may run, needs your confirmation.";
+
 /// Switches supervision on or off, and saves what to run.
 ///
 /// Turning it *off* deliberately does not stop a running backend: the setting
@@ -284,12 +298,17 @@ pub fn supervisor_status(app: AppHandle) -> SupervisorStatus {
 /// change is not what a preference change should do. `stop_backend` is the
 /// explicit way.
 #[tauri::command]
-pub fn set_supervision(
+pub async fn set_supervision(
     app: AppHandle,
+    window: tauri::WebviewWindow,
     supervise: Option<bool>,
     backend: Option<BackendConfig>,
 ) -> Result<SupervisorStatus, String> {
     use tauri_plugin_store::StoreExt;
+    // SECOND FACTOR, before anything is written (T slice, audit F3).
+    if supervision_change_needs_hello(supervise, backend.is_some()) {
+        crate::lock::require_hello(&app, &window, SUPERVISION_HELLO).await?;
+    }
     let store = app
         .store(commands::SETTINGS_STORE)
         .map_err(|e| format!("settings unavailable: {e}"))?;
@@ -1126,5 +1145,31 @@ mod tests {
         assert_eq!(w.bump_unreachable(), 3);
         w.reset_unreachable();
         assert_eq!(w.bump_unreachable(), 1);
+    }
+}
+
+#[cfg(test)]
+mod second_factor_tests {
+    use super::*;
+
+    #[test]
+    fn turning_supervision_off_alone_does_not_ask() {
+        assert!(
+            !supervision_change_needs_hello(Some(false), false),
+            "off is always allowed"
+        );
+        assert!(
+            !supervision_change_needs_hello(None, false),
+            "a read-only save asks nothing"
+        );
+        assert!(
+            supervision_change_needs_hello(Some(true), false),
+            "switching it on must ask"
+        );
+        assert!(
+            supervision_change_needs_hello(Some(false), true),
+            "a saved program must ask"
+        );
+        assert!(supervision_change_needs_hello(None, true));
     }
 }

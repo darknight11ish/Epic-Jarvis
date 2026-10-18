@@ -1889,8 +1889,8 @@
     "title": "Small Python scripts for sums and averages",
     "what": "The AI model can run a small Python script for maths or data work, in its own read-only sandbox.",
     "where": "PC: Settings, Data and maths sandbox. Phone: Settings, Data and maths sandbox.",
-    "asks": "Turning the sandbox on asks first, with one approval card on the PC. Turning it off is instant.",
-    "limit": "It has no network, writes no file, reads only files you already listed for Jarvis, and refuses dangerous code before it starts.",
+    "asks": "Turning the sandbox on asks first, with one approval card on the PC. Turning it off is instant. A run that reads a file you listed also asks first, showing the script and the file.",
+    "limit": "It has no network, writes no file, reads only the listed files you picked, and refuses dangerous code before it starts. Its Windows job object blocks the clipboard, screen and desktop, but cannot block network access on its own.",
     "surface": "both",
     "covers": [
       "settings.sandbox"

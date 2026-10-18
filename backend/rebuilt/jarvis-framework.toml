@@ -209,6 +209,9 @@ github_read               = "auto"
 # in", which is empty until you add a folder on the PC with an approval
 # card). "ask" gives a card for every look.
 read_files_readonly       = "auto"
+# A sandbox run that names files to read: one card per run, showing the
+# script and the resolved files (M7, 2026-10-18).
+sandbox_file_run          = "ask"
 # Saving an email draft (jarvis_email_draft.py, draft-email.patch; the
 # owner's decision of 2026-09-27, "a card every time, showing the full
 # draft"; I53). A draft goes up to the mail provider's servers (an IMAP

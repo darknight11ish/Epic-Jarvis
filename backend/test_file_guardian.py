@@ -106,6 +106,7 @@ import sys
 import tempfile
 import traceback
 import types
+import subprocess
 from pathlib import Path
 from urllib.parse import quote
 
@@ -2000,7 +2001,7 @@ def t_a_restore_whose_write_fails_leaves_no_receipt():
     before_receipts = receipts_count()
     real_write = G._write_file
 
-    def no_write(real, data):
+    def no_write(real, data, roots=None):
         raise G.Refused("the write failed (simulated)")
 
     G._write_file = no_write
@@ -2063,6 +2064,153 @@ def t_forget_purges_unpinned_guardian_copies_but_never_a_pin():
     check("purge says how many it removed", removed >= 1, removed)
     check("a version that does NOT hold the words is untouched",
           G.purge_words("words that appear nowhere") == 0 or True)
+
+
+# --------------------------------------------------------------------------
+#   Slice T (security audit, 18 October): the last check-to-write window
+# --------------------------------------------------------------------------
+
+
+def _make_junction(target: Path, link: Path):
+    """A Windows directory junction, or (False, why). Skipped, never faked."""
+    if os.name != "nt":
+        return False, "a junction is a Windows thing"
+    try:
+        made = subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(target)],
+                              capture_output=True, text=True)
+        if made.returncode != 0:
+            return False, (made.stderr or made.stdout).strip() or "mklink refused"
+        return True, ""
+    except Exception as exc:                        # noqa: BLE001
+        return False, type(exc).__name__
+
+
+def t_a_folder_swapped_for_a_junction_at_write_time_is_refused():
+    """The final `_check_path` is several operations away from the write.
+
+    A parent folder replaced by a junction in that window must be refused at
+    WRITE time, not followed: the same bytes must not land outside the allowed
+    folders. This is the T slice's proof that the hole the host audit named
+    (`jarvis_file_guardian.py`'s final check and path write) is closed.
+    """
+    fresh()
+    sub = ALLOWED / "sub"
+    sub.mkdir(parents=True, exist_ok=True)
+    write("sub/victim.txt", b"v1\n")
+    outside = Path(TMP) / "outside"
+    outside.mkdir(parents=True, exist_ok=True)
+    real_before = G._check_path(str(sub / "victim.txt"))[0]
+
+    # The swap: the real folder moves aside, a junction takes its name.
+    moved = ALLOWED / "sub-real"
+    sub.rename(moved)
+    made, why = _make_junction(outside, sub)
+    if not made:
+        skip(f"a directory junction cannot be made here ({why}), so the write-time "
+             f"swap refusal was not driven")
+        try:
+            moved.rename(sub)
+        except OSError:
+            pass
+        return
+    outside_victim = outside / "victim.txt"
+    try:
+        raised = None
+        try:
+            G._write_file(str(real_before), b"evil\n", [str(ALLOWED)])
+        except G.Refused as exc:
+            raised = str(exc)
+        check("a write whose parent was swapped for a junction is refused",
+              raised is not None
+              and ("changed while the card was up" in raised
+                   or "moved while the card was up" in raised), raised)
+        check("... and no byte was written through the junction",
+              not outside_victim.exists(), outside_victim)
+    finally:
+        try:
+            sub.rmdir()                     # a junction itself removes empty
+        except OSError:
+            subprocess.run(["cmd", "/c", "rmdir", str(sub)], capture_output=True)
+        moved.rename(sub)
+
+    # And the same call still succeeds when nothing has been swapped, so the
+    # refusal above is about the junction and not the write path generally.
+    target = ALLOWED / "sub" / "victim.txt"
+    G._write_file(str(target), b"v2\n", [str(ALLOWED)])
+    check("... and the ordinary write still works after it", target.read_bytes() == b"v2\n",
+          target.read_bytes())
+
+
+def t_a_planted_blob_is_not_trusted_for_dedup():
+    """The blob's name IS the hash - but only after the bytes prove it.
+
+    A gzip written under a real content address (planted, corrupted, copied
+    from somewhere else) must never be trusted just because the filename
+    exists: it is re-hashed before dedup and refused as damaged. Otherwise a
+    restore would write bytes whose card named different content.
+    """
+    fresh()
+    files = {"real.txt": b"the real bytes\n"}
+    for name, data in files.items():
+        write(name, data)
+    p = ALLOWED / "real.txt"
+    data = b"the real bytes\n"
+    sha = G.sha256_bytes(data)
+    blob = G.blob_path(sha)
+    blob.parent.mkdir(parents=True, exist_ok=True)
+    blob.write_bytes(G._gzip_bytes(b"planted, different bytes\n"))
+    planted = blob.read_bytes()
+
+    result = snapshot(p)
+    check("a planted blob under the content address is refused, not trusted",
+          result.get("ok") is False, result)
+    check("... and the refusal names a damaged/altered copy",
+          "damaged" in str(result.get("error", "")).lower()
+          or "altered" in str(result.get("error", "")).lower(), result.get("error"))
+    check("... the planted copy is not reported as a saved version",
+          not result.get("before_sha256"), result.get("before_sha256"))
+    check("... nothing was journalled for it", row_list() == [], row_list())
+    check("... and the planted file itself is untouched, not silently rewritten",
+          blob.read_bytes() == planted)
+
+
+def t_the_restore_opens_the_destination_by_handle_not_by_path():
+    """The write is through ONE opened handle, and a reparse point is refused.
+
+    A final check followed by another path-based write is the race; an opened
+    handle cannot be redirected after it is open. Proved by the source the
+    write runs, by the reparse attribute checked on the handle, and by writing
+    to a file symlink directly (past `_check_path`) being refused.
+    """
+    source = Path(G.__file__).read_text(encoding="utf-8")
+    check("the destination is opened with FILE_FLAG_OPEN_REPARSE_POINT",
+          "FILE_FLAG_OPEN_REPARSE_POINT" in source)
+    check("...or O_NOFOLLOW where that is the rule", "O_NOFOLLOW" in source)
+    check("...and the handle's own attributes are checked for a reparse point",
+          "FILE_ATTRIBUTE_REPARSE_POINT" in source)
+    check("...the bytes are written through the opened handle, not a second path",
+          "os.ftruncate(handle, 0)" in source and "os.write(handle, data[offset:])" in source)
+    check("...the old path-based atomic replace is gone from the write body",
+          "os.replace(tmp, real)" not in source)
+
+    fresh()
+    target = write("handle-target.txt", b"real bytes\n")
+    link = ALLOWED / "handle-link.txt"
+    try:
+        os.symlink(str(target), str(link))
+    except OSError as exc:
+        skip(f"a symlink cannot be made on this machine ({type(exc).__name__}), so the "
+             f"handle refusal was not driven")
+        return
+    raised = None
+    try:
+        G._write_file(str(link), b"evil bytes\n", [str(ALLOWED)])
+    except G.Refused as exc:
+        raised = str(exc)
+    check("a write to a file symlink, past _check_path, is refused by the handle path",
+          raised is not None, raised)
+    check("...and the link's target is untouched", target.read_bytes() == b"real bytes\n",
+          target.read_bytes())
 
 
 if __name__ == "__main__":

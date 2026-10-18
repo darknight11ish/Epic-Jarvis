@@ -5978,6 +5978,15 @@ real code.
 
 ### 24.1 The route
 
+The answer also carries `enforcement` (added 2026-10-18, the security
+audit's F2): `{"available": bool, "wired": bool, "line": <plain sentence>}`,
+read from the same `[autonomy]` lines the gate reads. `available` and `wired`
+are DIFFERENT questions - enforcement can exist and not be connected to the
+older approval path - so the one `line` never lets "available" read as "on":
+`available && wired` says on, `available` alone says "AVAILABLE but NOT WIRED",
+and `available: false` says off. Settings shows that line under "What Jarvis
+can reach"; the phone ignores it (the desktop is where this setting lives).
+
 `GET /api/reach` - behind the origin check and `X-Jarvis-Token`, like every
 other read. **A read**: it changes nothing, opens no socket, starts or wakes
 nothing (not the second card, not the big model), writes no file - so
@@ -21399,10 +21408,14 @@ outcomes; `null` is its honest fourth state and is never a pass.
 **Neither app calls either route, and this slice adds no desktop or Android
 face.** That is deliberate: the wiring queue asked for a diagnostic the owner
 can query, not a product button - and a button that shows source snippets needs
-its own redaction/placement design first. `tools/check_parity.py` scans the two
-apps' own source for routes they call, so a backend route no app calls is
-outside what it decides, and it stays clean. No app menu, no Brain read
-section, and no `features/features.json` entry are added.
+its own redaction/placement design first. **Both routes are this PC's own**: a request from another device
+(a phone on the same private network, say) is refused `403` with one plain
+sentence by `jarvis_owner_check.from_this_pc`, BEFORE any file is read - the
+same rule the guardian and selection routes use, so a paired phone's token
+cannot use them either. `tools/check_parity.py` scans the two apps' own
+source for routes they call, so a backend route no app calls is outside what
+it decides, and it stays clean. No app menu, no Brain read section, and no
+`features/features.json` entry are added.
 
 `docs/CLAIMS.tsv` gets no row for this: it is a read-only exposure of two
 modules whose own claims are already registered, and adding a row would force
@@ -21548,6 +21561,26 @@ the row disabled with one sentence naming the command
 `docs/ARCHITECTURE.md` §8 needs no one-sided row: both apps carry the switch,
 and the phone deliberately only asks the PC - the same shape as every other
 approval-card setting.
+
+### 142.5 A run that reads a file asks on its own card (added 2026-10-18)
+
+`sandbox_file_run` is a tier line of its own, shipped `"ask"`. A
+`run_data_script` call whose `files` list is not empty is decided under it,
+AFTER the tool's own `file_read` lookup: the card shows the script, its code
+and the resolved file names, and no file is read until the owner answers. A
+pure calculation stays under the calculator's auto action. The 2026-10-18 host
+audit's M7 is why: the sandbox is a language allow-list, so a file-reading run
+gets a person in front of it.
+
+The same audit added the OS boundary Windows does have: the Win32 Job Object
+that already caps memory now also sets `JOB_OBJECT_UILIMIT_ALL` (clipboard,
+screen, desktops, windows and system parameters are denied to the child), and
+the child's environment drops proxy variables (`HTTP_PROXY`, `HTTPS_PROXY`,
+`ALL_PROXY`, `NO_PROXY` and neighbours) even if an allow-list ever let one
+through. Said plainly: a Job Object cannot block network access, cannot
+restrict which files the process opens at the OS level, and is not a
+restricted token or AppContainer. `jarvis_sandbox_exec.OS_BOUNDARY_NOTE` is
+that sentence in code, and the suite holds it.
 
 ## 143. The person dossier: one click in "People and things", read-only (LM-4, added 2026-10-18)
 

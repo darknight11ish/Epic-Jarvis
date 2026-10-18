@@ -35,6 +35,9 @@ export const ASKS_LABEL = "Asks you first";
 
 const STATES = Object.freeze(["on", "off", "not_set_up", "blocked"]);
 
+/** The gate's pair: "available" and "wired" are different questions. */
+export const ENFORCEMENT_LABEL = "Approval enforcement";
+
 function text(v) {
   return typeof v === "string" ? v : "";
 }
@@ -79,8 +82,21 @@ export function readReach(answer) {
     everythingElse: text(a.everything_else) || EVERYTHING_ELSE,
     whereLabel: text(a.where_label) || WHERE_LABEL,
     asksLabel: text(a.asks_label) || ASKS_LABEL,
+    enforcement: (() => {
+      const e = a.enforcement && typeof a.enforcement === "object" ? a.enforcement : {};
+      return {
+        available: e.available === true,
+        wired: e.wired === true,
+        line: text(e.line),
+      };
+    })(),
     on: rows.filter((r) => r.on).length,
   };
+}
+
+/** The one line about enforcement, or "" when the PC did not send one. */
+export function enforcementLine(v) {
+  return text(v && v.enforcement && v.enforcement.line);
 }
 
 /** The lines under a row's name: where it goes and whether it asks (only

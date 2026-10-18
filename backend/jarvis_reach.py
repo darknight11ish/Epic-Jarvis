@@ -235,6 +235,55 @@ def _tools_enabled() -> set:
         return set()
 
 
+#: The gate's own two flags, and one sentence that never lets "available"
+#: read as "on" (T slice, security audit F2). The pair is read from the SAME
+#: file the gate reads; a caller may hand its own (`Ctx.enforcement`) so the
+#: contract cases and the tests agree without touching the owner's config.
+ENFORCEMENT_AVAILABLE_WIRED = (
+    "Approval enforcement is ON: tool calls go through the gate, and the older "
+    "approval path is wired to it."
+)
+ENFORCEMENT_AVAILABLE_NOT_WIRED = (
+    "Approval enforcement is AVAILABLE but NOT WIRED into the older approval "
+    "path - this app's own chat is gated, and the other path still approves by "
+    "itself until patch_openjarvis.py is run on this PC."
+)
+ENFORCEMENT_OFF = (
+    "Approval enforcement is OFF on this PC: no tool call is being checked by "
+    "the gate right now."
+)
+ENFORCEMENT_UNKNOWN = (
+    "The approval settings could not be read, so treat enforcement as NOT on."
+)
+
+
+def _enforcement_from_flags(available, wired) -> dict:
+    """The honest pair and the one sentence that goes with it."""
+    on = available is True
+    connected = wired is True
+    if on and connected:
+        line = ENFORCEMENT_AVAILABLE_WIRED
+    elif on:
+        line = ENFORCEMENT_AVAILABLE_NOT_WIRED
+    else:
+        line = ENFORCEMENT_OFF
+    return {"available": on, "wired": connected, "line": line}
+
+
+def _enforcement(ctx) -> dict:
+    given = getattr(ctx, "enforcement", None)
+    if isinstance(given, dict):
+        return _enforcement_from_flags(given.get("available"), given.get("wired"))
+    try:
+        fw = _fw()
+        cfg = fw.load_framework() if fw is not None else {}
+        gate = (cfg or {}).get("autonomy") or {}
+        return _enforcement_from_flags(gate.get("enforcement_available"),
+                                      gate.get("wired_into_approval_endpoint"))
+    except Exception:
+        return {"available": False, "wired": False, "line": ENFORCEMENT_UNKNOWN}
+
+
 def _tier(action: str) -> str:
     fw = _fw()
     try:
@@ -362,6 +411,10 @@ class Ctx:
     # monthly limit) / the module is here but no service is set up / the module
     # is not here; None: look.
     quiz_cloud: Optional[dict] = None
+    #: The gate's own honest pair, read from jarvis-framework.toml unless a
+    #: caller hands one: {"available": bool, "wired": bool} (the sentence is
+    #: built here, never by the caller).
+    enforcement: Optional[dict] = None
 
 
 def _gate_action(lookup: str) -> Optional[str]:
@@ -1448,6 +1501,7 @@ def view(ctx: Optional[Ctx] = None) -> dict:
     except Exception:
         tools = []
     return {"available": True, "title": TITLE, "detail": DETAIL, "rows": rows,
+            "enforcement": _enforcement(ctx),
             "tools": tools, "tools_title": TOOLS_TITLE,
             "tools_none": TOOLS_NONE, "everything_else": EVERYTHING_ELSE,
             "where_label": WHERE_LABEL, "asks_label": ASKS_LABEL,

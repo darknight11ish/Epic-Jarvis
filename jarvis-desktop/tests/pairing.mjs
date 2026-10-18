@@ -236,7 +236,7 @@ await check("CONTROL: the backend's own token is read in the backend's order, an
 
 await check("CONTROL: Clear never stores an empty token", async () => {
   const rust = read("src-tauri/src/commands.rs");
-  const set = rust.slice(rust.indexOf("pub fn set_api_settings"));
+  const set = rust.slice(rust.indexOf("pub async fn set_api_settings("));
   const body = set.slice(0, set.indexOf("\n}\n"));
   // Setting or clearing, the plain key goes; "" clears Credential Manager.
   assert.match(body, /if token\.is_some\(\) \{\s*store\.delete\("token"\);/,

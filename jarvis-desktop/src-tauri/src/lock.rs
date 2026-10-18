@@ -761,6 +761,20 @@ pub fn may_open(app: &AppHandle, which: Covered) -> bool {
     false
 }
 
+/// Asks Windows Hello for a change that can redirect or persist something
+/// (the T slice, security audit F3): the same prompt Security settings and
+/// Show already use, and the same fail-closed verdict - cancelled, not set up
+/// or unable to show all refuse the change. Windows Hello only; the App lock's
+/// own Hello prompt gates reaching Settings at all.
+pub async fn require_hello(
+    app: &AppHandle,
+    window: &WebviewWindow,
+    message: &str,
+) -> Result<(), String> {
+    let outcome = ask(app, &Asker::window(window), message.to_string()).await;
+    strict_verdict(outcome)
+}
+
 /// Talk-to-type (talk_type.rs): true while App lock is on and the owner has
 /// been away longer than "Lock again after" - the same test [`may_open`]
 /// makes, but it starts no prompt (a prompt would take the keyboard focus
