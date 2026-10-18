@@ -50,11 +50,12 @@ data class ReadinessItem(
 object PlatformReadiness {
 
     /**
-     * Mirrors what network_security_config.xml's `<domain>` rows actually
-     * match - `ts.net` and `nord` (with subdomains), the phone itself - and
-     * nothing else. The list and the matching live in one place,
-     * [PhoneAddress.cleartextPermitted], which PhoneAddressTest holds to the
-     * real XML file; this used to keep its own copy "in step by hand".
+     * Mirrors what the RELEASE network_security_config.xml's `<domain>` rows
+     * actually match - `ts.net` and `nord` (with subdomains) and nothing else
+     * (loopback is a debug-only overlay, apps security audit L7). The list and
+     * the matching live in one place, [PhoneAddress.cleartextPermitted], which
+     * PhoneAddressTest holds to the real XML file; this used to keep its own
+     * copy "in step by hand".
      *
      * The copy before that held a bare `"ts.net"` and tested it with
      * `endsWith`, so `notmyts.net` and `evilts.net` - registrable public

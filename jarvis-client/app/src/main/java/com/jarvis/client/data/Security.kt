@@ -195,6 +195,54 @@ object SecurityRules {
     fun approvalNeedsCheck(s: Security, item: PendingItem): Boolean =
         riskyByToday(item) || s.approvals == ApprovalCheck.EVERY
 
+    /** Shown once, after the first pairing, when App lock is turned on by default. */
+    const val SETUP_LOCK_ON =
+        "App lock is on. Jarvis will ask for your fingerprint or PIN when it comes back."
+
+    /** Shown once, after the first pairing, when the phone cannot check a person. */
+    const val SETUP_LOCK_OFF =
+        "App lock stays off because this phone has no screen lock. Risky approvals stay " +
+            "refused until it has one to check."
+
+    /**
+     * What a phone's security settings should be right after its FIRST pairing.
+     *
+     * The owner's decision of 2026-10-18: App lock defaults ON at setup, so a
+     * newly paired phone is protected without first asking. It is only a
+     * DEFAULT for a phone that is not paired yet:
+     *  - an already-paired phone (a re-pair) is left exactly as it is, so an
+     *    owner who deliberately turned App lock off is not overruled and an
+     *    unlocked session is not relocked;
+     *  - a phone with no way to check (no screen lock, no usable biometrics)
+     *    stays off, because turning it on would lock the owner out
+     *    ([refuseTightening]).
+     */
+    fun setupDefault(current: Security, canCheck: Boolean, alreadyPaired: Boolean): Security =
+        when {
+            alreadyPaired -> current
+            // No way to check: the setup adds no lock, and never removes one
+            // the owner already had (availability can be transiently busy).
+            !canCheck -> current
+            else -> current.copy(appLock = true)
+        }
+
+    /**
+     * Whether notification CONTENT must be redacted. This is the single rule
+     * every notifier uses:
+     *  - App lock or "Hide memory lists and chat history" say the owner does
+     *    not want the words where someone else can read them;
+     *  - a phone whose own screen lock is NOT secure has no lock between a
+     *    notification and a stranger, so App lock off must not mean "show the
+     *    words on the lock screen" (M12). Android's `VISIBILITY_PRIVATE` still
+     *    shows private content on a swipe-only lock screen; the redacted
+     *    public version is used in that state too.
+     *
+     * [deviceSecure] is `KeyguardManager.isDeviceSecure()`; callers that
+     * cannot read it pass false (redact - the safe direction).
+     */
+    fun notificationsLocked(s: Security, deviceSecure: Boolean): Boolean =
+        s.appLock || s.privateLists || !deviceSecure
+
     /**
      * What to do after a check. [Stop.say] is null when nothing needs saying.
      * [Stop.offerLockSettings]: the fix is in Android's own settings, so the

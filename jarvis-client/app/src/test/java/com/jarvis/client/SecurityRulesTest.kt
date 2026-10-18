@@ -388,4 +388,51 @@ class SecurityRulesTest {
         val locked = Security(appLock = true, swipeDecides = false)
         assertTrue(SecurityRules.summary(locked).endsWith(SecurityRules.SWIPE_OFF_SUMMARY))
     }
+
+    // --- M12: the first-pair default, and lock-screen redaction ---
+
+    @Test
+    fun `App lock defaults on at first pairing, for a phone that can check`() {
+        val on = SecurityRules.setupDefault(Security(), canCheck = true, alreadyPaired = false)
+        assertTrue(on.appLock)
+        // The other choices are untouched.
+        assertEquals(Security().relockAfter, on.relockAfter)
+        assertEquals(Security().method, on.method)
+        // A re-pair is an existing phone: the owner's choice is left exactly.
+        val existing = SecurityRules.setupDefault(
+            Security(appLock = false, privateLists = true), canCheck = true, alreadyPaired = true,
+        )
+        assertFalse(existing.appLock)
+        assertTrue(existing.privateLists)
+        // No way to check: the setup adds no lock, and never removes one the
+        // owner already had (availability can be transiently busy).
+        val cannot = SecurityRules.setupDefault(Security(), canCheck = false, alreadyPaired = false)
+        assertFalse(cannot.appLock)
+        assertTrue(SecurityRules.setupDefault(Security(appLock = true), false, false).appLock)
+        // A phone already on before setup stays on.
+        assertTrue(SecurityRules.setupDefault(Security(appLock = true), true, false).appLock)
+    }
+
+    @Test
+    fun `notification words are redacted when App lock is on, lists are hidden, or the phone has no secure lock`() {
+        assertTrue(SecurityRules.notificationsLocked(Security(appLock = true), deviceSecure = true))
+        assertTrue(SecurityRules.notificationsLocked(Security(privateLists = true), deviceSecure = true))
+        assertTrue(SecurityRules.notificationsLocked(Security(), deviceSecure = false))
+        assertFalse(SecurityRules.notificationsLocked(Security(), deviceSecure = true))
+        // Any one is enough: turning both settings off does not override an
+        // insecure keyguard, which is the whole M12 point.
+        assertTrue(
+            SecurityRules.notificationsLocked(
+                Security(appLock = false, privateLists = false),
+                deviceSecure = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `the setup sentences say what happened and how to fix it`() {
+        assertTrue(SecurityRules.SETUP_LOCK_ON.startsWith("App lock is on"))
+        assertTrue(SecurityRules.SETUP_LOCK_OFF.contains("no screen lock"))
+        assertTrue(SecurityRules.SETUP_LOCK_OFF.contains("Risky approvals"))
+    }
 }

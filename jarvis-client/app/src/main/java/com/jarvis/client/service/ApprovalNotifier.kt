@@ -261,7 +261,13 @@ object ApprovalNotifier {
 
     private fun build(context: Context, item: PendingItem, notificationId: Int): Notification {
         val sec = JarvisRuntime.settings.security.value
-        val locked = sec.appLock || sec.privateLists
+        // App lock/private lists, OR a phone whose OWN lock screen is not
+        // secure: Android's VISIBILITY_PRIVATE draws the body on a swipe-only
+        // lock screen, so the redacted public words are used there too (M12).
+        val locked = com.jarvis.client.data.SecurityRules.notificationsLocked(
+            sec,
+            com.jarvis.client.platform.DeviceSecure.isSecure(context),
+        )
         val (title, body) = textFor(context, item, locked)
 
         // Which channel, not which priority. On Android 8 and later the

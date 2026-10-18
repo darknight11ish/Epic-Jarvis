@@ -53,6 +53,12 @@
   in plain words (data/PhoneAddress.kt), rather than accepting an address
   every request would then fail on. PhoneAddressTest reads THIS file and
   fails if the app's copy of the list differs from it.
+
+  Loopback (localhost, 127.0.0.1) is deliberately NOT in this RELEASE file
+  (apps security audit L7): the app never targets the phone itself, and a
+  release build should not be able to speak plain HTTP to whatever app happens
+  to be listening on a loopback port. Debug builds keep those two rules in
+  src/debug/res/xml/network_security_config.xml for local tests only.
 -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="false" />
@@ -60,7 +66,5 @@
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="true">ts.net</domain>
         <domain includeSubdomains="true">nord</domain>
-        <domain includeSubdomains="true">localhost</domain>
-        <domain includeSubdomains="false">127.0.0.1</domain>
     </domain-config>
 </network-security-config>

@@ -252,6 +252,31 @@ object Devices {
     /** Was the removed device this phone itself? */
     fun removedThisPhone(body: JsonObject?): Boolean = body.bool("was_this_device") == true
 
+    // ── Unpair & clear the token (M10) ────────────────────────────────────
+    //
+    // The phone's own "forget this desktop" action. It reuses the SAME
+    // `/api/devices/remove` route the device list's Remove button already uses
+    // (no new backend route, no desktop-side change needed: the PC's existing
+    // device list is the revoke/rotation surface), then clears the local
+    // Keystore token and address. Even when the PC cannot be reached the local
+    // secret is cleared; the sentence says which half happened.
+
+    const val UNPAIR_BUTTON = "Unpair & clear the token"
+
+    const val UNPAIR_PROMPT =
+        "This forgets the desktop on this phone and clears its pairing token now. " +
+            "If the PC can be reached, this device is also removed from its list. " +
+            "You will need to pair again with the PC's token (or QR code)."
+
+    /** What [removeSaid] plus the local half said, once the token is gone. */
+    fun unpairSaid(removedOnPc: Boolean): String =
+        if (removedOnPc) {
+            "Unpaired. This phone's token is cleared and the PC removed it from its list. Pair again to use Jarvis."
+        } else {
+            "Unpaired. This phone's token is cleared. The PC could not be reached, so remove this " +
+                "device there too (Settings, Devices)."
+        }
+
     // ── Naming a device (docs/MULTI-DEVICE-DESIGN.md, the first slice) ────
     //
     // The owner's own name for a device he already paired: kept beside its key
