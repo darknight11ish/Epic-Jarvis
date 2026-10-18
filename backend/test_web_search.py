@@ -355,7 +355,9 @@ def t_searxng_results_no_proxy_no_redirect():
     check("titles lose their tags, snippets are cut to length",
           r and r[0]["title"] == "Result 0" and len(r[0]["snippet"]) <= WS.SNIPPET_CHARS, r[:1])
     check("the request went straight to SearXNG, with format=json",
-          srv.seen and "format=json" in srv.seen[0]["path"] and "walking+boots" in srv.seen[0]["path"])
+          len(srv.seen) >= 2 and srv.seen[0]["path"] == "/"
+          and any("format=json" in r["path"] and "walking+boots" in r["path"]
+                  for r in srv.seen[1:]), srv.seen)
     check("the machine's proxy saw nothing (jarvis_local_http, no proxy)", not proxy.seen,
           proxy.seen)
     proxy.close()
@@ -412,6 +414,101 @@ def t_searxng_down_says_so_and_never_falls_back():
         WS.TAVILY_URL = WS.TAVILY_URL_SAVED
         tavily.close()
         WS._DDGS_MODULE = None
+
+
+class StalledPort:
+    """A local port that ACCEPTS and then says nothing: a cold Docker Desktop
+    proxy on the owner's PC. The connection is held open and never written to,
+    so only the client's own timeout can end the wait."""
+
+    def __init__(self):
+        self.sock = socket.socket()
+        self.sock.bind(("127.0.0.1", 0))
+        self.sock.listen(8)
+        self.url = f"http://127.0.0.1:{self.sock.getsockname()[1]}"
+        self.conns = []
+        self._stop = False
+        threading.Thread(target=self._serve, daemon=True).start()
+
+    def _serve(self):
+        self.sock.settimeout(0.2)
+        while not self._stop:
+            try:
+                c, _ = self.sock.accept()
+            except socket.timeout:
+                continue
+            except OSError:
+                return
+            self.conns.append(c)          # accepted, never answered
+
+    def close(self):
+        self._stop = True
+        for c in self.conns:
+            try:
+                c.close()
+            except Exception:
+                pass
+        try:
+            self.sock.close()
+        except Exception:
+            pass
+
+
+def t_a_stalled_searxng_is_reported_fast_and_honestly():
+    """The owner's morning: Docker Desktop is still starting, its port accepts
+    the connection and then answers nothing. Before the bounded preflight this
+    waited TIMEOUT (15 s) inside the model turn. It must be the SAME honest
+    "isn't running" words, in well under 2 s, with nothing sent anywhere else
+    and the model told to say it rather than guess."""
+    stalled = StalledPort()
+    ddg_calls = []
+    WS._DDGS_MODULE = fake_ddgs(ddg_calls)
+    reset(searxng_url=stalled.url)
+    try:
+        started = time.monotonic()
+        out = WS.run(WS.plan("walking boots"), approved=True)
+        took = time.monotonic() - started
+        check("a stalled local port is reported in well under 2 s",
+              took < 2.0, f"{took:.2f}s")
+        check("... with the same plain words as a closed one", out.get("ok") is False
+              and out.get("state") == "not_running"
+              and "SearXNG isn't running on this PC" in out.get("error", "")
+              and "Start it in Docker Desktop" in out.get("error", ""), out)
+        check("... and NOTHING was tried anywhere else (no silent fallback)",
+              not ddg_calls, ddg_calls)
+        told = WS.tool_result(out)
+        check("... and the model is told to say it, never to guess or search another way",
+              "Do not try to search another way" in told["tell_the_owner"], told)
+    finally:
+        WS._DDGS_MODULE = None
+        stalled.close()
+    # A closed port is the same answer, and fast for the same reason.
+    reset(searxng_url=f"http://127.0.0.1:{free_port()}")
+    started = time.monotonic()
+    out = WS.run(WS.plan("walking boots"), approved=True)
+    took = time.monotonic() - started
+    check("a closed local port is the same honest answer, just as fast",
+          out.get("state") == "not_running" and took < 2.0
+          and "isn't running" in out.get("error", ""), (took, out))
+    # A healthy SearXNG is unchanged: the preflight answers at once and the
+    # real search keeps its own budget and returns results.
+    srv = StandIn({"/search": (200, {"Content-Type": "application/json"}, searxng_json())})
+    reset(searxng_url=srv.url)
+    try:
+        out = WS.run(WS.plan("walking boots"), approved=True)
+        check("a healthy SearXNG still searches normally - the preflight costs it nothing",
+              out.get("ok") is True and len(out.get("results") or []) > 0, out)
+        check("... the preflight asked the address first, then the real search",
+              len(srv.seen) >= 2 and srv.seen[0]["path"] == "/"
+              and any("format=json" in r["path"] for r in srv.seen[1:]), srv.seen)
+    finally:
+        srv.close()
+    # readiness() itself still opens NO socket: the bounded ask is the SEND
+    # step, never the settings screen's own report.
+    with NoSockets() as ns:
+        state, said = WS.readiness("searxng")
+    check("readiness() still opens no socket - the bounded ask belongs to the send",
+          state == "" and not ns.tried, (state, said, ns.tried))
 
 
 def t_searxng_answering_with_nothing_is_never_a_silent_empty_answer():
@@ -872,7 +969,8 @@ def t_test_search_reports_plainly():
     check("Test search: works, with a count", out["ok"] and out["state"] == "works"
           and "3 results" in out["said"], out)
     check("... for the fixed harmless word only",
-          srv.seen and f"q={WS.TEST_QUERY}" in srv.seen[0]["path"], srv.seen)
+          len(srv.seen) >= 2 and all(f"q={WS.TEST_QUERY}" in r["path"]
+                                     for r in srv.seen[1:]), srv.seen)
     srv.close()
     reset(searxng_url=f"http://127.0.0.1:{free_port()}")
     code, out = WS.handle_test({})
@@ -1467,6 +1565,7 @@ if __name__ == "__main__":
     for fn in (t_the_why_lines, t_both_apps_say_the_same_words,
                t_plan_opens_no_socket_and_refuses_a_secret,
                t_searxng_results_no_proxy_no_redirect, t_searxng_down_says_so_and_never_falls_back,
+               t_a_stalled_searxng_is_reported_fast_and_honestly,
                t_searxng_answering_with_nothing_is_never_a_silent_empty_answer,
                t_the_searxng_address_is_the_owners_own, t_tavily_key_goes_only_to_tavily,
                t_exa_key_goes_only_to_exa, t_brave_key_goes_only_to_brave,

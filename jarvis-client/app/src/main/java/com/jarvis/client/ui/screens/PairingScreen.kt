@@ -64,6 +64,12 @@ fun PairingScreen(
     /** The host to show. When [onHostChange] is set this IS the field's value. */
     initialHost: String,
     hasToken: Boolean,
+    /**
+     * The address the stored token was paired with - set only when [hasToken].
+     * A token is reused for this address only; any other address needs a
+     * freshly typed token (data/PairingKey.kt `freshTokenRequired`).
+     */
+    savedHost: String = "",
     busy: Boolean,
     /** The last handshake failure, in words the user can act on. */
     notice: String?,
@@ -110,6 +116,10 @@ fun PairingScreen(
     // saved value. Only used when the caller does not own the host.
     var localHost by rememberSaveable(initialHost) { mutableStateOf(initialHost) }
     val host = if (onHostChange != null) initialHost else localHost
+    // A stored token is used for the desktop it was paired with ONLY. When the
+    // owner edits the address, the token field must be filled again - otherwise
+    // Connect would carry the old device key to the new host (M11).
+    val freshTokenNeeded = PairingKey.freshTokenRequired(hasToken, savedHost, host)
     val setHost: (String) -> Unit = { value ->
         if (onHostChange != null) {
             onHostChange(value)
@@ -311,10 +321,10 @@ fun PairingScreen(
                 password = !keyShown,
                 label = if (hasToken) "Replace token" else "Pairing token",
                 placeholder = "On the PC: Settings, Show the token for my phone",
-                supportingText = if (hasToken) {
-                    "A token is stored. Leave this blank to keep it."
-                } else {
-                    "Kept encrypted on this phone, in Android's secure key storage."
+                supportingText = when {
+                    freshTokenNeeded -> PairingKey.FRESH_TOKEN_REQUIRED
+                    hasToken -> "A token is stored. Leave this blank to keep it."
+                    else -> "Kept encrypted on this phone, in Android's secure key storage."
                 },
                 // Password keyboard either way, shown or not: no suggestions, and
                 // the keyboard does not learn the token.
@@ -376,7 +386,7 @@ fun PairingScreen(
                 text = "Connect",
                 busy = busy,
                 enabled = !busy && host.isNotBlank() &&
-                    (hasToken || handedOver || token.isNotBlank()),
+                    (token.isNotBlank() || handedOver || (hasToken && !freshTokenNeeded)),
                 modifier = Modifier.weight(1f),
                 onClick = {
                     // Local network access, asked for HERE and not at app start,

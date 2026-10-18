@@ -392,14 +392,19 @@ def t_what_is_backed_up_and_what_is_excluded():
           "its weekly check-ins live in schedule.db", "goals.db" in B.SOURCE_DBS)
     # Every database file name a backend module opens must be on the list, so
     # the next one added cannot be forgotten the way projects.db and goals.db
-    # each were once.
+    # each were once. A `.jsonl` store is the same kind of decision and is
+    # scanned too (Frontier 2 audit, 2026-10-18) - the older `.db`-only regex
+    # could not see the File Guardian's journal, so a whole store could go
+    # missing without a red check.
     import re as _re
     opened = set()
+    opened_jsonl = set()
     for mod in sorted(HERE.glob("jarvis_*.py")):
         if mod.name == "jarvis_backup.py":
             continue
-        opened |= set(_re.findall(r"[\"']([A-Za-z0-9_-]+\.db)[\"']",
-                                  mod.read_text(encoding="utf-8")))
+        text = mod.read_text(encoding="utf-8")
+        opened |= set(_re.findall(r"[\"']([A-Za-z0-9_-]+\.db)[\"']", text))
+        opened_jsonl |= set(_re.findall(r"[\"']([A-Za-z0-9_-]+\.jsonl)[\"']", text))
     # The module's OWN register of deliberate exclusions, so a new database is
     # accounted for in one place. study.db (review decks, jarvis_decks.py)
     # joined the locked backup on 2026-09-30, the owner's decision; the search
@@ -408,6 +413,14 @@ def t_what_is_backed_up_and_what_is_excluded():
     NOT_BACKED_UP = set(B.NOT_BACKED_UP)
     check("every .db a backend module names is backed up (or written down here)",
           opened - NOT_BACKED_UP <= set(B.SOURCE_DBS), sorted(opened - NOT_BACKED_UP - set(B.SOURCE_DBS)))
+    excused_jsonl = {n for n in opened_jsonl if B.not_backed_up_reason(n)}
+    check("every .jsonl a backend module names is backed up or recorded too",
+          opened_jsonl - set(B.SETTINGS_NAMES) - excused_jsonl == set(),
+          sorted(opened_jsonl - set(B.SETTINGS_NAMES) - excused_jsonl))
+    check("every recorded non-SQLite exclusion says why, in plain words",
+          all(isinstance(w, str) and len(w) > 20
+              for w in B.NOT_BACKED_UP_PATHS.values()),
+          B.NOT_BACKED_UP_PATHS)
     check("study.db (review decks) is on the list of databases backed up",
           "study.db" in B.SOURCE_DBS and "study.db" in opened)
     check("the settings JSON is in", "settings/folders.json" in names)
@@ -617,6 +630,50 @@ def t_the_newly_covered_databases_and_named_files_really_go_in():
           f"{len(B.SOURCE_DBS)} backed up, {len(B.NOT_BACKED_UP)} excluded")
 
 
+def t_the_guardian_store_is_an_explicit_exclusion_never_a_silent_one():
+    """The File Guardian's store is device-local file history, not memory.
+
+    Frontier 2 audit, 2026-10-18: there is no `guardian.db`; the store is
+    `guardian/guardian.jsonl` (a path per saved version), `pins.json` and
+    `blobs/<sha256>.gz` (up to the 250 MiB quota in jarvis_file_guardian.py).
+    It was in neither SOURCE_DBS nor NOT_BACKED_UP, so a backup simply left it
+    out and no check said so. This proves the archive never carries it - a
+    blob store must not bloat a backup - and that every piece of the decision
+    is written down in words, so a new store cannot disappear the same way.
+    """
+    conf, _backups = fresh_conf()
+    guardian = conf / "guardian"
+    (guardian / "blobs").mkdir(parents=True)
+    (guardian / "guardian.jsonl").write_text(
+        '{"path": "C:\\\\Users\\\\owner\\\\notes.txt", "before_sha256": "%s"}\n'
+        % ("a" * 64), encoding="utf-8")
+    (guardian / "pins.json").write_text(
+        '{"pins": ["%s"]}' % ("a" * 64), encoding="utf-8")
+    (guardian / "blobs" / ("a" * 64 + ".gz")).write_bytes(b"COMPRESSED OLD BYTES" * 100)
+
+    zip_bytes, _manifest = B.build_archive()
+    names = zf_names(zip_bytes)
+    check("the guardian store never enters the archive",
+          not any(n.startswith("guardian/") for n in names),
+          [n for n in names if "guardian" in n])
+    check("...and its blob store cannot be reached by any other name",
+          not any(n.endswith(".gz") for n in names),
+          [n for n in names if n.endswith(".gz")])
+
+    blob = "guardian/blobs/" + ("a" * 64) + ".gz"
+    for path in ("guardian/guardian.jsonl", "guardian/pins.json", blob):
+        why = B.not_backed_up_reason(path)
+        check(f"{path} has a recorded reason", len(why) > 20, why)
+    why = B.not_backed_up_reason("guardian/guardian.jsonl")
+    check("...the journal's reason says device-local, not memory",
+          "device-local" in why, why)
+    check("the same record covers the other non-SQLite stores",
+          "energy" in B.not_backed_up_reason("energy.jsonl")
+          and "anchor" in B.not_backed_up_reason("ledger-anchors.jsonl"))
+    check("a store nobody wrote down gets no invented reason",
+          B.not_backed_up_reason("something-else.jsonl") == "")
+
+
 def t_the_settings_files_a_json_glob_cannot_reach_are_carried_and_put_back():
     """config.toml and speed.jsonl (2026-10-13).
 
@@ -689,8 +746,11 @@ def zf_names(zip_bytes: bytes) -> set:
 #: on a line that is NOT a comment, with a value that is not empty and not an
 #: obvious placeholder. Used to read the owner's own config.toml - see the
 #: module docstring's "WHAT `config.toml` ACTUALLY HOLDS".
+#: Secret-shaped setting names. The LEADING boundary is deliberately absent so
+#: a provider-prefixed name (`bot_token`, `github_api_key`) is caught too; the
+#: trailing boundary still keeps `max_tokens` and `secret_scanner` out.
 _SECRET_NAME_RE = re.compile(
-    r'(?i)\b(token|secret|passwd|password|api[_-]?key|passphrase|private[_-]?key)\b')
+    r'(?i)(token|secret|passwd|password|api[_-]?key|passphrase|private[_-]?key)\b')
 _PLACEHOLDER_VALUES = {'""', "''", '""', "null", "none", '""  # or set telegram_bot_token env var'}
 _CONFIG_PATH = Path(os.path.expanduser("~")) / ".openjarvis" / "config.toml"
 
@@ -716,6 +776,31 @@ def _live_secret_lines(text: str) -> list:
             continue
         out.append((n, line))
     return out
+
+
+def _snapshot_secret_lines(config_path=_CONFIG_PATH) -> list:
+    """[(snapshot name, line number, line)] for live secrets in
+    `config.toml.before-*` snapshots (2026-10-18, audit F6).
+
+    The patcher and Settings leave these plaintext copies of earlier settings
+    in the same folder; the real `config.toml` is tested above, but a secret
+    pasted in before the fix would only exist in a snapshot. Empty when there
+    are no snapshots - the caller says so rather than counting that as a pass.
+    """
+    out = []
+    try:
+        snapshots = sorted(config_path.parent.glob(config_path.name + ".before-*"))
+    except OSError:
+        return out
+    for path in snapshots:
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for number, line in _live_secret_lines(text):
+            out.append((path.name, number, line))
+    return out
+
 
 
 def t_config_toml_holds_no_secret():
@@ -768,6 +853,33 @@ def t_config_toml_holds_no_secret():
           "# bot_token" in text and "_TOKEN env var" in text)
     check("...and its server section is loopback, not exposed",
           'host = "127.0.0.1"' in text and '# host = "0.0.0.0"' in text)
+    snapshot_files = sorted(_CONFIG_PATH.parent.glob(_CONFIG_PATH.name + ".before-*"))
+    if not snapshot_files:
+        print("        NOTE: no config.toml.before-* snapshot is on this machine, so the "
+              "snapshot check did NOT run. It is not a pass.")
+    else:
+        bad_snaps = _snapshot_secret_lines()
+        check("...and every config.toml.before-* snapshot holds no live secret either "
+              "(F6: the patcher leaves those plaintext copies)",
+              bad_snaps == [], bad_snaps[:3])
+
+
+def t_a_secret_in_a_config_snapshot_would_be_caught():
+    """F6's scanner is exercised on a synthetic snapshot, so a machine with no
+    live snapshots still proves the rule; a bite on `_snapshot_secret_lines`
+    turns this red."""
+    with tempfile.TemporaryDirectory() as tmp:
+        config = Path(tmp) / "config.toml"
+        config.write_text("[server]\nhost = \"127.0.0.1\"\n", encoding="utf-8")
+        snap = Path(tmp) / "config.toml.before-test"
+        snap.write_text('[a]\nbot_token = "REAL"\n# token = ""\n', encoding="utf-8")
+        got = _snapshot_secret_lines(config)
+        check("a live secret in a before-* snapshot is found, with its file and line",
+              got == [("config.toml.before-test", 2, 'bot_token = "REAL"')], got)
+    with tempfile.TemporaryDirectory() as tmp:
+        config = Path(tmp) / "config.toml"
+        config.write_text("[a]\ntoken = \"\"\n", encoding="utf-8")
+        check("...and a clean snapshot folder is clean", _snapshot_secret_lines(config) == [])
 
 
 def t_the_credentials_folder_is_not_swept_into_a_backup():

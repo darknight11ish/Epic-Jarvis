@@ -392,16 +392,36 @@ class UpdateCheckTest {
         }
     }
 
+    // ROTATION STEP 2 of 2: the expected certificate, paired with
+    // UpdateCheck.SIGNER_SHA256 (STEP 1). The runbook is
+    // `.dsh-scratch/ANDROID-SIGNING-ROTATION.md`; the two values change in the
+    // same commit, in lowercase hex with no colons, and the tests below fail
+    // loudly if they drift apart.
+    private val expectedSigner =
+        "62ef7742e35e742a94a071bba83631fd6db78b5b50961f7b45719d736500d7b5"
+
     @Test
     fun `the pinned certificate is the project key's, and it is a real digest`() {
         // keytool, on the owner's own keystore, and apksigner, on the copy
         // installed on his phone, both read exactly this (2026-10-11). It is
-        // the one thing a swapped file cannot fake.
-        assertEquals(
-            "62ef7742e35e742a94a071bba83631fd6db78b5b50961f7b45719d736500d7b5",
-            UpdateCheck.SIGNER_SHA256,
-        )
+        // the one thing a swapped file cannot fake. ROTATION: this compares the
+        // two STEP-marked values above; see `.dsh-scratch/ANDROID-SIGNING-ROTATION.md`.
+        assertEquals(expectedSigner, UpdateCheck.SIGNER_SHA256)
         assertTrue(UpdateCheck.SIGNER_SHA256.matches(Regex("^[0-9a-f]{64}$")))
+    }
+
+    @Test
+    fun `a near-miss digest is refused, never rounded, padded or shortened`() {
+        val want = UpdateCheck.SIGNER_SHA256
+        // One byte short, one byte long: both are a refusal, not a warning.
+        assertFalse(UpdateCheck.signerMatches(want.dropLast(1)))
+        assertFalse(UpdateCheck.signerMatches(want + "0"))
+        // A different first byte is still 64 hex characters and still refused.
+        assertFalse(UpdateCheck.signerMatches(want.replaceRange(0, 1, if (want[0] == '0') "1" else "0")))
+        // The same digest as keytool prints it (uppercase, colon-separated) and
+        // with the surrounding space a clipboard paste sometimes adds: accepted.
+        assertTrue(UpdateCheck.signerMatches(want.chunked(2).joinToString(":").uppercase()))
+        assertTrue(UpdateCheck.signerMatches("  $want  "))
     }
 
     @Test

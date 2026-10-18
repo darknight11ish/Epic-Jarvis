@@ -65,7 +65,10 @@ object HandoffNotifier {
     fun post(context: Context, o: Handoff.Offer, locked: Boolean) {
         if (!allowed(context)) return
         ensureChannel(context)
-        val (title, text) = Handoff.alert(o, locked)
+        // The caller's lock rule, plus M12's: an insecure keyguard draws the
+        // private body on a swipe-only lock screen, so redact there too.
+        val mustHide = locked || !com.jarvis.client.platform.DeviceSecure.isSecure(context)
+        val (title, text) = Handoff.alert(o, mustHide)
         val open = PendingIntent.getActivity(
             context,
             NOTIFICATION_ID,

@@ -88,19 +88,29 @@ object ChatbotNotifier {
             return
         }
         if (!allowed(context)) return
+        // M12: a swipe-only lock screen would draw private content; use the
+        // generic words there too, exactly as the approval and reminder
+        // notifiers do.
+        val mustHide = !com.jarvis.client.platform.DeviceSecure.isSecure(context)
         val n = NotificationCompat.Builder(context, EventService.CHANNEL_ID)
             // Stays on this phone unless the owner turned on "Show
             // notifications on a compatible watch" (Brain, off by default).
             .setLocalOnly(!JarvisRuntime.watchNotificationsAllowed())
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(line)
-            .setContentText(title)
+            .setContentTitle(if (mustHide) context.getString(R.string.app_name) else line)
+            .setContentText(if (mustHide) lockedWords else title)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)
-            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setVisibility(
+                if (mustHide) {
+                    NotificationCompat.VISIBILITY_PUBLIC
+                } else {
+                    NotificationCompat.VISIBILITY_PRIVATE
+                },
+            )
             .setPublicVersion(locked(context, lockedWords))
             .setContentIntent(open(context))
             .addAction(0, Chatbot.STOP, stopIntent(context, stopId))

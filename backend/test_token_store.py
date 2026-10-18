@@ -129,6 +129,14 @@ def t_a_file_that_disagrees_wins():
     check("disagreeing file: the file's token wins", got.token == "newer-from-old-code")
     check("disagreeing file: and replaces the store's", store.value == "newer-from-old-code")
     check("disagreeing file: the file is deleted", files_in(d) == [])
+    banner = " ".join(got.notes)
+    check("disagreeing file: the banner SAYS it differed and replaced the store "
+          "(it is not silently authoritative)",
+          "DIFFERENT token" in banner and "REPLACED Credential Manager" in banner, got.notes)
+    check("disagreeing file: the banner still names the file that was deleted",
+          str(f) in banner and "deleted" in banner, got.notes)
+    check("disagreeing file: the banner never carries the token itself",
+          "newer-from-old-code" not in banner, got.notes)
 
 
 def t_a_refusing_store_keeps_the_old_file():

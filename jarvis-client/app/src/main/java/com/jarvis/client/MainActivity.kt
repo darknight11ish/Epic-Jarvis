@@ -966,6 +966,18 @@ class MainActivity : FragmentActivity() {
         // then judged the saved one, usually blank. Only ever written to
         // settings by onPair, as before. Not a secret - the token is not here.
         var pairingHost by rememberSaveable { mutableStateOf(JarvisRuntime.settings.host.value) }
+        // M10: "Unpair & clear the token" bumps the runtime's tick. The token
+        // and address are gone, so bring the pairing screen back rather than
+        // leaving the owner on a Home screen pointing at nothing.
+        val unpairedTick by JarvisRuntime.unpairedTick.collectAsState()
+        LaunchedEffect(unpairedTick) {
+            if (unpairedTick > 0) {
+                paired = false
+                repairing = false
+                pairingHost = ""
+                nav.resetTo(Screen.HOME)
+            }
+        }
         // Set once the pairing screen has been brought back for the current
         // token refusal, so "Keep current desktop" is not overruled a moment
         // later by the same refusal. Cleared when the refusal clears.
@@ -2089,6 +2101,17 @@ class MainActivity : FragmentActivity() {
                 val pairWith: (String, String) -> Unit = { host, token ->
                     busy = true
                     scope.launch {
+                        // M11 defence in depth: the screen already requires a
+                        // freshly typed token when the address changes, but a
+                        // caller must never hand the stored device key to a
+                        // changed host. Refuse before anything is written.
+                        if (replacing && token.isBlank() &&
+                            !com.jarvis.client.data.PairingKey.sameDesktop(JarvisRuntime.settings.host.value, host)
+                        ) {
+                            busy = false
+                            JarvisRuntime.setNotice(com.jarvis.client.data.PairingKey.FRESH_TOKEN_REQUIRED)
+                            return@launch
+                        }
                         // Only filled in when re-pairing. Held in this
                         // coroutine and nowhere else, never logged, and
                         // dropped when it ends. `oldToken` stays empty when
@@ -2127,7 +2150,33 @@ class MainActivity : FragmentActivity() {
                                 // one-time "Background restart" offer on Home
                                 // (walk-through C9). Offered, never asked for
                                 // by a dialog, and never again after.
-                                if (!replacing) JarvisRuntime.settings.queueKeepAliveOffer()
+                                if (!replacing) {
+                                    JarvisRuntime.settings.queueKeepAliveOffer()
+                                    // M12: App lock defaults ON at first setup,
+                                    // for a phone that can actually check. An
+                                    // already-paired phone (replacing) is left
+                                    // alone, and lockTurnedOn() keeps a session
+                                    // that was already open from relocking.
+                                    val current = JarvisRuntime.settings.security.value
+                                    val check = com.jarvis.client.ui.approval.BiometricGate
+                                        .availability(this@MainActivity, current.method)
+                                    val canCheck =
+                                        check == com.jarvis.client.data.CheckAvailability.READY ||
+                                            check == com.jarvis.client.data.CheckAvailability.NOT_NOW
+                                    val next = com.jarvis.client.data.SecurityRules
+                                        .setupDefault(current, canCheck, alreadyPaired = false)
+                                    if (next != current) {
+                                        JarvisRuntime.settings.setSecurity(next)
+                                        lockSession.lockTurnedOn()
+                                        JarvisRuntime.setNotice(
+                                            com.jarvis.client.data.SecurityRules.SETUP_LOCK_ON,
+                                        )
+                                    } else if (!current.appLock) {
+                                        JarvisRuntime.setNotice(
+                                            com.jarvis.client.data.SecurityRules.SETUP_LOCK_OFF,
+                                        )
+                                    }
+                                }
                                 repairing = false
                                 pairingHost = JarvisRuntime.settings.host.value
                                 // The stream lives in the service, not here:
@@ -2188,6 +2237,9 @@ class MainActivity : FragmentActivity() {
                     onKeyShownChange = { pairingKeyShown = it },
                     initialHost = pairingHost,
                     hasToken = JarvisRuntime.tokens.hasToken(),
+                    // What the stored token belongs to; the screen needs it to
+                    // refuse a blank field after the address is edited (M11).
+                    savedHost = if (replacing) JarvisRuntime.settings.host.value else "",
                     busy = busy,
                     // Brought back by a refusal the stream reported, there may be
                     // no notice yet - so say why the screen appeared. The same

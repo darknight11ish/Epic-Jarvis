@@ -78,21 +78,17 @@ object CrashLog {
     }
 
     /**
-     * The token scrub, in one place: the secret itself when we can read it,
-     * then the header shape, then a per-device key's shape. The crash path has
-     * always done all three; a hang note goes through the SAME door, so it
-     * cannot become a second, weaker way onto the same screen.
+     * The token/address scrub, in one place: the secret itself when we can read
+     * it, then the header shape, then a per-device key's shape, then the PC's
+     * own address (platform/CrashScrub.kt, which the JVM test drives directly).
+     * A hang note goes through the SAME door, so it cannot become a second,
+     * weaker way onto the same screen.
      */
     private fun scrub(body: String, redact: (() -> String?)?): String {
         val secret = runCatching { redact?.invoke() }.getOrNull()
-        var safe = if (!secret.isNullOrBlank()) body.replace(secret, "«token»") else body
-        safe = TOKEN_HEADER.replace(safe, "$1«token»")
-        return com.jarvis.client.net.DeviceKey.scrub(safe, "«token»")
+        return CrashScrub.scrub(body, secret)
     }
 
-    /** `X-Jarvis-Token: ...` however it appears in a trace or an OkHttp message. */
-    private val TOKEN_HEADER =
-        Regex("(X-Jarvis-Token[ :=]+)([A-Za-z0-9._~+/=-]+)", RegexOption.IGNORE_CASE)
     private const val TAG = "JarvisCrash"
 
     /** Installed once, from Application.onCreate, before anything else runs. */
@@ -136,10 +132,20 @@ object CrashLog {
         File(context.filesDir, FILE).writeText(safe)
     }
 
-    /** The last crash, or null. */
+    /**
+     * The last crash, or null when there is none OR it is older than
+     * [CrashScrub.MAX_AGE_MS]. An expired file is deleted rather than shown:
+     * the screen it would open is about what is happening now, and an old trace
+     * is a stale copy of private context that should not be kept forever.
+     */
     fun read(context: Context): String? = runCatching {
         val f = File(context.applicationContext.filesDir, FILE)
-        if (f.exists()) f.readText().takeIf { it.isNotBlank() } else null
+        if (!f.exists()) return@runCatching null
+        if (CrashScrub.isExpired(System.currentTimeMillis(), f.lastModified())) {
+            f.delete()
+            return@runCatching null
+        }
+        f.readText().takeIf { it.isNotBlank() }
     }.getOrNull()
 
     fun clear(context: Context) {

@@ -2605,8 +2605,10 @@ def _kill_tree(p) -> None:
     """Stops the F5 process this module started, and anything it started."""
     try:
         if os.name == "nt":
+            import jarvis_child_env
             subprocess.run(["taskkill", "/PID", str(p.pid), "/T", "/F"],
-                           capture_output=True, timeout=10)
+                           capture_output=True, timeout=10,
+                           env=jarvis_child_env.inherited())
         else:
             import signal
             try:

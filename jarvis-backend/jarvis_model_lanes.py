@@ -375,8 +375,10 @@ def _run(argv: list, timeout: float) -> tuple:
     """(returncode, stdout bytes) for one program run as argv, never a shell."""
     creation = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
     try:
+        import jarvis_child_env
         done = subprocess.run(argv, capture_output=True, timeout=timeout,
-                              creationflags=creation)
+                              creationflags=creation,
+                              env=jarvis_child_env.inherited())
     except (OSError, subprocess.SubprocessError):
         return None, b""
     return done.returncode, done.stdout or b""

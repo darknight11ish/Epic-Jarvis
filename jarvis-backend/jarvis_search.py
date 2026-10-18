@@ -86,6 +86,16 @@ WHAT GOES OVER THE NETWORK, AND HOW
     Whether primp also uses the Windows system proxy is NOT checked here.
   - Every response is read up to MAX_BODY bytes; a longer one is refused.
     Every request has a TIMEOUT. Redirects are refused.
+  - SearXNG gets ONE bounded preflight before the search itself (2026-10-18):
+    one request to its own address with PREFLIGHT_TIMEOUT (1 s). A container
+    that is not there - or a Docker proxy that accepts the port and then
+    says nothing on a cold morning - is reported with the SAME "SearXNG
+    isn't running on this PC" words in about a second, not after the
+    15-second request timeout, so a dead local search never holds a model
+    turn. A healthy SearXNG answers the preflight in milliseconds and the
+    real search keeps its full TIMEOUT. `readiness()` still opens no socket:
+    its contract is to say what is known without asking, and this is the
+    asking step.
 
 RESULTS ARE OUTSIDE TEXT. At most MAX_RESULTS, each {title, url, snippet},
 cut to fixed lengths, tags and control characters taken out. jarvis_agent
@@ -208,6 +218,12 @@ URL_CHARS = 500
 MAX_QUERY_CHARS = 300
 MAX_BODY = 1_000_000          # bytes read from one answer, at most
 TIMEOUT = 15.0                # seconds for one request
+#: SearXNG only (2026-10-18): the bound on the ONE preflight that asks its
+#: address whether anything is there, before the real search is sent. Docker
+#: Desktop after a reboot can accept the port and then answer nothing, and
+#: without this the wait is TIMEOUT (15 s) inside a model turn. A healthy
+#: SearXNG answers in milliseconds, so the search below keeps its own budget.
+PREFLIGHT_TIMEOUT = 1.0
 DDG_GAP = 1.1                 # seconds between two DuckDuckGo searches, at least
 
 #: The one harmless search "Test search" sends.
@@ -1109,15 +1125,53 @@ def normalise(rows) -> list:
     return out
 
 
+def _searxng_down_said(where: str) -> str:
+    """The ONE honest sentence for "nothing is answering at the SearXNG
+    address". Shared with _connection_failed so a dead port, a dead
+    container and a stalled Docker proxy cannot word the same fact two ways.
+    """
+    return (f"SearXNG isn't running on this PC - nothing answered at {where}. Start it in "
+            f"Docker Desktop (backend/README.md, \"Web search\"), or switch web search "
+            f"to another provider.")
+
+
+def _searxng_preflight(base: str) -> None:
+    """Bounded: is ANYTHING answering at the SearXNG address at all?
+
+    ONE request to `base/` with PREFLIGHT_TIMEOUT. Returns None when something
+    answered - even an HTTP error, which means the port is alive and the
+    search below is worth sending. Raises SearchError("not_running", the
+    shared honest sentence) when nothing answered in time or the address
+    refused: about a second, against the 15-second request timeout.
+
+    The tests' `_HTTP` stands in for the request like everywhere else, so a
+    suite drives a refused or a stalled answer without opening a port.
+    `readiness()` deliberately does NOT do this: its contract is no socket.
+    """
+    url = f"{str(base).rstrip('/')}/"
+    req = urllib.request.Request(url, headers={"Accept": "*/*",
+                                               "User-Agent": "jarvis-search"})
+    try:
+        if _HTTP is not None:
+            _HTTP(req, local=True)
+            return
+        import jarvis_local_http as LH
+        with LH.opener(_RefuseRedirect).open(req, timeout=PREFLIGHT_TIMEOUT):
+            pass
+    except SearchError:
+        raise
+    except urllib.error.HTTPError:
+        return              # a 403/404/whatever: the port answered
+    except Exception:
+        raise SearchError("not_running", _searxng_down_said(base)) from None
+
+
 def _connection_failed(provider: str, exc: BaseException, where: str) -> SearchError:
     reason = getattr(exc, "reason", exc)
     if isinstance(reason, (TimeoutError,)) or "timed out" in str(reason).lower():
         return SearchError("timeout", f"{LABEL[provider]} did not answer in time.")
     if provider == "searxng":
-        return SearchError("not_running", (
-            f"SearXNG isn't running on this PC - nothing answered at {where}. Start it in "
-            f"Docker Desktop (backend/README.md, \"Web search\"), or switch web search "
-            f"to another provider."))
+        return SearchError("not_running", _searxng_down_said(where))
     return SearchError("failed", (
         f"Jarvis could not reach {LABEL[provider]} ({type(reason).__name__}). Check the "
         f"PC's internet connection."))
@@ -1154,6 +1208,11 @@ def _engines_down_said(failed: list) -> str:
 
 def _searxng(p: Plan) -> list:
     base = (p.searxng_url or DEFAULT_SEARXNG_URL).rstrip("/")
+    # FIRST: is anything answering at that address? One request, one second.
+    # A cold Docker Desktop can accept the port and then say nothing; asking
+    # here turns that 15-second hang into the same honest sentence in about a
+    # second. A healthy SearXNG answers at once and the search is unchanged.
+    _searxng_preflight(base)
     url = f"{base}/search?" + urllib.parse.urlencode({"q": p.query, "format": "json"})
     req = urllib.request.Request(url, headers={"Accept": "application/json",
                                                "User-Agent": "jarvis-search"})

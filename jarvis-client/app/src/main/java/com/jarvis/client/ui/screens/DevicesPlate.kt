@@ -70,6 +70,7 @@ internal fun DevicesSection() {
     var typed by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<String?>(null) }
+    var unpairing by remember { mutableStateOf(false) }
     var local by remember { mutableStateOf(SignedApproval.Local.NONE) }
 
     // Signed approvals (design §11): waiting for the owner's yes on the PC
@@ -336,6 +337,39 @@ internal fun DevicesSection() {
                     }
                 }
 
+            }
+
+            // M10: "Unpair & clear the token". Available even when the device
+            // list could not be read (the local half always works), and even
+            // when the PC is unreachable (the sentence says to remove it
+            // there). It asks once, because the token is not recoverable.
+            Gap(14)
+            if (!unpairing) {
+                Secondary(Devices.UNPAIR_BUTTON, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                    unpairing = true
+                    said = null
+                }
+            } else {
+                Text(
+                    Devices.UNPAIR_PROMPT,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = chrome.warnInk,
+                )
+                Gap(6)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Secondary("Cancel", modifier = Modifier.weight(1f)) { unpairing = false }
+                    Refuse("Clear it", enabled = !busy) {
+                        busy = true
+                        scope.launch {
+                            try {
+                                said = JarvisRuntime.unpairAndClearToken()
+                            } finally {
+                                busy = false
+                                unpairing = false
+                            }
+                        }
+                    }
+                }
             }
 
             said?.let {

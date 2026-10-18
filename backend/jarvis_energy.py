@@ -167,8 +167,9 @@ def _default_run(argv: list) -> str:
     """Run nvidia-smi and hand back its stdout as text. Never raises; a
     missing program or a refusal comes back as an empty string."""
     try:
+        import jarvis_child_env
         done = subprocess.run(argv, capture_output=True, timeout=_TIMEOUT_S,
-                              check=False)
+                              check=False, env=jarvis_child_env.inherited())
     except (OSError, subprocess.SubprocessError):
         return ""
     out = done.stdout or b""

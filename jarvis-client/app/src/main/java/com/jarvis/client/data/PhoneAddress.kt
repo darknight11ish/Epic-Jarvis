@@ -36,16 +36,19 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 object PhoneAddress {
 
     /**
-     * Every `<domain>` in network_security_config.xml's one
+     * Every `<domain>` in the RELEASE network_security_config.xml's one
      * `cleartextTrafficPermitted="true"` block, as (name, includeSubdomains).
-     * [PhoneAddressTest] reads the real XML file and fails when this list and
+     * [PhoneAddressTest] reads that real XML file and fails when this list and
      * the file differ, so it cannot be "kept in step by hand" and drift.
+     *
+     * Loopback is not here: the release file refuses it (apps security audit
+     * L7), even though the debug overlay adds it for local tests. Refusing it
+     * in the app's own check too is the conservative direction - a debug build
+     * simply cannot pair to a loopback desktop, which no real setup needs.
      */
     internal val CLEARTEXT_DOMAINS: List<Pair<String, Boolean>> = listOf(
         "ts.net" to true,
         "nord" to true,
-        "localhost" to true,
-        "127.0.0.1" to false,
     )
 
     /**
