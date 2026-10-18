@@ -1,0 +1,106 @@
+diff --git a/jarvis_hud.py b/jarvis_hud.py
+index 178fae3..de8495a 100644
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1397,51 +1397,24 @@ def _bind_address() -> str:
+ 
+ 
+ def _token_ok(handler) -> bool:
+-    """A shared secret on the way IN, not just on the way out.
+-
+-    JARVIS_API_KEY only ever authenticated this proxy TO Jarvis; the port
+-    itself took anything that arrived. That is survivable while the bind is
+-    loopback, but _origin_ok deliberately allows same-host access so the phone
+-    can reach this over Tailscale - and on a tailnet "any device that can
+-    route to me" is not an acceptable definition of "me". Set HUD_TOKEN to
+-    require a matching X-Jarvis-Token; leave it unset and the check is skipped
+-    with a warning at boot, so the loopback-only setup still just works.
++    """Delegates to jarvis_owner_check.token_ok (hud-origin-module.patch).
++
++    The DECISION - no token means loopback only; otherwise header, cookie and
++    one-time query token compared as bytes and never raising - is production
++    code in the tracked module, where CI tests it on a clean checkout. What
++    stays here is only what the running server owns: HUD_TOKEN, and this
++    server's own cookie/query extractors.
+     """
+-    if not HUD_TOKEN:
+-        # No secret configured, so the only caller we are willing to believe is
+-        # one on this machine. The bind is already loopback, but that is a
+-        # single line away from being changed for phone access, and the origin
+-        # check alone lets any LOCAL process through with one header. Make the
+-        # weak configuration fail closed at the edge instead of relying on the
+-        # bind address to be right.
+-        peer = (handler.client_address or ("",))[0]
+-        return peer in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+-
+-    # Three ways to present it, because a header alone locks out the very UI
+-    # this server ships. Setting HUD_TOKEN used to 401 every request the HUD
+-    # made - the page has no field for a token and no way to attach one - so
+-    # the only way to use the HUD was to turn the token off. A protection you
+-    # have to disable to get any work done is not a protection.
+-    #
+-    #   X-Jarvis-Token   scripts, the phone client, curl
+-    #   jarvis_token=    cookie set on first load; SameSite=Strict, so a
+-    #                    cross-site request does NOT carry it and the CSRF
+-    #                    property the origin check gives us is preserved
+-    #   ?token=          the one-time bootstrap that plants that cookie
+-    # compare_digest refuses non-ASCII str with a TypeError, and headers
+-    # arrive latin-1 decoded, so an attacker-chosen byte crashed the handler
+-    # and printed a traceback with local paths. Compare bytes; any failure
+-    # to even compare is a refusal.
+-    try:
+-        want = HUD_TOKEN.encode("utf-8")
+-        for cand in (handler.headers.get("X-Jarvis-Token") or "",
+-                     _cookie(handler, "jarvis_token"),
+-                     _query_token(handler)):
+-            if cand and hmac.compare_digest(cand.encode("utf-8", "replace"), want):
+-                return True
+-    except Exception:
+-        return False
+-    return False
++    import jarvis_owner_check as _oc
++    return _oc.token_ok(handler, HUD_TOKEN, _cookie2, _query2)
++
++
++def _cookie2(handler) -> str:
++    return _cookie(handler, "jarvis_token")
++
++
++def _query2(handler) -> str:
++    return _query_token(handler)
+ 
+ 
+ def _cookie(handler, name: str) -> str:
+@@ -5899,22 +5872,17 @@ def _same_origin_stream(handler) -> bool:
+ 
+ 
+ def _origin_ok(handler) -> bool:
+-    """Is this request from a page we serve, or from a non-browser client?
+-
+-    The first version accepted any Origin that matched the Host header. Both
+-    are supplied by the caller. In a DNS-rebinding attack a page on
+-    attacker.example rebinds that name to 127.0.0.1, sends
+-    Origin: http://attacker.example and Host: attacker.example, they match,
+-    and a page you merely visited was inside the CSRF defence - approving
+-    Jarvis's own pending shell commands. The Host header is not an identity.
+-    Trust is derived from what THIS server was configured to answer on.
++    """Delegates to jarvis_owner_check.origin_ok (hud-origin-module.patch).
++
++    The DECISION is production code in the tracked module, tested by
++    backend/test_origin.py on a clean checkout: an Origin must be one this
++    server was configured to serve, and a request with no Origin must carry
++    X-Jarvis-Client: hud (a custom header forces a CORS preflight). What stays
++    here is only the configuration read, _served_origins(), which needs the
++    bind address and HUD_PORT.
+     """
+-    origin = (handler.headers.get("Origin") or "").rstrip("/")
+-    if origin:
+-        return origin in _served_origins()
+-    # No Origin: require the header the HUD sets, which forces a CORS preflight
+-    # and so cannot be produced by a drive-by simple request.
+-    return handler.headers.get("X-Jarvis-Client") == "hud"
++    import jarvis_owner_check as _oc
++    return _oc.origin_ok(handler, _served_origins())
+ 
+ 
+ # The four /api/voice/* routes answered a missing jarvis_speech in four

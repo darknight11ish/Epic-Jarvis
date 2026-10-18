@@ -262,19 +262,135 @@ def from_this_pc(peer, local=None, own=None) -> bool:
     this PC's own addresses: a program on the PC that calls the PC's own
     Tailscale address arrives FROM that same address - which is also the
     address the connection arrived AT, so `peer == local` catches it even
-    when the name lookup misses an adapter. Anything that cannot be placed
-    counts as this PC, so it asks. A program on the PC cannot make its
-    request come from the phone's address; it would need another device.
+    when the name lookup misses an adapter.
+
+    FAIL CLOSED when a NETWORK peer cannot be placed (2026-10-18, SECPRIV
+    audit N8): an unparsable peer string (including "") or the unspecified
+    address is NOT taken as proof of being on the PC. It used to return True
+    for those, so a wrapper that handed a malformed peer through would
+    silently turn a remote request into a local one for every PC-only route.
+
+    `peer is None` is different, and is NOT "an unparsable peer": it is the
+    project's documented in-process convention - a direct call with no network
+    request behind it (jarvis_brain_reads.handle_get's own docstring, and the
+    suites that call a handler in-process). A remote caller can never make
+    client_address None, so None cannot be attacker-controlled; it means "no
+    request to place", and keeps answering as this PC the way it always has.
+    A program on the PC cannot make its request come from the phone's address;
+    it would need another device.
     """
+    if peer is None:
+        return True                       # no request to place: in-process
     p = _ip(peer)
-    if p is None:
-        return True
-    if p.is_loopback or p.is_unspecified:
+    if p is None or p.is_unspecified:
+        return False
+    if p.is_loopback:
         return True
     lo = _ip(local)
     if lo is not None and p == lo:
         return True
     return p in (own_addresses() if own is None else frozenset(_ip(a) for a in own))
+
+
+# ---------------------------------------------------------------------------
+# The HUD's two request-edge checks, extracted so CI can test the real code
+# ---------------------------------------------------------------------------
+#
+# These used to live only inside jarvis_hud.py, which is on the owner's PC and
+# not in this repository - so the only tests of them SKIPPED on a clean
+# checkout, and CI never ran them. The DECISIONS are pure; only reading the
+# request and the configuration stays in the HUD:
+#
+#   * `origin_ok(handler, served)` gets a duck-typed handler and the set of
+#     origins this server was configured to answer on. `_served_origins()`
+#     itself stays in the HUD - it reads the bind address and HUD_PORT, which
+#     only the running server knows.
+#   * `token_ok(handler, token, cookie, query)` gets the token (HUD_TOKEN, or
+#     "" when none is configured) and the two HUD-specific extractors. A
+#     `token` of "" means "not configured", and then only a loopback caller is
+#     believed.
+#
+# `jarvis_hud.py` calls these through `hud-origin-module.patch`; the test suite
+# `backend/test_origin.py` imports them and runs with zero skips on a clean
+# checkout, instead of lifting the function out of the installed HUD.
+
+#: The three places a request may present the token: a header, the cookie the
+#: HUD sets after the first load, and the one-time ?token= bootstrap.
+_HUD_TOKEN_HEADER = "X-Jarvis-Token"
+_HUD_CLIENT_HEADER = "X-Jarvis-Client"
+_HUD_TOKEN_COOKIE = "jarvis_token"
+
+#: Peers believed when NO token is configured: this PC only.
+_HUD_LOOPBACK_PEERS = frozenset({"127.0.0.1", "::1", "::ffff:127.0.0.1"})
+
+
+def origin_ok(handler, served_origins) -> bool:
+    """Is this request from a page we serve, or from a non-browser client?
+
+    The first version accepted any Origin that matched the Host header. Both
+    are supplied by the caller. In a DNS-rebinding attack a page on
+    attacker.example rebinds that name to 127.0.0.1, sends
+    Origin: http://attacker.example and Host: attacker.example, they match,
+    and a page you merely visited was inside the CSRF defence - approving
+    Jarvis's own pending shell commands. The Host header is not an identity.
+    Trust is derived from what THIS server was configured to answer on, which
+    is exactly the `served_origins` set the caller supplies.
+
+    No Origin at all: the request must carry `X-Jarvis-Client: hud`, which
+    forces a CORS preflight and so cannot be produced by a drive-by simple
+    request.
+    """
+    try:
+        origin = (handler.headers.get("Origin") or "").rstrip("/")
+        client = handler.headers.get(_HUD_CLIENT_HEADER)
+    except Exception:                    # no headers object: refuse, never guess
+        return False
+    if origin:
+        return origin in served_origins
+    return client == "hud"
+
+
+def token_ok(handler, token, cookie, query) -> bool:
+    """Is the shared secret presented correctly, or is this the untokened
+    loopback case?
+
+    `token` is the configured HUD_TOKEN ("" = none configured). `cookie` and
+    `query` are the HUD's own extractors: `(handler) -> str`. Three ways are
+    accepted because a header alone locks out the HUD page itself (it has no
+    token field): X-Jarvis-Token, the `jarvis_token` cookie (SameSite=Strict,
+    so a cross-site request does not carry it), and the one-time ?token=
+    bootstrap that plants that cookie.
+
+    With no token configured, only a loopback peer is believed. Comparands are
+    encoded to UTF-8 and compared as BYTES: `hmac.compare_digest` raises
+    TypeError on non-ASCII str, and headers arrive latin-1 decoded, so an
+    attacker-chosen byte used to crash the handler and print a traceback with
+    local paths. Any failure to compare is a refusal.
+    """
+    try:
+        peer = (handler.client_address or ("",))[0]
+    except Exception:
+        return False
+    if not token:
+        return peer in _HUD_LOOPBACK_PEERS
+    want = str(token).encode("utf-8", "replace")
+    try:
+        candidates = (
+            handler.headers.get(_HUD_TOKEN_HEADER) or "",
+            cookie(handler) if callable(cookie) else "",
+            query(handler) if callable(query) else "",
+        )
+    except Exception:
+        return False
+    for cand in candidates:
+        if not cand:
+            continue
+        try:
+            if hmac.compare_digest(str(cand).encode("utf-8", "replace"), want):
+                return True
+        except Exception:
+            continue
+    return False
 
 
 # ---------------------------------------------------------------------------

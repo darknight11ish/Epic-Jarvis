@@ -191,10 +191,15 @@ def t_this_pc_is_told_from_another_device_by_the_connection():
     yes = [("127.0.0.1", None), ("::1", None), ("::ffff:127.0.0.1", None),
            ("100.64.0.5", "100.64.0.5"),        # the PC calling its own Tailscale address
            ("192.168.1.20", "100.64.0.5"),      # one of the PC's own addresses
-           ("", None), ("not an address", None), (None, None)]   # cannot be placed: asks
+           (None, None)]                        # no request to place: in-process
+    # FAIL CLOSED (SECPRIV audit N8, 2026-10-18): a NETWORK peer that cannot
+    # be placed is NOT this PC. None is the documented in-process convention
+    # (a direct call with no network request behind it), not a peer string.
     no = [("100.101.102.103", "100.64.0.5"),    # the phone over Tailscale
           ("192.168.1.44", "192.168.1.20"),     # another device at home
-          ("fe80::1%eth0", "fe80::2%eth0")]
+          ("fe80::1%eth0", "fe80::2%eth0"),
+          ("", None), ("not an address", None),  # unparsable network peers
+          ("0.0.0.0", None)]                    # the unspecified address
     wrong = []
     for peer, local in yes:
         if not OC.from_this_pc(peer, local, own=own):

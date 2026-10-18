@@ -41,8 +41,8 @@ SUITES = {
                               "_loopback_companion"),
                              "_loopback_companion(bind, HUD_PORT, Handler)",
                              "testing the function from the installed jarvis_hud.py"),
-    "test_bind_wildcard.py": (("_binds_every_interface", "_refuse_every_interface",
-                               "_loopback_companion"),
+    "test_bind_wildcard.py": (("_binds_every_interface", "_bind_scope_problem",
+                               "_refuse_every_interface", "_loopback_companion"),
                               "_loopback_companion(bind, HUD_PORT, Handler)",
                               "testing the functions from the installed jarvis_hud.py"),
 }

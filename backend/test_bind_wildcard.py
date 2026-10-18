@@ -47,7 +47,8 @@ import _skeleton  # noqa: E402
 SRC = BACKEND / "jarvis_hud.py"
 PATCH = HERE / "bind-wildcard.patch"
 CASES = HERE.parent / "jarvis-desktop" / "tests" / "bind-address-cases.json"
-LIFTED = ("_binds_every_interface", "_refuse_every_interface", "_loopback_companion")
+LIFTED = ("_binds_every_interface", "_bind_scope_problem",
+          "_refuse_every_interface", "_loopback_companion")
 
 FAILED, PASSED = [], []
 SKIPPED = []
@@ -72,7 +73,10 @@ _SOURCE = None
 def _source():
     global _SOURCE
     if _SOURCE is None:
-        if not missing("jarvis_hud.py") and "_binds_every_interface" in SRC.read_text(encoding="utf-8"):
+        installed_has_all = (not missing("jarvis_hud.py")
+                            and all(("def " + name + "(") in SRC.read_text(encoding="utf-8")
+                                    for name in LIFTED))
+        if installed_has_all:
             _SOURCE = (SRC.read_text(encoding="utf-8"), f"the installed {SRC.name}")
         else:
             ok, out = _skeleton.rehearse(PATCH.name, "token-file.patch", "loopback-too.patch")
@@ -153,6 +157,17 @@ def _quiet(fn, *args):
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
         result = fn(*args)
+    return result, out.getvalue()
+
+
+def _quiet_failure(fn, *args):
+    """Like _quiet, but a refusal (SystemExit) is the RESULT, not a crash."""
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        try:
+            result = fn(*args)
+        except SystemExit as exc:
+            result = exc
     return result, out.getvalue()
 
 
@@ -272,6 +287,60 @@ def t_no_second_listener_for_any_wildcard_spelling():
         check(f"bind {bind!r} gets no second listener", result is None, said)
 
 
+def t_a_hand_set_lan_or_public_address_is_refused():
+    """N1 (SECPRIV audit 2026-10-18): the backend used to refuse only the
+    "every interface" spellings. A hand-set LAN or public address is just as
+    wrong - it puts the plain-HTTP HUD on the home or cafe Wi-Fi - and the
+    desktop already refuses to save one. The accepted set is the desktop's
+    own: loopback or 100.64.0.0/10 (Tailscale and NordVPN Meshnet)."""
+    ns, where = _lifted()
+    refuse = ns["_refuse_every_interface"]
+
+    def resolves_to_non_mesh(text):
+        try:
+            infos = socket.getaddrinfo(text, None, 0, socket.SOCK_STREAM)
+        except (OSError, UnicodeError, ValueError):
+            return None
+        import ipaddress
+        mesh = ipaddress.ip_network("100.64.0.0/10")
+        for info in infos:
+            try:
+                ip = ipaddress.ip_address(str(info[4][0]).split("%")[0])
+            except ValueError:
+                continue
+            if ip.is_loopback or (ip.version == 4 and ip in mesh):
+                continue
+            return ip
+        return None
+
+    tested = 0
+    for spelling in _cases()["refused"]:
+        address = resolves_to_non_mesh(spelling)
+        if address is None:
+            # A grammar-only refusal in the desktop's validator, a typo, or a
+            # wildcard already handled above: the bind itself fails, so there
+            # is no listener to refuse. A skip, counted on its own.
+            skip(f"{spelling!r} does not resolve to a LAN/public address here")
+            continue
+        result, said = _quiet_failure(refuse, spelling)
+        tested += 1
+        check(f"a hand-set {spelling!r} ({address}) is refused, not bound",
+              isinstance(result, SystemExit) and "Refusing to start" in said, said)
+    check("at least the LAN and public rows were really asked", tested >= 4, tested)
+
+    # CONTROL: the loopback and mesh addresses the desktop accepts still start.
+    for spelling in ("127.0.0.1", "localhost", "::1", "100.64.12.3",
+                     "100.100.100.100"):
+        result, said = _quiet(refuse, spelling)
+        check(f"{spelling!r} is still allowed to listen", result is None, said)
+
+    # The desktop's accepted "" means "no explicit address, use the default";
+    # binding "" itself would be every interface, so the backend refuses it.
+    result, said = _quiet_failure(refuse, "")
+    check("a literal empty bind is still refused as every interface",
+          result is not None, said)
+
+
 def t_the_real_file():
     if missing("jarvis_hud.py"):
         return skip(explain())
@@ -293,6 +362,7 @@ if __name__ == "__main__":
     for fn in (t_the_patch_applies_over_loopback_too,
                t_the_table_is_true_and_every_wildcard_is_refused,
                t_ordinary_addresses_still_start,
+               t_a_hand_set_lan_or_public_address_is_refused,
                t_no_second_listener_for_any_wildcard_spelling,
                t_the_real_file):
         print(f"\n--- {fn.__name__} ---")

@@ -10,7 +10,7 @@ you drop in and take out.
 
 - **25 drop-in modules**, in [`ready/`](ready/) -
   one folder each, no core change.
-- **120 core patches**, which still go on through
+- **122 core patches**, which still go on through
   `scripts/apply-patches.ps1` in its own order.
 
 ## The drop-in modules
@@ -170,6 +170,8 @@ stack's order and cannot be moved into a folder.
 | `gate-touches.patch` | edits lines the core already has; it cannot be applied out of order |
 | `big-coder.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `initiative-payload.patch` | edits lines the core already has; it cannot be applied out of order |
+| `hud-origin-module.patch` | edits lines the core already has; it cannot be applied out of order |
+| `hud-exclusive-bind.patch` | edits lines the core already has; it cannot be applied out of order |
 | `plugin-loader.patch` | the loader itself: the ONE startup call that makes every other drop-in folder possible. It is what replaces the patches, so it can never be replaced by a folder. |
 
 ## Adding and removing one

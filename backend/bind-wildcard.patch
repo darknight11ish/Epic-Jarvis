@@ -1,6 +1,6 @@
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
-@@ -204,6 +204,54 @@
+@@ -204,6 +204,102 @@
          return ""
  
  
@@ -32,30 +32,78 @@
 +
 +
 +def _refuse_every_interface(bind):
-+    """Stop before listening on every network interface.
++    """Stop before listening anywhere but this PC or the private mesh.
 +
 +    JARVIS_HUD_BIND and [security].bind_address exist so a phone can reach
 +    this over a private mesh (Tailscale, NordVPN Meshnet). Every interface
 +    also means the home Wi-Fi, the cafe Wi-Fi and whatever else this machine
-+    is plugged into. The desktop app refuses to save such an address; this is
-+    the same refusal for a backend started by hand.
++    is plugged into; so does a hand-set LAN or public address, which the
++    desktop already refuses to save. This is the same refusal for a backend
++    started by hand, and it uses the same accepted set as the desktop's
++    validator: loopback (127.0.0.1, localhost, ::1) or the carrier-grade
++    100.64.0.0/10 mesh range. The desktop's empty string means "no explicit
++    address, use the default"; the backend's `_bind_address()` resolves that
++    before this is called, and a literal "" is still refused here because
++    binding it means every interface.
 +    """
-+    if not _binds_every_interface(bind):
++    if _binds_every_interface(bind):
++        print()
++        print(f"  bind       {bind!r} means EVERY network interface on this machine -")
++        print("             the home or cafe Wi-Fi too, not just your private mesh.")
++        print("  Refusing to start. Set JARVIS_HUD_BIND (or [security].bind_address)")
++        print("  to this computer's own Tailscale or Meshnet address (100.x.x.x),")
++        print("  or leave it at 127.0.0.1 for this machine only.")
++        print()
++        raise SystemExit(2)
++    bad = _bind_scope_problem(bind)
++    if not bad:
 +        return
 +    print()
-+    print(f"  bind       {bind!r} means EVERY network interface on this machine -")
-+    print("             the home or cafe Wi-Fi too, not just your private mesh.")
-+    print("  Refusing to start. Set JARVIS_HUD_BIND (or [security].bind_address)")
-+    print("  to this computer's own Tailscale or Meshnet address (100.x.x.x),")
-+    print("  or leave it at 127.0.0.1 for this machine only.")
++    print(f"  bind       {bind!r} is {bad} - hand-set, and not this PC or your mesh.")
++    print("             The home or cafe Wi-Fi could reach Jarvis over plain HTTP.")
++    print("  Refusing to start. Use 127.0.0.1 for this machine only, or this")
++    print("  computer's own Tailscale/Meshnet address (100.x.x.x).")
 +    print()
 +    raise SystemExit(2)
++
++
++def _bind_scope_problem(bind):
++    """The address a hand-set `bind` resolves to when it is NOT this PC or the
++    private mesh, else "". None of the resolver's answers may be a LAN, public,
++    link-local or multicast address.
++
++    The accepted set is the desktop's own (`bind-address-cases.json`): loopback,
++    and 100.64.0.0/10 (Tailscale and NordVPN Meshnet share that block). A name
++    that does not resolve is left alone - the bind itself will fail, and
++    inventing a refusal for a typo would hide the real error. A wildcard is
++    `_binds_every_interface` above, checked separately for its own message.
++    """
++    import ipaddress
++    import socket
++    if not str(bind or "").strip():
++        return ""
++    try:
++        infos = socket.getaddrinfo(str(bind), None, 0, socket.SOCK_STREAM)
++    except (OSError, UnicodeError, ValueError):
++        return ""
++    mesh = ipaddress.ip_network("100.64.0.0/10")
++    for info in infos:
++        try:
++            ip = ipaddress.ip_address(str(info[4][0]).split("%")[0])
++        except ValueError:
++            continue
++        if ip.is_loopback:
++            continue
++        if ip.version == 4 and ip in mesh:
++            continue
++        return str(ip)
++    return ""
 +
 +
  def _loopback_companion(bind, port, handler):
      """Also answer on 127.0.0.1 when the main listener is bound elsewhere.
  
-@@ -222,7 +270,7 @@
+@@ -222,7 +366,7 @@
      loopback or the port is taken - the phone still works then, so say so
      rather than fail the whole boot over it.
      """
@@ -64,7 +112,7 @@
          return None
      import threading
      try:
-@@ -2356,6 +2404,8 @@
+@@ -2356,6 +2500,8 @@
      if not os.environ.get("HUD_TOKEN", "").strip() and HUD_TOKEN:
          print(f"  token      {TOKEN_FILE}")
          print("             (pair the phone with this; it was made on first run)")
