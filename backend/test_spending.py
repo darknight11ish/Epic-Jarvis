@@ -971,6 +971,10 @@ def t_the_tool_is_offered_only_with_a_folder():
     tool = AG.TOOLS["my_spending"]
     check("decided under file_read's action (read_files_readonly)", tool.gate_lookup_name({}) == "file_read")
     check("it changes nothing and sends nothing: not in NEEDS_A_PERSON", "my_spending" not in AG.NEEDS_A_PERSON)
+    schema = tool.schema()["function"]["parameters"]
+    check("the subscriptions radar is one of its actions, with the rest",
+          schema["properties"]["action"]["enum"]
+          == ["summary", "files", "suggest", "subscriptions"], schema["properties"]["action"])
     check("its words fit the tool budget", AG.estimate_tokens(tool.schema()) <= 300, AG.estimate_tokens(tool.schema()))
     check("it is one of the documents group's tools",
           "my_spending" in dict((g[0], g[2]) for g in AG.TOOL_GROUPS)["documents"])
@@ -2376,6 +2380,264 @@ def t_an_empty_audit_is_an_empty_answer_not_a_crash():
              "duplicate_charges": []}
     check("no transactions gives the four empty lists", SP.audit_subscriptions([]) == empty)
     check("None is the same as none at all", SP.audit_subscriptions(None) == empty)
+
+
+# ============================================================ 12. the subscriptions answer
+
+def _sub_csv(rows):
+    """A bank file from (date, description, amount) rows in the standing header."""
+    return CSV_HDR + "".join(f"{d},{desc},{amt}\n" for d, desc, amt in rows)
+
+
+SUB_ROWS = [
+    ("2026-01-05", "NETFLIX.COM 4832", "-9.99"),
+    ("2026-02-05", "NETFLIX.COM 4832", "-9.99"),
+    ("2026-03-05", "NETFLIX.COM 4832", "-12.99"),
+    ("2025-06-01", "SPOTIFY P2E4X7", "-59.99"),
+    ("2026-05-27", "SPOTIFY P2E4X7", "-59.99"),
+    ("2026-04-02", "GYM 12345678901", "-25.00"),
+    ("2026-04-05", "GYM 12345678901", "-25.00"),
+    ("2026-04-09", "TESCO STORES 1234", "-31.40"),
+    ("2026-04-10", "NETFLIX REFUND", "12.99"),
+]
+
+
+def _table_shape_problem(table) -> str:
+    """The strict rules BOTH apps' table readers enforce (docs/FINANCE-DESIGN.md,
+    Slice contract), checked here so a shape the phone would refuse is caught
+    before anyone draws it. Returns "" or the first thing that is wrong."""
+    if not isinstance(table, dict):
+        return "not a dict"
+    if table.get("kind") != "spending" or table.get("version") != 1:
+        return "kind/version"
+    for field in ("title", "period"):
+        if not isinstance(table.get(field), str):
+            return field
+    for field in ("sources", "caveats"):
+        val = table.get(field)
+        if not isinstance(val, list) or not all(isinstance(x, str) for x in val):
+            return field
+    cols = table.get("columns")
+    if not isinstance(cols, list) or not cols:
+        return "columns"
+    for c in cols:
+        if not isinstance(c, dict) or not isinstance(c.get("key"), str) \
+                or not isinstance(c.get("label"), str) or c.get("align") not in ("left", "right"):
+            return "column"
+    sections = table.get("sections")
+    if not isinstance(sections, list) or not sections:
+        return "sections"
+    for sec in sections:
+        if not isinstance(sec, dict) or not isinstance(sec.get("heading"), str) \
+                or not isinstance(sec.get("currency"), str):
+            return "section"
+        for grp in ("rows", "totals", "also"):
+            if not isinstance(sec.get(grp), list):
+                return grp
+            for r in sec[grp]:
+                if not isinstance(r, dict) or not isinstance(r.get("kind"), str):
+                    return "row kind"
+                cells = r.get("cells")
+                if not isinstance(cells, list) or len(cells) != len(cols) \
+                        or not all(isinstance(c, str) for c in cells):
+                    return "cells"
+    return ""
+
+
+def t_the_subscriptions_answer_is_a_table_both_apps_can_draw():
+    fresh()
+    d = folder("SubsAnswer", text={"a.csv": _sub_csv(SUB_ROWS),
+                                   "b.csv": _sub_csv(SUB_ROWS[:3])})   # an overlapping export
+    listed(d)
+    setup(d / "a.csv")
+    res = SP.run_tool({"action": "subscriptions"}, roots=[str(d)])
+    check("the tool answers with a table", res.get("ok") is True and "_table" in res, res)
+    table = res["_table"]
+    check("the block is the shape both apps already draw", _table_shape_problem(table) == "",
+          _table_shape_problem(table) or table)
+    check("it keeps the spending flags: private, never read aloud, never remembered",
+          table["private"] is True and table["read_aloud"] is False and table["remember"] is False
+          and table["words"] == {"hidden": SP.TABLE_HIDDEN}, table)
+    check("the columns say what each figure is",
+          [c["label"] for c in table["columns"]]
+          == ["What", "How often", "Last charged", "Amount", "Went up by"], table["columns"])
+    check("the words columns are marked not-money, so only amounts may be quoted",
+          [c.get("money") is not False for c in table["columns"]]
+          == [True, False, False, True, True], table["columns"])
+    row = table["sections"][0]["rows"][0]
+    check("Netflix: every month, last charged 5 March 2026, 12.99, up 3.00",
+          row["cells"] == ["NETFLIX.COM 4832", "Every month", "5 March 2026", "12.99", "3.00"],
+          row["cells"])
+    spot = [r for r in table["sections"][0]["rows"] if "SPOTIFY" in r["cells"][0]]
+    check("a subscription that did not rise has an empty rise cell, and is annual",
+          len(spot) == 1 and spot[0]["cells"][1] == "Every year" and spot[0]["cells"][4] == "",
+          spot)
+    dup = table["sections"][0]["also"]
+    check("the double charge is its own row, with both dates",
+          len(dup) == 1 and dup[0]["kind"] == "duplicate"
+          and dup[0]["cells"][1] == "Charged twice"
+          and "2 April 2026 and 5 April 2026" in dup[0]["cells"][2]
+          and dup[0]["cells"][3] == "25.00", dup)
+    check("the title says what was found",
+          table["title"] == SP.SUB_TITLE, table["title"])
+    check("the period is the range the charges cover",
+          "1 June 2025" in table["period"] and "27 May 2026" in table["period"], table["period"])
+    raw = json.dumps(table)
+    check("the account number is hidden in this table too",
+          "12345678901" not in raw and "[hidden]" in raw, raw[:300])
+    check("two overlapping exports are counted once",
+          any("counted once" in c for c in table["caveats"]), table["caveats"])
+    fresh()
+
+
+def t_the_model_gets_shops_and_figures_but_never_the_table_or_a_date():
+    fresh()
+    d = folder("SubsModel", text={"a.csv": _sub_csv(SUB_ROWS)})
+    listed(d)
+    setup(d / "a.csv")
+    res = SP.run_tool({"action": "subscriptions"}, roots=[str(d)])
+    table = res["_table"]
+    seen = json.dumps({k: v for k, v in res.items() if k != "_table"})
+    check("the model is not given the table itself",
+          '"cells"' not in seen and '"columns"' not in seen
+          and "already on the owner's screen" in res["instruction"], seen[:300])
+    check("the model gets each shop by its clean stem, its amount and its exact rise",
+          res["sections"][0]["subscriptions"] == [
+              {"shop": "netflix com", "how_often": "every month", "amount": "12.99",
+               "went_up_by": "3.00"},
+              {"shop": "spotify", "how_often": "every year", "amount": "59.99",
+               "went_up_by": None}], res["sections"])
+    check("the double charge is there too",
+          res["sections"][0]["charged_twice"] == [{"shop": "gym hidden", "amount": "25.00"}],
+          res["sections"])
+    check("no charge date and no raw description reaches the model",
+          "2026-" not in seen and "4832" not in seen and "NETFLIX.COM" not in seen, seen[:400])
+    check("the one sentence may name a shop and quote its rise",
+          SP.checked_sentence("netflix com went up by 3.00.", table)
+          == "netflix com went up by 3.00.")
+    check("... an invented figure is dropped",
+          SP.checked_sentence("netflix com went up by 4.00.", table) == SP.DROPPED_LINE)
+    check("... a year the period covers may be written",
+          SP.checked_sentence("In 2026 netflix com went up by 3.00.", table)
+          == "In 2026 netflix com went up by 3.00.")
+    check("... but a year the period does not cover is dropped",
+          SP.checked_sentence("In 2019 netflix com went up by 3.00.", table) == SP.DROPPED_LINE)
+    fresh()
+
+
+def t_a_quiet_radar_says_so_in_one_plain_line():
+    fresh()
+    d = folder("SubsNone", text={"a.csv": _sub_csv([
+        ("2026-01-02", "TESCO STORES 1234", "-31.40"),
+        ("2026-02-11", "COSTA COFFEE", "-3.50")])})
+    listed(d)
+    setup(d / "a.csv")
+    res = SP.run_tool({"action": "subscriptions"}, roots=[str(d)])
+    check("no table is drawn when there is nothing to report",
+          res.get("ok") is True and "_table" not in res
+          and res.get("shown_on_screen") is False, res)
+    check("the plain line says what was looked for", res.get("message") == SP.SUB_NONE, res)
+    fresh()
+
+
+def t_the_title_follows_what_was_actually_found():
+    fresh()
+    d = folder("SubsTitle", text={"a.csv": _sub_csv([
+        ("2026-01-05", "NETFLIX.COM", "-9.99"),
+        ("2026-02-05", "NETFLIX.COM", "-9.99")])})       # recurring, no rise
+    listed(d)
+    setup(d / "a.csv")
+    res = SP.run_tool({"action": "subscriptions"}, roots=[str(d)])
+    check("a subscription with no rise: the title is just Subscriptions",
+          res["_table"]["title"] == SP.SUB_TITLE_PLAIN, res["_table"]["title"])
+    fresh()
+    d = folder("SubsTitleDup", text={"a.csv": _sub_csv([
+        ("2026-04-02", "GYM", "-25.00"),
+        ("2026-04-05", "GYM", "-25.00")])})              # double charge, not recurring
+    listed(d)
+    setup(d / "a.csv")
+    res = SP.run_tool({"action": "subscriptions"}, roots=[str(d)])
+    table = res["_table"]
+    check("only a double charge: the title says so, with no subscription rows",
+          table["title"] == SP.SUB_TITLE_DUP and table["sections"][0]["rows"] == []
+          and len(table["sections"][0]["also"]) == 1, table)
+    fresh()
+
+
+def t_a_word_column_is_never_a_figure_the_sentence_may_quote():
+    table = {"columns": [{"key": "what", "label": "What", "align": "left"},
+                         {"key": "how", "label": "How often", "align": "left", "money": False},
+                         {"key": "amount", "label": "Amount", "align": "right"}],
+             "sections": [{"heading": "", "currency": "",
+                           "rows": [{"kind": "subscription",
+                                     "cells": ["NETFLIX.COM", "2026", "12.99"]}],
+                           "totals": [], "also": []}]}
+    check("a column marked money:false is not a money column",
+          SP._money_columns(table) == [2], SP._money_columns(table))
+    check("... so a year written in it is not a figure of the table",
+          SP._canon("2026") not in SP.table_numbers(table)
+          and SP._canon("12.99") in SP.table_numbers(table), SP.table_numbers(table))
+    check("an older table with no flag is read exactly as before",
+          SP._money_columns({"columns": [{"key": "category", "label": "Category", "align": "left"},
+                                         {"key": "spent", "label": "Spent", "align": "right"},
+                                         {"key": "rows", "label": "Rows", "align": "right"}]}) == [1])
+
+
+def t_the_subscriptions_answer_in_a_whole_chat_turn():
+    fresh()
+    d = folder("SubsTurn", text={"a.csv": _sub_csv(SUB_ROWS)})
+    listed(d)
+    setup(d / "a.csv")
+    msgs = [{"role": "user", "content": "did any of my subscriptions go up?",
+             "provenance": "typed"}]
+    sentence = "netflix com went up by 3.00."
+    stream, out, calls = turn(msgs, [call(action="subscriptions"), say(sentence)])
+    tid = marker(stream)
+    check("the stream announces the table with `: jarvis-table <id>`", len(tid) == 32, tid)
+    check("the checked sentence is the answer", words(stream) == sentence, words(stream))
+    table = SP.fetch_table(tid)
+    check("the fetchable table is the subscriptions one",
+          table is not None and table["title"] == SP.SUB_TITLE
+          and len(table["sections"][0]["rows"]) == 2, table and table["title"])
+    check("the kept answer is the sentence and holds no table",
+          out["answer"] == sentence and "_table" not in json.dumps(out))
+    model_msgs = json.dumps(calls[1]["messages"])
+    check("the model was given the shop stems and figures, never the table or a raw name",
+          "netflix com" in model_msgs and "went_up_by" in model_msgs
+          and "NETFLIX.COM 4832" not in model_msgs and '"_table"' not in model_msgs,
+          model_msgs[:600])
+    stream, out, _c = turn(msgs, [call(action="subscriptions"),
+                                  say("netflix com went up by 4.00.")])
+    check("an invented figure: the sentence is dropped, the table still comes",
+          words(stream) == SP.DROPPED_LINE and marker(stream) != "", words(stream))
+    vmsgs = [{"role": "user", "content": "did any subscription go up", "provenance": "voice"}]
+    stream, out, _c = turn(vmsgs, [call(action="subscriptions"), say(sentence)])
+    check("a spoken question gets the screen-only line, never the figures",
+          words(stream) == SP.SPOKEN_LINE and marker(stream) != "", words(stream))
+    # One table an answer: a second table-producing call in the same turn is refused.
+    stream, out, calls = turn(msgs, [call(action="summary", path=str(d / "a.csv")),
+                                     call(action="subscriptions"), say(sentence)])
+    check("one table an answer: a subscriptions table cannot follow a spending table",
+          AG.SPENDING_ONE_TABLE in json.dumps(calls[-1]["messages"])
+          and stream.count(b": jarvis-table ") == 1, stream.count(b": jarvis-table "))
+    fresh()
+
+
+def t_the_radar_is_named_where_the_model_and_the_question_meet():
+    """The words that make the radar reachable: the action is named to the model,
+    a question about it is held like a spending question (so a figure cannot be
+    written before the tool runs), and the status line says what is being done."""
+    check("a subscription question is held exactly like a spending question",
+          SP.looks_like_spending_question("did any subscription go up?")
+          and SP.looks_like_spending_question("any price rises?")
+          and SP.looks_like_spending_question("was I charged twice?"),
+          [SP.looks_like_spending_question(x) for x in
+           ("did any subscription go up?", "any price rises?", "was I charged twice?")])
+    check("the status line says what it is looking for",
+          "subscriptions" in SP.describe({"action": "subscriptions"}))
+    check("an unknown action names all four",
+          all(a in SP.ERRORS["unknown_action"] for a in
+              ("summary", "files", "suggest", "subscriptions")))
 
 
 if __name__ == "__main__":

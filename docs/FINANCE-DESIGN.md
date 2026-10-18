@@ -198,7 +198,9 @@ figure, only word it.
 
 - **Tool name in `TOOLS`: `my_spending`**, beside `my_files`. Actions: `summary`
   (period, group by category or month or both, optional category), `files` (which
-  files could be read), `suggest` (category suggestions). It only reads.
+  files could be read), `suggest` (category suggestions), `subscriptions` (Pillar
+  10's radar: the shops that bill again and again, any price rise and any double
+  charge; section 11 below). It only reads.
 - **Gate action: `read_files_readonly`**, the same as `file_read` and `my_files`
   (`gate_lookup_name=lambda args: "file_read"` in `my_files`; the same here). Why
   no new card: adding the folder already took an approval card that names it, and
@@ -513,12 +515,17 @@ file limit; "Keep these numbers" for the calculator off (form starts empty).
 
 ## 11. Subscriptions and price hikes (Pillar 10, first half, 2026-10-17)
 
-**Status: built, with no way in yet.** `backend/jarvis_spending.py` gains one
-pure function, `audit_subscriptions(transactions)`. It is the deterministic half
-of the "Subscription & Price-Hike Radar": no route, no chat tool, no UI, no model
-call, no file, no clock, no network. Nothing in either app changes, so
-`tools/check_parity.py` is unmoved, and the dict it returns is the design
-contract a later slice builds on rather than a frozen app contract.
+**Status: built, reachable in chat, and shown by both apps with no app change.** Two
+slices landed the same day (2026-10-17). First, `backend/jarvis_spending.py` gained one
+pure function, `audit_subscriptions(transactions)`: the deterministic half of the
+"Subscription & Price-Hike Radar" - whole cents, no model, no file, no clock, no network.
+Second, the owner asked for it to be "its own answer", so the same module gained a
+`my_spending` action `subscriptions` that builds a table both apps already draw (it is the
+same block shape as a spending table) and gives the model one checked sentence to put round
+it. The table never leaves the PC, is never read aloud, never remembered; the tests are
+`backend/test_spending.py` sections 11 and 12, and `docs/JARVIS-API.md` section 100.3
+documents the action and the answer. No new route, no new app code, no new card: it is the
+same tool, the same `file_read` action and the same limit.
 
 **The problem it answers.** Today the spending feature totals a bank export. It
 does not notice that a subscription quietly went up by 3.00 a month, or that the
@@ -570,24 +577,45 @@ number keeps it ("studio54", "7eleven"), and there is no fuzzy matching. A
 subscription written two different ways is missed rather than guessed at,
 because a false alarm about money is worse than no alarm.
 
-**What it costs and what it proves.** The function is file-free and clock-free,
-so the tests are file-free too: `backend/test_spending.py` section 11 adds 14
-test functions and 60 checks calling the real function with `Txn` lists and
-asserting on the returned dict - including the boundaries at both ends (25/26
-and 35/36 days monthly, 349/350 and 380/381 annual, exactly 6 and exactly 7 days
-for a duplicate), an equal amount and a lower amount that must not be a hike, a
-double charge that must not hide a subscription or its rise, two currencies that
-must not match, a bad transaction that must be refused, and the same rows in
-reverse order giving the identical dict. Every check was made to fail on purpose
-before it was trusted (the mutations and their red output are in the pull request
-for this slice).
+**The answer in chat** (`build_subscriptions_table`, `subscriptions_for_model`). The
+`my_spending` action `subscriptions` reads one file by `path`, or with no path every file
+that has a saved layout (a monthly rhythm needs the whole history, so `period` is ignored
+there). It then draws the ordinary table block - kind `"spending"`, version 1, so the two
+apps' existing renderers draw it unchanged - with five columns: **What**, **How often**
+("Every month" / "Every year" / "Charged twice"), **Last charged** (a date written out),
+**Amount** and **Went up by**. One section per currency; the `rows` are the subscriptions
+(the rise filled in only where the latest charge is higher than the one before) and the
+`also` rows are the double charges, each with both dates. There are **no totals rows**:
+billing periods differ, so a sum would mean nothing. The title is "Subscriptions and price
+rises", "Subscriptions" or "Charged twice" depending on what was found. The two word columns
+carry `"money": false`, so a date can never become a figure the model's sentence quotes.
+**The model** is given each shop by its merchant stem (lower-case, trailing store number or
+reference removed), its amount and its exact rise - never the raw description, never a
+charge date, never the table - so its ONE sentence can name the row whose figure it uses,
+and the sentence is dropped if it invents or rounds anything (the rule is unchanged from a
+spending answer). **When nothing was found**, no empty table is drawn: the answer is the
+plain line "I found no subscriptions, price rises or double charges in your bank files."
+
+**What it costs and what it proves.** The audit function is file-free and clock-free, so its
+tests are too: `backend/test_spending.py` section 11 adds 14 test functions and 62 checks
+calling the real function with `Txn` lists and asserting on the returned dict - including the
+boundaries at both ends (25/26 and 35/36 days monthly, 349/350 and 380/381 annual, exactly 6
+and exactly 7 days for a duplicate), an equal amount and a lower amount that must not be a
+hike, a double charge that must not hide a subscription or its rise, two currencies that must
+not match, a bad transaction that must be refused, and the same rows in reverse order giving
+the identical dict. Test section 12 adds 6 test functions and 36 checks for the answer: the
+block is validated against the strict shape both apps' readers enforce, the doubling is found
+end to end through `read_rows`/`normalise` (so the account-number hiding is proven on the way
+in), the model's payload is proven to hold the stems and figures and no table, date or raw
+description, an invented figure and a wrong year are dropped, a quiet radar says so in one
+line, and a whole scripted chat turn shows the table under the checked sentence - including
+the one-table-an-answer refusal. Every check in both sections was made to fail on purpose
+before it was trusted (the mutations and their red output are in the pull requests).
 
 **Deliberately not built here.** The pillar's second half - scanning mail for
-trial-ending and delivery messages - belongs with `jarvis_mail.py`, which this
-slice does not touch: no IMAP, no socket, no model. And nothing is shown to the
-owner yet: no route, no table, no app screen. That is the later slice's job, and
-this function is written so that slice can call it - pure, deterministic,
-already in cents, already JSON-safe.
+trial-ending and delivery messages - belongs with `jarvis_email.py`, which owns IMAP
+(the handoff that asked for this slice named a `jarvis_mail.py` that does not exist in
+this repository). This slice does not touch it: no IMAP, no socket, no model.
 
 ## 12. Not verified
 

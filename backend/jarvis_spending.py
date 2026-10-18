@@ -62,10 +62,13 @@ reads transactions that are already normalised and answers three questions with
 plain arithmetic: which merchants charge on a recurring interval (monthly or
 annual), which of those went up since the charge before it (the exact rise, in
 whole cents), and where the same shop charged the same amount twice within six
-days. Nothing here is displayed, remembered, sent to the model or written to
-disk: this is the deterministic half of the pillar, and the caller does the
-words. The mail half of the pillar (trial-ending and delivery emails) is
-deliberately NOT here - it belongs with jarvis_mail.py.
+days. The owner reaches it in chat as the `my_spending` action "subscriptions":
+code builds a table both apps draw (the same block shape as a spending table, so
+neither app needed a change) and the model gets the shop stems and exact
+figures to write ONE checked sentence round it - see build_subscriptions_table
+and subscriptions_for_model. The mail half of the pillar (trial-ending and
+delivery emails) is deliberately NOT here - it belongs with jarvis_email.py,
+which owns IMAP.
 
 Standard library only, apart from openpyxl in the child program.
 """
@@ -149,6 +152,25 @@ CAV_FILES = "Added up from {n} files."
 CAV_DATES = ("{n} rows had a date that did not fit the saved date order and were left out. "
              "If that looks wrong, check the columns again on the PC.")
 
+# The subscriptions answer (Pillar 10, the my_spending action "subscriptions").
+# Both apps draw this table with their ordinary table renderer: it is the same
+# block shape as a spending table (kind "spending", version 1), so no app change
+# was needed for it.
+SUB_TITLE = "Subscriptions and price rises"
+SUB_TITLE_PLAIN = "Subscriptions"
+SUB_TITLE_DUP = "Charged twice"
+SUB_COL_WHAT = "What"
+SUB_COL_HOW = "How often"
+SUB_COL_LAST = "Last charged"
+SUB_COL_AMOUNT = "Amount"
+SUB_COL_RISE = "Went up by"
+SUB_HOW_MONTHLY = "Every month"
+SUB_HOW_ANNUAL = "Every year"
+SUB_HOW_TWICE = "Charged twice"
+SUB_CAV_HOW = ("A subscription is a shop that charged about once a month (26 to 35 days apart) "
+               "or once a year (350 to 380). A shop written two different ways is not matched.")
+SUB_NONE = "I found no subscriptions, price rises or double charges in your bank files."
+
 ROW_TOTAL = "Total spent"
 ROW_UNCATEGORISED = "Uncategorised"
 ROW_REFUNDS = "Refunds (already taken off above)"
@@ -187,7 +209,7 @@ ERRORS = {
     "months": "That is more than 12 months. Ask for a shorter period.",
     "category": "There is no category called that. The categories are: {names}.",
     "empty_period": "No spending was found in that period.",
-    "unknown_action": "action is summary, files or suggest",
+    "unknown_action": "action is summary, files, suggest or subscriptions",
     "profile_bad": "Those column choices are not usable.",
     "pc_only": PC_ONLY,
     "needs_setup": NEEDS_SETUP_ON_PC,
@@ -2082,10 +2104,16 @@ def _label_keys(label: str) -> set:
 
 
 def _money_columns(table: dict) -> list:
-    """The indexes of the columns that hold money (not the label, not Rows)."""
+    """The indexes of the columns that hold money (not the label, not Rows).
+
+    A column may say `"money": False` (the subscriptions table's dates and
+    "how often" words) to be left out: its numbers are then never figures the
+    model's one sentence may quote. Every older table has no such flag, so this
+    is the same list it always was."""
     cols = table.get("columns") or []
     return [i for i, c in enumerate(cols)
-            if i > 0 and str((c or {}).get("key", "")) != "rows"]
+            if i > 0 and str((c or {}).get("key", "")) != "rows"
+            and (c or {}).get("money") is not False]
 
 
 def _row_figures(cells: list, money_idx: list) -> set:
@@ -2263,7 +2291,9 @@ NO_TABLE_LINE = ("Jarvis could not add up your spending this time, so it has no 
 _SPENDING_ASK = re.compile(
     r"\b(?:spen[dt]|spending|expenses?|outgoings?|bank\s+(?:statement|export|file|csv)|"
     r"statements?|transactions?|budget|how\s+much\s+(?:did|have|do)\s+i|"
-    r"what\s+did\s+i\s+(?:spend|pay))\b", re.I)
+    r"what\s+did\s+i\s+(?:spend|pay)|subscriptions?|recurring|renewals?|"
+    r"price\s+(?:rise|rises|rise|hike|hikes|increase|increases|go\s*up|went\s*up)|"
+    r"charged\s+(?:me\s+)?twice|double\s+charges?|duplicate\s+charges?)\b", re.I)
 
 
 def looks_like_spending_question(text) -> bool:
@@ -2371,6 +2401,136 @@ def result_for_model(table: dict, numbers: dict) -> dict:
         "written in this result, copied exactly (same digits, same commas). Do not round, "
         "add up, compare or work out any new number. Do not give advice.")
     return out
+
+
+# --------------------------------------------------------------------------
+#   The subscriptions answer (Pillar 10): a table both apps draw, and what the
+#   model reads to write its one sentence
+# --------------------------------------------------------------------------
+
+def _day_label(iso: str) -> str:
+    """"2026-03-05" as the table writes it: "5 March 2026"."""
+    d = _dt.date.fromisoformat(iso)
+    return f"{d.day} {_MONTH_NAMES[d.month - 1]} {d.year}"
+
+
+def _subscriptions_by_currency(audit: dict) -> "OrderedDict[str, dict]":
+    """The audit's findings grouped by currency, in the audit's own order."""
+    out: "OrderedDict[str, dict]" = OrderedDict()
+    for s in audit.get("subscriptions") or ():
+        out.setdefault(s["currency"], {"subs": [], "hikes": {}, "dups": []})["subs"].append(s)
+    for h in audit.get("price_hikes") or ():
+        out.setdefault(h["currency"], {"subs": [], "hikes": {}, "dups": []})[
+            "hikes"][h["merchant_stem"]] = h
+    for d in audit.get("duplicate_charges") or ():
+        out.setdefault(d["currency"], {"subs": [], "hikes": {}, "dups": []})["dups"].append(d)
+    return out
+
+
+def build_subscriptions_table(audit: dict, *, period_label: str, sources: list,
+                              counted_once: int = 0, skipped: int = 0, bad_dates: int = 0,
+                              hidden_any: bool = False, files: int = 1,
+                              extra_caveats=()) -> dict:
+    """The block both apps draw for the subscriptions answer. Same shape as a
+    spending table (kind "spending", version 1) so the two apps' own renderers
+    draw it unchanged; the only new thing in it is the `"money": False` flag on
+    the two word columns, which the table's sentence check reads (a date is not
+    a figure the model may quote)."""
+    columns = [
+        {"key": "what", "label": SUB_COL_WHAT, "align": "left"},
+        {"key": "how", "label": SUB_COL_HOW, "align": "left", "money": False},
+        {"key": "last", "label": SUB_COL_LAST, "align": "left", "money": False},
+        {"key": "amount", "label": SUB_COL_AMOUNT, "align": "right"},
+        {"key": "rise", "label": SUB_COL_RISE, "align": "right"},
+    ]
+    sections = []
+    for cur, part in _subscriptions_by_currency(audit).items():
+        rows, also = [], []
+        for s in part["subs"]:
+            rise = part["hikes"].get(s["merchant_stem"])
+            rows.append({"kind": "subscription", "cells": [
+                s["description"],
+                SUB_HOW_MONTHLY if s["interval"] == "monthly" else SUB_HOW_ANNUAL,
+                _day_label(s["latest_date"]),
+                fmt(s["latest_amount_cents"]),
+                fmt(rise["delta_cents"]) if rise else ""]})
+        for d in part["dups"]:
+            also.append({"kind": "duplicate", "cells": [
+                d["description"],
+                SUB_HOW_TWICE,
+                f"{_day_label(d['dates'][0])} and {_day_label(d['dates'][1])}",
+                fmt(d["amount_cents"]), ""]})
+        sections.append({"heading": cur, "currency": cur, "rows": rows,
+                         "totals": [], "also": also})
+    caveats = []
+    if counted_once:
+        caveats.append(CAV_ONCE_ONE if counted_once == 1 else CAV_ONCE.format(n=counted_once))
+    if files > 1:
+        caveats.append(CAV_FILES.format(n=files))
+        caveats.append(CAV_PENDING)
+    for c in extra_caveats:
+        if c and c not in caveats:
+            caveats.append(c)
+    if skipped:
+        caveats.append(CAV_SKIPPED_ONE if skipped == 1 else CAV_SKIPPED.format(n=skipped))
+    if bad_dates:
+        caveats.append(CAV_DATES.format(n=bad_dates))
+    if len(sections) > 1:
+        caveats.append(CAV_CURRENCIES)
+    if hidden_any:
+        caveats.append(CAV_HIDDEN)
+    caveats.append(SUB_CAV_HOW)
+    if audit.get("price_hikes"):
+        title = SUB_TITLE
+    elif audit.get("subscriptions"):
+        title = SUB_TITLE_PLAIN
+    else:
+        title = SUB_TITLE_DUP
+    return {"kind": "spending", "version": 1, "title": title,
+            "period": period_label or "All dates in the files",
+            "sources": [hide_one(x)[:SOURCE_MAX] for x in sources[:ALL_FILES_MAX]],
+            "columns": columns, "sections": sections, "caveats": caveats,
+            "private": True, "read_aloud": False, "remember": False,
+            "words": {"hidden": TABLE_HIDDEN}}
+
+
+def subscriptions_for_model(table: dict, audit: dict) -> dict:
+    """What the model reads before writing its ONE sentence: each shop's amount
+    and exact rise, so the sentence can name the row whose figure it quotes.
+    The shops are the MERCHANT STEMS - lower-case words with any trailing store
+    number or reference removed - never the raw description, and never the
+    table itself. A date is deliberately not passed: a year in a sentence would
+    be a figure the table does not have, and the sentence would be dropped."""
+    out = {"ok": True, "shown_on_screen": True, "title": table["title"],
+           "period": table["period"], "sections": []}
+    for cur, part in _subscriptions_by_currency(audit).items():
+        out["sections"].append({
+            "currency": cur or "unspecified",
+            "subscriptions": [{
+                "shop": s["merchant_stem"],
+                "how_often": "every month" if s["interval"] == "monthly" else "every year",
+                "amount": fmt(s["latest_amount_cents"]),
+                "went_up_by": (fmt(part["hikes"][s["merchant_stem"]]["delta_cents"])
+                               if s["merchant_stem"] in part["hikes"] else None)}
+                for s in part["subs"]],
+            "charged_twice": [{"shop": d["merchant_stem"], "amount": fmt(d["amount_cents"])}
+                              for d in part["dups"]]})
+    out["caveats"] = table["caveats"]
+    out["instruction"] = (
+        "The full table is already on the owner's screen; do not repeat it or list its rows. "
+        "Reply with ONE short plain sentence that answers the question using only figures "
+        "written in this result, copied exactly (same digits, same commas). If you name a "
+        "shop, use a \"shop\" name from this result exactly. Do not round, add up, compare or "
+        "work out any new number. Do not give advice.")
+    return out
+
+
+def no_subscriptions_result() -> dict:
+    """The subscriptions answer when nothing recurring, no rise and no double
+    charge was found: a plain line, no table (an empty table says less)."""
+    return {"ok": True, "shown_on_screen": False, "message": SUB_NONE,
+            "instruction": "Tell the owner, in one short plain sentence, that nothing was "
+                           "found. Do not invent a figure."}
 
 
 # --------------------------------------------------------------------------
@@ -2627,19 +2787,29 @@ def _run_tool(args, roots, convert, today, rules) -> dict:
     action = str(args.get("action") or "summary").strip().lower()
     if action == "files":
         return list_files(roots, convert)
-    if action not in ("summary", "suggest"):
+    if action not in ("summary", "suggest", "subscriptions"):
         raise SpendingError("unknown_action")
-    paths = _paths_for(args, roots, convert)
+    if action == "subscriptions" and not str(args.get("path") or "").strip():
+        # The radar needs the whole history, so with no file named it reads
+        # every file that has a saved layout (the same set `all: true` picks).
+        paths = _paths_for({"all": True}, roots, convert)
+    else:
+        paths = _paths_for(args, roots, convert)
     rules = load_rules()[0] if rules is None else rules
-    by = str(args.get("by") or "category").strip().lower()
-    if by not in ("category", "month", "both"):
-        by = "category"
-    only = _tidy(args.get("category") or "")
-    if only and only.casefold() not in {r["category"].casefold() for r in rules} | {ROW_UNCATEGORISED.casefold()}:
-        raise SpendingError("category", ERRORS["category"].format(
-            names=", ".join(r["category"] for r in rules)))
-    d_from, d_to, label = resolve_period(args.get("period"), today)
-    in_period = (lambda d: (d_from is None or d >= d_from) and (d_to is None or d <= d_to))
+    by, only = "category", ""
+    d_from = d_to = None
+    label = ""
+    if action == "summary":
+        by = str(args.get("by") or "category").strip().lower()
+        if by not in ("category", "month", "both"):
+            by = "category"
+        only = _tidy(args.get("category") or "")
+        if only and only.casefold() not in {r["category"].casefold() for r in rules} | {ROW_UNCATEGORISED.casefold()}:
+            raise SpendingError("category", ERRORS["category"].format(
+                names=", ".join(r["category"] for r in rules)))
+        d_from, d_to, label = resolve_period(args.get("period"), today)
+    in_period = (lambda d: True) if action == "subscriptions" else (
+        lambda d: (d_from is None or d >= d_from) and (d_to is None or d <= d_to))
     files, names, tags, notes = [], [], [], []
     skipped = bad_dates = 0
     hidden_any = False
@@ -2647,7 +2817,8 @@ def _run_tool(args, roots, convert, today, rules) -> dict:
     profiles = load_profiles()
     for real in paths:
         got, _idx, key, prof, sc = open_with_layout(real, profiles, roots=roots,
-                                                    convert=convert, keep=in_period)
+                                                    convert=convert,
+                                                    keep=None if action == "subscriptions" else in_period)
         norm = finish(sc)
         skipped += norm.skipped
         bad_dates += norm.bad_dates
@@ -2680,6 +2851,18 @@ def _run_tool(args, roots, convert, today, rules) -> dict:
         if first is not None:
             msg += EMPTY_RANGE.format(first=first.isoformat(), last=last.isoformat())
         return {"ok": False, "code": "empty_period", "error": "refused: " + msg}
+    if action == "subscriptions":
+        audit = audit_subscriptions(txns)
+        if not audit["subscriptions"] and not audit["duplicate_charges"]:
+            return no_subscriptions_result()
+        lo, hi = min(t.date for t in txns), max(t.date for t in txns)
+        table = build_subscriptions_table(
+            audit, period_label=f"{_day_label(lo.isoformat())} to {_day_label(hi.isoformat())}",
+            sources=names, counted_once=once, skipped=skipped, bad_dates=bad_dates,
+            hidden_any=hidden_any, files=len(files), extra_caveats=notes)
+        res = subscriptions_for_model(table, audit)
+        res["_table"] = table
+        return res
     numbers = summarise(txns, rules)
     table = build_table(numbers, by=by, period_label=label if (d_from or d_to) else "",
                         sources=names, counted_once=once, skipped=skipped, bad_dates=bad_dates,
@@ -2749,8 +2932,12 @@ def _suggest_result(txns: list, rules: list) -> dict:
 
 def describe(args: dict) -> str:
     action = str(args.get("action") or "summary")
-    what = "list the bank files it could read" if action == "files" else \
-        f"add up the spending in {args.get('path') or 'your bank files'}"
+    if action == "files":
+        what = "list the bank files it could read"
+    elif action == "subscriptions":
+        what = "look through your bank files for subscriptions, price rises and double charges"
+    else:
+        what = f"add up the spending in {args.get('path') or 'your bank files'}"
     return (f"Jarvis would like to {what} - only in the folders on your list, on this PC. "
             "Nothing is changed, and nothing is sent anywhere. " + SLOW_FIRST_TIME)
 
