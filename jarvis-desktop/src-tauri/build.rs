@@ -577,6 +577,10 @@ fn main() {
             // One Today card (2026-09-28, jarvis_today.py): no card, held
             // on a stale link. Brain only.
             "brain_schedule_add_today",
+            // The said-I'd-do switch (GTD-2, 2026-10-18, jarvis_today.py):
+            // OFF immediate, ON one ask-tier card; neither held on a stale
+            // link (the stricter direction / a card). Brain only.
+            "brain_schedule_set_unspoken",
             // "Widgets you describe" (brain/widgets.rs, JARVIS-API.md section
             // 87): the Brain manages them; the widget window draws one and
             // presses ONE of the five tile actions.

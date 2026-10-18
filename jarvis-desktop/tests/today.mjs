@@ -24,9 +24,14 @@ import { dirname, join } from "node:path";
 import {
   addArgs,
   BAD_TIME,
+  BREAK_LABEL,
   briefingCards,
   cardsOf,
   cardTitle,
+  cockpitOf,
+  DO_THIS_LABEL,
+  dueRows,
+  DUE_TITLE,
   EMPTY_CARDS,
   FROM_BRIEFING,
   HINT,
@@ -34,14 +39,24 @@ import {
   madeToday,
   MAX_TEXT,
   MISSING,
+  NEXT_TITLE,
+  nextRows,
   NO_BRIEFING_TODAY,
   NO_DAYS,
   NO_WORDS,
+  PROPOSALS_OFF,
+  PROPOSALS_ON_LABEL,
+  PROPOSALS_TITLE,
+  proposalRows,
+  REMIND_LABEL,
+  SNOOZE_LABEL,
+  snoozeOffers,
   TAG,
   TODAY_DETAIL,
   TODAY_TITLE,
   todayCards,
   TOO_LONG,
+  unspokenEnabled,
 } from "../src/today.js";
 import { KIND_TAGS, readSchedule, tagOf, TODAY_CARD_TITLE, titleOf } from "../src/coming-up.js";
 import * as K from "./uikit.mjs";
@@ -148,7 +163,90 @@ await check("the form's arguments, in both apps' words", async () => {
   assert.deepEqual(addArgs("Gym", "07:00", []), { error: NO_DAYS });
 });
 
-/* ── The page ──────────────────────────────────────────────────────────── */
+const COCKPIT = {
+  unspoken_commitments_enabled: false,
+  rollover_cards: [],
+  due_reminders: [{
+    id: "s0000000e01", kind: "reminder", text: "Call the vet", due: NOW - 300,
+    when: "12:00 today", went_off: true, fired_at: NOW - 300, overdue: true,
+    suggested_prompt: "Help me call the vet about the booster.",
+  }],
+  active_next_steps: [
+    { kind: "goal", id: "g0000001", name: "Insulate the garage",
+      step: "Call two installers", by: "Friday" },
+    { kind: "project", id: "p0000001", name: "Garage tidy",
+      step: "Sort the shelves", by: "" },
+  ],
+  proposals: [],
+};
+const COCKPIT_ON = {
+  unspoken_commitments_enabled: true,
+  rollover_cards: [],
+  proposals: [{ text: "send the report to Sam tomorrow", suggested_due: "2026-10-19",
+    source_conv_id: "conv-abcdefgh" }],
+};
+
+/* ── The Today board's reading (GTD-2) ────────────────────────────────── */
+
+await check("the board: due reminders, next steps, proposals - OFF by default", async () => {
+  const c = cockpitOf({ cockpit: COCKPIT });
+  assert.equal(unspokenEnabled(c), false);
+  assert.equal(cockpitOf({}), null);
+  const due = dueRows(c, NOW * 1000);
+  assert.equal(due.length, 1);
+  assert.equal(due[0].title, "Call the vet");
+  assert.deepEqual(due[0].meta, ["Went off (12:00 today)"]);
+  assert.equal(due[0].prompt, "Help me call the vet about the booster.");
+  assert.equal(due[0].breakPrompt, null, "no stuck_hint, no break offer");
+  assert.ok(due[0].snooze.length >= 3, "presets: +15m, +1h, tonight/tomorrow");
+  assert.deepEqual(due[0].snooze.slice(0, 2).map((x) => x.seconds), [900, 3600]);
+  for (const offer of due[0].snooze) {
+    assert.ok(offer.seconds >= 60 && offer.seconds <= 86400, offer.label);
+  }
+  const steps = nextRows(c);
+  assert.deepEqual(steps.map((s) => s.title), ["Call two installers", "Sort the shelves"]);
+  assert.equal(steps[0].tag, "goal");
+  assert.ok(steps[0].meta.includes("Insulate the garage"));
+  assert.equal(steps[1].tag, "project");
+  assert.ok(steps[1].meta.includes("work list"));
+  assert.deepEqual(proposalRows(c), [], "off: the shelf has nothing");
+});
+
+await check("the board: the proposal shelf only when the switch is on", async () => {
+  const on = cockpitOf({ cockpit: COCKPIT_ON });
+  assert.equal(unspokenEnabled(on), true);
+  const rows = proposalRows(on);
+  assert.deepEqual(rows.map((r) => r.title), ["send the report to Sam tomorrow"]);
+  assert.equal(rows[0].prompt, "Remind me to send the report to Sam tomorrow (2026-10-19).");
+  assert.ok(rows[0].meta[0].includes("2026-10-19"));
+});
+
+await check("the board: a sensitive or stuck reminder never offers Break Into 3 Steps", async () => {
+  const base = { id: "s0000000e02", kind: "reminder", text: "Call the vet",
+    went_off: true, when: "12:00 today" };
+  const stuck = dueRows({ due_reminders: [{ ...base, stuck_hint: true }] }, NOW * 1000);
+  assert.ok(stuck[0].breakPrompt.startsWith("Help me break this into 3 easy steps"));
+  const sensitive = dueRows({
+    due_reminders: [{ ...base, text: "My chemotherapy appointment", sensitive: true,
+      stuck_hint: true }],
+  }, NOW * 1000);
+  assert.equal(sensitive[0].breakPrompt, null, "sensitive: never offered");
+  const overdueOnly = dueRows({
+    due_reminders: [{ id: "s0000000e03", kind: "reminder", text: "Call the vet",
+      overdue: true, went_off: false, when: "11:00 today" }],
+  }, NOW * 1000);
+  assert.equal(overdueOnly[0].snooze, null, "not gone off yet: nothing to snooze");
+});
+
+await check("the board: snooze presets stay inside the PC's 1 minute..24 hours", async () => {
+  const nowMs = new Date(2026, 9, 18, 22, 0, 0).getTime();   // local 22:00: tonight is past
+  const offers = snoozeOffers(nowMs);
+  assert.deepEqual(offers.map((o) => o.label), ["+15 min", "+1 hour", "Tomorrow"]);
+  assert.ok(offers.every((o) => o.seconds >= 60 && o.seconds <= 86400));
+  const midday = new Date(2026, 9, 18, 12, 0, 0).getTime();
+  assert.deepEqual(snoozeOffers(midday).map((o) => o.label),
+    ["+15 min", "+1 hour", "Tonight", "Tomorrow"]);
+});
 
 const { base, close } = await K.serve();
 const browser = await K.launch();
@@ -190,6 +288,57 @@ await check("no cards and no briefing today: said plainly", async () => {
   await page.close();
   assert.ok(text.includes(EMPTY_CARDS));
   assert.ok(text.includes(NO_BRIEFING_TODAY));
+});
+
+await check("the Today board: Due now with Do This, Break steps and Snooze", async () => {
+  const page = await workTab({
+    schedule: { jobs: CARDS, todo: [], cockpit: COCKPIT },
+    briefing: { briefing: BRIEFING, setups: [], sources: {} },
+    security: { hidden: false },
+  });
+  const text = await page.locator("#today").innerText();
+  await page.close();
+  assert.match(text, new RegExp(`^${DUE_TITLE}$`, "im"));
+  assert.match(text, /Call the vet/);
+  assert.match(text, /Went off \(12:00 today\)/);
+  assert.ok(text.includes(DO_THIS_LABEL), "Do This With Jarvis");
+  assert.ok(text.includes(SNOOZE_LABEL), "the Snooze preset menu");
+  assert.ok(!text.includes(BREAK_LABEL), "no stuck_hint: no break offer");
+  assert.match(text, new RegExp(`^${NEXT_TITLE}$`, "im"));
+  assert.match(text, /Call two installers/);
+  assert.match(text, /Insulate the garage/);
+  assert.match(text, new RegExp(PROPOSALS_TITLE, "i"));
+  assert.ok(text.includes(PROPOSALS_OFF), "the said-I'd-do shelf says it is off");
+  assert.ok(text.includes(PROPOSALS_ON_LABEL), "and offers the one opt-in button");
+});
+
+await check("the Today board: proposals only with the switch on, and no reminder is made", async () => {
+  const page = await workTab({
+    schedule: { jobs: [], todo: [], cockpit: COCKPIT_ON },
+    briefing: { briefing: BRIEFING, setups: [], sources: {} },
+  });
+  const text = await page.locator("#today").innerText();
+  const buttons = await page.locator("#today .row-item")
+    .filter({ hasText: "send the report to Sam tomorrow" })
+    .locator("button").allInnerTexts();
+  await page.close();
+  assert.match(text, /send the report to Sam tomorrow/);
+  assert.match(text, /2026-10-19/);
+  assert.ok(buttons.includes(REMIND_LABEL), buttons.join(","));
+  assert.ok(!text.toUpperCase().includes(DUE_TITLE.toUpperCase()),
+    "nothing due: no Due now section");
+});
+
+await check("the Today board's words are hidden with the private lists", async () => {
+  const page = await workTab({
+    schedule: { jobs: [], todo: [], cockpit: COCKPIT_ON },
+    briefing: { briefing: BRIEFING, setups: [], sources: {} },
+    security: { hidden: true },
+  });
+  const text = await page.locator("#today-card").innerText();
+  await page.close();
+  assert.doesNotMatch(text, /Call the vet|Insulate the garage|send the report/);
+  assert.match(text, /Hidden until Windows Hello/);
 });
 
 await check("Add: ONE brain_schedule_add_today with the words, time and days - asking nothing", async () => {

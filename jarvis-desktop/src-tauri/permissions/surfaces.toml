@@ -1082,6 +1082,7 @@ permissions = [
   "allow-brain-schedule-add-todo",
   "allow-brain-schedule-add-standby",
   "allow-brain-schedule-add-today",
+  "allow-brain-schedule-set-unspoken",
   "allow-brain-schedule-clear-list",
 ]
 
