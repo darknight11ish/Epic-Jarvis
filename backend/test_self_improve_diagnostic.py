@@ -182,9 +182,14 @@ def t_install_answers_the_diagnosis_route_with_a_real_citation():
         check("... and it carries a citation naming the real file",
               bool(citations) and citations[0].get("path") == "alpha.py",
               str(citations))
-        check("... whose quote is the line from disk",
-              bool(citations) and "retry loop" in str(citations[0].get("quote")),
-              str(citations))
+        # #540's DEFINITION_BONUS ranks the `def retry_backup(` definition
+        # above the comment that names the question; both are real lines from
+        # the fixture, so this asserts the property (a real line re-read from
+        # disk), not which matching line wins the retrieval order.
+        real_lines = {ln.strip() for ln in _ALPHA.splitlines() if ln.strip()}
+        check("... whose quote is a real line re-read from disk",
+              bool(citations) and str(citations[0].get("quote", "")).strip()
+              in real_lines, str(citations))
         check("... and the plain-words rendering is there too",
               "alpha.py:" in str(body.get("words")), str(body.get("words")))
         check("... and the model was asked exactly once, with the question in the prompt",
