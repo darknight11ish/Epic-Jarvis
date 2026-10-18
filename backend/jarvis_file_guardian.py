@@ -255,6 +255,15 @@ WORDS = {
                 "nothing was touched."),
     "no_version": ("That earlier version is not in the time machine any more - it may have "
                    "been removed to stay under the size limit."),
+    "damaged": ("That saved version is damaged or was altered - it does not match its own "
+                "content address - so nothing was put back."),
+    "unpacked_too_big": ("That saved version unpacks to more than the time machine's limit "
+                         "for one file, so nothing was put back."),
+    "not_this_files_version": ("That saved version was saved from a different file, so "
+                               "nothing was put back."),
+    "receipt_failed": ("The restore could not be recorded, so nothing was written."),
+    "record_failed": ("The restore could not be added to the file history, so nothing "
+                      "was written."),
     "denied": "The card was turned down, so nothing was written.",
     "timed_out": "Nobody answered the card in time, so nothing was written.",
     "refused": "The card was not approved, so nothing was written.",
@@ -475,8 +484,13 @@ def _gzip_bytes(data: bytes) -> bytes:
     return buf.getvalue()
 
 
-def _gunzip_bytes(packed: bytes) -> bytes:
+def _gunzip_bytes(packed: bytes, limit: int = 0) -> bytes:
+    """The unpacked bytes. With a positive `limit`, read at most one byte past
+    it, so a corrupt or tampered copy cannot unpack into an unbounded amount of
+    memory before the caller refuses it."""
     with gzip.GzipFile(fileobj=io.BytesIO(packed), mode="rb") as handle:
+        if isinstance(limit, int) and limit > 0:
+            return handle.read(limit + 1)
         return handle.read()
 
 
@@ -524,8 +538,17 @@ def _store_blob(data: bytes, sha: str) -> tuple:
 
 
 def _load_blob(sha256: str) -> bytes:
-    """The saved bytes for one content address, or a plain refusal."""
-    path = blob_path(sha256)
+    """The saved bytes for one content address, or a plain refusal.
+
+    The name IS the sha256 of the unpacked bytes, so it is checked again here
+    (F3, 2026-10-18): a copy that was altered, or merely corrupted, is refused
+    rather than written into a file whose card named the real hash. The unpack
+    is read with a one-byte-over-the-limit cap first, so a tampered gzip cannot
+    allocate an unbounded amount of memory or write a file larger than the
+    store's own ceiling.
+    """
+    sha = str(sha256 or "").strip().lower()
+    path = blob_path(sha)
     try:
         packed = path.read_bytes()
     except FileNotFoundError:
@@ -533,9 +556,14 @@ def _load_blob(sha256: str) -> bytes:
     except OSError as exc:
         raise Refused(WORDS["read_failed"].format(why=type(exc).__name__))
     try:
-        return _gunzip_bytes(packed)
+        data = _gunzip_bytes(packed, limit=MAX_FILE_BYTES)
     except (OSError, EOFError):
-        raise Refused("That saved version is damaged and cannot be read back.")
+        raise Refused(WORDS["damaged"])
+    if len(data) > MAX_FILE_BYTES:
+        raise Refused(WORDS["unpacked_too_big"])
+    if sha256_bytes(data) != sha:
+        raise Refused(WORDS["damaged"])
+    return data
 
 
 def _write_file(real: str, data: bytes) -> None:
@@ -1011,19 +1039,17 @@ def _gate(action: str, detail: dict, prompt: str):
 
 
 def _approved(verdict) -> bool:
-    """Did a PERSON say yes? `allowed` alone is not enough at tier "ask".
+    """Did a PERSON say yes? An outcome of exactly `"approved"`, nothing less.
 
-    The same rule jarvis_receipts.py keeps: `check()` also returns
-    allowed=True at tier "notify" with nobody in the loop, so at "ask" only an
-    outcome of "approved" is a yes.
+    `allowed` is not enough: the gate returns allowed=True with nobody in the
+    loop at tier "notify"/"auto", and older verdict objects could leave
+    `outcome` at None. A missing or different outcome is NOT a person's yes
+    (F5, 2026-10-18) - a restore writes a file, so only a card approval counts.
     """
     try:
         allowed = getattr(verdict, "allowed", False) is True
-        tier = str(getattr(verdict, "tier", "unknown") or "unknown")
-        outcome = getattr(verdict, "outcome", None)
-        if tier == "ask" and outcome not in (None, "approved"):
-            return False
-        return allowed
+        outcome = str(getattr(verdict, "outcome", "") or "")
+        return bool(allowed and outcome == "approved")
     except Exception:
         return False
 
@@ -1237,37 +1263,92 @@ def diff_versions(path, sha_before, *, roots=None, max_bytes=MAX_DIFF_BYTES) -> 
 # --------------------------------------------------------------------------
 
 
+def _version_was_saved_from(real: str, sha: str) -> bool:
+    """Did this file's own history save this exact version? (F2, 2026-10-18)
+
+    A saved version is content-addressed, so the bytes alone do not say which
+    file they came from. Restoring is only safe when a journal row for THIS
+    resolved path names this sha; otherwise an approved card for file B could
+    write file A's saved words into it.
+    """
+    try:
+        for row in rows():
+            if not isinstance(row, dict) or row.get("before_sha256") != sha:
+                continue
+            saved_path = row.get("path")
+            if not isinstance(saved_path, str) or not saved_path:
+                continue
+            try:
+                if os.path.normcase(os.path.realpath(saved_path)) == os.path.normcase(real):
+                    return True
+            except OSError:
+                continue
+    except Exception:
+        return False
+    return False
+
+
+def _discard_receipt(receipt_id) -> None:
+    """Take the receipt back when the change it announced did not happen.
+
+    The receipt is written BEFORE the write on purpose; if the write then
+    fails, no receipt may claim a restore that never happened (F4, 2026-10-18).
+    Best effort: a store that cannot discard is louder elsewhere, never here.
+    """
+    if not receipt_id:
+        return
+    R = _receipts()
+    if R is None:
+        return
+    try:
+        discard = getattr(R, "discard", None)
+        if callable(discard):
+            discard(receipt_id)
+    except Exception:
+        pass
+
+
 def restore_version(path, sha_before, *, gate=None, roots=None, reason: str = "",
                     now=None) -> dict:
     """Put one saved version back, on a person's yes and nothing less.
 
-    The order is the whole safety story:
+    The order is the whole safety story (F1-F5, 2026-10-18):
 
-      1. the path rules, and the saved version, are checked first - no card is
-         ever raised for something that could only refuse;
+      1. the path rules, the saved bytes (whose name is verified against them
+         again) and the requirement that THIS file's own history saved this
+         version are checked first - no card is ever raised for something that
+         could only refuse;
       2. the ONE permission model is asked, with the EXISTING `undo_action`
-         card, through the caller's `gate` callable or the real
-         `jarvis_gate.check()`; a denied, timed-out or unraisable card writes
-         nothing;
-      3. the version here now is saved, and a NEW receipt is recorded BEFORE
-         the write, so the existing Undo button reverses this restore;
-      4. the path rules are applied once more (the card can wait minutes), then
-         the bytes are replaced in one atomic rename.
+         card; only an outcome of exactly "approved" is a person's yes. A
+         denied, timed-out or unraisable card writes nothing;
+      3. what is here NOW is read AFTER the card - an edit made while the person
+         was deciding is the version saved and the version Undo puts back -
+         then it is saved, with a NEW receipt and journal row BEFORE the write.
+         If any of those cannot be recorded, nothing is written;
+      4. the path rules are applied once more, then the bytes are replaced in
+         one atomic rename. A write that fails takes its receipt back, so no
+         receipt claims a restore that did not happen.
 
     Never raises; returns a dict with plain words either way.
     """
     reason_text = _clean_reason(reason)
+    receipt_id = ""
     try:
         sha = str(sha_before or "").strip().lower()
         if not _SHA.match(sha):
             raise Refused(WORDS["bad_sha"])
         real, roots_list = _check_path(path, roots)
         old = _load_blob(sha)
+        if not _version_was_saved_from(real, sha):
+            raise Refused(WORDS["not_this_files_version"])
+        # This read only answers "already that version?" before bothering the
+        # person; its bytes are discarded and never stored. The version saved
+        # for Undo is re-read AFTER the card (below), so an edit made during
+        # the wait is the version that gets saved and put back by Undo.
         current = _check_file(real)
-        now_sha = sha256_bytes(current)
-        if now_sha == sha:
+        if sha256_bytes(current) == sha:
             return {"ok": True, "changed": False, "same": True, "path": real,
-                    "before_sha256": sha, "after_sha256": now_sha, "receipt_id": "",
+                    "before_sha256": sha, "after_sha256": sha, "receipt_id": "",
                     "words": WORDS["same"]}
         detail = {"file_name": os.path.basename(real), "sha256": sha[:12],
                   "size": len(old)}
@@ -1283,13 +1364,28 @@ def restore_version(path, sha_before, *, gate=None, roots=None, reason: str = ""
                      else WORDS["refused"])
             return {"ok": False, "refused": True, "gated": True, "outcome": outcome,
                     "path": real, "error": words, "words": words}
+        # The card can wait minutes. Re-check the path, then read what is here
+        # NOW: this is the version the receipt and the journal record, so Undo
+        # brings back what was really replaced (not a stale pre-card copy).
+        real_now, _same_roots = _check_path(path, roots_list)
+        if os.path.normcase(os.path.realpath(real_now)) != os.path.normcase(real):
+            raise Refused("The file moved while the card was up, so nothing was written.")
+        current = _check_file(real)
+        now_sha = sha256_bytes(current)
+        if now_sha == sha:
+            return {"ok": True, "changed": False, "same": True, "path": real,
+                    "before_sha256": sha, "after_sha256": sha, "receipt_id": "",
+                    "words": WORDS["same"]}
         # What is here now becomes a saved version too, so the restore itself
         # can be undone in one click. The receipt and the journal row both go
         # down BEFORE the write: a change that could not be recorded must not
-        # be made.
+        # be made (F4: every one of these failures aborts with the file as it
+        # was, and takes back the receipt the failure did not complete).
         _store_blob(current, now_sha)
         copy_id = _new_copy_id()
         receipt_id = _record_restore(real, now_sha, sha, reason_text, copy_id)
+        if not receipt_id:
+            raise Refused(WORDS["receipt_failed"])
         stamp = float(now) if isinstance(now, (int, float)) and not isinstance(now, bool) \
             else time.time()
         row = {"timestamp": stamp, "path": real, "before_sha256": now_sha,
@@ -1298,7 +1394,7 @@ def restore_version(path, sha_before, *, gate=None, roots=None, reason: str = ""
         try:
             _append_row(row)
         except Exception:
-            pass                    # the blob and the receipt still name this version
+            raise Refused(WORDS["record_failed"])
         real_now, _same_roots = _check_path(path, roots_list)
         if os.path.normcase(os.path.realpath(real_now)) != os.path.normcase(real):
             raise Refused("The file moved while the card was up, so nothing was written.")
@@ -1314,17 +1410,17 @@ def restore_version(path, sha_before, *, gate=None, roots=None, reason: str = ""
                     when = ""
                 break
         words = WORDS["restored"].format(when=when or "that day")
-        if not receipt_id:
-            words += WORDS["restored_no_receipt"]
         return {"ok": True, "changed": True, "same": False, "path": real,
                 "before_sha256": now_sha, "after_sha256": sha,
                 "restored_sha256": sha, "receipt_id": receipt_id,
                 "pruned": pruned.get("pruned", []),
                 "prune_words": pruned.get("words", ""), "words": words}
     except Refused as exc:
+        _discard_receipt(receipt_id)
         return {"ok": False, "refused": True, "path": str(path), "receipt_id": "",
                 "error": str(exc), "words": str(exc)}
     except Exception as exc:                    # pragma: no cover - last resort
+        _discard_receipt(receipt_id)
         return {"ok": False, "path": str(path), "receipt_id": "",
                 "error": f"the version could not be put back ({type(exc).__name__})",
                 "words": "The version could not be put back."}

@@ -1856,6 +1856,187 @@ def t_an_older_backend_says_update_in_the_same_shape():
           h.sent[0] == 501 and h.sent[1].get("why") == "update", h.sent)
 
 
+# --------------------------------------------------------------------------
+#   16. The 2026-10-18 integrity fixes (review F1-F5)
+# --------------------------------------------------------------------------
+
+
+def t_a_tampered_blob_is_refused_before_the_card():
+    fresh()
+    p = write("tamper.txt", b"the real saved version\n")
+    saved = snapshot(p)
+    blob = blob_path(HOME_A, saved["before_sha256"])
+    blob.write_bytes(gzip.compress(b"NOT THE VERSION THE CARD NAMES\n"))
+    p.write_bytes(b"a later version\n")
+    cards = Cards("approved")
+    result = G.restore_version(str(p), saved["before_sha256"], gate=cards.gate)
+    check("a blob that does not match its own content address is refused",
+          refused(result, "does not match its own content address"), result)
+    check("... before any card is raised", cards.cards == [], cards.cards)
+    check("... and the file is untouched", p.read_bytes() == b"a later version\n")
+
+
+def t_a_blob_that_unpacks_over_the_file_limit_is_refused():
+    fresh()
+    p = write("bomb.txt", b"the real saved version\n")
+    saved = snapshot(p)
+    blob = blob_path(HOME_A, saved["before_sha256"])
+    blob.write_bytes(gzip.compress(b"z" * (G.MAX_FILE_BYTES + 4096)))
+    p.write_bytes(b"a later version\n")
+    cards = Cards("approved")
+    result = G.restore_version(str(p), saved["before_sha256"], gate=cards.gate)
+    check("a blob that unpacks over the one-file limit is refused, not written",
+          refused(result, "unpacks to more than"), result)
+    check("... before any card is raised", cards.cards == [], cards.cards)
+    check("... and the file is untouched", p.read_bytes() == b"a later version\n")
+
+
+def t_an_edit_while_the_card_is_up_is_the_version_saved_and_restored():
+    edited = b"v3 edited while the card was up\n"
+
+    class EditingCard:
+        def __init__(self, path):
+            self.path, self.cards = path, []
+
+        def gate(self, action, detail, prompt):
+            self.cards.append((action, detail, prompt))
+            self.path.write_bytes(edited)       # the edit made during the wait
+            return Verdict(True, "ask", "approved")
+
+    fresh()
+    p = write("race.txt", b"v1\n")
+    saved = snapshot(p)
+    p.write_bytes(b"v2\n")
+    card = EditingCard(p)
+    result = G.restore_version(str(p), saved["before_sha256"], gate=card.gate)
+    check("an approved restore still puts the saved version back",
+          ok(result) and result.get("changed") is True and p.read_bytes() == b"v1\n",
+          result)
+    check("... and the version saved for Undo is what the file held AFTER the card",
+          result.get("before_sha256") == sha256_of(edited), result.get("before_sha256"))
+    receipt = R.get(result.get("receipt_id")) if result.get("receipt_id") else None
+    check("... the receipt's before snapshot agrees",
+          receipt is not None
+          and ((receipt.get("before") or {}).get("sha256")) == sha256_of(edited),
+          receipt)
+    undo = R.undo(result["receipt_id"]) if result.get("receipt_id") else None
+    check("... so Undo brings the edit made during the card back",
+          undo is not None and undo.get("ok") is True and p.read_bytes() == edited, undo)
+
+
+def t_a_version_saved_from_another_file_is_refused():
+    fresh()
+    a = write("other-a.txt", b"file A's saved words\n")
+    saved = snapshot(a)
+    b = write("other-b.txt", b"file B's own words\n")
+    cards = Cards("approved")
+    result = G.restore_version(str(b), saved["before_sha256"], gate=cards.gate)
+    check("a version saved from another file is refused",
+          refused(result, "different file"), result)
+    check("... before any card is raised", cards.cards == [], cards.cards)
+    check("... and the target file is untouched",
+          b.read_bytes() == b"file B's own words\n")
+    again = G.restore_version(str(a), saved["before_sha256"], gate=Cards("approved").gate)
+    check("a version saved from THIS file is still restorable", ok(again))
+
+
+def t_a_restore_that_cannot_be_receipted_aborts_before_the_write():
+    fresh()
+    p = write("receipt-fail.txt", b"v1\n")
+    saved = snapshot(p)
+    p.write_bytes(b"v2\n")
+    before_receipts, before_rows = receipts_count(), journal_rows()
+    real_record = R.record
+
+    def no_record(*a, **k):
+        raise RuntimeError("the receipt store is down")
+
+    R.record = no_record
+    try:
+        result = G.restore_version(str(p), saved["before_sha256"],
+                                   gate=Cards("approved").gate)
+    finally:
+        R.record = real_record
+    check("a restore whose receipt cannot be recorded is refused",
+          refused(result, "could not be recorded"), result)
+    check("... nothing was written", p.read_bytes() == b"v2\n")
+    check("... and no receipt or journal row was left behind",
+          receipts_count() == before_receipts and journal_rows() == before_rows,
+          (receipts_count(), journal_rows()))
+
+
+def t_a_restore_that_cannot_be_journalled_aborts_and_takes_its_receipt_back():
+    fresh()
+    p = write("journal-fail.txt", b"v1\n")
+    saved = snapshot(p)
+    p.write_bytes(b"v2\n")
+    before_receipts, before_rows = receipts_count(), journal_rows()
+    real_append = G._append_row
+
+    def no_row(row):
+        raise OSError("disk full")
+
+    G._append_row = no_row
+    try:
+        result = G.restore_version(str(p), saved["before_sha256"],
+                                   gate=Cards("approved").gate)
+    finally:
+        G._append_row = real_append
+    check("a restore whose journal row cannot be written is refused",
+          refused(result, "file history"), result)
+    check("... nothing was written", p.read_bytes() == b"v2\n")
+    check("... its receipt was taken back, so it cannot claim a restore",
+          receipts_count() == before_receipts and journal_rows() == before_rows,
+          (receipts_count(), journal_rows()))
+
+
+def t_a_restore_whose_write_fails_leaves_no_receipt():
+    fresh()
+    p = write("write-fail.txt", b"v1\n")
+    saved = snapshot(p)
+    p.write_bytes(b"v2\n")
+    before_receipts = receipts_count()
+    real_write = G._write_file
+
+    def no_write(real, data):
+        raise G.Refused("the write failed (simulated)")
+
+    G._write_file = no_write
+    try:
+        result = G.restore_version(str(p), saved["before_sha256"],
+                                   gate=Cards("approved").gate)
+    finally:
+        G._write_file = real_write
+    check("a restore whose write fails is refused", refused(result, "write failed"), result)
+    check("... nothing was written", p.read_bytes() == b"v2\n")
+    check("... and no receipt claims a restore that did not happen",
+          receipts_count() == before_receipts, receipts_count())
+
+
+def t_a_verdict_that_is_not_exactly_approved_writes_nothing():
+    fresh()
+    p = write("outcome.txt", b"v1\n")
+    saved = snapshot(p)
+    p.write_bytes(b"v2\n")
+
+    class NoOutcome:
+        def __call__(self, action, detail, prompt):
+            return Verdict(True, "ask", None)
+
+    result = G.restore_version(str(p), saved["before_sha256"], gate=NoOutcome())
+    check("allowed=True at tier ask with no outcome is NOT a person's yes",
+          refused(result, "not approved"), result)
+    check("... and nothing was written", p.read_bytes() == b"v2\n")
+
+    class NotifyOutcome:
+        def __call__(self, action, detail, prompt):
+            return Verdict(True, "notify", "notify")
+
+    result = G.restore_version(str(p), saved["before_sha256"], gate=NotifyOutcome())
+    check("allowed=True with a notify outcome is not a yes either",
+          refused(result, "not approved") and p.read_bytes() == b"v2\n", result)
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("t_") and callable(fn) and fn.__module__ == "__main__":
