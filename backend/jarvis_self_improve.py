@@ -183,6 +183,27 @@ _STOP = frozenset({
 CODE_SUFFIXES = frozenset({".py", ".ps1", ".js", ".kt", ".rs", ".toml"})
 CODE_BONUS = 5
 
+#: A line that DEFINES a symbol the question names outranks a line that only
+#: MENTIONS it. "Where is the taint latch written?" must put
+#: `def latch_taint(...)` in the evidence, and comments that merely say the
+#: name (a registration note, a caller's own comment) otherwise score the same
+#: and win the tie on path order - measured 2026-10-17 on Pillar 16's branch:
+#: two new comments naming `jarvis_gate.latch_taint` pushed the definition out
+#: of the top eight for that question, and the real-tree check caught it.
+#: Large enough to beat any mention-only combination of the question's words,
+#: and it only ever moves a DEFINITION up: nothing is dropped, so the mentions
+#: are still evidence when the budget has room for them.
+DEFINITION_BONUS = 60
+
+#: What a definition line starts with, in the languages this module reads:
+#: `def name(`, `async def name(`, `class Name`, Rust's `fn name(` /
+#: `pub fn name(`, Kotlin's `fun name(`. The name is captured, not the whole
+#: line, because the question's words have to appear in the NAME for this to be
+#: a definition OF what was asked about - a `def save_history(` line is not the
+#: "history" answer a question about a different word asked for.
+_DEFINITION_LINE = re.compile(
+    r"^(?:(?:async\s+)?def|class|fn|pub\s+fn|fun)\s+([A-Za-z_][A-Za-z0-9_]*)")
+
 #: A long run of characters with no space or tab in it is a blob (a base64
 #: payload in a word list, a hash), not a line of source that can answer
 #: anything. Measured: an invented word matched inside `jarvis_stopword.py`'s
@@ -501,6 +522,17 @@ def _is_blob(line: str) -> bool:
     return len(line) > BLOB_MIN_CHARS and " " not in line and "\t" not in line
 
 
+def _definition_name(text: str) -> str:
+    """The symbol this line DEFINES, or "" for a line that defines nothing.
+
+    Only a real definition line at the START of the (stripped) line counts:
+    prose that says `def latch_taint(` in a sentence is a mention, which is
+    exactly the shape the definition bonus must not reward.
+    """
+    match = _DEFINITION_LINE.match(text.strip())
+    return match.group(1) if match else ""
+
+
 def _iter_files(roots: Iterable[Path]) -> Iterable[Path]:
     """Every readable text file under `roots`, in a fixed order.
 
@@ -587,7 +619,12 @@ def retrieve(question: str, *, roots: Optional[Sequence[Path]] = None,
     A line scores the sum of its words' weights (rare words weigh more), plus a
     bonus for a word in the FILE NAME - a question about backups is more likely
     to be answered by `jarvis_backup.py` than by a comment that happens to say
-    "backup" - plus a small bonus for the program's own code over prose about it.
+    "backup" - plus a small bonus for the program's own code over prose about it,
+    plus a DEFINITION bonus when the line defines a symbol the question names
+    (`def latch_taint(` for "where is the taint latch written"). Without that
+    last term a mention of the name scores the same as the definition and wins
+    the tie on path order: two comments naming the latch were enough to push
+    the definition out of the top eight (Pillar 16, 2026-10-17).
     Ranking is `(-score, path, line)`, which is total and deterministic: the same
     question against the same tree returns the same lines in the same order.
 
@@ -643,6 +680,9 @@ def retrieve(question: str, *, roots: Optional[Sequence[Path]] = None,
         score += 2 * len(_hits(name, hits, patterns))
         if Path(label).suffix.lower() in CODE_SUFFIXES:
             score += CODE_BONUS
+        defined = _definition_name(text)
+        if defined and _hits(defined.lower(), hits, patterns):
+            score += DEFINITION_BONUS
         scored.append(Evidence(path=label, line=number, text=text, score=score))
     scored.sort(key=lambda e: (-e.score, e.path, e.line))
     return tuple(scored[:max(1, int(limit))])

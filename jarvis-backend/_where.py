@@ -1046,6 +1046,19 @@ SHIPPED = (
     # 14B) is a later slice after the commands.rs hand-off. Nothing it
     # does leaves this PC.
     "jarvis_clipboard.py",
+    # Pillar 16 (2026-10-17): the pre-meeting person dossier - ONE person's
+    # facts split current/retired, the kept chat turns that mention them, the
+    # newest mail headers/snippets, the open to-dos that name them and the
+    # next calendar event whose own words name them, read only through the
+    # modules that already own those records (jarvis_memory.py is base-only
+    # and is NEVER edited: its public reads are called from here). The whole
+    # dossier is withheld before any read when "Hide memory lists and chat
+    # history" or App lock is on, and reading facts latches the conversation
+    # private (jarvis_gate.latch_taint). No route, no chat tool and no UI in
+    # this slice: like jarvis_compaction.py it is a library, and the one
+    # surface it adds is one line in the morning briefing (jarvis_briefing.py)
+    # for a person Jarvis already knows who is named in today's calendar.
+    "jarvis_people_crm.py",
 )
 
 
