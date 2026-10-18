@@ -1868,6 +1868,39 @@ def devices_view(*, you: str, here: bool, tier_of=None, armed=None) -> dict:
             "pairing": {"available": problem is None, "why_not": problem}}
 
 
+def paired_status() -> dict:
+    """What PC help's silent-failure doctor reads: every PAIRED device, when
+    it was last heard from (epoch seconds), and whether it has remote reach at
+    all. Read-only, and never a token, key or hash.
+
+    {"devices": [{"id", "name", "kind", "created", "last_seen", "reach"}],
+     "readable": bool, "why": ""}
+
+    `last_seen` is the newest of the row's written sighting and this
+    process's in-memory one - the same pair `devices_view()` merges - or None
+    for a device never heard from since it was paired. `name` is
+    `row_shown()`'s one name, the same one both apps show. `reach` is True
+    for every row that has its own key: this design has no separate
+    "also on my phone" switch (the string does not exist in this tree), so a
+    paired device with its own key IS the device that can reach Jarvis, and
+    its last check-in is the evidence it still does."""
+    doc, why = load()
+    with _SEEN_LOCK:
+        seen = dict(_SEEN)
+    rows = []
+    for r in doc["devices"]:
+        if not isinstance(r, dict) or r.get("removed") or not r.get("token_sha256"):
+            continue
+        last = max([x for x in (r.get("last_seen"), seen.get(r.get("id")))
+                    if isinstance(x, int)], default=None)
+        row = {"id": r.get("id"), "name": row_shown(r),
+               "kind": r.get("kind", "phone"),
+               "created": r.get("created") if isinstance(r.get("created"), int) else None,
+               "last_seen": last, "reach": True}
+        rows.append(row)
+    return {"devices": rows, "readable": not why, "why": why}
+
+
 def remove(body, *, you: str) -> tuple:
     """POST /api/devices/remove {"id"} - immediate, no card, one device."""
     if not isinstance(body, dict) or set(body) != {"id"} or not isinstance(body["id"], str):
