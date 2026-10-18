@@ -23,7 +23,7 @@ package com.jarvis.client.net
  * tests/sayable.mjs reads the same file, so the two apps cannot carry a
  * different list.
  *
- * The phone has no 3-screen walkthrough to put 3 examples on (see
+ * The phone has no multi-screen walkthrough to put 3 examples on (see
  * docs/ARCHITECTURE.md §8, "One-sided on purpose": the phone's pairing flow
  * is one screen, not a tour) - [WALKTHROUGH_EXAMPLES] exists so a future
  * screen, and today's contract test, both have the same 3 to work from.

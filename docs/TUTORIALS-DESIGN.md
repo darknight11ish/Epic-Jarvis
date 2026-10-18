@@ -159,8 +159,8 @@ Memory"). So:
   how every other page reaches the backend.
 * The intro is **offered once** from the Brain's own list (a line at the top:
   "New here? Start with What Jarvis is"), never a modal that blocks anything.
-  The existing first-run `onboarding.html` is untouched: it is three screens
-  about first setup, and this is the reference the owner comes back to.
+  The existing first-run `onboarding.html` is untouched: it is five screens
+  about first setup and how to use it, and this is the reference the owner comes back to.
 
 **Android.** A Tutorials screen reachable from the Brain list (and offered once,
 on first run, in place of the desktop's onboarding), with the same two sections,

@@ -221,7 +221,7 @@ the file does not exist).
 ### 12. The phone has no welcome at all
 
 After install the phone opens straight on "Pair with your desktop" with two
-boxes (`PairingScreen.kt:123-178`). The desktop's three-screen walkthrough has
+boxes (`PairingScreen.kt:123-178`). The desktop's multi-screen walkthrough has
 no phone counterpart, and `docs/ARCHITECTURE.md` §8 "One-sided on purpose"
 (`:1106` on) does not say why (no "walkthrough"/"onboarding" in it), which
 `CLAUDE.md`'s parity rule asks for. `tools/check_parity.py` passes, because it

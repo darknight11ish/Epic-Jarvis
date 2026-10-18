@@ -8292,12 +8292,13 @@ shared text goes to the model as before.
   explanation). The rebindable hotkeys the primer used to mirror live now,
   unduplicated, in Settings -> Shortcuts, which is where the footer line
   points. 3 of the 10 (`WALKTHROUGH_EXAMPLES`) are on the walkthrough's screen
-  2 (`onboarding.html`), next to its Alt+Space mention - never screen 1 or 3.
+  2 (`onboarding.html`), next to its Alt+Space mention - never screen 1, 3, 4
+  or 5.
   Settings -> FAQ has a "What can I say?" entry with the Help paragraph.
 - **Phone**: `Sayable.kt` carries the same words, held to the same fixture,
   and `FaqScreen.kt` has the same "What can I say?" entry. "What can you
   do?" is answered the same way, through ordinary chat. **The phone has no
-  primer or 3-screen walkthrough to put the tappable list or the 3 examples
+  primer or five-screen walkthrough to put the tappable list or the 3 examples
   on** - see `docs/ARCHITECTURE.md` §8, "One-sided on purpose" (the entry
   this feature added there). `Sayable.WALKTHROUGH_EXAMPLES` still exists on
   the phone so a screen that wants them later does not have to invent its
