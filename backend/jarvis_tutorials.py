@@ -905,6 +905,50 @@ CATALOGUE = (
         ),
     },
     {
+        "id": "clipboard-time-machine",
+        "version": 1,
+        "section": "pc",
+        "title": "Clipboard history, and the three cleanups for what you copy",
+        "why": "The last things you copied, kept only in memory, with one press "
+               "each to clean up a table, JSON or a link.",
+        "minutes": 2,
+        "steps": (
+            {"title": "A drawer at the Jarvis bar, opened by a key",
+             "body": "Press Alt+Shift+C on the PC to open the clipboard history "
+                     "drawer at the Jarvis bar; Tab moves inside it and Esc closes "
+                     "it. The key only opens the drawer - it captures nothing by "
+                     "itself - and it can be changed in Settings, Shortcuts.",
+             "where": "The Jarvis bar on the PC - press Alt+Shift+C"},
+            {"title": "Off on every launch, and only in memory",
+             "body": "Nothing is kept until you press Turn on in the drawer, and "
+                     "it is off again the next time Jarvis starts: there is no "
+                     "saved switch. While it is on, the last 25 copies are held in "
+                     "the Jarvis bar's own memory, newest first, and copying the "
+                     "same thing again moves it to the top instead of piling up. "
+                     "Nothing is written to disk and no copied word is ever "
+                     "logged.",
+             "where": "The Turn on button at the top of the clipboard history drawer"},
+            {"title": "The three cleanups",
+             "body": "Each kept copy carries three one-press transforms, all done "
+                     "on this PC: Table turns a CSV or TSV table into a Markdown "
+                     "table, Pretty JSON indents a JSON blob so it can be read, and "
+                     "Clean link removes utm_* and the other click-tracking "
+                     "parameters from a link. A copy that does not fit is refused "
+                     "with a plain reason and offers no Copy; a successful one can "
+                     "be copied with the private copy, so a cleaned table does not "
+                     "land in Windows Clipboard History.",
+             "where": "Table, Pretty JSON and Clean link, on each kept copy"},
+            {"title": "What is never kept, and the lock that wipes it",
+             "body": "Password managers, one-time codes, private keys, card "
+                     "numbers and empty copies are never kept. When Jarvis is "
+                     "locked, or the Windows lock screen comes up, the whole list "
+                     "is wiped at once and capture is turned off; the drawer also "
+                     "clears every copied word from the screen when it closes or "
+                     "the bar loses focus.",
+             "where": "Nothing to press - a lock does it"},
+        ),
+    },
+    {
         "id": "money-and-health",
         "version": 1,
         "section": "both",
