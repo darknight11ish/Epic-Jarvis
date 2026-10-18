@@ -159,7 +159,7 @@ SOURCE_PIN_CEILING: dict[str, int] = {
     "backend/test_prompt_coach.py": 11,
     "backend/test_quiz_cloud.py": 1,
     "backend/test_reach.py": 2,
-    "backend/test_reader_promises.py": 10,
+    "backend/test_reader_promises.py": 11,  # +1 (2026-10-17): the caption-quiz pin now also proves the injection arguments start_outside receives
     "backend/test_readpage.py": 4,
     "backend/test_reasoning_fallback.py": 3,
     "backend/test_receipts.py": 3,
