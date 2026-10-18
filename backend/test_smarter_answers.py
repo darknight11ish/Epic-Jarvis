@@ -222,11 +222,14 @@ def t_a_long_answer_sends_cleared_results_to_the_model():
         return {"ok": True, "value": f"RESULT{n['i']} " + "v" * 6500}
     AG.TOOLS["calculator"].execute = big
     try:
-        call = {"choices": [{"message": {"role": "assistant", "tool_calls": [
-            {"id": "1", "function": {"name": "calculator",
-                                     "arguments": json.dumps({"expression": "1+1"})}}]}}]}
+        # Five DIFFERENT calls: the same call twice is now the loop-breaker's
+        # business (F1, 2026-10-18) and would not run a second time.
+        rounds = [{"choices": [{"message": {"role": "assistant", "tool_calls": [
+            {"id": str(i), "function": {"name": "calculator",
+                                        "arguments": json.dumps({"expression": f"1+{i}"})}}]}}]}
+                  for i in range(5)]
         answer = {"choices": [{"message": {"role": "assistant", "content": "All read."}}]}
-        opener, calls = TA.scripted_stream([call] * 5 + [answer])
+        opener, calls = TA.scripted_stream(rounds + [answer])
         with TA.NoRealIO():
             AG.run_local_turn([{"role": "user", "content": "work it out"}], "qwen3:8b",
                               ollama_url=URL, stream_out=lambda b: None, gate_check=TA.allow,
@@ -514,6 +517,153 @@ def t_an_honest_reminder_answer_gets_no_correction():
           and "set_reminder" in res["tools_ran"], res["answer"])
 
 
+def t_an_identical_consecutive_tool_call_is_not_run_twice():
+    """F1 (2026-10-18): the loop-breaker. The exact same (tool, arguments) as
+    the step just before is never run again - a different pair, or the same
+    pair after another tool, is a new step."""
+    real = AG.TOOLS["calculator"].execute
+    seen = []
+    AG.TOOLS["calculator"].execute = \
+        lambda args, state, **kw: (seen.append(args), {"ok": True, "value": 4})[1]
+
+    def call(expression="2+2", cid="1"):
+        return {"choices": [{"message": {"role": "assistant", "tool_calls": [
+            {"id": cid, "function": {"name": "calculator",
+                                     "arguments": json.dumps({"expression": expression})}}]}}]}
+    try:
+        check("the canonical pair ignores key order",
+              AG.canonical_call_args('{"a":1,"b":2}')
+              == AG.canonical_call_args('{"b":2,"a":1}'))
+        check("... and different arguments are different pairs",
+              AG.canonical_call_args('{"a":1}') != AG.canonical_call_args('{"a":2}'))
+        res, _blob = _turn("It's 4.", tool_rounds=[call(), call()],
+                           tools={"calculator"})
+        check("the same call twice in a row runs ONCE", len(seen) == 1, seen)
+        check("... and the turn still answers", res["answer"].startswith("It's 4."),
+              res["answer"])
+        seen.clear()
+        _turn("It's six.", tool_rounds=[call("2+2"), call("3+3")],
+              tools={"calculator"})
+        check("different arguments are never suppressed", len(seen) == 2, seen)
+        seen.clear()
+        real_mem = AG.TOOLS["memory_search"].execute
+        AG.TOOLS["memory_search"].execute = lambda args, state, **kw: {"ok": True,
+                                                                       "facts": []}
+        try:
+            mem = {"choices": [{"message": {"role": "assistant", "tool_calls": [
+                {"id": "2", "function": {"name": "memory_search",
+                                         "arguments": json.dumps({"query": "x"})}}]}}]}
+            _turn("Done.", tool_rounds=[call(), mem, call()],
+                  tools={"calculator", "memory_search"})
+        finally:
+            AG.TOOLS["memory_search"].execute = real_mem
+        check("the same call after another tool is a new step", len(seen) == 2, seen)
+    finally:
+        AG.TOOLS["calculator"].execute = real
+
+
+ANNOUNCE_YES = [
+    "I will now add this to today's Logseq journal.",
+    "I will set a reminder for one hour before the appointment.",
+    "Would you like me to proceed with setting the reminder?",
+    "Let me add that to your journal.",
+    "I'm going to send that email now.",
+    "Shall I open the file for you?",
+]
+ANNOUNCE_NO = [
+    "Your dentist appointment is at 14:30 on 2 October.",
+    "I can't set reminders or timers yet.",
+    "I don't have a way to add that.",
+    "Should I set a reminder for 7pm?",
+    "I have added it to your journal.",
+    "Reminder set for 13:30.",
+    "The front door is locked.",
+    "I will remember that.",          # no tool action named: deliberately not nudged
+    "I can't set reminders, but I will add it to your journal.",  # refusal wins
+]
+
+
+def t_the_announcement_detector_is_conservative():
+    for text in ANNOUNCE_YES:
+        check(f"an announcement: {text!r}", AG.announcement_shape(text), text)
+    for text in ANNOUNCE_NO:
+        check(f"not an announcement: {text!r}", not AG.announcement_shape(text), text)
+    shown = ["calendar_read", "set_reminder", "notes_search",
+             "append_logseq_journal", "my_files"]
+    line = AG.continuation_nudge("I will now add this to today's Logseq journal.",
+                                 shown, ["notes_search"])
+    check("the nudge names only a tool already shown",
+          "append_logseq_journal" in line and "Do it now, not describe it." in line, line)
+    check("... and is empty before any intermediate tool result",
+          AG.continuation_nudge("I will set a reminder.", shown, []) == "")
+    check("... and empty when no shown, not-yet-run tool matches",
+          AG.continuation_nudge("I will set a reminder.", ["calendar_read"], ["calendar_read"]) == "")
+    check("... and never names a tool that already ran (that would repeat it)",
+          AG.continuation_nudge("I will now calculate that.",
+                                ["calculator", "append_logseq_journal"],
+                                ["calculator"]) == "")
+
+
+def _plain(text):
+    return {"choices": [{"message": {"role": "assistant", "content": text}}]}
+
+
+def _tool(name, args, cid="1"):
+    return {"choices": [{"message": {"role": "assistant", "tool_calls": [
+        {"id": cid, "function": {"name": name, "arguments": json.dumps(args)}}]}}]}
+
+
+def t_an_announcement_after_a_tool_gets_one_nudge():
+    real_calc = AG.TOOLS["calculator"].execute
+    real_journal = AG.TOOLS["append_logseq_journal"].execute
+    ran = {"calc": 0, "journal": 0}
+    AG.TOOLS["calculator"].execute = \
+        lambda args, state, **kw: (ran.__setitem__("calc", ran["calc"] + 1),
+                                   {"ok": True, "value": 4})[1]
+    AG.TOOLS["append_logseq_journal"].execute = \
+        lambda args, state, **kw: (ran.__setitem__("journal", ran["journal"] + 1),
+                                   {"ok": True, "added": True})[1]
+    try:
+        rounds = [_tool("calculator", {"expression": "2+2"}),
+                  _plain("I will now add this to your journal."),
+                  _tool("append_logseq_journal", {"text": "boiler"})]
+        res, _blob = _turn("Added to your journal.", tool_rounds=rounds,
+                           tools={"calculator", "append_logseq_journal"})
+        check("the promise got one nudge, so the next tool really ran",
+              ran == {"calc": 1, "journal": 1}, ran)
+        check("... and the answer carries the promise and the real confirmation",
+              "I will now add" in res["answer"] and res["answer"].endswith("Added to your journal."),
+              res["answer"])
+        ran.update(calc=0, journal=0)
+        rounds = [_tool("calculator", {"expression": "2+2"}),
+                  _plain("I will now add this to your journal."),
+                  _plain("I will now add it to your journal.")]
+        res, _blob = _turn("", tool_rounds=rounds,
+                           tools={"calculator", "append_logseq_journal"})
+        check("a second promise is NOT nudged again (one per turn)",
+              ran["journal"] == 0 and res["rounds"] == 3, (ran, res["rounds"]))
+        ran.update(calc=0, journal=0)
+        res, _blob = _turn("Your calendar is empty.", tool_rounds=[
+            _tool("calculator", {"expression": "2+2"})],
+            tools={"calculator", "append_logseq_journal"})
+        check("a genuine final answer is not nudged",
+              ran["journal"] == 0 and res["rounds"] == 2
+              and res["answer"] == "Your calendar is empty.", (ran, res))
+        ran.update(calc=0, journal=0)
+        res, _blob = _turn("I can't add to your journal.", tool_rounds=[
+            _tool("calculator", {"expression": "2+2"})],
+            tools={"calculator", "append_logseq_journal"})
+        check("a refusal is not nudged past",
+              ran["journal"] == 0 and res["rounds"] == 2
+              and res["answer"] == "I can't add to your journal.", (ran, res))
+        res, _blob = _turn("I will add that tomorrow.")
+        check("with no intermediate tool result there is no nudge",
+              res["rounds"] == 1 and res["answer"] == "I will add that tomorrow.", res)
+    finally:
+        AG.TOOLS["calculator"].execute = real_calc
+        AG.TOOLS["append_logseq_journal"].execute = real_journal
+
+
 if __name__ == "__main__":
     for fn in (t_a_small_result_is_unchanged,
                t_one_long_text_keeps_its_start_and_end,
@@ -542,7 +692,10 @@ if __name__ == "__main__":
                t_a_model_denial_after_a_real_reminder_is_corrected,
                t_a_failed_reminder_leaves_the_honest_limitation_alone,
                t_no_reminder_tool_gets_no_correction,
-               t_an_honest_reminder_answer_gets_no_correction):
+               t_an_honest_reminder_answer_gets_no_correction,
+               t_an_identical_consecutive_tool_call_is_not_run_twice,
+               t_the_announcement_detector_is_conservative,
+               t_an_announcement_after_a_tool_gets_one_nudge):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

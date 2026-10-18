@@ -3472,6 +3472,169 @@ def _turn_budget_refusal(call: dict, convo: list, steps: list, say_step) -> None
         pass
 
 
+#: The identical-call breaker (F1, 2026-10-18): a model that asks for the exact
+#: same (tool, arguments) twice in a row gets one short SYSTEM line instead of
+#: a second run. Bytes for bytes the pair, so different arguments are never
+#: caught, and only CONSECUTIVE calls are compared - a retry after anything
+#: else happened (or a changed result) is a new step.
+IDENTICAL_CALL_NOTE = ("You just called {tool} with these exact arguments. Use the result above "
+                       "or try different arguments.")
+IDENTICAL_CALL_ERROR = "Not run again: this is exactly the call just above."
+
+
+def canonical_call_args(value) -> str:
+    """One canonical string for a call's arguments: JSON with sorted keys and
+    no incidental spaces. A raw JSON string is parsed first; anything that
+    will not parse is kept verbatim (it is still the pair the model wrote)."""
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except Exception:
+            return value.strip()
+    try:
+        return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    except Exception:
+        return repr(value)
+
+
+def _identical_call_refusal(call: dict, convo: list, steps: list, say_step) -> None:
+    """One repeated identical call: never run, answered in words, and the
+    model told once, in a system line, why. Shaped like every other refusal -
+    a `tool` message with `ok: False` - so the next round still sees a finished
+    tool call and can use the result above or change its arguments."""
+    name = str(((call.get("function") or {}) or {}).get("name") or "unknown")
+    convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                  "content": json.dumps({"ok": False, "error": IDENTICAL_CALL_ERROR})})
+    convo.append({"role": "system", "content": IDENTICAL_CALL_NOTE.format(tool=name)})
+    try:
+        steps.append({"tool": name, "ran": False, "ok": False,
+                      "outcome": "refused - the same call as the step above"})
+    except Exception:
+        pass
+    try:
+        say_step("tool_refused", name, ok=False)
+    except Exception:
+        pass
+
+
+#: The continuation nudge (2026-10-18): after an intermediate tool result, a
+#: model that ANNOUNCES its next action instead of calling the tool gets ONE
+#: short system line, once per turn. It names only tools already shown to the
+#: model in this turn, never invents a call, and never overrides a genuine
+#: final answer or a refusal (see announcement_shape / _REFUSAL_GUARD).
+CONTINUATION_NUDGE = (
+    "Do it now, not describe it. You already have the tool result above; you have "
+    "{tools}. Call the right one in this round. Do not ask permission or promise the "
+    "action - make the call.")
+
+#: Shapes of a promise/offer to act LATER (the phone field-test failure): first
+#: person future ("I will/I'll/I'm going to add ..."), a permission offer
+#: ("Would you like me to proceed ...", "Shall I ..."), and "Let me add ...".
+#: Deliberately narrow: past-tense claims, questions about facts, plain answers
+#: and refusals do not match (see the tests for the exact not-caught list).
+_ANNOUNCE_FUTURE = re.compile(
+    r"(?:\bi(?:'ll| will| am going to|'m going to| shall)(?:\s+now)?\b"
+    r"[^.!?\n]{0,120}?\b(?:add|append|set|send|create|make|schedule|remind|start|stop|"
+    r"cancel|put|write|save|open|check|read|search|find|look up|turn|dim|switch|lock|"
+    r"unlock|play|draft|archive|mark|update|delete|remove|calculate|run|proceed|"
+    r"go ahead|do (?:that|it))\b"
+    r"|\b(?:would you like me to|shall i|do you want me to|may i|can i)\b"
+    r"[^.!?\n]{0,120}?\b(?:proceed|go ahead|do (?:that|it)|add|append|set|send|create|"
+    r"make|schedule|remind|start|stop|cancel|put|write|save|open|check|read|search|"
+    r"find|turn|dim|switch|lock|unlock|play|draft|archive|mark|update|delete|remove|run|"
+    r"call)\b"
+    r"|\blet me\b[^.!?\n]{0,80}?\b(?:add|append|set|send|create|make|schedule|remind|"
+    r"start|stop|cancel|put|write|save|open|check|read|search|find|turn|dim|switch|"
+    r"lock|unlock|play|draft|archive|mark|update|delete|remove|run)\b)", re.I)
+
+#: A denial of ability/action in the same answer means the model is being
+#: honest, not announcing - never nudge past it.
+_REFUSAL_GUARD = re.compile(
+    r"\b(?:can'?t|cannot|can not|unable|not able|do not have|don'?t have|no way to|"
+    r"not allowed|won'?t|will not)\b[^.!?\n]{0,80}?\b(?:set|add|append|send|create|make|"
+    r"schedule|remind|start|stop|cancel|put|write|save|open|check|read|search|find|turn|"
+    r"dim|switch|lock|unlock|play|draft|archive|mark|update|delete|remove|run|"
+    r"do (?:that|it))\b", re.I)
+
+#: Action words a nudge can NAME, per tool (this branch has no top-K diet; the
+#: nudge is deliberately independent of it). Only tools already SHOWN in this
+#: turn and not already run are ever named.
+_NUDGE_TOOL_WORDS = {
+    "set_reminder": ("remind", "reminder", "alarm"),
+    "set_timer": ("timer", "countdown"),
+    "send_email": ("email", "mail", "send"),
+    "append_logseq_journal": ("logseq", "journal"),
+    "append_obsidian_daily": ("obsidian", "daily note"),
+    "create_joplin_note": ("joplin", "note"),
+    "calendar_read": ("calendar", "appointment", "meeting", "schedule"),
+    "email_check": ("email", "inbox", "messages", "mail"),
+    "notes_search": ("notes", "search", "find", "jot"),
+    "my_files": ("files", "document", "folder", "find"),
+    "home_control": ("light", "turn off", "switch", "dim", "lock", "unlock"),
+    "home_read": ("light", "door", "thermostat", "locked", "state"),
+    "todo_add": ("to-do", "todo", "task", "list"),
+    "todo_done": ("done", "complete", "tick off"),
+    "web_search": ("web", "search online", "latest"),
+    "shell_exec": ("command", "shell"),
+    "file_read": ("file", "read"),
+    "calculator": ("calculate", "percent", "math"),
+    "memory_search": ("remember", "memory", "what i said"),
+    "coming_up": ("timers", "reminders", "coming up"),
+    "draft_email": ("draft",),
+    "tidy_inbox": ("archive", "trash", "mark read"),
+    "retirement_whatif": ("retirement", "pension"),
+    "read_web_page": ("web page", "url"),
+    "github_search": ("github", "library"),
+    "control_computer": ("click", "type", "window"),
+    "control_phone": ("phone", "screenshot"),
+    "browser_control": ("browser", "tab"),
+    "run_data_script": ("script", "csv", "data"),
+    "my_spending": ("spending", "bank", "bill"),
+}
+
+
+def announcement_shape(text: str) -> bool:
+    """True when `text` promises/offers an action instead of doing it.
+
+    Conservative: a future first-person action, a permission offer, or "Let me
+    <action>". A refusal in the same answer wins (returns False), so honest
+    limitations are never nudged. Deliberately NOT caught: past-tense claims
+    ("I've added it"), plain answers, questions about facts, and future
+    statements that name no action from the list (e.g. "I will be here").
+    """
+    body = str(text or "").strip()
+    if not body or _REFUSAL_GUARD.search(body):
+        return False
+    return bool(_ANNOUNCE_FUTURE.search(body))
+
+
+def continuation_nudge(answer_text: str, shown, ran_tools=()) -> str:
+    """The one system line to inject after an announcement, or "".
+
+    "" when: there is no intermediate tool result (ran_tools empty), the text
+    is not an announcement, or no SHOWN, not-yet-run tool's own words appear in
+    the answer (naming a tool would be a guess). Names at most two such tools,
+    best match first, in the shown order as the tie-break.
+    """
+    text = str(answer_text or "").strip()
+    ran = {str(n) for n in (ran_tools or ())}
+    if not ran or not text or not announcement_shape(text):
+        return ""
+    lower = text.lower()
+    scored = []
+    for order, name in enumerate(shown or ()):
+        if name in ran or name == MORE_TOOLS:
+            continue
+        words = _NUDGE_TOOL_WORDS.get(name, ())
+        score = sum(1 for word in words if word in lower)
+        if score > 0:
+            scored.append((score, order, name))
+    if not scored:
+        return ""
+    scored.sort(key=lambda item: (-item[0], item[1]))
+    return CONTINUATION_NUDGE.format(tools=" or ".join(item[2] for item in scored[:2]))
+
+
 def _tokens_for_turn(messages, base: int) -> int:
     """The answer budget for a turn that did not ask for one: `base`, moved by
     how hard the newest owner message looks (2026-10-06; the idea is
@@ -5630,6 +5793,137 @@ def more_tools_groups(allowed, *, short: bool, plugins: bool = False) -> list:
     return out
 
 
+#: Top-K tool diet (F1, 2026-10-18): on a question with a clear subject, only
+#: the tools whose own words appear in it are shown - at most this many. A
+#: question with NO recognisable subject falls back to the full list (the safe
+#: side: an unknown question must never lose a tool), and the short list, when
+#: on, keeps its own fixed core + more_tools path untouched.
+TOOL_DIET_LIMIT = 8
+#: Off only when the owner sets `[tools] tool_diet = false`; the default is on
+#: so the real-model eval measures what ships. A tool not shown can still be
+#: CALLED (check_call reads `names`, the allowed list, not the shown one), so
+#: this changes what the model sees, never what the gate lets through.
+TOOL_DIET_DEFAULT = True
+
+#: What each tool is ABOUT, as regular expressions matched against the owner's
+#: newest question. Written from the tool descriptions and the tool-eval cases,
+#: frozen before the holdout check, and deliberately deterministic: no model,
+#: no embeddings, no order-dependent scores. One point per pattern that hits;
+#: the tie-break is TOOLS order, so the same question always shows the same
+#: list on every turn of a conversation (prompt reuse depends on that).
+TOOL_HINTS = {
+    "calculator": (r"\bcalculat", r"\barithmetic\b", r"\bpercent", r"\bmaths?\b", r"\btip\b",
+                   r"\bdivid", r"\bmultipl", r"\bsum\b", r"\baverage\b", r"\bconvert\b",
+                   r"how much is"),
+    "memory_search": (r"\bremember", r"\bmemor(y|ies)\b", r"\bmention", r"did i (say|tell)",
+                      r"\bfacts?\b", r"\blearn(t|ed)\b", r"\bbirthday\b", r"\bsister\b",
+                      r"\bdog\b", r"\bfavou?rite\b", r"\bpreference\b", r"\bagain\b"),
+    "file_read": (r"\bfile\b", r"\.txt\b", r"\bpath\b", r"\bdocument\b", r"\breadme\b",
+                  r"\bfolder\b"),
+    "run_data_script": (r"\bscript\b", r"\bpython\b", r"\bcsv\b", r"\bchart\b", r"\bdata\b",
+                        r"add up", r"\bpercentage\b", r"\baverage\b"),
+    "shell_exec": (r"\bshell\b", r"\bcommand\b", r"\bterminal\b", r"\bipconfig\b",
+                   r"\bprocesses\b", r"\bdisk\b", r"\bdrive\b", r"\bpowershell\b",
+                   r"\bcmd\b", r"\brun\b"),
+    "control_computer": (r"\bclick\b", r"\btype\b", r"\bwindow\b", r"\bnotepad\b",
+                         r"\bpaint\b", r"\bbutton\b", r"\bsave\b", r"\bkeyboard\b",
+                         r"on-screen"),
+    "control_phone": (r"\bphone\b", r"\bandroid\b", r"\btap\b", r"\bswipe\b",
+                      r"\bscreenshot\b"),
+    "browser_control": (r"\bbrowser\b", r"\btab\b", r"\bchrome\b", r"\bedge\b",
+                        r"\bfirefox\b", r"page element"),
+    "github_search": (r"\bgithub\b", r"\blibrary\b", r"\bcrate\b", r"\brepo\b",
+                      r"\bpackage\b", r"\bexisting\b"),
+    "web_search": (r"\bweb\b", r"\binternet\b", r"\bonline\b", r"\blatest\b", r"\bnews\b",
+                   r"\bcurrent\b", r"\bweather\b", r"who is"),
+    "read_web_page": (r"web ?page", r"\burl\b", r"https?://", r"\blink\b", r"\barticle\b"),
+    "calendar_read": (r"\bcalendar\b", r"\bschedule\b", r"\bmeeting\b", r"\bappointment\b",
+                      r"\bfree\b", r"\bbusy\b", r"this week", r"\btomorrow\b",
+                      r"\bfriday\b", r"\bevents?\b"),
+    "email_check": (r"\bemail\b", r"\bmail\b", r"\binbox\b", r"\bunread\b", r"\bmessages?\b",
+                    r"\brepl(y|ies)\b", r"\breceived\b", r"written back", r"heard back"),
+    "send_email": (r"\bemail\s+(?:\w+@|her|him|them|me|the)\b", r"\bsend\b.*\bemail\b",
+                   r"\bemail\b.*\bto\b", r"\bmail\s+(?:her|him|them|me)\b", r"thank-you",
+                   r"\bforward\b", r"\breply to\b", r"\bwrite to\b"),
+    "draft_email": (r"\bdraft\b", r"\bcompose\b"),
+    "tidy_inbox": (r"\barchive\b", r"\btrash\b", r"mark read", r"\bstar\b", r"\btidy\b"),
+    "notes_search": (r"\bnotes?\b", r"\bobsidian\b", r"\bjoplin\b", r"\blogseq\b",
+                     r"\bjott", r"\bwrote\b", r"\bwritten\b"),
+    "my_files": (r"\bfiles?\b", r"\bdocuments?\b", r"\bfolder\b", r"\bfind\b",
+                 r"\binvoice\b", r"\bpdf\b", r"\blease\b", r"\bagreement\b", r"where is"),
+    "my_spending": (r"\bspending\b", r"\bspend\b", r"\bbank\b", r"\bbills?\b", r"\bmoney\b",
+                    r"\btransactions?\b", r"\bexpenses?\b"),
+    "retirement_whatif": (r"\bretirement\b", r"\bpension\b", r"\bretire\b", r"what-if"),
+    "home_read": (r"\bhome\b", r"\blights?\b", r"\bdoor\b", r"\blocked\b", r"\bthermostat\b",
+                  r"\bsensor\b", r"\bgarage\b", r"\bkitchen\b", r"\bhall\b", r"\bstate\b"),
+    "home_control": (r"\bturn\b.*\boff\b", r"\bturn\b.*\bon\b", r"\bswitch\b", r"\bdim\b",
+                     r"\bbrightness\b", r"\bunlock\b", r"\block\b",
+                     r"\bset\b.*\b(bedroom|light|lamp|brightness)\b"),
+    "append_logseq_journal": (r"\blogseq\b", r"\bjournal\b"),
+    "append_obsidian_daily": (r"\bobsidian\b", r"\bdaily note\b"),
+    "create_joplin_note": (r"\bjoplin\b",),
+    "propose_plan": (r"\bplan\b", r"\bsteps?\b", r"\borgani[sz]e\b", r"\bworkflow\b"),
+    "set_timer": (r"\btimer\b", r"\bcountdown\b", r"\bminutes? timer\b"),
+    "set_reminder": (r"\breminder\b", r"\bremind\b", r"\balarm\b", r"\bwake me\b"),
+    "todo_add": (r"\bto-?do\b", r"\btask\b", r"\bchecklist\b", r"\badd\b.*\blist\b"),
+    "todo_done": (r"mark done", r"\bcomplete", r"\bfinished\b", r"tick off", r"marked done"),
+    "coming_up": (r"coming up", r"what'?s next", r"my timers", r"my alarms", r"my reminders",
+                  r"to-?do list"),
+    "change_setting": (r"\bsettings?\b", r"\benable\b", r"\bdisable\b",
+                       r"\bturn\b.*\b(?:on|off)\b"),
+}
+_TOOL_HINTS_RX = {name: tuple(re.compile(rx, re.I) for rx in patterns)
+                  for name, patterns in TOOL_HINTS.items()}
+
+
+def tool_diet_on() -> bool:
+    """`[tools] tool_diet` in jarvis-framework.toml; TOOL_DIET_DEFAULT when it
+    is not set or cannot be read. Only a real `false` turns it off."""
+    try:
+        import jarvis_framework
+        tools = (jarvis_framework.load_framework() or {}).get("tools") or {}
+        if "tool_diet" in tools:
+            return tools.get("tool_diet") is not False
+    except Exception:
+        pass
+    return TOOL_DIET_DEFAULT
+
+
+def tool_diet_selection(question: str, allowed, *, limit: int = TOOL_DIET_LIMIT) -> dict:
+    """What a question shows from `allowed`, and how sure the selector is.
+
+    {"tools": [...], "fallback": bool, "matched": n}. `fallback` is True when
+    the question has NO word any tool's hints recognise - the safe side, and
+    the caller then shows every allowed tool exactly as before. A question
+    with at least one match shows the matched tools in TOOLS order, at most
+    `limit`; the model can still CALL any allowed tool (check_call reads the
+    allowed list), so nothing is made impossible, only unshown.
+    """
+    allowed = list(allowed or ())
+    limit = max(1, int(limit))
+    if not allowed:
+        return {"tools": [], "fallback": False, "matched": 0}
+    text = str(question or "").strip().lower()
+    if not text:
+        return {"tools": allowed, "fallback": True, "matched": 0}
+    scored = []
+    for name in allowed:
+        patterns = _TOOL_HINTS_RX.get(name, ())
+        scored.append((sum(1 for rx in patterns if rx.search(text)), name))
+    hit = [(score, name) for score, name in scored if score > 0]
+    if not hit:
+        return {"tools": allowed, "fallback": True, "matched": 0}
+    order = {name: i for i, name in enumerate(allowed)}
+    hit.sort(key=lambda pair: (-pair[0], order[pair[1]]))
+    return {"tools": [name for _score, name in hit[:limit]],
+            "fallback": False, "matched": len(hit)}
+
+
+def tool_diet(question: str, allowed, *, limit: int = TOOL_DIET_LIMIT) -> list:
+    """The names a question shows, or every allowed name when it is unsure."""
+    return tool_diet_selection(question, allowed, limit=limit)["tools"]
+
+
 def tool_offer(allowed, opened=(), *, short: bool, plugins: bool = False) -> list:
     """The built-in tool names a round shows the model, in a fixed order,
     with MORE_TOOLS last when there is anything to open.
@@ -7458,11 +7752,25 @@ def _new_offer(names: list, opened=()) -> dict:
             "opened": set(opened), "extra": {}, "shown": [], "groups": [], "schemas": []}
 
 
-def _fill_offer(offer: dict, names: list) -> None:
+def _fill_offer(offer: dict, names: list, question: str = "") -> None:
     offer["groups"] = more_tools_groups(names, short=offer["short"],
                                         plugins=offer["plugins"])
-    offer["shown"] = tool_offer(names, offer["opened"], short=offer["short"],
-                                plugins=offer["plugins"])
+    if offer["short"] or not question or not tool_diet_on():
+        offer["shown"] = tool_offer(names, offer["opened"], short=offer["short"],
+                                    plugins=offer["plugins"])
+        offer["schemas"] = _schemas_for(offer["shown"], offer["groups"], offer["extra"])
+        return
+    # The top-K diet (F1, 2026-10-18): the short list keeps its fixed core +
+    # more_tools contract; with it off, a specific question shows only the
+    # tools whose own hints it names, and an unrecognised question falls back
+    # to the full list (tool_diet_selection's `fallback`). more_tools, when
+    # plug-in groups make it reachable, always stays last: the diet must not
+    # remove the owner's route to a tool it did not show.
+    reachable = tool_offer(names, offer["opened"], short=False, plugins=offer["plugins"])
+    more = MORE_TOOLS in reachable
+    base = [n for n in reachable if n != MORE_TOOLS]
+    diet = tool_diet(question, base, limit=TOOL_DIET_LIMIT - (1 if more else 0))
+    offer["shown"] = diet + ([MORE_TOOLS] if more else [])
     offer["schemas"] = _schemas_for(offer["shown"], offer["groups"], offer["extra"])
 
 
@@ -7482,7 +7790,11 @@ def chat_prefix(enabled_tools, *, ollama_url: str, model: str, manner="auto") ->
         manner = _manner_now(None)
     names, _ = _allowed_tools(enabled_tools, ollama_url, model)
     offer = _new_offer(names)
-    _fill_offer(offer, names)
+    # The warm-up cannot know the first question, so WARM_WORD is what the
+    # diet sees: it matches nothing and therefore shows the full list. A real
+    # first question may show a diet list instead - the rules and the messages
+    # before it are still the same bytes (test_warm_prefix).
+    _fill_offer(offer, names, question=WARM_WORD)
     msgs = dress_messages([{"role": "user", "content": WARM_WORD}], manner=manner,
                           focus=_focus_active_now())
     return with_rules_first(msgs[:-1]), list(offer["schemas"])
@@ -7946,9 +8258,12 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     # once, from the owner's own newest words, before any round.
     next_time = _next_time_due(watch, messages, req)
     offer: dict = _new_offer(names, opened_groups(conv_id))
+    # The diet reads the owner's newest own words ONCE for this turn, so every
+    # round shows the same tool list (prompt reuse depends on that).
+    diet_question = _newest_user_text(messages)
 
     def reoffer() -> None:
-        _fill_offer(offer, names)
+        _fill_offer(offer, names, question=diet_question)
 
     if offer["plugins"] and PLUGINS in offer["opened"]:
         # Opened earlier in this chat: the plug-in tools of programs still
@@ -8375,6 +8690,20 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         # When this answer started calling tools, for the turn-level bound
         # below (2026-10-06).
         _tools_started = time.monotonic()
+        # The identical-call breaker (F1, 2026-10-18) compares against the LAST
+        # CALL OF THE PREVIOUS MODEL ROUND, not against calls in the same round.
+        # Two calls in one assistant message arrive together - there is no
+        # result "above" the second one yet - and a model that asks for the same
+        # safe thing twice in one batch is making two requests, not retrying.
+        # The retry loop the breaker exists for is across rounds, where the
+        # model has seen the result and asks for the same thing again.
+        previous_round_key = None
+
+
+        # One continuation nudge per turn at most (2026-10-18): a promise after
+        # an intermediate tool result gets one system line; a second promise
+        # ends the turn, exactly as before.
+        continuation_used = False
         for _round in range(max_rounds + 1):
             final = _round == max_rounds
             if final:
@@ -8407,6 +8736,21 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 last = one_round(offer_tools=True)
             calls = last.tool_calls()
             if final or not calls:
+                if (not final and not calls and not continuation_used
+                        and not out.gone and not watch.crisis
+                        and any(s.get("ran") and s.get("ok") is True for s in steps)):
+                    # An intermediate tool result is in, and the model answered
+                    # with a promise/offer instead of the next call. ONE nudge
+                    # per turn, only if it names a tool already shown; never a
+                    # second model round of its own, never a made-up call.
+                    ran_tools = [str(s.get("tool")) for s in steps if s.get("ran")]
+                    nudge = continuation_nudge("".join(last.text), offer["shown"], ran_tools)
+                    if nudge:
+                        continuation_used = True
+                        convo.append({"role": "assistant", "content": "".join(last.text)})
+                        convo.append({"role": "system", "content": nudge})
+                        said["gap"] = True
+                        continue
                 break
             text = "".join(last.text)
             at = len(convo)
@@ -8414,9 +8758,21 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                           "tool_calls": [dict(c, function=dict(c["function"]))
                                          for c in calls]})
             said["gap"] = True
+            round_last_key = None
             for call in calls:
                 if out.gone:
                     raise ClientGone()
+                call_fn = call.get("function") or {}
+                call_key = (str(call_fn.get("name") or ""),
+                            canonical_call_args(call_fn.get("arguments")))
+                round_last_key = call_key
+                if previous_round_key is not None and call_key == previous_round_key:
+                    # The exact same (tool, arguments) as the last call of the
+                    # previous round: never run it again. The model gets the
+                    # result it already has plus a short system line, and this
+                    # round continues.
+                    _identical_call_refusal(call, convo, steps, say_step)
+                    continue
                 if (TOOL_TURN_BUDGET_S > 0
                         and (time.monotonic() - _tools_started) > TOOL_TURN_BUDGET_S):
                     # A turn-level bound: the rounds have a ceiling and every
@@ -8435,6 +8791,10 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 _one_call(call, names + [n for n in offer["extra"] if n not in names],
                           convo, steps, checker, announce, out, say_step,
                           watch=watch, tell_owner=tell_owner, tools=offer["extra"])
+            # What the next round's breaker compares its first calls against:
+            # the last call THIS round asked for (whether it ran or was itself
+            # the repeat of the round before).
+            previous_round_key = round_last_key
             if watch.read and not watch.noted:
                 # Once per turn, as soon as outside text is in it - before the
                 # round that first asked for a tool, so every result that

@@ -446,6 +446,105 @@ def t_a_fair_test_for_every_model():
     finally:
         E.context_of, E.run_all, E.save, E.print_summary = real
 
+def t_the_full_list_is_a_top_k_diet_that_keeps_every_needed_tool():
+    allowed = list(AG.TOOLS)
+    check("every tool has diet hints (a new tool cannot land nowhere)",
+          set(AG.TOOL_HINTS) == set(AG.TOOLS))
+    check("the diet lists are deterministic for the same words",
+          AG.tool_diet("what is on my calendar tomorrow", allowed)
+          == AG.tool_diet("what is on my calendar tomorrow", allowed))
+    check("an unknown question falls back to the WHOLE allowed list",
+          AG.tool_diet_selection("hi", allowed)["fallback"]
+          and AG.tool_diet_selection("hi", allowed)["tools"] == allowed)
+    check("an empty question falls back too",
+          AG.tool_diet_selection("", allowed)["tools"] == allowed)
+    for label, cases, wanted in (
+            ("pick", TC.CASES, lambda c: [] if c[1] is None else [c[1]]),
+            ("held-out", TC.HELD_OUT, lambda c: [] if c[1] is None else [c[1]]),
+            ("multi-step", TC.MULTI_STEP, lambda c: [n for n, _a in c["example"]])):
+        fallbacks = 0
+        for case in cases:
+            question = case[0] if isinstance(case, tuple) else case["say"]
+            need = wanted(case)
+            sel = AG.tool_diet_selection(question, allowed)
+            got = sel["tools"]
+            fallbacks += 1 if sel["fallback"] else 0
+            if sel["fallback"]:
+                check(f"{label}: {question[:36]!r}: an unsure question shows every tool",
+                      got == allowed, got)
+            else:
+                check(f"{label}: {question[:36]!r}: the diet is 1..{AG.TOOL_DIET_LIMIT} tools",
+                      1 <= len(got) <= AG.TOOL_DIET_LIMIT, got)
+            check(f"{label}: {question[:36]!r}: every tool the job needs is shown "
+                  "or the list fell back", all(n in got for n in need), (need, got))
+        check(f"{label}: the diet saves a list on most cases, not a name", fallbacks < len(cases))
+    check("the eval's full list is the same diet a real turn sends",
+          [t["function"]["name"] for t in E.Offer(
+              "full", "check my calendar for the dentist and remind me an hour before it").schemas()]
+          == AG.tool_diet("check my calendar for the dentist and remind me an hour before it",
+                          E.NAMES))
+    check("the short list keeps its own core + more_tools contract",
+          [t["function"]["name"] for t in E.Offer("short", "hi").schemas()]
+          == AG.tool_offer(E.NAMES, short=True))
+
+
+def t_the_multi_runner_uses_the_identical_call_breaker():
+    case = TC.MULTI_STEP[0]
+    first_name, first_args = case["example"][0]
+    last_name, last_args = case["example"][-1]
+
+    def rule(messages, tools):
+        tool_msgs = [m for m in messages if m.get("role") == "tool"]
+        noted = any(m.get("role") == "system"
+                    and str(m.get("content", "")).startswith("You just called")
+                    for m in messages)
+        if not tool_msgs:
+            return ("call", first_name, first_args)
+        if not noted:
+            return ("call", first_name, first_args)     # the exact same call again
+        if len(tool_msgs) < 3:
+            return ("call", first_name, dict(first_args, days_ahead=7))  # a real retry
+        return ("call", last_name, last_args)
+
+    with NoSocket():
+        row = E.run_multi_case(E.scripted(rule), "full", case)
+    check("the repeated identical call is not run again, and the case still finishes",
+          row["pass"] and row["path"].count(first_name) == 2, row)
+    check("... the retry with DIFFERENT arguments was not suppressed",
+          row["path"] == [first_name, first_name, last_name], row["path"])
+
+
+def t_the_multi_runner_uses_the_continuation_nudge():
+    case = next(c for c in TC.MULTI_STEP if c["id"] == "dentist_reminder")
+    first, first_args = case["example"][0]
+    last, last_args = case["example"][-1]
+
+    def rule(messages, tools):
+        calls = sum(1 for m in messages for c in m.get("tool_calls") or [])
+        noted = any(m.get("role") == "system"
+                    and "Do it now, not describe it." in str(m.get("content"))
+                    for m in messages)
+        if calls == 0:
+            return ("call", first, first_args)
+        if not noted:
+            return "I will set a reminder one hour before the appointment."
+        return ("call", last, last_args)
+
+    with NoSocket():
+        row = E.run_multi_case(E.scripted(rule), "full", case)
+    check("a promise after the first step gets the nudge, and the case then finishes",
+          row["pass"] and row["path"] == [first, last], row)
+
+    def stuck(messages, tools):
+        calls = sum(1 for m in messages for c in m.get("tool_calls") or [])
+        return ("call", first, first_args) if calls == 0 else "I will do it next."
+
+    with NoSocket():
+        stuck_row = E.run_multi_case(E.scripted(stuck), "full", case)
+    check("the nudge is bounded to one per case (a second promise just stops)",
+          stuck_row["pass"] is False and stuck_row["path"] == [first], stuck_row)
+
+
 if __name__ == "__main__":
     for fn in (t_the_harness_reads_the_real_rules_and_tools,
                t_pick_scores_right_wrong_crash_and_one_retry,
@@ -457,7 +556,10 @@ if __name__ == "__main__":
                t_the_nothing_done_count,
                t_a_long_result_reaches_the_model_shortened,
                t_run_all_and_the_dated_results_file,
-               t_a_fair_test_for_every_model):
+               t_a_fair_test_for_every_model,
+               t_the_full_list_is_a_top_k_diet_that_keeps_every_needed_tool,
+               t_the_multi_runner_uses_the_identical_call_breaker,
+               t_the_multi_runner_uses_the_continuation_nudge):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

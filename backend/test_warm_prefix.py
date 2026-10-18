@@ -251,11 +251,23 @@ def t_a_real_question_starts_the_same_way():
         check("a real first question: every message before the question is the same",
               real["messages"][:-1] == w["messages"][:-1] and len(w["messages"]) >= 2,
               (real["messages"][:-1], w["messages"][:-1]))
-        check("... the tools are the same, in the same order",
-              json.dumps(real["tools"]) == json.dumps(w["tools"]))
-        check("... and every other field but max_tokens is the same",
-              {k: v for k, v in real.items() if k not in ("messages", "max_tokens")}
-              == {k: v for k, v in w.items() if k not in ("messages", "max_tokens")})
+        # F1 (2026-10-18): the tool diet is per QUESTION, and the warm-up only
+        # has WARM_WORD - which matches nothing, so it shows the full list.
+        # A real question shows the top-K list for its own words. The messages
+        # (rules, manner, focus) are still byte for byte the same; only the
+        # tools the question itself selects may differ. "hi" above still
+        # matches nothing, so that case is byte-identical as before.
+        ordered = [t["function"]["name"] for t in w["tools"] or []]
+        real_tools = [t["function"]["name"] for t in real["tools"] or []]
+        allowed_now = AG.offered_tools(EVERY)
+        check("... the warm-up shows the whole allowed list (its word is not a question)",
+              ordered == AG.tool_offer(allowed_now, short=False), ordered)
+        check("... and the real question shows the diet for its own words",
+              real_tools == AG.tool_diet("what is on my calendar tomorrow", ordered),
+              (real_tools, AG.tool_diet("what is on my calendar tomorrow", ordered)))
+        check("... every other field but messages, max_tokens and tools is the same",
+              {k: v for k, v in real.items() if k not in ("messages", "max_tokens", "tools")}
+              == {k: v for k, v in w.items() if k not in ("messages", "max_tokens", "tools")})
         check("the warm-up's only words from anyone are the one word",
               w["messages"][-1] == {"role": "user", "content": AG.WARM_WORD}
               and [m["role"] for m in w["messages"][:-1]] == ["system"] * (len(w["messages"]) - 1))
