@@ -6,6 +6,17 @@ Runs anywhere; no model, no network, no Windows Hello (where a raise needs the
 approval gate, the test stands one in, exactly as
 backend/test_attention_settings_route.py does).
 
+THE NO-MODEL PROMISE IS ENFORCED, NOT ASSUMED (2026-10-18). The memory store
+is imported as a side effect of importing `jarvis_quick`, and on a cold cache
+fastembed fetched its 5 model files instead - under the patcher this suite sat
+for 900 s on a download it never wanted. `JARVIS_NO_EMBED` is
+`jarvis_memory`'s own documented switch (`_make_embedder()` returns the
+deterministic HashEmbedder), and it is set BEFORE the imports below, so the
+model cannot be loaded as an import side effect; the test at the end proves
+no code path reaches the loader, with a fake hub that raises rather than any
+real download. `run_suites.py` also puts HF_HUB_OFFLINE/TRANSFORMERS_OFFLINE
+into every suite's environment, so an accidental loader fails fast there too.
+
 "How much Jarvis may interrupt you" is a card in the Brain on the PC. The
 audit of all 117 features (2026-10-08) found the owner could read it and change
 it nowhere; the backend half is `jarvis_arbiter.set_spoken_per_day` /
@@ -41,6 +52,12 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
+# The header says "no model, no network", and this is what makes that true:
+# the memory store comes in as an import side effect of `jarvis_quick`, and
+# fastembed would fetch its 5 model files on a cold cache (the 900-second hang
+# under the patcher). `JARVIS_NO_EMBED` is jarvis_memory's own documented
+# switch, and it must be set BEFORE the modules below are imported.
+os.environ["JARVIS_NO_EMBED"] = "1"
 sys.path.insert(0, str(HERE))
 from _where import require_shipped  # noqa: E402
 require_shipped("jarvis_quick.py", "jarvis_arbiter.py", "jarvis_settings_registry.py",
@@ -183,6 +200,57 @@ def t_only_whole_sentences_count():
         check(f"{text!r} is not treated as a setting",
               not Q.is_command(text), text)
     check("and the budget was not touched by any of them", AR._limit() == 3, AR._limit())
+
+
+def t_the_meaning_model_is_never_loaded_here():
+    """Offline by construction, not because the model happened to be cached.
+
+    This is the 2026-10-18 fastembed hang pinned as a test. A fake
+    `fastembed` module that RAISES is installed for the duration: if any code
+    path reaches the model loader, the fake records it and the check fails -
+    it can never become a real download. Removing the `JARVIS_NO_EMBED` line
+    above makes both the switch check and the fake-hub check red.
+    """
+    import types
+    import jarvis_memory as M
+
+    check("the suite set the memory module's own no-model switch before importing it",
+          os.environ.get("JARVIS_NO_EMBED") == "1", os.environ.get("JARVIS_NO_EMBED"))
+    first = M._make_embedder()
+    check("... so memory's embedder is the deterministic stand-in, not fastembed",
+          isinstance(first, M.HashEmbedder), type(first).__name__)
+    a = M.HashEmbedder().embed(["speak up"])
+    b = M.HashEmbedder().embed(["speak up"])
+    check("... and the stand-in is deterministic: same words, same vector",
+          a == b and bool(a and a[0]), (a[:1], b[:1]))
+
+    attempts = []
+
+    class _NoHub:
+        @staticmethod
+        def list_supported_models():
+            attempts.append("list_supported_models")
+            raise RuntimeError("this suite tried to load a model from the hub")
+
+        def __init__(self, *args, **kwargs):
+            attempts.append("TextEmbedding")
+            raise RuntimeError("this suite tried to load a model from the hub")
+
+    fake = types.ModuleType("fastembed")
+    fake.TextEmbedding = _NoHub
+    real = sys.modules.get("fastembed")
+    sys.modules["fastembed"] = fake
+    try:
+        got = M._make_embedder()
+    finally:
+        if real is None:
+            sys.modules.pop("fastembed", None)
+        else:
+            sys.modules["fastembed"] = real
+    check("... and no code path touched the model loader (the fake hub never fired)",
+          attempts == [], attempts)
+    check("... the stand-in is what a later call gets too",
+          isinstance(got, M.HashEmbedder), type(got).__name__)
 
 
 def main():
