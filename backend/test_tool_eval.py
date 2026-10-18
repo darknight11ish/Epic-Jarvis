@@ -514,6 +514,37 @@ def t_the_multi_runner_uses_the_identical_call_breaker():
           row["path"] == [first_name, first_name, last_name], row["path"])
 
 
+def t_the_multi_runner_uses_the_continuation_nudge():
+    case = next(c for c in TC.MULTI_STEP if c["id"] == "dentist_reminder")
+    first, first_args = case["example"][0]
+    last, last_args = case["example"][-1]
+
+    def rule(messages, tools):
+        calls = sum(1 for m in messages for c in m.get("tool_calls") or [])
+        noted = any(m.get("role") == "system"
+                    and "Do it now, not describe it." in str(m.get("content"))
+                    for m in messages)
+        if calls == 0:
+            return ("call", first, first_args)
+        if not noted:
+            return "I will set a reminder one hour before the appointment."
+        return ("call", last, last_args)
+
+    with NoSocket():
+        row = E.run_multi_case(E.scripted(rule), "full", case)
+    check("a promise after the first step gets the nudge, and the case then finishes",
+          row["pass"] and row["path"] == [first, last], row)
+
+    def stuck(messages, tools):
+        calls = sum(1 for m in messages for c in m.get("tool_calls") or [])
+        return ("call", first, first_args) if calls == 0 else "I will do it next."
+
+    with NoSocket():
+        stuck_row = E.run_multi_case(E.scripted(stuck), "full", case)
+    check("the nudge is bounded to one per case (a second promise just stops)",
+          stuck_row["pass"] is False and stuck_row["path"] == [first], stuck_row)
+
+
 if __name__ == "__main__":
     for fn in (t_the_harness_reads_the_real_rules_and_tools,
                t_pick_scores_right_wrong_crash_and_one_retry,
@@ -527,7 +558,8 @@ if __name__ == "__main__":
                t_run_all_and_the_dated_results_file,
                t_a_fair_test_for_every_model,
                t_the_full_list_is_a_top_k_diet_that_keeps_every_needed_tool,
-               t_the_multi_runner_uses_the_identical_call_breaker):
+               t_the_multi_runner_uses_the_identical_call_breaker,
+               t_the_multi_runner_uses_the_continuation_nudge):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

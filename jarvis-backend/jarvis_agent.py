@@ -3517,6 +3517,124 @@ def _identical_call_refusal(call: dict, convo: list, steps: list, say_step) -> N
         pass
 
 
+#: The continuation nudge (2026-10-18): after an intermediate tool result, a
+#: model that ANNOUNCES its next action instead of calling the tool gets ONE
+#: short system line, once per turn. It names only tools already shown to the
+#: model in this turn, never invents a call, and never overrides a genuine
+#: final answer or a refusal (see announcement_shape / _REFUSAL_GUARD).
+CONTINUATION_NUDGE = (
+    "Do it now, not describe it. You already have the tool result above; you have "
+    "{tools}. Call the right one in this round. Do not ask permission or promise the "
+    "action - make the call.")
+
+#: Shapes of a promise/offer to act LATER (the phone field-test failure): first
+#: person future ("I will/I'll/I'm going to add ..."), a permission offer
+#: ("Would you like me to proceed ...", "Shall I ..."), and "Let me add ...".
+#: Deliberately narrow: past-tense claims, questions about facts, plain answers
+#: and refusals do not match (see the tests for the exact not-caught list).
+_ANNOUNCE_FUTURE = re.compile(
+    r"(?:\bi(?:'ll| will| am going to|'m going to| shall)(?:\s+now)?\b"
+    r"[^.!?\n]{0,120}?\b(?:add|append|set|send|create|make|schedule|remind|start|stop|"
+    r"cancel|put|write|save|open|check|read|search|find|look up|turn|dim|switch|lock|"
+    r"unlock|play|draft|archive|mark|update|delete|remove|calculate|run|proceed|"
+    r"go ahead|do (?:that|it))\b"
+    r"|\b(?:would you like me to|shall i|do you want me to|may i|can i)\b"
+    r"[^.!?\n]{0,120}?\b(?:proceed|go ahead|do (?:that|it)|add|append|set|send|create|"
+    r"make|schedule|remind|start|stop|cancel|put|write|save|open|check|read|search|"
+    r"find|turn|dim|switch|lock|unlock|play|draft|archive|mark|update|delete|remove|run|"
+    r"call)\b"
+    r"|\blet me\b[^.!?\n]{0,80}?\b(?:add|append|set|send|create|make|schedule|remind|"
+    r"start|stop|cancel|put|write|save|open|check|read|search|find|turn|dim|switch|"
+    r"lock|unlock|play|draft|archive|mark|update|delete|remove|run)\b)", re.I)
+
+#: A denial of ability/action in the same answer means the model is being
+#: honest, not announcing - never nudge past it.
+_REFUSAL_GUARD = re.compile(
+    r"\b(?:can'?t|cannot|can not|unable|not able|do not have|don'?t have|no way to|"
+    r"not allowed|won'?t|will not)\b[^.!?\n]{0,80}?\b(?:set|add|append|send|create|make|"
+    r"schedule|remind|start|stop|cancel|put|write|save|open|check|read|search|find|turn|"
+    r"dim|switch|lock|unlock|play|draft|archive|mark|update|delete|remove|run|"
+    r"do (?:that|it))\b", re.I)
+
+#: Action words a nudge can NAME, per tool (this branch has no top-K diet; the
+#: nudge is deliberately independent of it). Only tools already SHOWN in this
+#: turn and not already run are ever named.
+_NUDGE_TOOL_WORDS = {
+    "set_reminder": ("remind", "reminder", "alarm"),
+    "set_timer": ("timer", "countdown"),
+    "send_email": ("email", "mail", "send"),
+    "append_logseq_journal": ("logseq", "journal"),
+    "append_obsidian_daily": ("obsidian", "daily note"),
+    "create_joplin_note": ("joplin", "note"),
+    "calendar_read": ("calendar", "appointment", "meeting", "schedule"),
+    "email_check": ("email", "inbox", "messages", "mail"),
+    "notes_search": ("notes", "search", "find", "jot"),
+    "my_files": ("files", "document", "folder", "find"),
+    "home_control": ("light", "turn off", "switch", "dim", "lock", "unlock"),
+    "home_read": ("light", "door", "thermostat", "locked", "state"),
+    "todo_add": ("to-do", "todo", "task", "list"),
+    "todo_done": ("done", "complete", "tick off"),
+    "web_search": ("web", "search online", "latest"),
+    "shell_exec": ("command", "shell"),
+    "file_read": ("file", "read"),
+    "calculator": ("calculate", "percent", "math"),
+    "memory_search": ("remember", "memory", "what i said"),
+    "coming_up": ("timers", "reminders", "coming up"),
+    "draft_email": ("draft",),
+    "tidy_inbox": ("archive", "trash", "mark read"),
+    "retirement_whatif": ("retirement", "pension"),
+    "read_web_page": ("web page", "url"),
+    "github_search": ("github", "library"),
+    "control_computer": ("click", "type", "window"),
+    "control_phone": ("phone", "screenshot"),
+    "browser_control": ("browser", "tab"),
+    "run_data_script": ("script", "csv", "data"),
+    "my_spending": ("spending", "bank", "bill"),
+}
+
+
+def announcement_shape(text: str) -> bool:
+    """True when `text` promises/offers an action instead of doing it.
+
+    Conservative: a future first-person action, a permission offer, or "Let me
+    <action>". A refusal in the same answer wins (returns False), so honest
+    limitations are never nudged. Deliberately NOT caught: past-tense claims
+    ("I've added it"), plain answers, questions about facts, and future
+    statements that name no action from the list (e.g. "I will be here").
+    """
+    body = str(text or "").strip()
+    if not body or _REFUSAL_GUARD.search(body):
+        return False
+    return bool(_ANNOUNCE_FUTURE.search(body))
+
+
+def continuation_nudge(answer_text: str, shown, ran_tools=()) -> str:
+    """The one system line to inject after an announcement, or "".
+
+    "" when: there is no intermediate tool result (ran_tools empty), the text
+    is not an announcement, or no SHOWN, not-yet-run tool's own words appear in
+    the answer (naming a tool would be a guess). Names at most two such tools,
+    best match first, in the shown order as the tie-break.
+    """
+    text = str(answer_text or "").strip()
+    ran = {str(n) for n in (ran_tools or ())}
+    if not ran or not text or not announcement_shape(text):
+        return ""
+    lower = text.lower()
+    scored = []
+    for order, name in enumerate(shown or ()):
+        if name in ran or name == MORE_TOOLS:
+            continue
+        words = _NUDGE_TOOL_WORDS.get(name, ())
+        score = sum(1 for word in words if word in lower)
+        if score > 0:
+            scored.append((score, order, name))
+    if not scored:
+        return ""
+    scored.sort(key=lambda item: (-item[0], item[1]))
+    return CONTINUATION_NUDGE.format(tools=" or ".join(item[2] for item in scored[:2]))
+
+
 def _tokens_for_turn(messages, base: int) -> int:
     """The answer budget for a turn that did not ask for one: `base`, moved by
     how hard the newest owner message looks (2026-10-06; the idea is
@@ -8576,6 +8694,12 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         # breaker (F1, 2026-10-18): (name, canonical arguments), or None
         # before the first call. Only CONSECUTIVE pairs are compared.
         last_call_key = None
+
+
+        # One continuation nudge per turn at most (2026-10-18): a promise after
+        # an intermediate tool result gets one system line; a second promise
+        # ends the turn, exactly as before.
+        continuation_used = False
         for _round in range(max_rounds + 1):
             final = _round == max_rounds
             if final:
@@ -8608,6 +8732,21 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 last = one_round(offer_tools=True)
             calls = last.tool_calls()
             if final or not calls:
+                if (not final and not calls and not continuation_used
+                        and not out.gone and not watch.crisis
+                        and any(s.get("ran") and s.get("ok") is True for s in steps)):
+                    # An intermediate tool result is in, and the model answered
+                    # with a promise/offer instead of the next call. ONE nudge
+                    # per turn, only if it names a tool already shown; never a
+                    # second model round of its own, never a made-up call.
+                    ran_tools = [str(s.get("tool")) for s in steps if s.get("ran")]
+                    nudge = continuation_nudge("".join(last.text), offer["shown"], ran_tools)
+                    if nudge:
+                        continuation_used = True
+                        convo.append({"role": "assistant", "content": "".join(last.text)})
+                        convo.append({"role": "system", "content": nudge})
+                        said["gap"] = True
+                        continue
                 break
             text = "".join(last.text)
             at = len(convo)

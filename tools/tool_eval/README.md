@@ -82,6 +82,18 @@ Because that changes what the eval measures, the measurement must use the
 same 8 cases from `#570` (`baseline 1/8`) and a baseline run of the tree
 BEFORE F1. On the PC, when idle:
 
+
+## Continuation nudge (2026-10-18)
+
+The 8 multi-step cases were failing mostly because the model **announced** the
+next action instead of calling the tool ("I will now add this to your
+journal"), not because of a step cap. A real turn now gives that one short
+system nudge after an intermediate tool result; the multi runner in
+`ollama_tool_eval.py` calls the SAME `jarvis_agent.continuation_nudge`, so the
+eval measures the shipping logic. The nudge is bounded to one per turn, names
+only tools already shown and not yet run, and is skipped for a genuine final
+answer or a refusal. The cases are not changed:
+
 ```
 py -3 tools\tool_eval\ollama_tool_eval.py --suites multi --lists full --models jarvis-primary
 ```
@@ -97,6 +109,8 @@ py -3 tools\tool_eval\multi_case_table.py <baseline.json> <after.json>
 It prints all 8 rows (`before -> after`), the paths and the failure reasons;
 the cases are not modified. A holdout set is optional and must be scored as a
 separate table.
+
+
 
 ## Self-test without a model
 

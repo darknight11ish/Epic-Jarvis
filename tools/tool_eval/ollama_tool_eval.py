@@ -408,6 +408,7 @@ def run_multi_case(model, lst, case, max_steps=5):
     offer = Offer(lst, case["say"])
     msgs = start(case["say"])
     path, tokens, noted = [], None, False
+    nudged = False
     why = "it stopped before the last step"
     last_key = None
     for _ in range(max_steps):
@@ -419,7 +420,20 @@ def run_multi_case(model, lst, case, max_steps=5):
             break
         call = r["calls"][0] if r["calls"] else None
         if call is None:
-            if case["want"] is None and (r.get("content") or "").strip():
+            content = r.get("content") or ""
+            # The SAME continuation nudge a real turn uses (2026-10-18): after
+            # an intermediate tool result, a promise instead of the next call
+            # gets one system line naming tools already shown. Once per case.
+            if (not nudged and path and AG is not None
+                    and getattr(AG, "continuation_nudge", None) is not None):
+                shown = [t["function"]["name"] for t in offer.schemas()]
+                nudge = AG.continuation_nudge(content, shown, path)
+                if nudge:
+                    nudged = True
+                    msgs = msgs + [{"role": "assistant", "content": content},
+                                   {"role": "system", "content": nudge}]
+                    continue
+            if case["want"] is None and content.strip():
                 return {"id": case["id"], "pass": True, "path": path, "why": "",
                         "prompt_tokens": tokens}
             break
