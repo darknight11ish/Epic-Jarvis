@@ -45,7 +45,7 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_store::StoreExt;
 
@@ -61,10 +61,52 @@ pub const FOLDER_KEY: &str = "updates.backend_folder";
 pub const BACKEND_ENV: &str = "JARVIS_BACKEND";
 /// The one program allowed to change the backend folder, relative to the repo.
 pub const SCRIPT_REL: &str = r"scripts\apply-patches.ps1";
+/// The repo tool that wraps that script and runs the suites at the owner's
+/// chosen pace: `scripts\apply-patches.ps1 -SkipTests`, then
+/// `backend/run_suites.py --jobs N`, with the safe fallback.
+pub const TOOL_REL: &str = r"tools\update_backend.py";
 /// The file that makes a folder a backend folder.
 const HUD: &str = "jarvis_hud.py";
 /// Where the script writes its own copy of everything it prints.
 const LOG_DIR: &str = "_jarvis-logs";
+
+/// One of the three paces the owner chooses between, as the Python tool
+/// (`--modes-json`) answers it. ONE implementation of the worker numbers and
+/// the ETA maths lives in `tools/update_backend.py`; this is a read of that
+/// answer, never a second copy of it.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ModeInfo {
+    /// `max_speed`, `responsive` or `safe`.
+    pub id: String,
+    /// The card's short word: "Fastest", "Balanced", "Safest".
+    pub label: String,
+    /// One plain sentence about what the PC will feel like.
+    pub plain: String,
+    /// Suites run at once.
+    pub workers: u32,
+    /// About how long, in seconds, and the honest range around it.
+    pub eta_seconds: u32,
+    pub eta_low_seconds: u32,
+    pub eta_high_seconds: u32,
+    /// True once this PC's own recorded times are the basis; False on the
+    /// first run, and the card says so.
+    pub measured: bool,
+    /// The one the card preselects.
+    pub recommended: bool,
+    /// How many suites every pace will run (the same list for all three).
+    pub suite_count: u32,
+}
+
+/// The tool's whole `--modes-json` answer.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModePlan {
+    pub modes: Vec<ModeInfo>,
+    /// [`DEFAULT_MODE`] as the tool names it.
+    pub default: String,
+    pub measured: bool,
+}
 
 /// How long the patch run may take before it is treated as wedged.
 ///
@@ -99,6 +141,13 @@ pub struct Where {
     pub backend_source: Option<String>,
     /// `<repo>\scripts\apply-patches.ps1`, when there is a repo to join it to.
     pub script: Option<String>,
+    /// The three paces, with their worker counts and ETA ranges, as
+    /// `tools/update_backend.py --modes-json` answers them. Empty when the
+    /// tool could not be asked (an older clone, no Python): the card then
+    /// says the estimate is unavailable rather than inventing one.
+    pub modes: Vec<ModeInfo>,
+    /// Why the pace table could not be read, when it could not.
+    pub modes_note: Option<String>,
     /// Everything is in place and the run may go ahead. `None` is a yes.
     pub blocked: Option<String>,
 }
@@ -251,8 +300,124 @@ pub fn locate(app: &AppHandle) -> Where {
         backend_typed: typed_backend,
         backend_source: source.map(str::to_string),
         script,
+        modes: Vec::new(),
+        modes_note: None,
         blocked,
     }
+}
+
+// ---------------------------------------------------------------------------
+// The three paces: the tool's own answer, read back and never re-derived
+// ---------------------------------------------------------------------------
+
+/// The Python program to run the update tool with. `py -3` first (the
+/// documented Windows launcher), then `python` for a PC where only that exists.
+fn python_programs() -> Vec<(String, Vec<String>)> {
+    vec![
+        ("py".to_string(), vec!["-3".to_string()]),
+        ("python".to_string(), Vec::new()),
+    ]
+}
+
+/// The update tool's command line, relative to the two folders. Public and
+/// pure so the argument shape is a test: the tool must be asked for the SAME
+/// repo and backend folders the card shows, and with an explicit `--mode`.
+pub fn tool_args(repo: &str, backend: &str, mode: &str) -> Vec<String> {
+    vec![
+        "-B".to_string(),
+        Path::new(repo).join(TOOL_REL).to_string_lossy().to_string(),
+        "--repo".to_string(),
+        repo.to_string(),
+        "--backend".to_string(),
+        backend.to_string(),
+        "--mode".to_string(),
+        mode.to_string(),
+    ]
+}
+
+/// Reads the three paces from `tools/update_backend.py --modes-json`.
+///
+/// ONE implementation of the worker numbers and the ETA maths lives in that
+/// tool; this function is only a read of its answer. A failure is a plain note
+/// (an older clone, no Python) and the card then says the estimate is not
+/// available - it never makes one up.
+pub fn mode_plan_for(repo: &str, backend: &str) -> (Vec<ModeInfo>, Option<String>) {
+    let tool = Path::new(repo).join(TOOL_REL);
+    if !tool.is_file() {
+        return (
+            Vec::new(),
+            Some(format!(
+                "This Jarvis program folder has no {TOOL_REL} in it, so the update \
+                 paces cannot be estimated on this PC. Pull the newest programs \
+                 folder first (git pull), then press Update again. Nothing was changed."
+            )),
+        );
+    }
+    let mut last = String::new();
+    for (program, leading) in python_programs() {
+        let mut command = std::process::Command::new(&program);
+        command
+            .args(&leading)
+            .arg("-B")
+            .arg(&tool)
+            .arg("--modes-json")
+            .arg("--repo")
+            .arg(repo)
+            .arg("--backend")
+            .arg(backend)
+            .env("PYTHONDONTWRITEBYTECODE", "1");
+        match command.output() {
+            Ok(output) if output.status.success() => {
+                let text = String::from_utf8_lossy(&output.stdout).to_string();
+                if let Some(plan) = parse_mode_plan(&text) {
+                    return (plan.modes, None);
+                }
+                last = "the update tool answered, but not in the shape this app reads".to_string();
+            }
+            Ok(output) => {
+                last = format!("the update tool refused to answer ({})", output.status);
+            }
+            Err(err) => {
+                last = format!("the update tool could not be started: {err}");
+            }
+        }
+    }
+    (
+        Vec::new(),
+        Some(format!(
+            "The update paces could not be worked out on this PC ({last}), so the \
+             estimate is not shown. The update itself still runs when you press it."
+        )),
+    )
+}
+
+/// The tool's `--modes-json` answer, as the three paces. `None` when the text
+/// is not that document (a half-written reply, an error page, a future shape).
+pub fn parse_mode_plan(text: &str) -> Option<ModePlan> {
+    let plan: ModePlan = serde_json::from_str(text.trim()).ok()?;
+    if plan.modes.is_empty() {
+        return None;
+    }
+    Some(plan)
+}
+
+/// Whether `mode` is one of the paces the tool offers. Used by `update_both`
+/// BEFORE anything runs, so an unknown mode is refused rather than defaulted.
+pub fn known_mode(modes: &[ModeInfo], mode: &str) -> bool {
+    !modes.is_empty() && modes.iter().any(|row| row.id == mode)
+}
+
+/// The plain sentence for an unknown pace, naming the three that exist.
+pub fn unknown_mode_words(modes: &[ModeInfo], mode: &str) -> String {
+    let names = modes
+        .iter()
+        .map(|row| row.id.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "There is no update pace called \"{mode}\". The paces on this PC are: {names}. \
+         Nothing was changed."
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -350,15 +515,28 @@ pub struct Run {
     /// This attempt stopped the Jarvis backend, so Jarvis is off until the app
     /// is restarted. False on every refusal that happens before that.
     pub stopped: bool,
+    /// The pace this run used (`max_speed`, `responsive`, `safe`), and its
+    /// short word for the card.
+    pub mode: String,
+    pub mode_label: String,
+    /// True when the run fell back to the safe second pass (the tool's own
+    /// events set this); the card is told, and the detail says so.
+    pub fallback: bool,
+    /// False when this program folder has no `tools/update_backend.py`, so the
+    /// older one-at-a-time patcher was run instead. Said on the card.
+    pub used_tool: bool,
 }
 
-/// Puts the two folders in place and runs the one program allowed to change the
-/// backend. Refuses — changing nothing — when either folder is missing.
-pub async fn run(app: &AppHandle) -> Run {
+/// Puts the two folders in place and runs the chosen pace's update: the repo
+/// tool when this clone has it, the older one-at-a-time patcher when it does
+/// not. Refuses — changing nothing — when either folder is missing.
+pub async fn run(app: &AppHandle, mode: &str, mode_label: &str) -> Run {
     let here = locate(app);
     if let Some(why) = here.blocked.clone() {
         return Run {
             detail: why,
+            mode: mode.to_string(),
+            mode_label: mode_label.to_string(),
             ..Run::default()
         };
     }
@@ -369,6 +547,8 @@ pub async fn run(app: &AppHandle) -> Run {
             detail: "This app does not know where the Jarvis program or backend folder is, \
                      so nothing was changed."
                 .to_string(),
+            mode: mode.to_string(),
+            mode_label: mode_label.to_string(),
             ..Run::default()
         };
     };
@@ -392,25 +572,61 @@ pub async fn run(app: &AppHandle) -> Run {
         false
     };
 
-    let script = Path::new(&repo).join(SCRIPT_REL);
     let backend = PathBuf::from(&backend);
     // The handle the progress events go to. Cloned out here because the closure
     // below is `'static`: a borrow of `app` cannot cross into it.
     let reports_to = app.clone();
-    let mut finished =
-        tauri::async_runtime::spawn_blocking(move || run_script(&script, &backend, &reports_to))
-            .await
-            .unwrap_or_else(|err| Run {
-                detail: format!("The patch run could not be started: {err}. Nothing was changed."),
-                ..Run::default()
-            });
+    let mode_owned = mode.to_string();
+    let label_owned = mode_label.to_string();
+    let repo_root = PathBuf::from(&repo);
+    let mut finished = tauri::async_runtime::spawn_blocking(move || {
+        run_script(&repo_root, &backend, &reports_to, &mode_owned, &label_owned)
+    })
+    .await
+    .unwrap_or_else(|err| Run {
+        detail: format!("The patch run could not be started: {err}. Nothing was changed."),
+        mode: mode.to_string(),
+        mode_label: mode_label.to_string(),
+        ..Run::default()
+    });
     finished.stopped = stopped;
     finished
 }
 
+/// The Python the update tool should be run with, once: `py -3` first (the
+/// documented Windows launcher), then `python`. Checked with `--version` so the
+/// command the run gets is one this PC can actually start; a run that returned
+/// "not found" halfway would look like a failed update.
+fn resolve_python() -> Option<(String, Vec<String>)> {
+    for (program, leading) in python_programs() {
+        let started = std::process::Command::new(&program)
+            .args(&leading)
+            .arg("--version")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok();
+        if started {
+            return Some((program, leading));
+        }
+    }
+    None
+}
+
 /// The blocking half: spawn, watch, and read back what it printed.
-fn run_script(script: &Path, backend: &Path, app: &AppHandle) -> Run {
+fn run_script(repo: &Path, backend: &Path, app: &AppHandle, mode: &str, mode_label: &str) -> Run {
     let log_dir = Some(backend.join(LOG_DIR).to_string_lossy().to_string());
+    let tool = repo.join(TOOL_REL);
+    let used_tool = tool.is_file();
+    let python = if used_tool { resolve_python() } else { None };
+    let used_tool = used_tool && python.is_some();
+    if used_tool {
+        // The repo tool is the one that can run the suites at the chosen pace.
+    } else if !tool.is_file() {
+        // An older program folder: the patcher runs its own suites one at a
+        // time, exactly as every update did before this feature. Said on the
+        // card so nobody wonders where the paces went.
+    }
 
     // Everything the child prints goes to a file of our own rather than down a
     // pipe: `apply-patches.ps1` prints tens of kilobytes, and a pipe nobody is
@@ -448,25 +664,37 @@ fn run_script(script: &Path, backend: &Path, app: &AppHandle) -> Run {
         };
     };
 
-    // Windows PowerShell 5.1, the interpreter the documented line uses. The
-    // repository root is the working folder: the script resolves everything of
-    // its own from `$PSScriptRoot`, so this only decides where a bare `git`
-    // starts, and the repo root is the honest answer to that.
-    let working_dir = script
-        .parent()
-        .and_then(Path::parent)
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| PathBuf::from("."));
+    // The repository root is the working folder either way: the tool and the
+    // patcher both find everything of theirs from their own location, so this
+    // only decides where a bare `git` starts, and the repo root is the honest
+    // answer to that.
+    let working_dir = repo.to_path_buf();
 
-    let mut command = std::process::Command::new("powershell");
+    let mut command = if let Some((program, leading)) = python.as_ref() {
+        let mut command = std::process::Command::new(program);
+        command.args(leading).args(tool_args(
+            &working_dir.to_string_lossy(),
+            &backend.to_string_lossy(),
+            mode,
+        ));
+        command
+    } else {
+        // An older program folder with no repo tool (or no Python to run it):
+        // the documented patcher invocation, which runs its own suites one at a
+        // time. Same script, same backups, same proof - only without the paces.
+        let script = repo.join(SCRIPT_REL);
+        let mut command = std::process::Command::new("powershell");
+        command
+            .arg("-NoProfile")
+            .arg("-ExecutionPolicy")
+            .arg("Bypass")
+            .arg("-File")
+            .arg(&script)
+            .arg("-BackendPath")
+            .arg(backend);
+        command
+    };
     command
-        .arg("-NoProfile")
-        .arg("-ExecutionPolicy")
-        .arg("Bypass")
-        .arg("-File")
-        .arg(script)
-        .arg("-BackendPath")
-        .arg(backend)
         .current_dir(&working_dir)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::from(out))
@@ -482,6 +710,8 @@ fn run_script(script: &Path, backend: &Path, app: &AppHandle) -> Run {
                     "The patch program could not be started: {err}. Nothing was changed."
                 ),
                 log_dir,
+                mode: mode.to_string(),
+                mode_label: mode_label.to_string(),
                 ..Run::default()
             }
         }
@@ -579,7 +809,7 @@ fn run_script(script: &Path, backend: &Path, app: &AppHandle) -> Run {
 
     let exit_ok = status.is_some_and(|s| s.success());
     let verdict = read_verdict(&tail, exit_ok);
-    let detail = if !verdict.ok {
+    let mut detail = if !verdict.ok {
         let mut said = "The backend step did not finish, so Jarvis Desktop was NOT installed \
                         on top of it."
             .to_string();
@@ -598,6 +828,31 @@ fn run_script(script: &Path, backend: &Path, app: &AppHandle) -> Run {
          (it says which were skipped in the log). That is not the same as a proven update."
             .to_string()
     };
+    let progress = live.lock().map(|p| p.clone()).unwrap_or_default();
+    let fallback = progress.fallback == Some(true);
+    if used_tool {
+        detail.push_str(&format!(" (Update pace: {mode_label}.)"));
+    } else if tool.is_file() {
+        // The tool is there; this PC would not start Python to run it. Said as
+        // what happened rather than as a missing file, so the card does not
+        // send the owner to `git pull` for a problem a pull cannot fix.
+        detail.push_str(
+            " The quicker paces need Python to run tools\\update_backend.py, and this \
+             PC would not start it, so the older one-check-at-a-time update ran.",
+        );
+    } else {
+        detail.push_str(
+            " The quicker paces need tools\\update_backend.py in the Jarvis program \
+             folder; this folder does not have it (git pull gets it), so the older \
+             one-check-at-a-time update ran.",
+        );
+    }
+    if fallback {
+        detail.push_str(
+            " The quick check hit a problem, so it was re-run the safe way - this \
+             result is that safe pass.",
+        );
+    }
 
     Run {
         ok: verdict.ok,
@@ -606,10 +861,14 @@ fn run_script(script: &Path, backend: &Path, app: &AppHandle) -> Run {
         detail,
         log_dir,
         tail,
-        progress: live.lock().map(|p| p.clone()).unwrap_or_default(),
+        progress,
         // Filled in by `run`, which is the only caller and the only place that
         // knows whether Jarvis was stopped for this attempt.
         stopped: false,
+        mode: mode.to_string(),
+        mode_label: mode_label.to_string(),
+        fallback,
+        used_tool,
     }
 }
 
@@ -617,10 +876,24 @@ fn run_script(script: &Path, backend: &Path, app: &AppHandle) -> Run {
 // Commands
 // ---------------------------------------------------------------------------
 
-/// What the Updates card shows about the two folders without running anything.
+/// What the Updates card shows about the two folders and the three paces,
+/// without running anything.
 #[tauri::command]
 pub fn backend_update_status(app: AppHandle) -> Where {
-    locate(&app)
+    let mut here = locate(&app);
+    if here.blocked.is_some() {
+        here.modes_note = Some(
+            "Set the two folders above first; the update paces are worked out from them."
+                .to_string(),
+        );
+        return here;
+    }
+    if let (Some(repo), Some(backend)) = (here.repo.clone(), here.backend.clone()) {
+        let (modes, note) = mode_plan_for(&repo, &backend);
+        here.modes = modes;
+        here.modes_note = note;
+    }
+    here
 }
 
 /// Remembers the two folders. Empty is allowed and means "not said", which
@@ -667,7 +940,8 @@ pub fn set_update_folders(
 #[cfg(test)]
 mod tests {
     use super::{
-        backend_folder, folder_of_hud, read_verdict, refuse, tail_of, Verdict, BACKEND_ENV, HUD,
+        backend_folder, folder_of_hud, known_mode, parse_mode_plan, read_verdict, refuse, tail_of,
+        tool_args, unknown_mode_words, ModeInfo, Verdict, BACKEND_ENV, HUD,
     };
 
     fn args(items: &[&str]) -> Vec<String> {
@@ -847,5 +1121,121 @@ mod tests {
         );
         assert!(detail.contains("part-way through"));
         assert!(detail.contains("_jarvis-logs"));
+    }
+
+    // ---- the three paces: the tool's own answer, read back ---------------
+
+    /// The exact shape `tools/update_backend.py --modes-json` prints (camelCase,
+    /// one key set per mode). The page and this struct both read it, so a field
+    /// rename in the tool must fail HERE rather than show a card with blanks.
+    const MODES_JSON: &str = r#"{
+      "kind": "update_backend",
+      "version": 1,
+      "default": "responsive",
+      "measured": false,
+      "suiteCount": 356,
+      "modes": [
+        {"id": "max_speed", "label": "Fastest", "plain": "Nearly the whole PC.",
+         "workers": 22, "etaSeconds": 120, "etaLowSeconds": 60, "etaHighSeconds": 300,
+         "measured": false, "recommended": false, "suiteCount": 356},
+        {"id": "responsive", "label": "Balanced", "plain": "About half the PC.",
+         "workers": 14, "etaSeconds": 121, "etaLowSeconds": 61, "etaHighSeconds": 301,
+         "measured": false, "recommended": true, "suiteCount": 356},
+        {"id": "safe", "label": "Safest", "plain": "One at a time.",
+         "workers": 1, "etaSeconds": 480, "etaLowSeconds": 240, "etaHighSeconds": 1200,
+         "measured": false, "recommended": false, "suiteCount": 356}
+      ]
+    }"#;
+
+    #[test]
+    fn the_tool_s_mode_table_is_read_as_the_card_needs_it() {
+        let plan = parse_mode_plan(MODES_JSON).expect("the tool's own answer did not parse");
+        assert_eq!(plan.modes.len(), 3);
+        assert_eq!(plan.default, "responsive");
+        assert!(!plan.measured);
+        let responsive = plan
+            .modes
+            .iter()
+            .find(|row| row.id == "responsive")
+            .expect("the recommended pace is missing");
+        assert_eq!(responsive.workers, 14);
+        assert_eq!(responsive.label, "Balanced");
+        assert!(responsive.recommended);
+        assert!(responsive.eta_low_seconds < responsive.eta_high_seconds);
+        assert_eq!(responsive.suite_count, 356);
+        // The three are ordered fastest to safest in the tool's answer, and the
+        // ETA ordering is the tool's own arithmetic - this only reads it.
+        assert!(plan.modes[0].eta_seconds <= plan.modes[1].eta_seconds);
+        assert!(plan.modes[1].eta_seconds <= plan.modes[2].eta_seconds);
+    }
+
+    #[test]
+    fn a_table_that_is_not_the_tool_s_answer_is_refused_rather_than_shown() {
+        assert!(parse_mode_plan("").is_none());
+        assert!(parse_mode_plan("not json").is_none());
+        assert!(parse_mode_plan(r#"{"modes": []}"#).is_none());
+        assert!(parse_mode_plan(r#"{"modes": [{"id": "responsive"}]}"#).is_none());
+        // A valid document with all three rows still parses; the refusal above
+        // is about the SHAPE, not about being cautious with a good answer.
+        assert!(parse_mode_plan(MODES_JSON).is_some());
+    }
+
+    #[test]
+    fn the_run_asks_the_tool_for_the_same_folders_and_an_explicit_pace() {
+        let argv = tool_args(r"C:\repo", r"C:\backend", "responsive");
+        // The tool's path is joined onto the repo folder, so the argument is the
+        // absolute path (repo\tools\update_backend.py), not the bare relative one.
+        assert!(
+            argv.iter()
+                .any(|arg| arg.ends_with("update_backend.py") && arg.contains("tools")),
+            "{argv:?}"
+        );
+        assert!(
+            argv.windows(2).any(|pair| pair == ["--repo", r"C:\repo"]),
+            "{argv:?}"
+        );
+        assert!(
+            argv.windows(2)
+                .any(|pair| pair == ["--backend", r"C:\backend"]),
+            "{argv:?}"
+        );
+        assert!(
+            argv.windows(2).any(|pair| pair == ["--mode", "responsive"]),
+            "{argv:?}"
+        );
+        // The tool runs the patcher itself, so its command line never carries
+        // the patcher's own flags: -SkipTests belongs to the tool, not here.
+        assert!(!argv.iter().any(|arg| arg == "-SkipTests"), "{argv:?}");
+    }
+
+    #[test]
+    fn a_pace_the_tool_did_not_offer_is_refused_with_the_real_ones() {
+        let modes = vec![
+            ModeInfo {
+                id: "max_speed".to_string(),
+                ..Default::default()
+            },
+            ModeInfo {
+                id: "responsive".to_string(),
+                ..Default::default()
+            },
+            ModeInfo {
+                id: "safe".to_string(),
+                ..Default::default()
+            },
+        ];
+        assert!(known_mode(&modes, "safe"));
+        assert!(!known_mode(&modes, "turbo"));
+        assert!(!known_mode(&[], "safe"));
+        let words = unknown_mode_words(&modes, "turbo");
+        for expected in [
+            "turbo",
+            "max_speed",
+            "responsive",
+            "safe",
+            "Nothing was changed",
+        ] {
+            assert!(words.contains(expected), "{expected} missing from {words}");
+        }
     }
 }

@@ -27,7 +27,20 @@ apply-patches.ps1 asks for the same variables with `--state-env DIR`.
 
 The skip list is explicit, not guessed from a failure: a suite that is not in
 it and fails is a failure, and a suite in it whose files ARE present runs.
+
+    python3 backend/run_suites.py --jobs 14
+
+`--jobs N` runs N suites at once. **The default is 1, and CI uses the
+default**, so the output of the ordinary run is what it has always been. The
+updater is the only caller that asks for more (`tools/update_backend.py`, the
+owner's own choice of how hard the update should work), and it changes ONLY
+the number of workers: the suite list is the same glob in every mode, so a
+"quick" update and a "safe" one run exactly the same checks. Each worker gets
+its own config folder, audit log and scratch folder inside the same run root,
+because the suites write real state and two of them writing into one folder
+is not a check either of them asked for.
 """
+import concurrent.futures
 import json
 import os
 import re
@@ -35,6 +48,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -615,8 +629,14 @@ def suite_result(name: str, took: str, code, stdout, stderr, why="") -> tuple:
     return "FAIL", n, line[:200], echo
 
 
-def main(only=()) -> int:
+def main(only=(), jobs: int = 1) -> int:
     """Every suite, or only the ones named (`run_suites.py test_x.py ...`).
+
+    `jobs` is how many suites to run at once: **1 by default, and that is what
+    CI runs**, so the ordinary output is byte-for-byte what it has always been.
+    The updater (the owner's own "how hard should this update work" choice) is
+    the only caller that passes more; which suites run never changes, only how
+    many are in flight.
 
     A name given on the command line that is not a suite here is a FAILURE, not
     an empty run: a sweep that prints "0 passed, 0 skipped, 0 failed" and exits
@@ -631,10 +651,11 @@ def main(only=()) -> int:
     is what the reaper at the start of `_sweep` is for: next time it finds this
     folder by its `_owner.json` marker, whose lock this process no longer
     holds, and removes it."""
+    jobs = max(1, int(jobs))
     root = Path(tempfile.mkdtemp(prefix=SWEEP_PREFIX))
     lock = claim(root, "sweep")
     try:
-        return _sweep(root, only)
+        return _sweep(root, only, jobs)
     finally:
         # The lock goes FIRST: on Windows a file this process still holds open
         # cannot be deleted, so the marker would keep the whole folder alive -
@@ -644,9 +665,123 @@ def main(only=()) -> int:
         remove_tree(root, "this run's own staging folder")
 
 
-def _sweep(root: Path, only=()) -> int:
+def _suite_job(s: Path, backend: Path, env: dict) -> dict:
+    """Run ONE suite and hand back what to print. Never prints.
+
+    Split out of `_sweep` for `--jobs`: with more than one worker the jobs
+    finish in a different order than the list, and a job that printed from
+    inside a thread would interleave another suite's lines into its own
+    failure block. The caller owns the printing. The result carries exactly
+    the same four things a single-worker run printed, so the two paths cannot
+    disagree about what a suite means."""
+    need = NEEDS_OWNER.get(s.name, ())
+    absent = [f for f in need if not (backend / f).is_file()]
+    if absent:
+        return {"name": s.name, "status": "skip",
+                "counts": {"passed": 0, "skipped": 0, "failed": 0},
+                "line": f"skip  {s.name:<34} needs the owner's {', '.join(absent)}",
+                "echo": [], "tail": []}
+    t0 = time.time()
+    why = ""
+    try:
+        # errors="replace" and an explicit utf-8 decode: the child is run
+        # with PYTHONIOENCODING=utf-8 (see private_state), so decoding its
+        # output with the console's own code page raised
+        # UnicodeDecodeError INSIDE subprocess's reader thread, which left
+        # r.stdout as None and crashed this whole runner with
+        # "unsupported operand type(s) for +: 'NoneType' and 'str'" - one
+        # suite's non-ASCII output taking the entire run down with it.
+        # That happened on 2026-10-03, at test_mail_mask.py.
+        r = subprocess.run([sys.executable, str(s)], cwd=HERE, env=env,
+                           capture_output=True, text=True, timeout=900,
+                           encoding="utf-8", errors="replace")
+        code, got_out, got_err = r.returncode, r.stdout, r.stderr
+    except subprocess.TimeoutExpired:
+        code, got_out, got_err = "timeout", "", ""
+    except OSError as exc:
+        # The child never started at all - an executable that cannot run,
+        # a path that is gone, a permission the sandbox refuses. The suite
+        # has no exit code to compare with 0, so it is FAILED and the
+        # reason is carried into the report; continuing is the point,
+        # because the suites after this one still have results worth
+        # printing.
+        code, got_out, got_err = None, "", ""
+        why = f"the suite could not be started: {exc}"
+    took = f"{time.time() - t0:5.1f}s"
+    status, n, line, echo = suite_result(s.name, took, code, got_out, got_err, why)
+    tail = ((got_out or "") + (got_err or "")).strip().splitlines()[-40:]
+    return {"name": s.name, "status": status, "counts": n, "line": line,
+            "echo": echo, "tail": tail}
+
+
+def _print_job(got: dict, ran: dict, passed: list, failed: list,
+               skipped: list) -> None:
+    """Print one finished suite exactly as the one-at-a-time run always has."""
+    if got["status"] == "skip":
+        skipped.append(got["name"])
+        print(got["line"])
+        return
+    for word in ran:
+        ran[word] += got["counts"][word]
+    if got["status"] == "ok":
+        passed.append(got["name"])
+        print(got["line"])
+        return
+    failed.append(got["name"])
+    print(got["line"])
+    for line in got["echo"]:
+        print(line)
+    print("\n".join("      " + line for line in got["tail"]))
+
+
+def _sweep_parallel(suites: list, backend: Path, worker_envs: list, ran: dict,
+                    passed: list, failed: list, skipped: list) -> None:
+    """The same suites, `len(worker_envs)` at a time.
+
+    The only thing the extra workers change is the ORDER the finished lines are
+    printed in - and that is deliberate: the updater reads them as they arrive
+    to refine its ETA. Which suites run, what each result means and the final
+    counts are the same code (`_suite_job`) as the one-at-a-time path.
+
+    Each worker owns one private state folder (made in `_sweep`), so two
+    suites never write their config folder, audit log or scratch into one
+    another. A job that raises is reported as a FAILED suite with its error
+    rather than taking the other 300 results down with it."""
+    free = list(worker_envs)
+    guard = threading.Lock()
+    print_lock = threading.Lock()
+
+    def work(suite: Path) -> dict:
+        with guard:
+            env = free.pop()
+        try:
+            return _suite_job(suite, backend, env)
+        finally:
+            with guard:
+                free.append(env)
+
+    futures = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(worker_envs)) as pool:
+        for suite in suites:
+            futures[pool.submit(work, suite)] = suite
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                got = future.result()
+            except Exception as exc:            # noqa: BLE001 - one job's bug
+                name = futures[future].name
+                got = {"name": name, "status": "FAIL",
+                       "counts": {"passed": 0, "skipped": 0, "failed": 1},
+                       "line": f"FAIL  {name:<34}  (worker error)  the job "
+                               f"raised {type(exc).__name__}: {exc}",
+                       "echo": [], "tail": []}
+            with print_lock:
+                _print_job(got, ran, passed, failed, skipped)
+
+
+def _sweep(root: Path, only=(), jobs: int = 1) -> int:
     """One run, inside `root`: reap what a dead run left, stage, run each
     suite, report. Never called except from `main`, which owns `root`."""
+    jobs = max(1, int(jobs))
     reaped = reap_orphans(keep=(root,))
     if reaped:
         print(f"reaped {len(reaped)} staging folder(s) an earlier run left behind: "
@@ -674,58 +809,24 @@ def _sweep(root: Path, only=()) -> int:
     if no_owner:
         print(f"FAIL  run_suites.py skips suites that need nothing from the owner's PC: {no_owner}")
         failed += no_owner
-    state = root / STATE_NAME
-    env = private_state(dict(os.environ, JARVIS_BACKEND=str(backend),
-                             PYTHONDONTWRITEBYTECODE="1"), backend, state)
-    env = suite_temp_env(env, root)
-    print(f"state: {state}  (config folder and audit log for this run, not yours)")
-    for s in suites:
-        need = NEEDS_OWNER.get(s.name, ())
-        absent = [f for f in need if not (backend / f).is_file()]
-        if absent:
-            skipped.append(s.name)
-            print(f"skip  {s.name:<34} needs the owner's {', '.join(absent)}")
-            continue
-        t0 = time.time()
-        why = ""
-        try:
-            # errors="replace" and an explicit utf-8 decode: the child is run
-            # with PYTHONIOENCODING=utf-8 (see private_state), so decoding its
-            # output with the console's own code page raised
-            # UnicodeDecodeError INSIDE subprocess's reader thread, which left
-            # r.stdout as None and crashed this whole runner with
-            # "unsupported operand type(s) for +: 'NoneType' and 'str'" - one
-            # suite's non-ASCII output taking the entire run down with it.
-            # That happened on 2026-10-03, at test_mail_mask.py.
-            r = subprocess.run([sys.executable, str(s)], cwd=HERE, env=env,
-                               capture_output=True, text=True, timeout=900,
-                               encoding="utf-8", errors="replace")
-            code, got_out, got_err = r.returncode, r.stdout, r.stderr
-        except subprocess.TimeoutExpired:
-            code, got_out, got_err = "timeout", "", ""
-        except OSError as exc:
-            # The child never started at all - an executable that cannot run,
-            # a path that is gone, a permission the sandbox refuses. The suite
-            # has no exit code to compare with 0, so it is FAILED and the
-            # reason is carried into the report; continuing is the point,
-            # because the suites after this one still have results worth
-            # printing.
-            code, got_out, got_err = None, "", ""
-            why = f"the suite could not be started: {exc}"
-        took = f"{time.time() - t0:5.1f}s"
-        status, n, line, echo = suite_result(s.name, took, code, got_out, got_err, why)
-        for w in ran:
-            ran[w] += n[w]
-        if status == "ok":
-            passed.append(s.name)
-            print(line)
-            continue
-        failed.append(s.name)
-        print(line)
-        for el in echo:
-            print(el)
-        tail = ((got_out or "") + (got_err or "")).strip().splitlines()[-40:]
-        print("\n".join("      " + l for l in tail))
+    base = dict(os.environ, JARVIS_BACKEND=str(backend),
+                PYTHONDONTWRITEBYTECODE="1")
+    if jobs == 1:
+        state = root / STATE_NAME
+        worker_envs = [suite_temp_env(private_state(base, backend, state), root)]
+        print(f"state: {state}  (config folder and audit log for this run, not yours)")
+        for suite in suites:
+            _print_job(_suite_job(suite, backend, worker_envs[0]),
+                       ran, passed, failed, skipped)
+    else:
+        worker_envs = []
+        for index in range(jobs):
+            state = root / f"{STATE_NAME}-{index + 1}"
+            worker_envs.append(suite_temp_env(
+                private_state(dict(base), backend, state), state))
+        print(f"state: {root / STATE_NAME}-1 .. -{jobs}  ({jobs} worker folders: "
+              f"config folder and audit log for this run, not yours)")
+        _sweep_parallel(suites, backend, worker_envs, ran, passed, failed, skipped)
     # No rmtree here any more: `root` - which holds the staged backend (unless
     # JARVIS_BACKEND named a real one), the state folder and the suites' own
     # scratch - is removed by main()'s `finally`, on every path out of here.
@@ -735,7 +836,8 @@ def _sweep(root: Path, only=()) -> int:
               f"suites above, {len(skipped)} whole suite(s) that need files which live only on "
               f"the owner's PC)")
     if failed:
-        print("failed: " + ", ".join(failed))
+        shown = sorted(failed) if jobs > 1 else failed
+        print("failed: " + ", ".join(shown))
     return 1 if failed else 0
 
 
@@ -760,6 +862,18 @@ def state_env(where: str) -> int:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 3 and sys.argv[1] == "--state-env":
-        sys.exit(state_env(sys.argv[2]))
-    sys.exit(main(tuple(a for a in sys.argv[1:] if a.startswith("test_"))))
+    args = list(sys.argv[1:])
+    jobs = 1
+    if "--jobs" in args:
+        at = args.index("--jobs")
+        try:
+            jobs = int(args[at + 1])
+        except (IndexError, ValueError):
+            print("FAIL  --jobs needs a whole number of workers, e.g. --jobs 14",
+                  file=sys.stderr)
+            sys.exit(2)
+        del args[at:at + 2]
+    if len(args) == 2 and args[0] == "--state-env":
+        sys.exit(state_env(args[1]))
+    sys.exit(main(tuple(a for a in args if a.startswith("test_")),
+                  max(1, jobs)))

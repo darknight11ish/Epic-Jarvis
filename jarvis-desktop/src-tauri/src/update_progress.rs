@@ -55,7 +55,8 @@ pub struct BadCheck {
 #[derive(Debug, Clone, Default, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Progress {
-    /// `reading`, `rehearsing`, `applying`, `testing`, `done`.
+    /// `reading`, `rehearsing`, `applying`, `verifying`, `testing`,
+    /// `fallback`, `done`.
     pub phase: String,
     /// Items finished in this phase (patches, or test suites).
     pub done: u32,
@@ -70,6 +71,105 @@ pub struct Progress {
     pub verdict: Option<String>,
     /// The failed checks, at most [`MAX_BAD`] of them.
     pub bad: Vec<BadCheck>,
+    // ---- what tools/update_backend.py adds --------------------------------
+    // The tool prints one `JARVIS-EVENT {json}` line per progress change, and
+    // these are its fields. `None` means "the tool did not say", and the card
+    // holds its last real value rather than guessing forward.
+    /// The pace the owner chose: `max_speed`, `responsive` or `safe`.
+    pub mode: Option<String>,
+    /// That pace's worker count for this run.
+    pub workers: Option<u32>,
+    /// Remaining seconds, and the honest range around it.
+    pub eta_seconds: Option<u32>,
+    pub eta_low_seconds: Option<u32>,
+    pub eta_high_seconds: Option<u32>,
+    /// True once this PC's own recorded suite times are the basis, False on
+    /// the first (unmeasured) run. `None` before the tool has said anything.
+    pub measured: Option<bool>,
+    /// The progress bar's real fraction, 0.0 ..= 1.0, computed by the tool
+    /// from completed work (items applied, weighted finished suites). The
+    /// screen paints only this; it never advances a timer of its own.
+    pub fraction: Option<f64>,
+    /// Set on the visible second (safe) pass after a fallback.
+    pub pass_label: Option<String>,
+    /// The checking phase's weighted completed work, for the card's words.
+    pub weight_done: Option<f64>,
+    pub weight_total: Option<f64>,
+    /// True once the tool has fallen back to the safe second pass.
+    pub fallback: Option<bool>,
+    /// One plain sentence from the tool about this event (a fallback note).
+    pub note: Option<String>,
+}
+
+/// Applies one `JARVIS-EVENT` body to `p`. Pure; a malformed body does nothing.
+///
+/// Only fields the event actually carries are written, so an event that says
+/// nothing about the ETA cannot erase the last one the screen was given.
+fn apply_event(raw: &str, p: &mut Progress) {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(raw) else {
+        return;
+    };
+    let Some(object) = value.as_object() else {
+        return;
+    };
+    let Some(phase) = object.get("phase").and_then(|v| v.as_str()) else {
+        return;
+    };
+    p.phase = phase.to_string();
+    if let Some(mode) = object.get("mode").and_then(|v| v.as_str()) {
+        p.mode = Some(mode.to_string());
+    }
+    if let Some(workers) = object.get("workers").and_then(|v| v.as_u64()) {
+        p.workers = Some(workers as u32);
+    }
+    if let Some(done) = object.get("done").and_then(|v| v.as_u64()) {
+        p.done = done as u32;
+    }
+    if object.contains_key("total") {
+        p.total = object
+            .get("total")
+            .and_then(|v| v.as_u64())
+            .map(|n| n as u32);
+    }
+    if let Some(failed) = object.get("failed").and_then(|v| v.as_u64()) {
+        p.failed = failed as u32;
+    }
+    if let Some(skipped) = object.get("skipped").and_then(|v| v.as_u64()) {
+        p.skipped = skipped as u32;
+    }
+    if let Some(verdict) = object.get("verdict").and_then(|v| v.as_str()) {
+        p.verdict = Some(verdict.to_string());
+    }
+    if let Some(eta) = object.get("etaSeconds").and_then(|v| v.as_u64()) {
+        p.eta_seconds = Some(eta as u32);
+    }
+    if let Some(eta) = object.get("etaLowSeconds").and_then(|v| v.as_u64()) {
+        p.eta_low_seconds = Some(eta as u32);
+    }
+    if let Some(eta) = object.get("etaHighSeconds").and_then(|v| v.as_u64()) {
+        p.eta_high_seconds = Some(eta as u32);
+    }
+    if let Some(measured) = object.get("measured").and_then(|v| v.as_bool()) {
+        p.measured = Some(measured);
+    }
+    if let Some(fraction) = object.get("fraction").and_then(|v| v.as_f64()) {
+        p.fraction = Some(fraction.clamp(0.0, 1.0));
+    }
+    if let Some(label) = object.get("passLabel").and_then(|v| v.as_str()) {
+        p.pass_label = Some(label.to_string());
+    }
+    if let Some(done) = object.get("weightDone").and_then(|v| v.as_f64()) {
+        p.weight_done = Some(done);
+    }
+    if let Some(total) = object.get("weightTotal").and_then(|v| v.as_f64()) {
+        p.weight_total = Some(total);
+    }
+    if let Some(fallback) = object.get("fallback").and_then(|v| v.as_bool()) {
+        p.fallback = Some(fallback);
+    }
+    if let Some(note) = object.get("note").and_then(|v| v.as_str()) {
+        p.note = Some(note.to_string());
+    }
 }
 
 /// Is this failure a check that could not RUN here, rather than a check that ran
@@ -95,6 +195,17 @@ pub fn could_not_run(reason: &str) -> bool {
 pub fn progress_of(line: &str, p: &mut Progress) {
     let text = line.trim_end();
     let trimmed = text.trim();
+
+    // --- the update tool's own machine-readable events ---------------------
+    // `tools/update_backend.py` prints one `JARVIS-EVENT {json}` line per
+    // progress change. It is the only source the progress BAR is painted from:
+    // the fraction, the refined ETA and the second-pass label are all its own
+    // arithmetic, and a missing or malformed event leaves the last real values
+    // standing rather than inventing the next one.
+    if let Some(rest) = trimmed.strip_prefix("JARVIS-EVENT ") {
+        apply_event(rest, p);
+        return;
+    }
 
     // --- the phase markers -------------------------------------------------
     if let Some(rest) = trimmed.strip_prefix("Rehearsing all ") {
@@ -487,5 +598,75 @@ mod tests {
         // A Windows line ending is not part of the line.
         let mut crlf = b"  ok   c.patch\r\n".to_vec();
         assert_eq!(take_lines(&mut crlf), vec!["  ok   c.patch"]);
+    }
+
+    /// The updater tool's event, verbatim from `tools/update_backend.py`'s
+    /// `emit_event` (sorted keys, camelCase fields). This is what the progress
+    /// bar is painted from, so the fields are read one at a time and a missing
+    /// one is "not said", not zero.
+    #[test]
+    fn the_update_tool_s_events_are_read_field_by_field() {
+        let mut p = Progress::default();
+        progress_of(
+            r#"JARVIS-EVENT {"done": 12, "failed": 1, "fraction": 0.4321, "kind": "update_backend", "measured": false, "mode": "responsive", "phase": "testing", "total": 356, "weightDone": 12.5, "weightTotal": 100.0, "workers": 14}"#,
+            &mut p,
+        );
+        assert_eq!(p.phase, "testing");
+        assert_eq!(p.done, 12);
+        assert_eq!(p.total, Some(356));
+        assert_eq!(p.failed, 1);
+        assert_eq!(p.mode.as_deref(), Some("responsive"));
+        assert_eq!(p.workers, Some(14));
+        assert_eq!(p.measured, Some(false));
+        assert_eq!(p.fraction, Some(0.4321));
+        assert_eq!(p.weight_done, Some(12.5));
+        assert_eq!(p.weight_total, Some(100.0));
+    }
+
+    #[test]
+    fn a_missing_or_malformed_event_never_invents_progress() {
+        let mut p = Progress::default();
+        progress_of(
+            r#"JARVIS-EVENT {"fraction": 0.5, "phase": "testing", "done": 3, "total": 10}"#,
+            &mut p,
+        );
+        let held = p.clone();
+        // Malformed JSON: nothing changes.
+        progress_of("JARVIS-EVENT { this is not json", &mut p);
+        assert_eq!(p, held);
+        // A JSON object with no phase is not an event this build understands.
+        progress_of(r#"JARVIS-EVENT {"fraction": 0.9, "done": 9}"#, &mut p);
+        assert_eq!(p, held);
+        // A fractional over 1 is clamped, never allowed to say 100%-plus.
+        progress_of(
+            r#"JARVIS-EVENT {"fraction": 7.5, "phase": "testing", "done": 10, "total": 10}"#,
+            &mut p,
+        );
+        assert_eq!(p.fraction, Some(1.0));
+        // An event with no ETA keeps the last one the screen was given.
+        p.eta_seconds = Some(42);
+        progress_of(
+            r#"JARVIS-EVENT {"fraction": 0.6, "phase": "testing", "done": 4, "total": 10}"#,
+            &mut p,
+        );
+        assert_eq!(p.eta_seconds, Some(42));
+    }
+
+    #[test]
+    fn a_fallback_event_carries_the_second_pass_label_and_a_zeroed_fraction() {
+        let mut p = Progress::default();
+        progress_of(
+            r#"JARVIS-EVENT {"fallback": true, "fraction": 0.0, "note": "quick check hit a problem - re-running the safe way", "passLabel": "second pass (safe mode)", "phase": "fallback"}"#,
+            &mut p,
+        );
+        assert_eq!(p.phase, "fallback");
+        assert_eq!(p.fraction, Some(0.0));
+        assert_eq!(p.fallback, Some(true));
+        assert_eq!(p.pass_label.as_deref(), Some("second pass (safe mode)"));
+        assert!(p
+            .note
+            .as_deref()
+            .unwrap_or("")
+            .contains("re-running the safe way"));
     }
 }

@@ -773,6 +773,154 @@ select:focus-visible {
   }
 }
 
+/* ── The backend update's pace choice and real progress bar (2026-10-18) ──
+   The bar's width is NOT animated by anything here and is not on a timer:
+   settings.js sets it only from the update tool's own `fraction` events
+   (completed items, then finished suites weighted by their recorded times).
+   The style is a segmented gradient track whose colour follows the phase, which
+   is the "futuristic" half; the numbers are the honest half. */
+.ub-progress {
+  --ub-color: var(--accent);
+  margin: 12px 0 2px;
+}
+
+.ub-progress[data-phase="patching"],
+.ub-progress[data-phase="rehearsing"],
+.ub-progress[data-phase="applying"],
+.ub-progress[data-phase="fallback"] {
+  --ub-color: var(--warn);
+}
+
+.ub-progress[data-phase="verifying"] {
+  --ub-color: var(--accent);
+}
+
+.ub-progress[data-phase="testing"],
+.ub-progress[data-phase="done"] {
+  --ub-color: var(--ok);
+}
+
+.ub-progress[data-tone="bad"] {
+  --ub-color: var(--bad);
+}
+
+.ub-progress-track {
+  position: relative;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  box-shadow: inset 0 0 0 1px rgb(var(--accent-rgb) / 0.18);
+  overflow: hidden;
+}
+
+.ub-progress-fill {
+  position: relative;
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgb(var(--accent-rgb) / 0.55), var(--ub-color));
+  box-shadow: 0 0 10px rgb(var(--accent-rgb) / 0.35);
+  transition: width 320ms var(--ease, ease);
+}
+
+/* The "segments": a fixed overlay, not movement. It is the same on every frame
+   and says nothing about how far along the update is. The highlight is the
+   theme's own `--sheen-rgb` token rather than a literal white, so a light
+   theme draws it dark instead of washing the bar out (and the frontend token
+   check stays at zero unreachable colours). */
+.ub-progress-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgb(var(--sheen-rgb) / 0.16) 0 2px,
+    transparent 2px 10px
+  );
+  pointer-events: none;
+}
+
+.ub-progress-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 6px 0 0;
+  font-size: var(--text-sm);
+}
+
+.ub-progress-count {
+  flex: none;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.ub-progress-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin: 2px 0 0;
+  font-size: var(--text-2xs, var(--text-xs));
+  color: var(--text-muted);
+}
+
+.ub-progress-pass {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.ub-progress[data-fallback="true"] .ub-progress-track {
+  box-shadow: inset 0 0 0 1px var(--warn);
+}
+
+/* The three paces: buttons big enough to read, each with its own ETA line. */
+.ub-modes-row {
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 6px 0 6px;
+}
+
+.ub-mode {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 13rem;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.ub-mode strong {
+  font-size: var(--text-sm);
+}
+
+.ub-mode small {
+  font-size: var(--text-2xs, var(--text-xs));
+  color: var(--text-muted);
+  white-space: normal;
+}
+
+.ub-mode-eta {
+  font-size: var(--text-xs);
+  color: var(--accent-text);
+}
+
+.ub-mode-estimated {
+  color: var(--text-muted);
+}
+
+.ub-mode[data-recommended="true"] {
+  border-color: var(--accent);
+  background: var(--accent-faint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ub-progress-fill {
+    transition: none;
+  }
+}
+
 /* The release notes are published text: arbitrary length, and not ours. A
    disclosure keeps them out of the way of the button. */
 .update-notes {
