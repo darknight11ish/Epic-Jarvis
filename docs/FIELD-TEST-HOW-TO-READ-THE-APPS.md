@@ -136,6 +136,36 @@ readers went there and not into `tools/` (that folder holds the Python checkers 
 
 ## The checklist for next time
 
+**Step 0 - the binary build-SHA gate (mandatory since 2026-10-18, Gemini's
+ruling).** A row is evidence only for the BUILD that ran it. `desktop-latest`
+and the phone's `client-latest` are rolling releases and move several times an
+hour, so a row can be tested against a binary that never contained the feature.
+Before any desktop or phone row, record the live backend's commit, the
+installed desktop version/commit against `desktop-latest`, and the installed
+APK version/commit against `client-latest`; then for the row's own merge commit
+ask whether the installed binary really contains it:
+
+```powershell
+python -B tools/check_field_test_binaries.py --feature-sha <row's merge commit> `
+    --installed-desktop <version in About> --desktop-sha <its build commit> `
+    --installed-apk <version in About> --apk-sha <its build commit> `
+    --backend-url http://127.0.0.1:8765 --backend-sha <live backend commit>
+```
+
+- exit **0 PASS** - every requested installed binary contains the feature; the
+  printed `git merge-base --is-ancestor <feature_sha> <binary_sha>` proved it.
+- exit **3 WAITING_FOR_RELEASE_BUILD** - a newer build is waiting or the release
+  workflow is still building. Write the row as **WAITING_FOR_RELEASE_BUILD**,
+  never UNWIRED or FAIL; install the named build (or wait for the release),
+  then run it.
+- exit **2 REFUSED** - the gate cannot answer honestly (a commit this clone
+  does not hold: `git fetch origin`; the backend needs its HUD token; a bad
+  version). Fix that before running any row.
+- `--github` reads the rolling releases' own version/commit (no token); without
+  it pass `--desktop-latest`/`--apk-latest` and their SHAs. The live backend's
+  API has no commit field, so `--backend-sha` is read from the update log, never
+  guessed.
+
 1. Put real input in front of the app being read - a phone screen the app is showing, a window that is
    not minimised - and drive **one process at a time**.
 2. Read with method 1 on the phone and method 2 on the desktop. Read, do not guess.
