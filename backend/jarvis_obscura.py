@@ -430,8 +430,10 @@ def _taskkill(pid: int) -> bool:
     suite that hangs to its ceiling with one failure, "stop kills it", and
     nothing else wrong. Split out so a test can hand back a refusal without
     needing one."""
+    import jarvis_child_env
     r = subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
-                       capture_output=True, timeout=10)
+                       capture_output=True, timeout=10,
+                       env=jarvis_child_env.inherited())
     return r.returncode == 0
 
 

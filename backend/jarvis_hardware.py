@@ -326,8 +326,9 @@ def _reg_query() -> Optional[str]:
     if not exe:
         return None
     try:
+        import jarvis_child_env
         out = subprocess.run([exe, "query", CLASS_KEY, "/s"], capture_output=True, text=True,
-                             timeout=10)
+                             timeout=10, env=jarvis_child_env.inherited())
     except Exception:
         return None
     return out.stdout if out.returncode == 0 else None

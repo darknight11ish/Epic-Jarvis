@@ -720,8 +720,10 @@ class Vram:
         if not exe:
             return None
         try:
+            import jarvis_child_env
             r = subprocess.run([exe, "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
-                               capture_output=True, text=True, timeout=10)
+                               capture_output=True, text=True, timeout=10,
+                               env=jarvis_child_env.inherited())
         except (OSError, subprocess.SubprocessError):
             return None
         if r.returncode != 0:

@@ -393,6 +393,7 @@ def resolve(token_file, *, store=None, environ=None,
             notes.append(f"{token_file} is still plain text, because {broken}.")
             notes.append("It was left in place so the phone stays paired.")
         else:
+            was = stored
             try:
                 if stored != old:
                     store.write(old)
@@ -402,13 +403,23 @@ def resolve(token_file, *, store=None, environ=None,
             if back == old:
                 stored = old
                 gone = _remove(token_file)
+                if was is not None and was != old:
+                    # 2026-10-18 (audit F3): a disagreeing file is NOT silently
+                    # authoritative. Credential Manager's copy is replaced by the
+                    # file's (that is what the phone was last paired with), so
+                    # say so on the banner instead of only "moved out".
+                    notes.append(f"{token_file} held a DIFFERENT token from Credential "
+                                 "Manager; the file's token was the one the phone was last "
+                                 "paired with, so it REPLACED Credential Manager's copy.")
                 notes.append(f"moved out of the plain-text file {token_file}" +
-                             (f" - but {gone}; delete it by hand." if gone else ", which was deleted."))
+                             (f" - but {gone}; delete it by hand." if gone
+                              else ", which was deleted."))
             else:
                 kept_old = True
                 why = broken or "the copy read back from Credential Manager did not match"
                 notes.append(f"{token_file} is still plain text, because {why}.")
-                notes.append("It was left in place so the phone stays paired.")
+                notes.append("It was left in place so the phone stays paired, but must be")
+                notes.append("deleted by hand once Credential Manager works.")
 
     # 2. The environment wins.
     from_env = env.get("HUD_TOKEN", "").strip()
