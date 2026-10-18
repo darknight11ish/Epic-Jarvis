@@ -14,16 +14,26 @@ ONE source for:
     DecksTest.kt and QuizTest.kt);
   * the words that come from the PC itself, taken from the backend modules, not
     typed again: the "Answer key written by the model" label, the Spanish crisis
-    notice, the four ratings;
+    notice, the four ratings, and (slice 22B, 2026-10-17) the four sentences the
+    deterministic grader puts on a typed answer;
   * worked examples of the small rules (how a day, a card count and the "next
     cards ready" line are said; which deck rows may start a review; whether the
     "why per-deck counts can add up to more" note shows) that both apps run;
-  * sample replies of the frozen shapes (C2 and C4).
+  * sample replies of the frozen shapes (C2 and C4), plus slice 22B's two
+    additive fields: the "radar" rows under the deck list and the "grade" a
+    reveal answers with when a typed answer is sent.
+
+Slice 22B adds fields only - no route, no changed key: the phone draws the
+radar and a "Mark my answer" button; the desktop's net layer reads both shapes
+(src/decks.js readRadar/readGrade) and its review screen does not draw them yet
+(docs/ARCHITECTURE.md section 8, "One-sided on purpose"). The backend suits
+these samples: backend/test_decks.py proves the radar sentences are
+_radar_words()'s and the graded reveal is grade_spoken_answer()'s own answer.
 
 This file replaced the hand-written tests/fixtures/decks-words.json (2026-09-30,
 the decks audit): the phone's tests used to assert the same words by hand, so
 the two apps could drift without a test noticing. Every key of that file is
-kept here.
+kept here. Keys are only ever added.
 """
 import ast
 import json
@@ -54,8 +64,10 @@ COPIES = (DESKTOP, PHONE)
 
 ABOUT = ("The shared words of Review decks and Spanish practice (docs/QUIZ-DECKS-DESIGN.md, "
          "Slice contract C5), word for word, plus worked examples of the small rules and the "
-         "frozen reply shapes of C2 and C4. Written by tools/gen_decks_cases.py: both apps' "
-         "tests (src/decks.js, src/quiz.js, Decks.kt, Quiz.kt) read this file.")
+         "frozen reply shapes of C2 and C4 - and slice 22B's two additive fields: the "
+         "\"radar\" rows under the deck list and the \"grade\" a reveal answers a typed "
+         "answer with. Written by tools/gen_decks_cases.py: both apps' tests (src/decks.js, "
+         "src/quiz.js, Decks.kt, Quiz.kt) read this file.")
 
 #: The one sentence the apps say when the local model did not answer (the
 #: backend's own class says the same thing with "in a way Jarvis could use").
@@ -147,6 +159,8 @@ WORDS.update({
 PC_WORDS = {
     "key_label_model": _const("jarvis_decks.py", "KEY_LABEL"),
     "spanish_notice": _const("jarvis_quiz.py", "SPANISH_NOTICE"),
+    # slice 22B: the four sentences grade_spoken_answer() can answer with
+    "grade_words": _const("jarvis_decks.py", "GRADE_WORDS"),
 }
 
 WORDS["key_label_model"] = PC_WORDS["key_label_model"]   # one source: the backend's own label
@@ -237,7 +251,18 @@ SAMPLES = {'decks': {'ok': True,
                       'name': 60,
                       'front': 500,
                       'back': 2000,
-                      'new_per_day': 20}},
+                      'new_per_day': 20},
+           # slice 22B: the fading-deck radar rows an additive key of the same reply
+           'radar': [{'topic': 'Plants',
+                      'cards': 6,
+                      'below': 2,
+                      'lowest': 0.52,
+                      'words': '2 cards in Plants have dropped below 75% memory strength'},
+                     {'topic': 'Verbos',
+                      'cards': 4,
+                      'below': 1,
+                      'lowest': 0.71,
+                      'words': '1 card in Verbos has dropped below 75% memory strength'}]},
  'decks_unavailable': {'ok': True,
                        'available': False,
                        'why': 'Decks are not set up on this PC: no key in Credential Manager.',
@@ -247,6 +272,7 @@ SAMPLES = {'decks': {'ok': True,
                        'new_left': 2,
                        'next_ready_day': None,
                        'line': '2 cards ready',
+                       'radar': [],
                        'limits': {'decks': 20,
                                   'cards': 1000,
                                   'name': 60,
@@ -280,6 +306,15 @@ SAMPLES = {'decks': {'ok': True,
  'reveal': {'ok': True,
             'back': {'answer': 'Chlorophyll', 'passage': 'Chlorophyll absorbs sunlight.'},
             'key_label': None},
+ # slice 22B: the same reveal when a typed answer was sent - one additive "grade"
+ 'graded_reveal': {'ok': True,
+                   'back': {'answer': 'Chlorophyll',
+                            'passage': 'Chlorophyll absorbs sunlight.'},
+                   'key_label': None,
+                   'grade': {'rating': 3,
+                             'label': 'Good',
+                             'matched': True,
+                             'words': PC_WORDS['grade_words']['Good']}},
  'rate': {'ok': True,
           'ready': 2,
           'new_left': 1,

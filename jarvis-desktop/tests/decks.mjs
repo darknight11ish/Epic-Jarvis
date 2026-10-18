@@ -224,8 +224,31 @@ await check("the deck list is read with its counts and line; unavailable keeps i
   assert.equal(D.readDecks(null), null);
 });
 
-await check("a day is shown as the PC gave it, only formatted", async () => {
-  assert.equal(D.formatDay("2026-10-03"), "3 Oct 2026");
+await check("slice 22B: the radar rows and a graded reveal are read; an old reply still reads", async () => {
+  const v = D.readDecks(FIX.samples.decks);
+  assert.equal(v.radar.length, FIX.samples.decks.radar.length);
+  assert.deepEqual(v.radar[0], {
+    topic: "Plants", cards: 6, below: 2, lowest: 0.52,
+    words: "2 cards in Plants have dropped below 75% memory strength",
+  });
+  assert.equal(v.radar[1].words, FIX.samples.decks.radar[1].words);
+  // An older PC that never sent a radar: an empty list, never a crash.
+  assert.deepEqual(D.readDecks({ ...FIX.samples.decks, radar: undefined }).radar, []);
+  assert.deepEqual(D.readDecks({ ...FIX.samples.decks, radar: "x" }).radar, []);
+  // The shape is guarded: no topic, no row; a bad lowest is clamped into 0..1.
+  assert.deepEqual(D.readRadar([{ topic: "", words: "x" }, 5, { topic: "T", lowest: 7, cards: -1 }]),
+    [{ topic: "T", cards: 0, below: 0, lowest: 1, words: "" }]);
+  const g = D.readReveal(FIX.samples.graded_reveal);
+  assert.equal(g.answer, "Chlorophyll");
+  assert.deepEqual(g.grade, FIX.samples.graded_reveal.grade);
+  assert.equal(g.grade.words, FIX.pc_words.grade_words.Good);
+  // An old reply carries no grade; an unknown label is not a grade.
+  assert.equal(D.readReveal(FIX.samples.reveal).grade, null);
+  assert.equal(D.readGrade({ rating: 3, label: "Easy", matched: true, words: "x" }), null);
+  assert.equal(D.readGrade({ rating: 3, label: "Good" }).matched, false);
+});
+
+await check("a day is shown as the PC gave it, only formatted", async () => {  assert.equal(D.formatDay("2026-10-03"), "3 Oct 2026");
   assert.equal(D.nextReadyLine("2026-10-03"), "Next cards ready on 3 Oct 2026");
   assert.equal(D.nextReadyLine(null), "");
   assert.equal(D.formatDay("nonsense"), "nonsense");

@@ -907,11 +907,12 @@ def t_hide_lists_shapes():
     v = w.d.create_deck("Secret deck name")
     w.d.keep({"deck": v["id"]}, mkcards(2, "Hidden"))
     ls = w.d.list_decks()
-    words_in = json.dumps({k: v2 for k, v2 in ls.items() if k != "decks"})
-    check("the deck list's only owner-word field is each deck's `name`; every count is a number",
+    words_in = json.dumps({k: v2 for k, v2 in ls.items() if k not in ("decks", "radar")})
+    check("the deck list's owner-word fields are each deck's `name` and the radar rows' own "
+          "topic/words; every count elsewhere is a number",
           set(ls["decks"][0]) == {"id", "name", "cards", "ready", "paused", "kind"}
           and isinstance(ls["decks"][0]["cards"], int) and isinstance(ls["decks"][0]["ready"], int)
-          and "Secret" not in words_in and "Hidden" not in words_in)
+          and "Secret" not in words_in and "Hidden" not in words_in and ls["radar"] == [])
     st = w.d.review_state()
     rest = json.dumps({k: v2 for k, v2 in st.items() if k != "card"})
     check("the review answer's only owner-word field is card.front; the line and counts carry no words",
@@ -920,6 +921,14 @@ def t_hide_lists_shapes():
     rv = w.d.reveal(st["card"]["id"])
     check("reveal: the words are back.answer and back.passage only", set(rv) == {"ok", "back", "key_label"}
           and set(rv["back"]) == {"answer", "passage"})
+    w.d.rate(st["card"]["id"], "good")
+    w.clock.t += 60 * DAY
+    radar = w.d.list_decks()["radar"]
+    check("the radar is the list's only other owner-word place: its topic is the deck's name and "
+          "its counts are numbers",
+          len(radar) == 1 and radar[0]["topic"] == "Secret deck name"
+          and isinstance(radar[0]["cards"], int) and isinstance(radar[0]["below"], int)
+          and isinstance(radar[0]["lowest"], float), radar)
     cs = w.d.deck_cards(v["id"])
     check("the card list: front, back and passage are the owner-word fields",
           set(cs["cards"][0]) == {"id", "front", "back", "passage", "kind", "level", "key_source", "key_label", "new", "due_day"}
@@ -1514,12 +1523,132 @@ def t_a_voice_grade_leaves_an_undoable_receipt():
         R._reset_for_tests()
 
 
+def t_the_radar_and_the_graded_answer_reach_the_apps():
+    """Slice 22B (2026-10-17): the two ADDITIVE fields that let a phone use the
+    22A code without a new route - GET /api/decks carries the radar rows, and
+    POST /api/review/reveal takes a typed answer and answers with the grader's
+    own mark. No route is added, and every reply an old app knows is unchanged."""
+    check("a store with no decks has no radar rows to show", World().d.radar() == [])
+    w = World()
+    v = w.d.create_deck("Fading")["id"]
+    w.d.set_new_per_day(20)
+    w.d.keep({"deck": v}, mkcards(2))
+    fresh = w.d.list_decks()
+    check("a deck whose cards were never rated has an empty radar (no memory to predict)",
+          fresh["radar"] == [] and fresh["decks"][0]["name"] == "Fading", fresh.get("radar"))
+    check("... and the keys an old app reads are exactly where they were",
+          fresh["decks"][0]["kind"] == "study" and fresh["line"] == "2 cards ready",
+          json.dumps(fresh["decks"]))
+    cid = w.d.review_state(v)["card"]["id"]
+    w.d.reveal(cid)
+    w.d.rate(cid, "good", v)
+    w.clock.t += 60 * DAY
+    radar = w.d.radar()
+    check("a card rated 60 days ago fades into the radar: one row for its deck",
+          len(radar) == 1 and radar[0]["topic"] == "Fading" and radar[0]["below"] == 1,
+          radar)
+    check("... counting only the reviewed card (the new one has no memory to predict)",
+          radar[0]["cards"] == 1, radar[0])
+    check("... with the PC's own plain sentence and the 75% line",
+          radar[0]["words"] == "1 card in Fading has dropped below 75% memory strength",
+          radar[0]["words"])
+    sched = _db_schedule(w.d, cid)
+    want = D.retrievability({"stability": sched["stability"],
+                             "last_review": sched["last_review"]}, now=w.clock.t)
+    check("... carrying py-fsrs's own number for the weakest card",
+          abs(radar[0]["lowest"] - want) < 1e-12, (radar[0]["lowest"], want))
+    check("the radar rows are low_retrievability_topics()'s own shapes",
+          set(radar[0]) == {"topic", "cards", "below", "lowest", "words"}, radar[0])
+    H = make_handler()
+    code, out = call(H, "GET", "/api/decks")
+    check("GET /api/decks through install() carries the same radar rows",
+          code == 200 and out["radar"] == radar, out.get("radar"))
+    # The typed answer: the reply keeps its old shape and adds one "grade" key.
+    back = w.d.reveal(cid)
+    check("reveal with no answer is exactly the reply it always was",
+          set(back) == {"ok", "back", "key_label"}, sorted(back))
+    before = _db_schedule(w.d, cid)
+    graded = w.d.reveal(cid, "q0 answer")
+    check("reveal with the card's own answer grades it in the same reply",
+          graded["grade"]["label"] == "Good" and graded["grade"]["matched"] is True
+          and graded["grade"]["rating"] == 3, graded.get("grade"))
+    check("... using the PC's own sentence (no app prints a copy)",
+          graded["grade"]["words"] == D.GRADE_WORDS["Good"], graded["grade"]["words"])
+    check("... and the back is still there, so the app can show what the answer was",
+          graded["back"]["answer"] == "Q0 answer", graded["back"])
+    check("a graded reveal changed no schedule: the owner's rating is still the only write",
+          _db_schedule(w.d, cid) == before)
+    wrong = w.d.reveal(cid, "I like turtles")
+    check("a wrong typed answer is Again and not matched",
+          wrong["grade"]["label"] == "Again" and wrong["grade"]["matched"] is False,
+          wrong["grade"])
+    partial = w.d.reveal(cid, "answer")
+    check("a partly right typed answer is Hard and still matched",
+          partial["grade"]["label"] == "Hard" and partial["grade"]["matched"] is True,
+          partial.get("grade"))
+    for blank in (None, "", "   ", 5, {"a": 1}):
+        got = w.d.reveal(cid, blank)
+        check(f"a reveal with answer={blank!r} adds no grade and still shows the back",
+              "grade" not in got and got["back"]["answer"] == "Q0 answer", got)
+    code, out = call(H, "POST", "/api/review/reveal",
+                     {"card": cid, "answer": "Q0 answer"})
+    check("POST /api/review/reveal through install() marks the typed answer",
+          code == 200 and out["grade"]["label"] == "Good", out.get("grade"))
+    code, out = call(H, "POST", "/api/review/reveal", {"card": cid})
+    check("... and with no answer sends the old reply (the extra key never appears)",
+          code == 200 and "grade" not in out and set(out["back"]) == {"answer", "passage"}, out)
+    rated = w.d.rate(cid, "good", v)
+    check("the graded reply's rating can be sent as the owner's own tap",
+          rated["ok"] is True and rated["run"]["done"] == 1, rated.get("run"))
+    check("with the card just rated, it is not fading any more: the radar is empty again",
+          w.d.radar() == [])
+    w.d.deck_act(v, "pause")
+    w.clock.t += 3 * 365 * DAY
+    check("a paused deck rests rather than fading: the radar leaves it out",
+          w.d.radar() == [])
+    w.d.deck_act(v, "resume")
+    check("... and resuming it brings its fading cards back",
+          len(w.d.radar()) == 1 and w.d.radar()[0]["topic"] == "Fading")
+    check("no word of the typed path says voice, spoken or microphone",
+          not [word for word in ("voice", "spoken", "microphone", "speech")
+               if word in json.dumps(D.GRADE_WORDS).lower()])
+
+
 def t_wording_and_the_shared_fixture():
     import subprocess
     r = subprocess.run([sys.executable, str(HERE.parent / "tools" / "gen_decks_cases.py"), "--check"],
                        capture_output=True, text=True)
     check("tools/gen_decks_cases.py --check: both apps' decks-cases.json are current "
           "(python3 tools/gen_decks_cases.py)", r.returncode == 0, r.stdout + r.stderr)
+    # Slice 22B: the fixture's new shared shapes are the PC's own, not a copy -
+    # the radar rows' sentences are _radar_words()'s and the graded reveal is
+    # grade_spoken_answer()'s actual answer, so a backend change cannot drift
+    # away from the file both apps' tests read.
+    fixture = json.loads((HERE.parent / "jarvis-desktop" / "tests" / "fixtures"
+                          / "decks-cases.json").read_text(encoding="utf-8"))
+    sample = fixture["samples"]["decks"]
+    check("the fixture's deck sample carries the radar rows GET /api/decks answers",
+          isinstance(sample.get("radar"), list) and sample["radar"]
+          and all(set(row) == {"topic", "cards", "below", "lowest", "words"}
+                  for row in sample["radar"]), sample.get("radar"))
+    check("... every row's sentence is _radar_words()'s own wording, with the 75% line",
+          all(row["words"] == D._radar_words(row["topic"], row["below"], D.LOW_RETRIEVABILITY)
+              for row in sample["radar"]), sample.get("radar"))
+    check("... and each lowest strength is a real number from 0 to 1",
+          all(isinstance(row["lowest"], (int, float)) and 0.0 <= row["lowest"] <= 1.0
+              for row in sample["radar"]))
+    graded = fixture["samples"]["graded_reveal"]
+    check("the fixture's graded reveal is grade_spoken_answer()'s actual mark for its answer",
+          graded["grade"] == D.grade_spoken_answer(graded["back"]["answer"],
+                                                   graded["back"]["answer"]),
+          (graded["grade"], D.grade_spoken_answer(graded["back"]["answer"],
+                                                  graded["back"]["answer"])))
+    check("the fixture's PC grade words are the module's own GRADE_WORDS",
+          fixture["pc_words"]["grade_words"] == D.GRADE_WORDS,
+          fixture["pc_words"].get("grade_words"))
+    check("... and neither says voice, spoken, microphone or speech (this path is typed)",
+          not [word for word in ("voice", "spoken", "microphone", "speech")
+               if word in json.dumps(fixture["pc_words"]["grade_words"]).lower()])
     msg = Q.CLASSES["model_unavailable"][1]
     check("the model-unavailable sentence says 'Nothing was changed' and not 'lost'",
           "Nothing was changed" in msg and "lost" not in msg.lower(), msg)

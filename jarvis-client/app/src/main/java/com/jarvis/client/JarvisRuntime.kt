@@ -6716,11 +6716,25 @@ object JarvisRuntime {
     suspend fun reviewStart(deck: String?): com.jarvis.client.net.Decks.Outcome<com.jarvis.client.net.Decks.Review> =
         decksRead(com.jarvis.client.net.Decks.reviewPath(deck), "Not read.", com.jarvis.client.net.Decks::reviewSaid)
 
-    /** `POST /api/review/reveal`: show the back. Required before a rating. */
-    suspend fun reviewReveal(card: String): com.jarvis.client.net.Decks.Outcome<com.jarvis.client.net.Decks.Reveal> =
+    /**
+     * `POST /api/review/reveal`: show the back. Required before a rating.
+     *
+     * [answer] is the owner's typed attempt when they tapped "Mark my answer"
+     * (slice 22B): the PC marks it with its own deterministic grader in the
+     * same reply ([Reveal.grade]). Null sends none, exactly as before - the
+     * text is never sent any other way, and the phone never listens.
+     */
+    suspend fun reviewReveal(
+        card: String,
+        answer: String? = null,
+    ): com.jarvis.client.net.Decks.Outcome<com.jarvis.client.net.Decks.Reveal> =
         decksWrite(
             "/api/review/reveal",
-            if (com.jarvis.client.net.Decks.validId(card)) com.jarvis.client.net.Decks.revealBody(card) else null,
+            if (com.jarvis.client.net.Decks.validId(card)) {
+                com.jarvis.client.net.Decks.revealBody(card, answer)
+            } else {
+                null
+            },
             "Not shown.",
             com.jarvis.client.net.Decks::revealSaid,
         )

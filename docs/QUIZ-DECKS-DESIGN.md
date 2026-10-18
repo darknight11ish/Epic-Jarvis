@@ -711,3 +711,32 @@ locked backup since 2026-09-30); a Spanish crisis-phrase list
 `grader_verified` (nothing has measured the model's Spanish); cloud "grade this better"; spoken Spanish;
 YouTube captions; notifications for cards (the owner's question 3, default "never"); a model suggesting a
 rating.
+
+### C8. Slice 22B: two additive fields, no new route (2026-10-17)
+
+Appended by the backend builder for Pillar 22 Slice 22B (the phone surface for slice 22A's
+`grade_spoken_answer()` and `low_retrievability_topics()`). **Nothing above changes**: no route is added,
+no key is renamed, and an app that sends and reads only C1-C7 gets exactly the replies it always got.
+
+- **`GET /api/decks` gains `radar`** (an extra key, `[]` when nothing is fading): one row per deck whose
+  reviewed cards have dropped below py-fsrs's 75% memory-strength line, weakest first -
+  `{"topic": <the deck's name>, "cards": <reviewed cards>, "below": <cards under the line>,
+  "lowest": 0.0-1.0, "words": <the PC's own sentence, e.g. "1 card in Plants has dropped below 75%
+  memory strength">}`. A paused deck is left out (resting, not fading); the numbers are py-fsrs's own.
+  The rows are the owner's words (a deck name), so **an app withholds the radar under "Hide memory lists
+  and chat history"** exactly as it withholds the deck list; the counts elsewhere and `line` still work.
+- **`POST /api/review/reveal` takes an optional `answer`** (a typed answer) and, when it is a non-blank
+  string, the reply gains **`grade`**: `{"rating": 1-3, "label": "Good"|"Hard"|"Again", "matched": bool,
+  "words": <the PC's own sentence>}` - `grade_spoken_answer()`'s own mark of that text against the card's
+  back. It applies **no rating** and changes no schedule: the owner still sends one of the four rating ids
+  with `/api/review/rate`. The four sentences are `GRADE_WORDS` in `backend/jarvis_decks.py`; an app never
+  copies them.
+- **The phone's typed box is therefore worded differently from the desktop's.** The phone can send what
+  was typed on one tap ("Mark my answer"), so its placeholder says the answer stays on the device unless
+  the owner asks the PC to mark it; the desktop's box is unchanged and still sends nothing (a one-sided
+  UI in this slice - `docs/ARCHITECTURE.md` §8, "One-sided on purpose"). Both apps' net layers read the
+  two new shapes from the one fixture (`tools/gen_decks_cases.py`; `samples.decks.radar`,
+  `samples.graded_reveal`, `pc_words.grade_words`).
+- **No microphone and no speech-to-text on a client** (`CLAUDE.md`): the grader is used on a TYPED answer.
+  Slice 22A's `record_voice_review()` and its reversible receipt are still not reachable - a later slice
+  that records a clip and has the PC transcribe it is where they become real.
