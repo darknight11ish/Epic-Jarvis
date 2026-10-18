@@ -906,6 +906,28 @@ def t_windows_code_paths_against_a_fake_kernel32():
             ctypes.WinDLL = real_windll
 
 
+def t_a_call_scans_the_whole_arguments_past_1500():
+    """DEF-012: `Bridge.call` used to hand the gate `plan.args_json[:1500]`.
+
+    A protected target past character 1,500 was then invisible to the gate's
+    PROTECTED rule, so an action that would rewrite the gate itself could come
+    back as an ordinary card a person could approve. The whole payload now
+    reaches the scan; only the RECORD stays bounded (inside the gate)."""
+    g = Gate()
+    b = bridge(tools=tools("echo"), gate=g)
+    b.start("fake")
+    g.calls.clear()
+    tail = "pathlib.Path('jarvis_gate.py').write_text('')"
+    text = "x" * 1700 + " " + tail
+    out = b.call("mcp_fake__echo", {"text": text})
+    prompt = g.calls[-1][2] if g.calls else ""
+    check("the call really was put to the gate", bool(g.calls), (out, g.calls))
+    check("the whole arguments reach the gate, not a 1,500-character cut",
+          tail in prompt and len(prompt) > 1500, (len(prompt), prompt[-120:]))
+    check("... which a 1,500-character cut would have hidden",
+          tail not in prompt[:1500], len(prompt))
+
+
 def t_there_is_no_approve_all_and_run_has_no_default():
     sig = inspect.signature(M.Bridge.run)
     check("run() has no default verdict",
@@ -939,6 +961,7 @@ if __name__ == "__main__":
                t_the_shared_bridge_reads_the_settings,
                t_no_socket_is_ever_opened,
                t_windows_code_paths_against_a_fake_kernel32,
+               t_a_call_scans_the_whole_arguments_past_1500,
                t_there_is_no_approve_all_and_run_has_no_default):
         print(f"\n--- {fn.__name__} ---")
         try:

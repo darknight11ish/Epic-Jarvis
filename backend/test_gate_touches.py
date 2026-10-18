@@ -756,12 +756,71 @@ def t_the_change_is_in_the_repositorys_own_copy_of_the_gate():
           and source.index("_PROSE_KEYS = (") < source.index("def _target_blobs("))
     check("... and the old two-blob call is gone",
           "_touches_protected(prompt, detail)" not in source)
-    # The patch removes exactly the line the published copy no longer has.
+    # The DEF-012 whole-argument prompt and the I6 memory latch are proved by
+    # BEHAVIOUR against this same published gate, in
+    # t_the_whole_arguments_are_read_and_a_failed_latch_still_holds below -
+    # no second source-text pin, so this suite stays inside its ratchet.
+    # The patch removes the old lines the published copy no longer has, and adds
+    # the two replacements (DEF-012 and I6). More than one removal is expected
+    # since 2026-10-18: the gate-tool prompt and the latch's fail-open return
+    # are bounded-argument/plain-error lines of this same patch's own subject.
     body = PATCH.read_text(encoding="utf-8")
     removed = [l[1:] for l in body.splitlines()
                if l.startswith("-") and not l.startswith("---")]
-    check("it removes exactly one line, the old call",
-          removed == ["    hit = _touches_protected(prompt, detail)"], removed)
+    check("it still removes the old two-blob call",
+          "    hit = _touches_protected(prompt, detail)" in removed, removed[-6:])
+    old_gate_tool = [l for l in removed
+                     if l.startswith("    v = check(action, detail, prompt=f\"tool {name} ")
+                     and "detail['args']" in l]
+    check("... and replaces gate_tool's 1500-cut prompt with the whole arguments "
+          "(DEF-012)",
+          bool(old_gate_tool)
+          and '+    v = check(action, detail, prompt=f"tool {name} {raw_args}")' in body
+          and "+        _latch_in_memory(seconds, why)" in body, removed[-6:])
+
+
+def t_the_whole_arguments_are_read_and_a_failed_latch_still_holds():
+    """DEF-012 and I6, against the published gate itself.
+
+    DEF-012: `gate_tool` used to hand the gate `detail["args"]` cut at 1,500
+    characters as the prompt too, so a protected target past that point was
+    never scanned and the action came back as an ordinary card. The whole
+    arguments now reach the scan; the stored copy stays bounded inside check().
+    I6: `latch_taint` used to `return False` when its own database write raised,
+    i.e. it created NO latch for a private read. It now keeps a process-local
+    latch, and taint_active() reads it.
+    """
+    args = {"command": "x" * 1600 + " ; python -c \"import pathlib; "
+                                       "pathlib.Path('jarvis_gate.py').write_text('')\""}
+    full = json.dumps(args)
+    check("the protected write really is beyond character 1500 of the arguments",
+          len(full) > 1500 and full.index("jarvis_gate.py") > 1500,
+          f"args={len(full)} at={full.index('jarvis_gate.py')}")
+    refused = G.gate_tool("run_shell_on_host", args)
+    check("gate_tool REFUSES the protected target past 1500, naming it",
+          isinstance(refused, str) and "no tool may modify" in refused
+          and "jarvis_gate.py" in refused, refused)
+    check("... and NO row reached the queue, so there is nothing to approve",
+          not [r for r in _pending_rows() if r.get("action") == "run_shell_on_host"])
+
+    # I6: a latch that cannot be written is still a latch, in memory.
+    real_connect = G._connect
+
+    def gone():
+        raise RuntimeError("the latch database has gone away")
+
+    try:
+        G.clear_taint()
+        G._connect = gone
+        check("latch_taint returns True when its own write fails (fail closed)",
+              G.latch_taint(minutes=1, why="audit-i6") is True)
+        check("... and taint_active() still answers private",
+              G.taint_active() is True)
+    finally:
+        G._connect = real_connect
+        G.clear_taint()
+    check("... and clearing it releases the memory latch too",
+          G.taint_active() is False)
 
 
 def t_no_other_patch_already_rewrites_that_call():
