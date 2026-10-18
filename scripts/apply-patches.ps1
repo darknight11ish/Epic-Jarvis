@@ -1954,6 +1954,17 @@ $SHIPPED = @(
 # 250 MB and never removes a pinned one; refuses a link or a path outside the
 # allowed folders. No route, no chat tool and no caller yet.
 'jarvis_file_guardian.py'
+# --- A red-team / pre-mortem decision simulator, on this PC only (2026-10-17) ---
+# Takes a one-sentence decision and returns a 1-3-1 decision brief (checked by
+# jarvis_card_words), counter-arguments, failure modes with a closed-world
+# likelihood and impact, and one plain-English recommendation sentence. The
+# deterministic mode asks no model; the one-pass mode asks the LOCAL model
+# exactly once and refuses a reply that breaks any rule. Figures are whole
+# cents read-only from jarvis_spending and jarvis_retirement, open goals from
+# jarvis_goals; reading any of them latches jarvis_gate.latch_taint. Nothing is
+# written, no route is opened, there is no cloud lane, and it is deliberately
+# unwired: no route, no chat tool, no approval card, no UI in either app.
+'jarvis_decision_lab.py'     # Red-team and pre-mortem: 1-3-1 brief, failure modes, local only
 )
 
 # The settings file. Installed only where none exists; never overwritten.

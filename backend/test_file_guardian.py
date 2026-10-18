@@ -902,9 +902,13 @@ def t_a_missing_receipt_store_does_not_stop_the_copy():
 def t_the_module_is_registered_in_the_shipped_lists():
     check("the module is in _where.SHIPPED", "jarvis_file_guardian.py" in _where.SHIPPED,
           _where.SHIPPED[-3:])
-    check("... at the END of _where.SHIPPED (a new entry goes at the end)",
-          _where.SHIPPED and _where.SHIPPED[-1] == "jarvis_file_guardian.py",
-          _where.SHIPPED[-1])
+    shipped = list(_where.SHIPPED)
+    check("... appended after the earlier Pillar 15 entry (nothing was inserted before it)",
+          "jarvis_sandbox_exec.py" in shipped
+          and "jarvis_file_guardian.py" in shipped
+          and shipped.index("jarvis_file_guardian.py")
+          > shipped.index("jarvis_sandbox_exec.py"),
+          shipped[-3:])
     twin = REPO / "jarvis-backend" / "jarvis_file_guardian.py"
     check("the base's twin exists", twin.is_file(), str(twin))
     ours = HERE / "jarvis_file_guardian.py"
