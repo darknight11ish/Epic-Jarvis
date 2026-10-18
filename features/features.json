@@ -33,7 +33,9 @@
     "asks": "No card. What you said is checked as your voice on the PC first.",
     "limit": "The phone needs your voice trained, and the PC able to turn speech into words.",
     "surface": "both",
-    "covers": []
+    "covers": [
+      "phone-talking"
+    ]
   },
   {
     "id": "wake-word",
@@ -1223,7 +1225,8 @@
     "surface": "phone",
     "surface_reason": "It is the phone page's own honest list of what this phone will not do, so the two apps cannot disagree; there is nothing on the desktop for it to describe (this entry's own what).",
     "covers": [
-      "phone-limits"
+      "phone-limits",
+      "phone-stays-on-pc"
     ]
   },
   {

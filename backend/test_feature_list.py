@@ -128,6 +128,55 @@ def t_every_copy_is_the_same_file():
           C.source_bytes() == (REPO / "features" / "features.json").read_bytes())
 
 
+def t_every_lesson_is_claimed_by_a_feature_row():
+    """Rule 6's reverse half: a lesson with no feature row is an orphan.
+
+    The hole (Gemini's Part II ruling on Session B section 11.3): every other
+    direction was checked - a feature the code has but the list omits, a
+    `covers` id the code lost, a feature row with no lesson - but a feature ROW
+    could vanish while its lesson stayed in the catalogue, and the checker
+    printed that as information instead of a failure. These prove it fails now,
+    naming the lesson, and that the two honest fixes both pass: name it from the
+    row that teaches it, or record why it is deliberately not a feature."""
+    lessons = C.lesson_ids()
+    real = C.entries()
+    check("CONTROL: every lesson in the catalogue is named by a feature row",
+          C.lesson_problems(real) == [], C.lesson_problems(real))
+
+    # The bite this rule exists for: the clipboard-time-machine row is removed
+    # while its lesson stays in jarvis_tutorials.py.
+    orphaned = [e for e in real if e.get("id") != "clipboard-time-machine"]
+    problems = C.lesson_problems(orphaned)
+    check("a feature row removed while its lesson remains is reported, by lesson name",
+          len(problems) == 1 and "clipboard-time-machine" in problems[0]
+          and "no feature row" in problems[0], problems)
+    check("  ...and the line names both honest fixes (a row, or an exemption)",
+          bool(problems) and "covers" in problems[0]
+          and "LESSON_UNCOVERED" in problems[0], problems)
+
+    # The other honest answer: an explicit exemption with its reason.
+    exempted = C.lesson_problems(
+        orphaned, lessons=lessons,
+        exempt={"clipboard-time-machine": "the row was removed for this test"})
+    check("...and an explicit exemption with a reason makes it pass",
+          exempted == [], exempted)
+
+    # The exemption list empties itself rather than becoming a hiding place.
+    stale = C.lesson_problems(real, exempt={"clipboard-time-machine": "why"})
+    check("an exemption for a lesson a row names again FAILS (delete it)",
+          len(stale) == 1 and "delete the exemption" in stale[0], stale)
+    unknown = C.lesson_problems(
+        real, exempt={"a-lesson-that-was-deleted": "why"})
+    check("an exemption for a lesson that no longer exists FAILS",
+          len(unknown) == 1 and "not a lesson in jarvis_tutorials.py" in unknown[0],
+          unknown)
+    empty = C.lesson_problems(
+        orphaned, lessons=lessons,
+        exempt={"clipboard-time-machine": "   "})
+    check("an exemption with no reason FAILS",
+          any("has no reason" in b for b in empty), empty)
+
+
 def t_a_one_sided_claim_carries_its_reason():
     """Rule 5, and the reason it covers one direction only.
 
@@ -178,6 +227,7 @@ if __name__ == "__main__":
     for fn in (t_the_list_is_complete_and_true,
                t_the_check_is_sensitive_both_directions,
                t_every_copy_is_the_same_file,
+               t_every_lesson_is_claimed_by_a_feature_row,
                t_a_one_sided_claim_carries_its_reason):
         print(f"\n--- {fn.__name__} ---")
         try:
