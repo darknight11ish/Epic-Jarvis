@@ -1017,6 +1017,20 @@ SHIPPED = (
     # caller yet: this is the module and its suite, and wiring it in is a
     # later, separately-approved slice. Nothing it does leaves this PC.
     "jarvis_file_guardian.py",
+    # A red-team / pre-mortem decision simulator, on this PC only (2026-10-17,
+    # Pillar 21): takes one-sentence decision and returns a 1-3-1 decision
+    # brief checked by jarvis_card_words, counter-arguments, failure modes with
+    # a closed-world likelihood/impact (and a deterministic score), and one
+    # plain-English recommendation sentence. Deterministic mode needs no model
+    # at all; one_pass asks the LOCAL model exactly once and refuses a reply
+    # that breaks any rule rather than showing it. Grounds financial options in
+    # whole cents read-only from jarvis_spending.audit_subscriptions and
+    # jarvis_retirement.run, counts open goals read-only from jarvis_goals, and
+    # latches jarvis_gate.latch_taint(why="decision_lab") whenever it reads any
+    # of them. Writes nothing, opens no route, reads no clock, and is
+    # loopback-only: no cloud lane exists in the file. Deliberately unwired -
+    # no route, no chat tool, no approval card, no UI in either app.
+    "jarvis_decision_lab.py",
 )
 
 
