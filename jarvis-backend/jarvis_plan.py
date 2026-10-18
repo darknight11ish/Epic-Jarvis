@@ -66,8 +66,10 @@ goes through; this module adds no new lane.
 """
 from __future__ import annotations
 
+import datetime
 import json
 import re
+import time
 from dataclasses import dataclass, field, asdict, replace
 from pathlib import Path
 from typing import Callable, Optional
@@ -93,6 +95,15 @@ MAX_TEXT = 300            # a goal's own words, and a step's `why`
 #: exactly the failure this whole gate exists to catch.
 MULTI_PASS_RATE = 0.9
 TOOL_LIST = "full"        # which of ollama_tool_eval's two lists gates this
+
+#: A safety result older than this many days is not trusted. The model, the
+#: tool list and Jarvis's own rules can all change under a result, so the gate
+#: must be re-measured rather than trusted for ever (2026-10-18): the module
+#: docstring promised a stale file was refused, but the code never checked the
+#: date. The runner writes `run_at` with every result; a file that does not say
+#: when it was run is refused too (fail closed), because it is not evidence
+#: about this build. The number is here, named, so it is not a hidden default.
+MAX_RESULT_AGE_DAYS = 90
 
 #: A result-filled step (`from_step`) says WHERE the earlier result goes: an
 #: argument holding "{{step N}}" (N counted from 1, as the card counts). At
@@ -450,11 +461,50 @@ def _results_path() -> Path:
     return _primary_results_path()
 
 
-def enabled(model: str = "jarvis-primary", *, results_path: Optional[Path] = None) -> tuple:
-    """(True, "") once a real run of tools/tool_eval/ollama_tool_eval.py on
-    THIS model has cleared the bar; (False, reason) otherwise, with `reason`
-    a plain sentence naming exactly what is missing - never a bare False
-    with no way to know why. Reads a file; never runs the eval itself."""
+def _run_at_epoch(doc) -> Optional[float]:
+    """When the safety run happened, as local epoch seconds; None when the
+    file does not say (or says something that cannot be read).
+
+    The runner writes `run_at` as an ISO timestamp in LOCAL time
+    (tools/tool_eval/ollama_tool_eval.py's save()); a hand-kept file may
+    carry `date` instead, and an epoch number is accepted too. No usable
+    timestamp means the result cannot be trusted at all - the caller refuses
+    it rather than treating an undated file as new."""
+    raw = doc.get("run_at", doc.get("date")) if isinstance(doc, dict) else None
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, (int, float)):
+        return float(raw) if raw > 0 else None
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    text = raw.strip()
+    try:
+        return float(text)                  # an epoch written as digits
+    except ValueError:
+        pass
+    try:
+        when = datetime.datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    try:
+        return when.timestamp()             # naive = this PC's local time
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
+def enabled(model: str = "jarvis-primary", *, results_path: Optional[Path] = None,
+            now: Optional[float] = None) -> tuple:
+    """(True, "") once a real, RECENT run of
+    tools/tool_eval/ollama_tool_eval.py on THIS model has cleared the bar;
+    (False, reason) otherwise, with `reason` a plain sentence naming exactly
+    what is missing - never a bare False with no way to know why. Reads a
+    file; never runs the eval itself.
+
+    A result older than `MAX_RESULT_AGE_DAYS` (90) is refused in words, and a
+    result file that does not say when it was run is refused too: a pass from
+    another model build or tool list is not evidence about this one. `now` is
+    injectable for the age tests; production leaves it out and uses the PC's
+    own clock."""
     import json
     path = results_path or _results_path()
     if not path.is_file():
@@ -467,6 +517,19 @@ def enabled(model: str = "jarvis-primary", *, results_path: Optional[Path] = Non
         doc = json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:
         return False, f"The safety test's results file could not be read ({type(exc).__name__})."
+    run_at = _run_at_epoch(doc)
+    if run_at is None:
+        return False, ("The safety test's results file does not say when it was run, so it "
+                       "cannot be trusted as evidence about this model and tool list. Run "
+                       "tools/tool_eval/ollama_tool_eval.py again - the runner writes the "
+                       "date with the result.")
+    age_s = (time.time() if now is None else float(now)) - run_at
+    if age_s > MAX_RESULT_AGE_DAYS * 86400.0:
+        days = int(max(0.0, age_s) // 86400.0)
+        return False, (f"The safety test's result is {days} days old - older than the "
+                       f"{MAX_RESULT_AGE_DAYS} days this gate trusts. The model or the tool "
+                       "list may have changed since; run tools/tool_eval/ollama_tool_eval.py "
+                       "again.")
     models = doc.get("models") if isinstance(doc, dict) else None
     row = models.get(model) if isinstance(models, dict) else None
     summary = row.get("summary") if isinstance(row, dict) else None
