@@ -296,6 +296,30 @@ def said(found: list) -> str:
     return FOUND_ONE if len(found) == 1 else FOUND_MANY.format(n=len(found))
 
 
+#: GTD-1 (2026-10-18): the context packet a proposal carries, so the owner's
+#: tap can keep the details the reminder is about instead of a bare title.
+#: Built from the words already read and scrubbed from the picture (never the
+#: picture itself), run through the scheduler's own `scrub_context_bundle`
+#: (which uses jarvis_scrub and drops every path-shaped file entry). A picture
+#: has no file path to store, so `linked_files` is always empty here. Additive:
+#: a client that does not know about it simply posts its date and title.
+def context_bundle(proposal: dict) -> dict:
+    """The bundle for ONE proposal - {} when jarvis_schedule is missing."""
+    try:
+        import jarvis_schedule as S
+    except Exception:
+        return {}
+    title = str((proposal or {}).get("title") or "").strip()
+    line = str((proposal or {}).get("line") or "").strip()
+    return S.scrub_context_bundle({
+        "source_conv_id": None,
+        "source_summary": line or title,
+        "linked_entities": [],
+        "linked_files": [],
+        "suggested_prompt": f"Help me get ready for: {title}" if title else "",
+    })
+
+
 # ---- the route -----------------------------------------------------------------
 
 def _clean_words(image: bytes, reader: Callable[[bytes], dict]) -> dict:
@@ -351,6 +375,11 @@ def scan(body, *, reader: Optional[Callable[[bytes], dict]] = None,
         return 200, {"ok": True, "outside": True, "found": [], "said": NO_WORDS,
                      "note": OUTSIDE_NOTE, "text": "", "left_out": 0}
     found = find(text, now)
+    # GTD-1: every proposal carries its scrubbed details, so the app's tap can
+    # send them with the reminder (POST /api/schedule/add accepts
+    # `context_bundle`). Nothing is kept here, exactly as before.
+    for item in found:
+        item["context_bundle"] = context_bundle(item)
     return 200, {"ok": True, "outside": True, "found": found, "said": said(found),
                  "note": OUTSIDE_NOTE, "text": text,
                  "left_out": int(read.get("left_out") or 0)}

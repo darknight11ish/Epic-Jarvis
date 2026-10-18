@@ -488,6 +488,54 @@ def t_both_apps_say_these_words():
               part in js_flat and part in kt_flat, part)
 
 
+# --------------------------------------------------------------------------
+#   GTD-1 (2026-10-18): every proposal carries its scrubbed details
+# --------------------------------------------------------------------------
+
+def t_each_proposal_carries_its_scrubbed_context():
+    import jarvis_scrub
+    jarvis_scrub.register_secret("gtd-photo-secret-24680")
+    # (a) a date line whose words include a registered secret, and no path.
+    text = "Summer fair token gtd-photo-secret-24680, Sat 12 Oct, 2pm\nVillage Hall"
+    code, out = P.scan({"image": URI}, reader=reader(text), now=NOW)
+    proposals = out.get("found") or []
+    bundle = (proposals[0].get("context_bundle") if proposals else {}) or {}
+    flat = json.dumps(bundle)
+    check("a scan's proposal carries a context packet",
+          code == 200 and isinstance(bundle, dict) and bundle != {}, (code, out))
+    check("... its summary is non-empty and bounded",
+          bool((bundle.get("source_summary") or "").strip())
+          and len(bundle.get("source_summary") or "") <= S.BUNDLE_SUMMARY_MAX, bundle)
+    check("... a registered secret is scrubbed out of it",
+          "gtd-photo-secret-24680" not in flat, flat)
+    check("... the suggested prompt is the action-ready one and is scrubbed too",
+          (bundle.get("suggested_prompt") or "").startswith("Help me get ready for:")
+          and "gtd-photo-secret-24680" not in (bundle.get("suggested_prompt") or ""),
+          bundle)
+    check("... and a picture has no file to store (linked_files stays empty)",
+          bundle.get("linked_files") == [], bundle)
+    check("find() itself stays pure: only the scan adds the packet",
+          P.find(text, NOW) and "context_bundle" not in P.find(text, NOW)[0])
+    # (b) a date line that carries a Windows path: no path may survive.
+    path_text = "Summer fair C:\\Users\\pcadmin\\Documents\\flyer.txt, Sat 12 Oct, 2pm"
+    _c, path_out = P.scan({"image": URI}, reader=reader(path_text), now=NOW)
+    path_bundle = (((path_out.get("found") or [{}])[0] or {})
+                   .get("context_bundle") or {})
+    path_flat = json.dumps(path_bundle)
+    check("a Windows path on the date line is NOT carried in the packet",
+          "flyer.txt" not in path_flat and "C:\\\\" not in path_flat,
+          path_bundle)
+    direct = P.context_bundle({"title": "Fair", "line":
+                               "Fair at C:\\Users\\pcadmin\\x\\flyer.pdf"})
+    check("the packet builder drops a path-shaped line too",
+          "flyer.pdf" not in json.dumps(direct)
+          and direct.get("linked_files") == [], direct)
+    code2, out2 = P.scan({"image": URI}, reader=reader("Seven dwarves\nno dates"),
+                         now=NOW)
+    check("a picture with no date proposes nothing and has no packet to carry",
+          code2 == 200 and out2.get("found") == [], (code2, out2))
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):
