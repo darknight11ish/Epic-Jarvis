@@ -2024,7 +2024,17 @@ def t_learning_on_a_lane_that_does_not_answer():
 
 def t_hooks_when_on():
     msgs = _long_history()
-    sent = _turn(msgs, lane_for=lambda f: LANE14 if f == "long_context" else None)
+    # NO TOOLS FOR THIS ONE CALL (2026-10-18). `_turn`'s default `enabled=None`
+    # means EVERY tool (offered_tools(None) is the whole TOOLS table), and the
+    # long-context budget this check depends on subtracts all their schema
+    # tokens. That made a LANE claim depend on how much tool text the tree
+    # happened to ship: adding `run_data_script`'s 287-token schema tipped this
+    # history over the compaction budget, so six exchanges were folded into a
+    # digest and the request was no longer "whole". The claim here is only "the
+    # whole history goes to the long_context lane", so the call pins an explicit
+    # empty tool set and stays the same claim whatever tools exist.
+    sent = _turn(msgs, lane_for=lambda f: LANE14 if f == "long_context" else None,
+                 enabled=set())
     # THE HISTORY IS COMPARED CANONICALISED, NOT RAW (2026-10-15). Every
     # assistant message this fixture builds ends in a trailing space
     # (f"answer {i} " + "word " * 120), and jarvis_agent.tidy_assistant_whitespace
