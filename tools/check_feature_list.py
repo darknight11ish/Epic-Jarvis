@@ -44,6 +44,19 @@ BOTH DIRECTIONS, which is the whole point:
      The value alone is not a reason ("phone only" is refused). It covers one
      direction on purpose - see "WHY THE RULE COVERS ONLY `phone`" below.
 
+  6. EVERY LESSON IS CLAIMED BY A FEATURE ROW, OR EXEMPT WITH A REASON
+     (reverse completeness). Rule 1 asks "is every menu/route listed?", rules 2
+     and 6 ask "is every row's line still true?", and rule 6's forward half
+     asks "is every feature taught?". None of them could see the remaining
+     hole: a feature ROW vanishes (or is renamed) while its lesson stays in
+     `jarvis_tutorials.py`. The old summary printed that as "information, not a
+     failure", which is exactly how a silent loss reads. Now every catalogued
+     lesson id must appear in at least one row's `covers`, unless
+     `LESSON_UNCOVERED` names it with the reason it is deliberately not a
+     feature - and that exemption itself fails when it goes stale (a lesson
+     deleted, or one that a row now claims). A tutorial the list no longer
+     points at is a feature the page has stopped telling the owner about.
+
 WHAT `surface` IS NOT CHECKED AGAINST, AND WHY NOT (2026-10-16)
 
 `surface` is only required to be one of `("desktop", "phone", "both")` - never
@@ -213,7 +226,6 @@ INTERNAL = {
 #: claim a lesson that does not exist.
 LESSON_EXEMPT = {
     "typing": "the box you type in; the app's own prompt field is the lesson",
-    "talk-button": "one button, press and hold - the screen says what it does",
     "interrupt": "the talk button stops the answer; there is nothing to learn",
     "temporary-chat": "one switch in the chat head; its own label is the lesson",
     "history-search": "a search box over the list it is above",
@@ -230,6 +242,25 @@ LESSON_EXEMPT = {
     "start-the-model-lane": "one button on the standing line, which names the lane that is down and says what pressing it does",
     "restart-the-model-lane": "automatic and nothing to press; the line says what Jarvis did, in its own words",
 }
+
+#: Rule 6's exemptions: lessons that are deliberately NOT a feature row, each
+#: with the one line saying why nobody reaches it from this list. The reverse of
+#: `LESSON_EXEMPT` above (which is keyed by FEATURE id and says "this feature
+#: needs no lesson"): this one is keyed by LESSON id and says "this lesson is
+#: not any feature's page". A stale line is itself an error - a lesson that no
+#: longer exists, a lesson whose reason is empty, or a lesson a feature row now
+#: claims all FAIL, so the list empties itself instead of becoming a hiding
+#: place (the same shape REASON_PENDING already has).
+#:
+#: **IT IS EMPTY, AND THAT IS THE MECHANISM WORKING (2026-10-18).** The audit
+#: that added the reverse check found the last two unclaimed lessons -
+#: `phone-talking` (the phone's hold-to-talk button, which the "talk-button" row
+#: describes) and `phone-stays-on-pc` (the "phone-limits" row's own subject) -
+#: and named them from those rows instead of exempting them, because a feature
+#: row genuinely teaches each. The dict stays, empty: the next lesson that is a
+#: cross-cutting rule rather than a feature needs exactly this place, and its
+#: entry must carry the sentence saying which rule.
+LESSON_UNCOVERED = {}
 
 
 def lesson_ids() -> list:
@@ -441,6 +472,54 @@ def teaching_problems(got: list, known: dict) -> list:
     return bad
 
 
+def lesson_problems(got: list, lessons=None, exempt=None) -> list:
+    """Rule 6, reverse completeness: a lesson with no feature row is an orphan.
+
+    THE HOLE THIS CLOSES (Gemini's ruling, Part II, on Session B section 11.3).
+    Every direction except this one was already checked: a feature the code has
+    but the list omits; a `covers` id the code no longer has; a feature row with
+    no lesson. What nothing could see was a feature ROW disappearing while its
+    lesson stayed in `jarvis_tutorials.py` - the checker's own summary printed
+    "lessons no feature names (information, not a failure)", so the one loss
+    this list exists to prevent was the one nobody would act on. Now an
+    unclaimed lesson FAILS, naming the lesson and the two honest fixes: name it
+    from the feature row that teaches it, or record in `LESSON_UNCOVERED` why it
+    is a cross-cutting rule rather than a feature.
+
+    `lessons` and `exempt` are injectable so the suite can prove the rule bites
+    without editing the catalogue or the real list (the same way the other
+    problems() helpers are called with made-up input).
+    """
+    lesson_list = list(lessons if lessons is not None
+                       else lesson_ids())
+    exempt_map = dict(LESSON_UNCOVERED if exempt is None else exempt)
+    bad = []
+    claimed_by = {}
+    for e in got:
+        if not isinstance(e, dict):
+            continue
+        for c in e.get("covers") or []:
+            if c in lesson_list:
+                claimed_by.setdefault(c, []).append(str(e.get("id")))
+    for lesson in lesson_list:
+        if lesson in claimed_by:
+            if lesson in exempt_map:
+                bad.append(f"LESSON_UNCOVERED `{lesson}` is exempt, but `{claimed_by[lesson][0]}` "
+                           "names the lesson now - delete the exemption line (it is covered)")
+            continue
+        if lesson not in exempt_map:
+            bad.append(f"lesson `{lesson}` is in jarvis_tutorials.py, but no feature row's "
+                       "`covers` names it - name it in the feature row that teaches it, or add "
+                       "it to LESSON_UNCOVERED with the reason it is deliberately not a feature")
+    for lesson, why in exempt_map.items():
+        if lesson not in lesson_list:
+            bad.append(f"LESSON_UNCOVERED `{lesson}` is not a lesson in jarvis_tutorials.py any "
+                       "more - delete the line")
+        elif not str(why).strip():
+            bad.append(f"LESSON_UNCOVERED `{lesson}` has no reason")
+    return bad
+
+
 def uncovered(got: list, known: dict) -> list:
     """Rule 1: an id nobody listed - a feature added without being written down."""
     covered = set()
@@ -494,7 +573,7 @@ def problems() -> list:
     known = known_ids()
     return (field_problems(got) + phantom_covers(got, known) + uncovered(got, known)
             + internal_problems(known) + copy_problems() + teaching_problems(got, known)
-            + pending_problems(got))
+            + lesson_problems(got) + pending_problems(got))
 
 
 def main() -> int:
@@ -515,6 +594,9 @@ def main() -> int:
          f"{len(REASON_PENDING)} line(s) are self-emptying", pending_problems(got)),
         (f"every feature is taught by one of the {len(lessons)} lessons, or exempt with a reason",
          teaching_problems(got, known)),
+        (f"every one of the {len(lessons)} lessons is named by a feature row or in "
+         f"LESSON_UNCOVERED ({len(LESSON_UNCOVERED)} exempt) - reverse completeness",
+         lesson_problems(got)),
     ]
     failed = 0
     for name, bad in checks:
@@ -538,10 +620,10 @@ def main() -> int:
     print(f"{taught} of {len(got)} features are taught by a lesson; "
           f"{len(LESSON_EXEMPT)} are exempt with a reason; "
           f"{len(by_lesson)} of the {len(lessons)} lessons are named by a feature")
-    unused = sorted(lessons - set(by_lesson))
-    if unused:
-        print("lessons no feature names (information, not a failure): "
-              + ", ".join(unused))
+    unclaimed = sorted(lessons - set(by_lesson) - set(LESSON_UNCOVERED))
+    if unclaimed:
+        print("lessons no feature names (FAILED above, listed so the fix is one line each): "
+              + ", ".join(unclaimed))
     print(f"{len(checks) - failed} passed, {failed} failed")
     return 1 if failed else 0
 
