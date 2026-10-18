@@ -69,7 +69,7 @@ const check = (name, fn) => {
   }
 };
 
-// The REAL answer shape of GET /api/guardian/snapshots (JARVIS-API 139.1).
+// The REAL answer shape of GET /api/guardian/snapshots (JARVIS-API 140.1).
 const ANSWER = {
   ok: true, refused: false, why: "", count: 2, total: 2, limit: 50, more: false,
   snapshots: [
@@ -237,7 +237,7 @@ check("parity calls all three routes deliberate, and the docs say the same", () 
     const at = parity.indexOf(`"${route}": ("deliberate"`);
     assert.notEqual(at, -1, `${route} is not deliberate in parity`);
   }
-  assert.match(apiDoc, /### 139\.5 The desktop drawer/);
+  assert.match(apiDoc, /### 140\.5 The desktop drawer/);
   assert.match(apiDoc, /Brain -> Projects -> File history/);
   assert.match(arch, /File history/);
   assert.ok(design.includes("File history drawer"));
