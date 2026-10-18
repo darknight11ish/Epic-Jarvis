@@ -47,6 +47,19 @@ the number of workers: the suite list is the same glob in every mode, so a
 its own config folder, audit log and scratch folder inside the same run root,
 because the suites write real state and two of them writing into one folder
 is not a check either of them asked for.
+
+THE UPDATE LOCK. A backend update holds `update-in-progress.lock` in the
+folder Jarvis keeps its own data in (`OPENJARVIS_CONFIG_DIR`, then
+`JARVIS_CONFIG_DIR`, then `~/.openjarvis`). While that lock is VALID (live pid,
+heartbeat under 30 minutes, run under 3 hours), this runner REFUSES immediately
+with exit 3, naming the lock's pid, pace and start time - a sweep beside an
+update starves the CPU and skews the update's timing. The update's own suite
+phase is the one exception: `tools/update_backend.py` passes
+`--ignore-update-lock`, and `JARVIS_INSIDE_PATCHER=1` does the same for a
+caller that must set an environment instead. The lock rules and reading live
+in `tools/update_backend.py`'s lock section (one implementation, so the tool,
+this runner and the desktop cannot disagree); a checkout without that tool
+simply cannot check, and this runner never claims it did.
 """
 import concurrent.futures
 import json
@@ -681,8 +694,75 @@ def suite_result(name: str, took: str, code, stdout, stderr, why="") -> tuple:
     return "FAIL", n, line[:200], echo
 
 
-def main(only=(), jobs: int = 1) -> int:
+# ---------------------------------------------------------------------------
+#   The update lock - never run a suite sweep beside a live backend update
+# ---------------------------------------------------------------------------
+#
+# An update patches the backend and then runs these very suites; a second
+# sweep beside it (or the desktop's watchdog restarting the backend mid-run)
+# starves the CPU and doubles the wall time a real update measured at 2h8m.
+# The update tool writes `update-in-progress.lock` in the folder Jarvis keeps
+# its own data in; this runner refuses to start while that lock is VALID
+# (live pid, fresh heartbeat, under the 3-hour ceiling) unless the caller is
+# the update's own suite phase: `--ignore-update-lock` or
+# JARVIS_INSIDE_PATCHER=1. The rules and the reading live in ONE place,
+# `tools/update_backend.py`'s lock section, so the tool, this runner and the
+# desktop app cannot disagree about what "stale" means.
+LOCK_BYPASS_ENV = "JARVIS_INSIDE_PATCHER"
+LOCK_BYPASS_FLAG = "--ignore-update-lock"
+
+
+def _update_lock_api():
+    """`tools/update_backend.py`, imported for its lock section - or None.
+
+    Guarded, and deliberately quiet when absent: a checkout without the update
+    tool (or an import that fails) means this runner CANNOT know about a lock,
+    and must not print a line claiming it checked for one. The lock is advisory;
+    a missing reader is not a pass.
+    """
+    try:
+        tools = HERE.parent / "tools"
+        if not (tools / "update_backend.py").is_file():
+            return None
+        if str(tools) not in sys.path:
+            sys.path.insert(0, str(tools))
+        import update_backend          # noqa: PLC0415 - one guarded import
+        return update_backend
+    except Exception:                  # noqa: BLE001 - never a crash
+        return None
+
+
+def update_lock_refusal(ignore: bool = False) -> str:
+    """The plain refusal when a VALID update lock is held, else "".
+
+    `ignore` is `--ignore-update-lock`; the environment variable is the other
+    way the update's own suite phase says who it is. A lock that is stale, a
+    lock file that is unreadable, or no update tool to read it with all answer
+    "" - nothing is enforced there, and nothing claims it was.
+    """
+    if ignore:
+        return ""
+    if str(os.environ.get(LOCK_BYPASS_ENV) or "").strip() == "1":
+        return ""
+    api = _update_lock_api()
+    if api is None:
+        return ""
+    try:
+        state = api.read_lock(api.lock_path())
+    except Exception:                  # noqa: BLE001 - a read never blocks a run
+        return ""
+    return api.lock_refusal_words(state) if state.get("valid") else ""
+
+
+def main(only=(), jobs: int = 1, ignore_update_lock: bool = False) -> int:
     """Every suite, or only the ones named (`run_suites.py test_x.py ...`).
+
+    Refuses immediately (exit 3, nothing staged, no suite started) while a
+    valid backend-update lock is held; see `update_lock_refusal`. It asks AGAIN
+    after the backend has been staged, immediately before the first suite, so a
+    lock published while it was staging still stops it. The update's own suite
+    phase passes `ignore_update_lock=True` (or sets JARVIS_INSIDE_PATCHER=1),
+    which is the only thing that bypasses both checks.
 
     `jobs` is how many suites to run at once: **1 by default, and that is what
     CI runs**, so the ordinary output is byte-for-byte what it has always been.
@@ -703,11 +783,18 @@ def main(only=(), jobs: int = 1) -> int:
     is what the reaper at the start of `_sweep` is for: next time it finds this
     folder by its `_owner.json` marker, whose lock this process no longer
     holds, and removes it."""
+    refusal = update_lock_refusal(ignore_update_lock)
+    if refusal:
+        # Immediately, before a folder is made: this is a "come back later",
+        # not a run that tried and failed.
+        print(f"REFUSED  {refusal}", file=sys.stderr)
+        print("Not run: nothing was staged and no suite was started.", file=sys.stderr)
+        return 3
     jobs = max(1, int(jobs))
     root = Path(tempfile.mkdtemp(prefix=SWEEP_PREFIX))
     lock = claim(root, "sweep")
     try:
-        return _sweep(root, only, jobs)
+        return _sweep(root, only, jobs, ignore_update_lock)
     finally:
         # The lock goes FIRST: on Windows a file this process still holds open
         # cannot be deleted, so the marker would keep the whole folder alive -
@@ -830,9 +917,15 @@ def _sweep_parallel(suites: list, backend: Path, worker_envs: list, ran: dict,
                 _print_job(got, ran, passed, failed, skipped)
 
 
-def _sweep(root: Path, only=(), jobs: int = 1) -> int:
+def _sweep(root: Path, only=(), jobs: int = 1,
+           ignore_update_lock: bool = False) -> int:
     """One run, inside `root`: reap what a dead run left, stage, run each
-    suite, report. Never called except from `main`, which owns `root`."""
+    suite, report. Never called except from `main`, which owns `root`.
+
+    `ignore_update_lock` is the update's own suite phase (see `main`); the
+    second lock check below must respect the same bypass and must run after the
+    backend is staged, so an update that starts while this run is staging is
+    still refused."""
     jobs = max(1, int(jobs))
     reaped = reap_orphans(keep=(root,))
     if reaped:
@@ -841,6 +934,16 @@ def _sweep(root: Path, only=(), jobs: int = 1) -> int:
     real = os.environ.get("JARVIS_BACKEND")
     backend = Path(real).resolve() if real else stage(root)
     print(f"backend: {backend}" + ("" if real else "  (staged: every shipped module, flattened)"))
+    # S4: the check at the top of `main()` is not the last word - a lock can be
+    # published while this run is staging the backend (that staging can take a
+    # second). Ask again immediately before the first suite starts; on a
+    # refusal, stop here and let `main`'s `finally` remove the staging root.
+    late_refusal = update_lock_refusal(ignore_update_lock)
+    if late_refusal:
+        print(f"REFUSED  {late_refusal}", file=sys.stderr)
+        print("Not run: the backend was staged first, but no suite was started; "
+              "the staging folder is removed.", file=sys.stderr)
+        return 3
     known = sorted(HERE.glob("test_*.py"))
     suites = [s for s in known if s.name in only] if only else known
     names = {s.name for s in suites}
@@ -926,6 +1029,13 @@ def state_env(where: str) -> int:
 if __name__ == "__main__":
     args = list(sys.argv[1:])
     jobs = 1
+    ignore_update_lock = False
+    if LOCK_BYPASS_FLAG in args:
+        # The update's own suite phase: it holds the lock, so it must not
+        # refuse itself. Any other caller asking for this is saying "I know an
+        # update is running and I want to add to the CPU load anyway".
+        ignore_update_lock = True
+        args.remove(LOCK_BYPASS_FLAG)
     if "--jobs" in args:
         at = args.index("--jobs")
         try:
@@ -938,4 +1048,4 @@ if __name__ == "__main__":
     if len(args) == 2 and args[0] == "--state-env":
         sys.exit(state_env(args[1]))
     sys.exit(main(tuple(a for a in args if a.startswith("test_")),
-                  max(1, jobs)))
+                  max(1, jobs), ignore_update_lock=ignore_update_lock))

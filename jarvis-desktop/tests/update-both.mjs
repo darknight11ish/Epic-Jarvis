@@ -135,7 +135,7 @@ await check("the question says exactly what will happen", async () => {
   // ...and the pace that was chosen, its worker count and its ETA range, with
   // the first-run honesty label on it. The same checks run at every pace.
   assert.match(q, /Pace: Balanced \(responsive\) - 14 checks at a time/, q);
-  assert.match(q, /first run - not measured yet/, q);
+  assert.match(q, /not measured for this pace yet/, q);
   assert.match(q, /Every pace runs the same checks/i, q);
 });
 
@@ -450,7 +450,7 @@ await check("pressing Update offers three paces in plain words, recommends Balan
   assert.match(labels[1] || "", /Balanced \(recommended\)/i, labels.join(" | "));
   // Each pace is plain words + an ETA RANGE + honest labelling of the source.
   labels.forEach((text) => {
-    assert.match(text, /not measured yet/, `a pace did not label its estimate: ${text}`);
+    assert.match(text, /not measured for this pace yet/, `a pace did not label its estimate: ${text}`);
     // A RANGE, not one invented number: "about 1 minute to 5 minutes".
     assert.match(text, /about \d+ (second|minute)s? to \d+ (second|minute)s?/,
       `a pace did not give a range: ${text}`);
@@ -488,7 +488,7 @@ await check("a measured pace says where its numbers came from, instead of preten
   await page.close();
   labels.forEach((text) => {
     assert.match(text, /from this PC's own times/, `a measured pace hid its source: ${text}`);
-    assert.doesNotMatch(text, /not measured yet/, `a measured pace still said not measured: ${text}`);
+    assert.doesNotMatch(text, /not measured for this pace yet/, `a measured pace still said not measured: ${text}`);
   });
 });
 
@@ -527,7 +527,7 @@ await check("the bar is hidden before any real event, then painted from the frac
   assert.equal(phase, "Checking the backend", phase);
   assert.equal(count, "12 of 356 checks", count);
   assert.match(eta, /left/, `the ETA is missing: ${eta}`);
-  assert.match(eta, /not measured yet/, `the first-run ETA is not labelled: ${eta}`);
+  assert.match(eta, /not measured for this pace yet/, `the unmeasured-pace ETA is not labelled: ${eta}`);
   assert.match(mode, /Pace: Balanced/, mode);
   assert.match(mode, /14 checks at a time/, mode);
 });
