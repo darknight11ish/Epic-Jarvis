@@ -14,7 +14,9 @@ from __future__ import annotations
 import base64
 import json
 from contextlib import closing
+import os
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -1464,6 +1466,43 @@ def t_listed_where_it_must_be():
     go = (HERE / "gate-outcome.patch").read_text(encoding="utf-8")
     check("a no on the history card proposes no memory (gate-outcome.patch)",
           '+    "history_enable",' in go)
+
+
+def t_deleting_a_conversation_scrubs_its_words_from_receipts():
+    """Audit DATA D5: an erased conversation must not reappear from a receipt.
+
+    The chat store reads the conversation's own user words with its key before
+    deleting the rows, then hands them to jarvis_receipts.purge_words. This
+    drives the real delete() and the real receipts store."""
+    import jarvis_receipts as R2
+    scratch = Path(tempfile.mkdtemp(prefix="jarvis-history-receipts-"))
+    saved = os.environ.get("JARVIS_RECEIPTS_DB")
+    os.environ["JARVIS_RECEIPTS_DB"] = str(scratch / "receipts.db")
+    w = None
+    try:
+        w = World()
+        w.log.record_turn(req(SENTENCE), lane="qwen3:8b", turn=local("I will remember that."))
+        rid = R2.record("note_write", "saved: " + SENTENCE,
+                        before={"text": SENTENCE}, after={"text": SENTENCE})
+        removed = w.log.delete("conv-000001")
+        with closing(sqlite3.connect(os.environ["JARVIS_RECEIPTS_DB"])) as con:
+            row = con.execute(
+                "SELECT summary, before_snapshot_json FROM action_receipts"
+                " WHERE receipt_id=?", (rid,)).fetchone()
+        check("the conversation really is deleted", removed and w.log.get("conv-000001") is None)
+        check("the receipt no longer holds one word of the erased conversation",
+              row is not None and SENTENCE not in (row[0] or "")
+              and SENTENCE not in (row[1] or ""), row)
+        check("... it holds the fixed marker instead, never a hash",
+              row is not None and R2.FORGOTTEN in ((row[0] or "") + (row[1] or "")), row)
+    finally:
+        if w is not None:
+            w.done()
+        if saved is None:
+            os.environ.pop("JARVIS_RECEIPTS_DB", None)
+        else:
+            os.environ["JARVIS_RECEIPTS_DB"] = saved
+        shutil.rmtree(scratch, ignore_errors=True)
 
 
 if __name__ == "__main__":

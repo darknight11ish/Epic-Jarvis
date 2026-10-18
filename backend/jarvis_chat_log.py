@@ -197,6 +197,26 @@ CONTINUABLE = ("chat", "live")
 CRISIS_TITLE = "A difficult moment"
 DEVICES = ("desktop", "hud", "phone")
 KEEP_DAYS = (0, 30, 90, 365)
+
+#: How many of a conversation's own user turns are handed to the receipts
+#: store's purge on delete (audit DATA D5): enough for the ordinary case, and
+#: bounded so a very long history cannot make one delete slow.
+RECEIPTS_WORDS = 200
+
+
+def _purge_receipts(words) -> None:
+    """Scrub conversation words out of receipts, best effort, never raises."""
+    if not words:
+        return
+    try:
+        import jarvis_receipts
+    except Exception:
+        return
+    for word in words:
+        try:
+            jarvis_receipts.purge_words(word)
+        except Exception:
+            continue
 VOICE_WINDOW = 600          # a transcript counts as voice for 10 minutes
 LIVE_MAX = 200              # the live-turn registry holds this many turns
 #: The most user turns of one continued chat put back in the registry from
@@ -2655,18 +2675,57 @@ class ChatLog:
     def delete(self, cid) -> bool:
         """One conversation. True if there was one. There is no delete-all here: the one
         exception, "Forget a time frame", is take_out() below, after a checked
-        list and ONE approval card."""
+        list and ONE approval card.
+
+        The conversation's own user words are ALSO scrubbed out of the receipts
+        store before the rows go (audit DATA D5, 2026-10-18): a receipt records
+        what a tool was given, and a turn's words could have been put in one.
+        The words are read with the chat key, inside this delete, and handed to
+        jarvis_receipts.purge_words after the rows are gone - best effort, like
+        memory's erase: the deletion itself never fails because of it."""
         if not (isinstance(cid, str) and _CID.fullmatch(cid)) or not self.db_path.exists():
             return False
+        words = []
         with self._lock, closing(self._connect()) as c:
             with c:
                 found = c.execute("SELECT 1 FROM conversations WHERE id=?",
                                   (cid,)).fetchone() is not None
                 if found:
+                    words = self._words_for_receipts(c, cid)
                     self._drop(c, [cid])
         if found:
             self._deleted()
+            _purge_receipts(words)
         return found
+
+    def _words_for_receipts(self, c, cid) -> list:
+        """The user's own words of `cid`, for the receipts purge. At most
+        RECEIPTS_WORDS turns; [] when the key is unavailable (nothing can be
+        read, and the erase still happens)."""
+        try:
+            aead, _why = self._recording()
+        except Exception:
+            return []
+        if aead is None:
+            return []
+        out = []
+        try:
+            rows = c.execute(
+                "SELECT idx, text FROM turns WHERE conversation_id=? AND role='user'"
+                " ORDER BY idx LIMIT ?", (cid, RECEIPTS_WORDS)).fetchall()
+        except Exception:
+            return []
+        # _connect() here does not set a row factory (this module reads plain
+        # columns on purpose, so it never needs one): rows are tuples.
+        for idx, blob in rows:
+            try:
+                text = self._open(aead, blob, self._aad(cid, idx)).decode("utf-8")
+            except Exception:
+                continue
+            text = " ".join(text.split())
+            if text:
+                out.append(text)
+        return out
 
     def set_keep_days(self, days) -> int:
         self._save_settings(keep_days=days)

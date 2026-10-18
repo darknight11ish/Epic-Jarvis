@@ -374,6 +374,36 @@ BUS = Bus()
 
 _ACTIVITY = {"state": "idle", "detail": "", "at": time.time()}
 
+#: The activity line goes to PAIRED APPS (the phone's event stream and the HUD
+#: over the same bus), so it is an egress surface like a notification. A step's
+#: announce() is written by whoever runs the step; it is short today (tool and
+#: model names), but nothing in the contract makes that true for ever - a page
+#: title, a URL or an argument could be announced by a future caller. So the
+#: detail is SCRUBBED and BOUNDED here, once, where every caller meets:
+#:   * jarvis_scrub.scrub_text redacts credential-shaped text and the secrets
+#:     this PC holds by value (the same scrubber receipts and logs use);
+#:   * the result is capped at ACTIVITY_DETAIL_MAX characters;
+#:   * if the scrubber cannot be imported or raises, the detail is DROPPED
+#:     (fail closed). The state word still travels, so a client still knows
+#:     what Jarvis is doing; only the sentence is lost.
+ACTIVITY_DETAIL_MAX = 160
+
+
+def _safe_activity_detail(detail) -> str:
+    """"detail", scrubbed and capped - or "" when that cannot be guaranteed."""
+    text = " ".join(str(detail or "").split())
+    if not text:
+        return ""
+    try:
+        import jarvis_scrub
+        text = jarvis_scrub.scrub_text(text)
+    except Exception:
+        return ""
+    text = " ".join(str(text or "").split())
+    if len(text) > ACTIVITY_DETAIL_MAX:
+        text = text[:ACTIVITY_DETAIL_MAX - 1].rstrip() + "\u2026"
+    return text
+
 
 def set_activity(state: str, detail: str = "") -> None:
     """What Jarvis is doing right now. Called by jarvis_hud._activity.
@@ -386,8 +416,12 @@ def set_activity(state: str, detail: str = "") -> None:
     the first "thinking" of the first turn after a restart was taken as the
     baseline and swallowed, and the only frame a client saw for that whole
     turn was the "idle" that followed it.
+
+    The DETAIL is scrubbed and capped by _safe_activity_detail before it is
+    stored, because this line leaves the PC over the event bus (audit DATA D7,
+    2026-10-18). A scrubber that cannot run means no detail, never raw text.
     """
-    _ACTIVITY.update({"state": str(state), "detail": str(detail or ""),
+    _ACTIVITY.update({"state": str(state), "detail": _safe_activity_detail(detail),
                       "at": time.time()})
     BUS.note("activity", {"state": _ACTIVITY["state"],
                           "detail": _ACTIVITY["detail"]}, "activity",

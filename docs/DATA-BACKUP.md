@@ -232,9 +232,20 @@ So the two sit side by side, doing different jobs:
 |---|---|---|
 | when it runs | when you press the button | weekly, by itself |
 | what it holds | data **and** the program's own source | your personal data only |
-| locked? | yes, AES-256-GCM, code shown once | no, unless you ask for `--seal` |
+| locked? | yes, AES-256-GCM, code shown once | **yes since 2026-10-18**: sealed by default, key in Windows Credential Manager (`--plaintext` is a debugging exception) |
 | how many kept | 5 | 4 |
 | can it be scheduled? | no - the code would be lost | yes, that is what it is for |
+
+The weekly snapshots are sealed by default since **2026-10-18** (audit HIGH-4):
+one `.jba` file per run, AES-256-GCM/Argon2id, with the key kept in Windows
+Credential Manager under `Jarvis Backend/data backup key`. The key is never
+printed or written to a file, so a sealed snapshot opens only on this Windows
+account on this PC - the `.jbak` archives, whose recovery code you hold, remain
+the disaster-recovery path. Plaintext snapshots written before that date are
+**not deleted automatically**: the tool names them and prints the exact
+`Remove-Item -LiteralPath @(...) -Recurse -Force` line once a sealed snapshot
+exists. The full at-rest picture, including what is still plaintext, is
+`docs/AT-REST-2026-10-18.md`.
 
 Neither one replaces the other. If you want one thing to do, keep pressing the
 button for the locked, code-protected archive, and let the weekly job be the

@@ -187,6 +187,19 @@ MAX_LIMIT = 200
 DEFAULT_LIMIT = 20
 MAX_CALLABLES = 200
 
+#: Retention (2026-10-18, audit DATA D5). A receipt holds the owner's words
+#: about what changed (scrubbed of secrets, not of private words), so an
+#: uncapped file would keep them for ever. Newest `MAX_ROWS` and nothing older
+#: than `KEEP_DAYS` are kept; the sweep runs on the write path so a receipt
+#: never waits for a separate job. Sized for a year of ordinary use: 90 days
+#: is the audit log's own window, and 5,000 actions is far above real days.
+KEEP_DAYS = 90
+MAX_ROWS = 5000
+
+#: What a purged word becomes in a receipt: a fixed marker, never a hash -
+#: a hash of a guessable name would be a way back to the words.
+FORGOTTEN = "[forgotten]"
+
 #: The gate action this module asks under. Deliberately NOT in jarvis_gate.py's
 #: `_RISK` table, and deliberately not given a row by this feature: adding one
 #: means patching the gate, and the drop-in folder exists so a new route needs
@@ -283,8 +296,34 @@ def _connect() -> sqlite3.Connection:
     # busy timeout so two actions finishing together wait rather than fail.
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=10000")
+    # Deleted words must not come back out of free pages: a receipt is deleted
+    # by the sweep below and by purge_words(), and both are about text leaving.
+    conn.execute("PRAGMA secure_delete=ON")
     conn.executescript(SCHEMA)
     return conn
+
+
+def _sweep(c) -> int:
+    """Apply the retention caps on the write path. Returns rows removed."""
+    now = time.time()
+    try:
+        removed = c.execute("DELETE FROM action_receipts WHERE created_at < ?",
+                            (now - KEEP_DAYS * 86400,)).rowcount or 0
+        removed += c.execute(
+            "DELETE FROM action_receipts WHERE receipt_id NOT IN ("
+            " SELECT receipt_id FROM action_receipts ORDER BY created_at DESC LIMIT ?)",
+            (int(MAX_ROWS),)).rowcount or 0
+    except sqlite3.Error:
+        return 0
+    if removed:
+        # VACUUM cannot run inside a transaction; isolation_level=None means
+        # there is none pending here. A VACUUM that fails is not a failure of
+        # the receipt - the rows are already gone.
+        try:
+            c.execute("VACUUM")
+        except sqlite3.Error:
+            pass
+    return removed
 
 
 # --------------------------------------------------------------------------
@@ -469,6 +508,7 @@ def record(tool_name: str, summary: str, *, before: Any = None, after: Any = Non
                 " before_snapshot_json, after_snapshot_json, undo_callable, undone_at)"
                 " VALUES (?,?,?,?,?,?,?,NULL)",
                 (receipt_id, time.time(), name, clean_summary, before_json, after_json, label))
+            _sweep(c)
         if callable(undo):
             with _LOCK:
                 _CALLABLES[receipt_id] = undo
@@ -511,6 +551,51 @@ def discard(receipt_id: str) -> bool:
     except Exception as exc:
         _audit("receipts.discard_failed", {"error": type(exc).__name__})
         return False
+
+
+def purge_words(text) -> int:
+    """Scrub one forgotten thing's words out of every receipt. Returns rows changed.
+
+    A receipt records what a tool was given: a summary and two small before/
+    after snapshots, all scrubbed of SECRETS at write time - but a private word
+    a tool was asked to write is not a secret shape, so it could sit there. When
+    the owner forgets a fact (or an erased conversation's own words), the memory
+    and chat stores call this so the words cannot reappear from a receipt. It is
+    a plain, case-insensitive replacement with the fixed `[forgotten]` marker -
+    never a hash, because a hash of a guessable name is a way back. Best effort
+    by design: no scrubber, no key, no database, or a word that spans a JSON
+    escape leaves the row as it was rather than raising into the caller."""
+    needle = " ".join(str(text or "").split())
+    if not needle:
+        return 0
+    pat = re.compile(re.escape(needle), re.I)
+    changed = 0
+    try:
+        with closing(_connect()) as c:
+            rows = c.execute(
+                "SELECT receipt_id, summary, before_snapshot_json, after_snapshot_json"
+                " FROM action_receipts").fetchall()
+            for row in rows:
+                summary = str(row["summary"] or "")
+                before = row["before_snapshot_json"]
+                after = row["after_snapshot_json"]
+                new_summary = pat.sub(FORGOTTEN, summary)
+                new_before = pat.sub(FORGOTTEN, str(before)) if before else before
+                new_after = pat.sub(FORGOTTEN, str(after)) if after else after
+                if new_summary == summary and new_before == before and new_after == after:
+                    continue
+                c.execute("UPDATE action_receipts SET summary=?, before_snapshot_json=?,"
+                          " after_snapshot_json=? WHERE receipt_id=?",
+                          (new_summary, new_before, new_after, row["receipt_id"]))
+                changed += 1
+            if changed:
+                try:
+                    c.execute("VACUUM")     # no transaction is pending here
+                except sqlite3.Error:
+                    pass
+    except Exception:
+        return 0
+    return changed
 
 
 # --------------------------------------------------------------------------

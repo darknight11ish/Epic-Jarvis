@@ -45,6 +45,7 @@ import ast
 import json
 import os
 import shutil
+import sqlite3
 import sys
 import traceback
 from pathlib import Path
@@ -811,6 +812,75 @@ def t_the_plugin_folder_and_the_module_agree():
           bool(from_patches) and max(from_patches)[0] < data.get("stack_order", 0),
           f"receipts at {data.get('stack_order')}, the highest from the stack is "
           f"{max(from_patches) if from_patches else None}")
+
+
+def _receipt_rows():
+    con = sqlite3.connect(os.environ["JARVIS_RECEIPTS_DB"])
+    try:
+        return con.execute(
+            "SELECT receipt_id, created_at, summary, before_snapshot_json"
+            " FROM action_receipts").fetchall()
+    finally:
+        con.close()
+
+
+def _clear_receipts():
+    con = sqlite3.connect(os.environ["JARVIS_RECEIPTS_DB"])
+    try:
+        con.execute("DELETE FROM action_receipts")
+        con.commit()
+    finally:
+        con.close()
+
+
+def t_receipts_are_capped_by_rows_and_age():
+    """Audit DATA D5: the file holds the owner's own words about what changed,
+    so it may not grow for ever. The newest MAX_ROWS and nothing older than
+    KEEP_DAYS survive; the sweep rides the write path."""
+    _clear_receipts()
+    saved = (R.KEEP_DAYS, R.MAX_ROWS)
+    try:
+        R.KEEP_DAYS, R.MAX_ROWS = 1, 3
+        ids = [R.record(f"tool_{i}", f"summary {i}") for i in range(6)]
+        rows = _receipt_rows()
+        check("only the newest MAX_ROWS receipts are kept", len(rows) == 3, rows)
+        check("... and the newest ones are the survivors",
+              {r[0] for r in rows} == set(ids[-3:]), [r[0] for r in rows])
+        # an old row that only the AGE cap can remove
+        con = sqlite3.connect(os.environ["JARVIS_RECEIPTS_DB"])
+        try:
+            con.execute("INSERT INTO action_receipts (receipt_id, created_at, tool_name,"
+                        " summary, undo_callable) VALUES ('rcold000000001', ?, 'old', 'old', '')",
+                        (__import__("time").time() - 10 * 86400,))
+            con.commit()
+        finally:
+            con.close()
+        R.record("tool_after_age", "x")
+        check("a receipt older than KEEP_DAYS is deleted on the next write",
+              "rcold000000001" not in [r[0] for r in _receipt_rows()])
+    finally:
+        R.KEEP_DAYS, R.MAX_ROWS = saved
+        _clear_receipts()
+
+
+def t_forgotten_words_are_scrubbed_out_of_receipts():
+    """Audit DATA D5: a receipt records what a tool was given. When the owner
+    forgets a fact, its words must not reappear from the receipt - summary and
+    before/after snapshots are replaced with the fixed marker, never a hash."""
+    _clear_receipts()
+    words = "the private phrase about my sister"
+    rid = R.record("note_write", "saved: " + words,
+                   before={"text": words}, after={"text": words})
+    check("the receipt was written with the words", bool(rid) and any(
+        words in (row[2] or "") for row in _receipt_rows()), _receipt_rows())
+    changed = R.purge_words(words)
+    rows = _receipt_rows()
+    row = next((r for r in rows if r[0] == rid), None)
+    check("purge_words reports the rows it changed", changed >= 1, changed)
+    check("NO copy of the forgotten words is left in the receipt",
+          row and words not in (row[2] or "") and words not in (row[3] or ""), row)
+    check("the fixed marker is there instead, never a hash",
+          row and (R.FORGOTTEN in (row[2] or "") or R.FORGOTTEN in (row[3] or "")), row)
 
 
 def main():
