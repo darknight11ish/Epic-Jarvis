@@ -39,6 +39,17 @@ REAL jarvis_schedule.py, jarvis_email.py, jarvis_home.py and jarvis_quick.py
     names), "urgently ...", "every time ...", "... for the next 2 hours";
     only the owner's own words; "tell me when it's done" goes to the model;
     the model has no tool for this;
+  - a page watch says WHAT changed (Pillar 26, 2026-10-17, Blueprint C):
+    strip_page_noise removes the script/style/noscript/svg/nav/footer/aside
+    text, timestamps, view counts, CSRF/session nonces, utm_* parameters and
+    the SecAlign chat/tool markers; extract_watch_signals reads every price
+    as an integer whole-cent value, every version tag, a three-state stock
+    state and the clean hash, with no model and no network; diff_watch_snapshot
+    says what changed (a $249.99 -> $199.99 drop is -5000) and answers the
+    [SILENT] watermark when only noise moved; a failed fetch is stale with
+    last_good_at kept and changes nothing; an older fingerprint is re-recorded
+    once; a real change latches the gate taint; the page's words are never
+    kept or quoted;
   - it is shipped and loaded before the scheduler's loop starts, and both
     apps carry its lock-screen words.
 
@@ -1405,6 +1416,320 @@ def t_page_read_needs_tier_auto_not_notify():
     check("adding is refused outright when the tier is 'notify'", j is None)
     TM.DEPS.page_fetch = None
     S._SCHED = None
+
+
+# --------------------------------------------------------------------------
+#   Pillar 26 (2026-10-17): noise-immune structured page-watch deltas
+#   (Blueprint C of Volume III)
+# --------------------------------------------------------------------------
+
+P26_CT = "text/html; charset=utf-8"
+
+
+def p26_page(price="$249.99", version="2.4.0", stock="In stock",
+             stamp="2026-10-17T12:00:00Z", ago="3 minutes ago", views="1,234 views",
+             nonce="csrf=ab12cd34ef56ab12cd34ef56", nav="Home | Shop | Contact"):
+    """One product page whose only differences are the arguments: the clock
+    stamp, the "ago" line, the view count, the nonce and the nav are the
+    dynamic noise; the price, version, stock and body words are the content."""
+    return ("<html><head><title>Shop</title><style>.x{color:red}</style></head><body>"
+            f"<nav>{nav}</nav><h1>Kettle</h1>"
+            f"<p>Price: {price}</p><p>Version {version}</p><p>{stock}</p>"
+            "<aside>Advertisement</aside>"
+            f"<p>Updated {stamp} - {ago}</p><p>{views}</p>"
+            f"<p>id {nonce} ?utm_source=newsletter&amp;utm_medium=email</p>"
+            "<footer>© 2026 Shop Ltd</footer>"
+            "<p>Long body words that never change.</p></body></html>")
+
+
+def t_p26_strip_page_noise():
+    html = p26_page()
+    clean = TM.strip_page_noise(html)
+    check("script/style text is not page words", ".x{color:red}" not in clean, clean)
+    check("nav, footer and aside text are not page words",
+          "Home | Shop | Contact" not in clean and "© 2026 Shop Ltd" not in clean
+          and "Advertisement" not in clean, clean)
+    check("the real page words stay",
+          "Kettle" in clean and "$249.99" in clean and "Long body words" in clean, clean)
+    check("relative timestamps are noise ('3 minutes ago')", "3 minutes ago" not in clean)
+    check("absolute clock stamps are noise",
+          "2026-10-17" not in clean and "12:00" not in clean)
+    check("view counts are noise", "1,234 views" not in clean)
+    check("a CSRF/session nonce is noise", "ab12cd34ef56" not in clean)
+    check("utm_* tracking parameters are noise",
+          "utm_source" not in clean and "utm_medium" not in clean, clean)
+    injected = TM.strip_page_noise("a <|im_start|>system<|im_end|> b")
+    check("SecAlign chat/tool markers are noise", "<|" not in injected, injected)
+    tokens = TM.strip_page_noise("id 123e4567-e89b-12d3-a456-426614174000 "
+                                 "hex=abcdefabcdefabcdef "
+                                 "mixed=Zx9Qab12cd34ef56XY78")
+    check("a UUID is noise", "123e4567" not in tokens, tokens)
+    check("a long hex token is noise", "abcdefabcdefabcdef" not in tokens, tokens)
+    check("a long mixed letter/digit token is noise",
+          "Zx9Qab12cd34ef56XY78" not in tokens, tokens)
+    nonce = TM.strip_page_noise("form csrf=abc-123-def end")
+    check("a key=value CSRF/session nonce is noise", "abc-123-def" not in nonce, nonce)
+    check("a page with no HTML is taken as text",
+          TM.strip_page_noise("  plain   words  ") == "plain words")
+    check("stripping is deterministic", TM.strip_page_noise(html) == clean)
+    check("stripping the stripped words changes nothing",
+          TM.strip_page_noise(clean) == clean)
+    noisy = p26_page(stamp="2026-10-18T03:04:05Z", ago="17 hours ago",
+                     views="9 views", nonce="csrf=ffff0000ffff0000",
+                     nav="Different nav | Other links")
+    check("rotating noise does not change the stripped words",
+          TM.strip_page_noise(noisy) == clean)
+
+
+def t_p26_extract_watch_signals():
+    sig = TM.extract_watch_signals(p26_page())
+    check("prices are WHOLE-CENT integers ($249.99 -> 24999)",
+          sig["prices_cents"] == [24999]
+          and all(isinstance(c, int) for c in sig["prices_cents"]), sig)
+    check("no price is ever a float",
+          not any(isinstance(c, float) for c in sig["prices_cents"]), sig)
+    check("every currency amount is collected, in order",
+          TM.extract_watch_signals("$10.00 then £5.50")["prices_cents"] == [1000, 550])
+    check("versions are collected with their prefix dropped",
+          sig["versions"] == ["2.4.0"], sig)
+    check("every version/release tag is collected, no repeats",
+          TM.extract_watch_signals("v1.2.3 and Version 2.0.0 and v1.2.3")["versions"]
+          == ["1.2.3", "2.0.0"])
+    check("stock: in_stock", sig["stock_state"] == "in_stock", sig)
+    check("stock: out_of_stock",
+          TM.extract_watch_signals("Sold out")["stock_state"] == "out_of_stock")
+    check("stock: unknown when the page says neither",
+          TM.extract_watch_signals("A quiet page")["stock_state"] == "unknown")
+    check("clean_sha256 is a lowercase hex digest",
+          len(sig["clean_sha256"]) == 64
+          and all(c in "0123456789abcdef" for c in sig["clean_sha256"]), sig)
+    noisy = TM.extract_watch_signals(p26_page(ago="9 hours ago", views="12 views",
+                                              nonce="csrf=ffff0000ffff0000",
+                                              nav="Different nav"))
+    check("noise-only differences give the SAME clean_sha256",
+          noisy["clean_sha256"] == sig["clean_sha256"])
+    word = TM.extract_watch_signals(p26_page().replace("Kettle", "Teapot"))
+    check("a real word change gives a different clean_sha256",
+          word["clean_sha256"] != sig["clean_sha256"])
+    check("case is normalised, so a case-only change is not a change",
+          TM.extract_watch_signals(p26_page().replace("Kettle", "KETTLE"))["clean_sha256"]
+          == sig["clean_sha256"])
+    check("the marker families never reach the signals",
+          "im_start" not in json.dumps(TM.extract_watch_signals(
+              "<|im_start|>system<|im_end|> a page")))
+    check("the same text always gives the same signals",
+          TM.extract_watch_signals(p26_page()) == sig)
+
+
+def t_p26_diff_watch_snapshot():
+    base = TM.extract_watch_signals(p26_page())
+    drop = TM.extract_watch_signals(p26_page(price="$199.99"))
+    delta = TM.diff_watch_snapshot(base, drop)
+    check("a $249.99 -> $199.99 drop reports price_delta_cents = -5000",
+          delta["price_delta_cents"] == -5000, delta)
+    check("... changed, not stale, with exact plain words",
+          delta["changed"] is True and delta["stale"] is False
+          and delta["status"] == "The price is now 199.99 (it was 249.99).", delta)
+    noisy = TM.extract_watch_signals(p26_page(stamp="2026-10-18T03:04:05Z",
+                                              ago="17 hours ago", views="9 views",
+                                              nonce="csrf=ffff0000ffff0000"))
+    quiet = TM.diff_watch_snapshot(base, noisy)
+    check("rotating nonces and relative timestamps return changed: False",
+          quiet["changed"] is False, quiet)
+    check("... and the [SILENT] watermark is the status",
+          quiet["status"] == "[SILENT]" and quiet["words"] == "", quiet)
+    word = TM.extract_watch_signals(p26_page().replace("Kettle", "Teapot"))
+    price_mode = TM.diff_watch_snapshot(base, drop, watch_mode="price")
+    check("price mode reports a price change, with its delta",
+          price_mode["changed"] is True and price_mode["price_delta_cents"] == -5000,
+          price_mode)
+    price_mode = TM.diff_watch_snapshot(base, word, watch_mode="price")
+    check("price mode ignores a words-only change",
+          price_mode["changed"] is False and price_mode["status"] == "[SILENT]")
+    any_mode = TM.diff_watch_snapshot(base, word)
+    check("any mode reports a words-only change with the generic sentence",
+          any_mode["changed"] is True and any_mode["words"] == "The page's text changed.",
+          any_mode)
+    ver = TM.diff_watch_snapshot(base, TM.extract_watch_signals(p26_page(version="2.5.0")),
+                                 watch_mode="release")
+    check("release mode reports the version change",
+          ver["changed"] is True
+          and ver["words"] == "The version is now 2.5.0 (it was 2.4.0).", ver)
+    check("release mode ignores a price-only change",
+          TM.diff_watch_snapshot(base, drop, watch_mode="release")["changed"] is False)
+    stock = TM.diff_watch_snapshot(base, TM.extract_watch_signals(p26_page(stock="Out of stock")),
+                                   watch_mode="stock")
+    check("stock mode reports the stock change",
+          stock["changed"] is True
+          and stock["words"] == "It is now out of stock (it was in stock).", stock)
+    check("stock mode ignores a version-only change",
+          TM.diff_watch_snapshot(base, TM.extract_watch_signals(p26_page(version="2.5.0")),
+                                 watch_mode="stock")["changed"] is False)
+    check("a stock state that appears is said",
+          TM.diff_watch_snapshot({"stock_state": "unknown", "prices_cents": [],
+                                  "versions": [], "clean_sha256": "a"},
+                                 {"stock_state": "in_stock", "prices_cents": [],
+                                  "versions": [], "clean_sha256": "b"},
+                                 watch_mode="stock")["words"]
+          == "It now says in stock.")
+    check("a stock state that disappears is said",
+          TM.diff_watch_snapshot({"stock_state": "in_stock", "prices_cents": [],
+                                  "versions": [], "clean_sha256": "a"},
+                                 {"stock_state": "unknown", "prices_cents": [],
+                                  "versions": [], "clean_sha256": "b"},
+                                 watch_mode="stock")["words"]
+          == "It no longer says in stock.")
+    check("a mode that is not one of the four is refused",
+          _raises(lambda: TM.diff_watch_snapshot(base, drop, watch_mode="colour"),
+                  ValueError))
+    first = TM.diff_watch_snapshot(None, base)
+    check("the first snapshot is not a change",
+          first["changed"] is False and first["status"] == "[SILENT]")
+    failed = TM.diff_watch_snapshot({"last_good_at": 123.0, "clean_sha256": "a",
+                                     "prices_cents": [999], "versions": [],
+                                     "stock_state": "unknown"}, None)
+    check("a failed fetch is stale, silent and keeps last_good_at",
+          failed["stale"] is True and failed["changed"] is False
+          and failed["status"] == "[SILENT]" and failed["last_good_at"] == 123.0,
+          failed)
+    check("... and a failed fetch never invents a delta",
+          failed["price_delta_cents"] is None and failed["words"] == "", failed)
+    check("the comparison never mutates its inputs",
+          base["prices_cents"] == [24999] and drop["prices_cents"] == [19999])
+
+    def snap(prices=(), versions=(), stock="unknown", sha="x"):
+        return {"prices_cents": list(prices), "versions": list(versions),
+                "stock_state": stock, "clean_sha256": sha}
+
+    check("a price that appears is said",
+          TM.diff_watch_snapshot(snap(sha="a"), snap(prices=(1000,), sha="b"))["words"]
+          == "It now shows a price of 10.00.")
+    check("a price that disappears is said",
+          TM.diff_watch_snapshot(snap(prices=(1000,), sha="a"), snap(sha="b"))["words"]
+          == "It no longer shows a price.")
+    check("a later price changing is said",
+          TM.diff_watch_snapshot(snap(prices=(1000,), sha="a"),
+                                 snap(prices=(1000, 3000), sha="b"))["words"]
+          == "The prices it shows changed.")
+    check("a version that appears is said",
+          TM.diff_watch_snapshot(snap(sha="a"), snap(versions=("1.0.0",), sha="b"))["words"]
+          == "It now names version 1.0.0.")
+    check("a version that disappears is said",
+          TM.diff_watch_snapshot(snap(versions=("1.0.0",), sha="a"), snap(sha="b"))["words"]
+          == "It no longer names version 1.0.0.")
+    check("a second version is said",
+          TM.diff_watch_snapshot(snap(versions=("1.0.0",), sha="a"),
+                                 snap(versions=("1.0.0", "2.0.0"), sha="b"))["words"]
+          == "It now names version 2.0.0.")
+
+
+def t_p26_the_page_watch_rings_only_for_a_real_change():
+    import types as _types
+    w = World(local(2026, 10, 17, 12, 0), read_tier="auto")
+    pages = {"url": "https://example.com/kettle", "html": p26_page()}
+    TM.DEPS.page_fetch = lambda url: TM._page_state(pages["html"].encode(), P26_CT)
+    latched = []
+    fake_gate = _types.ModuleType("jarvis_gate")
+
+    def _latch_taint(**kw):
+        latched.append(dict(kw))
+        return True
+    fake_gate.latch_taint = _latch_taint
+    sys.modules["jarvis_gate"] = fake_gate
+    try:
+        job = TM.add({"source": "page", "url": pages["url"]}, sched=w.s)["id"]
+        first = TM.look(job, deps=TM.DEPS, sched=w.s)
+        state = TM._state(job, w.s)["last_state"]
+        check("the first look only records the snapshot",
+              first["ok"] is True and first.get("matched", 0) == 0 and w.matched() == [])
+        check("... it is the new kind, with a last-good time",
+              state.startswith(TM.PAGE_STATE)
+              and TM._page_state_fields(state)["last_good_at"] == w.clock.t)
+        pages["html"] = p26_page(stamp="2026-10-18T03:04:05Z", ago="17 hours ago",
+                                 views="9 views", nonce="csrf=ffff0000ffff0000")
+        quiet = TM.look(job, deps=TM.DEPS, sched=w.s)
+        check("a page that changed only in its noise does NOT match ([SILENT] rule)",
+              quiet.get("matched", 0) == 0 and w.matched() == [], quiet)
+        check("... and a silent look latches nothing", latched == [])
+        pages["html"] = p26_page(price="$199.99")
+        hit = TM.look(job, deps=TM.DEPS, sched=w.s)
+        check("a real price change matches exactly once",
+              hit.get("matched", 0) == 1 and len(w.matched()) == 1, hit)
+        check("... and latches the gate's taint as outside text",
+              latched == [{"why": "page_watch"}], latched)
+        watch = TM.check_watch({"source": "page", "url": pages["url"]})
+        alert = TM.alert_words(watch, 1, TM._state(job, w.s))
+        check("the alert says WHAT changed, in plain words",
+              alert == (f"The page you're watching changed: {pages['url']} "
+                        "The price is now 199.99 (it was 249.99)."), alert)
+        check("... and never quotes the page",
+              "Kettle" not in alert and "Long body words" not in alert)
+        quiet2 = TM.look(job, deps=TM.DEPS, sched=w.s)
+        check("the next quiet look changes nothing and keeps the last words",
+              quiet2.get("matched", 0) == 0
+              and "The price is now 199.99" in TM.alert_words(watch, 1,
+                                                               TM._state(job, w.s)))
+        pages["html"] = p26_page(price="$199.99", version="2.5.0")
+        ver = TM.look(job, deps=TM.DEPS, sched=w.s)
+        check("a version change matches and is said plainly",
+              ver.get("matched", 0) == 1
+              and TM.alert_words(watch, 1, TM._state(job, w.s)).endswith(
+                  "The version is now 2.5.0 (it was 2.4.0)."))
+        pages["html"] = p26_page(price="$199.99", version="2.5.0", stock="Out of stock")
+        stock = TM.look(job, deps=TM.DEPS, sched=w.s)
+        check("a stock change matches and is said plainly",
+              stock.get("matched", 0) == 1
+              and TM.alert_words(watch, 1, TM._state(job, w.s)).endswith(
+                  "It is now out of stock (it was in stock)."))
+        pages["html"] = p26_page(price="$199.99", version="2.5.0",
+                                 stock="Out of stock").replace("Kettle", "Teapot")
+        words_only = TM.look(job, deps=TM.DEPS, sched=w.s)
+        check("a change only in the words still matches, and the alert stays generic",
+              words_only.get("matched", 0) == 1
+              and TM.alert_words(watch, 1, TM._state(job, w.s))
+              == (f"The page you're watching changed: {pages['url']} "
+                  "The page's text changed."))
+        good_state = TM._state(job, w.s)["last_state"]
+        good_latch = len(latched)
+        TM.DEPS.page_fetch = lambda url: None
+        none_out = TM.look(job, deps=TM.DEPS, sched=w.s)
+        check("a fetch that answers nothing is a failed look, not a blank page",
+              none_out.get("matched", 0) == 0
+              and TM._state(job, w.s)["last_state"] == good_state, none_out)
+
+        def _fail(url):
+            raise RuntimeError("the page did not answer")
+        TM.DEPS.page_fetch = _fail
+        failed = TM.look(job, deps=TM.DEPS, sched=w.s)
+        check("a failed fetch changes nothing and keeps last-known-good state",
+              failed.get("matched", 0) == 0
+              and TM._state(job, w.s)["last_state"] == good_state, failed)
+        check("... and the last-good time is still the last successful look",
+              TM._page_state_fields(good_state)["last_good_at"] == w.clock.t)
+        check("... a failed fetch never alerts or latches again",
+              w.matched() and len(latched) == good_latch)
+    finally:
+        TM.DEPS.page_fetch = None
+        sys.modules.pop("jarvis_gate", None)
+        S._SCHED = None
+
+
+def t_p26_the_older_states_are_re_recorded_once():
+    w = World(local(2026, 10, 17, 12, 0), read_tier="auto")
+    pages = {"url": "https://example.com/old", "html": p26_page()}
+    TM.DEPS.page_fetch = lambda url: TM._page_state(pages["html"].encode(), P26_CT)
+    try:
+        job = TM.add({"source": "page", "url": pages["url"]}, sched=w.s)["id"]
+        TM._save(job, w.s, last_state="t1:" + "a" * 64)      # the pre-Pillar-26 kind
+        out = TM.look(job, deps=TM.DEPS, sched=w.s)
+        check("an old fingerprint is re-recorded, not matched", out.get("matched", 0) == 0)
+        check("... and the new snapshot is what is kept",
+              TM._state(job, w.s)["last_state"].startswith(TM.PAGE_STATE))
+        again = TM.look(job, deps=TM.DEPS, sched=w.s)
+        check("then the same page is quiet", again.get("matched", 0) == 0)
+    finally:
+        TM.DEPS.page_fetch = None
+        S._SCHED = None
 
 
 def t_shipped_loaded_and_worded():
