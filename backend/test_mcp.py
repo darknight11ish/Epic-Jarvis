@@ -410,10 +410,12 @@ def t_a_call_needs_the_right_verdict_once():
     p = b.plan_call("mcp_fake__lookup", {"word": "cat"})
     r = b.run(p, verdict=V(True, "auto", p.action, "auto"))
     check("a tier that lets it through with nobody asked is refused", not r["ok"], r)
-    for bad, why in (({}, "missing"), ({"text": "x", "more": 1}, "unexpected"),
-                     ({"text": 5}, "string"), ([1], "object")):
+    for tool, bad, why in (("mcp_fake__echo", {}, "missing"),
+                           ("mcp_fake__lookup", {"word": "x", "more": 1}, "unexpected"),
+                           ("mcp_fake__echo", {"text": 5}, "string"),
+                           ("mcp_fake__echo", [1], "object")):
         try:
-            b.plan_call("mcp_fake__echo", bad)
+            b.plan_call(tool, bad)
             ok = False
         except ValueError as exc:
             ok = why in str(exc)

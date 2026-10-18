@@ -161,6 +161,12 @@ def t_a_whole_turn_start_card_call_card_outside_text():
         check("opening plugins raised ONE start card, for this server",
               asked[:1] == ["mcp_start__fake"], asked)
         check("the plug-in tool is shown from the next round", "mcp_fake__echo" in names(bodies[1]))
+        shown = {t["function"]["name"]: t for t in bodies[1]["tools"]}["mcp_fake__echo"]
+        shape = shown["function"]["parameters"]
+        check("its argument shape uses only keywords check_call really validates",
+              "additionalProperties" not in shape
+              and AG._schema_problems(shape, {"text": "hi"}, "mcp_fake__echo") == [],
+              shape)
         opened = tool_replies(bodies[1])[0]
         check("the model is told which tools are ready",
               "mcp_fake__echo" in opened.get("note", ""), opened)

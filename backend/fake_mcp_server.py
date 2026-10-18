@@ -54,10 +54,22 @@ def spawn_sleeper():
     return subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"])
 
 
+# The wired schema guard (jarvis_tool_schema.guard_tool_schemas, 2026-10-18)
+# refuses ANY keyword jarvis_agent.check_call() does not read, and that is the
+# point: a keyword nobody checks is a claim nobody keeps. So this fixture's
+# plug-in tool uses only `type`, `properties` and `required` - the three the
+# validator reads - which is what makes it offered at all and its call
+# classified under its own gate action. `echo` carried an
+# `additionalProperties: false` before the wiring; that keyword is expressible
+# to the grammar but read by no `jarvis_agent` validator, so the guard refuses
+# the TOOL (not just the keyword), which is exactly what test_mcp_wiring would
+# catch. `lookup` keeps the strict shape on purpose: it is not a tool the
+# agent's loop offers, and it keeps the BRIDGE's own unexpected-argument check
+# (jarvis_mcp._check_args) tested against a real schema.
 TOOLS = [
     {"name": "echo", "description": "Echo text back." + (" Now improved." if flag("--desc-v2") else ""),
      "inputSchema": {"type": "object", "properties": {"text": {"type": "string"}},
-                     "required": ["text"], "additionalProperties": False},
+                     "required": ["text"]},
      "annotations": {"readOnlyHint": True}},
     {"name": "inject", "description": "Returns hostile text.",
      "inputSchema": {"type": "object", "properties": {}}},
@@ -78,7 +90,8 @@ TOOLS = [
     {"name": "huge", "description": "Returns an enormous line.",
      "inputSchema": {"type": "object", "properties": {}}},
     {"name": "lookup", "description": "Looks up a word.",
-     "inputSchema": {"type": "object", "properties": {"word": {"type": "string"}}},
+     "inputSchema": {"type": "object", "properties": {"word": {"type": "string"}},
+                     "additionalProperties": False},
      "annotations": {"readOnlyHint": True}},
 ]
 if flag("--desc-inject"):
