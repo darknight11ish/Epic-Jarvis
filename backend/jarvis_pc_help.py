@@ -307,9 +307,11 @@ def _read_programs() -> Optional[dict]:
         return None
     encoded = base64.b64encode(PS_SCRIPT.encode("utf-16-le")).decode("ascii")
     try:
+        import jarvis_child_env
         out = subprocess.run([exe, "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
                              capture_output=True, text=True, timeout=PS_TIMEOUT,
-                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                             env=jarvis_child_env.inherited())
     except Exception:
         return None
     # stderr is never read or kept: it could quote a program's name.

@@ -689,8 +689,11 @@ def zf_names(zip_bytes: bytes) -> set:
 #: on a line that is NOT a comment, with a value that is not empty and not an
 #: obvious placeholder. Used to read the owner's own config.toml - see the
 #: module docstring's "WHAT `config.toml` ACTUALLY HOLDS".
+#: Secret-shaped setting names. The LEADING boundary is deliberately absent so
+#: a provider-prefixed name (`bot_token`, `github_api_key`) is caught too; the
+#: trailing boundary still keeps `max_tokens` and `secret_scanner` out.
 _SECRET_NAME_RE = re.compile(
-    r'(?i)\b(token|secret|passwd|password|api[_-]?key|passphrase|private[_-]?key)\b')
+    r'(?i)(token|secret|passwd|password|api[_-]?key|passphrase|private[_-]?key)\b')
 _PLACEHOLDER_VALUES = {'""', "''", '""', "null", "none", '""  # or set telegram_bot_token env var'}
 _CONFIG_PATH = Path(os.path.expanduser("~")) / ".openjarvis" / "config.toml"
 
@@ -716,6 +719,31 @@ def _live_secret_lines(text: str) -> list:
             continue
         out.append((n, line))
     return out
+
+
+def _snapshot_secret_lines(config_path=_CONFIG_PATH) -> list:
+    """[(snapshot name, line number, line)] for live secrets in
+    `config.toml.before-*` snapshots (2026-10-18, audit F6).
+
+    The patcher and Settings leave these plaintext copies of earlier settings
+    in the same folder; the real `config.toml` is tested above, but a secret
+    pasted in before the fix would only exist in a snapshot. Empty when there
+    are no snapshots - the caller says so rather than counting that as a pass.
+    """
+    out = []
+    try:
+        snapshots = sorted(config_path.parent.glob(config_path.name + ".before-*"))
+    except OSError:
+        return out
+    for path in snapshots:
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for number, line in _live_secret_lines(text):
+            out.append((path.name, number, line))
+    return out
+
 
 
 def t_config_toml_holds_no_secret():
@@ -768,6 +796,33 @@ def t_config_toml_holds_no_secret():
           "# bot_token" in text and "_TOKEN env var" in text)
     check("...and its server section is loopback, not exposed",
           'host = "127.0.0.1"' in text and '# host = "0.0.0.0"' in text)
+    snapshot_files = sorted(_CONFIG_PATH.parent.glob(_CONFIG_PATH.name + ".before-*"))
+    if not snapshot_files:
+        print("        NOTE: no config.toml.before-* snapshot is on this machine, so the "
+              "snapshot check did NOT run. It is not a pass.")
+    else:
+        bad_snaps = _snapshot_secret_lines()
+        check("...and every config.toml.before-* snapshot holds no live secret either "
+              "(F6: the patcher leaves those plaintext copies)",
+              bad_snaps == [], bad_snaps[:3])
+
+
+def t_a_secret_in_a_config_snapshot_would_be_caught():
+    """F6's scanner is exercised on a synthetic snapshot, so a machine with no
+    live snapshots still proves the rule; a bite on `_snapshot_secret_lines`
+    turns this red."""
+    with tempfile.TemporaryDirectory() as tmp:
+        config = Path(tmp) / "config.toml"
+        config.write_text("[server]\nhost = \"127.0.0.1\"\n", encoding="utf-8")
+        snap = Path(tmp) / "config.toml.before-test"
+        snap.write_text('[a]\nbot_token = "REAL"\n# token = ""\n', encoding="utf-8")
+        got = _snapshot_secret_lines(config)
+        check("a live secret in a before-* snapshot is found, with its file and line",
+              got == [("config.toml.before-test", 2, 'bot_token = "REAL"')], got)
+    with tempfile.TemporaryDirectory() as tmp:
+        config = Path(tmp) / "config.toml"
+        config.write_text("[a]\ntoken = \"\"\n", encoding="utf-8")
+        check("...and a clean snapshot folder is clean", _snapshot_secret_lines(config) == [])
 
 
 def t_the_credentials_folder_is_not_swept_into_a_backup():

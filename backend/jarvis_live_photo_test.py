@@ -313,9 +313,10 @@ class VramWatch:
 
     @staticmethod
     def _smi() -> str:
+        import jarvis_child_env
         return subprocess.run(["nvidia-smi", "--query-gpu=index,name,memory.used,memory.total",
                                "--format=csv,noheader,nounits"], capture_output=True, text=True,
-                              timeout=5).stdout
+                              timeout=5, env=jarvis_child_env.inherited()).stdout
 
     def sample(self) -> None:
         try:

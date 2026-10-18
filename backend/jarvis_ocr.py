@@ -774,9 +774,10 @@ def _run_powershell(image: bytes) -> tuple:
     flags = 0x08000000 if os.name == "nt" else 0          # CREATE_NO_WINDOW
     # -EncodedCommand is not a script file, so the execution policy does not
     # apply to it and is left alone.
+    import jarvis_child_env
     out = subprocess.run([exe, "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
                          input=image, capture_output=True, timeout=TIMEOUT_S,
-                         creationflags=flags)
+                         creationflags=flags, env=jarvis_child_env.inherited())
     return out.returncode, out.stdout
 
 

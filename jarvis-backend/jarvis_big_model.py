@@ -236,10 +236,11 @@ def _make_key() -> str:
 def _run(cmd: list, timeout: float) -> tuple:
     """(return code, stdout) of a short command; (None, "") on any failure."""
     try:
+        import jarvis_child_env
         kw: dict = {"capture_output": True, "text": True, "timeout": timeout}
         if os.name == "nt":
             kw["creationflags"] = 0x08000000        # no console window
-        r = subprocess.run(cmd, **kw)
+        r = subprocess.run(cmd, env=jarvis_child_env.inherited(), **kw)
         return r.returncode, r.stdout or ""
     except Exception:
         return None, ""
@@ -1275,8 +1276,10 @@ def _kill_tree(p) -> None:
     launcher starts Python, which starts the engine). Replaced in tests."""
     try:
         if os.name == "nt":
+            import jarvis_child_env
             subprocess.run(["taskkill", "/PID", str(p.pid), "/T", "/F"],
-                           capture_output=True, timeout=10)
+                           capture_output=True, timeout=10,
+                           env=jarvis_child_env.inherited())
         else:
             import signal
             try:

@@ -2925,8 +2925,10 @@ def _kill_tree(p) -> None:
             # The whole tree of this one process: `ollama serve` starts a
             # runner per model, and stopping the parent alone would leave the
             # runner holding the card's memory.
+            import jarvis_child_env
             subprocess.run(["taskkill", "/PID", str(p.pid), "/T", "/F"],
-                           capture_output=True, timeout=10)
+                           capture_output=True, timeout=10,
+                           env=jarvis_child_env.inherited())
         else:
             import signal
             try:

@@ -296,8 +296,10 @@ _CARD_CACHE = {"at": 0.0, "cards": []}
 
 def _run(cmd, timeout=20):
     try:
+        import jarvis_child_env
         out = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
-                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                             env=jarvis_child_env.inherited())
         return (out.stdout or "") + (out.stderr or "")
     except Exception:
         return ""
