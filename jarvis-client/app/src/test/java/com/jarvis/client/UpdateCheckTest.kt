@@ -77,6 +77,96 @@ class UpdateCheckTest {
         assertEquals("abcdef1", UpdateCheck.ownSha(" ABCDEF1 "))
     }
 
+    // --------------- the cached banner after an install (PR #552) ------
+    // Gemini Q5/Q8, 2026-10-18: `lineNamesBuild` alone misses the Pixel 9
+    // case - a cached line naming a commit different from the new build's
+    // sha, but stale all the same because it was cached before the install.
+    // The line is therefore tied to the app version that cached it.
+
+    /** The line the app caches: [UpdateCheck.line] with [sha] in it. */
+    private fun cachedLine(sha: String = "9999999") =
+        "A newer build of this app is on GitHub (main, $sha). Nothing is downloaded until you choose to."
+
+    @Test
+    fun `lineNamesBuild finds the short commit in the line's parenthesis, both ways`() {
+        val line = cachedLine("4cc383c")
+        assertTrue(UpdateCheck.lineNamesBuild(line, "4cc383c0123456789abcdef0123456789abcdef"))
+        assertTrue(UpdateCheck.lineNamesBuild(line, "4cc383c"))
+        // A different build is not this one, and a line with no sha is no claim.
+        assertFalse(UpdateCheck.lineNamesBuild(cachedLine("9999999"), "4cc383c"))
+        assertFalse(UpdateCheck.lineNamesBuild("A newer build of this app is on GitHub.", "4cc383c"))
+        assertFalse(UpdateCheck.lineNamesBuild(null, "4cc383c"))
+        assertFalse(UpdateCheck.lineNamesBuild(line, null))
+    }
+
+    @Test
+    fun `a cached line naming the build now installed is dropped`() {
+        // The old APK cached a line about the build that has just been
+        // installed: the very bug the owner hit on the Pixel 9.
+        val line = cachedLine("4cc383c")
+        assertNull(
+            UpdateCheck.cachedLineForBuild(
+                line, "0.2.1183", "0.2.1183",
+                "4cc383c0123456789abcdef0123456789abcdef",
+            ),
+        )
+        assertNull(UpdateCheck.cachedLineForBuild(line, "0.2.1183", "0.2.1183", "4cc383c"))
+    }
+
+    @Test
+    fun `a cached line naming a genuinely different build with the same app version is kept`() {
+        // Same running APK, a live poll found a different commit: genuinely
+        // newer, so the line stays - this is what `lineNamesBuild` is for.
+        val line = cachedLine("9999999")
+        assertEquals(
+            line,
+            UpdateCheck.cachedLineForBuild(
+                line, "0.2.1183", "0.2.1183",
+                "4cc383c0123456789abcdef0123456789abcdef",
+            ),
+        )
+    }
+
+    @Test
+    fun `a cached line from another app version is dropped regardless of the build it names`() {
+        // The Pixel 9 case `lineNamesBuild` cannot see: the line names a sha
+        // different from the new build and would pass that check, but it was
+        // cached before this APK was installed, so it is stale anyway.
+        val line = cachedLine("9999999")
+        assertNull(
+            UpdateCheck.cachedLineForBuild(
+                line, "0.2.1182", "0.2.1183",
+                "4cc383c0123456789abcdef0123456789abcdef",
+            ),
+        )
+        // A different version wins even when the line names this build too.
+        assertNull(
+            UpdateCheck.cachedLineForBuild(
+                cachedLine("4cc383c"), "0.2.1182", "0.2.1183",
+                "4cc383c0123456789abcdef0123456789abcdef",
+            ),
+        )
+    }
+
+    @Test
+    fun `a cached line from before the version was stored is dropped`() {
+        // Additive migration: the new key is absent on an older install and
+        // reads as null - the line was cached by an older APK, so it goes.
+        assertNull(
+            UpdateCheck.cachedLineForBuild(
+                cachedLine("9999999"), null, "0.2.1183",
+                "4cc383c0123456789abcdef0123456789abcdef",
+            ),
+        )
+        assertNull(UpdateCheck.cachedLineForBuild(null, "0.2.1182", "0.2.1183", "4cc383c"))
+        assertNull(UpdateCheck.cachedLineForBuild("  ", "0.2.1183", "0.2.1183", "4cc383c"))
+        // A build that does not know its version cannot apply rule 1: it
+        // falls back to the build-name check alone rather than drop a line
+        // that may still be right.
+        val newer = cachedLine("9999999")
+        assertEquals(newer, UpdateCheck.cachedLineForBuild(newer, "0.2.1182", null, "4cc383c"))
+    }
+
     @Test
     fun `with two APKs half way through a publish, the newer upload is the release`() {
         val p = found(

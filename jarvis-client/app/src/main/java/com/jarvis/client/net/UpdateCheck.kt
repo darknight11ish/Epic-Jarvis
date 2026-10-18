@@ -305,6 +305,41 @@ object UpdateCheck {
         if (!HEX.matches(named)) return false
         return named.startsWith(own) || own.startsWith(named)
     }
+
+    /**
+     * The cached banner line this build may still show, or null when it must
+     * be dropped. Two rules, both needed:
+     *
+     *  1. **The cache belongs to this app version.** [cachedOnVersion] is the
+     *     `BuildConfig.VERSION_NAME` that was running when the line was
+     *     stored (null for a cache written before that was recorded). A
+     *     different - or absent - version means the line was written by an
+     *     older APK, and installing an APK is exactly the moment "anything
+     *     cached before this install is stale" becomes true. This is the rule
+     *     [lineNamesBuild] alone cannot give: installing `0.2.1825 (b0f2c25)`
+     *     leaves a cached line naming `7ddb5b8`, which is different from the
+     *     running sha but still stale.
+     *  2. **The line must not name this build.** [lineNamesBuild] compares
+     *     the commit in the line's parentheses with the running build, so even
+     *     a live poll that named the very sha now installed is never shown as
+     *     "newer".
+     *
+     * When the running build does not know its version (blank [ownVersion]) the
+     * version rule cannot be applied, so only rule 2 is used rather than
+     * dropping a cache that may still be right.
+     */
+    fun cachedLineForBuild(
+        cachedLine: String?,
+        cachedOnVersion: String?,
+        ownVersion: String?,
+        ownSha: String?,
+    ): String? {
+        val line = cachedLine?.takeIf { it.isNotBlank() && !lineNamesBuild(it, ownSha) }
+            ?: return null
+        val own = ownVersion?.trim().orEmpty()
+        if (own.isEmpty()) return line
+        return line.takeIf { cachedOnVersion?.trim() == own }
+    }
     /** The one quiet line. */
     fun line(p: Published): String =
         "A newer build of this app is on GitHub (" +
