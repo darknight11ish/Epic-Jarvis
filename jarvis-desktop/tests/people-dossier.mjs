@@ -108,8 +108,16 @@ check("the page asks the one command by its literal name and draws its answer", 
   assert.match(brain, /invoke\("people_dossier", \{ name: peopleL\.name \}\)/);
   assert.match(brain, /import \{ dossierBody, dossierTitle \} from "\.\/people-dossier\.js"/);
   assert.match(brain, /dossierBody\(peopleL\.view\)/, "the card must draw the PC's own text");
-  assert.match(brain, /onOpen: \(entityId\) => \{/);
+  // The panel's per-row "Open in Memory" action is NOT a dossier door: it
+  // keeps opening the About page for every row (the regression galaxy-panel
+  // caught). A PERSON opens the dossier from their node click and from the
+  // inspector's own button, and only there.
+  assert.match(brain, /onOpen: \(entityId\) => openAboutFromGalaxy\(entityId\),/);
   assert.match(brain, /node\.group === "person"/, "only a person opens a dossier");
+  assert.match(brain, /if \(node\.group === "person"\) openPersonDossier\(node\.label\);/,
+    "a person's node click is one of the two dossier doors");
+  assert.match(brain, /nodeButtons\.push\(button\("Person dossier", \(\) => openPersonDossier\(node\.label\)/,
+    "the inspector's own button is the other door");
   assert.match(brain, /listen\("private-hidden", \(\) => closePersonDossier\(\)\)/);
   assert.match(brain, /listen\("security-changed", \(\) => closePersonDossier\(\)\)/);
   const html = read("jarvis-desktop/src/brain.html");

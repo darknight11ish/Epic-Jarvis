@@ -13054,6 +13054,10 @@ function wireConstellation() {
     const node = state.graph?.byId?.get(nodeIdOf(button));
     if (!node) return;
     select(node);
+    // LM-4: ONE click on a person opens their read-only dossier. A row's own
+    // action buttons (galaxyPanel's "Open in Memory") are above this overlay
+    // and never reach this listener; only a person's NODE does this.
+    if (node.group === "person") openPersonDossier(node.label);
     centreOn(node);
   });
   // Hovering a dot lights it and everything joined to it, exactly as the canvas
@@ -13249,12 +13253,11 @@ const galaxyPanel = createGalaxyPanel({
     live: dom.galaxyFactsLive,
     foot: dom.galaxyFactsFoot,
   },
-  onOpen: (entityId) => {
-    // A PERSON opens their dossier (LM-4); a thing keeps the About page.
-    const node = (state.graph?.nodes || []).find((n) => n.entityId === entityId);
-    if (node && node.group === "person") return openPersonDossier(node.label);
-    return openAboutFromGalaxy(entityId);
-  },
+  // LM-4 does NOT touch this callback: it is the panel's per-row
+  // "Open in Memory" action, and it must keep opening the About page for
+  // every row, person or thing. The dossier has its own two doors below
+  // (a person's node click and the inspector's "Person dossier" button).
+  onOpen: (entityId) => openAboutFromGalaxy(entityId),
 });
 
 function select(node) {
