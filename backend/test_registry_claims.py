@@ -547,45 +547,54 @@ def t_a_comment_that_names_a_file_names_one_that_exists():
 #   The two entries this suite was written for
 # --------------------------------------------------------------------------
 
-def t_jarvis_tool_schema_still_has_no_caller():
+def t_jarvis_tool_schema_is_wired_into_the_tool_loop():
     """The corrected claim, pinned by measurement - and by the doc it cites.
 
-    `jarvis_tool_schema.py`'s own docstring records why wiring it into the tool
-    loop would be wrong: on the live Ollama, a tool's schema in `format` on a
-    call that also offers `tools` corrupted the arguments. So a *new* caller
-    appearing is a real event worth failing on, and the registry comment and
-    `docs/JARVIS-API.md` must move together with it.
+    The sentence was "It has NO CALLER YET" until 2026-10-18, when
+    `jarvis_agent.py` began importing the module on both sides of a tool call
+    (Part III.1 item 4): `_schemas_for()` sanitises and guards every tool's
+    parameters before sending, and `check_call()` validates the parsed
+    arguments against the SAME returned schema before prepare() or the gate.
+    The registry comments and `docs/JARVIS-API.md` must say so TOGETHER; a
+    comment that falls behind the code again is the defect this suite exists
+    for.
     """
     scan = SCAN
     importers = scan.importers("jarvis_tool_schema")
-    check("jarvis_tool_schema.py still has no caller outside its own suite",
-          not importers,
-          f"importers now: {scan.importers('jarvis_tool_schema', count_tests=True)}")
+    check("jarvis_agent.py imports jarvis_tool_schema - the caller the registry "
+          "comment now names",
+          any(r.endswith("jarvis_agent.py") for r in importers),
+          f"importers: {importers}")
+    check("... and it is the only production caller",
+          sorted({r.rsplit("/", 1)[-1] for r in importers}) == ["jarvis_agent.py"],
+          f"importers: {importers}")
     for label, path in SHIPPED_LISTS:
         rows = [c for n, c, _ in entries_of(label, path)
                 if n == "jarvis_tool_schema.py"]
-        check(f"{label}'s entry for jarvis_tool_schema.py says it has no caller",
-              rows and _NO_CALLER.search(rows[0]),
-              f"comment: {rows[0][-260:] if rows else 'NO ENTRY'}")
+        check(f"{label}'s entry names jarvis_agent.py as the caller",
+              rows and "jarvis_agent.py" in rows[0],
+              f"comment: {rows[0][-320:] if rows else 'NO ENTRY'}")
+        check(f"{label}'s entry no longer claims nothing imports it",
+              rows and not (_NOTHING_IMPORTS.search(rows[0])
+                            or _NO_CALLER.search(rows[0])),
+              f"comment still says it: {rows[0][-320:] if rows else 'NO ENTRY'}")
         check(f"{label}'s entry points at the doc that says the same",
               rows and "JARVIS-API.md" in rows[0],
-              f"comment: {rows[0][-260:] if rows else 'NO ENTRY'}")
+              f"comment: {rows[0][-320:] if rows else 'NO ENTRY'}")
     if not API_DOC.is_file():
         skip(f"{API_DOC.relative_to(REPO).as_posix()} is not here, so the sentence "
              f"the registry points at was NOT checked")
         return
     text = API_DOC.read_text(encoding="utf-8", errors="replace")
-    # The PARAGRAPH, not a window of characters: this page is hard-wrapped, and
-    # it says "It has no\ncaller yet" - so a search for the words "no caller"
-    # misses a sentence that is there. Measured, not guessed: that is exactly
-    # how the first version of this check failed.
+    # The PARAGRAPH, not a window of characters: this page is hard-wrapped.
     said = [p for p in re.split(r"\n\s*\n", text) if "jarvis_tool_schema.py" in p]
-    check("docs/JARVIS-API.md still says it has no caller - the sentence the "
-          "registry comment points at",
-          any("no caller" in re.sub(r"\s+", " ", p) for p in said),
-          f"{len(said)} paragraph(s) name the module; flat text of the first: "
-          f"{re.sub(r'\\s+', ' ', said[0])[:300]!r}" if said else "no paragraph names it")
-
+    flat = [re.sub(r"\s+", " ", p) for p in said]
+    check("docs/JARVIS-API.md says the module IS called, and by whom",
+          any("jarvis_agent.py" in f for f in flat),
+          f"{len(said)} paragraph(s) name the module")
+    check("... and no longer says it has no caller",
+          not any("no caller" in f for f in flat),
+          flat[0][:300] if flat else "no paragraph names it")
 
 def t_jarvis_task_lease_is_wired_on_the_consumer_side_only():
     """The corrected claim, pinned: wired where it is consumed, unopened in
@@ -787,7 +796,7 @@ if __name__ == "__main__":
                t_a_comment_that_says_nothing_imports_it_is_right,
                t_a_comment_that_names_a_proof_names_a_real_one,
                t_a_comment_that_names_a_file_names_one_that_exists,
-               t_jarvis_tool_schema_still_has_no_caller,
+               t_jarvis_tool_schema_is_wired_into_the_tool_loop,
                t_jarvis_task_lease_is_wired_on_the_consumer_side_only,
                t_a_claim_that_work_is_merged_is_really_merged,
                t_the_checker_refuses_the_sentences_that_were_shipped,

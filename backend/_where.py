@@ -898,14 +898,21 @@ SHIPPED = (
     # times live in vault.json; NO VALUE IS EVER IN THAT FILE.
     "jarvis_vault.py",
     # The schema a skill's `format` may carry, and the guard around it
-    # (2026-10-15, Upgrade 3A). A skill's own format is validated against a
-    # declared schema BEFORE anything uses it, so a malformed one is refused
-    # in plain words rather than acted on. It validates only: no route, no
-    # card, no file written, nothing downloaded. Standard library only, and
-    # no patch. It has NO CALLER YET, and docs/JARVIS-API.md says the same;
-    # its own docstring records why - putting a tool's schema in `format` on
-    # a call that also offers `tools` corrupted the arguments on the live
-    # Ollama, so the schema belongs on a call with no `tools` at all.
+    # (2026-10-15, Upgrade 3A; wired into the tool loop 2026-10-18, Part III.1
+    # item 4). A skill's own format is validated against a declared schema
+    # BEFORE anything uses it, so a malformed one is refused in plain words
+    # rather than acted on. It validates only: no route, no card, no file
+    # written, nothing downloaded. Standard library only, and no patch. It IS
+    # wired now: `jarvis_agent.py` imports it on BOTH sides of a tool call -
+    # `_schemas_for()` sends a tool's parameters only after `sanitise_schema()`
+    # (REFUSE) and `guard_tool_schemas()` pass, and `check_call()` validates
+    # the parsed arguments against the SAME returned schema before prepare() or
+    # the gate. A tool whose shape cannot pass is left out, never sent
+    # weakened, and a call to it gets one plain refusal that names it and says
+    # nothing ran. docs/JARVIS-API.md section 136 says the same. Its own
+    # docstring still records why a SKILL's schema belongs in `format` only on
+    # a call that offers no `tools` - that rule is unchanged; what is wired is
+    # the schema OF a tool, not a schema in `format`.
     "jarvis_tool_schema.py",
     # One bounded, revocable lease over a run of steps (the task-lease work
     # order, Slice 1): what a lease is, who may open one - `jarvis_gate.check()`

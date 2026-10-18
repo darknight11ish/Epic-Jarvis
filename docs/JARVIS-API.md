@@ -21255,6 +21255,14 @@ source, so a backend route no app calls is outside what it decides.
 same work item and serves no route at all. It decides whether a JSON Schema may
 be sent as Ollama's `format`, refuses the keywords the live grammar was measured
 not to express, and guards the set of keywords a tool's own schema may use
-against the ones `jarvis_agent.check_call()` actually validates. It has no
-caller yet, so it has nothing to document here beyond that sentence; the
-`format`-on-a-tool-call design it warns about is recorded in its own docstring.
+against the ones `jarvis_agent.check_call()` actually validates. **Since
+2026-10-18 it IS called:** `jarvis_agent.py` imports it on both sides of a tool
+call - `_schemas_for()` sends a tool's parameters only after
+`sanitise_schema()` (default REFUSE) and `guard_tool_schemas()` pass, and
+`check_call()` validates the parsed arguments against the SAME returned schema
+before `prepare()` or the gate. A tool whose shape cannot pass either check is
+left out of the request (never sent weakened) and a call to it gets one plain
+refusal that names it and says nothing ran; a backend without the module keeps
+today's behaviour. The `format`-on-a-tool-call design its docstring warns about
+is unchanged and still not used - what is wired is the schema OF a tool, not a
+schema in `format`.
