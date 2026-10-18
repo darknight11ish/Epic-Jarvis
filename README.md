@@ -53,7 +53,7 @@ reader can check them rather than take them on trust.
 1. **Private by architecture, not just policy**: anything touching your emails, local files, credentials, finances, or long-term memory is locked to your **local LLM** via automatic taint latches (`jarvis_gate.py`). Sensitive turns cannot leave your PC.
 2. **Zero public tunnels**: cross-device sync between your Windows 11 PC and your Android phone runs strictly over **localhost (`127.0.0.1`)**, **Tailscale**, or **NordVPN Meshnet** — never through public ingress tunnels (`ngrok`, Cloudflare Tunnel, or Tailscale Funnel).
 3. **Fail-closed credential vault & scrubber**: secrets live in a host-bound vault (`jarvis_vault.py`, backed by Windows Credential Manager) and are handled by name (`vault://...`). Values resolve only at the single outbound request header that authenticates with them, and are scrubbed everywhere else (`jarvis_scrub.py`).
-4. **Human-in-the-loop approval & 1-click undo**: consequential actions follow **Plan → Describe → Gate → Run** (`jarvis_gate.py`). Approval cards never steal keyboard focus (so a stray `Enter` while typing can never auto-approve an action), wait up to 15 minutes, and record reversible before/after snapshots in `receipts.db` for **1-click undo** (`jarvis_receipts.py`).
+4. **Human-in-the-loop approval & 1-click undo**: consequential actions follow **Plan → Describe → Gate → Run** (`jarvis_gate.py`). Approval cards never steal keyboard focus (so a stray `Enter` while typing can never auto-approve an action), wait up to 15 minutes, and record reversible before/after snapshots in `receipts.db` for **1-click undo** (`jarvis_receipts.py`). While the connection is catching up, **Deny still works** and only Approve waits - refusing is never held.
 
 ## Major Features at a Glance
 
@@ -66,8 +66,103 @@ reader can check them rather than take them on trust.
 | **Skills & Self-Improvement** | Compatible with the open `SKILL.md` standard: progressive disclosure, `/skill` commands, security scanning (`scan_text`), routine discovery, and approval-gated edits. | `jarvis_skills.py`, `jarvis_skill_hub.py`, `jarvis_skill_discovery.py` |
 | **Hybrid Local + Cloud Routing** | Runs 8B/9B models locally on your GPU (`Qwen 3.5 9B` / `Qwen 3 8B` + local opt-in abliterated models) with complexity/latency routing to spend-capped cloud lanes. | `jarvis_models.py`, `jarvis_router.py`, `jarvis_auto_router.py`, `jarvis_chatbot_api.py` |
 | **Voice & Speaker Verification** | Verify-first, transcribe-second pipeline: **CAM++** (everyday) & **TitaNet-Large** (strict) speaker verification, plus **WeSpeaker**, before **Parakeet TDT** STT, **Kokoro** / **ZipVoice** / **Pocket TTS**, and `openWakeWord`. | `jarvis_speech.py`, `jarvis_voice.py`, `jarvis_kokoro.py` |
-| **Projects, Finance & Learning** | `coding` and `life` project workspaces with benchmarks, SHA-256 deduplicated bank CSV spending, real-money retirement projections, and **FSRS v6** (`fsrs==6.3.2`) flashcards. | `jarvis_projects.py`, `jarvis_spending.py`, `jarvis_retirement.py`, `jarvis_decks.py` |
+| **Projects, Finance & Learning** | `coding` and `life` project workspaces with benchmarks, SHA-256 deduplicated bank CSV spending, a subscription and price-rise radar in whole cents, real-money retirement projections, and **FSRS v6** (`fsrs==6.3.2`) flashcards. | `jarvis_projects.py`, `jarvis_spending.py`, `jarvis_retirement.py`, `jarvis_decks.py` |
 | **Desktop, Browser & Phone Tools** | Opt-in CDP Accessibility-Tree browser driver, Windows UI Automation (`uiautomation`), ADB Android control, Docker management, and local SearXNG web search. | `jarvis_browser_control.py`, `jarvis_ui_control.py`, `jarvis_android_control.py` |
+| **PC Health & N-GPU Doctor** | Names every graphics card's own memory, use and state - resting, working, warm, hot, at its power limit, or nearly full - and answers heat and "why is my PC slow" without calling rest a fault. Both apps show the same answers through PC help. | `jarvis_pc_help.py`, `jarvis_hardware.py`, `jarvis_compute.py` |
+
+## What's new (October 2026)
+
+The newest work, grouped by what it changes for you. Everything described as a
+feature you can use is on `main` and reachable from both apps unless the bullet
+says otherwise. Anything built but not reachable yet says so in its own bullet.
+
+- **Your money: a subscriptions and price-rise radar, and two bugs in it
+  fixed.** Ask in chat *"did any of my subscriptions go up?"* or *"was I
+  charged twice?"* and Jarvis reads the bank files that already have a saved
+  layout. It finds shops billing about once a month (26-35 days) or once a
+  year (350-380), reports the **exact rise in whole cents**, and reports the
+  same shop charging the same amount twice within six days. It reuses the
+  spending answer's table block, so both apps draw it with no new screen. The
+  two fixes: a rise billed again at the same new price no longer hides the
+  rise, and a different amount inside one bill (a one-off charge beside a
+  subscription) is no longer read as a price rise. Both apps are tested
+  against one generated contract, so they cannot disagree about the numbers.
+  The mail half (trial-ending and delivery emails) is not built. Links:
+  [FINANCE-DESIGN](docs/FINANCE-DESIGN.md) §11,
+  [JARVIS-API](docs/JARVIS-API.md) §100.3.
+- **Approvals: refusing is never held, even while the connection catches up.**
+  The rule both apps already promised is now true on all four surfaces: Deny
+  works on the bar, the widget, the HUD and the phone (its home-screen widget
+  and a notification too), while Approve still waits for the link to catch up.
+  A stale-but-connected phone widget shows the last known cards **with** Deny;
+  only a link that is gone hides it. A stale Deny cannot approve anything (it
+  sends `approved: false`), and a late one is refused by the server's existing
+  expired/duplicate answer. Links: [ARCHITECTURE](docs/ARCHITECTURE.md) §3,
+  [the desktop test](jarvis-desktop/tests/deny-on-stale.mjs).
+- **Jarvis Live names the real reason it stopped, instead of blaming you.**
+  When Android refused the microphone foreground service, or the microphone
+  permission was missing, the end screen used to say *"You ended it."* The
+  phone now sorts the failure into its own kind and the PC gives each kind its
+  own plain sentence; an end nobody explained reads "Live ended." and never
+  "You ended it." Both sides read one shared table, so their words cannot
+  drift. No device fix is claimed - the next attempt on the phone will show on
+  the end screen which refusal it was. Links:
+  [LIVE-DESIGN](docs/LIVE-DESIGN.md) §2,
+  [JARVIS-API](docs/JARVIS-API.md) §63.1-63.2.
+- **Graphics cards: one, two or three, and twin cards are told apart.** Every
+  GPU sentence works on **one card, the two installed today, or three** -
+  three is never required. Two cards with the same name are called "on your
+  monitor" and "(headless)", or by their own id tail when the monitor cannot
+  separate them. The big 30B model's 28,672-token figure is the setting
+  **measured on two cards**; it is not raised for a third card until a
+  measurement on this PC says it fits. PC help's `gpu`, `heat` and "why is my
+  PC slow" answers now read each card's own state (`pstate` + clocks + load),
+  so a resting card is never called throttled, and each card's memory is
+  reported. Links: [MODEL-TOPOLOGY](docs/MODEL-TOPOLOGY.md),
+  [MEASURED-2026-10-05-owner-pc.md](docs/MEASURED-2026-10-05-owner-pc.md),
+  [JARVIS-API](docs/JARVIS-API.md) §84.
+- **Study decks: a memory-strength radar, a spoken-answer grader, and a
+  reversible voice review.** The flashcard module (`jarvis_decks.py`) can now
+  name the topics whose cards have dropped below 75% memory strength, weakest
+  first, in one plain sentence per topic; grade a spoken answer against the
+  card with no model at all (empty or "I don't know" is Again, and a misheard
+  answer is never marked Easy, because Easy waits longest before the card
+  comes back); and record a voice review as a receipt, so the existing Undo
+  puts the card back exactly - even after a restart. **This is the backend
+  half only: no route and no app screen yet**, so it does not change what you
+  can do in either app today. Links: [JARVIS-API](docs/JARVIS-API.md) §102,
+  [decks module](backend/jarvis_decks.py).
+- **Built, tested, and not reachable from either app yet: a local data sandbox
+  and a file time machine.** The **data sandbox** (`jarvis_sandbox_exec.py`)
+  is for the day a small local model writes a small Python script for data or
+  maths. A strict allowlist refuses any import that could reach the network or
+  start another program, the script runs in a separate scrubbed Python
+  process, and only a result stamped with a per-run secret code comes back.
+  Five seconds and 64 KiB of output are hard limits; **memory is not bounded
+  on Windows yet**. The **file guardian** (`jarvis_file_guardian.py`) keeps
+  the bytes an overwrite would destroy in the folders Jarvis may change: one
+  compressed copy per distinct content, a size-limited diff, a 250 MB limit
+  that never prunes a pinned copy, and a restore that asks the existing Undo
+  card and writes a new receipt so the restore itself can be undone. Neither
+  is wired into a route, a chat tool, a card or a screen; wiring them in is a
+  separate decision. Links:
+  [sandbox module](backend/jarvis_sandbox_exec.py),
+  [guardian module](backend/jarvis_file_guardian.py).
+- **Two ratchets against tests that measure the wrong thing.** One refuses a
+  test that asserts on a production module's **source text**; the other
+  refuses one that pins a **line number or a slice** of source. Both walk the
+  `ast` rather than matching text, both record today's debt as a ceiling that
+  may only go down, and both run in CI. Links:
+  [check_no_source_pins.py](tools/check_no_source_pins.py),
+  [check_position_pins.py](tools/check_position_pins.py).
+- **In flight, not in this build (17 October 2026).** Two open pull requests
+  are not merged: the clipboard time-machine backend (#536) and the red-team
+  decision lab (#538). **Planned, not built:** the flashcard coach's phone
+  screen; a third graphics card is planned but not installed, so every
+  three-card case in the tests is an injected reading; the sandbox's Windows
+  memory cap and the wiring of the sandbox, the file guardian and the
+  study-deck additions into an app or a tool are follow-up slices; the
+  voice-scribe pillar waits for your answers to three privacy questions.
 
 ## Feature Highlights in Detail
 
@@ -82,14 +177,16 @@ reader can check them rather than take them on trust.
 * **"Write Like Me" Voiceprint (`jarvis_voiceprint.py`)**: Builds an inspectable stylometric profile from your calibration answers and writing samples (`voiceprint.db`), guarded by `jarvis_scrub` and full **List + Forget-with-confirm** controls.
 * **Encrypted Backups (`jarvis_backup.py`)**: Protects personal data backups with Argon2id / Windows Credential Manager, and restoring one always needs Windows Hello on the PC.
 
-### 3. Dual-GPU Local AI, Opt-In Uncensored Models & Spend-Capped Cloud Lanes
-* **Hardware-Aware Local Inference**: Separates your display GPU (e.g., 8 GB RTX 2080 Super running Windows 11 DWM + WebView2) from your dedicated headless AI GPU (e.g., 12 GB RTX 2060 running `Qwen 3.5 9B` or `Qwen 3 8B` in Ollama), with automatic prefix warming (`warm_prefix()`) on wake.
+### 3. Local AI on One, Two or Three Cards, Opt-In Uncensored Models & Spend-Capped Cloud Lanes
+* **Hardware-Aware Local Inference**: Separates your display GPU (an 8 GB RTX 2080 SUPER running Windows 11 DWM + WebView2) from your dedicated headless AI GPU (a 12 GB RTX 2060 running `Qwen 3.5 9B` or `Qwen 3 8B` in Ollama), with automatic prefix warming (`warm_prefix()`) on wake. The same code runs on **one card, the two installed today, or three**; two identical cards are told apart by role ("on your monitor" / "(headless)") and, if the monitor cannot separate them, by their own id tail - never by a bare duplicated name.
+* **Honest Card Figures & Health**: The big 30B model's 28,672-token setting is the figure measured on two cards, and it is not raised for a third card until measured there. PC help's `gpu`, `heat` and "why is my PC slow" answers are per card, read `pstate` + clocks + load so rest is not called a fault, and say plainly when this PC's driver will not report per-program memory (`[N/A]`).
 * **On-Disk Opt-In Models (`jarvis_optin_models.py`)**: Switch to local uncensored/abliterated GGUF models already on your drive without triggering any external downloads.
 * **Smart Cloud Escalation with Whole-Cent Spend Caps (`jarvis_router.py`, `jarvis_auto_router.py`, `jarvis_chatbot_api.py`)**: Escalates complex, untainted coding or research turns to `jarvis-escalate` / `jarvis-critic`, extracts `reasoning_content` fallbacks automatically, and records every cent against your monthly cap (`jarvis_chatbot_api.money_check()`).
 
 ### 4. Verify-First Voice Pipeline
 * **Speaker Verification Before Transcription (`jarvis_speech.py`)**: Every voice clip is verified against your voiceprint (**CAM++** for everyday speed, **TitaNet-Large** for strict verification, plus **WeSpeaker**) *before* speech-to-text runs. Unverified audio is never transcribed.
 * **Local STT, TTS & Wake Word**: Uses **Silero VAD**, **openWakeWord** (`hey_jarvis` + custom `stop_head.bin`), **NeMo Parakeet TDT 0.6B** via `sherpa-onnx`, and **Kokoro-82M** (54 voices with lip-sync timing) plus **ZipVoice**, **F5-TTS**, and **Pocket TTS** for custom voice cloning (**Pocket TTS** is built and pinned but not switched on yet).
+* **Jarvis Live says why it stopped (`jarvis_live.py`)**: Android's foreground-service refusal, a missing microphone permission and a stopped microphone each get their own plain sentence on the end screen, and an end nobody explained is "Live ended." - never "You ended it." Both apps read one shared case table, so their words cannot drift.
 
 ### 5. Unified Design System & Living UI
 * **Single-Source W3C DTCG Tokens (`tokens/themes.tokens.json`)**: Ten color families compiled via `tools/tokens/build.mjs` into three Desktop themes (`deep-space`, `paper`, `high-contrast`) and three Android themes (`reactor`, `daylight`, `contrast`), verified for WCAG AA/AAA contrast (`themecheck.mjs` & `contrast.mjs`).
@@ -111,7 +208,9 @@ the one place rule 4 is deliberately loosened.
   phone. With no lock set up, the card is refused until you set one up. This
   narrows a real gap without closing it — see [Honest limits](#honest-limits).
 - **Stopping is never held back.** Stop everything, Cancel on a job, muting
-  and Undo all happen at once, with no card.
+  and Undo all happen at once, with no card. The same is true of refusing an
+  approval card: Deny works even while the connection is catching up - only
+  Approve waits.
 - **Outside text raises the bar.** In a turn that has read an email, a page, a
   file or other outside text, note writes, web searches and smart-home
   switches ask first.
@@ -129,7 +228,7 @@ can be loosened from an app.
 ```text
 Epic-Jarvis/
 ├── jarvis-backend/     # Canonical patched Python backend & HUD server (http://localhost:4719)
-├── backend/            # 194 modules shipped whole (184 twins + 10 rebuilt), 143 patches & 328 test suites - measured 2026-10-15 on main at 6db0df06
+├── backend/            # 205 modules shipped whole (195 twins + 10 rebuilt), 147 patches & 356 test suites - measured 2026-10-17 on main at 7ddb5b8c
 ├── jarvis-desktop/     # Windows 11 Tauri v2 (Rust + WebView2) Spotlight & HUD application
 ├── jarvis-client/      # Native Android companion app (Kotlin + Jetpack Compose, minSdk 33)
 ├── plugins/            # Dynamic plugin loader (loader/) & drop-in plugins (ready/)
@@ -138,7 +237,7 @@ Epic-Jarvis/
 ├── docker/searxng/     # Local privacy-preserving SearXNG metasearch container setup
 ├── scripts/            # PowerShell setup, update, backup, & patch-stack management scripts
 ├── tools/              # Static verifiers, code generators, & architectural audit checkers
-└── docs/               # 387 design docs, API reference (JARVIS-API.md) & decision logs - measured 2026-10-15
+└── docs/               # 388 design docs, API reference (JARVIS-API.md) & decision logs - measured 2026-10-17 on main at 7ddb5b8c
 ```
 
 ## Quick Start (Windows 11)
@@ -158,6 +257,8 @@ Epic-Jarvis/
    ```powershell
    Remove-Item Env:JARVIS_BACKEND -ErrorAction SilentlyContinue
    python -B backend/run_suites.py
+   python tools/check_no_source_pins.py
+   python tools/check_position_pins.py
    python tools/check_defect_register.py
    python tools/check_claims.py
    python tools/check_docs_map.py
@@ -182,6 +283,30 @@ rules is that **nothing is claimed that is not true**. The short list:
   suggestions); **every one is off, and each needs its own approval card**.
   That includes the camera in Jarvis Live, which stays off until the card is
   in and a photo test passes.
+- **A third graphics card is planned, not installed.** The hardware sentences
+  already work on one, two or three cards, but every three-card case in the
+  tests is an injected reading, not a real machine. The big 30B model's
+  28,672-token setting is the figure measured on two cards and is not raised
+  for a third card until it is measured there.
+- **PC help cannot show how much graphics memory each program uses on this
+  PC.** The driver reports `[N/A]` for every process, so the answer lists
+  which programs hold each card, says plainly that it cannot show the
+  amounts, and caps the list. A genuinely hot card has not been produced in
+  testing either - the heat classification is driven by injected readings,
+  so it is honest arithmetic, not a measured throttle.
+- **Three backend slices are built, tested, and not wired to anything you can
+  use yet.** The local data sandbox, the file guardian and the study-deck
+  additions (memory-strength radar, spoken-answer grader) have no route, chat
+  tool, card or screen, so they change nothing you can do today; wiring them
+  in is a separate decision. The sandbox's five-second and 64 KiB limits are
+  hard, but **its memory is not capped on Windows**, so a badly behaved script
+  can still make the PC struggle until the five seconds are up. The file
+  guardian has only ever snapshotted temporary test folders, never a real
+  project or vault.
+- **Jarvis Live's new stop reasons are tested, not field-measured.** No device
+  fix is claimed: the phone's classification and both sides' words are tested
+  in the project's own harnesses without a phone, and the next attempt on the
+  phone will show on its own end screen which refusal it hit.
 - **Everyday chat has a small memory: about 4,096 tokens** of conversation.
   Longer talks get strange before they get long, and the bigger figures for
   what fits on each card are still worked out on paper — none of them is
