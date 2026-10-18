@@ -8690,10 +8690,14 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         # When this answer started calling tools, for the turn-level bound
         # below (2026-10-06).
         _tools_started = time.monotonic()
-        # The last tool call this turn asked for, for the identical-call
-        # breaker (F1, 2026-10-18): (name, canonical arguments), or None
-        # before the first call. Only CONSECUTIVE pairs are compared.
-        last_call_key = None
+        # The identical-call breaker (F1, 2026-10-18) compares against the LAST
+        # CALL OF THE PREVIOUS MODEL ROUND, not against calls in the same round.
+        # Two calls in one assistant message arrive together - there is no
+        # result "above" the second one yet - and a model that asks for the same
+        # safe thing twice in one batch is making two requests, not retrying.
+        # The retry loop the breaker exists for is across rounds, where the
+        # model has seen the result and asks for the same thing again.
+        previous_round_key = None
 
 
         # One continuation nudge per turn at most (2026-10-18): a promise after
@@ -8754,19 +8758,21 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                           "tool_calls": [dict(c, function=dict(c["function"]))
                                          for c in calls]})
             said["gap"] = True
+            round_last_key = None
             for call in calls:
                 if out.gone:
                     raise ClientGone()
                 call_fn = call.get("function") or {}
                 call_key = (str(call_fn.get("name") or ""),
                             canonical_call_args(call_fn.get("arguments")))
-                if last_call_key is not None and call_key == last_call_key:
-                    # The exact same (tool, arguments) as the step just before:
-                    # never run it twice. The model gets the result it already
-                    # has plus a short system line, and this round continues.
+                round_last_key = call_key
+                if previous_round_key is not None and call_key == previous_round_key:
+                    # The exact same (tool, arguments) as the last call of the
+                    # previous round: never run it again. The model gets the
+                    # result it already has plus a short system line, and this
+                    # round continues.
                     _identical_call_refusal(call, convo, steps, say_step)
                     continue
-                last_call_key = call_key
                 if (TOOL_TURN_BUDGET_S > 0
                         and (time.monotonic() - _tools_started) > TOOL_TURN_BUDGET_S):
                     # A turn-level bound: the rounds have a ceiling and every
@@ -8785,6 +8791,10 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 _one_call(call, names + [n for n in offer["extra"] if n not in names],
                           convo, steps, checker, announce, out, say_step,
                           watch=watch, tell_owner=tell_owner, tools=offer["extra"])
+            # What the next round's breaker compares its first calls against:
+            # the last call THIS round asked for (whether it ran or was itself
+            # the repeat of the round before).
+            previous_round_key = round_last_key
             if watch.read and not watch.noted:
                 # Once per turn, as soon as outside text is in it - before the
                 # round that first asked for a tool, so every result that
