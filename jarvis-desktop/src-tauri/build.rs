@@ -882,7 +882,7 @@ fn main() {
             "brain_pictures_file",
             "brain_pictures_make",
             "brain_pictures_settings",
-            // "File history" (LM-2C; JARVIS-API section 139,
+            // "File history" (LM-2C; JARVIS-API section 140,
             // brain/guardian.rs): the module's own bounded diff, and the ONE
             // write - a restore that asks the PC, which raises the EXISTING
             // undo_action card in the Jarvis bar. The list itself rides on

@@ -35,6 +35,7 @@ import { currentLink, linkWords, onLink } from "./jarvis-link.js";
 import {
   WORDS,
   diffModel,
+  hiddenModel,
   restoreModel,
   restoreRequest,
   sizeWords,
@@ -299,10 +300,17 @@ onLink(() => {
 if (TAURI && TAURI.event) {
   TAURI.event.listen("security-changed", () => {
     if (!state.visible) return;
-    // App lock or the hidden lists may have just turned on: forget the open
-    // difference and ask Rust again, which answers with the one hidden line.
+    // App lock or the hidden lists may have just turned on. Forget the open
+    // difference AND clear the rows at once, before the next read: this file
+    // may not keep a file name on screen while the flags that hide it are on
+    // (F13, 2026-10-18). The refresh then replaces this with Rust's own hidden
+    // answer, or with the real list when the flags were turned OFF.
     state.open = null;
     state.diff = null;
+    state.error = "";
+    state.said = "";
+    state.model = hiddenModel();
+    paint();
     refreshGuardian();
   });
 }

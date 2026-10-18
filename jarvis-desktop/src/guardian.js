@@ -172,3 +172,20 @@ export function restoreModel(answer) {
     words: textOf(answer.words) || (ok ? "" : WORDS.missing),
   };
 }
+
+/**
+ * The one hidden summary the drawer can show IMMEDIATELY, when App lock or the
+ * hidden lists have just turned on and the next read has not come back yet. It
+ * carries no row, no count and no path - the same shape Rust's hidden answer
+ * has - so the old rows are gone from the screen before the network answers
+ * (F13, 2026-10-18).
+ */
+export function hiddenModel(words = WORDS.hidden_short) {
+  return {
+    missing: false,
+    hidden: true,
+    hiddenWords: typeof words === "string" && words ? words : WORDS.hidden_short,
+    rows: [],
+    words: "",
+  };
+}

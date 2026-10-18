@@ -1,6 +1,6 @@
 /**
  * The Brain's "File history" drawer (Pillar 18's file guardian; JARVIS-API
- * section 139; LM-2C; docs/FILE-GUARDIAN-DESIGN.md).
+ * section 140; LM-2C; docs/FILE-GUARDIAN-DESIGN.md).
  *
  * TWO HALVES, BOTH NODE
  *
@@ -29,6 +29,7 @@ import {
   MAX_DIFF_VIEW_CHARS,
   WORDS,
   diffModel,
+  hiddenModel,
   restoreModel,
   restoreRequest,
   sizeWords,
@@ -244,6 +245,45 @@ check("parity calls all three routes deliberate, and the docs say the same", () 
 
 check("guardian-drawer.mjs runs with the other node tests", () => {
   assert.ok(packageJson.includes("node tests/guardian-drawer.mjs"));
+});
+
+check("the hidden summary used when a flag changes names no file and no count", () => {
+  const model = hiddenModel();
+  assert.equal(model.hidden, true);
+  assert.deepEqual(model.rows, []);
+  assert.ok(model.hiddenWords.length > 0);
+  assert.ok(!JSON.stringify(model).includes("C:\\\\"));
+});
+
+check("the restore command takes the same stale-link gate as the other writes", () => {
+  const at = guardianRs.indexOf("pub async fn guardian_restore");
+  assert.notEqual(at, -1);
+  const body = guardianRs.slice(at);
+  const gate = body.indexOf("require_link_live(&app)?");
+  const send = body.indexOf("jarvis_client(Some(RESTORE_WAIT))");
+  assert.notEqual(gate, -1, "the command must call require_link_live");
+  assert.ok(gate < send, "the stale gate must run before anything is sent");
+});
+
+check("a restore answer is re-hidden after it returns, like the diff", () => {
+  const at = guardianRs.indexOf("pub async fn guardian_restore");
+  assert.notEqual(at, -1);
+  const body = guardianRs.slice(at, at + 2000);
+  assert.match(body, /shown\(&app, answer\)/);
+});
+
+check("a flag change clears the rows before the next read", () => {
+  const at = panel.indexOf("security-changed");
+  assert.notEqual(at, -1);
+  const block = panel.slice(at, at + 900);
+  const clear = block.indexOf("state.model = hiddenModel()");
+  const paint = block.indexOf("paint();");
+  const readAgain = block.indexOf("refreshGuardian();");
+  assert.notEqual(clear, -1, "the rows must be replaced at once");
+  assert.notEqual(paint, -1, "the drawer must be repainted at once");
+  assert.notEqual(readAgain, -1);
+  assert.ok(clear < readAgain && paint < readAgain,
+            "the old rows must be gone before the next read is asked for");
 });
 
 if (fails.length) {

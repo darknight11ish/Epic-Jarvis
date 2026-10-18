@@ -1151,7 +1151,7 @@ permissions = [
   "allow-brain-pictures-make",
 ]
 
-# "File history" (LM-2C; JARVIS-API section 139; brain/guardian.rs): the copies
+# "File history" (LM-2C; JARVIS-API section 140; brain/guardian.rs): the copies
 # Jarvis took of a file before changing it - the module's own bounded diff, and
 # ONE restore that asks the PC, which raises the EXISTING undo_action card in
 # the Jarvis bar. Nothing is approved here. The whole drawer hides in Rust under

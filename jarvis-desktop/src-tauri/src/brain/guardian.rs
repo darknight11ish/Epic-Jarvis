@@ -37,6 +37,7 @@ use std::time::Duration;
 
 use tauri::AppHandle;
 
+use super::require_link_live;
 use super::READ_TIMEOUT;
 use crate::commands;
 
@@ -163,7 +164,9 @@ pub async fn guardian_diff(
 /// Put one saved version back. The PC raises the EXISTING `undo_action` card;
 /// this command only waits for its answer and hands the PC's own sentence back.
 /// A denied, timed-out or unraisable card changes nothing on the PC, and a
-/// hidden drawer asks for nothing at all.
+/// hidden drawer asks for nothing at all. Held on a STALE link exactly like the
+/// Brain's other writes (F6, 2026-10-18): the command, not the button's state,
+/// is where "the app blocks acting when the stream is stale" is enforced.
 #[tauri::command]
 pub async fn guardian_restore(
     app: AppHandle,
@@ -176,6 +179,7 @@ pub async fn guardian_restore(
             "path": "", "receipt_id": "", "words": HIDDEN_WORDS,
         }));
     }
+    require_link_live(&app)?;
     let base = commands::jarvis_base(&app);
     let body = serde_json::json!({ "path": path, "sha_before": sha_before });
     let response = commands::jarvis_client(Some(RESTORE_WAIT))?
@@ -188,7 +192,11 @@ pub async fn guardian_restore(
     let status = response.status().as_u16();
     let text = response.text().await.unwrap_or_default();
     if let Ok(answer) = serde_json::from_str::<serde_json::Value>(&text) {
-        return Ok(answer);
+        // The card can wait twenty minutes: App lock or the hidden lists may
+        // have turned on while it was up, and the backend's answer names the
+        // file's full path. Re-hide it the way guardian_diff does (F8), so a
+        // hidden drawer never receives a path from a request it started earlier.
+        return Ok(shown(&app, answer));
     }
     Err(if status == 404 || status == 501 {
         MISSING.to_string()
@@ -260,5 +268,43 @@ mod tests {
         assert_eq!(SNAPSHOTS_PATH, "/api/guardian/snapshots");
         assert_eq!(DIFF_PATH, "/api/guardian/diff");
         assert_eq!(RESTORE_PATH, "/api/guardian/restore");
+    }
+
+    #[test]
+    fn the_restore_takes_the_stale_gate_before_it_sends_anything() {
+        // F6, 2026-10-18: the button's disabled state is not the enforcement
+        // point; the command itself must refuse on a stale link, before any
+        // request can reach the PC (the same rule every other Brain write
+        // keeps, and the sentence is brain.rs's require_link_live).
+        let src = include_str!("guardian.rs");
+        let start = src
+            .find("pub async fn guardian_restore")
+            .expect("the command");
+        let body = &src[start..];
+        let gate = body
+            .find("require_link_live(&app)?")
+            .expect("the stale gate");
+        let send = body
+            .find("jarvis_client(Some(RESTORE_WAIT))")
+            .expect("the request");
+        assert!(
+            gate < send,
+            "the stale gate must run before anything is sent"
+        );
+    }
+
+    #[test]
+    fn a_restore_answer_is_re_hidden_when_a_flag_turned_on() {
+        // F8, 2026-10-18: the card can wait twenty minutes, so the App lock or
+        // the hidden lists can turn on after the request started. The answer
+        // names the file's full path; it must be hidden like the list's answer.
+        let real = serde_json::json!({
+            "ok": true, "changed": true, "path": "C:\\Notes\\secret-words.md",
+            "receipt_id": "rc1234", "words": "Put back the version from that day.",
+        });
+        let hidden = hide_private(real);
+        assert_eq!(hidden["hidden"], true);
+        assert!(!hidden.to_string().contains("secret-words.md"));
+        assert!(hidden.get("path").is_none());
     }
 }

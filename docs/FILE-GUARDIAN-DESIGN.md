@@ -56,9 +56,10 @@ project files and notes.
   `words_hidden`), not on the page: while hidden the answer is ONE sentence that
   names no file, no count and no folder, and neither `brain_read`'s list section
   nor the two commands ask the PC for anything - so while hidden no file name
-  crosses the loopback wire. `security-changed` clears an open difference at
-  once. This is the desktop half of the gap JARVIS-API section 140.3 records:
-  the backend cannot see either flag, so the desktop is the only place it can be
+  crosses the loopback wire. `security-changed` clears the rows and an open
+  difference at once, before the next read is asked for, and a restore answer
+  that comes back after a flag changed is re-hidden before the page sees it.
+  This is the desktop half of the gap JARVIS-API section 140.3 records:  the backend cannot see either flag, so the desktop is the only place it can be
   enforced.
 
 **Least privilege:** the list rides on the existing `brain_read` allowlist
