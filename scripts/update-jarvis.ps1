@@ -25,8 +25,9 @@
        script still rehearses every patch on a throwaway copy, backs everything
        up, and refuses to leave you half-applied. This script adds no patching
        of its own.
-    5. Update the desktop app. Downloading the published installer is tried
-       first (it is seconds); building it here is the fallback (it needs the
+    5. Update the desktop app. The published installer is tried first (it is
+       seconds), and its minisign signature is checked against the app's own
+       update key before it is run; building here is the fallback (it needs the
        build tools and takes minutes). Which one is used, and why, is printed.
     6. Start Jarvis again, and run the live check (backend\selftest.py
        --preflight).
@@ -39,9 +40,11 @@
 
   What this script does NOT do: it never approves anything for you, it never
   installs an update on its own (you ran it - that is the decision), and it
-  never prints a token or a key. The desktop app's own Settings -> Updates
-  button remains the route that checks the installer's signature; see the note
-  under -FromSource and in docs\INSTALL.md.
+  never prints a token or a key. A downloaded desktop installer is verified
+  against the app's own minisign public key BEFORE it is run; if it cannot be
+  verified, nothing is installed and the app is built from this folder instead.
+  The app's own Settings -> Updates button remains the other signed route; see
+  the note in docs\INSTALL.md.
 
 .PARAMETER BackendPath
   The folder holding jarvis_hud.py. Left out, it uses the JARVIS_BACKEND
@@ -516,7 +519,9 @@ function Get-UpdateEndpoint($Repo) {
 # The rolling release's small manifest (latest.json): the newest published
 # desktop version, the installer's address, and its signature. $null when
 # there is no release, or the PC cannot reach GitHub - which is a normal state,
-# not a failure: the app is then built from this folder instead.
+# not a failure: the app is then built from this folder instead. The signature
+# is not enough on its own: Install-DesktopFromRelease verifies the download
+# against the app's own public key before anything runs.
 function Get-DesktopRelease($Endpoint) {
     if (-not $Endpoint) { return $null }
     try {
@@ -547,10 +552,9 @@ function Get-DesktopRelease($Endpoint) {
         return $null
     }
     if ($url.Scheme -ne 'https') { return $null }
-    # The installer must come from the same host the manifest did. A manifest
-    # that points somewhere else is exactly the case the signature exists for,
-    # and this script cannot check the signature - so it asks for the next best
-    # thing: the file comes from where the project publishes it.
+    # The installer must come from the same host the manifest did. That is a
+    # second lock, not the signature: a manifest that points somewhere else is
+    # refused before its signature is even considered.
     try {
         $mine = [Uri]$Endpoint
         if ($url.Host -ne $mine.Host) { return $null }
@@ -598,6 +602,57 @@ function Test-LocalAtLeastAsNew($Repo, $Commit) {
     }
 }
 
+function Test-InstallerSignature($File, $Signature, $Repo) {
+    # Verify one downloaded installer against the app's own minisign key.
+    #
+    # The app (tauri-plugin-updater) checks the same signature before it installs;
+    # Windows PowerShell has no minisign verifier of its own, so the small Python
+    # helper beside this script does the check. Returns $true only when the bytes
+    # verify. Anything else - no key, no verifier, no Python, a bad signature -
+    # refuses: an unverified download is never run (security audit, 2026-10-18:
+    # supply chain H-2).
+    $conf = Join-Path $Repo 'jarvis-desktop\src-tauri\tauri.conf.json'
+    $pubkey = ''
+    try {
+        $j = Get-Content -LiteralPath $conf -Raw | ConvertFrom-Json
+        $pubkey = "$($j.plugins.updater.pubkey)".Trim()
+    } catch { }
+    if (-not $pubkey) {
+        Bad "the app's configuration names no update public key, so this download cannot be verified and will not run."
+        return $false
+    }
+    $verifier = Join-Path $PSScriptRoot 'verify_minisign.py'
+    if (-not (Test-Path -LiteralPath $verifier)) {
+        Bad "the minisign verifier (scripts\verify_minisign.py) is missing, so this download cannot be verified and will not run."
+        return $false
+    }
+    $py = Find-Python
+    if (-not $py) {
+        Bad "no working Python was found, so this download cannot be verified and will not run."
+        return $false
+    }
+    Info "checking the download's minisign signature against the app's own update key"
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $out = @()
+    try {
+        $out = @(& $py.Exe $verifier '--pubkey-base64' $pubkey '--signature-base64' "$Signature" '--file' $File 2>&1)
+        $code = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $prevEap
+    }
+    if ($code -eq 0) {
+        Ok "the download's signature is verified against the app's own update key."
+        return $true
+    }
+    Bad "the update was NOT installed because its signature did not verify."
+    if ($out.Count -gt 0) {
+        Say (($out | Select-Object -Last 3 | ForEach-Object { "        $_" }) -join "`n")
+    }
+    Info "nothing was run. Use Jarvis's own Settings -> Updates, or -FromSource to build here."
+    return $false
+}
+
 # Run an installer with no windows and no questions.
 #
 # /S is NSIS's silent switch, which the desktop app's own bundle accepts (its
@@ -621,21 +676,16 @@ function Invoke-SilentInstaller($Exe) {
     return $true
 }
 
-function Install-DesktopFromRelease($Release, [switch] $DryRun) {
+function Install-DesktopFromRelease($Release, $Repo, [switch] $DryRun) {
     $leaf = Split-Path -Leaf ([Uri]$Release.Url).AbsolutePath
     if ($leaf -notmatch '\.exe$') {
         Bad "the release points at '$leaf', which is not an installer"
         return $false
     }
     if ($DryRun) {
-        Info "would download $leaf (version $($Release.Version)) and install it silently"
-        # The limit is named in the PLAN as well as in the real run. An owner who
-        # does the careful thing and runs -Print first would otherwise not learn
-        # it until the moment the file had already been installed - and this is
-        # the one thing about this step that a person might want to decide on.
-        Info "its signature would NOT be checked here (PowerShell has no minisign"
-        Info "verifier, and the Tauri command line tool has no 'signer verify'); the"
-        Info "SHA-256 would be printed instead. -FromSource builds instead."
+        Info "would download $leaf (version $($Release.Version)), verify its minisign"
+        Info "signature against the app's own update key, and install it silently."
+        Info "A download that does not verify is never run; -FromSource builds instead."
         return $true
     }
     $dest = Join-Path ([IO.Path]::GetTempPath()) $leaf
@@ -652,10 +702,11 @@ function Install-DesktopFromRelease($Release, [switch] $DryRun) {
     $hash = (Get-FileHash -LiteralPath $dest -Algorithm SHA256).Hash
     Ok ("downloaded {0:N1} MB" -f ($size / 1MB))
     Info "SHA-256 of what was downloaded: $hash"
-    Info "the signature published beside it is NOT checked here - PowerShell has no"
-    Info "minisign verifier, and the Tauri command line tool has no 'signer verify'."
-    Info "This is the same file the download page offers; the app's own"
-    Info "Settings -> Updates button is the route that checks a signature."
+    if (-not (Test-InstallerSignature $dest $Release.Signature $Repo)) {
+        Remove-Item -LiteralPath $dest -Force -ErrorAction SilentlyContinue
+        Info "the app was not changed; the download was removed."
+        return $false
+    }
     if (-not (Invoke-SilentInstaller $dest)) { return $false }
     Ok "the desktop app was replaced with version $($Release.Version)"
     # The installer has run, so the copy in %TEMP% has done its job. Best
@@ -876,10 +927,10 @@ if ($Print) {
 Step 2 $Total 'Getting the newest code'
 
 # The scripts and patches that DO the update come from this folder. When it is
-# a git checkout, pulling is the newest copy of them; when it is an unzipped
-# download there is no git to pull, so the newest source is fetched from the
-# project's own page into a temporary folder and used from there. Either way
-# this only reads - the folder you are in is never rewritten.
+# a git checkout, pulling is the newest copy of them; an unzipped download has
+# no git history, and this script will not fetch and run a source archive it
+# cannot verify - the code already in the folder is used. Either way this only
+# reads - the folder you are in is never rewritten.
 $SourceRoot = $RepoRoot
 $isGit = Test-Path -LiteralPath (Join-Path $RepoRoot '.git')
 if ($isGit -and (Get-Command git -ErrorAction SilentlyContinue)) {
@@ -916,58 +967,14 @@ if ($isGit -and (Get-Command git -ErrorAction SilentlyContinue)) {
     Warn "this folder is a git checkout but git is not installed, so it cannot be updated"
     Info "winget install Git.Git -e    (then open a NEW PowerShell window)"
 } else {
-    # An unzipped download: no git, and the ZIP is the only way to get newer
-    # patches. Fetched to a temporary folder and used from there, so the copy
-    # you unzipped is left exactly as it is.
-    $endpoint = Get-UpdateEndpoint $RepoRoot
-    $zip = $null
-    if ($endpoint) {
-        $m = [regex]::Match($endpoint, '^https://([^/]+)/([^/]+)/([^/]+)/releases/')
-        if ($m.Success) { $zip = "https://$($m.Groups[1].Value)/$($m.Groups[2].Value)/$($m.Groups[3].Value)/archive/refs/heads/main.zip" }
-    }
-    if (-not $zip) {
-        Warn "this folder was unzipped rather than cloned, and the project's page could not be worked out"
-        Info "the code already here is used; download the repository again to get newer patches"
-    } elseif ($Print) {
-        Info "would download the newest source from $zip into a temporary folder and patch from there"
-    } else {
-        # A name that cannot collide with another run's. NOT the date-and-time
-        # stamp used for the log below: two runs started in the same second get
-        # the same clock reading (Windows only moves it on the system timer
-        # tick), and this folder is deleted at the end - so the second run would
-        # delete the first run's copy while it was still patching from it. The
-        # same trap is why scripts\apply-patches.ps1 names all five of its
-        # throwaway folders per run (next-patcher-race; its rehearsal was one of
-        # them, and the others went unnoticed until 2026-10-09). That sentence
-        # used to end "and tools\check_same_tick_paths.py reads every *.ps1 for
-        # it" - it did not, and does not: the checker read only *.py and
-        # *.patch. It reads *.ps1 too now, which is what makes the claim true.
-        $unique = $([Guid]::NewGuid().ToString('N').Substring(0, 12))
-        $tmp = Join-Path ([IO.Path]::GetTempPath()) "jarvis-source-$unique"
-        try {
-            New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-            # Handed to Finish-Run, which is where every ending goes through, so
-            # the copy is deleted after the patching and the live check have
-            # finished reading it rather than now. (A comment here used to say it
-            # was deleted and nothing deleted it.)
-            $script:TempSource = $tmp
-            $file = Join-Path $tmp 'source.zip'
-            Info "downloading the newest source (this folder was unzipped, so there is no git pull)"
-            Invoke-WebRequest -Uri $zip -OutFile $file -UseBasicParsing -TimeoutSec 600
-            Expand-Archive -LiteralPath $file -DestinationPath (Join-Path $tmp 'unpacked') -Force
-            $top = @(Get-ChildItem -LiteralPath (Join-Path $tmp 'unpacked') -Directory | Select-Object -First 1)
-            if ($top.Count -eq 1 -and (Test-Path -LiteralPath (Join-Path $top[0].FullName 'scripts\apply-patches.ps1'))) {
-                $SourceRoot = $top[0].FullName
-                Ok "using the newest source from a temporary copy:"
-                Say "          $SourceRoot"
-            } else {
-                Warn "the download did not look like this repository, so the copy already here is used"
-            }
-        } catch {
-            Warn "the newest source could not be downloaded ($($_.Exception.Message))"
-            Info "the code already here is used; download the repository again to get newer patches"
-        }
-    }
+    # An unzipped download: no git, and no signature-checked way to fetch a
+    # newer source archive from here. Downloading main.zip and running its
+    # patcher would execute code this script cannot verify, so it is not done
+    # (security audit, 2026-10-18: supply chain H-2). The code already on disk
+    # is used; the owner gets a plain instruction for getting newer patches.
+    Warn "this folder was unzipped rather than cloned, so there is no git history to pull"
+    Info "the code already here is used. To get newer patches, download the repository"
+    Info "again (or clone it), then run this script from that copy."
 }
 
 $apply = Join-Path $SourceRoot 'scripts\apply-patches.ps1'
@@ -1155,7 +1162,7 @@ if ($SkipDesktop) {
     if ($FromSource -or -not $release) {
         $desktopDone = Build-AndInstallDesktop $RepoRoot -DryRun:$Print
     } else {
-        $desktopDone = Install-DesktopFromRelease $release -DryRun:$Print
+        $desktopDone = Install-DesktopFromRelease $release $RepoRoot -DryRun:$Print
     }
     if (-not $Print) {
         if ($desktopDone) {

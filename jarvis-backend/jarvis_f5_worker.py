@@ -43,10 +43,60 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import json
 import os
 import sys
 import time
+from pathlib import Path
+
+#: The three F5-TTS files, by SHA-256, taken from the Hugging Face file
+#: metadata the install line in backend/README.md downloads (2026-10-18, the
+#: security audit's supply-chain finding M8). The owner's copy is verified
+#: before PyTorch or F5-TTS is imported: a changed or truncated file refuses
+#: with a plain sentence instead of being loaded. The README's install line
+#: prints these hashes so a fresh download can be compared too.
+F5_PINNED = {
+    "checkpoint": "670900fd14e6c458b95da6e9ed317cdb20dbaf7a1c02ac6a05475a9d32b6a38",
+    "vocoder model": "97ec976ad1fd67a33ab2682d29c0ac7df85234fae875aefcc5fb215681a91b2a",
+    "vocoder config": "da9033922f969a47f0c160010226919e59f27761fd5066f3828d46de6650b0fc",
+}
+
+
+def _file_sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def verify_model_files(checkpoint, vocoder_dir) -> None:
+    """Refuse the F5-TTS files unless their bytes match the pinned SHA-256.
+
+    `checkpoint` is the .safetensors file; `vocoder_dir` holds
+    `pytorch_model.bin` and `config.yaml` - exactly what the install line in
+    backend/README.md downloads. Called before any import of torch/f5_tts, so a
+    changed file is never handed to the model loader.
+    """
+    root = Path(str(vocoder_dir))
+    files = (
+        ("checkpoint", Path(str(checkpoint)), F5_PINNED["checkpoint"]),
+        ("vocoder model", root / "pytorch_model.bin", F5_PINNED["vocoder model"]),
+        ("vocoder config", root / "config.yaml", F5_PINNED["vocoder config"]),
+    )
+    for label, path, expected in files:
+        if not path.is_file():
+            raise RuntimeError(
+                f"the F5-TTS {label} is missing at {path}; nothing was loaded. "
+                "backend/README.md, \"The better voice\", has the install line.")
+        got = _file_sha256(path)
+        if got.lower() != expected:
+            raise RuntimeError(
+                f"the F5-TTS {label} at {path} does not match its pinned SHA-256, "
+                "so nothing was loaded. Download the model files again with the "
+                "line in backend/README.md, \"The better voice\", and check the "
+                "hashes it prints.")
 
 
 def _args(argv):
@@ -62,6 +112,7 @@ def _args(argv):
 
 def load(args):
     """The F5-TTS model, on the card. Raises with a plain reason."""
+    verify_model_files(args.checkpoint, args.vocoder)   # before torch/F5-TTS load
     for k in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE", "HF_DATASETS_OFFLINE",
               "HF_HUB_DISABLE_TELEMETRY"):
         os.environ.setdefault(k, "1")

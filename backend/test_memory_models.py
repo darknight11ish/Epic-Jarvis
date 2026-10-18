@@ -20,6 +20,7 @@ What it proves, with a stand-in fastembed (no model is downloaded here):
 WHAT IT DOES NOT PROVE: whether a new model finds facts better. That is
 tools/model_tryout/memory_tryout.py's job, on the PC.
 """
+import hashlib
 import os
 import subprocess
 import sys
@@ -264,6 +265,55 @@ def t_the_reranker_switch():
     check("JARVIS_MEMORY_RERANK_MODEL names the model the self-test and recall load",
           out.stdout.strip().endswith("Xenova/ms-marco-MiniLM-L-12-v2"),
           out.stdout + out.stderr)
+
+
+def t_pinned_fastembed_weights_are_checked_before_they_are_used():
+    """Supply-chain M8: a cached model file that does not match its SHA-256 pin
+    is refused before fastembed loads it, in plain words; the matching file is
+    accepted. The real pins are kept for the wrong-file case and temporarily
+    replaced by the fake file's own hash for the matching case, so no model is
+    downloaded and no pin is weakened for any other test."""
+    old_cache = M.model_cache_dir
+    default_pin = M.FASTEMBED_PINS[M.EMBED_MODEL_DEFAULT]
+    rerank_pin = M.FASTEMBED_PINS[M.RERANK_MODEL_DEFAULT]
+    try:
+        with tempfile.TemporaryDirectory(prefix="jarvis-pins-") as d:
+            root = Path(d)
+            M.model_cache_dir = lambda: d
+            embed_file = (root / "models--Qdrant--bge-small-en-v1.5-onnx-Q" / "snapshots" /
+                          "abc" / "model_optimized.onnx")
+            rerank_file = (root / "models--Xenova--ms-marco-MiniLM-L-6-v2" / "snapshots" /
+                           "abc" / "onnx" / "model.onnx")
+            for path in (embed_file, rerank_file):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"not the measured model")
+            for label, factory in (
+                    ("memory", lambda: M.FastEmbedder(M.EMBED_MODEL_DEFAULT)),
+                    ("re-rank", lambda: M.FastReranker(M.RERANK_MODEL_DEFAULT))):
+                LOADED.clear()
+                try:
+                    factory()
+                    check(f"a wrong {label} model file is refused, not loaded", False)
+                except M.EmbedModelUnavailable as exc:
+                    check(f"a wrong {label} model file is refused, in plain words",
+                          "pinned SHA-256" in str(exc) and not LOADED, (str(exc), LOADED))
+            M.FASTEMBED_PINS[M.EMBED_MODEL_DEFAULT] = (
+                default_pin[0], default_pin[1], hashlib.sha256(embed_file.read_bytes()).hexdigest())
+            M.FASTEMBED_PINS[M.RERANK_MODEL_DEFAULT] = (
+                rerank_pin[0], rerank_pin[1], hashlib.sha256(rerank_file.read_bytes()).hexdigest())
+            try:
+                LOADED.clear()
+                check("a model file that matches its pin is accepted",
+                      isinstance(M.FastEmbedder(M.EMBED_MODEL_DEFAULT), M.FastEmbedder))
+                check("a re-ranker file that matches its pin is accepted",
+                      isinstance(M.FastReranker(M.RERANK_MODEL_DEFAULT), M.FastReranker))
+            finally:
+                M.FASTEMBED_PINS[M.EMBED_MODEL_DEFAULT] = default_pin
+                M.FASTEMBED_PINS[M.RERANK_MODEL_DEFAULT] = rerank_pin
+    finally:
+        M.FASTEMBED_PINS[M.EMBED_MODEL_DEFAULT] = default_pin
+        M.FASTEMBED_PINS[M.RERANK_MODEL_DEFAULT] = rerank_pin
+        M.model_cache_dir = old_cache
 
 
 def main() -> int:

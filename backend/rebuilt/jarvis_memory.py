@@ -96,6 +96,7 @@ THE FIVE WAYS THIS FILE USED TO DESTROY DATA, all fixed, none to be undone:
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 import os
 import re
@@ -532,6 +533,7 @@ class FastEmbedder(Embedder):
 
     def __init__(self, model: Optional[str] = None) -> None:
         model = (model or embed_model_wanted()).strip()
+        _verify_pinned_model(model)          # a cached copy, before fastembed loads it
         quiet_onnxruntime()
         from fastembed import TextEmbedding  # imported lazily and on purpose
         if model != EMBED_MODEL_DEFAULT and model not in {
@@ -542,6 +544,9 @@ class FastEmbedder(Embedder):
                 "against tools/model_tryout/README.md; the newer models need fastembed "
                 "0.8.1 or later (the same page has the one line that installs it).")
         self._m = TextEmbedding(model_name=model, cache_dir=model_cache_dir())
+        # First use downloads: check the copy that has just landed too, still
+        # before the first vector is computed.
+        _verify_pinned_model(model, getattr(getattr(self._m, "model", None), "_model_dir", None))
         self._q, self._d = EMBED_PREFIXES.get(model, ("", ""))
         self.name = model if not (self._q or self._d) else \
             f"{model}+prefixes-{EMBED_PREFIX_VERSION}"
@@ -647,6 +652,69 @@ RERANK_MODEL_DEFAULT = "Xenova/ms-marco-MiniLM-L-6-v2"
 RERANK_MODEL = (os.environ.get("JARVIS_MEMORY_RERANK_MODEL") or "").strip() \
     or RERANK_MODEL_DEFAULT
 
+#: The two model files Jarvis's fastembed actually loads, by SHA-256, taken
+#: from the Hugging Face repositories fastembed names for these models on
+#: 2026-10-18 (the security audit's supply-chain finding M8). fastembed checks
+#: sizes and hub blob ids on download, not a cryptographic hash; this is the
+#: check that the bytes loaded are the bytes measured. A different pinned model
+#: the owner chooses (JARVIS_MEMORY_EMBED_MODEL / _RERANK_MODEL) is left to
+#: fastembed's own checks, since this repository has no pin for it.
+FASTEMBED_PINS = {
+    "BAAI/bge-small-en-v1.5": (
+        "Qdrant/bge-small-en-v1.5-onnx-Q", "model_optimized.onnx",
+        "51f1bd0addd6e859e42c2c8021a5e5461385bb676a649f4b269aa445449f2431"),
+    "Xenova/ms-marco-MiniLM-L-6-v2": (
+        "Xenova/ms-marco-MiniLM-L-6-v2", "onnx/model.onnx",
+        "c623d0bcb99f4622beb413eaef00cfbe5db20df9f1dd982da4b4f26022881870"),
+}
+
+
+def _sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _pinned_model_file(model: str, model_dir=None):
+    """The model file for `model` in fastembed's cache, or None if not there."""
+    pin = FASTEMBED_PINS.get(model)
+    if not pin:
+        return None, ""
+    source, rel, expected = pin
+    if model_dir:
+        path = Path(str(model_dir)) / rel
+        return (path if path.is_file() else None), expected
+    root = Path(model_cache_dir()) / f"models--{source.replace('/', '--')}"
+    hits = sorted(root.glob(f"snapshots/*/{rel}"))
+    return (hits[-1] if hits else None), expected
+
+
+def _verify_pinned_model(model: str, model_dir=None) -> None:
+    """Refuse to load a pinned fastembed model whose bytes do not match its pin.
+
+    Called once before the model is loaded (a cached copy) and once after it
+    exists (the copy fastembed has just downloaded), before any inference. A
+    mismatch raises `EmbedModelUnavailable` in plain words, so the caller falls
+    back to words-only search rather than trusting the wrong file. A model with
+    no pin here is not refused by this function.
+    """
+    path, expected = _pinned_model_file(model, model_dir)
+    if path is None:
+        return
+    try:
+        got = _sha256_file(path)
+    except OSError as exc:
+        raise EmbedModelUnavailable(
+            f"The memory search model {model!r} on this PC could not be read "
+            f"({type(exc).__name__}), so it was not used.") from None
+    if got.lower() != expected:
+        raise EmbedModelUnavailable(
+            f"The memory search model {model!r} on this PC does not match its pinned "
+            f"SHA-256, so it was not used. Delete {path.parent} and let fastembed "
+            "download it again; nothing was loaded from the changed bytes.")
+
 
 def _env_int(name: str, default: int, lo: int, hi: int) -> int:
     try:
@@ -710,6 +778,7 @@ class FastReranker(Reranker):
     """fastembed's cross-encoder. Imported lazily and on purpose."""
 
     def __init__(self, model: str = RERANK_MODEL) -> None:
+        _verify_pinned_model(model)          # a cached copy, before fastembed loads it
         quiet_onnxruntime()
         from fastembed.rerank.cross_encoder import TextCrossEncoder
         if model != RERANK_MODEL_DEFAULT and model not in {
@@ -719,6 +788,9 @@ class FastReranker(Reranker):
                 f"({fastembed_version()}) has - check the spelling against "
                 "tools/model_tryout/README.md")
         self._m = TextCrossEncoder(model_name=model, cache_dir=model_cache_dir())
+        # First use downloads: check the copy that has just landed too, still
+        # before its first rerank call.
+        _verify_pinned_model(model, getattr(getattr(self._m, "model", None), "_model_dir", None))
         self.name = model
         list(self._m.rerank("probe", ["probe"]))      # load it now, not on a question
 
@@ -759,7 +831,8 @@ def _rr_load(factory) -> None:
             if _rr["state"] == "loading":
                 _rr.update(state="ready", model=m, why="")
     except Exception as exc:
-        why = (f"{type(exc).__name__}: fastembed is not installed or has no re-ranker"
+        why = (str(exc) if isinstance(exc, EmbedModelUnavailable) else
+               f"{type(exc).__name__}: fastembed is not installed or has no re-ranker"
                if isinstance(exc, ImportError) else
                f"{type(exc).__name__}: the re-ranking model could not be loaded")
         with _rr_lock:

@@ -7533,13 +7533,21 @@ py -3 -m pip install torch torchaudio --index-url https://download.pytorch.org/w
 ```
 
 **6. F5-TTS's model files** - about 1.4 GB, into `voice-models\f5-tts`
-(normally `C:\Users\pcadmin\.openjarvis\voice-models\f5-tts`). **There is no
-checksum to compare yet**: huggingface.co could not be reached from where
-this was written, so the line prints each file's SHA-256 instead - send them
-back and they will be recorded here:
+(normally `C:\Users\pcadmin\.openjarvis\voice-models\f5-tts`). The three files
+are **pinned by SHA-256** in `jarvis_f5_worker.py` (`F5_PINNED`), measured from
+Hugging Face's own file metadata on 2026-10-18, and the worker checks them
+before it loads PyTorch or the model - a changed or truncated file refuses in
+plain words:
+
+    model_1250000.safetensors  670900fd14e6c458b95da6e9ed317cdb20dbaf7a1c02ac6a05475a9d32b6a38
+    vocos\pytorch_model.bin    97ec976ad1fd67a33ab2682d29c0ac7df85234fae875aefcc5fb215681a91b2a
+    vocos\config.yaml          da9033922f969a47f0c160010226919e59f27761fd5066f3828d46de6650b0fc
+
+The line below prints each downloaded file's SHA-256, so a fresh download can be
+compared with those values before the voice is switched on:
 
 ```powershell
-$ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $base = if ($env:OPENJARVIS_CONFIG_DIR) { $env:OPENJARVIS_CONFIG_DIR } elseif ($env:JARVIS_CONFIG_DIR) { $env:JARVIS_CONFIG_DIR } else { "$env:USERPROFILE\.openjarvis" }; $d = Join-Path (Join-Path $base 'voice-models') 'f5-tts'; New-Item -ItemType Directory -Force -Path (Join-Path $d 'vocos') | Out-Null; $hf = 'https://huggingface.co/'; $files = @( @(($hf + 'SWivid/F5-TTS/resolve/main/F5TTS_v1_Base/model_1250000.safetensors'), (Join-Path $d 'model_1250000.safetensors')), @(($hf + 'charactr/vocos-mel-24khz/resolve/main/config.yaml'), (Join-Path $d 'vocos\config.yaml')), @(($hf + 'charactr/vocos-mel-24khz/resolve/main/pytorch_model.bin'), (Join-Path $d 'vocos\pytorch_model.bin')) ); Write-Host 'Downloading F5-TTS (about 1.4 GB)...'; foreach ($x in $files) { Invoke-WebRequest -UseBasicParsing -Uri $x[0] -OutFile $x[1] }; foreach ($x in $files) { Write-Host ((Split-Path -Leaf $x[1]) + '  ' + (Get-FileHash $x[1] -Algorithm SHA256).Hash) }; Write-Host "OK - F5-TTS is in $d. Send the lines above back so the checksums can be recorded." -ForegroundColor Green
+$ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $base = if ($env:OPENJARVIS_CONFIG_DIR) { $env:OPENJARVIS_CONFIG_DIR } elseif ($env:JARVIS_CONFIG_DIR) { $env:JARVIS_CONFIG_DIR } else { "$env:USERPROFILE\.openjarvis" }; $d = Join-Path (Join-Path $base 'voice-models') 'f5-tts'; New-Item -ItemType Directory -Force -Path (Join-Path $d 'vocos') | Out-Null; $hf = 'https://huggingface.co/'; $files = @( @(($hf + 'SWivid/F5-TTS/resolve/main/F5TTS_v1_Base/model_1250000.safetensors'), (Join-Path $d 'model_1250000.safetensors')), @(($hf + 'charactr/vocos-mel-24khz/resolve/main/config.yaml'), (Join-Path $d 'vocos\config.yaml')), @(($hf + 'charactr/vocos-mel-24khz/resolve/main/pytorch_model.bin'), (Join-Path $d 'vocos\pytorch_model.bin')) ); Write-Host 'Downloading F5-TTS (about 1.4 GB)...'; foreach ($x in $files) { Invoke-WebRequest -UseBasicParsing -Uri $x[0] -OutFile $x[1] }; foreach ($x in $files) { Write-Host ((Split-Path -Leaf $x[1]) + '  ' + (Get-FileHash $x[1] -Algorithm SHA256).Hash) }; Write-Host "OK - F5-TTS is in $d. The pinned SHA-256 values are in prose above; a mismatch makes Jarvis refuse to load it." -ForegroundColor Green
 ```
 
 F5-TTS's code is MIT; **its model is CC-BY-NC** (non-commercial), which this

@@ -785,9 +785,24 @@ def better_setup(mode="ok"):
     CFG["f5_dir"] = str(f5)
     V._second_card = lambda: dict(CAPABLE)
     worker = str(HERE / "jarvis_f5_worker.py")
-    code = (f"import sys, runpy; sys.path.insert(0, {str(fake)!r}); "
-            f"sys.argv = ['jarvis_f5_worker.py', '--checkpoint', 'c', '--vocoder', 'v']; "
-            f"runpy.run_path({worker!r}, run_name='__main__')")
+    ckpt = f5 / V.F5_CHECKPOINT
+    vocos = f5 / "vocos"
+    # The worker verifies the three files against F5_PINNED before it imports
+    # torch (supply-chain M8). A stand-in card cannot have the real 1.4 GB
+    # bytes, so the harness keeps the SAME check but replaces the pin table
+    # with these little files' own hashes - nothing else about the check is
+    # skipped, and the wrong-file test below uses the real pins.
+    code = (
+        "import sys, runpy, hashlib; "
+        f"sys.path.insert(0, {str(fake)!r}); "
+        f"ns = runpy.run_path({worker!r}); "
+        "ns['F5_PINNED'].update({"
+        f"'checkpoint': hashlib.sha256(open({str(ckpt)!r}, 'rb').read()).hexdigest(), "
+        f"'vocoder model': hashlib.sha256(open({str(vocos / 'pytorch_model.bin')!r}, 'rb').read()).hexdigest(), "
+        f"'vocoder config': hashlib.sha256(open({str(vocos / 'config.yaml')!r}, 'rb').read()).hexdigest()}}); "
+        "sys.argv = ['jarvis_f5_worker.py', '--checkpoint', "
+        f"{str(ckpt)!r}, '--vocoder', {str(vocos)!r}]; "
+        "sys.exit(ns['main']())")
     V._worker_command = lambda: [sys.executable, "-c", code]
     return d, fake
 
@@ -799,6 +814,48 @@ def wait_for(cond, seconds=20.0):
             return True
         time.sleep(0.05)
     return False
+
+
+def t_f5_model_files_are_pinned_and_a_changed_one_is_refused():
+    """Supply-chain M8: the F5-TTS files are checked against their pinned
+    SHA-256 before torch or F5-TTS is imported; a changed or missing file is a
+    plain `ready: false` sentence, never a load. The stand-in files here are
+    tiny, so the REAL pins must refuse them - that is the test."""
+    d, fake = better_setup("ok")
+    f5 = Path(CFG["f5_dir"])
+    worker = str(HERE / "jarvis_f5_worker.py")
+    vocos = f5 / "vocos"
+    code = (
+        "import sys, runpy; "
+        "sys.argv = ['jarvis_f5_worker.py', '--checkpoint', "
+        f"{str(f5 / V.F5_CHECKPOINT)!r}, '--vocoder', {str(vocos)!r}]; "
+        f"runpy.run_path({worker!r}, run_name='__main__')")
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=120)
+    out = r.stdout + r.stderr
+    check("a changed F5-TTS file is refused before loading, in plain words",
+          r.returncode != 0 and '"ready": false' in r.stdout and
+          "pinned SHA-256" in out and "nothing was loaded" in out,
+          out[-800:])
+    # A missing file is refused the same way, not by the hashing step. The
+    # files that ARE present get their own hashes pinned in this child only,
+    # so the missing config is the failure that is reached.
+    missing = f5 / "vocos-missing"
+    missing.mkdir()
+    (missing / "pytorch_model.bin").write_bytes(b"x")
+    code2 = (
+        "import sys, runpy, hashlib; "
+        f"ns = runpy.run_path({worker!r}); "
+        "ns['F5_PINNED'].update({"
+        f"'checkpoint': hashlib.sha256(open({str(f5 / V.F5_CHECKPOINT)!r}, 'rb').read()).hexdigest(), "
+        f"'vocoder model': hashlib.sha256(open({str(missing / 'pytorch_model.bin')!r}, 'rb').read()).hexdigest()}}); "
+        "sys.argv = ['jarvis_f5_worker.py', '--checkpoint', "
+        f"{str(f5 / V.F5_CHECKPOINT)!r}, '--vocoder', {str(missing)!r}]; "
+        "sys.exit(ns['main']())")
+    r2 = subprocess.run([sys.executable, "-c", code2], capture_output=True, text=True, timeout=120)
+    out2 = r2.stdout + r2.stderr
+    check("a missing F5-TTS file is refused with the install line named",
+          r2.returncode != 0 and '"ready": false' in r2.stdout and
+          "vocoder config is missing" in out2 and "README.md" in out2, out2[-800:])
 
 
 def t_better_voice_switch():
