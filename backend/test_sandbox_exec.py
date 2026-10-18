@@ -67,6 +67,20 @@ What it proves:
     dispatches to `jarvis_sandbox_exec.run_data_script` through a real
     `run_local_turn` round - with `jarvis_gate.latch_taint(why="sandbox_tool_file")`
     called exactly when a local file is read.
+16. THE OWNER'S SWITCH (LM-1, 2026-10-18): `sandbox_exec_enabled`, default OFF
+    (a missing settings file is OFF, a damaged one is OFF with the reason).
+    `jarvis_agent.offered_tools()` offers `run_data_script` only while it is
+    ON - and does not offer it when OFF even if `[tools].enabled` names it by
+    hand. `request_enabled(True)` is 202 waiting on ONE normal
+    `change_own_config` approval card and writes NOTHING until a person says
+    yes; OFF is immediate and withdraws a waiting card; a denied card, a tier
+    that is not "ask", a raising gate and a card that cannot be raised all
+    leave it OFF. Turning it ON does not weaken one sandbox refusal (the same
+    code is refused before and after). The registry's `set_sandbox_exec` -
+    the chat/voice door both apps already have - calls exactly that function.
+    No Settings toggle row is shipped by this slice: a row that cannot be
+    clicked is worse than none, and the fixture check here bites if one is
+    added before LM-1C wires the surfaces.
 """
 from __future__ import annotations
 
@@ -902,7 +916,12 @@ def t_jarvis_agent_dispatches_a_model_tool_call_to_run_data_script():
 
     streamed = []
     real_run = SE.run_data_script
+    real_enabled = SE.enabled
     SE.run_data_script = run_spy
+    # This test is about the CHAT DOOR (the tool call reaching run_data_script),
+    # not about the owner's switch: it presumes the owner has turned the switch
+    # on, which t_the_switch_* above prove is what makes the tool offered at all.
+    SE.enabled = lambda: True
     try:
         with NoRealIO():
             out = AG.run_local_turn(
@@ -914,6 +933,7 @@ def t_jarvis_agent_dispatches_a_model_tool_call_to_run_data_script():
                 on_step=lambda step: None, lane_choice=None)
     finally:
         SE.run_data_script = real_run
+        SE.enabled = real_enabled
     tool_messages = [m["content"] for m in bodies[-1]["messages"]
                      if m.get("role") == "tool"]
     check("a model's tool call really reaches jarvis_sandbox_exec.run_data_script "
@@ -925,6 +945,279 @@ def t_jarvis_agent_dispatches_a_model_tool_call_to_run_data_script():
     check("the answer the owner sees is still the model's own words",
           out.get("answer") == "It is 6." or b"It is 6." in b"".join(streamed),
           (streamed, out.get("answer")))
+
+
+# --------------------------------------------------------------------------
+#   The owner's switch (LM-1, 2026-10-18): OFF by default, ON only after a
+#   normal approval card, and OFF never weakens a sandbox refusal
+# --------------------------------------------------------------------------
+# These checks are the reported bite-proof's targets: each mutates one guard
+# in jarvis_sandbox_exec.py / jarvis_agent.py and must go RED by its own name.
+
+@contextlib.contextmanager
+def switch_config():
+    """A private settings folder for the switch, restored afterwards.
+
+    `jarvis_sandbox_exec` resolves its config folder at call time, so setting
+    OPENJARVIS_CONFIG_DIR here is the real lookup - never a monkeypatched path
+    that would prove only the test's own stub."""
+    names = ("OPENJARVIS_CONFIG_DIR", "JARVIS_CONFIG_DIR")
+    saved = {name: os.environ.get(name) for name in names}
+    folder = TMP / f"switch-{time.time_ns()}"
+    folder.mkdir(parents=True, exist_ok=True)
+    try:
+        os.environ["OPENJARVIS_CONFIG_DIR"] = str(folder)
+        os.environ.pop("JARVIS_CONFIG_DIR", None)
+        SE._reset_for_tests()
+        yield folder
+    finally:
+        for name, old in saved.items():
+            if old is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = old
+        SE._reset_for_tests()
+
+
+def verdict(tier="ask", allowed=False, outcome=None, reason="refused"):
+    """The shape `jarvis_gate.check()` answers with, for a stubbed card."""
+    return types.SimpleNamespace(tier=tier, allowed=allowed, outcome=outcome,
+                                 reason=reason, why=reason)
+
+
+def t_the_sandbox_switch_is_off_by_default_and_that_hides_the_tool():
+    with switch_config() as folder:
+        path = SE.settings_path()
+        check("the switch lives in sandbox.json in the settings folder",
+              path.parent == folder and path.name == SE.SWITCH_FILE == "sandbox.json",
+              str(path))
+        check("no file at all means OFF (the default), and nothing is written by reading",
+              path.is_file() is False and SE.settings()["enabled"] is False
+              and SE.enabled() is False, SE.settings())
+        AG = _agent()
+        OFF_LIST = {"web_search", "change_setting"}
+        check("with the switch OFF the model is not offered run_data_script",
+              AG.SANDBOX_TOOL not in AG.offered_tools(OFF_LIST),
+              AG.offered_tools(OFF_LIST))
+        check("...even when the inherited tool list names it by hand",
+              AG.SANDBOX_TOOL not in AG.offered_tools({AG.SANDBOX_TOOL}),
+              AG.offered_tools({AG.SANDBOX_TOOL}))
+
+
+def t_the_switch_on_offers_the_tool_and_off_takes_it_away():
+    with switch_config() as folder:
+        AG = _agent()
+        out = SE.set_enabled(True)
+        check("set_enabled(True) writes the switch and says so", out.get("ok") is True
+              and SE.enabled() is True and (folder / "sandbox.json").is_file(), out)
+        check("ON offers run_data_script although [tools].enabled never named it",
+              AG.SANDBOX_TOOL in AG.offered_tools({"web_search", "change_setting"}),
+              AG.offered_tools({"web_search", "change_setting"}))
+        check("ON also offers it when the list is nearly empty",
+              AG.SANDBOX_TOOL in AG.offered_tools({"calculator"}),
+              AG.offered_tools({"calculator"}))
+        SE.set_enabled(False)
+        check("OFF removes it from the offer again",
+              AG.SANDBOX_TOOL not in AG.offered_tools({"calculator", AG.SANDBOX_TOOL}),
+              AG.offered_tools({"calculator", AG.SANDBOX_TOOL}))
+
+
+def t_turning_it_on_waits_for_the_card_and_writes_nothing_until_yes():
+    with switch_config() as folder:
+        jobs, asked = [], []
+
+        def gate(action, detail, prompt):
+            asked.append((action, prompt, detail))
+            return verdict(allowed=True, outcome="approved")
+
+        code, out = SE.request_enabled(True, gate=gate, tier_of=lambda a: "ask",
+                                       spawn=jobs.append)
+        check("ON is 202 waiting, never 'it is on'",
+              code == 202 and out.get("waiting") is True and out.get("enabled") is False
+              and out.get("ok") is True, (code, out))
+        check("nothing is written while the card waits",
+              SE.enabled() is False and SE.settings_path().is_file() is False,
+              SE.settings())
+        check("the card is raised exactly once, by the job the request queued",
+              len(jobs) == 1 and asked == [], (len(jobs), asked))
+        if jobs:
+            jobs[0]()
+        check("the card was asked under the NORMAL settings action change_own_config",
+              len(asked) == 1 and asked[0][0] == SE.SWITCH_ACTION == "change_own_config",
+              asked)
+        check("the card's words are the sandbox's own, in plain sentences",
+              bool(asked) and "Python" in asked[0][1]
+              and "stays exactly as it is" in asked[0][1]
+              and "say no" in asked[0][1], asked[0][1] if asked else "")
+        check("a person saying yes is what writes the switch",
+              SE.enabled() is True and SE.settings_path().is_file()
+              and SE.switch_state()["last"]["outcome"] == "enabled",
+              SE.switch_state())
+
+
+def t_a_denied_or_missing_card_changes_nothing_and_fails_closed():
+    with switch_config():
+        jobs = []
+
+        def denied_gate(action, detail, prompt):
+            return verdict(allowed=False, outcome="denied")
+
+        code, out = SE.request_enabled(True, gate=denied_gate,
+                                       tier_of=lambda a: "ask", spawn=jobs.append)
+        check("a denied card still answers 202 while it waits", code == 202 and jobs, out)
+        jobs[0]()
+        check("a DENIED card writes nothing", SE.enabled() is False
+              and SE.switch_state()["last"]["outcome"] == "denied", SE.switch_state())
+        # A tier that is not "ask" means nobody is being asked: no card, no write.
+        for t in ("auto", "never", "unreadable (ImportError)"):
+            code, out = SE.request_enabled(True, gate=lambda *a: verdict(allowed=True),
+                                           tier_of=lambda a, t=t: t, spawn=jobs.append)
+            check(f"tier {t!r} refuses before raising a card (503, unchanged)",
+                  code == 503 and out.get("error") and SE.enabled() is False, (code, out))
+        # The gate itself raising must leave it OFF, never guess.
+        def raising_gate(action, detail, prompt):
+            raise RuntimeError("owner check unavailable")
+
+        code, out = SE.request_enabled(True, gate=raising_gate, tier_of=lambda a: "ask",
+                                       spawn=lambda fn: fn())
+        check("a gate that raises leaves it OFF and says refused",
+              code == 202 and SE.enabled() is False
+              and SE.switch_state()["last"]["outcome"] == "refused", SE.switch_state())
+        # The card job never starting must not leave a stuck "waiting" that lies.
+        def no_spawn(fn):
+            raise RuntimeError("no thread")
+
+        code, out = SE.request_enabled(True, gate=denied_gate, tier_of=lambda a: "ask",
+                                       spawn=no_spawn)
+        check("a card that cannot be raised is 503 with no pending card and no write",
+              code == 503 and SE.enabled() is False and not SE.switch_state()["waiting"],
+              (code, out))
+
+
+def t_off_is_immediate_and_takes_back_a_waiting_card():
+    with switch_config():
+        jobs = []
+
+        def approved_gate(action, detail, prompt):
+            return verdict(allowed=True, outcome="approved")
+
+        SE.request_enabled(True, gate=approved_gate, tier_of=lambda a: "ask",
+                           spawn=jobs.append)
+        check("the ON card is waiting before OFF is asked", bool(jobs))
+        code, out = SE.request_enabled(False)
+        check("OFF is 200 at once, with no card raised for it",
+              code == 200 and out.get("waiting") is False and SE.enabled() is False,
+              (code, out))
+        if jobs:
+            jobs[0]()
+        check("the withdrawn card approving afterwards changes nothing",
+              SE.enabled() is False
+              and SE.switch_state()["last"]["outcome"] == "withdrawn", SE.switch_state())
+
+
+def t_a_damaged_or_unwritable_settings_file_is_off_and_says_so():
+    with switch_config() as folder:
+        path = SE.settings_path()
+        path.write_text("{not json", encoding="utf-8")
+        got = SE.settings()
+        check("a damaged settings file reads as OFF, with the reason in plain words",
+              got["enabled"] is False and "could not be read" in got["why"], got)
+        path.write_text("[]", encoding="utf-8")
+        check("a JSON file that is not a settings object also reads as OFF",
+              SE.settings()["enabled"] is False, SE.settings())
+        SE.set_enabled(True)
+        check("set_enabled repairs the file", SE.enabled() is True, SE.settings())
+        # A config folder that is really a file cannot be written: fail closed.
+        blocked = TMP / "switch-blocked"
+        blocked.write_text("not a folder", encoding="utf-8")
+        os.environ["OPENJARVIS_CONFIG_DIR"] = str(blocked)
+        out = SE.set_enabled(True)
+        check("a settings file that cannot be saved changes nothing and says so",
+              out.get("ok") is False and "could not be saved" in out.get("error", ""),
+              out)
+        check("...and reading it afterwards is still OFF", SE.enabled() is False, out)
+
+
+def t_the_switch_never_weakens_the_sandbox_refusals():
+    with switch_config():
+        before = SE.run_data_script("import socket")
+        SE.set_enabled(True)
+        after = SE.run_data_script("import socket")
+        check("with the switch ON an import refusal is unchanged",
+              refused(before, "import") and refused(after, "import")
+              and before["error"] == after["error"], (before["error"], after["error"]))
+        before = SE.run_data_script("while True:\n    pass")
+        SE.set_enabled(False)
+        after = SE.run_data_script("while True:\n    pass")
+        check("the switch does not change a script the sandbox itself stops",
+              before["error"] == after["error"], (before["error"], after["error"]))
+
+
+def t_the_spoken_setting_reaches_the_same_card():
+    import jarvis_settings_registry as R
+    setting = R.find_bool_setting("the data sandbox")
+    check("'the data sandbox' resolves to one spoken BoolSetting",
+          setting is not None and setting.key == "sandbox_exec", setting)
+    check("its other spoken names resolve to the same switch",
+          all((R.find_bool_setting(name) or types.SimpleNamespace(key=""))
+              .key == "sandbox_exec"
+              for name in ("data sandbox", "the python sandbox", "the sandbox")),
+          [name for name in ("data sandbox", "the python sandbox", "the sandbox")
+           if (R.find_bool_setting(name) or types.SimpleNamespace(key="")).key
+           != "sandbox_exec"])
+    called = []
+    real = SE.request_enabled
+
+    def spy(on, **kwargs):
+        called.append(on)
+        return 202, {"ok": True, "waiting": True,
+                     "message": "Waiting for your approval."}
+
+    SE.request_enabled = spy
+    try:
+        out = R.set_sandbox_exec(True, peer="127.0.0.1", local=True)
+    finally:
+        SE.request_enabled = real
+    check("the registry setter calls the sandbox module's own request_enabled, ON once",
+          called == [True], called)
+    check("...and its answer is the card's waiting sentence, not an invented 'done'",
+          out.ok is True and out.waiting is True
+          and out.said == "Waiting for your approval.", out)
+    # The chat/voice door both apps already have, matched on the real grammar
+    # rather than on this file's belief about it.
+    import jarvis_quick as Q
+    on_match = Q.match("turn on the data sandbox")
+    off_match = Q.match("turn off the data sandbox")
+    check("'turn on the data sandbox' is the settings_bool intent, key sandbox_exec, ON",
+          on_match is not None and on_match.name == "settings_bool"
+          and on_match.f == {"key": "sandbox_exec", "on": True}, on_match)
+    check("'turn off the data sandbox' is the same intent, OFF",
+          off_match is not None and off_match.name == "settings_bool"
+          and off_match.f == {"key": "sandbox_exec", "on": False}, off_match)
+
+
+def t_no_dead_toggle_row_is_shipped_by_this_slice():
+    """The honest-scope guard (Lead's correction, 2026-10-18): LM-1 does NOT
+    draw a Settings toggle it cannot wire. The spoken switch exists, and the
+    generated catalogs must not carry a row for it until LM-1C adds both apps'
+    surfaces. If someone adds the row without the transport, this goes red."""
+    import jarvis_settings_registry as R
+    linked = [r.dom_id for r in R.SETTINGS_ROWS if r.setting == "sandbox_exec"]
+    check("no SETTINGS_ROWS row claims the sandbox switch before it can be clicked",
+          linked == [], linked)
+    repo = HERE.parent
+    desk = repo / "jarvis-desktop" / "tests" / "fixtures" / "settings-cases.json"
+    phone = (repo / "jarvis-client" / "app" / "src" / "test" / "resources" / "contract"
+             / "settings-cases.json")
+    check("both generated settings fixtures exist", desk.is_file() and phone.is_file(),
+          (desk, phone))
+    if desk.is_file() and phone.is_file():
+        check("the two apps' settings fixtures are byte-identical",
+              desk.read_bytes() == phone.read_bytes(), "fixtures differ")
+        rows = json.loads(desk.read_text(encoding="utf-8")).get("rows", [])
+        check("neither app's catalog carries a dead sandbox row",
+              not any(r.get("setting") == "sandbox_exec" for r in rows),
+              [r for r in rows if r.get("setting") == "sandbox_exec"])
 
 
 if __name__ == "__main__":

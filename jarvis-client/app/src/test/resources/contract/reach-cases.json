@@ -1192,10 +1192,6 @@
      "name": "Reading files on this PC"
     },
     {
-     "id": "run_data_script",
-     "name": "Running a small Python script for data or maths (read-only, no network)"
-    },
-    {
      "id": "shell_exec",
      "name": "Running commands on this PC"
     },

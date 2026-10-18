@@ -5277,6 +5277,20 @@ def _web_search_switched_off() -> bool:
         return False
 
 
+def _sandbox_offered() -> bool:
+    """Is the owner's own data-and-maths sandbox switch ON? (LM-1, 2026-10-18.)
+
+    `run_data_script` is the one tool whose switch is its own, not a line in
+    `[tools].enabled`: the module keeps `sandbox_exec_enabled`, default OFF, in
+    sandbox.json. Missing, unreadable or broken means OFF - fail closed, never
+    a guess."""
+    try:
+        import jarvis_sandbox_exec as SANDBOX
+        return bool(SANDBOX.enabled())
+    except Exception:
+        return False
+
+
 def enabled_tools_for_turn(legacy: Optional[dict] = None) -> set:
     """Which tools this turn may offer: `[tools].enabled` from the owner's own
     settings file (`jarvis-framework.toml`), falling back to the inherited
@@ -5348,6 +5362,15 @@ def offered_tools(enabled_tools) -> list:
         wanted.discard(SPENDING_TOOL)
     if RETIREMENT_TOOL in wanted and _RET is None:
         wanted.discard(RETIREMENT_TOOL)
+    if _sandbox_offered():
+        # The owner's own switch for the one tool that is not a line in
+        # `[tools].enabled`: ON means the model IS offered `run_data_script`,
+        # wherever that list does or does not name it. That keeps the switch
+        # real without editing the inherited tool list (LM-1, 2026-10-18).
+        wanted.add(SANDBOX_TOOL)
+    else:
+        # OFF means it is never offered - even if a hand-edited list names it.
+        wanted.discard(SANDBOX_TOOL)
     return [n for n in TOOLS if n in wanted]
 
 

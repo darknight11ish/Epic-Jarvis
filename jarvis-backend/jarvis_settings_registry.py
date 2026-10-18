@@ -612,6 +612,23 @@ def set_browser_engine(on: bool, *, peer=None, local=None) -> Outcome:
     return _say(code, out)
 
 
+# --- the data and maths sandbox (jarvis_sandbox_exec.py, LM-1 2026-10-18) --
+
+def set_sandbox_exec(on: bool, *, peer=None, local=None) -> Outcome:
+    """Offer (or stop offering) the local data-and-maths sandbox to the AI
+    model. OFF is immediate; ON is ONE normal approval card
+    (`change_own_config`, tier ask) and nothing is written before a person says
+    yes - the module's own `request_enabled()` does both, exactly as a route
+    would. There is no static Settings toggle wired to this yet (LM-1C); the
+    reachable door tonight is this spoken one, on both apps."""
+    try:
+        import jarvis_sandbox_exec as SANDBOX
+    except Exception:
+        return _missing("the data and maths sandbox")
+    code, out = SANDBOX.request_enabled(bool(on))
+    return _say(code, out)
+
+
 # --- making pictures (jarvis_pictures.py, JARVIS-API section 129) ----------
 
 def set_pictures(on: bool, *, peer=None, local=None) -> Outcome:
@@ -1607,6 +1624,17 @@ BOOL_SETTINGS: tuple = (
                ("the headless browser", "headless browser", "obscura", "the obscura browser",
                 "the browser with no window"),
                "browser-engine", set_browser_engine),
+    # "The data and maths sandbox" (LM-1, 2026-10-18). The ONE tool whose
+    # switch is its own rather than a line in [tools].enabled: default OFF, and
+    # ON is one normal change_own_config card. It has NO desktop or phone row
+    # yet on purpose - a toggle that cannot be clicked is worse than none - so
+    # its `section` is None and it is one of the spoken-only settings the rows
+    # test lists by name. LM-1C adds the real rows and their two routes.
+    BoolSetting("sandbox_exec",
+               ("the data sandbox", "data sandbox", "the data and maths sandbox",
+                "the python sandbox", "the small python sandbox", "the sandbox",
+                "small python scripts", "the data and maths tool"),
+               None, set_sandbox_exec),
     # "Making pictures" (the owner's decision of 2026-09-27; pictures.patch,
     # JARVIS-API section 129). Its own switch, OFF by default: the second card
     # is shared with the everyday model, and CLAUDE.md's rule is that a feature
