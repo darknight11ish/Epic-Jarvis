@@ -1468,6 +1468,8 @@ SELECTION_WORDS = {
                  "read."),
     "secret": ("The highlighted text looked like a secret (a key, a password or a card "
                "number), so it was not passed on."),
+    "window_changed": ("The window changed while the highlighted text was being read, so "
+                       "nothing was returned."),
 }
 SELECTION_CUT = "Only the first part of the highlighted text was kept."
 
@@ -1486,6 +1488,29 @@ def _default_front_snapshot():
         return jarvis_screen_win.front_snapshot()
     except Exception:
         return None
+
+
+def _default_focused_window():
+    """The top-level window of the FOCUSED control, as `{"hwnd": int}`, or None.
+
+    The reader reads `GetFocusedControl()`, so this is the window the text
+    actually came from. The pause rules above ran on the FOREGROUND window's
+    snapshot; this is what proves the two are the same window. A control whose
+    window cannot be placed answers None and the caller refuses: a read that
+    cannot be attributed cannot inherit another window's rules (fail closed).
+    """
+    try:
+        auto = _uia_lib()
+        focused = auto.GetFocusedControl()
+        if focused is None:
+            return None
+        top = focused.GetTopLevelControl()
+        if top is None:
+            return None
+        hwnd = int(top.NativeWindowHandle or 0)
+    except Exception:
+        return None
+    return {"hwnd": hwnd} if hwnd > 0 else None
 
 
 def _default_selection_text() -> str:
@@ -1541,7 +1566,62 @@ def _default_scrubber():
         return None
 
 
-def read_selection(*, front=None, selection=None, never=None, scrubber=None) -> dict:
+def _same_read_window(snap, front, window) -> bool:
+    """Did the text come from the window whose pause rules passed?
+
+    Two proofs, because they catch different changes:
+
+      * the FOCUSED control's own top-level HWND must equal the snapshot's
+        `hwnd` - that is the window the reader actually reads. A control whose
+        window cannot be placed is a refusal (fail closed);
+      * when the snapshot was taken by this module (`front is None`) or by a
+        caller that supplied a callable, it is taken AGAIN after the read and
+        compared with `jarvis_screen.same_window` - so a site/tab/title change
+        inside the SAME window is caught too.
+
+    An injected world (`front` a dict and no `window=`) is the caller's own
+    fake and is not identity-checked here; the production path is `front is
+    None`, which always checks both.
+    """
+    try:
+        import jarvis_screen
+    except Exception:
+        return False
+    if not isinstance(snap, dict):
+        return False
+    snap_hwnd = snap.get("hwnd")
+    checks_hwnd = window is not None or front is None
+    if checks_hwnd:
+        try:
+            got = window() if callable(window) else window
+        except Exception:
+            got = None
+        if got is None and front is None:
+            got = _default_focused_window()
+        hwnd = got.get("hwnd") if isinstance(got, dict) else got
+        try:
+            hwnd = int(hwnd) if hwnd is not None else 0
+            snap_hwnd = int(snap_hwnd) if snap_hwnd is not None else 0
+        except (TypeError, ValueError):
+            return False
+        if hwnd <= 0 or snap_hwnd <= 0 or hwnd != snap_hwnd:
+            return False
+    if front is None:
+        after = _default_front_snapshot()
+        if not isinstance(after, dict) or not jarvis_screen.same_window(snap, after):
+            return False
+    elif callable(front):
+        try:
+            after = front()
+        except Exception:
+            return False
+        if not isinstance(after, dict) or not jarvis_screen.same_window(snap, after):
+            return False
+    return True
+
+
+def read_selection(*, front=None, selection=None, never=None, scrubber=None,
+                   window=None) -> dict:
     """The text the owner has highlighted in the window in front. Never raises.
 
     Returns `{ok, text, app, chars, truncated, scrubbed, words}` on success, or
@@ -1552,13 +1632,18 @@ def read_selection(*, front=None, selection=None, never=None, scrubber=None) -> 
     one; `truncated` says a long selection was cut to MAX_SELECTION_CHARS.
 
     Order, and why: the window is checked FIRST (the pause rules), then the
-    selection is read, then it is scrubbed. An excluded program's selection is
-    never touched. A missing scrubber is a refusal, not a raw pass.
+    selection is read, then it is PROVED the text came from that same window
+    (the focused control's top-level HWND, and the front snapshot again), then
+    it is scrubbed. An excluded program's selection is never returned. A
+    missing scrubber is a refusal, not a raw pass.
 
-    `front`, `selection`, `never` and `scrubber` inject the real world:
-    a callable returning the `jarvis_screen.pause_reason` snapshot (or a dict),
-    a zero-argument callable returning text, a `jarvis_screen.NeverLook`-shaped
-    object, and a callable text -> text.
+    `front`, `selection`, `never`, `scrubber` and `window` inject the real
+    world: a callable returning the `jarvis_screen.pause_reason` snapshot (or
+    a dict), a zero-argument callable returning text, a
+    `jarvis_screen.NeverLook`-shaped object, a callable text -> text, and the
+    focused control's top-level window (a callable returning `{"hwnd": n}`, or
+    the dict itself). The identity check that uses `window`/the real probe is
+    what makes "the pause rules are this window's" true of the bytes returned.
     """
     try:
         import jarvis_screen
@@ -1614,6 +1699,15 @@ def read_selection(*, front=None, selection=None, never=None, scrubber=None) -> 
             f"was returned.", app)
     if not isinstance(raw, str) or not raw.strip():
         return _selection_refusal("no_selection", SELECTION_WORDS["no_selection"], app)
+    # 2b. The same window must still be the one the text came from: the pause
+    # rules that passed above belong to the snapshot's window, and the reader
+    # reads the FOCUSED control, which is not proven to be that window. A
+    # focus change between the two calls, or a control in another top-level
+    # window, is refused before a character is returned - it is not another
+    # window's text with this window's permission.
+    if not _same_read_window(snap, front, window):
+        return _selection_refusal("window_changed",
+                                  SELECTION_WORDS["window_changed"], app)
     truncated = len(raw) > MAX_SELECTION_CHARS
     raw = raw[:MAX_SELECTION_CHARS]
 
