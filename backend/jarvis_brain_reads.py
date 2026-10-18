@@ -44,6 +44,19 @@ The owner's choice of 2026-09-28 (docs/RESEARCH-AUDIT-2026-09-28.md section
         lists" (both are desktop-side state), so the desktop's own drawer must
         hide while either is on; JARVIS-API section 140 says that gap plainly.
 
+    POST /api/guardian/restore  {"path": <file>, "sha_before": <sha256>}
+        (2026-10-18, LM-2B; JARVIS-API section 140.4) "Put that version
+        back": the ONE route here that writes. It calls
+        jarvis_file_guardian.restore_version(), which asks the EXISTING
+        `undo_action` card through the real `jarvis_gate.check()` - no new
+        tier, no second permission model - saves the version here now and a
+        NEW receipt BEFORE the write (so the existing Undo reverses the
+        restore), refuses a link, a path outside the allowed folders or a
+        version no longer in the store, and changes nothing when the card is
+        denied, times out or cannot be raised. It is POST-only (there is no
+        GET form) and a request from another device is refused BEFORE the
+        request body is read.
+
     GET /api/pc/help
         (2026-09-28; JARVIS-API section 84) "PC help": five plain answers
         about this PC - why it is slow, how full the drives are, what is using
@@ -103,11 +116,6 @@ COCKPIT_PATH = "/api/today/cockpit"
 PATHS = (SEARCH_PATH, FACT_HISTORY_PATH, CONVERSATION_FACTS_PATH, PC_HELP_PATH,
          FACT_CHAT_PATH, COCKPIT_PATH, GUARDIAN_SNAPSHOTS_PATH, GUARDIAN_DIFF_PATH)
 
-#: The one POST this module answers (GTD-2, 2026-10-18): the said-I'd-do
-#: switch's own toggle. OFF is immediate; ON raises ONE approval card. It is
-#: not a second way to change any other setting.
-POST_PATHS = (COCKPIT_PATH,)
-
 UPDATE = ("This PC's Jarvis is missing part of this feature. Run apply-patches.ps1 on the PC "
           "to update it.")
 
@@ -118,6 +126,17 @@ MAX_SNAPSHOTS = 200
 MAX_PATH_CHARS = 4096
 MAX_RECEIPT_CHARS = 120
 MAX_REASON_CHARS = 200
+
+#: The one WRITE route: a restore overwrites a file, so it is POST-only and
+#: asked through the EXISTING undo_action card. There is no GET form, and the
+#: request body is small on purpose.
+GUARDIAN_RESTORE_PATH = "/api/guardian/restore"
+MAX_BODY_BYTES = 16 * 1024
+
+#: The two POSTs this module answers: the Today board's said-I'd-do switch
+#: (GTD-2; no PC-only rule) and the guardian's one WRITE route (a restore,
+#: this PC only, behind the EXISTING undo_action card).
+POST_PATHS = (COCKPIT_PATH, GUARDIAN_RESTORE_PATH)
 
 NOT_THIS_PC = ("The file guardian's history is on this PC, so a request from another "
                "device is refused before anything is read.")
@@ -278,6 +297,79 @@ def _diff_answer(query: str, differ) -> tuple:
     return 200, dict(answer)          # the module's own answer, unchanged
 
 
+def _restore_refusal(why: str, words: str) -> dict:
+    """A refusal in the shape the restore route's answer has."""
+    return {"ok": False, "refused": True, "why": why, "path": "",
+            "receipt_id": "", "words": words}
+
+
+def _restore_answer(body, restore, *, gate=None) -> tuple:
+    """(status, answer) for POST /api/guardian/restore's body.
+
+    The module's own answer is passed back UNCHANGED - its own allowed-folder
+    and saved-version checks (BEFORE any card), its own undo_action card and
+    its own both-sides receipts. This route only refuses a body that is not
+    the two strings the module takes, and never names a gate over the wire:
+    the HTTP wrapper calls this with `gate=None`, so restore_version() uses
+    the real jarvis_gate.check() exactly as its own docstring says.
+    """
+    if not isinstance(body, dict):
+        return 400, _restore_refusal(
+            "bad_request", "Send a JSON object with path and sha_before.")
+    try:
+        path = str(body.get("path") or "").strip()
+    except Exception:
+        path = ""
+    sha = _safe_text(body.get("sha_before"), 64).lower()
+    if not path or not sha:
+        return 400, _restore_refusal(
+            "bad_request", "Say which file and which saved version (path and sha_before).")
+    if len(path) > MAX_PATH_CHARS:
+        return 400, _restore_refusal(
+            "bad_request", "That path is too long to be one file on this PC.")
+    answer = restore(path, sha, gate=gate)
+    if not isinstance(answer, dict):
+        return 500, _restore_refusal("unreadable", "The version could not be put back.")
+    return 200, dict(answer)
+
+
+def handle_post(path: str, body, *, peer=None, local=None, gate=None) -> tuple:
+    """(http status, reply) for one of POST_PATHS. Never raises.
+
+    `gate` exists for IN-PROCESS callers and the suite to hand in a stand-in
+    card; the HTTP wrapper never passes one, so a real request always goes
+    through the module default - the real jarvis_gate.check(). A caller cannot
+    name a gate over the wire, and there is no argument that skips it.
+    """
+    if path == COCKPIT_PATH:
+        try:
+            import jarvis_today
+        except Exception:
+            return 503, {"available": False, "why": UPDATE}
+        handler = getattr(jarvis_today, "handle_cockpit_post", None)
+        if handler is None:
+            return 501, {"ok": False, "error": UPDATE}
+        try:
+            return handler(body)
+        except Exception as exc:
+            return 500, {"ok": False, "error": type(exc).__name__}
+    if path != GUARDIAN_RESTORE_PATH:
+        return 404, {"error": "no such route"}
+    if not _from_this_pc(peer, local):
+        return 403, _restore_refusal("not_this_pc", NOT_THIS_PC)
+    try:
+        import jarvis_file_guardian as engine
+    except Exception:
+        return 501, _restore_refusal("update", UPDATE)
+    restore = getattr(engine, "restore_version", None)
+    if not callable(restore):
+        return 501, _restore_refusal("update", UPDATE)
+    try:
+        return _restore_answer(body, restore, gate=gate)
+    except Exception:
+        return 500, _restore_refusal("unreadable", "The version could not be put back.")
+
+
 def handle_get(path: str, query: str = "", *, peer=None, local=None) -> tuple:
     """(http status, reply) for one of PATHS. Never raises.
 
@@ -415,16 +507,19 @@ def fact_chat(query: str) -> tuple:
 
 
 def install(handler_cls, *, origin_ok, token_ok, read_body=None) -> str:
-    """Wrap `handler_cls.do_GET` so PATHS are answered here, after the
-    server's own origin and token checks; every other request goes straight
-    to the original `do_GET`. `read_body` is handed on to
-    jarvis_widgets.install() (its POSTs); every route of this module's own
-    is GET-only."""
+    """Wrap `handler_cls.do_GET` and `do_POST` so PATHS/POST_PATHS are answered
+    here, after the server's own origin and token checks; every other request
+    goes straight to the original. `read_body` is the server's own request
+    reader: the widgets install() takes it, and the one POST route here reads
+    its small JSON body with it. Without it that route answers 501 and changes
+    nothing - a server with no body reader cannot have asked a person."""
     widgets = _install_widgets(handler_cls, origin_ok, token_ok, read_body)
-    if getattr(handler_cls.do_GET, "_jarvis_brain_reads", False):
-        return ("  brain      Search old chats, fact history, a chat's facts, PC help and "
-                "the file guardian's history (already on)" + widgets)
+    if (getattr(handler_cls.do_GET, "_jarvis_brain_reads", False)
+            or handler_cls.__dict__.get("_jarvis_brain_reads_on")):
+        return ("  brain      Search old chats, fact history, a chat's facts, PC help, the "
+                "file guardian's history and its one gated restore (already on)" + widgets)
     get0 = handler_cls.do_GET
+    post0 = getattr(handler_cls, "do_POST", None)
 
     def _peer_local(self) -> tuple:
         """(peer, local) for this request, best effort. The guardian routes
@@ -464,39 +559,55 @@ def install(handler_cls, *, origin_ok, token_ok, read_body=None) -> str:
         code, out = handle_get(route, parsed.query, peer=peer, local=local)
         return self._send(code, out)
 
+    def do_POST(self):
+        parsed = urlsplit(str(getattr(self, "path", "") or ""))
+        route = parsed.path.rstrip("/")
+        if route not in POST_PATHS:
+            if post0 is None:
+                return self._send(405, {"error": "this server has no POST handler"})
+            return post0(self)
+        if not _allowed(self):
+            return None
+        peer, local = _peer_local(self)
+        # The restore is THIS PC's only, refused BEFORE its body is read:
+        # another device is refused having sent at most its headers. The Today
+        # board asks no such question (GTD-2).
+        if route == GUARDIAN_RESTORE_PATH and not _from_this_pc(peer, local):
+            return self._send(403, _restore_refusal("not_this_pc", NOT_THIS_PC))
+        if read_body is None:
+            if route == COCKPIT_PATH:
+                return self._send(501, {"ok": False, "error": UPDATE})
+            return self._send(501, _restore_refusal("update", UPDATE))
+        try:
+            raw = read_body(self) or b"{}"
+            if len(raw) > MAX_BODY_BYTES:
+                if route == COCKPIT_PATH:
+                    return self._send(413, {"ok": False, "error": "too big"})
+                return self._send(413, _restore_refusal(
+                    "too_large", "That request is too big; send one small JSON object."))
+            body = json.loads(raw)
+        except Exception as exc:
+            if route == COCKPIT_PATH:
+                return self._send(400, {"ok": False, "error": type(exc).__name__})
+            return self._send(400, _restore_refusal(
+                "bad_request", "Send a JSON object with path and sha_before."))
+        try:
+            code, out = handle_post(route, body, peer=peer, local=local)
+        except Exception as exc:
+            if route == COCKPIT_PATH:
+                code, out = 500, {"ok": False, "error": type(exc).__name__}
+            else:
+                code, out = 500, _restore_refusal(
+                    "unreadable", "The version could not be put back.")
+        return self._send(code, out)
+
     do_GET._jarvis_brain_reads = True
     handler_cls.do_GET = do_GET
-    if read_body is not None:
-        post0 = handler_cls.do_POST
+    handler_cls.do_POST = do_POST
+    handler_cls._jarvis_brain_reads_on = True
+    return ("  brain      Search old chats, fact history, a chat's facts, PC help, "
+            "the file guardian's history and its one gated restore: on" + widgets)
 
-        def do_POST(self):
-            try:
-                from urllib.parse import urlsplit
-                route = urlsplit(str(getattr(self, "path", "") or "")).path.rstrip("/")
-            except Exception:
-                route = ""
-            if route not in POST_PATHS:
-                return post0(self)
-            if not _allowed(self):
-                return None
-            try:
-                raw = read_body(self) or b"{}"
-                if len(raw) > 16 * 1024:
-                    return self._send(413, {"ok": False, "error": "too big"})
-                body = json.loads(raw)
-            except Exception as exc:
-                return self._send(400, {"ok": False, "error": type(exc).__name__})
-            try:
-                import jarvis_today
-                handler = getattr(jarvis_today, "handle_cockpit_post", None)
-                code, out = ((501, {"ok": False, "error": UPDATE}) if handler is None
-                             else handler(body))
-            except Exception as exc:
-                code, out = 500, {"ok": False, "error": type(exc).__name__}
-            return self._send(code, out)
-
-        handler_cls.do_POST = do_POST
-    return "  brain      Search old chats, fact history, a chat's facts and PC help: on" + widgets
 
 def _install_widgets(handler_cls, origin_ok, token_ok, read_body) -> str:
     """"Widgets you describe" (jarvis_widgets.py): its own routes, wrapped

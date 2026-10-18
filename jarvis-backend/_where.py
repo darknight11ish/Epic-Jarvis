@@ -1031,9 +1031,13 @@ SHIPPED = (
     # out), answered by jarvis_brain_reads.py and documented in JARVIS-API
     # section 140. They read the store and nothing else; a request from
     # another device is refused BEFORE anything is read; neither writes.
-    # There is still NO restore route and no chat tool - restore_version() is
-    # not reachable from any production path yet, and that is the next,
-    # separately-gated slice. Nothing it does leaves this PC.
+    # ONE gated restore route exists too since 2026-10-18 (LM-2B):
+    # POST /api/guardian/restore calls restore_version() with the EXISTING
+    # undo_action card through the real jarvis_gate.check() - no new tier. It
+    # is POST-only (there is no GET form), the only route here that writes,
+    # and a request from another device is refused before the body is read.
+    # There is still no chat tool: no model can reach any of this. Nothing it
+    # does leaves this PC.
     "jarvis_file_guardian.py",
     # A red-team / pre-mortem decision simulator, on this PC only (2026-10-17,
     # Pillar 21): takes one-sentence decision and returns a 1-3-1 decision

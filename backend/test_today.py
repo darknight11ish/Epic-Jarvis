@@ -721,7 +721,8 @@ class _PostHandler:
 def t_the_switch_has_one_post_route():
     import jarvis_brain_reads as B
     check("the switch's POST rides the same already-wrapped path",
-          B.COCKPIT_PATH in B.POST_PATHS and B.POST_PATHS == (B.COCKPIT_PATH,))
+          B.COCKPIT_PATH in B.POST_PATHS
+          and B.POST_PATHS == (B.COCKPIT_PATH, B.GUARDIAN_RESTORE_PATH))
     T.set_unspoken(False)
 
     class Hd(_PostHandler):

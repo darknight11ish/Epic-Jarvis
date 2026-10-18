@@ -483,6 +483,36 @@ def record(tool_name: str, summary: str, *, before: Any = None, after: Any = Non
         return ""
 
 
+def discard(receipt_id: str) -> bool:
+    """Remove one receipt whose action then DID NOT happen. True when removed.
+
+    The one caller is the file guardian's restore path (2026-10-18): it records
+    the receipt BEFORE the write, as the project's rule says, and if the write
+    itself then fails there must be no receipt claiming a restore that never
+    happened. This is the narrow, deliberately-loud counterweight to `record()`:
+    it never touches an undone or already-used row, it drops the live Undo
+    callable at the same time, and its only observable effect is that the row
+    is gone (it is not an "undo": nothing is put back). Never raises.
+    """
+    try:
+        rid = _name(receipt_id, 64)
+        if not _ID.match(rid):
+            return False
+        with _LOCK:
+            _CALLABLES.pop(rid, None)
+        with closing(_connect()) as c:
+            cur = c.execute(
+                "DELETE FROM action_receipts WHERE receipt_id = ? AND undone_at IS NULL",
+                (rid,))
+            removed = cur.rowcount == 1
+        if removed:
+            _audit("receipts.discarded", {"receipt_id": rid})
+        return removed
+    except Exception as exc:
+        _audit("receipts.discard_failed", {"error": type(exc).__name__})
+        return False
+
+
 # --------------------------------------------------------------------------
 #   Reading
 # --------------------------------------------------------------------------
