@@ -125,6 +125,14 @@ def t_the_page_lists_every_action():
           and rows["send_email"]["title"] == "Send an email", rows["calendar_read"])
     check("sending email always asks, and says it cannot be changed from an app",
           rows["send_email"]["note"] == AF.NOTE_ALWAYS and "switch" not in rows["send_email"])
+    # M7: the card a file-reading sandbox run raises has its own row, worded as
+    # the ask it is; no app switch, because loosening it is a hand edit.
+    sandbox_row = rows["sandbox_file_run"]
+    check("the sandbox file-run card has its own row, said as an ask",
+          sandbox_row["title"] == "Run a small script that reads the files you listed"
+          and sandbox_row["says"] == AF.SAYS["ask"]
+          and sandbox_row["note"] == AF.NOTE_FILE
+          and "switch" not in sandbox_row, sandbox_row)
     check("home control always asks; the lights row is its own",
           "switch" not in rows["home_control"] and rows["fixed:lights"]["lights"] is True
           and rows["fixed:lights"]["says"] == AF.SAYS["ask"])

@@ -81,6 +81,15 @@
        "title": "Read files on this PC"
       },
       {
+       "action": "sandbox_file_run",
+       "fixed": false,
+       "id": "sandbox_file_run",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a small script that reads the files you listed"
+      },
+      {
        "action": "read_joplin_note",
        "fixed": false,
        "id": "read_joplin_note",
@@ -1328,6 +1337,15 @@
        "title": "Read files on this PC"
       },
       {
+       "action": "sandbox_file_run",
+       "fixed": false,
+       "id": "sandbox_file_run",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a small script that reads the files you listed"
+      },
+      {
        "action": "read_joplin_note",
        "fixed": false,
        "id": "read_joplin_note",
@@ -2572,6 +2590,15 @@
        "title": "Read files on this PC"
       },
       {
+       "action": "sandbox_file_run",
+       "fixed": false,
+       "id": "sandbox_file_run",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a small script that reads the files you listed"
+      },
+      {
        "action": "read_joplin_note",
        "fixed": false,
        "id": "read_joplin_note",
@@ -3809,6 +3836,15 @@
        "title": "Read files on this PC"
       },
       {
+       "action": "sandbox_file_run",
+       "fixed": false,
+       "id": "sandbox_file_run",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a small script that reads the files you listed"
+      },
+      {
        "action": "read_joplin_note",
        "fixed": false,
        "id": "read_joplin_note",
@@ -5044,6 +5080,15 @@
        },
        "tier": "auto",
        "title": "Read files on this PC"
+      },
+      {
+       "action": "sandbox_file_run",
+       "fixed": false,
+       "id": "sandbox_file_run",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a small script that reads the files you listed"
       },
       {
        "action": "read_joplin_note",
@@ -6295,6 +6340,15 @@
        "title": "Read files on this PC"
       },
       {
+       "action": "sandbox_file_run",
+       "fixed": false,
+       "id": "sandbox_file_run",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a small script that reads the files you listed"
+      },
+      {
        "action": "read_joplin_note",
        "fixed": false,
        "id": "read_joplin_note",
@@ -7537,6 +7591,15 @@
        },
        "tier": "auto",
        "title": "Read files on this PC"
+      },
+      {
+       "action": "sandbox_file_run",
+       "fixed": false,
+       "id": "sandbox_file_run",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a small script that reads the files you listed"
       },
       {
        "action": "read_joplin_note",
