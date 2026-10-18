@@ -873,6 +873,117 @@ def _folders_listed() -> bool:
         return False
 
 
+# --------------------------------------------------------------------------
+#   "Run a small Python script" (Pillar 15; jarvis_sandbox_exec.py)
+# --------------------------------------------------------------------------
+# A READ-ONLY local tool. The sandbox has no network, writes nothing, keeps no
+# secret and can reach only files the caller names; this is the chat door for
+# it, the slice #533's own registration note said was still to come. It adds
+# NO way out of the PC and changes nothing, so it asks for no card of its own:
+# a run that reads a file is decided under the same action reading a file
+# already uses (`read_files_readonly`, tier auto), and a pure calculation under
+# the calculator's own auto action. Reading the owner's file still latches the
+# turn as private (jarvis_gate.latch_taint, the same latch the voiceprint and
+# self-improvement reads set). Any file the script may read must be inside
+# "Folders Jarvis may look in"; jarvis_projects.py's own folder check delegates
+# to that same one list, so that is the half this file calls rather than
+# writing a second file rule. The script text and the resolved files are built
+# ONCE by prepare(), before the gate, and execute() uses exactly that state.
+SANDBOX_TOOL = "run_data_script"
+#: `_TOOL_ACTIONS` keys this tool is decided under (never guessed gate names):
+#: "file_read" -> read_files_readonly, "calculator" -> auto. Both already exist
+#: in jarvis_gate.py, so this tool needs no gate change.
+SANDBOX_GATE_FILE = "file_read"
+SANDBOX_GATE_PURE = "calculator"
+SANDBOX_MAX_FILES = 8
+_SANDBOX_CODE_SHOWN = 2000
+
+
+def _sandbox_allowed_file(path):
+    """The real path when `path` is a file the owner lets Jarvis read, else None."""
+    if not isinstance(path, str) or not path.strip():
+        return None
+    try:
+        import jarvis_documents as DOCS
+        got = DOCS.allowed_path(path)
+    except Exception:
+        got = None
+    if got:
+        real = got[0]
+        if os.path.isfile(real):
+            return real
+    try:
+        import jarvis_projects as PROJ
+        real = PROJ._real(path)
+        roots = PROJ._allowed_folders()
+        if (any(PROJ._inside(PROJ._real(root), real) for root in roots)
+                and not PROJ._protected(real) and os.path.isfile(real)):
+            return real
+    except Exception:
+        pass
+    return None
+
+
+def _prepare_run_data_script(args: dict):
+    code = args.get("code")
+    if not isinstance(code, str) or not code.strip():
+        raise ValueError("code must be the Python program as text, and cannot be empty")
+    raw_files = args.get("files") or {}
+    if not isinstance(raw_files, dict):
+        raise ValueError("files must be an object mapping a name to a path")
+    if len(raw_files) > SANDBOX_MAX_FILES:
+        raise ValueError(f"a script may read at most {SANDBOX_MAX_FILES} files")
+    files = []
+    for name, path in raw_files.items():
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("every file the script reads needs a plain-text name")
+        real = _sandbox_allowed_file(path)
+        if real is None:
+            raise ValueError(
+                f"the file for {name!r} is not inside a folder Jarvis may look in - "
+                f"add its folder in Settings, Folders Jarvis may look in, on the PC")
+        files.append((name, real))
+    state = {"code": code, "files": dict(files)}
+    shown = code if len(code) <= _SANDBOX_CODE_SHOWN else (
+        code[:_SANDBOX_CODE_SHOWN]
+        + f"\n[... {len(code) - _SANDBOX_CODE_SHOWN} more characters]")
+    lines = ["Run this small Python script:", "", shown]
+    if files:
+        lines += ["", "It may read these files (name -> path):"]
+        lines += [f"  {name} -> {real}" for name, real in files]
+    return state, "\n".join(lines)
+
+
+def _latch_sandbox_file_read() -> bool:
+    """Record that a local file was read in this answer (jarvis_gate.latch_taint).
+
+    The same global latch the voiceprint and self-improvement reads set: once
+    the owner's own file reached the model, the turn stays on the local lane.
+    Never raises - a backend without jarvis_gate.py keeps the tool usable, and
+    its own result says nothing was read if the sandbox refuses."""
+    try:
+        import jarvis_gate
+        return bool(jarvis_gate.latch_taint(why="sandbox_file_read"))
+    except Exception:
+        return False
+
+
+def _run_run_data_script(args: dict, state, **_) -> dict:
+    """Run the script prepare() checked, using ITS code and files - never a
+    second lookup from `args` (the same rule every planning tool here follows)."""
+    try:
+        import jarvis_sandbox_exec as SANDBOX
+    except Exception as exc:
+        return {"ok": False, "error": f"the Python sandbox is not available here "
+                                      f"({type(exc).__name__})"}
+    state = state or {}
+    files = state.get("files") or {}
+    if files:
+        _latch_sandbox_file_read()
+    return SANDBOX.run_data_script(state.get("code", ""),
+                                   read_only_files=files or None)
+
+
 #: "How much did I spend on food last month?" (jarvis_spending.py; the owner's
 #: decisions of 2026-09-30, docs/FINANCE-DESIGN.md part A, JARVIS-API section
 #: 100). ONE tool that adds up a bank CSV/Excel export the owner dropped into a
@@ -1694,6 +1805,27 @@ TOOLS: dict = {
             "path": {"type": "string"}}, "required": ["path"]},
         lambda args: (None, f"Read the file: {args.get('path', '')}"),
         lambda args, state, **_: _run_file_read(args)),
+    SANDBOX_TOOL: Tool(
+        SANDBOX_TOOL,
+        "Run a small Python script for data or maths: add up a CSV, an average, "
+        "a percentage, a chart. It has no network, writes nothing, and can read "
+        "only the named files from folders the owner listed. Use read_csv(name) "
+        "and figure(name, data) inside it; print() the answer.",
+        {"type": "object", "properties": {
+            "code": {"type": "string", "description":
+                     "Python source. Allowed imports: math, statistics, decimal, "
+                     "fractions, datetime, collections, itertools, re, json, csv. "
+                     "read_csv(name) reads one of the files; figure(name, value) "
+                     "adds a chart; print() the answer."},
+            "files": {"type": "object", "additionalProperties": {"type": "string"},
+                      "description":
+                      "name -> path of the files the script may read; each must "
+                      "be inside a folder Jarvis may look in."}},
+         "required": ["code"]},
+        _prepare_run_data_script,
+        _run_run_data_script,
+        gate_lookup_name=lambda args: (SANDBOX_GATE_FILE if (args or {}).get("files")
+                                       else SANDBOX_GATE_PURE)),
     "shell_exec": Tool(
         "shell_exec", "Run one shell command on this machine and return its output.",
         {"type": "object", "properties": {
@@ -5163,7 +5295,8 @@ TOOL_GROUPS = (
     # folder is listed (offered_tools), so the group appears only then too.
     ("documents", "find and read files in the listed folders",
      ("my_files", "my_spending")),
-    ("files", "read a file on this PC, run a command", ("file_read", "shell_exec")),
+    ("files", "read a file or run a command or small script",
+     ("file_read", "shell_exec", SANDBOX_TOOL)),
     # Its own group: my_spending's group is dropped while no folder is listed,
     # and this needs no folder.
     ("retirement", "a retirement what-if", ("retirement_whatif",)),

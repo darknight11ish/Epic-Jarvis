@@ -49,6 +49,24 @@ What it proves:
 12. LAYER 3: a stubbed child that prints without the run's nonce envelope is
     refused and NOTHING it printed is returned - `ok` cannot be forged from
     stdout alone.
+13. THE ALLOCATION-BOMB GUARD: a huge power, left shift, repeated sequence or
+    `range` is refused by the AST pass BEFORE any child starts, each with its
+    OWN reason code from the closed set `AST_BOMB_REASONS`; the threshold
+    itself is a boundary (passing values still run), and small values of every
+    shape are still allowed.
+14. THE MEMORY CAP IS HONEST: on Windows a running child really is under a
+    256 MiB Job Object (the seam says True and the numbers are the constant);
+    on Linux/non-Windows the result NEVER claims a cap (`None` / `False`), a
+    failed attach is `None` / `False`, and a refused script (no child at all)
+    is `None` / `False` too.
+15. THE CHAT DOOR: `jarvis_agent.TOOLS['run_data_script']` exists, is in
+    exactly one tool group, maps to an EXISTING jarvis_gate action (`file_read`
+    when it reads a file, `calculator` when it does not), refuses a file
+    outside "Folders Jarvis may look in" before anything runs, uses the code
+    and files `prepare()` resolved (never a second lookup from the args), and
+    dispatches to `jarvis_sandbox_exec.run_data_script` through a real
+    `run_local_turn` round - with `jarvis_gate.latch_taint(why="sandbox_file_read")`
+    called exactly when a local file is read.
 """
 from __future__ import annotations
 
@@ -61,13 +79,14 @@ import sys
 import tempfile
 import time
 import traceback
+import types
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from _where import require_shipped  # noqa: E402
 
-require_shipped("jarvis_sandbox_exec.py", "jarvis_child_env.py")
+require_shipped("jarvis_sandbox_exec.py", "jarvis_child_env.py", "jarvis_agent.py")
 
 import jarvis_child_env as CE  # noqa: E402
 import jarvis_sandbox_exec as SE  # noqa: E402
@@ -80,8 +99,13 @@ TMP = Path(tempfile.mkdtemp(prefix="jarvis-sandbox-suite-"))
 CSV_TEXT = "\ufeffname,points\n\"Ada, Lovelace\",9\nGrace,10\n"
 CSV_PATH = TMP / "scores.csv"
 CSV_PATH.write_text(CSV_TEXT, encoding="utf-8", newline="")
+#: The path a fake jarvis_documents resolves the CSV to. Different from
+#: CSV_PATH string-for-string, so a tool that keeps the RAW argument instead of
+#: the resolved path `allowed_path` returned is caught (see the chat-door tests).
+RESOLVED_PATH = TMP / "resolved-scores.csv"
+RESOLVED_PATH.write_text(CSV_TEXT, encoding="utf-8", newline="")
 
-KEYS = {"ok", "stdout", "figures", "error"}
+KEYS = {"ok", "stdout", "figures", "error", "memory_cap_bytes", "memory_cap_enforced"}
 
 
 def check(name, cond, detail=""):
@@ -98,10 +122,14 @@ def skip(why):
 
 
 def shape(res):
-    """True when `res` is the documented four-key result dict."""
-    return isinstance(res, dict) and set(res) == KEYS \
-        and isinstance(res["ok"], bool) and isinstance(res["stdout"], str) \
-        and isinstance(res["figures"], list) and isinstance(res["error"], str)
+    """True when `res` is the documented six-key result dict."""
+    if not isinstance(res, dict) or set(res) != KEYS:
+        return False
+    cap = res["memory_cap_bytes"]
+    return (isinstance(res["ok"], bool) and isinstance(res["stdout"], str)
+            and isinstance(res["figures"], list) and isinstance(res["error"], str)
+            and (cap is None or (isinstance(cap, int) and not isinstance(cap, bool)))
+            and isinstance(res["memory_cap_enforced"], bool))
 
 
 def refused(res, *words):
@@ -180,14 +208,16 @@ def faking(painted: bytes):
 
 def t_the_contract_is_the_documented_shape():
     res = SE.run_data_script("print('hello')")
-    check("the result is exactly {ok, stdout, figures, error}, with the documented types",
-          shape(res), res)
+    check("the result is exactly {ok, stdout, figures, error} plus the two memory-cap "
+          "honesty keys, with the documented types", shape(res), res)
     check("a program's printed text is stdout, not mixed with the sandbox's own result "
           "envelope", shape(res) and res["stdout"] == "hello\n", res)
     check("TIMEOUT_S is the documented hard 5.0-second wall clock",
           SE.TIMEOUT_S == 5.0, SE.TIMEOUT_S)
     check("OUTPUT_CAP is the documented 64 * 1024-byte output cap",
           SE.OUTPUT_CAP == 64 * 1024, SE.OUTPUT_CAP)
+    check("MAX_MEMORY_BYTES is the documented 256 MiB job-object cap",
+          SE.MAX_MEMORY_BYTES == 256 * 1024 * 1024, SE.MAX_MEMORY_BYTES)
     res = SE.run_data_script("")
     check("an empty script is allowed and prints nothing",
           shape(res) and res["ok"] is True and res["stdout"] == ""
@@ -534,8 +564,338 @@ def t_an_unverified_child_result_is_refused():
           refused(res, "could not be verified"), res)
     check("nothing the unverified child printed is passed on as stdout",
           shape(res) and res["stdout"] == "", res)
-    check("the unverified result is still the documented four-key shape",
+    check("the unverified result is still the documented six-key shape",
           shape(res) and res["figures"] == [], res)
+
+
+# --------------------------------------------------------------------------
+#   The allocation-bomb guard (piece 1: the AST pass, before any Popen)
+# --------------------------------------------------------------------------
+
+#: (code, the ONE closed-world reason it must get, a word its plain sentence has).
+BOMBS = (
+    ("print(2 ** 100_000)", "ast_memory_bomb_pow", "power"),
+    ("print(2 ** 2 ** 20)", "ast_memory_bomb_pow", "power"),
+    ("print(1 << 100_000)", "ast_memory_bomb_lshift", "shifts"),
+    ("print('x' * 5_000_000)", "ast_memory_bomb_repeat", "repeats"),
+    ("x = [0] * (10 ** 9)", "ast_memory_bomb_repeat", "repeats"),
+    ("x = [0] * 1000 * 1000 * 1000", "ast_memory_bomb_repeat", "repeats"),
+    ("print(list(range(2_000_000)))", "ast_memory_bomb_range", "range"),
+    ("print([i for i in range(2_000_000)])", "ast_memory_bomb_range", "range"),
+)
+
+
+def t_allocation_bombs_are_refused_before_anything_starts():
+    with spying() as spy:
+        for code, reason, word in BOMBS:
+            verdict = SE.validate_sandbox_ast(code)
+            res = SE.run_data_script(code)
+            check(f"bomb {code[:34]!r} -> {reason}, by validate and by run",
+                  verdict["ok"] is False and verdict["reason"] == reason
+                  and word in verdict["error"] and refused(res)
+                  and res["error"] == verdict["error"], (verdict, res))
+        started = len(spy.calls)
+    check("not one allocation bomb started a child process", started == 0,
+          f"spy saw {started} call(s)")
+    res = SE.run_data_script("print(2 ** 20)")
+    check("a small power still runs (2 ** 20 prints 1048576)",
+          shape(res) and res["ok"] is True and res["stdout"] == "1048576\n", res)
+    res = SE.run_data_script("print('x' * 100)")
+    check("a small repeat still runs (and prints 100 characters)",
+          shape(res) and res["ok"] is True and res["stdout"] == "x" * 100 + "\n", res)
+    res = SE.run_data_script("print(list(range(5)))")
+    check("a small range still runs (prints [0, 1, 2, 3, 4])",
+          shape(res) and res["ok"] is True and res["stdout"] == "[0, 1, 2, 3, 4]\n", res)
+
+
+def t_the_bomb_reasons_are_a_closed_world():
+    want = frozenset({"ast_memory_bomb_pow", "ast_memory_bomb_lshift",
+                      "ast_memory_bomb_repeat", "ast_memory_bomb_range"})
+    check("AST_BOMB_REASONS is exactly the four documented codes",
+          SE.AST_BOMB_REASONS == want, sorted(SE.AST_BOMB_REASONS))
+    seen = {SE.validate_sandbox_ast(code)["reason"] for code, _reason, _w in BOMBS}
+    check("every bomb shape in this suite lands on its code from that closed set",
+          seen == want, sorted(seen))
+    for code, _why in (("import socket", "an import refusal"),
+                       ("if True print(1)", "a syntax refusal"),
+                       ("(1).__class__", "a dunder refusal")):
+        verdict = SE.validate_sandbox_ast(code)
+        check(f"{_why} carries NO bomb reason", verdict["ok"] is False
+              and verdict["reason"] == "" and verdict["error"].startswith("Not run:"),
+              verdict)
+
+
+def t_the_bomb_guard_sits_on_the_stated_threshold():
+    cases = [
+        ("print(2 ** 10_000)", True, "pow at the bound (10_000)"),
+        ("print(2 ** 10_001)", False, "pow one over the bound"),
+        ("print(1 << 10_000)", True, "shift at the bound (10_000)"),
+        ("print(1 << 10_001)", False, "shift one over the bound"),
+        ("x = [0] * 1_000_000", True, "repeat at the bound (1_000_000)"),
+        ("x = [0] * 1_000_001", False, "repeat one over the bound"),
+        ("x = list(range(1_000_000))", True, "range at the bound (1_000_000)"),
+        ("x = list(range(1_000_001))", False, "range one over the bound"),
+    ]
+    for code, allowed, label in cases:
+        verdict = SE.validate_sandbox_ast(code)
+        check(f"{label}: {'allowed' if allowed else 'refused as a bomb'}",
+              verdict["ok"] is allowed
+              and (allowed or verdict["reason"].startswith("ast_memory_bomb_")), verdict)
+
+
+# --------------------------------------------------------------------------
+#   The memory cap (piece 2: Win32 Job Object, or the honest non-Windows answer)
+# --------------------------------------------------------------------------
+
+def t_the_memory_cap_is_honest():
+    real_windows, real_attach = SE._IS_WINDOWS, SE._attach_job_limit
+    calls = []
+
+    def attach_true(proc):
+        calls.append(proc)
+        return True
+
+    def attach_false(proc):
+        calls.append(proc)
+        return False
+
+    def attach_boomed(proc):
+        calls.append(proc)
+        raise RuntimeError("no job object for you")
+
+    try:
+        SE._IS_WINDOWS = False
+        SE._attach_job_limit = attach_boomed
+        call_before = len(calls)
+        cap = SE._memory_cap_for(object())
+        check("Linux/non-Windows: NO cap is claimed, and the attach seam is never even "
+              "called", cap == {"memory_cap_bytes": None, "memory_cap_enforced": False}
+              and len(calls) == call_before, cap)
+        SE._IS_WINDOWS = True
+        for attach, label, enforced in (
+                (attach_true, "a real job object", True),
+                (attach_false, "an attach that said False", False),
+                (attach_boomed, "an attach that raised", False)):
+            SE._attach_job_limit = attach
+            cap = SE._memory_cap_for(object())
+            want = ({"memory_cap_bytes": SE.MAX_MEMORY_BYTES, "memory_cap_enforced": True}
+                    if enforced else
+                    {"memory_cap_bytes": None, "memory_cap_enforced": False})
+            check(f"Windows, {label}: the result claims {'the 256 MiB cap' if enforced else 'NO cap'}",
+                  cap == want, cap)
+    finally:
+        SE._IS_WINDOWS, SE._attach_job_limit = real_windows, real_attach
+    res = SE.run_data_script("print(1)")
+    if sys.platform == "win32":
+        honest = {"memory_cap_bytes": SE.MAX_MEMORY_BYTES, "memory_cap_enforced": True}
+    else:
+        honest = {"memory_cap_bytes": None, "memory_cap_enforced": False}
+    check("a real run reports the PLATFORM's honest cap (never a claim on Linux)",
+          shape(res) and all(res.get(k) == v for k, v in honest.items()), res)
+    res = SE.run_data_script("print(2 ** 100_000)")
+    check("a refused script ran no child, so it claims no memory cap",
+          shape(res) and res["memory_cap_bytes"] is None
+          and res["memory_cap_enforced"] is False, res)
+
+
+# --------------------------------------------------------------------------
+#   The chat door (piece 3: jarvis_agent.py registers and dispatches the tool)
+# --------------------------------------------------------------------------
+
+def _doc_module(name, **attrs):
+    """A stand-in module with exactly these attributes, for one `modules()` block."""
+    mod = types.ModuleType(name)
+    for key, value in attrs.items():
+        setattr(mod, key, value)
+    return mod
+
+
+@contextlib.contextmanager
+def modules(**replacement):
+    """Temporarily put these modules in `sys.modules` (saved and restored)."""
+    saved = {name: sys.modules.get(name) for name in replacement}
+    try:
+        for name, mod in replacement.items():
+            sys.modules[name] = mod
+        yield
+    finally:
+        for name, old in saved.items():
+            if old is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = old
+
+
+@contextlib.contextmanager
+def fake_gate(latch_calls):
+    """The two jarvis_gate seams this tool uses, plus a recording latch."""
+    def latch_taint(minutes=None, why=""):
+        latch_calls.append(why)
+        return True
+
+    def action_for_tool(name, params=None):
+        table = {"file_read": "read_files_readonly", "calculator": "auto"}
+        return table.get(name, "unclassified_tool"), name in table
+
+    with modules(jarvis_gate=_doc_module(
+            "jarvis_gate", latch_taint=latch_taint,
+            action_for_tool=action_for_tool,
+            _TOOL_ACTIONS={"file_read": "read_files_readonly", "calculator": "auto"})):
+        yield sys.modules["jarvis_gate"]
+
+
+def _agent():
+    import jarvis_agent
+    jarvis_agent._manner_now = lambda *a, **k: None
+    return jarvis_agent
+
+
+def t_the_chat_door_is_registered_and_maps_to_a_real_gate_action():
+    AG = _agent()
+    tool = AG.TOOLS.get(AG.SANDBOX_TOOL)
+    check("run_data_script is a jarvis_agent tool", tool is not None, sorted(
+        n for n in AG.TOOLS if "script" in n))
+    if tool is None:
+        return
+    params = tool.parameters
+    check("its schema names a required text `code` and an optional `files` object",
+          params.get("required") == ["code"]
+          and params.get("properties", {}).get("code", {}).get("type") == "string"
+          and params.get("properties", {}).get("files", {}).get("type") == "object",
+          params)
+    homes = (1 if AG.SANDBOX_TOOL in AG.CORE_TOOLS else 0) + sum(
+        1 for _g, _w, members in AG.TOOL_GROUPS if AG.SANDBOX_TOOL in members)
+    check("it has exactly one home: one tool group, not the core", homes == 1, homes)
+    check("a pure calculation is decided under the gate's own calculator key",
+          tool.gate_lookup_name({"code": "print(1)"}) == AG.SANDBOX_GATE_PURE
+          == "calculator", tool.gate_lookup_name({"code": "print(1)"}))
+    check("a file read is decided under the gate's own file_read key",
+          tool.gate_lookup_name({"code": "x", "files": {"a": "b"}})
+          == AG.SANDBOX_GATE_FILE == "file_read",
+          tool.gate_lookup_name({"code": "x", "files": {"a": "b"}}))
+    with fake_gate([]) as gate:
+        check("both lookup keys are keys jarvis_gate._TOOL_ACTIONS already knows "
+              "(this tool needs no gate change)",
+              AG.SANDBOX_GATE_FILE in gate._TOOL_ACTIONS
+              and AG.SANDBOX_GATE_PURE in gate._TOOL_ACTIONS,
+              (AG.SANDBOX_GATE_FILE, AG.SANDBOX_GATE_PURE))
+    check("its description fits the 300-token per-tool budget",
+          AG.estimate_tokens(tool.schema()) <= 300, AG.estimate_tokens(tool.schema()))
+
+
+def t_the_chat_door_refuses_files_outside_the_listed_folders():
+    AG = _agent()
+    tool = AG.TOOLS[AG.SANDBOX_TOOL]
+    docs = _doc_module(
+        "jarvis_documents", folders=lambda: [str(TMP)],
+        allowed_path=lambda path: (
+            (str(RESOLVED_PATH), str(TMP))
+            if os.path.realpath(str(path)) == os.path.realpath(str(CSV_PATH)) else None))
+    with modules(jarvis_documents=docs):
+        bad = None
+        try:
+            tool.prepare({"code": "print(1)",
+                          "files": {"secret": str(TMP.parent / "outside.txt")}})
+        except ValueError as exc:
+            bad = str(exc)
+        check("a file outside 'Folders Jarvis may look in' is refused in prepare(), "
+              "before any gate or child", isinstance(bad, str)
+              and "Folders Jarvis may look in" in bad, bad)
+        state, description = tool.prepare(
+            {"code": "print(1)", "files": {"scores": str(CSV_PATH)}})
+        check("a file inside a listed folder is resolved to the path the file rule "
+              "returned, in the state and on the plan",
+              state["files"] == {"scores": str(RESOLVED_PATH)}
+              and "scores" in description and str(RESOLVED_PATH) in description,
+              (state, description))
+
+
+def t_the_chat_door_uses_the_checked_state_and_dispatches():
+    AG = _agent()
+    tool = AG.TOOLS[AG.SANDBOX_TOOL]
+    spy_calls, latch_calls = [], []
+    ran = {"ok": True, "stdout": "ok\n", "figures": [], "error": "",
+           "memory_cap_bytes": None, "memory_cap_enforced": False}
+
+    def run_spy(code, read_only_files=None):
+        spy_calls.append((code, read_only_files))
+        return dict(ran)
+
+    real_run = SE.run_data_script
+    SE.run_data_script = run_spy
+    try:
+        with fake_gate(latch_calls):
+            state = {"code": "print(99)",
+                     "files": {"scores": str(RESOLVED_PATH)}}
+            result = tool.execute({"code": "print(1)", "files": {}}, state)
+            check("execute() runs the code and files prepare() resolved, never a second "
+                  "lookup from the args",
+                  spy_calls == [("print(99)", {"scores": str(RESOLVED_PATH)})],
+                  (spy_calls, result))
+            check("reading a local file latches the turn as private "
+                  "(why='sandbox_file_read')",
+                  latch_calls == ["sandbox_file_read"], latch_calls)
+            check("the sandbox's own result is what the tool returns", result == ran,
+                  result)
+            latch_calls.clear()
+            spy_calls.clear()
+            tool.execute({"code": "print(2)"}, {"code": "print(2)", "files": {}})
+            check("a pure calculation reads no file, so it latches nothing",
+                  latch_calls == [] and spy_calls == [("print(2)", None)],
+                  (latch_calls, spy_calls))
+    finally:
+        SE.run_data_script = real_run
+
+
+def t_jarvis_agent_dispatches_a_model_tool_call_to_run_data_script():
+    AG = _agent()
+    sys.path.insert(0, str(HERE))
+    from test_agent import NoRealIO, allow, scripted_stream  # noqa: E402
+
+    spy = []
+    ran = {"ok": True, "stdout": "6\n", "figures": [], "error": "",
+           "memory_cap_bytes": None, "memory_cap_enforced": False}
+
+    def run_spy(code, read_only_files=None):
+        spy.append((code, read_only_files))
+        return dict(ran)
+
+    call = {"choices": [{"message": {"role": "assistant", "tool_calls": [
+        {"id": "c1", "function": {"name": AG.SANDBOX_TOOL,
+                                  "arguments": json.dumps({"code": "print(2 * 3)"})}}]}}]}
+    answer = {"choices": [{"message": {"role": "assistant", "content": "It is 6."}}]}
+    opener, bodies = scripted_stream([call, answer])
+    asked = []
+
+    def gate(action, detail, prompt):
+        asked.append(action)
+        return allow(action, detail, prompt)
+
+    streamed = []
+    real_run = SE.run_data_script
+    SE.run_data_script = run_spy
+    try:
+        with NoRealIO():
+            out = AG.run_local_turn(
+                [{"role": "user", "content": "what is 2 times 3?",
+                  "provenance": "typed"}],
+                "qwen3:8b", ollama_url="http://127.0.0.1:11434",
+                stream_out=streamed.append, gate_check=gate, open_stream=opener,
+                enabled_tools={AG.SANDBOX_TOOL}, record_chain=lambda steps: None,
+                on_step=lambda step: None, lane_choice=None)
+    finally:
+        SE.run_data_script = real_run
+    tool_messages = [m["content"] for m in bodies[-1]["messages"]
+                     if m.get("role") == "tool"]
+    check("a model's tool call really reaches jarvis_sandbox_exec.run_data_script "
+          "through the turn loop", spy == [("print(2 * 3)", None)], spy)
+    check("that run was decided under an existing gate action (calculator, auto)",
+          asked == ["calculator"], asked)
+    check("the sandbox's stdout is handed back to the model as the tool result",
+          bool(tool_messages) and "6" in tool_messages[-1], tool_messages)
+    check("the answer the owner sees is still the model's own words",
+          out.get("answer") == "It is 6." or b"It is 6." in b"".join(streamed),
+          (streamed, out.get("answer")))
 
 
 if __name__ == "__main__":

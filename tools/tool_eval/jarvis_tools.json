@@ -60,6 +60,32 @@
  {
   "type": "function",
   "function": {
+   "name": "run_data_script",
+   "description": "Run a small Python script for data or maths: add up a CSV, an average, a percentage, a chart. It has no network, writes nothing, and can read only the named files from folders the owner listed. Use read_csv(name) and figure(name, data) inside it; print() the answer.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "code": {
+      "type": "string",
+      "description": "Python source. Allowed imports: math, statistics, decimal, fractions, datetime, collections, itertools, re, json, csv. read_csv(name) reads one of the files; figure(name, value) adds a chart; print() the answer."
+     },
+     "files": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "string"
+      },
+      "description": "name -> path of the files the script may read; each must be inside a folder Jarvis may look in."
+     }
+    },
+    "required": [
+     "code"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
    "name": "shell_exec",
    "description": "Run one shell command on this machine and return its output.",
    "parameters": {

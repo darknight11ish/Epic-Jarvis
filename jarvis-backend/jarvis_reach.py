@@ -101,6 +101,7 @@ TOOL_NAMES = {
     "calculator": "Calculator",
     "memory_search": "Searching what it has learned about you",
     "file_read": "Reading files on this PC",
+    "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
     "shell_exec": "Running commands on this PC",
     "control_computer": "Computer control",
     "control_phone": "Phone control",
