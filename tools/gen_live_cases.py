@@ -51,6 +51,16 @@ and must be the SAME on both:
               "Interrupt Jarvis while it talks" switch and "Interrupting
               Jarvis in Live" became one) - its words, and how an older
               choice carries over
+  ending      WHY Live ended, as whole sentences (`end_words`, the PC's words
+              for the ended screen): every reason, including the phone's own
+              microphone-service reasons of 2026-10-17 (`fgs_refused`,
+              `mic_permission`, `mic_stopped`) and the neutral `unknown` an
+              end nobody explained gets - never "owner". Plus the app's own
+              "listening stopped" line for those reasons (`app_stop_words`)
+              and the closed list of reasons an app may send
+              (`app_end_reasons`). The phone's JVM test and
+              backend/test_live.py read the same entries, so the two sides
+              cannot word one end differently.
 
 The words come from jarvis_live.py itself, so an app cannot word them
 differently. This writes the SAME file into
@@ -784,6 +794,9 @@ def build() -> dict:
         "mute_words": dict(L.MUTE_WORDS),
         "end_words": dict(L.END_WORDS),
         "end_said": dict(L.END_SAID),
+        # The app's own line while its microphone stopped (the phone shows
+        # these; the PC owns the words so both apps and the PC agree).
+        "app_stop_words": dict(L.APP_STOP_WORDS),
         "needs_voice": L.NEEDS_VOICE,
         "needs_voice_where": dict(L.NEEDS_VOICE_WHERE),
         "app_end_reasons": list(L.APP_END_REASONS),

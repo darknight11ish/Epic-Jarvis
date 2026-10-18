@@ -198,7 +198,11 @@ class LiveRulesTest {
         assertEquals("button", start.s("by"))
         assertEquals(table["app_end_reasons"]!!.jsonArray.map { it.jsonPrimitive.content }.containsAll(LiveRules.END_REASONS), true)
         assertEquals("app_lock", JarvisJson.parseToJsonElement(LiveRules.stopBody("app_lock")).jsonObject.s("why"))
-        assertEquals("owner", JarvisJson.parseToJsonElement(LiveRules.stopBody("locked")).jsonObject.s("why"))
+        // A reason the phone may not give is a neutral "unknown", never the
+        // raw code and never "owner" - both apps word "owner" as "You ended
+        // it." (2026-10-17). "locked" is the PC's own reason: Windows locked.
+        assertEquals("unknown", JarvisJson.parseToJsonElement(LiveRules.stopBody("locked")).jsonObject.s("why"))
+        assertFalse("locked" in LiveRules.END_REASONS)
         assertEquals("{\"do\":\"extend\",\"minutes\":20}", LiveRules.extendBody())
         assertEquals(null, LiveRules.extendBody(0))
         assertEquals(null, LiveRules.extendBody(500))

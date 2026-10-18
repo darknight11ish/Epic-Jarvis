@@ -66,7 +66,11 @@
     "slept": "The PC went to sleep.",
     "app_lock": "App lock came on.",
     "standby": "Jarvis went on standby.",
-    "screen_lock": "The phone's screen locked."
+    "screen_lock": "The phone's screen locked.",
+    "fgs_refused": "Android ended it: it would not let Jarvis Live use the microphone in the background.",
+    "mic_permission": "Jarvis needs the microphone for Jarvis Live. Allow it, then start Live again.",
+    "mic_stopped": "The microphone stopped. Start Jarvis Live again from the Live screen.",
+    "unknown": "Live ended."
   },
   "end_said": {
     "quiet": "Live ended - it was quiet.",
@@ -74,6 +78,11 @@
     "app_lock": "Live ended - App lock came on.",
     "standby": "Live ended - Jarvis is on standby.",
     "other_device": "Live moved to your other device."
+  },
+  "app_stop_words": {
+    "fgs_refused": "Android did not let Jarvis Live use the microphone in the background. Open Jarvis, then start Live from the Live screen.",
+    "mic_permission": "Jarvis needs the microphone for Jarvis Live. Allow it, then start Live again.",
+    "mic_stopped": "The microphone stopped. Start Jarvis Live again from the Live screen."
   },
   "needs_voice": "Jarvis Live didn't start: it needs your voice trained first.",
   "needs_voice_where": {
@@ -84,7 +93,10 @@
     "owner",
     "app_lock",
     "locked",
-    "screen_lock"
+    "screen_lock",
+    "fgs_refused",
+    "mic_permission",
+    "mic_stopped"
   ],
   "voice_pauses": [
     "other_voices",

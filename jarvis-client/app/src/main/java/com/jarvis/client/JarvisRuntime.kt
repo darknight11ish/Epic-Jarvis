@@ -7051,8 +7051,13 @@ object JarvisRuntime {
                         scope.launch { voice.sayLine(say) }
                         null
                     } else {
-                        liveStop("owner")
-                        LIVE_NOT_ALLOWED.also { liveNotice(it) }
+                        // WHICH refusal it was (2026-10-17): the service
+                        // records it where it was caught, and the PC gets THAT
+                        // reason - never a default "owner", which both apps
+                        // word "You ended it."
+                        val stop = liveRefusal()
+                        liveStop(com.jarvis.client.voice.LiveRules.whyOf(stop))
+                        com.jarvis.client.voice.LiveRules.stopWords(stop).also { liveNotice(it) }
                     }
                 }
             }
@@ -7151,6 +7156,13 @@ object JarvisRuntime {
         put("ended_device", JsonPrimitive(com.jarvis.client.voice.LiveRules.ME))
         put("ended_ago_s", JsonPrimitive(0))
         put("resumable", JsonPrimitive(false))
+        // The phone can word its OWN reasons at once, so the ended screen never
+        // sits wordless waiting for the PC - and never says "You ended it." for
+        // a stop the owner did not ask for (2026-10-17). App lock and the
+        // screen lock are worded by the PC, which answers in a moment.
+        com.jarvis.client.voice.LiveRules.stopOf(why)?.let {
+            put("ended_words", JsonPrimitive(com.jarvis.client.voice.LiveRules.endedWords(it)))
+        }
         _liveStatus.value?.get("session")?.let { put("session", it) }
     }
 
@@ -7308,10 +7320,14 @@ object JarvisRuntime {
                         voice.sayLine(reply.say)
                     } else {
                         // Android would not let the microphone service start
-                        // from the background: said, and ended (the review's B7).
-                        liveStop("owner")
-                        liveNotice(LIVE_NOT_ALLOWED)
-                        voice.sayLine(LIVE_NOT_ALLOWED_SAID)
+                        // (or the microphone stopped): the SPLIT reason goes
+                        // to the PC and the notice says the same thing
+                        // (2026-10-17) - never a default "owner".
+                        val stop = liveRefusal()
+                        liveStop(com.jarvis.client.voice.LiveRules.whyOf(stop))
+                        val words = com.jarvis.client.voice.LiveRules.stopWords(stop)
+                        liveNotice(words)
+                        voice.sayLine(words)
                     }
                 }
             }
@@ -7383,6 +7399,17 @@ object JarvisRuntime {
         watchLive()
         return started
     }
+
+    /**
+     * Why this phone's microphone service did not start: the refusal the
+     * service recorded where it caught it (the split catch, 2026-10-17), or
+     * the generic microphone stop when it did not say. NEVER [LiveRules.
+     * LiveStop.OWNER]: this is the reason the PC is told, and both apps word
+     * "owner" as "You ended it." - the lie the owner's Pixel 9 showed him.
+     */
+    private fun liveRefusal(): com.jarvis.client.voice.LiveRules.LiveStop =
+        com.jarvis.client.service.LiveService.refusedStop
+            ?: com.jarvis.client.voice.LiveRules.LiveStop.MIC_STOPPED
 
     /**
      * Live is over here: the microphone closes, the watcher stops (unless it
@@ -7514,9 +7541,6 @@ object JarvisRuntime {
 
     private const val LIVE_MISSING = "This PC's Jarvis does not have Jarvis Live yet. Run " +
         "scripts\\apply-patches.ps1 on the PC to add it."
-    private const val LIVE_NOT_ALLOWED = "Android did not let Jarvis Live listen from the background. " +
-        "Open Jarvis, then start Live from the Live screen."
-    private const val LIVE_NOT_ALLOWED_SAID = "Open Jarvis to start Live."
     private const val LIVE_WATCH_MS = 1000L
 
     /** How often a captured notification asks the PC for its switch again, at most. */

@@ -266,10 +266,42 @@ END_WORDS = {
     # owner's decision of 2026-09-28, the Jarvis Live extras): the phone
     # reports it when its own screen lock comes on.
     "screen_lock": "The phone's screen locked.",
+    # WHY THE PHONE'S LIVE STOPPED, when Android is what stopped it (the
+    # owner's Pixel 9, 2026-10-17). These are the phone's reasons, reported
+    # over the same stop route; the phone's own words for the same events are
+    # APP_STOP_WORDS below, and the shared fixture pins both (they are the
+    # same sentences). Owner's rule: the end screen must never blame him for
+    # something he did not do.
+    "fgs_refused": ("Android ended it: it would not let Jarvis Live use the microphone "
+                    "in the background."),
+    "mic_permission": ("Jarvis needs the microphone for Jarvis Live. Allow it, then start "
+                       "Live again."),
+    "mic_stopped": "The microphone stopped. Start Jarvis Live again from the Live screen.",
+    # The fallback for an end nobody explained (an unknown wire reason, or one
+    # missing). NEVER "owner": that was the lie - an end nobody supplied used
+    # to reach the PC as "owner" and both apps then said "You ended it."
+    "unknown": "Live ended.",
 }
+
 #: The end reasons an APP may report (POST {"do": "stop", "why": ...}). The
-#: rest are the PC's own.
-APP_END_REASONS = ("owner", "app_lock", "locked", "screen_lock")
+#: rest are the PC's own. The last three are the phone's microphone-service
+#: reasons (2026-10-17); the phone sends them, the PC words them.
+APP_END_REASONS = ("owner", "app_lock", "locked", "screen_lock",
+                   "fgs_refused", "mic_permission", "mic_stopped")
+
+#: The APP's own line while its microphone stopped - not the PC's words (an
+#: app shows these beside its buttons; END_WORDS is the ended screen). The
+#: phone's LiveRules constants are held to these by the shared fixture
+#: (tools/gen_live_cases.py writes it; the phone's JVM test reads it), so the
+#: two apps and the PC cannot drift apart.
+APP_STOP_WORDS = {
+    "fgs_refused": ("Android did not let Jarvis Live use the microphone in the background. "
+                    "Open Jarvis, then start Live from the Live screen."),
+    "mic_permission": ("Jarvis needs the microphone for Jarvis Live. Allow it, then start "
+                       "Live again."),
+    "mic_stopped": "The microphone stopped. Start Jarvis Live again from the Live screen.",
+}
+
 
 #: What Jarvis says, in fixed words - safe in any room (nothing heard, nothing
 #: private). jarvis_speech hands the right one to the app as `live_say`. Any
@@ -801,7 +833,9 @@ class Live:
         """End it. Always allowed - never held on a stale link, never a card.
         `device`: only end a session on that device (a phone's App lock must
         not end the desktop's session)."""
-        why = why if why in END_WORDS else "owner"
+        # An end nobody explained is "unknown", never "owner": blaming the
+        # owner for an end he did not ask for was the 2026-10-17 lie.
+        why = why if why in END_WORDS else "unknown"
         dev = _norm_device(device)
         with self._lock:
             was = self._on() and (not dev or dev == self.device)
@@ -1361,7 +1395,10 @@ def handle_post(body) -> tuple:
     "device"?, "why"?: "owner"|"call"|"mic_in_use"} | {"do": "active",
     "device"?} (the owner typed or tapped in Live: the quiet clock starts
     again). Start, extend and resume are held by both apps on a stale link
-    (rule 4); stop, mute, unmute and active always go."""
+    (rule 4); stop, mute, unmute and active always go. A stop's `why` must be
+    one of APP_END_REASONS - the phone reports `fgs_refused`, `mic_permission`
+    or `mic_stopped` when Android is what stopped it - and anything else,
+    including a missing reason, is "unknown" (never "owner")."""
     if not isinstance(body, dict):
         return 400, {"ok": False, "error": "send a JSON object"}
     do = str(body.get("do") or "").strip().lower()
@@ -1372,9 +1409,12 @@ def handle_post(body) -> tuple:
                            conversation_id=body.get("conversation_id"))
         return (200 if out.get("ok") else 409 if out.get("needs") else 400), out
     if do == "stop":
-        why = str(body.get("why") or "owner").strip().lower()
+        # An unknown or missing reason is "unknown", never "owner": an end
+        # nobody supplied must not reach both apps as "You ended it."
+        # (2026-10-17). "owner" is only ever what an app actually sent.
+        why = str(body.get("why") or "").strip().lower()
         if why not in APP_END_REASONS:
-            why = "owner"
+            why = "unknown"
         return 200, ENGINE.stop(why, device=body.get("device"))
     if do == "extend":
         out = ENGINE.extend(body.get("minutes"))

@@ -70,22 +70,36 @@ object LiveRules {
      * said "the microphone stopped" for ANY throw, and an End that nobody
      * asked for reached the PC as reason "owner" (JarvisRuntime.liveStop's
      * default), which is the PC's own words for "You ended it."
-     * (`backend/jarvis_live.py:255`). They are different events and must not
-     * share words:
-     *  - [FGS_REFUSED]: `ServiceCompat.startForeground(... MICROPHONE)` threw.
-     *    Android 14+ will not let a microphone service start from the
-     *    background, and this phone is newer than the one it was tested on.
-     *    That is Android's decision, so the headline must name Android.
-     *  - [MIC_STOPPED]: the microphone itself went away (audio focus taken by
-     *    a call or another app, permission revoked, the PC gone). Not the
-     *    owner's End and not a background refusal.
-     * Only [ENDED_OWNER] may say "You ended it."
+     * (`backend/jarvis_live.py` END_WORDS). They are different events and must
+     * not share words.
+     *
+     * THE SPLIT (the fix). The microphone-service failure is classified where
+     * it is caught, in ONE pure function - [stopForClasses] - so the JVM tests
+     * run the decision without an Android device:
+     *  - [FGS_REFUSED]: `ServiceCompat.startForeground(... MICROPHONE)` threw
+     *    `ForegroundServiceStartNotAllowedException`. Android 14+ will not let
+     *    a microphone service start from the background, and this phone is
+     *    newer than the one it was tested on. That is Android's decision, so
+     *    the headline must name Android.
+     *  - [MIC_PERMISSION]: the start threw `SecurityException` - the
+     *    microphone permission is off or was revoked.
+     *  - [MIC_STOPPED]: anything else (the microphone itself went away: audio
+     *    focus taken by a call or another app, the PC gone). Not the owner's
+     *    End and not a background refusal.
+     * Only [LiveStop.OWNER] may say "You ended it." The three reasons travel
+     * to the PC over the stop body ([whyOf] -> `fgs_refused`,
+     * `mic_permission`, `mic_stopped`, in `backend/jarvis_live.py`
+     * APP_END_REASONS) so BOTH apps word the same event the same way; the
+     * shared fixture (`tools/gen_live_cases.py`, read by this app's JVM test
+     * and the PC's Python test) pins every reason and its words.
      *
      * Pure Kotlin (no Android), so the JVM tests run it: LiveStopReasonTest.kt.
      */
     const val STOP_FGS_REFUSED =
         "Android did not let Jarvis Live use the microphone in the background. " +
             "Open Jarvis, then start Live from the Live screen."
+    const val STOP_MIC_PERMISSION =
+        "Jarvis needs the microphone for Jarvis Live. Allow it, then start Live again."
     const val STOP_MIC_STOPPED =
         "The microphone stopped. Start Jarvis Live again from the Live screen."
     const val ENDED_OWNER = "You ended it."
@@ -93,11 +107,48 @@ object LiveRules {
         "Android ended it: it would not let Jarvis Live use the microphone in the background."
 
     /** What stopped this phone's Live, as THIS phone can tell it. */
-    enum class LiveStop { OWNER, FGS_REFUSED, MIC_STOPPED }
+    enum class LiveStop { OWNER, FGS_REFUSED, MIC_PERMISSION, MIC_STOPPED }
+
+    /**
+     * Which stop a microphone-service failure is, from the throwable's CLASS
+     * PATH (never a raw exception, so the JVM tests decide it without
+     * Android). Null when the failure says nothing about why - the caller then
+     * uses the generic [LiveStop.MIC_STOPPED], which never blames the owner.
+     */
+    fun stopForClasses(classes: List<String>): LiveStop? = when {
+        classes.any {
+            it == "android.app.ForegroundServiceStartNotAllowedException" ||
+                it == "android.app.ServiceStartNotAllowedException"
+        } -> LiveStop.FGS_REFUSED
+        classes.any { it == "java.lang.SecurityException" } -> LiveStop.MIC_PERMISSION
+        else -> null
+    }
+
+    /** The wire reason for a stop body: the closed set the PC accepts. */
+    fun whyOf(stop: LiveStop): String = when (stop) {
+        LiveStop.OWNER -> "owner"
+        LiveStop.FGS_REFUSED -> "fgs_refused"
+        LiveStop.MIC_PERMISSION -> "mic_permission"
+        LiveStop.MIC_STOPPED -> "mic_stopped"
+    }
+
+    /**
+     * The stop a wire reason names, or null when it is not one THIS phone can
+     * word (App lock and the screen lock are worded by the PC). Used for the
+     * ended screen the phone shows at once, before the PC's answer arrives.
+     */
+    fun stopOf(why: String): LiveStop? = when (why) {
+        "owner" -> LiveStop.OWNER
+        "fgs_refused" -> LiveStop.FGS_REFUSED
+        "mic_permission" -> LiveStop.MIC_PERMISSION
+        "mic_stopped" -> LiveStop.MIC_STOPPED
+        else -> null
+    }
 
     /** The line shown beside the buttons when listening stopped. */
     fun stopWords(stop: LiveStop): String = when (stop) {
         LiveStop.FGS_REFUSED -> STOP_FGS_REFUSED
+        LiveStop.MIC_PERMISSION -> STOP_MIC_PERMISSION
         LiveStop.MIC_STOPPED -> STOP_MIC_STOPPED
         // An End the owner tapped has no "stopped" line: nothing failed.
         LiveStop.OWNER -> STOP_MIC_STOPPED
@@ -107,6 +158,7 @@ object LiveRules {
     fun endedWords(stop: LiveStop): String = when (stop) {
         LiveStop.OWNER -> ENDED_OWNER
         LiveStop.FGS_REFUSED -> ENDED_FGS_REFUSED
+        LiveStop.MIC_PERMISSION -> STOP_MIC_PERMISSION
         LiveStop.MIC_STOPPED -> STOP_MIC_STOPPED
     }
 
@@ -562,13 +614,26 @@ object LiveRules {
 
     /**
      * Why the phone ends Live: the owner (End Live), App lock would lock the
-     * app, or - under the Security screen's "End Live when: Only when the
-     * phone's screen locks" - the phone's screen lock came on.
+     * app, the phone's screen lock came on (the Security screen's "End Live
+     * when"), or one of the microphone-service reasons the PC now accepts
+     * ([LiveStop.FGS_REFUSED], [LiveStop.MIC_PERMISSION],
+     * [LiveStop.MIC_STOPPED]). This is a SUBSET of the closed set the PC
+     * words (`backend/jarvis_live.py` APP_END_REASONS): the phone never sends
+     * the PC's own reasons - `locked` (Windows locked), `bye`, `quiet`,
+     * `time`. The shared fixture holds the PC's set; the phone's test checks
+     * this list is contained in it.
      */
-    val END_REASONS: List<String> = listOf("owner", "app_lock", "screen_lock")
+    val END_REASONS: List<String> =
+        listOf("owner", "app_lock", "screen_lock",
+               "fgs_refused", "mic_permission", "mic_stopped")
 
+    /**
+     * The stop body. A reason outside [END_REASONS] is "unknown", NEVER
+     * "owner": an end nobody explained must not reach the PC (and both apps'
+     * ended screens) as "You ended it." - the 2026-10-17 lie.
+     */
     fun stopBody(why: String = "owner"): String =
-        "{\"do\":\"stop\",\"why\":\"${if (why in END_REASONS) why else "owner"}\",\"device\":\"$ME\"}"
+        "{\"do\":\"stop\",\"why\":\"${if (why in END_REASONS) why else "unknown"}\",\"device\":\"$ME\"}"
 
     /** "More time": 1 to 120 minutes, or null. */
     fun extendBody(minutes: Int = 20): String? =
