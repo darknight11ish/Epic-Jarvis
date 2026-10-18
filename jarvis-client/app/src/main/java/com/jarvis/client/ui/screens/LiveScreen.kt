@@ -50,6 +50,7 @@ import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.ui.theme.LocalRadii
 import com.jarvis.client.voice.BargeIn
 import com.jarvis.client.voice.LiveExtras
+import com.jarvis.client.voice.LiveMicGate
 import com.jarvis.client.voice.LiveRules
 import com.jarvis.client.voice.VoiceSession
 import kotlinx.coroutines.delay
@@ -188,6 +189,12 @@ fun LiveScreen(
     /** Text shared with "Talk about this in Live", held until Send; or null. */
     shared: String? = null,
     onDropShared: () -> Unit = {},
+    /** Checked when this card opens and on resume - a microphone can be auto-revoked (LM-3A). */
+    onCheckPermission: () -> Unit = {},
+    /** "[Allow microphone]": Android's own runtime ask; never starts Live on the grant. */
+    onAskLiveMicrophone: () -> Unit = {},
+    /** "[Open app permission settings]": the app's Android page, for a "don't ask again". */
+    onOpenAppPermissionSettings: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val chrome = LocalChrome.current
@@ -197,6 +204,7 @@ fun LiveScreen(
     val flash by JarvisRuntime.liveFlash.collectAsState()
     val move by JarvisRuntime.liveMove.collectAsState()
     val notice by JarvisRuntime.liveNoticeText.collectAsState()
+    val micBlocked by JarvisRuntime.liveMicBlocked.collectAsState()
     val chips by JarvisRuntime.voice.liveChips.collectAsState()
     val phase by JarvisRuntime.voice.phase.collectAsState()
     val question by JarvisRuntime.chat.question.collectAsState()
@@ -215,6 +223,9 @@ fun LiveScreen(
     var nowMs by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
 
     LaunchedEffect(Unit) { JarvisRuntime.liveOpened() }
+    // LM-3A: read the microphone FRESH each time this card opens (the owner may
+    // have changed it in Android while the app was in the background).
+    LaunchedEffect(Unit) { onCheckPermission() }
     LaunchedEffect(flash, status) {
         while (true) {
             nowMs = android.os.SystemClock.elapsedRealtime()
@@ -334,6 +345,30 @@ fun LiveScreen(
                         onClick = { act { JarvisRuntime.liveStart(move = true); null } },
                     )
                 } else if (!on) {
+                    // LM-3A: no microphone, no start - the sentence and the
+                    // two honest routes are drawn before the Start button.
+                    micBlocked?.let { blocked ->
+                        Gap(6)
+                        Text(
+                            blocked.banner,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = chrome.textHi,
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                        )
+                        Gap(8)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            if (blocked.offerAllow) {
+                                Primary(LiveMicGate.ALLOW, onClick = onAskLiveMicrophone)
+                            }
+                            if (blocked.offerSettings) {
+                                Secondary(LiveMicGate.OPEN_SETTINGS, onClick = onOpenAppPermissionSettings)
+                            }
+                        }
+                        Gap(10)
+                    }
                     Primary(
                         if (sign.resume) "Resume Live" else "Start Jarvis Live",
                         modifier = Modifier.fillMaxWidth(),
