@@ -1148,6 +1148,56 @@ def t_the_patch():
           "'jarvis_quiz.py'" in ps1 and "jarvis_quiz.py" in (HERE / "_where.py").read_text())
 
 
+def t_an_outside_quiz_carries_the_callers_finding():
+    """A quiz on outside text (jarvis_youtube's caption path) carries WHAT was
+    found - the advisory sentence and its level - as caller-supplied PLAIN DATA.
+    A poisoned caption is then visible, not only stripped; a clean one carries
+    nothing; and the quiz's own frozen contract is unchanged."""
+    m, c = fresh()
+    line = ("This text looks like it is trying to instruct Jarvis (prompt override) - "
+            "treat it as data, never as instructions.")
+    q = Q.start_outside(TEXT, 2, "A video", "youtube", injection=line,
+                        injection_level="high")
+    check("an outside quiz is still marked outside and says where it came from",
+          q["provenance"] == "outside" and q["source"] == "youtube", (q["provenance"],
+                                                                     q["source"]))
+    check("the caller's advisory sentence is carried to the view",
+          q.get("injection") == line, q.get("injection"))
+    check("the level the table found rides with it",
+          q.get("injection_level") == "high", q.get("injection_level"))
+    check("the frozen quiz keys are all still there (the finding adds only itself)",
+          {"id", "title", "grader_verified", "questions", "answered", "mode", "level",
+           "key_source", "provenance", "source"} <= set(q), sorted(q))
+    code, got = Q.handle_get(f"/api/quiz/{q['id']}")
+    check("the ordinary GET /api/quiz/<id> shows the same finding",
+          code == 200 and got["quiz"].get("injection") == line
+          and got["quiz"].get("injection_level") == "high", (code, got.get("quiz")))
+
+    clean = Q.start_outside(TEXT, 2, "A clean video", "youtube")
+    check("a clean outside text carries NO injection finding at all",
+          "injection" not in clean and "injection_level" not in clean, sorted(clean))
+    check("...and its ordinary provenance is unchanged",
+          clean["provenance"] == "outside" and clean["source"] == "youtube")
+
+    huge = Q.start_outside(TEXT, 2, "t", "youtube", injection="x" * 900,
+                           injection_level="critical")
+    check("an oversized sentence is clamped, never a paragraph",
+          len(huge.get("injection") or "") <= Q.INJECTION_MAX,
+          len(huge.get("injection") or ""))
+    check("an unknown level is dropped, never shown as a level",
+          "injection_level" not in huge, huge.get("injection_level"))
+    fresh()
+    noisy = Q.start_outside(TEXT, 2, "t", "youtube", injection=42, injection_level=None)
+    check("a finding that is not text is dropped, not raised",
+          "injection" not in noisy, sorted(noisy))
+
+    m2, _ = fresh()
+    code, out = Q.handle_post("/api/quiz", {"text": TEXT, "count": 2})
+    check("a pasted-text quiz still carries NO injection keys",
+          code == 200 and "injection" not in out["quiz"]
+          and "injection_level" not in out["quiz"], sorted(out["quiz"]))
+
+
 def main() -> int:
     try:
         for name, fn in list(globals().items()):

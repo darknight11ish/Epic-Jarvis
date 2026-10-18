@@ -56,6 +56,14 @@ READERS = {
     "jarvis_places.py": ("use", "own SQL for 'where is my passport': topic_blocked('use')"),
     "jarvis_tidy.py": ("use", "own SQL, a local model reads the facts: topic_blocked('use')"),
     "jarvis_briefing.py": ("use", "list_auto(topics='use')"),
+    "jarvis_people_crm.py": ("use", "Pillar 16's pre-meeting person dossier: one person's "
+                                  "facts reach a screen (the briefing's People line, and a "
+                                  "future card/route), so the entity layer is read with "
+                                  "topics='use' and every version comes from the memory "
+                                  "module's own fact_history_view - a learn-only or off "
+                                  "topic is never in it. It reads no fact by a search of "
+                                  "its own (no .search() call), and it never edits the "
+                                  "base-only memory module."),
     "jarvis_quick.py": ("use", "answers from jarvis_places.lookup; topic names for the door"),
     "jarvis_entities.py": ("use", "the entity model pass shows fact text to the local model: "
                                   "Off topics excluded"),

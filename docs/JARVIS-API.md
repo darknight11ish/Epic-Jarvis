@@ -5378,6 +5378,7 @@ asleep. Only what Jarvis can already read on this PC, in this order:
 | Section (`key`) | What | When it is left out |
 |---|---|---|
 | Calendar (`calendar`) | Today's events: all-day first, then by this PC's time. Repeating events (RRULE) are worked out, so a weekly meeting shows on today's date; one whose rule `jarvis_calendar` cannot work out (BYSETPOS and the like) shows the time of its first date and "(repeats)"; one that began earlier "(continues from an earlier day)". | Not set up (neither `JARVIS_CALDAV_URL` nor the private calendar link `JARVIS_CALENDAR_ICS_SECRET_URL` set, or `calendar_read` not in `[tools].enabled`); or `calendar_read` is not tier `auto`/`notify` - then it is not read and **no card is raised**, and the briefing says why. |
+| People (`people`, added 2026-10-17, Pillar 16) | A person Jarvis **already knows by name** (the memory entity layer) who is named in one of today's calendar events: one line, "Alex - 14:30: Lunch with Alex (4 saved facts)" - the name, the event's own time and title, and how many saved facts there are. The **summary is a count only** ("2 people in today's calendar."), because the apps already blank a briefing's `items` while "Hide memory lists and chat history" or App lock is on - so a hidden briefing shows a count and no name. Worked out from the calendar read above plus a local memory read (`entities_view(topics="use")`, so a topic the owner switched off or set learn-only is never in it); it makes **no second outside read, raises no card, and adds nothing to `read`**. `jarvis_people_crm.briefing_people()`. The full person dossier (`build_person_dossier()`, with mail/chat/to-dos and the next event together) is not part of the briefing and has no route yet - see `backend/jarvis_people_crm.py`. | Never: with no event naming a known person it is absent, so a briefing with no such event is byte-for-byte what it was before. |
 | Today (`today`) | Alarms, reminders and timers still to come today, with their words. | Never. |
 | To-do list (`todo`) | How many open items, and the first five. | Never. |
 | Approvals (`approvals`) | How many approval cards wait - "Open Jarvis to answer." Never an Approve. | Never. |
@@ -13647,12 +13648,26 @@ takes the PC a couple of seconds - never on a timer.
      "sections": [{"id": "slow" | "disk" | "gpu" | "heat" | "restart",
                    "title": "Why is my PC slow?",
                    "words": "<the PC's own answer>",
-                   "programs": <true when it names programs>}, ... five, in that order],
+                   "programs": <true when it names programs>}, ... five, in that order,
+                  ...then ONE more per Pillar 28 finding that fired, in the order
+                  digital_zero_mic, wal_bloat, phone_unreachable, ollama_wedged,
+                  each {"id", "title", "words", "programs": false}],
+     "silent": {"checked": ["digital_zero_mic", "wal_bloat", "phone_unreachable",
+                            "ollama_wedged"],
+                "failed": [<the ids that fired, in that same order>],
+                "at": <epoch>},
      "changes": "PC help only reads. Changing Windows settings from Jarvis (Night light, dark mode, Do not disturb) is not built yet.",
      "private": "Program names stay on your PC: Jarvis does not save, log or learn from them."}
 503 {"available": false, "error": "<update sentence>"}   jarvis_pc_help.py missing
 404                                                     a backend without it
 ```
+
+The five answers are always there, in that order. A warning section is
+appended **only** for a Pillar 28 check that found a real failure, so a
+healthy answer keeps exactly the five sections both apps were built for; an
+app that renders every section it is given shows each warning automatically,
+and both apps do. `silent` is the facts behind it for anything that wants
+them, and an app that does not know the key ignores it.
 
 A reading that fails says so in its own `words` ("Jarvis could not read
 this on your PC just now."); the route itself never fails for it. Both apps
@@ -13693,10 +13708,21 @@ not in `requirements.lock`):
   counter gives a program's **total** graphics memory across every card; the
   words label it as a total and never present it as one card's number. A
   card's state (`pstate` + clocks + load) is read from the same answer.
+- the silent-failure checks (§84.5): a `stat()` of the `*.db-wal` files in
+  Jarvis's home folder (`$OPENJARVIS_HOME` when set, else this codebase's
+  `OPENJARVIS_CONFIG_DIR`/`JARVIS_CONFIG_DIR`, else `~/.openjarvis`; sizes
+  only - no checkpoint is run), the paired-device registry through
+  `jarvis_devices.paired_status()`, one loopback `GET /api/ps` to Ollama with
+  a 2-second timeout, and `jarvis_speech.voice_attempts_status()` - the peak
+  RMS, input device and time of the last three voice attempts, kept in memory
+  by `jarvis_speech` (no audio, and PC help never opens the microphone).
 
 Program names are **never logged, printed, audited or written to a file**;
 the PowerShell reading is held in memory for at most 5 seconds (so both apps
 asking at once run it once), then dropped.
+The microphone readings are three numbers plus the device's name, held
+in memory, never written or logged, and gone when the backend stops;
+the paired-device reading never carries a token or a hash.
 
 ### 84.4 Not built, said plainly
 
@@ -13717,6 +13743,43 @@ asking at once run it once), then dropped.
   measured (2026-10-17, driver 617.42): nvidia-smi answers the state fields
   (`pstate`, clocks, idle and power-cap reasons) and the per-card memory, and
   reports **no** per-program amount; the words treat both as measured facts.
+
+### 84.5 Silent failures (added 2026-10-17, Pillar 28)
+
+Four failures that are **silent** - nothing crashes, nothing says why -
+checked by the same **Check now**, and each finding adds its own warning
+section after the five answers only when it fires. This PC's doctor is
+deterministic: each check reads a number or a file that already exists, and
+a check that cannot read says nothing (it never invents a failure). The one
+entry point is `diagnose_silent_failures(readers=None) -> list[dict]`; each
+finding is `{"id", "title", "words"}` with one of the four ids below, in that
+order. `silent.checked` names all four; `silent.failed` names the ones that
+fired.
+
+| Check id | Reads | Fires when | The words |
+|---|---|---|---|
+| `digital_zero_mic` | `jarvis_speech.voice_attempts_status()` - the PEAK RMS, input device and time of the last 3 voice attempts, in memory only | **three attempts in a row had a peak RMS of exactly 0.0** (100% digital zeros, the state some PCs leave the microphone in after waking from sleep) | names the input device ("this PC's microphone" / "your phone's microphone"), says every sample was exactly 0.000 so a quiet room does not explain it, and to unplug/replug the microphone or restart the PC (or the phone), then Check now again |
+| `wal_bloat` | the size of each `*.db-wal` in Jarvis's home folder, `$OPENJARVIS_HOME` honoured (`N_placeholder` limit) | a log is **larger than 64 MiB** | the size and database name (e.g. "65 MB for memory.db"), that the database is healthy but writes have not been folded back, that a **passive checkpoint** would fold it back - offered with its exact safe statement, `PRAGMA wal_checkpoint(PASSIVE);`, from `safe_passive_checkpoint_statement()` - and that PC help does **not** run one (it only reads); then to restart Jarvis, whose clean shutdown checkpoints the log, deleting nothing |
+| `phone_unreachable` | `jarvis_devices.paired_status()` - each paired device, its last check-in, and whether it has remote reach (a live device key; this design has no separate "also on my phone" switch) | a paired **phone** with remote reach has not checked in past the staleness threshold (7 days), or has never checked in since it was paired more than 7 days ago | the phone's name, how long ago it was last heard from, that its changes have not synced since, that this PC **cannot test the network** itself, and to open Jarvis on the phone, check it is on the same Tailscale or NordVPN Meshnet network, and use it once |
+| `ollama_wedged` | one loopback `GET /api/ps` with a **2 second** timeout | the TCP port **refused** (Ollama process not running) or it **opened and `/api/ps` did not answer in time** (running, but wedged) | two different sentences, because the fixes differ: "the process is not running - open Ollama from the Start menu" vs "its TCP port is open but `/api/ps` did not answer within 2 seconds - quit it from the icon by the clock and open it again" |
+
+**What it deliberately does not do.** It does not open the microphone (it
+reads what `jarvis_speech` already remembered - audio is never kept), does not
+run a checkpoint or any repair (the passive checkpoint is offered, with the
+exact statement, and never executed), does not wake or contact the phone
+(there is no network test, only the last check-in time), does not restart
+Ollama, and does not claim a failure it could not read. It is still read-only,
+so there is no approval card, and the warning sections name no program, so
+they are not private.
+
+The shared contract fixtures (`pc-help-cases.json`) are all HEALTHY for these
+checks, because both apps' tests assert exactly five section ids per case; the
+failing words and the appended warning sections are proven in
+`backend/test_pc_help.py` with invented readings (including every threshold
+boundary: 3 vs 2 zero-RMS attempts, 65 MiB vs 10 MiB and exactly 64 MiB,
+stale vs healthy vs exactly-at-threshold peer, and `/api/ps` timeout vs
+200 OK). A warning section has the same `{id, title, words, programs}` shape,
+so both apps draw it with their ordinary renderer.
 
 ## 85. Bring in chats from ChatGPT, Claude, Gemini or DeepSeek (added 2026-09-28)
 
@@ -17668,7 +17731,7 @@ The owner's decision (2026-09-30, `docs/STUDY-FROM-TEXT-DESIGN.md` sections 5, 7
 | `POST /api/youtube/{id}/cancel` | `{}` | `{"ok": true, "request": Request}` |
 
 * `Request` = `{"id", "state", "message", "link", "truncated": bool, "minutes": int \| null, "error": code \| null, "quiz": Quiz \| null, "provenance": "outside", "source": "youtube"}`. `state` is `waiting` (the card is open), `fetching`, `writing`, `ready` (`quiz` is the ordinary Quiz of section 98), or an end: `denied`, `timed_out`, `withdrawn`, `refused` (the card could not be answered) and `failed` (`error` says why). `message` is the PC's plain sentence for that state; the apps show it and do not write their own. `link` is the canonical address `https://www.youtube.com/watch?v=<id>` - the same one the card shows.
-* `Quiz` (section 98) gains two **additive** fields for a quiz made this way only: `"provenance": "outside"` and `"source": "youtube"`. A pasted-text quiz and the Spanish mode do not carry them. Everything else about the quiz - answering, the passage shown only after an answer, `finish`, `stop`, the 3-open cap, the 60-minute expiry, `grader_verified` - is section 98, unchanged.
+* `Quiz` (section 98) gains **additive** fields for a quiz made this way only: `"provenance": "outside"` and `"source": "youtube"`, and - when the caption carries something the injection table recognises (a "sneaky instruction") - `"injection"` (the table's own fixed advisory sentence naming the kind of attempt, never a caption word) and `"injection_level"` (`high`, `medium` or `low`). A pasted-text quiz and the Spanish mode do not carry them. The finding is **advisory**: it never blocks a quiz, changes a gate tier or removes a card - the caption's chat-template markers are stripped for every caller by `jarvis_quiz._fence`, and this is the *trace* that makes a poisoned video visible to both apps. The level (never a caption word) is also written to the `youtube.captions` audit line. Everything else about the quiz - answering, the passage shown only after an answer, `finish`, `stop`, the 3-open cap, the 60-minute expiry, `grader_verified` - is section 98, unchanged.
 * **The card** (an ordinary approval, `/api/pending`, gate action `youtube_captions_read`, tier `ask` only, a **risky approval**: Windows Hello on the PC, the screen lock on the phone; never an "always allow", never decided by voice). It shows the exact canonical link, says the pasted extras (a time stamp, a tracking code) were dropped when they were, and says: the PC will fetch the caption text from YouTube; **this breaks YouTube's terms and may be blocked**; only caption text - never the video, its sound or the comments; the link tells YouTube which video the owner is studying; it is a way out of this PC; the captions are outside text, never learned or saved; one card covers one link. The gate's `_RISK` words: "makes this PC contact YouTube to fetch the caption text of the one video named on the card, for a quiz; this breaks YouTube's terms and YouTube may block it, only the caption text comes back (never the video or its sound), the link tells YouTube which video you are studying, and it cannot be taken back".
 * **Limits:** a link is at most 300 characters; the caption text is cut to 20,000 characters (the quiz's own limit) on a word boundary and the request says so (`truncated`, `minutes` = how far into the video the quiz reaches); under 200 characters is `too_little_text`. One waiting card at a time; finished requests are forgotten after an hour and at most five are kept. The library's requests have a 40-second limit.
 

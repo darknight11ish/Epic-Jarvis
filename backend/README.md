@@ -13560,11 +13560,25 @@ this is a third `source` inside it, beside `"email"` and `"home"`.
   words ("tell me when `<url>` changes"): the address must be typed out in
   full; "tell me when this page changes" with no address goes to the
   model, since Jarvis has no page in mind for "this".
-- **A hash, never the text.** `_look_page` reuses the SAME `last_state`
-  column a Home Assistant watch's state word already uses - here it holds
-  a SHA-256 hex digest of the page's bytes instead. A match is "the digest
-  changed"; there is no code path that could show the owner a diff or a
-  quote of the page.
+- **A hash and the short facts, never the text.** `_look_page` reuses the
+  SAME `last_state` column a Home Assistant watch's state word already uses -
+  since Pillar 26 (2026-10-17, Blueprint C) it holds a compact JSON snapshot
+  instead: the SHA-256 of the page's noise-stripped words
+  (`strip_page_noise`: script/style/noscript/svg/nav/footer/aside text,
+  timestamps, view counts, CSRF/session nonces, utm_* parameters and the
+  SecAlign chat/tool markers removed), every price in whole cents
+  (`extract_watch_signals`, `$249.99` -> `24999`, never a float), every
+  version/release tag, one of three stock states, the last real change's
+  plain words and the last good look's time. `diff_watch_snapshot` says what
+  changed ("The price is now 199.99 (it was 249.99).", and a
+  `$249.99 -> $199.99` drop is `price_delta_cents = -5000`); there is no code
+  path that could show the owner a diff or a quote of the page's words. When
+  the two looks differ only in the stripped noise it answers
+  `{"changed": False, "status": "[SILENT]"}` and nothing is notified; a
+  failed fetch is `stale: True` with `last_good_at` preserved, so the old
+  snapshot is never overwritten and nothing is alerted. A real change is
+  outside text, so it latches `jarvis_gate.latch_taint(why="page_watch")`
+  (optional: a folder without `jarvis_gate.py` skips it and never fails).
 - **The private-address guard, checked twice, on purpose.** Adding the
   watch (`jarvis_tellme.add`) refuses it before any card is ever raised;
   `_look_page` refuses it again immediately before every later GET,
@@ -13589,6 +13603,19 @@ this is a third `source` inside it, beside `"email"` and `"home"`.
   `_PageRedirect`, `PAGE_ACTION`/`PAGE_MINUTES`/`PAGE_MAX_MINUTES`/
   `MAX_PAGE_WATCHES`, and the private-address checks in `add()` and
   `_look_page`.
+- `jarvis_tellme.py`, Pillar 26 (2026-10-17, Blueprint C of Volume III; no
+  model call and no new socket): `strip_page_noise` / `extract_watch_signals`
+  / `diff_watch_snapshot` + `PAGE_STATE`/`PAGE_SILENT`/`_page_state`/
+  `_latch_page_watch` - a page look keeps a noise-immune structured snapshot
+  (whole-cent prices, versions, a three-state stock state, the clean hash)
+  and the alert says what actually changed. `_default_page_fetch` returns
+  that snapshot, `_look_page` diffs it, keeps the last change's words,
+  enforces the `[SILENT]` watermark, never overwrites the last-known-good
+  snapshot on a failed fetch and latches the gate taint on a real change;
+  `alert_words` reads the stored change words. Older "t1:"/raw fingerprints
+  are re-recorded once, silently.
+- `docs/ARCHITECTURE.md` §4's egress row - the page watch now keeps those
+  short structured facts (never the page's words).
 - `jarvis_local_http.py` - `private_fetch_problem` (shared with news feeds
   above; written once, used by both).
 - `jarvis_quick.py` - "tell me when `<url>` changes" (`_PAGE_CHANGE`,
@@ -13610,7 +13637,15 @@ text, a real look cycle (first look records the fingerprint, an unchanged
 fetch matches nothing, a changed one matches exactly once and only
 notifies), a private address refused before any card, and the same address
 refused again on a LATER look once the fake resolver's answer changes -
-proving the re-check is real, not only claimed.
+proving the re-check is real, not only claimed. Its `t_p26_*` functions
+(Pillar 26) cover `strip_page_noise` (script/nav/footer/aside/style text,
+timestamps, view counts, nonces, utm_*, SecAlign markers), the signals
+(whole-cent integer prices, version tags, three-state stock, clean hash),
+`diff_watch_snapshot` (a `$249.99 -> $199.99` drop is `-5000`; the four
+modes; `[SILENT]`; a failed fetch is stale with last_good_at kept), the
+end-to-end look (a noise-only page does NOT ring, a real change does and
+latches the gate taint, a failed fetch keeps the old snapshot), and an older
+fingerprint re-recorded once. The kept state never contains a page word.
 
 ## Not checked, said plainly
 

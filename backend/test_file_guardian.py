@@ -30,9 +30,12 @@ What it proves:
     PINNED version is never removed - even when that leaves it over quota.
     A removed version can no longer be shown or restored.
  7. THE REFUSALS: a symlink, a path outside every allowed folder, a folder, a
-    missing file, no allowed folder at all, a file over the per-file limit,
-    and a file that cannot be read - all plain sentences, with no blob and no
-    row created and the file intact.
+    missing file, no allowed folder at all, a file over the per-file limit, and
+    a file that cannot be read - all plain sentences, with no blob and no row
+    created and the file intact. The size ceiling is checked BEFORE a byte is
+    read: an oversized file is refused with `error="file_too_large_for_guardian"`
+    plus `size_bytes`/`max_file_bytes`, the read is never called, and a caller
+    may lower the ceiling for its own call.
  8. ALLOWED FOLDERS: the owner's own "Folders Jarvis may look in" list and the
     configured Obsidian vault both make a folder allowed, through the REAL
     jarvis_documents.py / jarvis_notes.py modules.
@@ -52,6 +55,17 @@ What it proves:
     that copy back.
 13. THE REGISTRATION: the module is the LAST entry of `_where.SHIPPED` and the
     base's twin is byte-identical.
+14. THE PRE-WRITE HOOKS (Blueprint B): the approved Obsidian append in
+    jarvis_note_capture.py takes the guardian copy of the daily note BEFORE it
+    appends a byte, links the answer's `before_sha256`/`snapshot_id`/
+    `receipt_id` to the real journal row and receipt, and writes NOTHING when
+    the copy is refused or the guardian is absent (fail closed). The vault
+    helper in jarvis_notes.py is scoped to the configured vault and fails
+    closed with no vault and with no guardian module. jarvis_projects.py's
+    Project Mode pointer file is snapshotted before its temp+replace, with the
+    snapshot id and receipt id in its existing audit row; a broken guardian
+    never blocks Project Mode and the audit row never claims a copy that did
+    not happen; the guardian's own symlink refusal still applies.
 
 Every check bites: the module was mutated deliberately (see the branch's
 report) and this suite went red for each mutation, so no check is a check on
@@ -59,6 +73,8 @@ the constant True.
 """
 from __future__ import annotations
 
+import contextlib
+import datetime as dt
 import gzip
 import hashlib
 import inspect
@@ -93,6 +109,9 @@ os.environ["JARVIS_GUARDIAN_FOLDERS"] = str(ALLOWED)
 
 import _where  # noqa: E402
 import jarvis_file_guardian as G  # noqa: E402
+import jarvis_note_capture as NC  # noqa: E402
+import jarvis_notes as N  # noqa: E402
+import jarvis_projects as JP  # noqa: E402
 import jarvis_receipts as R  # noqa: E402
 
 PASSED, FAILED, SKIPPED = [], [], []
@@ -172,6 +191,26 @@ def blob_names(home=None) -> list:
 
 def snapshot(path, **kwargs) -> dict:
     return G.snapshot_before_write(str(path), **kwargs)
+
+
+@contextlib.contextmanager
+def vault_env():
+    """A real Obsidian vault folder under this suite's TMP, set as THE vault.
+
+    Set through the module's own environment name and restored afterwards, so
+    no other check in this suite sees a vault it did not ask for.
+    """
+    vault = TMP / "vault"
+    (vault / ".obsidian").mkdir(parents=True, exist_ok=True)
+    saved = os.environ.get(N.OBSIDIAN_VAULT_ENV)
+    os.environ[N.OBSIDIAN_VAULT_ENV] = str(vault)
+    try:
+        yield vault
+    finally:
+        if saved is None:
+            os.environ.pop(N.OBSIDIAN_VAULT_ENV, None)
+        else:
+            os.environ[N.OBSIDIAN_VAULT_ENV] = saved
 
 
 def ok(result) -> bool:
@@ -280,6 +319,9 @@ def t_the_saved_version_is_the_current_bytes():
     check("the receipt carries an opaque copy id, not the file's path",
           isinstance(before.get("copy_id"), str) and before.get("copy_id").startswith("gc")
           and "path" not in before, before)
+    check("the answer carries the same opaque copy id (snapshot_id) the row and receipt use",
+          result.get("snapshot_id") == before.get("copy_id") == row.get("copy_id"),
+          (result.get("snapshot_id"), before.get("copy_id"), row.get("copy_id")))
     check("neither the file's words nor its full path are in the receipt",
           json.dumps(receipt or {}) and str(path) not in json.dumps(receipt or {})
           and "first line" not in json.dumps(receipt or {}), receipt)
@@ -577,20 +619,83 @@ def t_a_folder_or_a_missing_file_is_refused():
     check("the per-file limit is not larger than the whole store's quota",
           G.MAX_FILE_BYTES <= G.QUOTA_BYTES, (G.MAX_FILE_BYTES, G.QUOTA_BYTES))
 
+
+def t_the_size_ceiling_is_checked_before_any_read():
+    """A file over the ceiling is refused by its SIZE alone, before any read.
+
+    This is the large-file guard: the size is checked with `getsize` before a
+    byte of the file is pulled into memory, so a file that could not be
+    copied cannot first be read (or compressed) on the way to being refused.
+    The refusal is machine-readable as `file_too_large_for_guardian` and it
+    carries both numbers, because the caller has to say which limit it broke.
+    """
+    fresh()
+    check("MAX_FILE_BYTES is the blueprint's 25 MiB N_placeholder",
+          G.MAX_FILE_BYTES == 25 * 1024 * 1024, G.MAX_FILE_BYTES)
+
     big = ALLOWED / "too-big.bin"
+    with open(big, "wb") as handle:
+        handle.truncate(G.MAX_FILE_BYTES + 1)
+    real_read = G._read_bytes
+    reads = []
+
+    def spy(real):
+        reads.append(real)
+        return real_read(real)
+
+    G._read_bytes = spy
     try:
-        with open(big, "wb") as handle:
-            handle.truncate(G.MAX_FILE_BYTES + 1)
         oversized = snapshot(big)
-        check("a file above the per-file limit is refused in plain words",
-              refused(oversized, "bigger than"), oversized)
-        check("... and nothing was copied or recorded for it",
-              blob_names() == [] and row_list() == [], (blob_names(), row_list()))
     finally:
-        try:
-            big.unlink()
-        except OSError:
-            pass
+        G._read_bytes = real_read
+    check("a file above the per-file limit is refused with error "
+          "file_too_large_for_guardian",
+          isinstance(oversized, dict) and oversized.get("ok") is False
+          and oversized.get("error") == "file_too_large_for_guardian", oversized)
+    check("... and the refusal carries the file's real size and the limit it broke",
+          oversized.get("size_bytes") == G.MAX_FILE_BYTES + 1
+          and oversized.get("max_file_bytes") == G.MAX_FILE_BYTES, oversized)
+    check("... and the file's bytes were NEVER read (the size is checked first)",
+          reads == [], reads)
+    check("... and nothing was copied or recorded for it",
+          blob_names() == [] and row_list() == [], (blob_names(), row_list()))
+    check("... and the oversized file itself is untouched",
+          big.is_file() and big.stat().st_size == G.MAX_FILE_BYTES + 1)
+    try:
+        big.unlink()
+    except OSError:
+        pass
+
+    check("a caller can lower the ceiling for its own call",
+          snapshot(write("small.txt", b"0123456789"), max_file_bytes=5).get("error")
+          == "file_too_large_for_guardian",
+          snapshot(ALLOWED / "small.txt", max_file_bytes=5))
+    at_limit = snapshot(ALLOWED / "small.txt", max_file_bytes=10)
+    check("... and a file exactly AT the caller's limit is copied",
+          ok(at_limit) and at_limit.get("size") == 10, at_limit)
+    fallback = snapshot(ALLOWED / "small.txt", max_file_bytes="not a number")
+    check("... and a nonsense limit falls back to the real ceiling, never to refusing "
+          "everything",
+          ok(fallback) and fallback.get("before_sha256") == sha256_of(b"0123456789"),
+          fallback)
+
+    grows = write("grows.txt", b"short now\n")
+    grown = b"x" * (G.MAX_FILE_BYTES + 7)
+    real_read = G._read_bytes
+    G._read_bytes = lambda _real: grown
+    try:
+        result = snapshot(grows)
+    finally:
+        G._read_bytes = real_read
+    check("a file that GROWS between getsize and the read is refused by the read's own "
+          "size, before it is hashed or stored",
+          isinstance(result, dict) and result.get("ok") is False
+          and result.get("error") == "file_too_large_for_guardian"
+          and result.get("size_bytes") == len(grown), result)
+    check("... and nothing was copied or recorded for the grown file",
+          sha256_of(grown) + ".gz" not in blob_names()
+          and all(row.get("before_sha256") != sha256_of(grown) for row in row_list()),
+          (blob_names(), row_list()))
 
 
 def t_an_unreadable_file_is_refused():
@@ -895,16 +1000,293 @@ def t_a_missing_receipt_store_does_not_stop_the_copy():
 
 
 # --------------------------------------------------------------------------
-#   12. The registration, and the twin
+#   12. The pre-write hooks (Blueprint B): the approved vault append, and
+#       Project Mode's pointer file
+# --------------------------------------------------------------------------
+
+
+def t_the_approved_vault_append_snapshots_the_note_first():
+    """A real approved append through jarvis_note_capture.py, driven for real.
+
+    The daily note is appended to only after the guardian has stored its
+    previous bytes, and the answer links that copy's hash, its opaque snapshot
+    id and its receipt id - so the append can be undone with the guard, not
+    just with the writer's own read-back.
+    """
+    fresh()
+    with vault_env() as vault:
+        plan = NC.plan("obsidian", "a note from the capture",
+                       now=dt.datetime(2026, 10, 17, 12, 0))
+        path = Path(plan.file)
+        check("the note plan names today's daily note inside the vault",
+              plan.target == "obsidian" and plan.reason_empty == ""
+              and G._inside(str(vault), os.path.realpath(str(path))), plan)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        old = b"- earlier entry\n"
+        path.write_bytes(old)
+        result = NC.run(plan, approved=True)
+        appended = path.read_bytes()
+
+    check("the approved append succeeds", result.get("ok") is True, result)
+    check("... and it only ADDS: the earlier bytes are still there, byte for byte",
+          appended.startswith(old) and len(appended) > len(old), appended[:80])
+    sha_old = sha256_of(old)
+    check("the answer links the copy of the OLD bytes (before_sha256)",
+          result.get("before_sha256") == sha_old, result.get("before_sha256"))
+    blob = blob_path(HOME_A, sha_old)
+    check("the guardian stored the PREVIOUS bytes before the append",
+          blob.is_file() and gzip.decompress(blob.read_bytes()) == old, str(blob))
+    row = next((r for r in row_list()
+                if r.get("copy_id") == result.get("snapshot_id")), {})
+    check("the answer's snapshot_id names a real journal row for that hash",
+          row.get("before_sha256") == sha_old, (result.get("snapshot_id"), row))
+    receipt = R.get(str(result.get("receipt_id") or ""))
+    check("the answer's receipt_id is a real guardian snapshot receipt",
+          receipt is not None and receipt.get("tool_name") == G.TOOL_SNAPSHOT,
+          receipt)
+    check("... so the copy comes BEFORE the append, never after it (the append's "
+          "own bytes got no snapshot)",
+          not blob_path(HOME_A, sha256_of(appended)).exists(), blob_names())
+
+
+def t_an_append_whose_copy_is_refused_writes_nothing():
+    """No copy, no append: a refusal is handed to the owner in plain words.
+
+    The guardian's refusal is the writer's answer too - the note is not
+    touched - and the structured reason (the large-file one, or an absent
+    guardian) is passed back rather than swallowed.
+    """
+    fresh()
+    with vault_env():
+        plan = NC.plan("obsidian", "a note that must not land",
+                       now=dt.datetime(2026, 10, 18, 12, 0))
+        path = Path(plan.file)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        old = b"- keep me exactly\n"
+        path.write_bytes(old)
+        real = NC._snapshot_daily_note
+
+        NC._snapshot_daily_note = lambda _path: {
+            "ok": False, "error": "file_too_large_for_guardian",
+            "size_bytes": 26 * 1024 * 1024, "max_file_bytes": G.MAX_FILE_BYTES}
+        try:
+            refused = NC.run(plan, approved=True)
+        finally:
+            NC._snapshot_daily_note = real
+        check("an append whose guardian copy is refused returns a plain refusal",
+              refused.get("ok") is False
+              and "could not be copied first" in str(refused.get("reason")), refused)
+        check("... and writes NOTHING: the daily note is exactly the old bytes",
+              path.read_bytes() == old, path.read_bytes()[:80])
+        check("... and the structured guardian reason is handed back, not swallowed",
+              refused.get("snapshot_error") == "file_too_large_for_guardian",
+              refused)
+
+        NC._snapshot_daily_note = lambda _path: {
+            "ok": False, "error": "guardian_unavailable",
+            "words": "the time machine is not on this backend"}
+        try:
+            absent = NC.run(plan, approved=True)
+        finally:
+            NC._snapshot_daily_note = real
+        check("with the guardian absent the append is refused too (fail closed)",
+              absent.get("ok") is False and path.read_bytes() == old, absent)
+
+        new_day = NC.plan("obsidian", "the first note of the day",
+                          now=dt.datetime(2026, 10, 19, 12, 0))
+        new_path = Path(new_day.file)
+        made = NC.run(new_day, approved=True)
+    check("a daily note that does not exist yet is still created (nothing was there "
+          "to lose, so no copy is needed)",
+          made.get("ok") is True and new_path.is_file()
+          and made.get("before_sha256") == "", made)
+
+
+def t_the_vault_helper_is_scoped_to_the_configured_vault():
+    """jarvis_notes.py stays read-only, but the one door a writer uses is guarded."""
+    fresh()
+    with vault_env() as vault:
+        inside = vault / "inside.md"
+        inside.write_bytes(b"inside the vault\n")
+        outside_dir = TMP / "not-the-vault"
+        outside_dir.mkdir(exist_ok=True)
+        outside = outside_dir / "outside.md"
+        outside.write_bytes(b"outside the vault\n")
+
+        out = N.snapshot_vault_before_write(outside)
+        check("the notes helper refuses a file outside the configured vault",
+              out.get("ok") is False and "not inside a folder" in str(out.get("error")),
+              out)
+        check("... and nothing was copied for it",
+              blob_names() == [] and row_list() == [], (blob_names(), row_list()))
+        good = N.snapshot_vault_before_write(inside, reason="a test of the door")
+        check("... and copies a file inside the vault, through the REAL guardian",
+              good.get("ok") is True
+              and good.get("before_sha256") == sha256_of(b"inside the vault\n"), good)
+
+        saved = os.environ.pop(N.OBSIDIAN_VAULT_ENV, None)
+        try:
+            no_vault = N.snapshot_vault_before_write(inside)
+        finally:
+            if saved is not None:
+                os.environ[N.OBSIDIAN_VAULT_ENV] = saved
+    check("with NO vault configured the helper fails closed (no folder is on the list)",
+          no_vault.get("ok") is False
+          and "no folder is on jarvis's list" in str(no_vault.get("error")).lower(),
+          no_vault)
+
+    real_module = sys.modules.get("jarvis_file_guardian")
+    sys.modules["jarvis_file_guardian"] = None
+    try:
+        absent = N.snapshot_vault_before_write(TMP / "anything.md")
+    finally:
+        if real_module is not None:
+            sys.modules["jarvis_file_guardian"] = real_module
+    check("with the guardian module absent the helper answers guardian_unavailable, "
+          "never a traceback",
+          absent.get("ok") is False
+          and absent.get("error") == "guardian_unavailable", absent)
+
+
+def t_the_project_pointer_is_snapshotted_before_it_is_replaced():
+    """Project Mode's own file is copied before the temp+replace, and linked.
+
+    The audit row carries the snapshot id, the receipt id and the copied hash -
+    the ids are checked against the real journal row and the real receipt, so
+    the link is a fact rather than a field.
+    """
+    fresh()
+    mode = JP.mode_path()
+    check("the Project Mode pointer is inside this suite's own config folder",
+          str(mode).startswith(str(CONFIG)), (mode, CONFIG))
+    mode.parent.mkdir(parents=True, exist_ok=True)
+    old = b'{"active_project_id": "an-old-project-id"}'
+    mode.write_bytes(old)
+    audits = []
+    real_audit = JP._audit
+    JP._audit = lambda event, detail: audits.append((event, detail))
+    try:
+        left = JP.set_active_project(None, store=object())
+    finally:
+        JP._audit = real_audit
+    check("leaving Project Mode returns cleanly", left is None)
+    check("... and the pointer file is replaced with the empty mode",
+          json.loads(mode.read_text(encoding="utf-8")) == {}, mode.read_text())
+    sha_old = sha256_of(old)
+    blob = blob_path(HOME_A, sha_old)
+    check("the guardian copied the PREVIOUS pointer bytes before the replace",
+          blob.is_file() and gzip.decompress(blob.read_bytes()) == old, str(blob))
+    detail = audits[-1][1] if audits else {}
+    check("the audit row says truthfully that a copy happened",
+          detail.get("snapshot_ok") is True, detail)
+    row = next((r for r in row_list()
+                if r.get("copy_id") == str(detail.get("snapshot_id") or "")), {})
+    receipt = R.get(str(detail.get("receipt_id") or ""))
+    check("... and links a real snapshot id, receipt id and the copied hash",
+          bool(detail.get("snapshot_id")) and row.get("before_sha256") == sha_old
+          and receipt is not None and receipt.get("tool_name") == G.TOOL_SNAPSHOT
+          and detail.get("before_sha256") == sha_old, (detail, row))
+    check("... and the NEW pointer's bytes got no snapshot (the copy is the BEFORE "
+          "state)",
+          not blob_path(HOME_A, sha256_of(mode.read_bytes())).exists())
+
+
+def t_a_broken_guardian_never_blocks_project_mode_and_never_lies():
+    """Best-effort, said honestly: Project Mode still works, the audit row does
+    not pretend a copy happened, and a first-time write says there was nothing
+    to copy."""
+    fresh()
+    mode = JP.mode_path()
+    mode.parent.mkdir(parents=True, exist_ok=True)
+    mode.write_bytes(b'{"active_project_id": "an-old-project-id"}')
+    real = JP._snapshot_mode_file
+    JP._snapshot_mode_file = lambda _path: {
+        "ok": False, "error": "guardian_unavailable (RuntimeError)",
+        "words": "the time machine is not on this backend"}
+    audits = []
+    real_audit = JP._audit
+    JP._audit = lambda event, detail: audits.append((event, detail))
+    try:
+        left = JP.set_active_project(None, store=object())
+    finally:
+        JP._audit = real_audit
+        JP._snapshot_mode_file = real
+    check("a REFUSED copy does NOT block Project Mode",
+          left is None and mode.is_file()
+          and json.loads(mode.read_text(encoding="utf-8")) == {}, mode.read_text())
+    detail = audits[-1][1] if audits else {}
+    check("the audit row says plainly that the copy did NOT happen",
+          detail.get("snapshot_ok") is False
+          and "guardian_unavailable" in str(detail.get("snapshot_error")), detail)
+    check("... and never claims a snapshot that did not happen (no id fields)",
+          "snapshot_id" not in detail and "receipt_id" not in detail, detail)
+
+    fresh()
+    mode = JP.mode_path()
+    try:
+        mode.unlink()
+    except OSError:
+        pass
+    audits = []
+    JP._audit = lambda event, detail: audits.append((event, detail))
+    try:
+        JP.set_active_project(None, store=object())
+    finally:
+        JP._audit = real_audit
+    detail = audits[-1][1] if audits else {}
+    check("a FIRST-TIME pointer write says there was no file to copy",
+          detail.get("snapshot_ok") is False
+          and detail.get("snapshot_reason") == "no file was there to copy", detail)
+
+
+def t_the_project_hook_keeps_the_symlink_refusal():
+    """The guardian's own link rule still runs through the Project Mode hook."""
+    fresh()
+    mode = JP.mode_path()
+    mode.parent.mkdir(parents=True, exist_ok=True)
+    target = CONFIG / "pointer-target.json"
+    target.write_bytes(b'{"a": "link target"}')
+    try:
+        if mode.exists() or mode.is_symlink():
+            mode.unlink()
+        os.symlink(str(target), str(mode))
+    except OSError as exc:
+        skip(f"a symlink cannot be made on this machine ({type(exc).__name__}), so "
+             f"the Project Mode link refusal was not driven")
+        return
+    audits = []
+    real_audit = JP._audit
+    JP._audit = lambda event, detail: audits.append((event, detail))
+    try:
+        JP.set_active_project(None, store=object())
+    finally:
+        JP._audit = real_audit
+    detail = audits[-1][1] if audits else {}
+    check("a symlinked pointer file is still refused by the guardian's own link rule",
+          detail.get("snapshot_ok") is False
+          and "link" in str(detail.get("snapshot_error")).lower(), detail)
+    check("... and Project Mode still writes the pointer (best-effort)",
+          mode.is_file() and not mode.is_symlink()
+          and json.loads(mode.read_text(encoding="utf-8")) == {}, mode.read_text())
+    check("... and the link's target was never written through",
+          target.read_bytes() == b'{"a": "link target"}')
+
+
+# --------------------------------------------------------------------------
+#   13. The registration, and the twin
 # --------------------------------------------------------------------------
 
 
 def t_the_module_is_registered_in_the_shipped_lists():
     check("the module is in _where.SHIPPED", "jarvis_file_guardian.py" in _where.SHIPPED,
           _where.SHIPPED[-3:])
-    check("... at the END of _where.SHIPPED (a new entry goes at the end)",
-          _where.SHIPPED and _where.SHIPPED[-1] == "jarvis_file_guardian.py",
-          _where.SHIPPED[-1])
+    shipped = list(_where.SHIPPED)
+    check("... appended after the earlier Pillar 15 entry (nothing was inserted before it)",
+          "jarvis_sandbox_exec.py" in shipped
+          and "jarvis_file_guardian.py" in shipped
+          and shipped.index("jarvis_file_guardian.py")
+          > shipped.index("jarvis_sandbox_exec.py"),
+          shipped[-3:])
     twin = REPO / "jarvis-backend" / "jarvis_file_guardian.py"
     check("the base's twin exists", twin.is_file(), str(twin))
     ours = HERE / "jarvis_file_guardian.py"

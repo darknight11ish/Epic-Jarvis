@@ -48,6 +48,7 @@ for p in (REPO / "tools", HERE / "rebuilt"):
 
 import jarvis_compute as CP  # noqa: E402
 import jarvis_hardware as H  # noqa: E402
+import jarvis_hf_inspect as HFI  # noqa: E402
 import jarvis_profiles as P  # noqa: E402
 import jarvis_second_card as SC  # noqa: E402
 import gen_hardware_cases as G  # noqa: E402
@@ -74,6 +75,35 @@ Verdict = G.Verdict
 YES = lambda a, d, p: Verdict(True, "ask", "approved")  # noqa: E731
 LOG1 = G.ollama_log([G.LOG_2080S])
 LOG2 = G.ollama_log([G.LOG_2080S, G.LOG_2060])
+
+#: qwen3.5:9b's own metadata, READ (never written) from this PC's Ollama
+#: `/api/show` on 2026-10-17: the GGUF's real values, not made up. 24 of its
+#: 32 blocks are recurrent (Gated DeltaNet), so only the 8 full-attention
+#: layers keep a growing KV cache - the shape docs/MODEL-TOPOLOGY.md measures.
+#: The numbers below are the ones the estimate arithmetic uses; the fixture is
+#: a stand-in so the suite never needs a live Ollama or the owner's Jarvis.
+QWEN35_9B_SHOW = {
+    "details": {"family": "qwen35", "parameter_size": "9.0B",
+                "quantization_level": "Q4_K_M"},
+    "parameters": "num_ctx                        16384\n",
+    "capabilities": ["completion", "vision", "tools", "thinking"],
+    "model_info": {
+        "general.architecture": "qwen35",
+        "general.parameter_count": 8_953_803_264,
+        "qwen35.block_count": 32,
+        "qwen35.attention.head_count": 16,
+        "qwen35.attention.head_count_kv": 4,
+        "qwen35.attention.key_length": 256,
+        "qwen35.attention.recurrent_layers": [True, True, True, False] * 8,
+        "qwen35.embedding_length": 4096,
+        "qwen35.context_length": 262144,
+    },
+}
+#: What the shared formula must say for that model, worked out by hand:
+#: 2 (K and V) x 8 full-attention layers x 4 KV heads x 256 head_dim.
+QWEN35_9B_CACHE = {"q8_0": 2 * 8 * 4 * 256 * 1.0625, "f16": 2 * 8 * 4 * 256 * 2.0}
+QWEN35_9B_DENSE_CACHE = {"q8_0": 2 * 32 * 4 * 256 * 1.0625,
+                         "f16": 2 * 32 * 4 * 256 * 2.0}
 
 #: The owner is adding a SECOND RTX 2080 SUPER 8 GB, so two of the cards on that
 #: PC will carry the same name AND the same size. Only the GPU- uuid tells them
@@ -375,6 +405,149 @@ def t_status_today():
     drop = data["card_dropped"]
     check("a dropped AMD card and unused built-in graphics, each in Ollama's words",
           "ROCm" in drop["cards"][1]["why_unused"] and "integrated" in drop["cards"][2]["why_unused"])
+
+
+def _hybrid_world(**extra):
+    """The owner's PC with qwen3.5:9b as the current model, from a FIXTURE of
+    Ollama's own /api/show answer: no live Ollama, no owner's Jarvis."""
+    kw = dict(smi=G.SMI_2080S, log=LOG1, reg=G.reg_text([G.REG_2080S]),
+              user_env=G.TODAY_ENV, health=G.HEALTH_2080S,
+              installed=("jarvis-primary", "qwen3.5:9b"),
+              current="qwen3.5:9b", shows={"qwen3.5:9b": QWEN35_9B_SHOW})
+    kw.update(extra)
+    return G.World(**kw)
+
+
+def _copy(show):
+    return json.loads(json.dumps(show))
+
+
+def t_a_hybrid_model_is_priced_from_its_attention_layers():
+    """"Now running" prices a model Ollama says is HYBRID with the cache of
+    its full-attention layers only - through the existing estimate path."""
+    weights = (QWEN35_9B_SHOW["model_info"]["general.parameter_count"] * P.Q4_BITS
+               / 8 / P.GIB)
+    hybrid_cache = QWEN35_9B_CACHE["q8_0"] * 16384 / P.GIB
+    dense_cache = QWEN35_9B_DENSE_CACHE["q8_0"] * 16384 / P.GIB
+    need_hybrid = weights + hybrid_cache + P.COMPUTE_GIB_PLACEHOLDER
+    need_dense = weights + dense_cache + P.COMPUTE_GIB_PLACEHOLDER
+    check("the two caches at 16K q8_0 are 0.27 GiB (8 full-attention layers) "
+          "against 1.06 GiB if a dense formula counted all 32",
+          round(hybrid_cache, 4) == 0.2656 and round(dense_cache, 4) == 1.0625,
+          (hybrid_cache, dense_cache))
+    with _hybrid_world() as w:
+        now = H.status()["now"]
+        wrote = bool(list(w.dir.iterdir()))
+        asked = [u for u, _ in w.http]
+    check("... read-only: nothing was written and every request was loopback",
+          not wrote and all(u.startswith("http://127.0.0.1:") for u in asked),
+          (wrote, asked))
+    words = now["words"]
+    check("a hybrid current model gets a priced bar (today it got none: the "
+          "table only knows qwen3)", now["bar"] is not None, now)
+    check("... priced with the HYBRID cache: the bar's need is weights + 0.27 GiB "
+          "+ the working-space placeholder",
+          now["bar"]["words"].startswith(f"{need_hybrid:.2f} + "), now["bar"])
+    check("... and NOT with the dense cache: the dense price would be 0.80 GiB more",
+          f"{need_dense:.2f} + " not in now["bar"]["words"]
+          and round(abs(need_dense - need_hybrid) - (dense_cache - hybrid_cache), 9) == 0,
+          now["bar"])
+    check("... the format is the q8_0 the settings say, so no format caveat is added",
+          now["format"] == "q8_0", now["format"])
+    check("... the words do not claim it is another model: "
+          "\"qwen3.5:9b with room for 16,384 tokens\"",
+          "qwen3.5:9b with room for 16,384 tokens" in words, words)
+    check("the design table is untouched: qwen3.5 is NOT in MODELS (it stays "
+          "\"test later\", in no preset)", "qwen3.5:9b" not in P.MODELS, sorted(P.MODELS))
+
+
+def t_hybrid_pricing_needs_ollama_to_prove_it():
+    """Defensive: no proof of hybrid (or a missing price field) means today's
+    words, never a number made up from a zero."""
+    missing = ("qwen35.attention.recurrent_layers", "qwen35.attention.key_length",
+               "qwen35.attention.head_count_kv", "qwen35.block_count",
+               "general.parameter_count")
+    for key in missing:
+        show = _copy(QWEN35_9B_SHOW)
+        del show["model_info"][key]
+        with _hybrid_world(shows={"qwen3.5:9b": show}):
+            now = H.status()["now"]
+        check(f"without {key}: no bar, today's one line instead",
+              now["bar"] is None and now["words"] == "Everyday chat uses qwen3.5:9b.",
+              now)
+    short = _copy(QWEN35_9B_SHOW)
+    short["model_info"]["qwen35.attention.recurrent_layers"] = [False]
+    with _hybrid_world(shows={"qwen3.5:9b": short}):
+        now = H.status()["now"]
+    check("a recurrent list that is not one entry per block proves nothing: no bar",
+          now["bar"] is None, now)
+    dense_meta = _copy(QWEN35_9B_SHOW)
+    dense_meta["model_info"]["qwen35.attention.recurrent_layers"] = [False] * 32
+    with _hybrid_world(shows={"qwen3.5:9b": dense_meta}):
+        now = H.status()["now"]
+    check("every layer full attention means a DENSE model: it is not priced as hybrid",
+          now["bar"] is None, now)
+    check("no /api/show at all: no bar", H._hybrid_model_from_show(None, "x") is None)
+    model = H._hybrid_model_from_show(QWEN35_9B_SHOW, "qwen3.5:9b")
+    check("the metadata that PROVES hybrid gives a model shape with 8 full-attention "
+          "layers of 32", model is not None and model.full_attention_layers == 8
+          and model.layers == 32 and model.params == 8_953_803_264, model)
+
+
+def t_the_cache_formula_is_jarvis_hf_inspects_one_copy():
+    """The estimate arithmetic CALLS the merged formula - it does not repeat
+    it. A spy on the public function proves what it was asked for; the dense
+    answer is the same number the design's own tables pinned before."""
+    calls = []
+    real = HFI.kv_bytes_per_token
+
+    def spy(config, bytes_per_elem=None):
+        calls.append((dict(config), bytes_per_elem))
+        return real(config, bytes_per_elem)
+
+    HFI.kv_bytes_per_token = spy
+    try:
+        hybrid = P.Model(ref="qwen3.5:9b", size="9.0B", params=8_953_803_264,
+                         reader_params=0, layers=32, kv_heads=4, head_dim=256,
+                         embedding=4096, heads=16,
+                         compute_gib=P.COMPUTE_GIB_PLACEHOLDER, max_ctx=262144,
+                         source="the /api/show fixture above",
+                         full_attention_layers=8)
+        got_hybrid = hybrid.kv_bytes("q8_0")
+        got_dense = P.MODELS["qwen3:8b"].kv_bytes("f16")
+    finally:
+        HFI.kv_bytes_per_token = real
+    check("a hybrid profile asks the shared formula with its 24 recurrent layers",
+          calls[0] == ({"num_hidden_layers": 32, "num_attention_heads": 16,
+                        "num_key_value_heads": 4, "head_dim": 256,
+                        "recurrent_layers": 24}, 1.0625), calls[0])
+    check("... and gets the full-attention layers' number, not all 32",
+          got_hybrid == QWEN35_9B_CACHE["q8_0"]
+          and got_hybrid != QWEN35_9B_DENSE_CACHE["q8_0"], got_hybrid)
+    check("a plain transformer asks it with NO recurrent layer (every layer counted)",
+          calls[1] == ({"num_hidden_layers": 36, "num_attention_heads": 32,
+                        "num_key_value_heads": 8, "head_dim": 128}, 2.0), calls[1])
+    check("... and gets byte for byte the design's old dense number (36 layers x "
+          "8 KV heads x 128 x 2 = 147,456 B a token)",
+          got_dense == 2 * 36 * 8 * 128 * 2.0 and got_dense == 147456.0, got_dense)
+
+
+def t_the_dense_estimate_is_byte_for_byte_unchanged():
+    """A model the design table knows keeps exactly the old sentence and the
+    old number - including the current-name-equals-table-name case, which the
+    hybrid wiring must not restyle."""
+    with G.World(smi=G.SMI_2080S, log=LOG1, reg=G.reg_text([G.REG_2080S]),
+                 user_env=G.TODAY_ENV, health=G.HEALTH_2080S,
+                 installed=("jarvis-primary", "qwen3:8b"), current="qwen3:8b",
+                 shows={"qwen3:8b": G.PRIMARY_SHOW}):
+        now = H.status()["now"]
+    need = P.MODELS["qwen3:8b"].need(16384, "q8_0")
+    check("a dense model from the table: the same words as before "
+          "(\"current is that model with room for ...\")",
+          "qwen3:8b is qwen3:8b with room for 16,384 tokens" in now["words"], now["words"])
+    check("... and the same need as the design's own table, on the dense formula",
+          now["bar"] is not None
+          and now["bar"]["words"].startswith(f"{need:.2f} + "), now["bar"])
 
 
 def t_every_cards_health():

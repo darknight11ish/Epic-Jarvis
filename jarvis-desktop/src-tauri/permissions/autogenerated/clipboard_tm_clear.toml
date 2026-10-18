@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-clipboard-tm-clear"
+description = "Enables the clipboard_tm_clear command without any pre-configured scope."
+commands.allow = ["clipboard_tm_clear"]
+
+[[permission]]
+identifier = "deny-clipboard-tm-clear"
+description = "Denies the clipboard_tm_clear command without any pre-configured scope."
+commands.deny = ["clipboard_tm_clear"]

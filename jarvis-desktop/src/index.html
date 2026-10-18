@@ -315,6 +315,54 @@
       <p class="sr-only" id="palette-status" role="status"
          aria-live="polite" aria-atomic="true"></p>
 
+      <!-- ── Clipboard history drawer (Pillar 14B, clipboard-drawer.js) ──
+           Alt+Shift+C opens it, the same key family as the bar's other
+           actions and rebindable in Settings. It is a drawer inside the bar
+           for exactly the reasons the palette above is: the bar already has
+           the keyboard, and a new window would need a new capability.
+
+           THE PRIVACY RULES ARE THE FEATURE. The ring of kept copies lives in
+           Rust, in memory, and only while the owner has turned it on here (it
+           ships OFF on every launch and is never written to disk). Every
+           command behind this drawer fails closed while App lock or Windows'
+           lock screen is up, App lock hides the bar, and the bar closing or
+           losing focus clears every copied word out of this page. The three
+           transforms are deterministic, in Rust - nothing here calls a model
+           and nothing leaves the PC.
+
+           Drawn by clipboard-drawer.js with textContent only: a copied word
+           is the owner's, never markup. -->
+      <section class="clipboard" id="clipboard-drawer" role="dialog"
+               aria-modal="true" aria-labelledby="clipboard-title" hidden>
+        <div class="clipboard-head">
+          <h2 class="clipboard-title" id="clipboard-title">Clipboard history</h2>
+          <span class="clipboard-state" id="clipboard-status">Off</span>
+          <button class="clipboard-close" id="clipboard-close" type="button"
+                  aria-label="Close clipboard history">Close</button>
+        </div>
+        <p class="clipboard-line" id="clipboard-line"></p>
+        <div class="clipboard-actions" role="group"
+             aria-label="Clipboard history controls">
+          <button class="text-button" type="button" id="clipboard-enable">Turn on</button>
+          <button class="text-button" type="button" id="clipboard-disable" hidden>Turn off</button>
+          <button class="text-button" type="button" id="clipboard-forget" hidden>Forget everything</button>
+          <button class="text-button" type="button" id="clipboard-lock" hidden>Forget and turn off</button>
+        </div>
+        <ol class="clipboard-list" id="clipboard-list"></ol>
+        <div class="clipboard-result" id="clipboard-result" hidden>
+          <div class="clipboard-result-head">
+            <span class="clipboard-result-kind" id="clipboard-result-kind"></span>
+            <button class="text-button" type="button" id="clipboard-result-copy"
+                    hidden>Copy the result</button>
+            <button class="text-button" type="button" id="clipboard-result-close">Close</button>
+          </div>
+          <p class="clipboard-result-line" id="clipboard-result-line" role="status"></p>
+          <pre class="clipboard-result-text" id="clipboard-result-text"></pre>
+        </div>
+        <p class="clipboard-privacy" id="clipboard-privacy"></p>
+        <p class="clipboard-keys" id="clipboard-keys"></p>
+      </section>
+
       <!-- ── Attachment strip (screen capture / clipboard ingest) ───────── -->
       <!-- Everything below the input row scrolls together, so the stack can
            never grow past the window's 720px clamp and hide the Approve and

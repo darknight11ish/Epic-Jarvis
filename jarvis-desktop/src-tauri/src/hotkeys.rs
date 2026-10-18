@@ -143,6 +143,16 @@ pub const ACTIONS: &[Action] = &[
         default: "",
         hint: "Off until you pick a key - Alt+Shift+L is free for it. Starting is held while the connection is catching up or App lock would ask; ending never is.",
     },
+    // Clipboard history (Pillar 14B, clipboard_time_machine.rs): the C of the
+    // Alt+Shift family, and free - nothing else here uses it. The key only
+    // OPENS the drawer; the history itself is a separate switch inside it,
+    // off until the owner turns it on, and nothing is captured before that.
+    Action {
+        id: "clipboard_time_machine",
+        label: "Clipboard history",
+        default: "Alt+Shift+C",
+        hint: "Open the clipboard history drawer at the Jarvis bar. History is off until you turn it on there - nothing is kept before that, and it is all forgotten on the next lock.",
+    },
 ];
 
 /// The key the Live hotkey's hint suggests. Checked below to be free of every
@@ -745,6 +755,31 @@ mod tests {
         let ours = parse(spec.default).expect("parses");
         // Actions that ship with no key (Live's hotkey is off until the owner
         // picks one) cannot clash, and an empty string is not a key.
+        for other in ACTIONS
+            .iter()
+            .filter(|a| a.id != spec.id && !a.default.is_empty())
+        {
+            assert_ne!(
+                ours,
+                parse(other.default).unwrap(),
+                "clashes with {}",
+                other.id
+            );
+        }
+    }
+
+    /// Pillar 14B (2026-10-17): the clipboard history drawer's key. It opens
+    /// the drawer only - capture is its own switch, off until the owner turns
+    /// it on - so a shipped binding here captures nothing by itself.
+    #[test]
+    fn clipboard_history_ships_on_its_own_key() {
+        let spec = action("clipboard_time_machine").expect("the clipboard history hotkey exists");
+        assert_eq!(spec.default, "Alt+Shift+C");
+        assert!(
+            spec.hint.contains("off until you turn it on"),
+            "the hint must say the history is off by default"
+        );
+        let ours = parse(spec.default).expect("parses");
         for other in ACTIONS
             .iter()
             .filter(|a| a.id != spec.id && !a.default.is_empty())

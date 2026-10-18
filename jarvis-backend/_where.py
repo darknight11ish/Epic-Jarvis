@@ -1013,10 +1013,52 @@ SHIPPED = (
     # EXISTING undo_action card (a person's yes and nothing less), refuses a
     # link or a path outside the allowed folders, and leaves a NEW receipt so
     # Undo puts the restore back. The store prunes its oldest unpinned blobs to
-    # 250 MB and never removes a pinned one. No route, no chat tool and no
-    # caller yet: this is the module and its suite, and wiring it in is a
-    # later, separately-approved slice. Nothing it does leaves this PC.
+    # 250 MB and never removes a pinned one. It IS wired on the consumer side:
+    # `jarvis_notes.py` imports it for the vault's pre-write copy (the vault
+    # append calls it first and writes nothing if the copy fails), and
+    # `jarvis_projects.py` imports it before Project Mode's pointer file is
+    # replaced (best-effort, so a broken store never blocks Project Mode).
+    # No route and no chat tool expose it yet - that is still the owner's
+    # decision - and nothing it does leaves this PC.
     "jarvis_file_guardian.py",
+    # A red-team / pre-mortem decision simulator, on this PC only (2026-10-17,
+    # Pillar 21): takes one-sentence decision and returns a 1-3-1 decision
+    # brief checked by jarvis_card_words, counter-arguments, failure modes with
+    # a closed-world likelihood/impact (and a deterministic score), and one
+    # plain-English recommendation sentence. Deterministic mode needs no model
+    # at all; one_pass asks the LOCAL model exactly once and refuses a reply
+    # that breaks any rule rather than showing it. Grounds financial options in
+    # whole cents read-only from jarvis_spending.audit_subscriptions and
+    # jarvis_retirement.run, counts open goals read-only from jarvis_goals, and
+    # latches jarvis_gate.latch_taint(why="decision_lab") whenever it reads any
+    # of them. Writes nothing, opens no route, reads no clock, and is
+    # loopback-only: no cloud lane exists in the file. Deliberately unwired -
+    # no route, no chat tool, no approval card, no UI in either app.
+    "jarvis_decision_lab.py",
+    # --- Pillar 14 slice 14A, 2026-10-17: the opt-in, RAM-only clipboard
+    # time machine ---
+    # One in-memory deque of recent copied texts, OFF until the owner turns
+    # it on, wiped on lock, refusing password managers, one-time codes,
+    # private keys and card numbers, with three pure transforms (CSV/TSV
+    # to a pipe table, pretty JSON, tracking parameters stripped from
+    # links). No file, no database, no route and no caller yet: this is
+    # the module and its 141-check suite, and the desktop wiring (Pillar
+    # 14B) is a later slice after the commands.rs hand-off. Nothing it
+    # does leaves this PC.
+    "jarvis_clipboard.py",
+    # Pillar 16 (2026-10-17): the pre-meeting person dossier - ONE person's
+    # facts split current/retired, the kept chat turns that mention them, the
+    # newest mail headers/snippets, the open to-dos that name them and the
+    # next calendar event whose own words name them, read only through the
+    # modules that already own those records (jarvis_memory.py is base-only
+    # and is NEVER edited: its public reads are called from here). The whole
+    # dossier is withheld before any read when "Hide memory lists and chat
+    # history" or App lock is on, and reading facts latches the conversation
+    # private (jarvis_gate.latch_taint). No route, no chat tool and no UI in
+    # this slice: like jarvis_compaction.py it is a library, and the one
+    # surface it adds is one line in the morning briefing (jarvis_briefing.py)
+    # for a person Jarvis already knows who is named in today's calendar.
+    "jarvis_people_crm.py",
 )
 
 

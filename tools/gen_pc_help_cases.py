@@ -14,6 +14,12 @@ against these.
 WHAT THE INPUTS ARE. Program names, sizes and temperatures are all MADE UP
 to look like real ones. None was read on the owner's PC. The clock is fixed
 and the time zone is UTC, so the file is the same on every machine.
+
+SINCE 2026-10-17 (Pillar 28) each answer also carries a `silent` key saying
+which silent-failure checks ran and which failed. Every case here is HEALTHY
+for those checks on purpose: both apps' contract tests assert exactly the
+five section ids for every case, so a failing case would need an app-test
+change, and the failing words are proven in backend/test_pc_help.py instead.
 """
 import json
 import os
@@ -55,10 +61,14 @@ def _const(v):
 
 
 def readers(*, programs=None, memory=None, disks=None, uptime=None, cards=None,
-            models=None, apps=None) -> PCH.Readers:
+            models=None, apps=None, mic=None, databases=None, devices=None,
+            ollama=None) -> PCH.Readers:
+    silent = {"mic": mic, "databases": databases, "devices": devices,
+              "ollama": ollama}
     return PCH.Readers(programs=_const(programs), memory=_const(memory), disks=_const(disks),
                        uptime=_const(uptime), cards=_const(cards), models=_const(models),
                        apps=_const(apps) if apps is not None else None,
+                       **{k: _const(v) for k, v in silent.items() if v is not None},
                        now=_const(NOW), own_pid=OWN_PID)
 
 
@@ -128,6 +138,28 @@ DISKS = [{"drive": "C:", "total_bytes": 500 * GB, "free_bytes": 32 * GB},
          {"drive": "D:", "total_bytes": 2000 * GB, "free_bytes": 810 * GB}]
 MODEL = [{"name": "qwen3:8b", "vram_bytes": 5.4 * GB}]
 
+#: Pillar 28's four silent-failure readings, all HEALTHY: every case in this
+#: shared fixture must keep the five answers, because both apps' contract
+#: tests assert exactly those five section ids for every case. The FAILING
+#: readings (three 0.0-RMS voice attempts, a 65 MiB WAL, a stale phone, a
+#: wedged Ollama) and their warning sections are proven in
+#: backend/test_pc_help.py with invented readings; the shape is the same, so
+#: both apps draw it generically.
+SILENT_HEALTHY = {
+    "mic": {"attempts": 3, "zeros_in_a_row": 0, "digital_zero": False,
+            "device": "this PC's microphone", "last_peak_rms": 0.0625,
+            "last_at": int(NOW) - 60},
+    "databases": [{"name": "memory.db", "path": "/home/jarvis/memory.db-wal",
+                   "wal_bytes": 1 * MB},
+                  {"name": "chat_log.db", "path": "/home/jarvis/chat_log.db-wal",
+                   "wal_bytes": 32 * 1024}],
+    "devices": {"readable": True, "why": "",
+                "devices": [{"id": "d1", "name": "OnePlus 10T", "kind": "phone",
+                             "created": int(NOW) - 30 * 86400,
+                             "last_seen": int(NOW) - 2 * 3600, "reach": True}]},
+    "ollama": {"state": "ok"},
+}
+
 CASES = {
     "busy": readers(programs=BUSY_PROGRAMS,
                     memory={"total_bytes": 16 * GB, "available_bytes": 3 * GB},
@@ -135,6 +167,14 @@ CASES = {
     "calm": readers(programs=CALM_PROGRAMS,
                     memory={"total_bytes": 32 * GB, "available_bytes": 24 * GB},
                     disks=DISKS[1:], uptime=2 * 3600, cards=[IDLE_CARD], models=[]),
+    "silent_healthy": readers(programs=CALM_PROGRAMS,
+                              memory={"total_bytes": 32 * GB,
+                                      "available_bytes": 24 * GB},
+                              disks=DISKS[1:], uptime=3600, cards=[CARD], models=[],
+                              **SILENT_HEALTHY),
+    "calm": readers(programs=CALM_PROGRAMS,
+                    memory={"total_bytes": 32 * GB, "available_bytes": 24 * GB},
+                    disks=DISKS[1:], uptime=2 * 3600, cards=[CARD], models=[]),
     "hot": readers(programs=BUSY_PROGRAMS,
                    memory={"total_bytes": 16 * GB, "available_bytes": 1 * GB},
                    disks=DISKS, uptime=26 * 3600, cards=[HOT_CARD], models=MODEL),

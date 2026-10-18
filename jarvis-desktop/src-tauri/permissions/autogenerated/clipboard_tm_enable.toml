@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-clipboard-tm-enable"
+description = "Enables the clipboard_tm_enable command without any pre-configured scope."
+commands.allow = ["clipboard_tm_enable"]
+
+[[permission]]
+identifier = "deny-clipboard-tm-enable"
+description = "Denies the clipboard_tm_enable command without any pre-configured scope."
+commands.deny = ["clipboard_tm_enable"]

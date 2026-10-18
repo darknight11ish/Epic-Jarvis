@@ -438,6 +438,13 @@ pub fn both_updated(steps: &[Step]) -> bool {
 /// **The order, in one place: backend first, the executable second, and the
 /// executable not at all if the backend step did not finish.**
 ///
+/// The owner also chooses the BACKEND's pace when the card asks: the three
+/// paces (`max_speed`, `responsive`, `safe`) and their worker counts and ETA
+/// ranges come from `tools/update_backend.py --modes-json`, read BEFORE
+/// anything is started. An unknown pace is refused here in plain words, so a
+/// page cannot send a pace this build does not have and get a different update
+/// than it asked for.
+///
 /// **Not held on a stale link, deliberately, and that is the same decision
 /// `backup_now` and `check_tool_updates` already made.** Being held belongs to
 /// a command that raises or answers an approval card, so that the card is
@@ -476,12 +483,56 @@ pub fn both_updated(steps: &[Step]) -> bool {
 /// button, nothing spawns it, and there is no setting anywhere that turns it
 /// into a background job.
 #[tauri::command]
-pub async fn update_both(app: AppHandle) -> Result<BothOutcome, String> {
+pub async fn update_both(app: AppHandle, mode: String) -> Result<BothOutcome, String> {
+    // ---- 0. the pace, read from the tool before anything runs -------------
+    let here = crate::backend_update::locate(&app);
+    if let Some(why) = here.blocked.clone() {
+        // The same plain refusal the card already shows under the button;
+        // nothing has been started, and nothing has been changed.
+        return Err(why);
+    }
+    let (modes, modes_note) = match (here.repo.as_deref(), here.backend.as_deref()) {
+        (Some(repo), Some(backend)) => crate::backend_update::mode_plan_for(repo, backend),
+        _ => (Vec::new(), None),
+    };
+    // A program folder older than this feature has no tool to ask, so there is
+    // no pace table. It can still update - the fallback path runs the patcher
+    // exactly as every update did before - but only at the default pace: a
+    // pace this build cannot check is never silently accepted.
+    let (mode_label, workers) = if modes.is_empty() {
+        if mode != "responsive" {
+            return Err(modes_note.unwrap_or_else(|| {
+                format!(
+                    "There is no update pace called \"{mode}\" on this PC. The only pace \
+                     available here is responsive (the older one-at-a-time update). \
+                     Nothing was changed."
+                )
+            }));
+        }
+        ("Balanced (older one-at-a-time update)".to_string(), 1)
+    } else {
+        if !crate::backend_update::known_mode(&modes, &mode) {
+            return Err(crate::backend_update::unknown_mode_words(&modes, &mode));
+        }
+        modes
+            .iter()
+            .find(|row| row.id == mode)
+            .map(|row| (row.label.clone(), row.workers))
+            .unwrap_or_else(|| (mode.clone(), 1))
+    };
     let mut steps: Vec<Step> = Vec::new();
 
     // ---- 1. the backend ------------------------------------------------
-    let _ = app.emit(crate::events::UPDATE_STEP, step_starting(STEP_BACKEND));
-    let backend = crate::backend_update::run(&app).await;
+    let opening = format!(
+        "Patching the backend folder at the {mode_label} pace ({workers} check(s) at a \
+         time). This can take several minutes - it applies every patch and then runs the \
+         test suites."
+    );
+    let _ = app.emit(
+        crate::events::UPDATE_STEP,
+        step_starting(STEP_BACKEND, Some(&opening)),
+    );
+    let backend = crate::backend_update::run(&app, &mode, &mode_label).await;
     // `proven` is its own answer rather than a flavour of done: a backend that
     // patched but skipped its own checks is patched, and is not a pass.
     let backend_step = if !backend.ok {
@@ -514,7 +565,10 @@ pub async fn update_both(app: AppHandle) -> Result<BothOutcome, String> {
     }
 
     // ---- 2. the executable ---------------------------------------------
-    let _ = app.emit(crate::events::UPDATE_STEP, step_starting(STEP_DESKTOP));
+    let _ = app.emit(
+        crate::events::UPDATE_STEP,
+        step_starting(STEP_DESKTOP, None),
+    );
     let desktop_step = match install_now(&app).await {
         Ok(version) => Step::ok(
             STEP_DESKTOP,
@@ -544,14 +598,17 @@ pub async fn update_both(app: AppHandle) -> Result<BothOutcome, String> {
 
 /// The placeholder a step emits when it starts, so the card can say which half
 /// is running rather than sitting silent for the minutes a patch run takes.
-fn step_starting(step: &str) -> Step {
+/// The backend half carries the chosen pace's own words (`opening`).
+fn step_starting(step: &str, opening: Option<&str>) -> Step {
     Step {
         step: step.to_string(),
         state: "running".to_string(),
         detail: if step == STEP_BACKEND {
-            "Patching the backend folder. This can take several minutes - it applies every \
-             patch and then runs the test suites."
-                .to_string()
+            opening.map(str::to_string).unwrap_or_else(|| {
+                "Patching the backend folder. This can take several minutes - it \
+                     applies every patch and then runs the test suites."
+                    .to_string()
+            })
         } else {
             "Downloading and verifying Jarvis Desktop.".to_string()
         },
@@ -688,8 +745,8 @@ mod tests {
 
     #[test]
     fn a_running_half_says_which_half_and_never_reads_as_finished() {
-        let backend = step_starting(STEP_BACKEND);
-        let desktop = step_starting(STEP_DESKTOP);
+        let backend = step_starting(STEP_BACKEND, None);
+        let desktop = step_starting(STEP_DESKTOP, None);
         assert_eq!(backend.state, "running");
         assert_eq!(desktop.state, "running");
         assert!(backend.detail.contains("Patching the backend"));
@@ -697,5 +754,54 @@ mod tests {
         // Neither can be mistaken for an ending: if a window is closed and
         // reopened mid-run the card must not paint either as done.
         assert_ne!(backend.state, "ok");
+    }
+
+    /// The pace words the card shows come from the tool's own answer, read
+    /// before anything runs; an unknown one is refused in plain words naming
+    /// the three that exist, never silently defaulted.
+    #[test]
+    fn an_unknown_pace_is_refused_with_the_three_that_exist() {
+        let modes = vec![
+            crate::backend_update::ModeInfo {
+                id: "max_speed".to_string(),
+                label: "Fastest".to_string(),
+                ..Default::default()
+            },
+            crate::backend_update::ModeInfo {
+                id: "responsive".to_string(),
+                label: "Balanced".to_string(),
+                recommended: true,
+                ..Default::default()
+            },
+            crate::backend_update::ModeInfo {
+                id: "safe".to_string(),
+                label: "Safest".to_string(),
+                ..Default::default()
+            },
+        ];
+        assert!(crate::backend_update::known_mode(&modes, "responsive"));
+        assert!(!crate::backend_update::known_mode(&modes, "turbo"));
+        // An empty table is "not known", not "everything is allowed".
+        assert!(!crate::backend_update::known_mode(&[], "responsive"));
+        let said = crate::backend_update::unknown_mode_words(&modes, "turbo");
+        for expected in [
+            "turbo",
+            "max_speed",
+            "responsive",
+            "safe",
+            "Nothing was changed",
+        ] {
+            assert!(said.contains(expected), "{expected} missing from {said}");
+        }
+    }
+
+    /// The pace's own words reach the running step, so the card says which pace
+    /// is running rather than the same sentence for all three.
+    #[test]
+    fn a_running_backend_step_names_the_chosen_pace() {
+        let words = "Patching the backend folder at the Balanced pace (14 check(s) at a time).";
+        let step = step_starting(STEP_BACKEND, Some(words));
+        assert_eq!(step.detail, words);
+        assert_eq!(step.state, "running");
     }
 }

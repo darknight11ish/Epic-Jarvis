@@ -173,11 +173,12 @@ def _unreachable(*a, **k):
 
 def deps(w=None, *, cal_tier="auto", mail_tier="auto", tools=("calendar_read", "email_check"),
          cal=None, count=None, pending=0, gate=None, deadline=5.0, senders=None,
-         senders_on=None):
+         senders_on=None, people=None):
     """`senders`: jarvis_email.senders's injected fetch, (p, newest) -> (count,
     [raw From headers]). `senders_on`: the setting; by default on exactly
     when `senders` is given, so the tests written for the count stay about
-    the count."""
+    the count. `people`: Pillar 16's People line, (events, now) -> section or
+    None; by default OFF, so a briefing test never opens the memory store."""
     seen = [] if w is None else w.reads
 
     def g(action, detail, prompt):
@@ -194,6 +195,11 @@ def deps(w=None, *, cal_tier="auto", mail_tier="auto", tools=("calendar_read", "
     return _DEPS(tier_of=lambda a: tiers.get(a, "ask"), gate=g,
                  tools_enabled=lambda: set(tools), pending_count=lambda: pending,
                  calendar_fetch=cal, email_search=count, email_senders=senders,
+                 # The People line is Pillar 16's own suite
+                 # (test_people_crm.py); a briefing test must never open the
+                 # memory store, so it is off here unless a test injects one.
+                 people_section=(people if people is not None
+                                 else (lambda events, now: None)),
                  senders_on=(senders_on if senders_on is not None
                              else (lambda: senders is not None)),
                  publish=(lambda k, d: w.events.append((k, d))) if w is not None
@@ -692,6 +698,104 @@ def t_what_decides_whether_the_calendar_is_read():
     sec = next(s for s in b["sections"] if s["key"] == "calendar")
     check("a failed read says so without quoting the server", sec["state"] == "failed"
           and "secret-path" not in json.dumps(b))
+
+
+def t_the_people_line_comes_after_the_calendar_and_only_today():
+    """Pillar 16 (2026-10-17): today's events that name someone Jarvis already
+    knows get ONE compact line, right after the calendar section it came from.
+    The line itself is jarvis_people_crm's (test_people_crm.py proves it); here
+    the briefing proves the wiring: today's events are handed over, the section
+    lands in the right place, and a line that is off or broken changes nothing
+    else about the briefing."""
+    now = local(2026, 9, 25, 7, 0)
+    xml = calendar_xml(("Lunch with Sam", "", "20260925T123000Z"),
+                       ("Dentist", "", "20260925T083000Z"))
+    seen = {}
+
+    def people(events, t):
+        seen["events"] = [e.get("summary") for e in events]
+        seen["now"] = t
+        return {"key": "people", "title": "People", "state": "ok",
+                "summary": "1 person in today's calendar.",
+                "items": ["Sam - 12:30: Lunch with Sam (3 saved facts)"]}
+    w = World(now, name="people")
+    b = B.build(sched=w.s, now=now,
+                deps=deps(w, cal=lambda q: xml, tools=("calendar_read",), people=people))
+    keys = [s["key"] for s in b["sections"]]
+    check("the People line sits right after the calendar section it came from",
+          "people" in keys and keys.index("people") == keys.index("calendar") + 1, keys)
+    check("the People line is given today's events and the briefing's clock",
+          sorted(seen.get("events") or []) == ["Dentist", "Lunch with Sam"]
+          and seen.get("now") == now, seen)
+    check("the People line is in the briefing's own words",
+          "People: 1 person in today's calendar." in b["text"]
+          and "Sam - 12:30: Lunch with Sam" in b["text"], b["text"])
+    b2 = B.build(sched=w.s, now=now,
+                 deps=deps(w, cal=lambda q: xml, tools=("calendar_read",),
+                           people=lambda events, t: None))
+    check("no People line when nothing names a known person",
+          all(s["key"] != "people" for s in b2["sections"])
+          and "People" not in b2["text"], [s["key"] for s in b2["sections"]])
+
+    def broken(events, t):
+        raise RuntimeError("the dossier could not be built")
+    b3 = B.build(sched=w.s, now=now,
+                 deps=deps(w, cal=lambda q: xml, tools=("calendar_read",), people=broken))
+    check("a People line that breaks leaves the rest of the briefing alone",
+          all(s["key"] != "people" for s in b3["sections"])
+          and next(s for s in b3["sections"] if s["key"] == "calendar")["items"],
+          [s["key"] for s in b3["sections"]])
+
+
+def t_the_people_line_uses_jarvis_people_crm_by_default():
+    """The default (no injected line) imports jarvis_people_crm and hands it
+    today's events. A stand-in module is put in sys.modules so no memory store
+    is opened on the morning-briefing path - the real builder is proven in
+    test_people_crm.py."""
+    import types
+    saved = sys.modules.get("jarvis_people_crm")
+    calls = []
+
+    def briefing_people(events, now=None, deps=None):
+        calls.append(([e.get("summary") for e in events], now))
+        return {"key": "people", "title": "People", "state": "ok",
+                "summary": "1 person in today's calendar.", "items": ["x"]}
+    fake = types.ModuleType("jarvis_people_crm")
+    fake.briefing_people = briefing_people
+    sys.modules["jarvis_people_crm"] = fake
+    try:
+        now = local(2026, 9, 25, 7, 0)
+        xml = calendar_xml(("Lunch with Sam", "", "20260925T123000Z"))
+        w = World(now, name="people-default")
+        d = deps(w, cal=lambda q: xml, tools=("calendar_read",))
+        d.people_section = None
+        b = B.build(sched=w.s, now=now, deps=d)
+        check("with no injected line the briefing calls jarvis_people_crm",
+              calls and calls[0][0] == ["Lunch with Sam"] and calls[0][1] == now, calls)
+        check("... and its section is in the briefing",
+              any(s["key"] == "people" for s in b["sections"]), [s["key"] for s in b["sections"]])
+    finally:
+        if saved is None:
+            sys.modules.pop("jarvis_people_crm", None)
+        else:
+            sys.modules["jarvis_people_crm"] = saved
+
+
+def t_the_people_line_adds_no_read_of_its_own():
+    """The line is worked out from the calendar read that already happened:
+    no second connection, no approval card, nothing in `read`."""
+    now = local(2026, 9, 25, 7, 0)
+    xml = calendar_xml(("Lunch with Sam", "", "20260925T123000Z"))
+    w = World(now, name="people-reads")
+    b = B.build(sched=w.s, now=now,
+                deps=deps(w, cal=lambda q: xml, tools=("calendar_read",),
+                          people=lambda events, t: {"key": "people", "title": "People",
+                                                    "state": "ok", "summary": "1 person.",
+                                                    "items": ["Sam"]}))
+    check("the People line makes no second outside read and raises no card",
+          w.reads == ["calendar_read"] and len(w.cards) == 0, (w.reads, w.cards))
+    check("the briefing claims only the reads its sections used",
+          b["read"] == ["calendar_read"], b["read"])
 
 
 def t_email_is_a_count_and_nothing_else():

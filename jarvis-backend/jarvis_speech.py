@@ -310,6 +310,77 @@ def _write_wav(samples, sample_rate: int) -> bytes:
 
 
 # --------------------------------------------------------------------------
+#   The last few voice attempts' PEAK RMS - PC help's silent-failure doctor
+# --------------------------------------------------------------------------
+#
+# (Pillar 28, 2026-10-17.) A microphone can go digitally deaf - most often
+# right after the PC wakes from sleep - and then every sample comes back
+# exactly 0. Jarvis cannot tell that from a quiet room: VAD says "no speech"
+# either way, so the failure is silent. This keeps each attempt's PEAK RMS (the
+# root-mean-square level of the whole clip), the microphone it came from and
+# when, for the last MIC_ATTEMPTS_KEPT attempts - IN MEMORY ONLY: no audio, no
+# words and no clip is written, logged or kept, and it is gone when the
+# backend stops. PC help reads voice_attempts_status() and reports it only
+# when three attempts in a row had an RMS of exactly 0.0.
+
+MIC_ATTEMPTS_KEPT = 3
+_mic_lock = threading.Lock()
+_mic_attempts: list = []        # [{"at": epoch, "peak_rms": 0.0..1.0, "device": str}]
+
+
+def _mic_device_words(mic: str) -> str:
+    """The input device's name, from the one thing the backend is told."""
+    mic = str(mic or "").strip().lower()
+    if mic == "desktop":
+        return "this PC's microphone"
+    if mic == "phone":
+        return "your phone's microphone"
+    return "the microphone"
+
+
+def _note_voice_attempt(samples, mic: str = "") -> None:
+    """Remember one received clip's peak RMS and its input device. Never its
+    audio."""
+    try:
+        peak_rms = float(np.sqrt(np.mean(np.square(samples)))) if len(samples) else 0.0
+    except Exception:
+        return
+    with _mic_lock:
+        _mic_attempts.append({"at": int(time.time()), "peak_rms": peak_rms,
+                              "device": _mic_device_words(mic)})
+        del _mic_attempts[:-MIC_ATTEMPTS_KEPT]
+
+
+def voice_attempts_status() -> dict:
+    """What PC help may read: {"attempts", "zeros_in_a_row", "digital_zero",
+    "device", "last_peak_rms", "last_at"}. "digital_zero" is True only when
+    the last MIC_ATTEMPTS_KEPT voice attempts all had peak_rms exactly 0.0 - a
+    microphone that has gone deaf, not a quiet room: one real level anywhere
+    in them makes it False. "attempts" below MIC_ATTEMPTS_KEPT means Jarvis
+    has not been sent enough clips yet to tell, and the doctor says nothing
+    rather than guessing."""
+    with _mic_lock:
+        rows = [dict(r) for r in _mic_attempts]
+    zeros = 0
+    for row in reversed(rows):
+        if row["peak_rms"] == 0.0:
+            zeros += 1
+        else:
+            break
+    return {"attempts": len(rows), "zeros_in_a_row": zeros,
+            "digital_zero": zeros >= MIC_ATTEMPTS_KEPT,
+            "device": rows[-1]["device"] if rows else None,
+            "last_peak_rms": rows[-1]["peak_rms"] if rows else None,
+            "last_at": rows[-1]["at"] if rows else None}
+
+
+def _reset_mic_levels() -> None:
+    """Tests only: forget the remembered attempts."""
+    with _mic_lock:
+        del _mic_attempts[:]
+
+
+# --------------------------------------------------------------------------
 #   Speech-to-text: sherpa-onnx. Lazy, cached, never crashes the caller on a
 #   missing or corrupt model.
 # --------------------------------------------------------------------------
@@ -2259,6 +2330,10 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
         return Heard(False, source=source, available=False,
                       reason="could not read that as a 16-bit PCM WAV clip")
     samples, sample_rate = parsed
+    # Pillar 28: remember this attempt's peak RMS and input device, never its
+    # audio, so PC help can spot a microphone gone digitally deaf (three
+    # 0.0-RMS attempts in a row; after sleep is the usual cause).
+    _note_voice_attempt(samples, mic)
     seconds = round(len(samples) / float(sample_rate or 16000), 2)
     wake = source == SOURCE_WAKE_WORD
 

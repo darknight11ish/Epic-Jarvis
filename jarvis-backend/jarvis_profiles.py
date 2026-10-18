@@ -31,6 +31,16 @@ owner's decision 1 (2026-09-24); llama.cpp's own default is 1 GB.
 Every constant is in CONSTANTS below with the place it came from, so the
 Details view can show it and nothing is a bare number.
 
+THE KV FORMULA IS NOT WRITTEN HERE ANY MORE. `Model.kv_bytes` calls
+`jarvis_hf_inspect.kv_bytes_per_token`, so there is one copy of the arithmetic
+in this repository rather than two that can drift. That function counts only
+the layers that keep a growing KV cache, which is what makes a HYBRID model
+(Qwen3.5's Gated DeltaNet recurrent layers, for one) affordable: a model with
+`full_attention_interval: 4` over 32 blocks caches 8 layers, not 32. A plain
+transformer has `full_attention_layers = None` here, and the shared formula
+then returns exactly the number this module's own arithmetic returned before
+the call - every model in the design table below is a plain transformer.
+
 Standard library only.
 """
 from __future__ import annotations
@@ -38,6 +48,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field, replace
 from typing import Optional
+
+import jarvis_hf_inspect as _hf
 
 GIB = 1024 ** 3
 
@@ -58,6 +70,14 @@ SHARE_NO_MONITOR_GIB = 0.60
 PICTURE_GIB = 0.25
 Q4_BITS = 4.90
 KV_BYTES = {"q8_0": 1.0625, "f16": 2.0}
+#: N_placeholder - the working space of a model the design table does NOT list
+#: (the table's own figures are 0.25 for a 4B, 0.30 for an 8B and 0.35 for a
+#: 14B at num_batch 512; an unlisted model is priced at the middle one). How
+#: to measure it on this PC: load that model at num_batch 512 and compare
+#: /api/ps's `size` for it with its weights plus the KV formula - the
+#: difference is the working space, and this figure can then be replaced with
+#: the measured one.
+COMPUTE_GIB_PLACEHOLDER = 0.30
 OLLAMA_GATE = 0.80
 #: The context sizes a preset picks from (tokens). The design's tables use
 #: exactly these; the Qwen 3 models were trained to 32,768.
@@ -90,6 +110,10 @@ CONSTANTS = {
     "share_no_monitor": (SHARE_NO_MONITOR_GIB, "the share of a card with no monitor: a "
                                                "placeholder until measured (section 4.1)"),
     "picture": (PICTURE_GIB, "reading one picture: a placeholder (section 4.2)"),
+    "compute_placeholder": (COMPUTE_GIB_PLACEHOLDER, "N_placeholder: the working space of "
+                             "a model the design table does not list; measured by loading "
+                             "it at num_batch 512 and comparing /api/ps size with weights "
+                             "plus the KV formula"),
     "q4_bits": (Q4_BITS, "bits per weight for Q4_K_M (docs/MODEL-TOPOLOGY.md)"),
     "q8_0_bytes": (KV_BYTES["q8_0"], "bytes per value in the compact q8_0 conversation "
                                      "format (section 2.8)"),
@@ -120,6 +144,12 @@ class Model:
     compute_gib: float      # working space at num_batch 512 (placeholder)
     max_ctx: int
     source: str
+    #: How many layers keep a growing KV cache. None means a plain
+    #: transformer - every layer, which is every model in the design table
+    #: below and the number the dense formula always used. A HYBRID model sets
+    #: it, and the shared formula then counts only those layers (a recurrent
+    #: layer keeps no KV cache at all).
+    full_attention_layers: Optional[int] = None
 
     @property
     def pictures(self) -> bool:
@@ -145,8 +175,22 @@ class Model:
         return (self.params * Q4_BITS / 8 + self.reader_params * 2) / 1e9
 
     def kv_bytes(self, kv: str = "q8_0") -> float:
-        """Cache per token: 2 (K and V) x layers x KV heads x head size x bytes."""
-        return 2 * self.layers * self.kv_heads * self.head_dim * KV_BYTES[kv]
+        """Cache per token: 2 (K and V) x FULL-ATTENTION layers x KV heads x
+        head size x bytes.
+
+        The arithmetic itself lives in `jarvis_hf_inspect.kv_bytes_per_token`,
+        which is what makes this number right for a hybrid model: it counts
+        only the layers that keep a growing KV cache. A plain transformer has
+        `full_attention_layers = None`, so the same call counts every layer and
+        returns the figure the design's tables were written with.
+        """
+        config = {"num_hidden_layers": self.layers,
+                  "num_attention_heads": self.heads,
+                  "num_key_value_heads": self.kv_heads,
+                  "head_dim": self.head_dim}
+        if self.full_attention_layers is not None:
+            config["recurrent_layers"] = max(0, self.layers - self.full_attention_layers)
+        return float(_hf.kv_bytes_per_token(config, KV_BYTES[kv]))
 
     def cache_gib(self, ctx: int, kv: str = "q8_0") -> float:
         return ctx * self.kv_bytes(kv) / GIB

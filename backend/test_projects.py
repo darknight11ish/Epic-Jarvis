@@ -98,6 +98,9 @@ _TMP = Path(tempfile.mkdtemp(prefix="jarvis-projects-"))
 #: run can never write into the owner's real one (the same shape as
 #: test_receipts.py's own SCRATCH).
 os.environ["JARVIS_RECEIPTS_DB"] = str(_TMP / "receipts.db")
+#: Project Mode now snapshots its pointer file through the guardian first, so
+#: this suite's copy of the time-machine store lives in its temp folder too.
+os.environ["OPENJARVIS_HOME"] = str(_TMP / "guardian-home")
 _AUDIT = []
 fw = types.ModuleType("jarvis_framework")
 fw.CONFIG_DIR = _TMP
@@ -2300,6 +2303,18 @@ def t_the_writer_that_was_missing_is_in_the_conversation_insert():
           "_active_project_id()))" in flat)
     check("... and an older chat joins the project once, never overwritten",
           "project IS NULL" in flat and "_fill_project(c, cid)" in flat)
+
+
+def t_the_guardian_store_is_this_suites_own():
+    """Project Mode's pre-write hook must not touch the owner's real store."""
+    import jarvis_file_guardian as GF
+    home = os.path.realpath(str(GF.home_dir()))
+    check("the guardian store Project Mode copies the pointer into is under this "
+          "suite's temp folder", home.startswith(os.path.realpath(str(_TMP))),
+          (home, str(_TMP)))
+    receipts = os.path.realpath(str(os.environ.get("JARVIS_RECEIPTS_DB", "")))
+    check("... and the receipts DB it links is under the same temp folder",
+          receipts.startswith(os.path.realpath(str(_TMP))), receipts)
 
 
 def main():

@@ -284,6 +284,54 @@ def t_a_blob_is_not_evidence_and_the_blob_rule_bites():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def t_a_definition_outranks_a_mention_of_it():
+    """A line that DEFINES a symbol the question names comes before lines that
+    merely mention it - and the mentions are still evidence.
+
+    Measured on the real repository (Pillar 16, 2026-10-17): two new comments
+    naming `jarvis_gate.latch_taint` in a SHIPPED registration note scored the
+    same as `def latch_taint(...)` and won the tie on path order, so "where is
+    the taint latch written" no longer surfaced the definition at all. The fix
+    is the DEFINITION_BONUS in `retrieve()`, not a bigger evidence budget.
+
+    The fixture is deterministic on purpose: the definition's file label sorts
+    AFTER every mention's file, so path order alone cannot put it first - only
+    the definition bonus can. BITE included: with the bonus set to zero the
+    definition falls back and the paths decide again."""
+    root = Path(tempfile.mkdtemp(prefix="jarvis-self-improve-definition-"))
+    try:
+        mentions = "".join(f"# the sprocket guard is mentioned on line {n}\n"
+                           for n in range(1, 13))
+        (root / "aaa_mentions.py").write_text(mentions, encoding="utf-8", newline="\n")
+        (root / "zzz_definition.py").write_text(
+            "def sprocket_guard(who):\n    return who\n", encoding="utf-8", newline="\n")
+        question = "where is the sprocket guard written"
+        found = M.retrieve(question, roots=[root], limit=M.MAX_EVIDENCE)
+        check("the definition of the asked-about symbol is the FIRST evidence",
+              bool(found) and found[0].text.strip().startswith("def sprocket_guard("),
+              [f"{e.where}: {e.text}" for e in found])
+        check("... and the lines that only mention it are still evidence, not dropped",
+              any(e.path == "aaa_mentions.py" for e in found),
+              [e.path for e in found])
+        check("... and the evidence budget is still the design's eight, not widened "
+              "to fit the definition", M.MAX_EVIDENCE == 8 and len(found) == 8,
+              (M.MAX_EVIDENCE, len(found)))
+
+        real_bonus = M.DEFINITION_BONUS
+        M.DEFINITION_BONUS = 0                  # the rule, disabled
+        try:
+            plain = M.retrieve(question, roots=[root], limit=M.MAX_EVIDENCE)
+        finally:
+            M.DEFINITION_BONUS = real_bonus
+        check("BITE: without the definition bonus, path order wins and the "
+              "definition is NOT first",
+              bool(plain) and not plain[0].text.strip().startswith("def sprocket_guard("),
+              [f"{e.where}: {e.text}" for e in plain])
+        check("... and the bonus is back", M.DEFINITION_BONUS == real_bonus)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def t_a_word_inside_a_snake_case_name_counts_the_same():
     """`save_history` must be found by the word AFTER the underscore.
 
@@ -993,6 +1041,7 @@ if __name__ == "__main__":
         t_retrieval_returns_nothing_when_the_answer_is_not_there,
         t_retrieval_is_deterministic_and_drops_the_twin,
         t_a_blob_is_not_evidence_and_the_blob_rule_bites,
+        t_a_definition_outranks_a_mention_of_it,
         t_a_word_inside_a_snake_case_name_counts_the_same,
         t_no_evidence_means_the_model_is_never_asked,
         t_an_answer_cites_a_real_line_and_the_quote_is_re_read,

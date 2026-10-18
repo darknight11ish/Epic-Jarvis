@@ -73,6 +73,13 @@ try:
 except Exception:  # pragma: no cover - shipped beside it on the PC
     fw = None  # type: ignore
 
+#: The "sneaky instruction" table (the same one jarvis_agent.py's tool path and
+#: jarvis_browser_control.py feed). Used where a CAPTION enters - see
+#: `default_quiz`. Imported HERE and never in jarvis_quiz.py: that module may
+#: import only `jarvis_local_http` and `jarvis_wellbeing` (test_quiz.py walks its
+#: syntax tree, and a lazy import counts too). Both modules ship together.
+import jarvis_injection
+
 PATH = "/api/youtube"
 QUIZ_ROUTE = "/api/youtube/quiz"
 
@@ -307,8 +314,36 @@ def default_fetch(video_id: str, languages) -> list:
 
 
 def default_quiz(text: str, count: int, title: str) -> dict:
+    """The caption, handed to the quiz - with the "sneaky instruction" SCAN done first.
+
+    A caption is the one text here that nobody chose and nobody read before it
+    reached a model, so a video carrying "ignore all previous instructions"
+    must not be invisible. `jarvis_injection.summary()` is the one advisory
+    sentence this repository has for that, and `worst()` is the level it found;
+    both are handed to `jarvis_quiz.start_outside` as PLAIN DATA, and the quiz
+    carries them with its own provenance, so both apps can show "this video
+    tried to instruct me" instead of only having the words stripped. ADVISORY,
+    exactly as that table says of itself: it never blocks the quiz, changes a
+    gate tier or removes a card - and no caption word rides along, only the
+    fixed sentence that names the kind of attempt.
+
+    THE MARKER STRIP IS NOT HERE, deliberately: `jarvis_quiz._fence` strips
+    chat-template delimiters for EVERY caller (the stronger design of
+    2026-10-17), so a second strip here would be a second copy of that rule.
+    The scan looks at the raw caption because a delimiter is itself a finding
+    worth showing.
+
+    This lives here rather than in jarvis_quiz because that module may import
+    only `jarvis_local_http` and `jarvis_wellbeing` (its own suite walks the
+    syntax tree, so even a lazy import there fails), and a caption is YouTube's
+    own text, so YouTube is where it enters.
+    """
     import jarvis_quiz
-    return jarvis_quiz.start_outside(text, count, title, "youtube")
+    line = str(jarvis_injection.summary(text) or "")
+    level = str(jarvis_injection.worst(text) or "")
+    return jarvis_quiz.start_outside(text, count, title, "youtube",
+                                     injection=(line or None),
+                                     injection_level=(level or None))
 
 
 def default_open_count() -> int:
@@ -545,7 +580,15 @@ def _decide(r: dict, parsed: dict, count: int, title: str, languages: tuple) -> 
             msg = (f"Ready. The video is long, so the quiz covers only the first part"
                    + (f" (about {minutes} minutes)." if minutes else "."))
         _set(r, "ready", message=msg)
-    _audit("youtube.captions", {"outcome": "ready", "truncated": bool(truncated)})
+    # The caption was scanned by default_quiz; the LEVEL (never a caption word)
+    # joins this outcome in the audit, so the Trust list every other
+    # outside-text reader feeds can see that this video tried to instruct
+    # Jarvis. Advisory: nothing was blocked, no tier changed, no card removed.
+    detail = {"outcome": "ready", "truncated": bool(truncated)}
+    level = quiz.get("injection_level") if isinstance(quiz, dict) else ""
+    if level in jarvis_injection.LEVELS:
+        detail["injection"] = level
+    _audit("youtube.captions", detail)
 
 
 def start(body, *, tainted: bool = False) -> tuple:

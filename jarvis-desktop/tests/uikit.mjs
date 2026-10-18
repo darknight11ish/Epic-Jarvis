@@ -507,6 +507,10 @@ export const HOTKEYS = [
   // Jarvis Live's key ships OFF (the owner's decision of 2026-09-28).
   { id: "toggle_live", label: "Start or end Jarvis Live", hint: "Off until you pick a key - Alt+Shift+L is free for it. Starting is held while the connection is catching up or App lock would ask; ending never is.",
     accelerator: "", default: "", registered: false, error: null },
+  // Clipboard history (Pillar 14B, 2026-10-17): the key only OPENS the
+  // drawer; whether anything is kept is its own switch, off by default.
+  { id: "clipboard_time_machine", label: "Clipboard history", hint: "Open the clipboard history drawer at the Jarvis bar. History is off until you turn it on there - nothing is kept before that, and it is all forgotten on the next lock.",
+    accelerator: "Alt+Shift+C", default: "Alt+Shift+C", registered: true, error: null },
 ];
 
 export const UPDATE_NONE = {
@@ -534,6 +538,22 @@ export const UPDATE_BOTH = {
     backendSource: "the folder this app starts Jarvis from",
     script: "C:\\Users\\pcadmin\\Epic-Jarvis\\scripts\\apply-patches.ps1",
     blocked: null,
+    // The three paces, as tools/update_backend.py --modes-json answers them and
+    // backend_update.rs reads them back. A scenario can replace this table to
+    // drive the card's words and the bar; unset, this is the first-run shape
+    // (measured: false, so every ETA line says "not measured yet").
+    modes: [
+      { id: "max_speed", label: "Fastest", plain: "Nearly the whole PC while it checks.",
+        workers: 22, etaSeconds: 120, etaLowSeconds: 60, etaHighSeconds: 300,
+        measured: false, recommended: false, suiteCount: 356 },
+      { id: "responsive", label: "Balanced", plain: "About half the PC; still quick.",
+        workers: 14, etaSeconds: 121, etaLowSeconds: 61, etaHighSeconds: 301,
+        measured: false, recommended: true, suiteCount: 356 },
+      { id: "safe", label: "Safest", plain: "One check at a time; slowest.",
+        workers: 1, etaSeconds: 480, etaLowSeconds: 240, etaHighSeconds: 1200,
+        measured: false, recommended: false, suiteCount: 356 },
+    ],
+    modesNote: null,
   },
   notTold: {
     repo: null,
@@ -545,6 +565,8 @@ export const UPDATE_BOTH = {
       "cannot update the backend. Type its full path into \"The Jarvis program folder on " +
       "this PC\" above - the folder you cloned from GitHub, the one with a scripts folder " +
       "in it. Nothing was changed.",
+    modes: [],
+    modesNote: "Set the two folders above first; the update paces are worked out from them.",
   },
   bothOk: {
     steps: [
@@ -596,9 +618,26 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   // sees successes.
   window.__invokeFails = invokeFails || {};
   // "Update both halves" (2026-10-13): { where, afterSave, outcome, statusFails,
-  // saveFails, fails }. Unset, the card finds both folders and both halves come
-  // back ok - see UPDATE_BOTH above for the shapes each one takes.
+  // saveFails, fails, modes }. Unset, the card finds both folders and both
+  // halves come back ok - see UPDATE_BOTH above for the shapes each one takes.
+  // `modes` is the three-pace table the card draws before anything runs
+  // (2026-10-18); a scenario can replace it with its own ETA numbers.
   window.__updateBoth = updateBoth || {};
+  // The three-pace table backend_update_status hands back when a scenario does
+  // not replace `where`. This literal is inside the serialised bridge function
+  // (so it cannot read UPDATE_BOTH at module scope), and it mirrors that
+  // fixture's first-run shape: measured false, so every ETA says "not measured".
+  window.__updateModes = (updateBoth && updateBoth.modes) || [
+    { id: "max_speed", label: "Fastest", plain: "Nearly the whole PC while it checks.",
+      workers: 22, etaSeconds: 120, etaLowSeconds: 60, etaHighSeconds: 300,
+      measured: false, recommended: false, suiteCount: 356 },
+    { id: "responsive", label: "Balanced", plain: "About half the PC; still quick.",
+      workers: 14, etaSeconds: 121, etaLowSeconds: 61, etaHighSeconds: 301,
+      measured: false, recommended: true, suiteCount: 356 },
+    { id: "safe", label: "Safest", plain: "One check at a time; slowest.",
+      workers: 1, etaSeconds: 480, etaLowSeconds: 240, etaHighSeconds: 1200,
+      measured: false, recommended: false, suiteCount: 356 },
+  ];
   // animal.rs: GET /api/animal's answer (a scenario's, else a PC nobody has
   // changed), changed by set_animal like the PC would.
   window.__animal = animal ? JSON.parse(JSON.stringify(animal)) : null;
@@ -1016,6 +1055,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
               backendSource: "the folder this app starts Jarvis from",
               script: "C:\\Users\\pcadmin\\Epic-Jarvis\\scripts\\apply-patches.ps1",
               blocked: null,
+              modes: window.__updateModes || [],
+              modesNote: null,
             };
           }
           case "set_update_folders": {
@@ -1031,10 +1072,15 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                 : "the folder this app starts Jarvis from",
               script: "C:\\Users\\pcadmin\\Epic-Jarvis\\scripts\\apply-patches.ps1",
               blocked: null,
+              modes: window.__updateModes || [],
+              modesNote: null,
             };
           }
           case "update_both": {
-            window.__calls.push(["__updatedBoth"]);
+            // The chosen pace is a real argument now (2026-10-18): recording it
+            // is how a test proves the card sends the one the owner picked.
+            window.__calls.push(["__updatedBoth", args.mode]);
+            window.__updatedMode = args.mode;
             const ub = window.__updateBoth || {};
             if (ub.fails) throw new Error(ub.fails);
             const answer = ub.outcome || {

@@ -23,6 +23,12 @@ Windows, no PowerShell, no nvidia-smi, no Ollama):
     ("why is my PC slow to boot after the update?", "how hot is it today?")
     go to the model;
   * the fast path: answered here, `gate: "private"` when programs are named;
+  * the Pillar 28 silent-failure doctor (2026-10-17): a microphone returning
+    three 0.0-RMS voice attempts in a row, a database write-ahead log past
+    64 MiB, a paired phone that stopped checking in, and the model service
+    not running vs running with its TCP port open and /api/ps timed out -
+    each with invented readings here, each adding ONE named warning section
+    only when it finds something, never a number it was not given;
   * GET /api/pc/help through jarvis_brain_reads, and the shared fixture is
     up to date (tools/gen_pc_help_cases.py --check);
   * not a tool the AI model can call; shipped by the script and _where;
@@ -57,6 +63,10 @@ import jarvis_quick as Q  # noqa: E402
 
 PASSED, FAILED = [], []
 GB = 1024 ** 3
+NOW = 1790589600.0
+DAY = 86400
+#: The four Readings Pillar 28 added; `fake()` wires them when a test passes them.
+SILENT_READINGS = ("mic", "databases", "devices", "ollama")
 
 
 def check(name, cond, detail=""):
@@ -70,10 +80,12 @@ def _const(v):
 
 def fake(**kw) -> PCH.Readers:
     base = dict(programs=None, memory=None, disks=None, uptime=None, cards=None, models=None)
+    silent = {name: kw.pop(name) for name in SILENT_READINGS if name in kw}
     base.update(kw)
     apps = _const(base.pop("apps", None))
     return PCH.Readers(**{k: _const(v) for k, v in base.items()}, apps=apps,
-                       now=_const(1790589600.0), own_pid=4242)
+                       **{k: _const(v) for k, v in silent.items()},
+                       now=_const(NOW), own_pid=4242)
 
 
 PROGRAMS = {
@@ -160,6 +172,260 @@ def t_programs_merged():
     check("control characters and .exe are taken out of a name",
           any(n.startswith("evil") and "\x1b" not in n and not n.endswith(".exe")
               for n in rows), str(rows.keys()))
+
+
+def t_the_mic_meter_remembers_attempts():
+    """jarvis_speech keeps each voice attempt's PEAK RMS, its input device and
+    when, for the last three attempts, in memory - three all-zero RMS attempts
+    in a row is the failure (Blueprint D's first boundary)."""
+    import numpy as np
+    import jarvis_speech as S
+    S._reset_mic_levels()
+    try:
+        st = S.voice_attempts_status()
+        check("mic meter: before any attempt it says it cannot tell",
+              st["digital_zero"] is False and st["attempts"] == 0
+              and st["last_peak_rms"] is None and st["device"] is None, st)
+        for _ in range(3):
+            S._note_voice_attempt(np.zeros(160, dtype="float32"), "desktop")
+        st = S.voice_attempts_status()
+        check("mic meter: three 0.0-RMS attempts in a row read as digital zero, naming the PC's microphone",
+              st["digital_zero"] is True and st["zeros_in_a_row"] == 3
+              and st["attempts"] == 3 and st["last_peak_rms"] == 0.0
+              and st["device"] == "this PC's microphone", st)
+        S._note_voice_attempt(np.array([0.0, 0.25, -0.5], dtype="float32"), "phone")
+        st = S.voice_attempts_status()
+        check("mic meter: one real level clears it, and the phone is named",
+              st["digital_zero"] is False and st["zeros_in_a_row"] == 0
+              and st["last_peak_rms"] > 0.0
+              and st["device"] == "your phone's microphone", st)
+        S._reset_mic_levels()
+        for _ in range(2):
+            S._note_voice_attempt(np.zeros(4, dtype="float32"), "desktop")
+        check("mic meter boundary: two 0.0-RMS attempts are NOT yet the failure (it needs three)",
+              S.voice_attempts_status()["digital_zero"] is False)
+        for _ in range(4):
+            S._note_voice_attempt(np.zeros(4, dtype="float32"), "desktop")
+        st = S.voice_attempts_status()
+        check("mic meter: it keeps only the last three attempts, and never the audio",
+              st["attempts"] == 3 and set(st) == {"attempts", "zeros_in_a_row",
+                                                  "digital_zero", "device",
+                                                  "last_peak_rms", "last_at"}, st)
+    finally:
+        S._reset_mic_levels()
+
+
+def _mic_reading(zeros=3, *, device="this PC's microphone"):
+    return {"attempts": max(zeros, PCH.MIC_ZERO_ATTEMPTS),
+            "zeros_in_a_row": zeros,
+            "digital_zero": zeros >= PCH.MIC_ZERO_ATTEMPTS,
+            "device": device,
+            "last_peak_rms": 0.0 if zeros else 0.25, "last_at": int(NOW)}
+
+
+def t_silent_microphone_check():
+    """Pillar 28 (1 of 4) boundary: three 0.0-RMS attempts in a row fire; two
+    do not."""
+    out = PCH.read(fake(mic=_mic_reading(3)))
+    section = out["sections"][-1]
+    check("mic: three 0.0-RMS attempts add ONE section, id digital_zero_mic",
+          len(out["sections"]) == 6 and section["id"] == "digital_zero_mic"
+          and section["title"] == "The microphone is giving Jarvis silence",
+          out["sections"])
+    check("mic: the words name the input device, what was heard, and what to do",
+          "this PC's microphone" in section["words"]
+          and "pure digital silence" in section["words"]
+          and "Unplug the microphone" in section["words"], section["words"])
+    check("mic: silent.checked names all four checks; failed names the microphone",
+          out["silent"]["checked"] == list(PCH.SILENT_CHECKS)
+          and out["silent"]["failed"] == ["digital_zero_mic"], out.get("silent"))
+    findings = PCH.diagnose_silent_failures(fake(mic=_mic_reading(3)))
+    check("diagnose_silent_failures returns a list of dicts with id/title/words",
+          len(findings) == 1 and set(findings[0]) == {"id", "title", "words"}
+          and findings[0]["id"] == "digital_zero_mic", findings)
+    check("mic boundary: two 0.0-RMS attempts in a row do NOT fire",
+          PCH.diagnose_silent_failures(fake(mic=_mic_reading(2))) == [])
+    for label, reading in (("a real level", {"attempts": 3, "zeros_in_a_row": 0,
+                                             "digital_zero": False,
+                                             "device": "this PC's microphone"}),
+                           ("an older reading with no digital-zero key",
+                            {"attempts": 3, "zeros_in_a_row": 0}),
+                           ("digital zero missing rather than false",
+                            {"attempts": 3, "digital_zero": None}),
+                           ("no reading at all", None)):
+        out = PCH.read(fake(mic=reading))
+        check(f"mic: {label} keeps the five answers and claims nothing",
+              len(out["sections"]) == 5 and out["silent"]["failed"] == [], out.get("silent"))
+
+
+def _wal_row(name, mib):
+    return {"name": name, "path": f"/home/{name}-wal", "wal_bytes": mib * 1024 ** 2}
+
+
+def t_silent_database_log_check():
+    """Pillar 28 (2 of 4) boundary: 65 MiB of .db-wal fires, 10 MiB and
+    exactly 64 MiB do not. The safe passive checkpoint is offered with its
+    statement and never run."""
+    out = PCH.read(fake(databases=[_wal_row("memory.db", 65), _wal_row("chat_log.db", 70)]))
+    section = out["sections"][-1]
+    check("db log: a 65 MiB .db-wal adds ONE section, id wal_bloat, naming the database",
+          len(out["sections"]) == 6 and section["id"] == "wal_bloat"
+          and "memory.db" in section["words"] and "65 MB" in section["words"]
+          and "chat_log.db" in section["words"], section["words"])
+    check("db log: the safe passive checkpoint is offered with its statement, never claimed as run",
+          "passive checkpoint" in section["words"].lower()
+          and PCH.safe_passive_checkpoint_statement() in section["words"]
+          and "does not run" in section["words"], section["words"])
+    check("db log: what to do is a restart, and nothing is deleted",
+          "Restart Jarvis" in section["words"]
+          and "nothing is deleted" in section["words"], section["words"])
+    check("db log boundary: 10 MiB does NOT fire",
+          PCH.diagnose_silent_failures(fake(databases=[_wal_row("memory.db", 10)])) == [])
+    check("db log boundary: exactly 64 MiB does NOT fire (the rule is 'exceeding')",
+          PCH.diagnose_silent_failures(fake(databases=[
+              {"name": "memory.db", "wal_bytes": PCH.WAL_LIMIT_BYTES}])) == [])
+    for label, rows in (("under the limit", [_wal_row("memory.db", 10)]),
+                        ("exactly the limit", [{"name": "memory.db",
+                                                "wal_bytes": PCH.WAL_LIMIT_BYTES}]),
+                        ("no logs", []), ("cannot read", None)):
+        out = PCH.read(fake(databases=rows))
+        check(f"db log: {label} keeps the five answers and claims nothing",
+              len(out["sections"]) == 5 and out["silent"]["failed"] == [], out.get("silent"))
+
+
+def _devices_reading(last_seen, *, created=None, kind="phone", name="OnePlus 10T", reach=True):
+    return {"readable": True, "why": "",
+            "devices": [{"id": "d1", "name": name, "kind": kind,
+                         "created": int(NOW) - 30 * DAY if created is None else created,
+                         "last_seen": last_seen, "reach": reach}]}
+
+
+def t_silent_phone_check():
+    """Pillar 28 (3 of 4) boundary: a peer past the staleness threshold fires,
+    a healthy peer (and one exactly at it) does not."""
+    stale_at = int(NOW - PCH.PHONE_STALE_SECONDS) - 1
+    out = PCH.read(fake(devices=_devices_reading(stale_at)))
+    section = out["sections"][-1]
+    check("phone: a peer past the staleness threshold adds ONE section, id phone_unreachable",
+          len(out["sections"]) == 6 and section["id"] == "phone_unreachable"
+          and "OnePlus 10T" in section["words"]
+          and "7 days ago" in section["words"], section["words"])
+    check("phone: it names the owner's two networks, the sync consequence and what to do",
+          all(bit in section["words"] for bit in
+              ("Tailscale", "Meshnet", "synced", "Open Jarvis on the phone")), section["words"])
+    check("phone: it says this PC cannot test the network itself",
+          "cannot tell from this PC" in section["words"], section["words"])
+    check("phone boundary: a healthy peer (heard an hour ago) does NOT fire",
+          PCH.diagnose_silent_failures(fake(
+              devices=_devices_reading(int(NOW) - 3600))) == [])
+    check("phone boundary: exactly at the threshold is NOT past it",
+          PCH.diagnose_silent_failures(fake(
+              devices=_devices_reading(int(NOW - PCH.PHONE_STALE_SECONDS)))) == [])
+    never = PCH.read(fake(devices=_devices_reading(None, created=int(NOW) - 30 * DAY)))
+    check("phone: never seen since an old pairing is said, not guessed",
+          "not checked in since it was paired 30 days ago" in never["sections"][-1]["words"],
+          never["sections"][-1]["words"])
+    for label, reading in (("a phone with no remote reach",
+                            _devices_reading(stale_at, reach=False)),
+                           ("a laptop, not a phone",
+                            _devices_reading(stale_at, kind="laptop")),
+                           ("an unreadable registry",
+                            {"readable": False, "why": "unreadable",
+                             "devices": _devices_reading(stale_at)["devices"]}),
+                           ("no reading at all", None)):
+        out = PCH.read(fake(devices=reading))
+        check(f"phone: {label} keeps the five answers and claims nothing",
+              len(out["sections"]) == 5 and out["silent"]["failed"] == [], out.get("silent"))
+
+
+def t_silent_ollama_check():
+    """Pillar 28 (4 of 4) boundary: 'the Ollama process is not running' and
+    'the TCP port is open but /api/ps timed out' are different sentences, and
+    a 200 OK /api/ps is no finding at all."""
+    stopped = PCH.read(fake(ollama={"state": "not_running"}))
+    wedged = PCH.read(fake(ollama={"state": "wedged"}))
+    s_words = stopped["sections"][-1]["words"]
+    w_words = wedged["sections"][-1]["words"]
+    check("ollama: not running adds ONE section, id ollama_wedged, said as the process not running",
+          len(stopped["sections"]) == 6
+          and stopped["sections"][-1]["id"] == "ollama_wedged"
+          and "is not running" in s_words and "port refused" in s_words
+          and stopped["silent"]["failed"] == ["ollama_wedged"], s_words)
+    check("ollama: the wedged case is a DIFFERENT sentence - TCP port open, /api/ps timed out",
+          "TCP port is open" in w_words
+          and "/api/ps did not answer within 2 seconds" in w_words
+          and "Quit Ollama" in w_words and w_words != s_words, w_words)
+    check("ollama boundary: a 200 OK /api/ps does NOT fire",
+          PCH.diagnose_silent_failures(fake(ollama={"state": "ok"})) == [])
+    for label, reading in (("an unknown error", {"state": "error", "why": "OSError"}),
+                           ("no reading at all", None)):
+        out = PCH.read(fake(ollama=reading))
+        check(f"ollama: {label} keeps the five answers and claims nothing",
+              len(out["sections"]) == 5 and out["silent"]["failed"] == [], out.get("silent"))
+
+
+def t_silent_checks_never_raise_and_all_four_render():
+    """All four failing is four warning sections, one per finding, in
+    SILENT_CHECKS' order; every reader throwing is NO section and no crash."""
+    def boom():
+        raise RuntimeError("a reading that throws must not take PC help with it")
+    r = PCH.Readers(programs=boom, memory=boom, disks=boom, uptime=boom, cards=boom,
+                    models=boom, mic=boom, databases=boom, devices=boom, ollama=boom)
+    out = PCH.read(r)
+    check("every silent reader throwing: five answers, no warning, no crash",
+          len(out["sections"]) == 5 and out["silent"]["failed"] == [], out.get("silent"))
+    allbad = PCH.read(fake(mic=_mic_reading(3),
+                           databases=[_wal_row("memory.db", 70)],
+                           devices=_devices_reading(int(NOW) - 9 * DAY),
+                           ollama={"state": "wedged"}))
+    check("all four failing: four warning sections in SILENT_CHECKS' order",
+          len(allbad["sections"]) == 9
+          and [s["id"] for s in allbad["sections"][5:]] == list(PCH.SILENT_CHECKS)
+          and allbad["silent"]["failed"] == list(PCH.SILENT_CHECKS),
+          [s["id"] for s in allbad["sections"]])
+    words = " ".join(s["words"] for s in allbad["sections"][5:])
+    check("all four failing: every finding's own words are there",
+          all(bit in words for bit in ("pure digital silence", "write-ahead logs",
+                                       "has not checked in", "TCP port is open")), words)
+
+
+def t_the_devices_paired_status_helper():
+    """The read-only device reader PC help uses: only live devices, one shown
+    name, remote reach, a never-seen device is None (never 0), and an
+    unreadable registry says so instead of looking empty."""
+    import jarvis_devices as D
+    saved = D.load
+    doc = {"devices": [
+        {"id": "d1", "name": "OnePlus 10T", "kind": "phone", "token_sha256": "x",
+         "created": 100, "last_seen": 200},
+        {"id": "d2", "name": "Removed", "kind": "phone", "token_sha256": "",
+         "created": 100, "last_seen": 200},
+        {"id": "d3", "name": "Gone", "kind": "phone", "token_sha256": "x",
+         "created": 100, "last_seen": 200, "removed": 5},
+        {"id": "d4", "name": "Laptop", "kind": "laptop", "token_sha256": "x",
+         "created": 100}]}
+    D.load = lambda: (doc, "")
+    with D._SEEN_LOCK:
+        D._SEEN.clear()
+    try:
+        st = D.paired_status()
+    finally:
+        D.load = saved
+    check("paired_status: only the live devices are listed",
+          [r["id"] for r in st["devices"]] == ["d1", "d4"], st)
+    check("paired_status: a never-seen device is None, never a made-up time",
+          st["devices"][1]["last_seen"] is None, st)
+    check("paired_status: the shown name is the one both apps use",
+          st["devices"][0]["name"] == "OnePlus 10T")
+    check("paired_status: every live device says it has remote reach (the real 'can reach Jarvis' fact)",
+          all(r["reach"] is True for r in st["devices"]), st)
+    D.load = lambda: (doc, "unreadable (ValueError)")
+    try:
+        bad = D.paired_status()
+    finally:
+        D.load = saved
+    check("paired_status: an unreadable registry says so", bad["readable"] is False
+          and bad["why"], bad)
 
 
 def t_the_words():
@@ -514,6 +780,9 @@ def t_route_and_fixture():
           code == 200 and [s["id"] for s in out["sections"]] == list(PCH.TOPICS)
           and out["changes"] == PCH.CHANGES_LATER and out["private"] == PCH.PRIVATE_NOTE
           and out["sections"][0]["title"] == "Why is my PC slow?", str(out))
+    check("... and the answer says what the silent-failure doctor checked, and that nothing failed",
+          out["silent"]["checked"] == list(PCH.SILENT_CHECKS)
+          and out["silent"]["failed"] == [], out.get("silent"))
     check("it is one of the Brain reads", BR.PC_HELP_PATH == PCH.PATH == "/api/pc/help"
           and PCH.PATH in BR.PATHS)
     r = subprocess.run([sys.executable, str(REPO / "tools" / "gen_pc_help_cases.py"), "--check"],
@@ -548,7 +817,11 @@ if __name__ == "__main__":
                t_reading_the_cards_however_many, t_the_words,
                t_doctor_cards_every_card_in_plain_words, t_doctor_twin_names_say_which_card,
                t_doctor_heat_says_resting_or_hot, t_doctor_slow_quiet_names_a_full_or_hot_card,
-               t_doctor_never_invents_a_reading, t_nothing_read_never_raises,
+               t_doctor_never_invents_a_reading,
+               t_the_mic_meter_remembers_attempts, t_silent_microphone_check,
+               t_silent_database_log_check, t_silent_phone_check, t_silent_ollama_check,
+               t_silent_checks_never_raise_and_all_four_render,
+               t_the_devices_paired_status_helper, t_nothing_read_never_raises,
                t_private, t_real_readers_off_windows, t_grammar, t_the_fast_path,
                t_route_and_fixture, t_not_a_tool_and_shipped, t_same_labels_both_apps):
         print(f"\n--- {fn.__name__} ---")

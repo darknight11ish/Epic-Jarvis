@@ -1952,8 +1952,41 @@ $SHIPPED = @(
 # A bounded diff and a one-click restore raise the EXISTING undo_action card and
 # leave a NEW Undo receipt for the restore. Prunes the oldest UNPINNED blobs to
 # 250 MB and never removes a pinned one; refuses a link or a path outside the
-# allowed folders. No route, no chat tool and no caller yet.
+# allowed folders. It IS wired on the consumer side: jarvis_notes.py imports it
+# for the vault's pre-write copy (the vault append writes nothing if the copy
+# fails), and jarvis_projects.py imports it before Project Mode's pointer file
+# is replaced (best-effort, so a broken store never blocks Project Mode). No
+# route and no chat tool expose it yet - that is still the owner's decision.
 'jarvis_file_guardian.py'
+# --- A red-team / pre-mortem decision simulator, on this PC only (2026-10-17) ---
+# Takes a one-sentence decision and returns a 1-3-1 decision brief (checked by
+# jarvis_card_words), counter-arguments, failure modes with a closed-world
+# likelihood and impact, and one plain-English recommendation sentence. The
+# deterministic mode asks no model; the one-pass mode asks the LOCAL model
+# exactly once and refuses a reply that breaks any rule. Figures are whole
+# cents read-only from jarvis_spending and jarvis_retirement, open goals from
+# jarvis_goals; reading any of them latches jarvis_gate.latch_taint. Nothing is
+# written, no route is opened, there is no cloud lane, and it is deliberately
+# unwired: no route, no chat tool, no approval card, no UI in either app.
+'jarvis_decision_lab.py'     # Red-team and pre-mortem: 1-3-1 brief, failure modes, local only
+# --- Pillar 14 slice 14A: the opt-in, RAM-only clipboard time machine (2026-10-17).
+# One in-memory deque of recent copied texts, OFF until the owner turns it on,
+# wiped on lock, refusing password managers, one-time codes, private keys and card
+# numbers; three pure transforms (CSV/TSV -> pipe table, pretty JSON, tracking
+# parameters off links). No file, no database, no route and no caller yet: the
+# desktop wiring is a later slice.
+'jarvis_clipboard.py'
+    # --- Pillar 16 (2026-10-17): the pre-meeting person dossier ---
+    # ONE person's facts split current/retired, the kept chat turns that mention
+    # them, the newest mail headers/snippets, the open to-dos that name them and
+    # the next calendar event whose own words name them - each through the
+    # module that already owns that record (jarvis_memory.py is base-only and is
+    # never edited; its public reads are called from here). Withheld completely,
+    # before any read, when "Hide memory lists and chat history" or App lock is
+    # on; reading facts latches the conversation private. No route and no chat
+    # tool: its one surface is one line in the morning briefing (jarvis_briefing.py)
+    # for a person Jarvis already knows who is named in today's calendar.
+    'jarvis_people_crm.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.
