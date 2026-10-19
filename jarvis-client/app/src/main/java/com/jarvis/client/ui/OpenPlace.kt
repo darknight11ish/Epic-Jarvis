@@ -138,6 +138,10 @@ object OpenPlace {
         // "This backend" plate, keyed "capabilities".
         "briefing-settings" to Where.Go(Screen.BRAIN, "briefing"),
         "hardware" to Where.Go(Screen.BRAIN, "hardware"),
+        // Focus presets are drawn INSIDE the phone's Hardware plate
+        // (HardwarePlate.kt's FocusPresetsSection), so "open focus presets"
+        // lands on that plate rather than the top of Settings.
+        "focus-presets" to Where.Go(Screen.BRAIN, "hardware"),
         "second-card" to Where.Go(Screen.BRAIN, "second-card"),
         "big-model" to Where.Go(Screen.BRAIN, "big-model"),
         "backend-supports" to Where.Go(Screen.BRAIN, "capabilities"),
@@ -200,10 +204,6 @@ object OpenPlace {
         "notifications",
         "first-run",
         "hud-window",
-        // "Focus presets" (the owner's preset selector, 2026-10-18): the
-        // PC's five model/lane presets. The phone's selector is not on this
-        // tree yet, so the honest answer is "only on your PC" for now.
-        "focus-presets",
     )
 
     /** Every id this file has made a decision about - for the test. */

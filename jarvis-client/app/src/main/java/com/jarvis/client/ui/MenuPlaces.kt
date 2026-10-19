@@ -213,6 +213,7 @@ object MenuPlaces {
         "settings.second-card.third-card" to "SecondCardPlate: the Third graphics card section",
         "settings.second-card.chat-card" to "SecondCardPlate: the Everyday chat runs on row",
         "brain.work.quiz.youtube" to "QuizPlate: the YouTube link block",
+        "settings.focus-presets" to "HardwarePlate: the Focus presets section inside the Hardware plate",
     )
 
     /**

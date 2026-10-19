@@ -160,6 +160,11 @@ object FindAnything {
         // tags overnight", and History's own `item(key = "settings")` is the
         // section the tags and that switch are set in (HistoryScreen.kt).
         "brain.history.tag-suggestions" to (Screen.HISTORY to "settings"),
+        // Focus presets are drawn INSIDE the phone's Hardware plate
+        // (HardwarePlate.kt's FocusPresetsSection), so the row opens that
+        // card. Without this entry the phone would have the catalogue row but
+        // no place for it, and `FindAnythingTest` would refuse the row.
+        "settings.focus-presets" to (Screen.BRAIN to "hardware"),
     )
 
     /**

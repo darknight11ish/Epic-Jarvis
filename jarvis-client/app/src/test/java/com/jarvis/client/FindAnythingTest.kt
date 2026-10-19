@@ -191,12 +191,19 @@ class FindAnythingTest {
             // both apps - so the catalogue is one larger because a place really
             // was added.
             //
+            // 120 -> 121 (2026-10-19): `settings.focus-presets` is a real menu
+            // on BOTH apps now. The phone draws FocusPresetsSection inside the
+            // Hardware plate (HardwarePlate.kt), and FindAnything has a real row
+            // for it that opens that card, so the catalogue is one larger
+            // because a place really was added - not because a desktop-only row
+            // was emitted into the phone's list.
+            //
             // It is here so that a regeneration which drops the `names` field,
             // or a catalogue that comes back a different size, is noticed rather
             // than quietly searched: the check above still proves that every one
-            // of the 120 menus has all of its names searched for.
+            // of the 121 menus has all of its names searched for.
             "the catalogue must still carry the names at all",
-            120,
+            121,
             MenuCatalog.MENUS.size,
         )
         assertTrue(
