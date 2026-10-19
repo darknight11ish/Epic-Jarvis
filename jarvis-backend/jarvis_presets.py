@@ -282,12 +282,39 @@ def recommendations() -> dict:
                                       p.measured is None,
                                       "the agreed 2-GPU mapping: main model on the 2060")
             else:
-                rows[p.id] = _row(p, 1 if p.id == "fast" else 0, cards, False, True,
-                                  "three cards: Jarvis plans up to two; reasoned, not tested")
+                # CONFIRMED PLAN (owner, 2026-10-18): three RTX cards, no GTX 1080
+                # for compute; lane-per-GPU, never one model split across three.
+                idx = {"general": 0, "general_uncensored": 0, "coding": 0,
+                       "fast": 1, "agentic_vision": 2}[p.id]
+                note = {
+                    "general": "2060 12 GB: main chat/everyday, 196k",
+                    "general_uncensored": "2060 12 GB: main chat/everyday, 196k; waiting for the model",
+                    "coding": "main model on the 2060; the Coding lane (qwen3.5:4b helper) "
+                              "starts on demand on 2080 SUPER #2 (card 2, PCIe 3.0 x4 M.2 adapter)",
+                    "fast": "2080 SUPER #1 (card 1): display + Fast/Live lane, qwen3:8b",
+                    "agentic_vision": "2080 SUPER #2 (card 2): Agentic+Vision, qwen3.5:9b with images",
+                }[p.id]
+                rows[p.id] = _row(p, idx, cards, False, True, note)
         by[str(n)] = rows
     return {"by_gpu_count": by,
             "basis": ("the agreed 2-GPU mapping is measured; 1 and 3 GPUs are "
-                      "best effort and labelled as not tested")}
+                      "best effort and labelled as not tested"),
+            "three_gpu_plan": {
+                "confirmed": True,
+                "layout": "lane per GPU, never one model split across three cards",
+                "cards": [
+                    {"role": "main chat / everyday", "card": "RTX 2060 12 GB", "context": 196608},
+                    {"role": "display + Fast/Live lane", "card": "RTX 2080 SUPER #1", "context": 16384},
+                    {"role": "Agentic+Vision and Coding lane (on demand)",
+                     "card": "RTX 2080 SUPER #2", "context": 16384},
+                ],
+                "link_note": ("2080 SUPER #2 likely sits on the B550 chipset through an M.2 "
+                              "adapter: PCIe 3.0 x4, maybe x2. A slower link costs loading "
+                              "time, not a lane; each lane keeps its own model."),
+                "future_not_a_preset": ("Qwen3.8-27B pooled to 28 GB across cards is a future "
+                                        "'max quality' experiment only; it is not a preset and "
+                                        "no figure is claimed until it is measured."),
+            }}
 
 def by_id(preset_id) -> Optional[Preset]:
     return _BY_ID.get(str(preset_id or ""))

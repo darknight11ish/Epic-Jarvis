@@ -98,6 +98,18 @@ def main() -> int:
           all(r["best_effort_not_tested"] and not r["measured"]
               for n in ("1", "3") for r in rec["by_gpu_count"][n].values()),
           "1/3 GPU rows")
+    three = rec["by_gpu_count"]["3"]
+    check("3-GPU confirmed layout: Fast on card 1, Agentic+Vision on card 2",
+          three["fast"]["card_index"] == 1 and three["agentic_vision"]["card_index"] == 2,
+          {k: v["card_index"] for k, v in three.items()})
+    check("3-GPU plan is lane-per-GPU on three RTX cards, and says the x4 link",
+          rec["three_gpu_plan"]["confirmed"] is True
+          and "lane per GPU" in rec["three_gpu_plan"]["layout"]
+          and "PCIe 3.0 x4" in rec["three_gpu_plan"]["link_note"]
+          and len(rec["three_gpu_plan"]["cards"]) == 3, rec.get("three_gpu_plan"))
+    check("the pooled Qwen3.8-27B 28 GB is named as future-only, not a preset",
+          "not a preset" in rec["three_gpu_plan"]["future_not_a_preset"]
+          and "28 GB" in rec["three_gpu_plan"]["future_not_a_preset"])
     check("a pending preset is never given a speed figure",
           rec["by_gpu_count"]["2"]["general_uncensored"]["tok_s"] is None
           and rec["by_gpu_count"]["2"]["general_uncensored"]["measured"] is False)

@@ -357,7 +357,7 @@
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "three cards: Jarvis plans up to two; reasoned, not tested"
+          "note": "2060 12 GB: main chat/everyday, 196k"
         },
         "general_uncensored": {
           "preset": "general_uncensored",
@@ -379,18 +379,18 @@
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "three cards: Jarvis plans up to two; reasoned, not tested"
+          "note": "main model on the 2060; the Coding lane (qwen3.5:4b helper) starts on demand on 2080 SUPER #2 (card 2, PCIe 3.0 x4 M.2 adapter)"
         },
         "agentic_vision": {
           "preset": "agentic_vision",
           "model": "qwen3.5:9b",
-          "card_index": 0,
-          "card": "card 0",
+          "card_index": 2,
+          "card": "card 2",
           "context": 16384,
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "three cards: Jarvis plans up to two; reasoned, not tested"
+          "note": "2080 SUPER #2 (card 2): Agentic+Vision, qwen3.5:9b with images"
         },
         "fast": {
           "preset": "fast",
@@ -401,10 +401,33 @@
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "three cards: Jarvis plans up to two; reasoned, not tested"
+          "note": "2080 SUPER #1 (card 1): display + Fast/Live lane, qwen3:8b"
         }
       }
     },
-    "basis": "the agreed 2-GPU mapping is measured; 1 and 3 GPUs are best effort and labelled as not tested"
+    "basis": "the agreed 2-GPU mapping is measured; 1 and 3 GPUs are best effort and labelled as not tested",
+    "three_gpu_plan": {
+      "confirmed": true,
+      "layout": "lane per GPU, never one model split across three cards",
+      "cards": [
+        {
+          "role": "main chat / everyday",
+          "card": "RTX 2060 12 GB",
+          "context": 196608
+        },
+        {
+          "role": "display + Fast/Live lane",
+          "card": "RTX 2080 SUPER #1",
+          "context": 16384
+        },
+        {
+          "role": "Agentic+Vision and Coding lane (on demand)",
+          "card": "RTX 2080 SUPER #2",
+          "context": 16384
+        }
+      ],
+      "link_note": "2080 SUPER #2 likely sits on the B550 chipset through an M.2 adapter: PCIe 3.0 x4, maybe x2. A slower link costs loading time, not a lane; each lane keeps its own model.",
+      "future_not_a_preset": "Qwen3.8-27B pooled to 28 GB across cards is a future 'max quality' experiment only; it is not a preset and no figure is claimed until it is measured."
+    }
   }
 }
