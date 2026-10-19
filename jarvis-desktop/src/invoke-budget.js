@@ -69,6 +69,13 @@ export const NETWORK_BUDGET_MS = 120_000;
 /** A command that copies or restores data, or waits for an approval card. */
 export const LONG_BUDGET_MS = 900_000;
 
+/** The preset apply waits for the PC's own switch_model approval card. The PC's
+ * gate may wait up to 900 s; the Rust command allows 1,200 s, so the page's
+ * budget is a little longer still (1,250 s). It must outlast the card, or the
+ * page would claim the result is unknown while a real card can still be
+ * answered. */
+export const APPLY_BUDGET_MS = 1_250_000;
+
 /** A command that really works for minutes - see LONG_BUDGET_MS. */
 const LONG = new Set([
   "backup_now",        // copies every database the owner has
@@ -84,6 +91,7 @@ const NETWORK = new Set([
 
 /** How long `command` gets, given whether it is a read or an action. */
 export function budgetFor(command, kind = "read") {
+  if (command === "apply_focus_preset") return APPLY_BUDGET_MS;
   if (LONG.has(command)) return LONG_BUDGET_MS;
   if (NETWORK.has(command)) return NETWORK_BUDGET_MS;
   return kind === "action" ? ACTION_BUDGET_MS : READ_BUDGET_MS;

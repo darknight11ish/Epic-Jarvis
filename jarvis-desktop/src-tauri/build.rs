@@ -247,6 +247,12 @@ fn main() {
             // "PC help" (JARVIS-API section 84): five plain answers about
             // this PC, read-only. Settings window only.
             "get_pc_help",
+            // Focus presets (backend/jarvis_presets.py; PRs #603/#611):
+            // read the five presets/hardware block, and the ONE apply that
+            // raises the existing switch_model ask card on the PC. Quickbar
+            // and Settings both draw it.
+            "get_focus_presets",
+            "apply_focus_preset",
             // Pillar 24-B: the highlighted text of the window in front,
             // read BEFORE the bar takes focus. Quickbar only; it only reads,
             // writes nothing and raises no card.

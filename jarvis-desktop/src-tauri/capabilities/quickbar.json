@@ -31,6 +31,7 @@
     "live-hold",
     "screen-watch",
     "model-lane",
-    "clipboard-time-machine"
+    "clipboard-time-machine",
+    "focus-presets"
   ]
 }

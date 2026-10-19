@@ -29,6 +29,7 @@
     "sandbox-exec",
     "spending-settings",
     "pictures-settings",
+    "focus-presets",
     "core:webview:allow-set-webview-zoom"
   ]
 }

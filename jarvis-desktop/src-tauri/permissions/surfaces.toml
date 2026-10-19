@@ -1834,3 +1834,18 @@ permissions = [
   "allow-start-model-lane",
   "allow-set-model-lane-auto",
 ]
+
+
+# ---------------------------------------------------------------------------
+# Focus presets (backend/jarvis_presets.py; PRs #603/#611). The quickbar's chip
+# and Settings both read the PC's five presets and can ask the PC to apply ONE
+# preset. Applying approves nothing: it raises the existing switch_model ask
+# card on the PC. Neither window may write anything else with this set.
+# ---------------------------------------------------------------------------
+[[set]]
+identifier = "focus-presets"
+description = "Read the five focus presets and the hardware block, and ask the PC to apply one (the PC's own switch_model approval card). Read-only otherwise."
+permissions = [
+  "allow-get-focus-presets",
+  "allow-apply-focus-preset",
+]

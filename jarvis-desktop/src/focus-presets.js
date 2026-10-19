@@ -56,6 +56,9 @@ export const BEING_PREPARED = "Being prepared";
 export const APPLY_WAITING =
   "The apply/lane patch is not on the PC yet. Until it lands, no preset can " +
   "be applied; nothing changes here.";
+export const CONTRACT_SHAPE_UPDATE =
+  "This PC's Jarvis sent the older preset contract shape. Update the backend " +
+  "by running apply-patches.ps1, then open this again.";
 
 /**
  * Is the DESKTOP APP wired to apply a preset yet?
@@ -65,12 +68,14 @@ export const APPLY_WAITING =
  * permission grant for it. The one button must stay disabled in that state or
  * it would promise an action the app cannot carry out.
  *
- * Flip this to `true` only in the change that lands the app-side bridge and its
- * capability - and add/keep the two-state test in tests/focus-presets.mjs. The
- * test may inject the other state through normaliseReading's `applyWired`
- * option without changing this constant.
+ * This is `true` now that the app-side bridge commands, invoke_handler entries
+ * and capability grants exist (`src-tauri/src/focus_presets.rs`). The contract
+ * route is still required too: an older backend with no `/api/work/apply` in
+ * its answer leaves the button disabled. The test injects the not-wired state
+ * through normaliseReading's `applyWired` option to prove that state stays
+ * disabled without touching this constant.
  */
-export const APPLY_BRIDGE_WIRED = false;
+export const APPLY_BRIDGE_WIRED = true;
 export const ASKED_WORDS = "Asked the PC. Nothing changes until you answer the card.";
 export const REFUSED_WORDS = "That did not work.";
 
@@ -207,15 +212,35 @@ function hardwareCard(row) {
   };
 }
 
-function normaliseHardware(raw) {
+function normaliseHardware(raw, questionnaireRaw) {
   if (!raw || typeof raw !== "object") {
     return {
       available: false, count: 0, cards: [], source: "",
-      focusChoices: [], priorityChoices: [], why: "",
+      focusChoices: [], priorityChoices: [], why: CONTRACT_SHAPE_UPDATE,
     };
   }
-  const detected = raw.detected && typeof raw.detected === "object" ? raw.detected : {};
-  const questionnaire = raw.questionnaire && typeof raw.questionnaire === "object" ? raw.questionnaire : {};
+  // The contract shape is `hardware: {detected, questionnaire}` - the generated
+  // fixture's shape, which the backend is aligning the live route to. If an
+  // older route sends the detected object directly instead, say so plainly
+  // rather than silently drawing an empty hardware block. No second shape is
+  // read: a silent second shape would hide exactly this kind of drift.
+  // PRIMARY: the fixture shape, hardware: {detected, questionnaire}, which the
+  // live route is being aligned to. COMPATIBILITY: an older live route sent
+  // the detected object directly and the questionnaire at the top level; read
+  // that as a fallback rather than showing an empty block. If neither shape is
+  // present, say the contract needs updating - never invent a card.
+  const nested = raw.detected && typeof raw.detected === "object";
+  const direct = raw.cards || raw.count !== undefined;
+  if (!nested && !direct) {
+    return {
+      available: false, count: 0, cards: [], source: "",
+      focusChoices: [], priorityChoices: [], why: CONTRACT_SHAPE_UPDATE,
+    };
+  }
+  const detected = nested ? raw.detected : raw;
+  const questionnaire = raw.questionnaire && typeof raw.questionnaire === "object"
+    ? raw.questionnaire
+    : (questionnaireRaw && typeof questionnaireRaw === "object" ? questionnaireRaw : {});
   const cards = Array.isArray(detected.cards)
     ? detected.cards.map(hardwareCard).filter(Boolean)
     : [];
@@ -310,11 +335,12 @@ export function normaliseReading(raw, { applyWired = APPLY_BRIDGE_WIRED } = {}) 
 
   const laneRaw = body.lane !== undefined ? body.lane
     : body.lane_status !== undefined ? body.lane_status
-      : body.laneStatus !== undefined ? body.laneStatus : "";
+      : body.laneStatus !== undefined ? body.laneStatus
+        : body.active_lane !== undefined ? body.active_lane : "";
   const laneObject = laneRaw && typeof laneRaw === "object" ? laneRaw : null;
   const lane = {
     words: plain(laneRaw),
-    label: field(laneObject || {}, ["label", "name", "words"]),
+    label: field(laneObject || {}, ["label", "name", "words", "key", "base_url"]),
     ready: laneObject ? !isFalse(laneObject.ready) : true,
     why: field(laneObject || {}, ["why", "detail", "note"]),
   };
@@ -334,7 +360,7 @@ export function normaliseReading(raw, { applyWired = APPLY_BRIDGE_WIRED } = {}) 
     chosen,
     lane,
     presets,
-    hardware: normaliseHardware(body.hardware),
+    hardware: normaliseHardware(body.hardware, body.questionnaire),
     oldIds: Array.isArray(body.old_ids_replaced)
       ? body.old_ids_replaced.map((x) => plain(x)).filter(Boolean)
       : [],

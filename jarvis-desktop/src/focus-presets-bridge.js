@@ -8,14 +8,12 @@
  * fixture - not the quickbar or Settings.
  *
  * Commands (Tauri): `get_focus_presets` (read-only) and
- * `apply_focus_preset` (the single approval-gated action). The contract now
- * advertises `POST /api/work/apply` (#611), but this app still has no bridge
- * command, Rust forwarding route or capability grant for it. That is why
- * `focus-presets.js`'s `APPLY_BRIDGE_WIRED` stays false and the one action
- * stays disabled even when the route is present. The app-side wiring is a
- * follow-up: once those two commands exist, flip that flag (and update this
- * file's command/body names if the bridge chooses different ones); the
- * quickbar, Settings and the reading then need no change.
+ * `apply_focus_preset` (the single approval-gated action). They live in
+ * `src-tauri/src/focus_presets.rs`, are registered in `invoke_handler`, and
+ * are granted to the quickbar and Settings by `permissions/surfaces.toml`'s
+ * `focus-presets` set. The Rust command calls the existing `GET /api/work`
+ * and `POST /api/work/apply` with `X-Jarvis-Client: hud` and the usual token;
+ * this file is still the only JavaScript place the pages get them from.
  */
 import { call } from "./invoke-budget.js";
 
@@ -34,7 +32,7 @@ function errorWords(error) {
 }
 
 /**
- * `GET /api/focus-presets` through the desktop bridge. A bridge that is not
+ * `GET /api/work` through the desktop bridge. A bridge that is not
  * there yet (an older desktop build) or a backend that has not shipped the
  * contract both become the reading's own `available: false` line; this never
  * invents a preset.
