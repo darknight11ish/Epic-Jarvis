@@ -1,0 +1,104 @@
+diff --git a/jarvis_hud.py b/jarvis_hud.py
+index f134133..41781f1 100644
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -81,6 +81,48 @@ JARVIS_API_KEY = os.environ.get("OPENJARVIS_API_KEY", "")
+ CONFIG_DIR = Path(os.environ.get("OPENJARVIS_CONFIG_DIR", Path.home() / ".openjarvis"))
+ HERE = Path(__file__).resolve().parent
+ 
++# --------------------------------------------------------------------------
++#   The active chat lane (presets.patch, 2026-10-18)
++#
++#   The chat lane is chosen per request from ONE file, not from a module
++#   constant. No preset has ever been applied -> the file is absent and every
++#   URL below is exactly OLLAMA_URL, byte-for-byte the behaviour before this
++#   patch. A file naming a non-loopback address is ignored: this is a choice
++#   between LANES ON THIS PC, never a way to send chat off the machine.
++# --------------------------------------------------------------------------
++
++PRESETS_LANE_FILE = CONFIG_DIR / "presets-active-lane.json"
++
++
++def active_ollama_url() -> str:
++    """The chat lane's address, from the owner's applied preset; OLLAMA_URL when
++    there is no file (the default), the file is unreadable, or it names anything
++    that is not a loopback address. Never raises."""
++    try:
++        doc = json.loads(PRESETS_LANE_FILE.read_text(encoding="utf-8"))
++        url = str(doc.get("base_url") or "").strip().rstrip("/")
++    except Exception:
++        return OLLAMA_URL
++    if url.startswith(("http://127.0.0.1:", "http://localhost:")):
++        return url
++    return OLLAMA_URL
++
++
++def set_active_ollama_url(base_url: str) -> bool:
++    """Persist the lane the next chat request talks to. Written beside the
++    other settings, atomically; False (and nothing changed) on any error."""
++    url = str(base_url or "").strip().rstrip("/")
++    if not url.startswith(("http://127.0.0.1:", "http://localhost:")):
++        return False
++    try:
++        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
++        tmp = PRESETS_LANE_FILE.with_suffix(".json.tmp")
++        tmp.write_text(json.dumps({"base_url": url}, indent=2) + "\n", encoding="utf-8")
++        tmp.replace(PRESETS_LANE_FILE)
++        return True
++    except Exception:
++        return False
++
+ FACTS_FILE = CONFIG_DIR / "memory_facts.jsonl"
+ DOCS_DB = CONFIG_DIR / "memory.db"
+ KG_DB = CONFIG_DIR / "knowledge_graph.db"
+@@ -4773,7 +4815,7 @@ class Handler(BaseHTTPRequestHandler):
+             # papered over, so the day a cloud lane is actually configured
+             # this is the one place that needs a real answer, not a second
+             # thing to discover broken.
+-            return (f"{OLLAMA_URL}/v1/chat/completions" if lane == local_model
++            return (f"{active_ollama_url()}/v1/chat/completions" if lane == local_model
+                     else f"{JARVIS_URL}/v1/chat/completions")
+ 
+         # A rate-limited lane should step down, not surface a 429 to the user.
+@@ -5184,7 +5226,7 @@ class Handler(BaseHTTPRequestHandler):
+                 try:
+                     if hasattr(jarvis_agent, "choose_lane"):
+                         _lane2 = jarvis_agent.choose_lane(
+-                            messages, lane, ollama_url=OLLAMA_URL, request=payload,
++                            messages, lane, ollama_url=active_ollama_url(), request=payload,
+                             enabled_tools=set((cfg.get("tools") or {}).get("enabled") or []))
+                 except Exception:
+                     _lane2 = None
+@@ -5203,7 +5245,7 @@ class Handler(BaseHTTPRequestHandler):
+                 try:
+                     import jarvis_agent
+                     _turn = jarvis_agent.run_local_turn(
+-                        messages, lane, ollama_url=OLLAMA_URL,
++                        messages, lane, ollama_url=active_ollama_url(),
+                         enabled_tools=set((cfg.get("tools") or {}).get("enabled") or []),
+                         stream_out=lambda chunk: (self.wfile.write(chunk),
+                                                    self.wfile.flush(),
+@@ -5429,7 +5471,7 @@ class Handler(BaseHTTPRequestHandler):
+                 unreachable_msg = (
+                     f"The local model is not running. Open Ollama on this PC "
+                     f"(or run `ollama serve`), then try again. "
+-                    f"(Details: nothing answered at {OLLAMA_URL}: {exc})"
++                    f"(Details: nothing answered at {active_ollama_url()}: {exc})"
+                     if lane == local_model else
+                     f"The cloud model is not set up on this PC - nothing "
+                     f"answers at {JARVIS_URL}. Pick the local model and ask "
+@@ -6828,3 +6870,14 @@
+         print(f"  lanes      NOT ON ({type(exc).__name__}) - starting a model lane is off")
+         print("             until jarvis_model_lanes.py is back: run apply-patches.ps1 again")
++    # presets.patch (2026-10-18, the preset model selector): POST /api/work/apply.
++    # ONE switch_model ask card; the named lane is started on demand; the chat lane
++    # is pointed at it; the chosen preset is saved. Nothing auto-applies, pending
++    # and heavy-mode presets refuse, and any failure rolls lane and preset back.
++    try:
++        import jarvis_presets
++        print(jarvis_presets.install(Handler, origin_ok=_origin_ok,
++                                     token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  presets    NOT ON ({type(exc).__name__}) - the preset apply route is off")
++        print("             until jarvis_presets.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.

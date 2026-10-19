@@ -230,9 +230,21 @@ def main() -> int:
         # touches jarvis_gate.py (uncensored-optins.patch does) would
         # otherwise be read as if its first block were the HUD one.
         def hud_hunks(name: str):
-            """(added, lands_after) for this patch's jarvis_hud.py half."""
+            """(added, lands_after) for this patch's jarvis_hud.py half.
+
+            `lands_after` is the LAST leading context line before a batch of
+            added lines: a patch may add non-chain hunks (the active-lane
+            helper at the top of jarvis_hud.py) before the install block that
+            appends to the chain, and only the install block's own context
+            says what the next patch anchors on. Reading only the first hunk's
+            context made presets.patch look like it landed after the module
+            top rather than after model-lanes.patch's block.
+            """
             added, lead, in_hud, done = [], [], False, False
             for line in (BACKEND / name).read_text(encoding="utf-8").splitlines():
+                if line.startswith("@@"):
+                    done = False
+                    continue
                 if line.startswith(("---", "+++")):
                     if line.startswith("+++"):
                         in_hud = line.split()[1] == "b/jarvis_hud.py"

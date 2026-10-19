@@ -771,7 +771,7 @@ def t_the_api_document_has_the_section_and_it_matches_this_code():
 #: writes down that they meant to. That is the price of a check that bites, and
 #: it is why the failure message below spells out the difference instead of
 #: saying "the document changed".
-EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 145))   # 129 ..= 144
+EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 146))   # 129 ..= 145 (145 is the preset GET route, added 2026-10-19)
 #: 137 is a REAL section, not a gap: `## 137. Starting the local model when
 #: it is not running`; 138 is `skills.lock` (PR #455). The tail reads
 #: 129 ..= 138 with no hole.

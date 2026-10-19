@@ -256,7 +256,15 @@ RATCHET = {
     #     `initiative-payload.patch: 1`. A ratchet: it may still only go down,
     #     and the pin has to move with a RAISING too - test_picture_card.py and
     #     test_retrieve_count.py assert this number EQUALS what the walk measures.
-    "jarvis_hud.py": 55,
+    #: RAISED 2026-10-18, 55 -> 57, for `presets.patch`, measured after its
+    #: call-site hunks were re-authored against the CURRENT stack (the first
+    #: version was written against an older base, so the stand-in materialised
+    #: them and read 59 - that was drift, not the patch). Now: active-lane
+    #: helper (1), the two chat call sites (2) and the install block (1) invent
+    #: a pre-image; the local-model URL detail applies exactly. Measured, not
+    #: argued: test_installed_stand_in reads 57, and the picture-card/
+    #: retrieve-count suites assert this number EQUALS the walk.
+    "jarvis_hud.py": 57,
     #: 23, raised from 22 on 2026-10-06. PR #80's `gate-risk-rows.patch` is the
     #: one new patch this walk adds for this file, and its single hunk's context
     #: is text only the owner's PC holds: the short `"delete it and it is gone"`

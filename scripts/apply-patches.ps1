@@ -1593,6 +1593,11 @@ $PATCHES = @(
 'hud-origin-module.patch'
 'hud-exclusive-bind.patch'
 'hud-request-gate.patch'
+    # presets.patch (2026-10-18, the preset model selector): active-lane
+    # resolution, and the ONE switch_model-ask POST /api/work/apply (lane start
+    # on demand, switch, persist, rollback). Its install block is the chain's
+    # last; plugin-loader.patch is re-anchored onto it and stays LAST of all.
+    'presets.patch'
     'plugin-loader.patch'
 )
 

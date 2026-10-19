@@ -66,7 +66,7 @@ WHAT IT DELIBERATELY DOES NOT DO
 It does not enforce the literal rule the audit proposed on 2026-09-30
 (`docs/audit-reports-2026-09-29-30/50-audit-a6c4aa03.md`, item 1): "Patches
 numbered above 29 must be 0, except a named allow-list (cloud-say-yes: 1)".
-Measured on 2f85d772, ELEVEN patches after position 29 invent context, and only
+Measured on 2f85d772, TWELVE patches after position 29 invent context, and only
 one of them is `cloud-say-yes.patch`:
 
     position  30  voice-enroll.patch
@@ -80,13 +80,14 @@ one of them is `cloud-say-yes.patch`:
     position 143  initiative-payload.patch
     position 144  hud-origin-module.patch   (SECPRIV audit 2026-10-18: owner-only _token_ok/_origin_ok bodies)
     position 145  hud-exclusive-bind.patch  (SECPRIV audit 2026-10-18 N4: owner-only main() setup tail)
+    position 146  presets.patch             (2026-10-18 preset model selector: the owner's original HUD text)
 
 A checker enforcing "0 except cloud-say-yes" would therefore be RED on a clean
 `main` with eight findings - the false positives the audit's own next sentence
 warns about. Those eight are honest rather than drift: each anchors on lines
 only the owner's PC holds, and the ones with a written reason have it in
 `_stack.py`'s RATCHET comments, which name most of them. The pin below records
-all eleven, with their positions, instead of pretending they are not there. The
+all twelve, with their positions, instead of pretending they are not there. The
 position-29 rule is kept as a REPORTED fact, not a gate.
 
 THE PIN
@@ -156,6 +157,12 @@ PIN = {
     # against the published gate and test_gate_touches.py applies them forwards
     # and reverses them out of it byte-for-byte.
     "gate-touches.patch":                      (5, 59),   # position 137
+    "presets.patch":                           (4, 27),   # position 146 - presets.patch
+    # (2026-10-18, the preset model selector): the active-lane helper and the
+    # four chat call sites are the owner's original HUD text. Measured, not
+    # argued: 4 of its 5 hunks read 27 lines of original text; the helper hunk
+    # rewrites nothing (it is pure addition) and the install-block hunk applies
+    # exactly. Pinned so a future edit that grows this is caught.
     "initiative-payload.patch":                (1, 7),     # position 143
     # SECPRIV audit 2026-10-18 (N1/origin/N4): text only the owner's PC holds.
     # hud-origin-module.patch replaces the old _token_ok/_origin_ok bodies

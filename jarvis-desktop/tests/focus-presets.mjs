@@ -87,16 +87,28 @@ await check("a short answer cannot draw invented presets", async () => {
   }
 });
 
-await check("the contract half keeps the one action disabled, with its waiting line", async () => {
+await check("the contract publishes the apply route, but the app wiring keeps the action disabled", async () => {
   const read = Focus.normaliseReading(clone(FIXTURE));
   assert.equal(Focus.APPLY_BRIDGE_WIRED, false, "the app-side apply wiring must ship OFF");
-  assert.equal(read.applyReady, false);
-  assert.equal(read.applyContractReady, false);
-  assert.equal(read.applyRoute, "");
+  assert.equal(read.applyContractReady, true, "the fixture now publishes apply_route");
+  assert.equal(read.applyRoute, "/api/work/apply");
+  assert.equal(read.applyReady, false, "the route alone must not enable the button");
   assert.equal(read.applyAction, "Use this preset");
   const view = Focus.pickerView(read, "fast");
   assert.equal(view.available, true);
   assert.equal(view.action.label, "Use this preset");
+  assert.equal(view.action.disabled, true);
+  assert.equal(view.action.why, Focus.APPLY_WAITING);
+});
+
+await check("an older PC with no apply route is disabled for the same reason, and says so", async () => {
+  const old = clone(FIXTURE);
+  for (const preset of old.presets) delete preset.apply.apply_route;
+  const read = Focus.normaliseReading(old);
+  assert.equal(read.applyContractReady, false);
+  assert.equal(read.applyRoute, "");
+  assert.equal(read.applyReady, false);
+  const view = Focus.pickerView(read, "fast");
   assert.equal(view.action.disabled, true);
   assert.equal(view.action.why, Focus.APPLY_WAITING);
 });
@@ -119,7 +131,10 @@ await check("a contract route alone is not enough: the app wiring decides the bu
   assert.equal(Focus.pickerView(wired, "fast").action.disabled, false);
 
   // ...and app wiring alone, with no contract route, must stay disabled too.
-  const noRouteButWired = Focus.normaliseReading(clone(FIXTURE), { applyWired: true });
+  // The fixture NOW publishes apply_route, so strip it for this old-PC case.
+  const noRoute = clone(FIXTURE);
+  for (const preset of noRoute.presets) delete preset.apply.apply_route;
+  const noRouteButWired = Focus.normaliseReading(noRoute, { applyWired: true });
   assert.equal(noRouteButWired.applyReady, false);
   assert.equal(Focus.pickerView(noRouteButWired, "fast").action.disabled, true);
   assert.equal(Focus.pickerView(noRouteButWired, "fast").action.why, Focus.APPLY_WAITING);

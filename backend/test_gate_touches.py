@@ -752,7 +752,12 @@ def t_the_patch_is_registered_and_carries_the_change():
                # deadlines, 32 bounded request slots, and the token rate bucket. No gate
                # list entry, no tier row, no _RISK row, no _TOOL_ACTIONS line, and no
                # line this patch writes - ordering safe, it rewrites nothing.
-             "hud-request-gate.patch"}
+"hud-request-gate.patch",
+             # presets.patch (2026-10-18) is appended after it and before
+             # plugin-loader.patch: the active-lane helper, the four chat call sites
+             # and the install block that wires POST /api/work/apply. No gate list,
+             # no tier row, no _RISK row, no line this patch writes.
+             "presets.patch"}
     others = [n for n in names if n not in later]
     check("it is LAST in the stack, bar the ones written after it, and bar "
           "plugin-loader.patch (which must be last of all)",

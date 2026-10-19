@@ -567,7 +567,12 @@ def t_hygiene():
                # deadlines, 32 bounded request slots, and the token rate bucket. No gate
                # list entry, no tier row, no _RISK row, no _TOOL_ACTIONS line, and no
                # line this patch writes - ordering safe, it rewrites nothing.
-             "hud-request-gate.patch"}
+"hud-request-gate.patch",
+             # presets.patch (2026-10-18) is appended after it and before
+             # plugin-loader.patch: the active-lane helper, the four chat call sites
+             # and the install block that wires POST /api/work/apply. No gate list,
+             # no tier row, no _RISK row, no line this patch writes.
+             "presets.patch"}
     check("the patch that wires it is in the script's list, and last",
           "'screen-attach.patch'" in ps1 and "screen-attach.patch" in stack_order
           and [n for n in stack_order if n not in later][-1] == "screen-attach.patch")
