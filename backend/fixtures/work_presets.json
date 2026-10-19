@@ -385,7 +385,7 @@
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "2060 12 GB: main chat/everyday, 196k; waiting for the model"
+          "note": "2060 12 GB: main chat/everyday, 196k"
         },
         "coding": {
           "preset": "coding",

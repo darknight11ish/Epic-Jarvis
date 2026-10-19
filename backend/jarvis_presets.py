@@ -595,7 +595,7 @@ def recommendations() -> dict:
                        "fast": 1, "agentic_vision": 2}[p.id]
                 note = {
                     "general": "2060 12 GB: main chat/everyday, 196k",
-                    "general_uncensored": "2060 12 GB: main chat/everyday, 196k; waiting for the model",
+                    "general_uncensored": "2060 12 GB: main chat/everyday, 196k",
                     "coding": "main model on the 2060; the Coding lane (qwen3.5:4b helper) "
                               "starts on demand on 2080 SUPER #2 (card 2, PCIe 3.0 x4 M.2 adapter)",
                     "fast": "2080 SUPER #1 (card 1): display + Fast/Live lane, qwen3:8b",
