@@ -76,6 +76,7 @@ gate-touches.patch	gate-touches/50dfe75.patch	50dfe75109ebaf94d0bd729a4c314b25b3
 gate-touches.patch	gate-touches/81e1128.patch	81e1128ad5beab8198943aaec2fd994c81683328	2026-10-11T01:19:53-07:00	fix(gate): read the arguments of a cut tool-call line
 gate-touches.patch	gate-touches/0f244f7.patch	0f244f7b04ecbea8640b5440943242991113a7af	2026-10-11T00:19:59-07:00	the gate reads what an action touches, not the words on its card (#249)
 goals.patch	goals/d68f7b2.patch	d68f7b240737ac081d91b26c85410738520d8f42	2026-09-27T23:29:50Z	Backend: Goals - a plan the owner edits, one card per acting step
+hud-request-gate.patch	hud-request-gate/af2adbb.patch	af2adbbbe5281363e88dc09b61375482b6869e3e	2026-10-18T22:07:57-07:00	fix(hud): header deadline, bounded concurrency and a token-failure gate without touching a route
 inbox-tidy.patch	inbox-tidy/d8d7911.patch	d8d7911ced71029756efc677cd6f883416561c84	2026-09-29T07:42:51Z	inbox-tidy.patch: its first hunk's context now ends at apps-in-projects' own line
 inbox-tidy.patch	inbox-tidy/98a5310.patch	98a5310e72ffb101536da6fc16ae983d89f8cf46	2026-09-29T07:27:30Z	Merge origin/main (PR #27: audit fixes, signed approvals, apps in projects) into the working branch
 inbox-tidy.patch	inbox-tidy/34c6103.patch	34c6103e9b3c2552e4e9e93f00e06bd3ca882afb	2026-09-29T05:35:18Z	Inbox tidy by voice: the backend (item 6 of the build queue)

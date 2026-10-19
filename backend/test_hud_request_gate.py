@@ -24,6 +24,8 @@ patches to a live backend.
 """
 from __future__ import annotations
 
+import ast
+import re
 import socket
 import sys
 import threading
@@ -334,6 +336,85 @@ def t_the_401_becomes_429_only_when_the_bucket_is_full():
         OC.TOKEN_FAILURES = real
 
 
+def _main_hunk_lines() -> list:
+    """The patch's main() body lines: context and additions, no removals."""
+    hunks, cur = [], None
+    for line in _patch_text().splitlines():
+        if line.startswith("@@"):
+            cur = []
+            hunks.append(cur)
+            continue
+        if cur is not None:
+            cur.append(line)
+    hunk = next((h for h in hunks if any("_HudServer" in l for l in h)),
+                None)
+    assert hunk is not None, "no main() hunk in the patch"
+    return [line[1:] if len(line) > 1 else "" for line in hunk
+            if not line.startswith("-")]
+
+
+def t_main_does_not_shadow_a_name_it_loads_earlier():
+    """The live-deploy break this test exists for (2026-10-19).
+
+    hud-request-gate.patch used to add `Handler = _request_gate(Handler)`
+    inside main(). A later assignment makes `Handler` local to main() for the
+    WHOLE function in Python, so every earlier `install(Handler, ...)` line
+    raised UnboundLocalError and the HUD refused to start. The patch now
+    wraps into `RequestHandler` and passes that to _HudServer.
+
+    This checks the generic rule, not one spelling: in a main() body built
+    from the patch's own lines (with an `install(Handler)` before them, as the
+    real file has), no name may be STORED after it was LOADed - that is
+    exactly the local-shadowing trap. It also compiles the fragment and checks
+    the added lines by name. The full HUD boot smoke is only possible on the
+    owner's PC (the real jarvis_hud.py is not in this repository).
+    """
+    text = _patch_text()
+    check("the patch never assigns the global Handler inside main()",
+          not re.search(r"^\+\s{4}Handler\s*=", text, re.M), "found +    Handler =")
+    check("... it wraps into RequestHandler instead",
+          "+    RequestHandler = _request_gate(Handler)" in text)
+    check("... and the server uses RequestHandler",
+          "+    httpd = _HudServer((bind, HUD_PORT), RequestHandler)" in text)
+    check("... the old server line is replaced, not kept as context",
+          "     httpd = _HudServer((bind, HUD_PORT), Handler)" not in text)
+
+    # Simple statement lines the patch adds to main() (skip class/def blocks,
+    # whose bodies live in later hunks and would be a syntax fragment on
+    # their own). The lines we are testing are exactly these assignments.
+    body = [line[1:] for line in text.splitlines()
+            if line.startswith("+    ")
+            and ("_HudServer" in line or "RequestHandler" in line
+                 or "Handler =" in line)]
+    snippet = ("def install(name):\n    return name\n\n\n"
+               "def main():\n"
+               "    install(Handler)\n"
+               + "\n".join(body) + "\n")
+    try:
+        tree = ast.parse(snippet)
+        compile(snippet, "<patched-main-fragment>", "exec")
+        parse_ok = True
+    except SyntaxError as exc:
+        parse_ok = False
+        tree = None
+        detail = str(exc)
+    else:
+        detail = ""
+    check("the patched main() fragment parses and py_compiles", parse_ok, detail)
+    if tree is None:
+        return
+    fn = tree.body[-1]
+    first_load, first_store = {}, {}
+    for node in ast.walk(fn):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Load, ast.Store)):
+            table = first_load if isinstance(node.ctx, ast.Load) else first_store
+            table.setdefault(node.id, node.lineno)
+    shadowed = sorted(name for name in first_store
+                      if name in first_load and first_store[name] > first_load[name])
+    check("no name in main() is stored after it is loaded (local-shadowing rule)",
+          not shadowed, shadowed)
+
+
 def t_the_patch_is_wired_into_the_stack():
     text = _patch_text()
     check("the request-gate patch ships", PATCH.is_file(), PATCH)
@@ -353,7 +434,8 @@ def t_the_patch_is_wired_into_the_stack():
 
 
 if __name__ == "__main__":
-    for fn in (t_the_patch_is_wired_into_the_stack,
+    for fn in (t_main_does_not_shadow_a_name_it_loads_earlier,
+               t_the_patch_is_wired_into_the_stack,
                t_a_slow_header_is_closed_by_the_deadline,
                t_the_33rd_concurrent_request_gets_503_without_a_thread,
                t_the_11th_bad_token_is_429_and_a_valid_one_resets,
