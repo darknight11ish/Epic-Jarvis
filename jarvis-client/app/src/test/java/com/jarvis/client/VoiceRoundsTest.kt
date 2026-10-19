@@ -46,12 +46,13 @@ class VoiceRoundsTest {
     // ------------------------------------------------------------ the plan --
 
     @Test
-    fun `very strict gets three rounds of the same twelve sentences`() {
+    fun `very strict gets one round per PC condition, using the PC's phrases`() {
         val p = VoiceRounds.plan(view("strong_untrained"))
         assertEquals(VoiceRounds.Kind.EXTENDED, p.kind)
-        assertEquals(listOf(1, 2, 3), p.rounds.map { it.number })
-        assertTrue(p.rounds.all { it.sentences == VoiceTraining.SENTENCES.indices.toList() })
-        assertEquals(36, p.total)
+        assertEquals(listOf(1, 2, 3, 4), p.rounds.map { it.number })
+        assertTrue(p.rounds.all { it.sentences == p.phrases.indices.toList() })
+        assertEquals("the PC's balanced phrases, not the old hardcoded twelve", 12, p.phrases.size)
+        assertEquals(48, p.total)
         assertFalse(p.add)
     }
 
@@ -76,17 +77,17 @@ class VoiceRoundsTest {
     @Test
     fun `rounds are held until the last, which finishes - one card`() {
         val p = VoiceRounds.plan(view("strong_untrained"))
-        for (i in 0..2) {
+        for (i in 0..3) {
             val b = JarvisJson.parseToJsonElement(VoiceRounds.body(p, i, clips(12), "phone")).jsonObject
             assertEquals("train", b["mode"]!!.jsonPrimitive.content)
             assertEquals(i + 1, b["round"]!!.jsonPrimitive.int)
             assertEquals("phone", b["mic"]!!.jsonPrimitive.content)
             assertEquals(false, b["add"]!!.jsonPrimitive.boolean)
-            assertEquals(i == 2, b["finish"]!!.jsonPrimitive.boolean)
+            assertEquals(i == 3, b["finish"]!!.jsonPrimitive.boolean)
             assertEquals(12, b["clips"]!!.jsonArray.size)
         }
         assertEquals("Send round 1 to your PC", VoiceRounds.sendLabel(p, 0))
-        assertEquals("Send the last round and finish", VoiceRounds.sendLabel(p, 2))
+        assertEquals("Send the last round and finish", VoiceRounds.sendLabel(p, 3))
     }
 
     @Test
@@ -176,7 +177,7 @@ class VoiceRoundsTest {
         val sent = VoiceRounds.plan(view("strong_untrained"))
         assertEquals(
             "Your PC left out 1 recording because it did not sound like the rest: round 2, " +
-                "\"${VoiceTraining.SENTENCES[4]}\".",
+                "\"${sent.phrases[4]}\".",
             VoiceRounds.outliersLine(v.last, sent),
         )
         // Not knowing what was sent: only how many.
@@ -225,12 +226,13 @@ class VoiceRoundsTest {
         assertEquals(VoiceRounds.Kind.EXTENDED, p.kind)
         assertEquals("Record all 12 sentences first (5 done).", VoiceRounds.sendBlocker(p, 0, 5, 20f, null))
         val stale = "Not connected to the desktop, so this cannot be delivered."
-        // Rounds 1 and 2 are only held in memory on the PC: no card, so they
+        // Rounds 1 to 3 are only held in memory on the PC: no card, so they
         // go on a stale link, like the desktop's (only `finish` is held).
         assertNull(VoiceRounds.sendBlocker(p, 0, 12, 30f, stale))
         assertNull(VoiceRounds.sendBlocker(p, 1, 12, 30f, stale))
-        // Round 3 carries `finish` and raises the one card: held.
-        assertEquals(stale, VoiceRounds.sendBlocker(p, 2, 12, 30f, stale))
+        assertNull(VoiceRounds.sendBlocker(p, 2, 12, 30f, stale))
+        // Round 4 carries `finish` and raises the one card: held.
+        assertEquals(stale, VoiceRounds.sendBlocker(p, 3, 12, 30f, stale))
         assertNotNull(VoiceRounds.sendBlocker(p, 0, 12, 81f, null))
         assertNull(VoiceRounds.sendBlocker(p, 0, 12, 30f, null))
         // A one-round plan's only round raises the card: held.
@@ -241,7 +243,7 @@ class VoiceRoundsTest {
             assertEquals(kind.name, stale, VoiceRounds.sendBlocker(plan, 0, 12, 30f, stale))
         }
         assertFalse(VoiceRounds.raisesCard(p, 0))
-        assertTrue(VoiceRounds.raisesCard(p, 2))
+        assertTrue(VoiceRounds.raisesCard(p, 3))
     }
 
     @Test
@@ -280,11 +282,14 @@ class VoiceRoundsTest {
     }
 
     @Test
-    fun `the words for very strict's first training say three rounds and one card`() {
+    fun `the words for very strict's first training say four conditions and one card`() {
         val p = VoiceRounds.plan(view("strong_untrained"))
-        assertTrue(VoiceRounds.intro(p).contains("three times"))
+        val words = VoiceRounds.intro(p, view("strong_untrained"))
+        assertTrue(words, words.contains("4 times"))
+        assertTrue(words, words.contains("normal, close to the microphone"))
+        assertTrue(words, words.contains("another room, or at a different time of day"))
         assertTrue(VoiceRounds.introDetail(p).contains("ONE approval card"))
-        assertEquals("Round 2 of 3: about two to three metres away, on a table",
+        assertEquals("Round 2 of 4: about two to three metres away, on a table",
             VoiceRounds.roundTitle(p, 1, view("strong_untrained")))
     }
 }

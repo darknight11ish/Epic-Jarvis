@@ -48,10 +48,10 @@ object VoiceRounds {
     }
 
     /**
-     * One round: its number on the wire (1-3, which is also the condition
-     * the PC files it under) and which of [VoiceTraining.SENTENCES] to read,
-     * by index, in order. Clip n of the round is `sentences[n - 1]` - which
-     * is how the PC's "round 2, clip 5" is turned back into a sentence.
+     * One round: its number on the wire (1..the PC's condition count, which
+     * is also the condition the PC files it under) and which of [Plan.phrases]
+     * to read, by index, in order. Clip n of the round is `phrases[n - 1]` -
+     * which is how the PC's "round 2, clip 5" is turned back into a sentence.
      */
     data class Round(val number: Int, val sentences: List<Int>)
 
@@ -68,7 +68,12 @@ object VoiceRounds {
         val heldElsewhere: Boolean = false,
     )
 
-    data class Plan(val kind: Kind, val rounds: List<Round>) {
+    data class Plan(
+        val kind: Kind,
+        val rounds: List<Round>,
+        /** The PC's balanced read phrases, word for word; the old 12 when it sent none. */
+        val phrases: List<String> = VoiceTraining.SENTENCES,
+    ) {
         val add: Boolean get() = kind == Kind.MORE || kind == Kind.REDO
         val total: Int get() = rounds.sumOf { it.sentences.size }
     }
@@ -81,21 +86,42 @@ object VoiceRounds {
         4 to "in another room, or at a different time of day",
     )
 
-    private val ALL: List<Int> = VoiceTraining.SENTENCES.indices.toList()
+    /** The PC's balanced phrases, or today's twelve when the PC sent none (an older PC). */
+    fun phrases(view: VoiceStrict.View): List<String> =
+        view.readPhrases.ifEmpty { VoiceTraining.SENTENCES }
+
+    /** How many condition rounds this PC asks for (four in the merged contract; 3 on an older one). */
+    fun roundCount(view: VoiceStrict.View): Int =
+        view.conditions.size.takeIf { it > 0 }
+            ?: view.limits.rounds.coerceIn(1, 8).takeIf { it > 0 }
+            ?: 3
 
     /**
-     * The first training (or a fresh one, replacing the print): three rounds
-     * when the PC is very strict and understands rounds, one otherwise.
+     * The first training (or a fresh one, replacing the print): one round per
+     * condition the PC asks for (four in the merged contract) when the PC is
+     * very strict and understands rounds, one otherwise.
      */
-    fun plan(view: VoiceStrict.View): Plan = when {
-        !view.rounds -> Plan(Kind.SINGLE_OLD, listOf(Round(1, ALL)))
-        view.isVeryStrict -> Plan(Kind.EXTENDED, (1..3).map { Round(it, ALL) })
-        else -> Plan(Kind.SINGLE, listOf(Round(1, ALL)))
+    fun plan(view: VoiceStrict.View): Plan {
+        val phrases = phrases(view)
+        val all = phrases.indices.toList()
+        val count = roundCount(view)
+        return when {
+            !view.rounds -> Plan(Kind.SINGLE_OLD, listOf(Round(1, all)), phrases)
+            view.isVeryStrict -> Plan(Kind.EXTENDED, (1..count).map { Round(it, all) }, phrases)
+            else -> Plan(Kind.SINGLE, listOf(Round(1, all)), phrases)
+        }
     }
 
-    /** "Train more", in the condition [round] (1-3). Null on a PC that cannot add. */
-    fun more(view: VoiceStrict.View, round: Int): Plan? =
-        if (view.rounds && round in 1..3) Plan(Kind.MORE, listOf(Round(round, ALL))) else null
+    /** "Train more", in condition [round] (1..the PC's condition count). Null on a PC that cannot add. */
+    fun more(view: VoiceStrict.View, round: Int): Plan? {
+        val phrases = phrases(view)
+        val all = phrases.indices.toList()
+        return if (view.rounds && round in 1..roundCount(view)) {
+            Plan(Kind.MORE, listOf(Round(round, all)), phrases)
+        } else {
+            null
+        }
+    }
 
     /**
      * "Record them again": exactly the clips the PC left out of an approved
@@ -135,7 +161,7 @@ object VoiceRounds {
             }
             Round(number, topped)
         }
-        return if (rounds.isEmpty()) null else Plan(Kind.REDO, rounds)
+        return if (rounds.isEmpty()) null else Plan(Kind.REDO, rounds, sent.phrases)
     }
 
     /**
@@ -197,8 +223,10 @@ object VoiceRounds {
         val s = view.session ?: return null
         if (!view.rounds || s.add || s.mic != mic) return null
         val held = s.rounds.map { it.round }.toSet()
-        val next = (1..3).firstOrNull { it !in held } ?: return null
-        return Plan(Kind.EXTENDED, (1..3).map { Round(it, ALL) }) to (next - 1)
+        val count = roundCount(view)
+        val next = (1..count).firstOrNull { it !in held } ?: return null
+        val phrases = phrases(view)
+        return Plan(Kind.EXTENDED, (1..count).map { Round(it, phrases.indices.toList()) }, phrases) to (next - 1)
     }
 
     /** The unfinished training the PC holds, in words, or null. */
@@ -214,7 +242,9 @@ object VoiceRounds {
     // -------------------------------------------------------------- words --
 
     fun ask(view: VoiceStrict.View, round: Int): String =
-        view.roundAsks[round] ?: DEFAULT_ASKS[round].orEmpty()
+        view.conditions.getOrNull(round - 1)?.ask?.takeIf { it.isNotBlank() }
+            ?: view.roundAsks[round]
+            ?: DEFAULT_ASKS[round].orEmpty()
 
     /** The heading over a round's sentences. */
     fun roundTitle(plan: Plan, index: Int, view: VoiceStrict.View): String {
@@ -227,14 +257,23 @@ object VoiceRounds {
         }
     }
 
-    /** The first screen's words, for [plan]. */
-    fun intro(plan: Plan): String = when (plan.kind) {
-        Kind.EXTENDED ->
+    /** The first screen's words, for [plan]. [view] gives the PC's own condition words. */
+    fun intro(plan: Plan, view: VoiceStrict.View? = null): String = when (plan.kind) {
+        Kind.EXTENDED -> {
+            val count = plan.rounds.size
+            val places = view?.conditions.orEmpty().mapNotNull {
+                it.ask.ifBlank { it.label }.takeIf { w -> w.isNotBlank() }
+            }
+            val where = if (places.size == count) {
+                " in ${count} places: " + places.joinToString("; ") + "."
+            } else {
+                " in $count places, each in a different condition."
+            }
             "Your voice check is very strict, so Jarvis needs to hear you in more than one " +
-                "place. Read the same 12 short sentences three times: close to the phone, then " +
-                "further away or more quietly, then at another time or in another room. It " +
-                "takes about six minutes, and you can do the rounds at different times within " +
-                "15 minutes of each other."
+                "place. Read the same ${plan.phrases.size} short sentences $count times$where " +
+                "It takes about ${count * 2} minutes, and you can do the rounds at different " +
+                "times within 15 minutes of each other."
+        }
         Kind.MORE ->
             "Add recordings to the voice Jarvis already knows, in one place it struggles " +
                 "with. Nothing it has now is deleted."
@@ -298,7 +337,7 @@ object VoiceRounds {
             val idx = sent?.rounds?.firstOrNull { it.number == o.round }?.sentences?.getOrNull(o.clip - 1)
                 ?: return@mapNotNull null
             val round = if ((sent.rounds.size) > 1) "round ${o.round}, " else ""
-            "$round\"${VoiceTraining.SENTENCES[idx]}\""
+            "$round\"${sent.phrases[idx]}\""
         }
         return if (named.size == n) "$head: ${named.joinToString("; ")}." else "$head."
     }
