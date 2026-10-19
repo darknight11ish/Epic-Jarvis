@@ -1,0 +1,445 @@
+{
+  "version": 1,
+  "generated_by": "tools/gen_work_presets.py",
+  "source": "backend/jarvis_presets.py",
+  "note": "both apps render these same words; regenerate, never hand-edit",
+  "presets": [
+    {
+      "id": "general",
+      "title": "General",
+      "focus": "everyday questions, writing, life admin",
+      "what": "The everyday preset: questions, writing, checking things, your own paperwork - one balanced setup instead of a separate admin preset.",
+      "cost": "qwen3.5:9b sits on the 2060 and holds 196,608 tokens there, taking 9.17 of its 12 GB; nothing else fits beside it. Writing is 44.9 tokens a second, not the fastest.",
+      "worse": "Not the quickest and not the picture specialist; its thinking has to stay off for ordinary turns, or it answered nothing in the measured run.",
+      "model": "qwen3.5:9b",
+      "lane": {
+        "key": "main",
+        "card": "RTX 2060",
+        "port": 11436,
+        "words": "the long-context card"
+      },
+      "context": 196608,
+      "helper": null,
+      "policy": {
+        "prompt": "balanced",
+        "diet": "balanced",
+        "tools": []
+      },
+      "measured": {
+        "tok_s": 44.9,
+        "size_gib": 6.1,
+        "vram_gib": 9.17,
+        "spill_gib": 0.0
+      },
+      "pending": false,
+      "heavy_mode": false,
+      "apply": {
+        "action": "Use this preset",
+        "switch_route": "/api/models/switch",
+        "lane_start": false,
+        "auto": false
+      }
+    },
+    {
+      "id": "general_uncensored",
+      "title": "General Uncensored",
+      "focus": "general work with the uncensored model",
+      "what": "General everyday work with the uncensored model, for answers the ordinary model's safety tuning would refuse or water down.",
+      "cost": "Measured 2026-10-18: cold load 18.5-20.5 s, 45.6 tokens a second at 8k and 45-46 at 16k; 32k loads 7.3 GB at 100% GPU (it only splits across cards when others are resident; no CPU spill). 6.3 GB on disk, Apache-2.0, Qwen3.5 family, 8.95B parameters.",
+      "worse": "A one-run general rubric of 6 prompts (6/6) is not independent evidence; it did beat the installed qwen2.5-14b fallback on the quality tie and 45.6 against 30.6 tokens a second. Small known nit: it suggested Homebrew on Windows.",
+      "model": "hf.co/mradermacher/Huihui-Qwen3.5-9B-abliterated-GGUF:Q4_K_M",
+      "lane": {
+        "key": "main",
+        "card": "RTX 2060",
+        "port": 11436,
+        "words": "the long-context card"
+      },
+      "context": 196608,
+      "helper": null,
+      "policy": {
+        "prompt": "balanced",
+        "diet": "balanced",
+        "tools": []
+      },
+      "measured": {
+        "tok_s": 45.6,
+        "tok_s_16k": 45.0,
+        "cold_load_s": [
+          18.5,
+          20.5
+        ],
+        "vram_gib_32k": 7.3,
+        "context_max": 262144,
+        "params_b": 8.95,
+        "disk_gib": 6.3,
+        "licence": "Apache-2.0",
+        "source": "measurement 2026-10-18: one-run 6-prompt general rubric, 6/6; not independent; 45.6 tok/s at 8k, 45-46 at 16k"
+      },
+      "pending": false,
+      "heavy_mode": false,
+      "apply": {
+        "action": "Use this preset",
+        "switch_route": "/api/models/switch",
+        "lane_start": false,
+        "auto": false
+      }
+    },
+    {
+      "id": "coding",
+      "title": "Coding",
+      "focus": "code, files, debugging, multi-step work",
+      "what": "For writing and fixing code, reading a project, and long tool-driven coding jobs: the 30B coding model across both cards (heavy mode), with the coding lane arriving as part of the lane patch.",
+      "cost": "HEAVY MODE: it holds BOTH GPUs (14 GB, 100% GPU across both cards) and evicts the other lanes' models while it works; cold load is about 32.1 s. Measured 76.2 tok/s median eval and 6/6 on the coding rubric. It is not a single-card model.",
+      "worse": "Heavy mode means the Fast/Live and Agentic+Vision lanes lose their models while it runs, and its apply path needs a pooled both-GPU lane - the pinned 2060/2080S lanes cannot host it. Until that lane patch lands: \"heavy mode: both cards; lane support arriving\". No single-card use is claimed.",
+      "model": "qwen3-coder-30b-a3b-ud-q3-k-xl",
+      "lane": {
+        "key": "main",
+        "card": "RTX 2060",
+        "port": 11436,
+        "words": "the long-context card"
+      },
+      "context": 28672,
+      "helper": null,
+      "policy": {
+        "prompt": "coding",
+        "diet": "coding",
+        "tools": [
+          "code",
+          "files"
+        ]
+      },
+      "measured": {
+        "tok_s": 76.2,
+        "rubric": "6/6 coding rubric",
+        "size_gib": 14.0,
+        "gpu_use": "100% GPU across both cards",
+        "cold_load_s": 32.1,
+        "spill_gib": 0.0,
+        "source": "measurement 2026-10-18: 76.2 tok/s median eval, 6/6 coding rubric, 14 GB, 100% GPU across both cards, cold load ~32.1 s, no CPU spill"
+      },
+      "pending": false,
+      "heavy_mode": true,
+      "apply": {
+        "action": "Use this preset",
+        "switch_route": "/api/models/switch",
+        "lane_start": false,
+        "auto": false
+      }
+    },
+    {
+      "id": "agentic_vision",
+      "title": "Agentic + Vision",
+      "focus": "tools, steps, forms, browser, phone, pictures",
+      "what": "For work that takes several steps with tools - browser, phone, forms, notes - and pictures: the vision model reads the image, and a picture-capable model stays off the display card.",
+      "cost": "Measured 2026-10-18: it accepts pictures and answered correctly (minor mislabels of status indicators). Browser: 4.45 s to first token, 25.6 s total. Desktop: 0.89 s first token / 46.9 s total warm, 27.6 s / 70.2 s cold - these are LATENCY, not tokens a second.",
+      "worse": "Slow on the desktop UI (about 47 s warm, 70 s cold for a full answer), and the faster first-token fallback qwen3-vl:8b-thinking produced NO answer on the desktop UI (all thinking, done_reason=length), so it is only a simple-page option.",
+      "model": "qwen3.5:9b",
+      "lane": {
+        "key": "main",
+        "card": "RTX 2060",
+        "port": 11436,
+        "words": "the long-context card"
+      },
+      "context": 16384,
+      "helper": null,
+      "policy": {
+        "prompt": "agentic",
+        "diet": "agentic",
+        "tools": [
+          "browser",
+          "phone",
+          "forms",
+          "notes"
+        ]
+      },
+      "measured": {
+        "vision_latency_s": {
+          "browser_first_token": 4.45,
+          "browser_total": 25.6,
+          "desktop_warm_first_token": 0.89,
+          "desktop_warm_total": 46.9,
+          "desktop_cold_first_token": 27.6,
+          "desktop_cold_total": 70.2
+        },
+        "source": "vision test 2026-10-18: pictures accepted, answers correct (minor status-indicator mislabels); speeds are LATENCY, not tok/s",
+        "fallback": {
+          "model": "qwen3-vl:8b-thinking",
+          "note": "browser 0.39 s first token / 25.9 s total and exact, but on the desktop UI no answer at 3,000 or 700 tokens (all thinking, done_reason=length) - a first-token option for simple pages only, not the default"
+        }
+      },
+      "pending": false,
+      "heavy_mode": false,
+      "apply": {
+        "action": "Use this preset",
+        "switch_route": "/api/models/switch",
+        "lane_start": false,
+        "auto": false
+      }
+    },
+    {
+      "id": "fast",
+      "title": "Fast",
+      "focus": "the quickest short answers",
+      "what": "The quickest preset: qwen3:8b on the fast card at 16k, while the 2060 keeps the general model warm for when you switch back.",
+      "cost": "16,384 tokens is its ceiling and it is the weakest measured explainer; the 2060's model stays loaded beside it, for the same measured -1.9% off the main model's speed.",
+      "worse": "Weakest answer quality of the measured models and the shortest conversation; chosen for waiting less, not for care.",
+      "model": "qwen3:8b",
+      "lane": {
+        "key": "coding",
+        "card": "RTX 2080 SUPER",
+        "port": 11435,
+        "words": "the fast card"
+      },
+      "context": 16384,
+      "helper": null,
+      "policy": {
+        "prompt": "fast",
+        "diet": "fast",
+        "tools": []
+      },
+      "measured": {
+        "tok_s": 64.0,
+        "size_gib": 4.87,
+        "vram_gib": 5.84,
+        "spill_gib": 0.0
+      },
+      "pending": false,
+      "heavy_mode": false,
+      "apply": {
+        "action": "Use this preset",
+        "switch_route": "/api/models/switch",
+        "lane_start": true,
+        "auto": false
+      }
+    }
+  ],
+  "old_ids_replaced": [
+    "everyday",
+    "coding",
+    "admin",
+    "long",
+    "specialist"
+  ],
+  "hardware": {
+    "detected": {
+      "count": 0,
+      "cards": [],
+      "source": "jarvis_hardware.detect()"
+    },
+    "questionnaire": {
+      "focus_choices": [
+        "general",
+        "general_uncensored",
+        "coding",
+        "agentic_vision",
+        "fast"
+      ],
+      "priority_choices": [
+        "speed",
+        "quality",
+        "long_context",
+        "vision"
+      ],
+      "answers": null
+    }
+  },
+  "recommendations": {
+    "by_gpu_count": {
+      "1": {
+        "general": {
+          "preset": "general",
+          "model": "qwen3.5:9b",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 196608,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "one card: reasoned, not measured on this PC"
+        },
+        "general_uncensored": {
+          "preset": "general_uncensored",
+          "model": "hf.co/mradermacher/Huihui-Qwen3.5-9B-abliterated-GGUF:Q4_K_M",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 196608,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "one card: reasoned, not measured on this PC"
+        },
+        "coding": {
+          "preset": "coding",
+          "model": "qwen3-coder-30b-a3b-ud-q3-k-xl",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 28672,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "one card: reasoned, not measured on this PC"
+        },
+        "agentic_vision": {
+          "preset": "agentic_vision",
+          "model": "qwen3.5:9b",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 16384,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "one card: reasoned, not measured on this PC"
+        },
+        "fast": {
+          "preset": "fast",
+          "model": "qwen3:8b",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 16384,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "one card: reasoned, not measured on this PC"
+        }
+      },
+      "2": {
+        "general": {
+          "preset": "general",
+          "model": "qwen3.5:9b",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 196608,
+          "tok_s": 44.9,
+          "measured": true,
+          "best_effort_not_tested": false,
+          "note": "the agreed 2-GPU mapping: main model on the 2060"
+        },
+        "general_uncensored": {
+          "preset": "general_uncensored",
+          "model": "hf.co/mradermacher/Huihui-Qwen3.5-9B-abliterated-GGUF:Q4_K_M",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 196608,
+          "tok_s": 45.6,
+          "measured": true,
+          "best_effort_not_tested": false,
+          "note": "the agreed 2-GPU mapping: main model on the 2060"
+        },
+        "coding": {
+          "preset": "coding",
+          "model": "qwen3-coder-30b-a3b-ud-q3-k-xl",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 28672,
+          "tok_s": 76.2,
+          "measured": true,
+          "best_effort_not_tested": false,
+          "note": "the agreed 2-GPU mapping: main model on the 2060"
+        },
+        "agentic_vision": {
+          "preset": "agentic_vision",
+          "model": "qwen3.5:9b",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 16384,
+          "tok_s": null,
+          "measured": true,
+          "best_effort_not_tested": false,
+          "note": "the agreed 2-GPU mapping: main model on the 2060"
+        },
+        "fast": {
+          "preset": "fast",
+          "model": "qwen3:8b",
+          "card_index": 1,
+          "card": "card 1",
+          "context": 16384,
+          "tok_s": 64.0,
+          "measured": true,
+          "best_effort_not_tested": false,
+          "note": "the agreed 2-GPU mapping: Fast on the fast card"
+        }
+      },
+      "3": {
+        "general": {
+          "preset": "general",
+          "model": "qwen3.5:9b",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 196608,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "2060 12 GB: main chat/everyday, 196k"
+        },
+        "general_uncensored": {
+          "preset": "general_uncensored",
+          "model": "hf.co/mradermacher/Huihui-Qwen3.5-9B-abliterated-GGUF:Q4_K_M",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 196608,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "2060 12 GB: main chat/everyday, 196k; waiting for the model"
+        },
+        "coding": {
+          "preset": "coding",
+          "model": "qwen3-coder-30b-a3b-ud-q3-k-xl",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 28672,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "main model on the 2060; the Coding lane (qwen3.5:4b helper) starts on demand on 2080 SUPER #2 (card 2, PCIe 3.0 x4 M.2 adapter)"
+        },
+        "agentic_vision": {
+          "preset": "agentic_vision",
+          "model": "qwen3.5:9b",
+          "card_index": 2,
+          "card": "card 2",
+          "context": 16384,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "2080 SUPER #2 (card 2): Agentic+Vision, qwen3.5:9b with images"
+        },
+        "fast": {
+          "preset": "fast",
+          "model": "qwen3:8b",
+          "card_index": 1,
+          "card": "card 1",
+          "context": 16384,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "2080 SUPER #1 (card 1): display + Fast/Live lane, qwen3:8b"
+        }
+      }
+    },
+    "basis": "the agreed 2-GPU mapping is measured; 1 and 3 GPUs are best effort and labelled as not tested",
+    "three_gpu_plan": {
+      "confirmed": true,
+      "layout": "lane per GPU, never one model split across three cards",
+      "cards": [
+        {
+          "role": "main chat / everyday",
+          "card": "RTX 2060 12 GB",
+          "context": 196608
+        },
+        {
+          "role": "display + Fast/Live lane",
+          "card": "RTX 2080 SUPER #1",
+          "context": 16384
+        },
+        {
+          "role": "Agentic+Vision and Coding lane (on demand)",
+          "card": "RTX 2080 SUPER #2",
+          "context": 16384
+        }
+      ],
+      "link_note": "2080 SUPER #2 likely sits on the B550 chipset through an M.2 adapter: PCIe 3.0 x4, maybe x2. A slower link costs loading time, not a lane; each lane keeps its own model.",
+      "future_not_a_preset": "Qwen3.8-27B pooled to 28 GB across cards is a future 'max quality' experiment only; it is not a preset and no figure is claimed until it is measured."
+    }
+  }
+}

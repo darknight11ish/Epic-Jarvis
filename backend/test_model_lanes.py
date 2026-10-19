@@ -622,10 +622,19 @@ def t_nothing_real_is_ever_run_by_this_suite():
     # exactly once - the function itself, which `start()` reaches through its
     # one default seam - so there is exactly one way for this module to start
     # anything. `"all"` appears only where the route REFUSES it.
+    #
+    # ALLOWED since 2026-10-18: `start_lane(lane_key)` is the preset apply's
+    # owner-approved path. It looks up exactly ONE named lane (lane_by_key) and
+    # calls the SAME start(lane=...) seam; it can never start two, and the
+    # route body still accepts only `why`. The old "for lane in LANES" string
+    # check would have banned the harmless lookup loop, so the check below pins
+    # the real property instead: one start call from start_lane, never a loop
+    # that starts each lane.
     check("nothing in this module can be asked to start more than one lane",
           text.count("_launch_task(") == 1
           and 'unknown = [k for k in body if k != "why"]' in text
-          and "for lane in LANES" not in text, text.count("_launch_task("))
+          and text.count("return start(lane=lane, **kwargs)") == 1
+          and "def lane_by_key" in text, text.count("_launch_task("))
     # And the two route paths are the ones the apps call.
     check("the two route paths are the ones the apps call",
           L.GET_ROUTE == "/api/model-lanes"

@@ -180,6 +180,41 @@ LANES = (
          "the coding model"),
 )
 
+#: The owner's full task names, for the preset apply card's words only. The
+#: matcher still uses each Lane's `task_prefix` - the stable half a rename does
+#: not touch - so this table can never make `schtasks` run something else.
+LANE_TASKS = {
+    "everyday": "Jarvis Ollama - Everyday model (RTX 2060)",
+    "coding": "Jarvis Ollama - Coding model (RTX 2080 Super)",
+}
+
+
+def lane_by_key(lane_key) -> Optional[Lane]:
+    """The lane called `lane_key` ("everyday"/"coding"), or None. Never raises."""
+    key = str(lane_key or "").strip().lower()
+    for lane in LANES:
+        if lane.key == key:
+            return lane
+    return None
+
+
+def start_lane(lane_key, **kwargs) -> tuple:
+    """Start the NAMED lane's own task, through the same `start()` rules.
+
+    The preset-apply route calls this only after the owner approved the apply:
+    one named lane, never both, and every existing safeguard still applies
+    (answering -> nothing started; no such task -> refused in words; already
+    watched -> 409; Task Scheduler says running -> watched instead). An unknown
+    key is refused rather than guessed.
+    """
+    lane = lane_by_key(lane_key)
+    if lane is None:
+        return 409, {"ok": False, "changed": False,
+                     "reason": f"no lane called {lane_key!r}; lanes are "
+                               f"{', '.join(l.key for l in LANES)}"}
+    return start(lane=lane, **kwargs)
+
+
 #: The address Jarvis itself talks to when `jarvis_hud.OLLAMA_URL` cannot be
 #: read - Ollama's own default, which is what `jarvis_hud.py` falls back to.
 DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
