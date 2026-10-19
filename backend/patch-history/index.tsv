@@ -107,8 +107,7 @@ plugin-loader.patch	plugin-loader/e8d837d.patch	e8d837d609c8bcb522dd83afd56d7155
 plugin-loader.patch	plugin-loader/ff4ee28.patch	ff4ee2880fa1880279aadfc4cd34f02f276ee8c2	2026-10-11T13:51:26-07:00	#266: re-anchor plugin-loader.patch on pictures.patch, and regenerate the plug-in catalogue
 plugin-loader.patch	plugin-loader/f2077b5.patch	f2077b51f724257747ab8d8b2f0aa1e9f345549a	2026-10-11T05:50:49-07:00	finish the uncensored opt-ins: off by default, on is one card, and a way in (#253)
 plugin-loader.patch	plugin-loader/d258b98.patch	d258b980ae95e1c19b121095cce7f5301a9823ae	2026-10-10T02:43:26-07:00	a feature whose only wiring was one start-up call is now a folder
-presets.patch	presets/980a6f7.patch	980a6f73461684f5aadeb36a8709e6a0c82a3dc7	2026-10-19T02:31:42-07:00	feat(presets): the apply route, the lane start and rollback (LAN slice)
-presets.patch	presets/323b8a7.patch	323b8a7c3d1e22b2c3ce981f42292bcd2c32ac96	2026-10-19T01:50:19-07:00	feat(presets): held patch for per-request chat lane resolution (unregistered)
+presets.patch	presets/41c9069.patch	41c906981c399944d236123b1bdd3e5f7a2786e9	2026-10-19T13:45:56-07:00	feat(presets): lane-aware single-approval apply with rollback
 projects.patch	projects/ef32847.patch	ef3284730bcbc4a1f9ddd20a2e57fe37c1c92888	2026-09-28T01:04:31Z	Projects, build steps 1 and 2: projects, life benchmarks and their numbers (backend only)
 prompt-coach.patch	prompt-coach/f56e6ab.patch	f56e6abc597daa98e826022584f6fe9b2c3fcba9	2026-10-08T20:47:48-07:00	the two things CI caught that this machine could not
 prompt-coach.patch	prompt-coach/54ed3dc.patch	54ed3dc1566ccb824ad38921a110c83503db3e54	2026-10-08T18:39:20-07:00	prompt coach: the patch, generated from the real jarvis_hud.py
