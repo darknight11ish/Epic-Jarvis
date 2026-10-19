@@ -668,6 +668,57 @@ _LABELS = {"pick": "picks the right tool", "ask": "asks instead of guessing",
            "behaviour": "behaves as it should"}
 
 
+def _mean_min_max(values):
+    """(mean, min, max) of the numbers present, or (None, None, None)."""
+    vals = [v for v in values if isinstance(v, (int, float)) and not isinstance(v, bool)]
+    if not vals:
+        return None, None, None
+    return sum(vals) / len(vals), min(vals), max(vals)
+
+
+def trial_stats(summaries):
+    """Per list/suite mean and min/max across trial summaries.
+
+    `summaries` is [summary(result), ...], one per trial. The result shape is
+    the same as `summary()`: {list: {suite: {"pass", "of", "prompt_tokens_avg"}}}.
+    The mean is a number of cases (e.g. 4.33/8), not a rounded integer, so a
+    three-trial run can show the direction even when every trial differs.
+    """
+    out = {}
+    for lst in (summaries[0] if summaries else {}):
+        out[lst] = {}
+        for suite in summaries[0][lst]:
+            pass_counts = [s[lst][suite]["pass"] for s in summaries if suite in s.get(lst, {})]
+            of = next((s[lst][suite]["of"] for s in summaries if suite in s.get(lst, {})), None)
+            tokens = [s[lst][suite].get("prompt_tokens_avg") for s in summaries
+                      if suite in s.get(lst, {})]
+            mean, low, high = _mean_min_max(pass_counts)
+            tmean, tlow, thigh = _mean_min_max(tokens)
+            out[lst][suite] = {
+                "trials": len(pass_counts), "of": of,
+                "pass_mean": round(mean, 3) if mean is not None else None,
+                "pass_min": low, "pass_max": high,
+                "prompt_tokens_mean": round(tmean) if tmean is not None else None,
+                "prompt_tokens_min": tlow, "prompt_tokens_max": thigh,
+            }
+    return out
+
+
+def print_trial_stats(name, stats, trials, temperature, top_p, out=print):
+    """The mean ± min/max lines, one per set (list/suite), after the trials."""
+    out(f"\n{name}: {trials} trials at temperature {temperature}, top_p {top_p} "
+        "(mean; min..max)")
+    for lst, suites in stats.items():
+        for suite, st in suites.items():
+            plow, phigh = st["pass_min"], st["pass_max"]
+            line = (f"  [{lst}/{suite}] pass mean {st['pass_mean']:.2f}/{st['of']} "
+                    f"(min {plow}, max {phigh})")
+            if st["prompt_tokens_mean"] is not None:
+                line += (f"; prompt tokens mean {st['prompt_tokens_mean']} "
+                         f"(min {st['prompt_tokens_min']}, max {st['prompt_tokens_max']})")
+            out(line)
+
+
 def print_summary(model_name, summ, result, out=print):
     lists = list(summ)
     out(f"\n{model_name}")
@@ -820,11 +871,22 @@ def main(argv=None):
                     help="pick: retry a broken call once, as Jarvis does")
     ap.add_argument("--every-attack", action="store_true",
                     help="injection: all 276 attack texts, not one per goal (hours)")
-    ap.add_argument("--temperature", type=float, default=JARVIS_TEMPERATURE,
+    ap.add_argument("--temperature", "--temp", dest="temperature", type=float,
+                    default=JARVIS_TEMPERATURE,
                     help=f"default {JARVIS_TEMPERATURE}, what Jarvis sends; use a model "
-                         "maker's own value to test that instead")
+                         "maker's own value to test that instead (--temp is the short form)")
     ap.add_argument("--top-p", type=float, default=JARVIS_TOP_P,
                     help=f"default {JARVIS_TOP_P}, what Jarvis sends")
+    ap.add_argument("--trials", type=int, default=1,
+                    help="run the chosen suites this many times at the sampled temperature; "
+                         "the report adds per-set mean/min/max and the worst trial stays "
+                         "under the model's name (default 1, the old single run)")
+    ap.add_argument("--greedy", action="store_true",
+                    help="after the sampled trials, run one deterministic pass at "
+                         "temperature 0.0 and top_p 1.0 and report it beside them")
+    ap.add_argument("--out", default=None,
+                    help="save the result JSON here (default: beside this script, and "
+                         "the copy the backend reads). A named path writes only there")
     ap.add_argument("--repeat", type=int, default=1,
                     help="run everything this many times; the WORST run is saved "
                          "under the model's name (the careful choice), every run beside it")
@@ -843,6 +905,13 @@ def main(argv=None):
     if a.repeat < 1:
         print("--repeat must be 1 or more.")
         return 2
+    if a.trials < 1:
+        print("--trials must be 1 or more.")
+        return 2
+    if a.repeat > 1 and (a.trials > 1 or a.greedy):
+        print("Use --trials/--greedy OR --repeat, not both: --repeat keeps the old "
+              "worst-run behaviour and --trials reports mean/min/max.")
+        return 2
     base = a.url.rstrip("/")
     runs = {}
     for name in a.models:
@@ -850,27 +919,68 @@ def main(argv=None):
         if (ctx is None or ctx < MIN_CONTEXT) and not a.allow_short_context:
             print(short_context_note(name, ctx))
             continue
-        tries = []
-        for i in range(a.repeat):
+        if a.repeat > 1 or (a.trials == 1 and not a.greedy):
+            # The old path, unchanged: one run (or the old repeated worst-run
+            # report), so an existing caller's screen and saved JSON stay the same.
+            tries = []
+            for i in range(a.repeat):
+                if a.repeat > 1:
+                    print(f"\n{name}: run {i + 1} of {a.repeat}")
+                result = run_all(ollama(base, name, a.temperature, a.top_p), suites, a.lists,
+                                 repair=a.repair, every=a.every_attack)
+                summ = summary(result)
+                print_summary(name, summ, result)
+                tries.append((summ, result))
+            worst = min(tries, key=lambda t: passes(t[0]))
+            runs[name] = {"summary": worst[0], "rows": worst[1],
+                          "settings": {"temperature": a.temperature, "top_p": a.top_p,
+                                       "context": ctx, "repeat": a.repeat}}
             if a.repeat > 1:
-                print(f"\n{name}: run {i + 1} of {a.repeat}")
+                runs[name]["every_run"] = [t[0] for t in tries]
+                print(f"\n{name}: passes per run {[passes(t[0]) for t in tries]} - "
+                      f"the worst is saved")
+            continue
+
+        # New: sampled trials, then one greedy pass. Every trial is printed in
+        # the old single-run shape, followed by the per-set mean and min/max.
+        trial_summs, trial_results = [], []
+        for i in range(a.trials):
+            if a.trials > 1:
+                print(f"\n{name}: trial {i + 1} of {a.trials}")
             result = run_all(ollama(base, name, a.temperature, a.top_p), suites, a.lists,
                              repair=a.repair, every=a.every_attack)
             summ = summary(result)
-            print_summary(name, summ, result)
-            tries.append((summ, result))
-        worst = min(tries, key=lambda t: passes(t[0]))
-        runs[name] = {"summary": worst[0], "rows": worst[1],
+            if a.trials > 1:
+                print_summary(name, summ, result)
+            trial_summs.append(summ)
+            trial_results.append(result)
+        if a.trials == 1:
+            print_summary(name, trial_summs[0], trial_results[0])
+        worst_at = min(range(len(trial_summs)), key=lambda i: passes(trial_summs[i]))
+        runs[name] = {"summary": trial_summs[worst_at], "rows": trial_results[worst_at],
                       "settings": {"temperature": a.temperature, "top_p": a.top_p,
-                                   "context": ctx, "repeat": a.repeat}}
-        if a.repeat > 1:
-            runs[name]["every_run"] = [t[0] for t in tries]
-            print(f"\n{name}: passes per run {[passes(t[0]) for t in tries]} - "
-                  f"the worst is saved")
+                                   "context": ctx, "repeat": 1, "trials": a.trials}}
+        if a.trials > 1:
+            runs[name]["trial_summaries"] = trial_summs
+            runs[name]["trial_rows"] = trial_results
+            st = trial_stats(trial_summs)
+            runs[name]["trial_stats"] = st
+            print_trial_stats(name, st, a.trials, a.temperature, a.top_p)
+        if a.greedy:
+            green_temperature, green_top_p = 0.0, 1.0
+            print(f"\n{name} (greedy: temperature {green_temperature}, top_p {green_top_p})")
+            gres = run_all(ollama(base, name, green_temperature, green_top_p), suites, a.lists,
+                           repair=a.repair, every=a.every_attack)
+            gsum = summary(gres)
+            print_summary(f"{name} [greedy]", gsum, gres)
+            runs[name]["greedy"] = {
+                "summary": gsum, "rows": gres,
+                "settings": {"temperature": green_temperature, "top_p": green_top_p,
+                             "context": ctx, "repeat": 1}}
     if not runs:
         print("Nothing was tested.")
         return 1
-    path = save(runs)
+    path = save(runs, a.out or RESULTS)
     print(f"\nSaved: {path}")
     return 0
 
