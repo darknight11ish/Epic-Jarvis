@@ -973,7 +973,7 @@ here does **not** set it - it is recorded on the turn (`outside_flags` in
 | `/api/voice/moment` | GET | - → WAV bytes | `voice_flow.rs` `get_voice_moment` | `JarvisApi.voiceMoment` | The "One moment." clip in the voice in use now (section 17, `voice-flow.patch`). 503 with `why` when there is none. |
 | `/api/voice/say` | POST | `{"text": …}` → WAV bytes | `voice.rs:716` | `JarvisApi.kt:601` | **503 is a legitimate answer.** |
 | `/api/voice/wake` | POST | `{"enabled": bool}` | `voice.rs` `ensure_wake_ready` | `JarvisApi.setWakeWord` | ON raises an approval card; OFF is immediate. |
-| `/api/voice/enroll` | POST | `{"clips": ["<base64 WAV>", ...], "mic": "phone"}`; also `"mode": "calibrate"` / `"threshold"`, and since 2026-09-24 `"train"` / `"strictness"` / `"privacy"` / `"memory"` / `"measure"` (§16) | `voice_training.rs` `send_voice_training`, `set_voice_setting`, `measure_voice`, `cancel_voice_training` | `JarvisApi.enrollVoice`, `calibrateVoice`, `proposeVoiceThreshold` | "Train my voice". Raises an approval card; enrols nothing itself. `voice-enroll.patch`. |
+| `/api/voice/enroll` | POST | `{"clips": ["<base64 WAV>", ...], "mic": "phone"}`; also `"mode": "calibrate"` / `"threshold"`, and since 2026-09-24 `"train"` / `"strictness"` / `"privacy"` / `"memory"` / `"measure"` (§16), and since 2026-10-19 `"clear"` (delete the saved voice training, ONE card) | `voice_training.rs` `send_voice_training`, `set_voice_setting`, `measure_voice`, `cancel_voice_training` | `JarvisApi.enrollVoice`, `calibrateVoice`, `proposeVoiceThreshold` | "Train my voice". Raises an approval card; enrols nothing itself. `voice-enroll.patch`. |
 | `/api/voice/turn` | POST | **WAV bytes** (the last few seconds of speech) | `voice.rs` `ask_turn` | **no** (runs the model itself) | Smart Turn: `{"available", "complete", "probability", "threshold", "ms"}`. Sound in, one number out; nothing kept. `voice-turn.patch`. |
 | `/api/voice/voices` (+ `/create`, `/active`, `/delete`, `/better`) | GET / POST | see section 15 | `get_custom_voices`, `create_custom_voice`, `set_active_voice`, `delete_custom_voice`, `set_better_voice` (Settings -> Jarvis's voice) | `CustomVoices.kt` via `JarvisRuntime` (Checks -> Jarvis's voice, `VoicesScreen.kt`) | Custom voices (2026-09-24, `voices.patch`), section 15. |
 
@@ -1196,6 +1196,71 @@ appeared. `listening.push_to_talk` is true only when a clip could get an
 answer end to end: the voice is trained (or mode is `broad`) **and** there
 is speech-to-text on the PC. `backend/test_voice_contract.py` checks this
 JSON against `VoiceModels.kt` and the desktop's `voice.rs`.
+
+**Clearing the saved training: `{"mode": "clear"}`** (added 2026-10-19). The
+owner asked for a way to clear previous voice training with an approval card
+in Settings; there was no control of any kind before this. **No new route and
+no new patch** - it is one more mode on this same `POST /api/voice/enroll`, so
+an older PC answers `400 unknown mode 'clear'` instead of misreading it:
+
+```
+POST /api/voice/enroll
+{"mode": "clear"}
+```
+
+It raises **ONE** approval card, action `change_own_config` (the voice print
+decides who Jarvis obeys, the same action enrolling uses). **Nothing is
+deleted until a person approves that card**; denying it, a timeout, a refusal,
+or a verdict at any tier other than `ask` deletes nothing. One card at a time,
+like every other mode on this route.
+
+| code | body | meaning |
+|---|---|---|
+| `202` | `{"ok": true, "pending": true, "files": 7, "prints": 3, "verifiers": 3, "adaptation": 1, "message": "..."}` | A card is up. Nothing deleted yet. `files` counts the saved files it will delete, by kind - never their paths, never audio. |
+| `200` | `{"ok": true, "cleared": false, "trained": false, "message": "There is nothing to clear: ..."}` | Nothing is saved, so **no card was raised** and nothing was touched. |
+| `409` | `{"error": "...", "pending": true, "expires_in": 140}` | Another card (a training, a threshold or a clear) is already waiting. |
+| `409` | `{"error": "change_own_config is tier 'auto' ...", "pending": false}` | The tier is not `ask`, so no card was raised. |
+
+The outcome shows in `/api/voice/status` as `gate.training.last` =
+`{"outcome": "cleared", "removed": 7, "prints": 3, "verifiers": 3,
+"adaptation": 1}` (counts only). If a saved file could not be deleted (another
+program is using it) the outcome is `failed` with a plain reason and how many
+were really removed - it is never reported as cleared.
+
+**What it deletes, exactly** - every path asked of the module that owns it,
+never typed into this route:
+- `jarvis_voice.lookup_order("")` - the per-microphone prints,
+  `voice/owner.json`, `voice/owner-phone.json`, `voice/owner-desktop.json`
+  (the first is the old single print);
+- `jarvis_wakeword.verifier_path("<mic>")` for each microphone -
+  `voice/wake-verifier.json`, `voice/wake-verifier-phone.json`,
+  `voice/wake-verifier-desktop.json` (the "hey Jarvis" check built from the
+  same recordings);
+- `jarvis_voice_training.adapt_path()` - `voice-adapt.json`, the
+  live-adaptation counters;
+- each one's `<name>.tmp` sibling if a crashed write left one behind
+  (`jarvis_voice` writes a voice file through `_atomic_write`, so a
+  half-written copy of a biometric file is exactly what a clear must not
+  leave).
+
+**What it does NOT delete:** the custom speaking voices (`voices/<id>/`), the
+chat history (including voice transcripts), the phone pairing (`devices/`),
+the threshold and strictness settings (`voice-settings.json` - settings, not
+training), the synthetic self-test clips (`self-test.wav`, `timing-test.wav` -
+made by the text-to-speech engine, not the owner's voice), the "someone else"
+comparison voices, and any audio at all: the training clips were dropped from
+memory when the training was decided, and this module has never written audio
+to disk.
+
+**After a clear** the PC is untrained, and the status says so:
+`GET /api/voice/status` has `gate.enrolled: false`, every
+`gate.prints.<mic>.trained: false`, `wake.verifier.trained: false`, and
+`gate.training.clear: true` is the capability flag that says this PC
+understands the mode. `jarvis_voice.verify()` then refuses every clip with
+`"no enrolled voice profile - run enrolment first"`, so spoken commands and
+"hey Jarvis" questions are refused and Jarvis Live will not start until the
+owner trains their voice again (Settings, Voice). The next training is
+accepted normally.
 
 **`/api/voice/utterance`'s answer** carries both clients' names:
 `is_owner`/`available` (desktop, `voice.rs` `HeardRaw`) and `ok`/`owner`
