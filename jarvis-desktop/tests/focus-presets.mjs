@@ -201,6 +201,19 @@ await check("an apply route plus app wiring enables the one action; the current 
   assert.equal(different.action.label, "Use this preset");
 });
 
+await check("heavy-mode Coding is refused with the PC's own explanation", async () => {
+  const other = withApplyRoute(FIXTURE);
+  other.chosen = "general";
+  const read = Focus.normaliseReading(other);
+  const coding = read.presets.find((p) => p.id === "coding");
+  assert.equal(coding.heavyMode, true);
+  const view = Focus.pickerView(read, "coding");
+  assert.equal(view.action.disabled, true);
+  assert.equal(view.action.why, coding.heavyWords);
+  assert.match(view.action.why, /both|heavy|cannot/i);
+  assert.equal(view.items.find((p) => p.id === "coding").blockerWords, coding.heavyWords);
+});
+
 await check("a preset the PC is preparing says so and cannot be applied", async () => {
   const other = withApplyRoute(FIXTURE);
   other.chosen = "general";
@@ -210,9 +223,18 @@ await check("a preset the PC is preparing says so and cannot be applied", async 
   const read = Focus.normaliseReading(other, { applyWired: true });
   assert.equal(read.presets.find((p) => p.id === "general_uncensored").ready, false);
   const view = Focus.pickerView(read, "general_uncensored");
-  assert.equal(view.items.find((p) => p.id === "general_uncensored").statusWords, row.pending_words);
+  const blocker = view.items.find((p) => p.id === "general_uncensored").blockerWords;
+  assert.ok(blocker.startsWith(row.pending_words), blocker);
+  assert.ok(blocker.includes(row.cost), "the PC's own cost sentence is kept");
   assert.equal(view.action.disabled, true);
-  assert.equal(view.action.why, row.pending_words);
+  assert.equal(view.action.why, blocker);
+});
+
+await check("Settings is disabled on a stale link, exactly like the bar", async () => {
+  const read = Focus.normaliseReading(withApplyRoute(FIXTURE), { applyWired: true });
+  const view = Focus.settingsView(read, "fast", { stale: true });
+  assert.equal(view.action.disabled, true);
+  assert.equal(view.action.why, Focus.STALE_WORDS);
 });
 
 await check("stale and busy never leave the action pressable", async () => {
@@ -300,6 +322,9 @@ await check("the result line uses the PC's words, with a card sentence only as f
   assert.equal(Focus.resultLine({ said: "The card is waiting on the PC." }),
     "The card is waiting on the PC.");
   assert.equal(Focus.resultLine({ ok: false, error: "no such preset" }), "no such preset");
+  assert.equal(Focus.resultLine({ ok: true, changed: true, preset: { title: "Coding" } }),
+    "Coding is now the chosen preset.");
+  assert.equal(Focus.resultLine({ ok: true, changed: true }), "The preset is now chosen.");
   assert.equal(Focus.resultLine({ pending: true }), Focus.ASKED_WORDS);
   assert.equal(Focus.resultLine(""), "");
   assert.equal(Focus.resultLine(null), "");
