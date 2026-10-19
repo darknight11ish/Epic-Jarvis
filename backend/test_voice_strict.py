@@ -1169,8 +1169,8 @@ def t_training_in_rounds():
               and out["held"]["clips"] == 4 and out["next_round"] == 2, (code, out))
         st = json.dumps(E.state())
         check("status shows what is held - counts only, no audio",
-              '"session"' in st and b64(r1)[0][:40] not in st and len(st) < 2500,
-              E.state()["session"])
+              '"session"' in st and b64(r1)[0][:40] not in st and len(st) < 12000,
+              len(st))
         held = E._SESSION["rounds"][1]
         code, out = _round(1, [wav(2.0, 190 + i) for i in range(3)], gate=gate, enroll=rec)
         check("a round sent again replaces the first take (and drops it)",
@@ -1186,7 +1186,7 @@ def t_training_in_rounds():
               and out["clips"] == 11 and "3 rounds" in gate.calls[0][2], (code, out))
         check("approved: enrolled ONCE with each clip's condition",
               len(rec.calls) == 1 and rec.calls[0]["conditions"]
-              == ["close"] * 3 + ["far"] * 3 + ["room"] * 5, rec.calls)
+              == ["close"] * 3 + ["table"] * 3 + ["noise"] * 5, rec.calls)
         last = E.state()["last"]
         check("the odd clip comes back as round and clip number",
               last["outcome"] == "enrolled" and last["outliers"] == [{"round": 1, "clip": 3}],

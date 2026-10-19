@@ -445,8 +445,11 @@ def t_nothing_logs_audio_or_tokens():
     check("no token anywhere", TOKEN not in blob + card + printed)
     st = json.dumps(E.state())
     # A clip is ~85,000 characters of base64; the status is counts and
-    # words (1,500 since the stricter check added its limits and flags).
-    check("status carries no audio either", not any(s[:40] in st for s in b64) and len(st) < 1500, st)
+    # words only. The 2026-10-18 redesign added the training plan (balanced
+    # phrases, free-speech prompts and the four condition labels) to status,
+    # so the length budget grew with it - still words, never audio.
+    check("status carries no audio either",
+          not any(s[:40] in st for s in b64) and len(st) < 9000, len(st))
 
     # The module's source: no print, no logging, no file writes. The clips
     # live in memory only - "never written to disk" is checked, not claimed.

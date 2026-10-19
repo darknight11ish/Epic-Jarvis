@@ -341,7 +341,13 @@ SHIPPED = (
     # modules the patches call
     "jarvis_intake.py", "jarvis_feedback.py", "jarvis_skill_discovery.py",
     "jarvis_speed.py", "jarvis_owned_tables.py", "jarvis_agent.py",
-    "jarvis_voice_enroll.py", "jarvis_speech.py",
+    "jarvis_voice_enroll.py",
+    # --- 2026-10-18: the voice-training redesign (phrases, condition rounds,
+    # live adaptation rules, per-condition measured thresholds, held-out
+    # EER/FRR). Local numbers only; the apps' training screens read it via
+    # jarvis_voice_enroll.state()["training"].
+    "jarvis_voice_training.py",
+    "jarvis_speech.py",
     "jarvis_task_control.py", "jarvis_note_capture.py", "jarvis_power_switch.py",
     "jarvis_wakeword.py",
     "jarvis_token_store.py",

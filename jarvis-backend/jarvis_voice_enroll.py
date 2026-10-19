@@ -154,9 +154,21 @@ MIN_PEAK = 0.01
 
 #: Training rounds: number -> (the sub-print's condition, what the app
 #: should ask for). The phone asks for each in turn; any may be redone.
-ROUNDS = {1: ("close", "normal, close to the microphone"),
-          2: ("far", "further away from the microphone, or quieter"),
-          3: ("room", "at another time of day, or in another room")}
+#:
+#: The redesign (2026-10-18) has FOUR condition rounds, defined in ONE place,
+#: jarvis_voice_training.CONDITIONS: close; on a table 2-3 m away; with
+#: background noise (fan/TV); another room or time of day. Old stored names
+#: keep working (`far` -> `table`, `general`/`room` as before) through
+#: jarvis_voice_training.clean_condition. The fallback is only for a backend
+#: whose bridge is older than this file.
+try:
+    import jarvis_voice_training as TRAINING
+    ROUNDS = {i + 1: (c["id"], c["ask"]) for i, c in enumerate(TRAINING.CONDITIONS)}
+except Exception:                                   # noqa: BLE001
+    TRAINING = None
+    ROUNDS = {1: ("close", "normal, close to the microphone"),
+              2: ("far", "further away from the microphone, or quieter"),
+              3: ("room", "at another time of day, or in another room")}
 #: Held rounds are dropped this long after the last one arrived.
 SESSION_SECONDS = 900.0
 #: The guided repeat test: up to this many of the owner's own sentences.
@@ -661,7 +673,7 @@ def stage(body: bytes, *, gate: Optional[Callable] = None,
                 "talk_to_type", "wake_confirm", "voice_id_model"):
         # Tightening is allowed while a card waits; loosening checks itself.
         return stage_setting(doc, mode, gate=gate, tier_of=tier_of, spawn=spawn)
-    if mode not in ("enroll", "threshold", "train"):
+    if mode not in ("enroll", "threshold", "train", "adapt-reset", "adapt_reset"):
         return 400, {"error": f"unknown mode {mode[:20]!r}"}
     if mode == "train" and doc.get("cancel") is True:
         return cancel_session()
@@ -673,6 +685,8 @@ def stage(body: bytes, *, gate: Optional[Callable] = None,
                                    "approval - approve or deny that card first"),
                          "pending": True, "expires_in": left}
 
+    if mode in ("adapt-reset", "adapt_reset"):
+        return reset_adaptation(doc.get("condition"))
     if mode == "threshold":
         return stage_threshold(doc, gate=gate, tier_of=tier_of, spawn=spawn)
     try:
@@ -924,6 +938,13 @@ def state() -> dict:
                      "rounds": len(ROUNDS), "session_seconds": SESSION_SECONDS,
                      "measure_max_clips": MEASURE_MAX_CLIPS}
     out["round_asks"] = {str(k): v[1] for k, v in ROUNDS.items()}
+    if TRAINING is not None:
+        # The training screens read this: the balanced phrase set, the 2-3
+        # free-speech prompts and the four condition rounds. The wake words
+        # are a SEPARATE fixed set inside it - never voice-print material.
+        out["training"] = TRAINING.plan()
+        # Owner-visible live-adaptation count and caps (no audio, no vectors).
+        out["adaptation"] = TRAINING.status()
     return out
 
 
@@ -1263,6 +1284,20 @@ def _speech_seconds(pcm: bytes) -> float:
     return (span[1] - span[0]) / float(SAMPLE_RATE)
 
 
+def reset_adaptation(condition=None) -> tuple:
+    """(http code, body) for the owner's visible RESET of live adaptations.
+
+    It only zeroes the counters (the Live call site drops the live sub-prints);
+    it never changes the enrolled voice - that would be an enrollment.
+    """
+    if TRAINING is None:
+        return 503, {"ok": False, "error": "the voice-training redesign is not "
+                                          "installed on this PC"}
+    got = TRAINING.reset_adaptation(condition)
+    _audit("voice.adaptation.reset", {"condition": condition})
+    return 200, {"ok": True, "adaptation": got.get("state", {})}
+
+
 def measure(doc: dict, *, measure_fn: Optional[Callable] = None) -> tuple:
     """mode "measure": up to MEASURE_MAX_CLIPS of the owner's own sentences,
     each judged at both strictness settings. Scored and dropped; no card;
@@ -1292,10 +1327,48 @@ def measure(doc: dict, *, measure_fn: Optional[Callable] = None) -> tuple:
         pcm.clear()
     if not got.get("ok"):
         return 409, {"ok": False, "error": str(got.get("why", "could not check"))}
+    held = {}
+    suggested = {"ok": False, "why": "not measured"}
+    if TRAINING is not None:
+        raw_conds = doc.get("conditions")
+        conds = ([TRAINING.clean_condition(c) for c in raw_conds]
+                 if isinstance(raw_conds, list) else [])
+        rows = []
+        per_clip = got.get("per_clip") if isinstance(got.get("per_clip"), list) else []
+        for n, row in enumerate(per_clip):
+            if not isinstance(row, dict):
+                continue
+            cond = conds[n] if n < len(conds) else (
+                conds[-1] if conds else "close")
+            score = row.get("score")
+            if isinstance(score, (int, float)):
+                rows.append({"condition": cond, "owner": True, "score": score})
+        others = got.get("other_scores")
+        if isinstance(others, list):
+            for n, item in enumerate(others):
+                if isinstance(item, dict) and isinstance(item.get("score"), (int, float)):
+                    rows.append({"condition": TRAINING.clean_condition(item.get("condition")),
+                                 "owner": False, "score": item["score"]})
+                elif isinstance(item, (int, float)):
+                    rows.append({"condition": conds[n] if n < len(conds) else "close",
+                                 "owner": False, "score": item})
+        held = TRAINING.held_out(rows, thresholds=got.get("thresholds") or None)
+        suggested = TRAINING.suggest_thresholds(rows)
+        got["held_out"] = held
+        got["suggested_thresholds"] = (suggested if suggested.get("ok") else
+                                       {"ok": False, "why": suggested.get("why", "")})
+        got["thresholds_applied"] = False
     keep = {"at": time.time(), "clips": got["clips"],
             "strong_model": bool(got.get("strong_model"))}
     for s in ("very_strict", "balanced"):
         keep[s] = {k: got[s][k] for k in ("passed", "of", "too_short", "repeat_rate")}
+    if held:
+        keep["held_out"] = {"available": bool(held.get("available")),
+                            "conditions": {c: {"available": r.get("available"),
+                                               "eer": r.get("eer"),
+                                               "frr": r.get("frr"),
+                                               "far": r.get("far")}
+                                           for c, r in (held.get("conditions") or {}).items()}}
     with _LOCK:
         _LAST_MEASURE = keep
     _audit("voice.training.measured", {"clips": got["clips"],

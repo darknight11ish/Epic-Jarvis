@@ -1211,6 +1211,71 @@ than streaming: the phone's voice-print gate needs the whole clip to check it.
 
 ---
 
+### 5.1 Voice-training redesign: diverse phrases, condition rounds, live adaptation (added 2026-10-18)
+
+The owner-approved redesign has a **backend half and a screen half**. This is
+the backend half; the training screens on the PC and the phone are the next
+slice (flow proposed below), so apps keep working with the current screens and
+read the new material when they are updated.
+
+**Phrase material (`state()["training"]`, from `jarvis_voice_training.plan()`).**
+`read_phrases` is a phonetically balanced, varied set - vowels, the consonant
+clusters that matter, and short / medium / long sentences - replacing the old
+repeated sentence. `free_speech` holds 2-3 natural prompts ("introduce
+yourself", "describe your day", "read this passage") with a length window, so
+enrollment hears real speaking style, not only reading voice. `wake_phrases`
+is a SEPARATE fixed set ("hey Jarvis"); the wake detector has its own words
+and they are never mixed into the voice-print material.
+
+**Condition rounds.** Four rounds, one sub-print each, in order: **close**;
+**on a table 2-3 m away**; **with background noise (fan or TV)**; **another
+room or at a different time of day**. The caps stay: up to 12 clips per round,
+min 3 clips, and a sub-print is never lowered to the loosest clip. Old stored
+condition names keep working (`far` -> `table`, `general` -> `close`).
+
+**Live adaptation (the owner's "train live" request).** After a Live
+verification that is a clean, HIGH-CONFIDENCE owner check - above the bar by a
+margin - one utterance may be added as a capped sub-print for its condition.
+Rules, all local:
+* never from side talk, refusals, crisis turns, non-Live sources, clips shorter
+  than 1.5 s, or a score only just over the bar (`should_adapt()`);
+* per-condition cap 4 and total cap 12 (`record_adaptation()`), so one noisy
+  day can never dominate;
+* a drift guard: a clip whose vector is below cosine 0.55 to the enrollment
+  anchor for that condition is refused, no count changes;
+* a periodic re-anchor back to the original enrollment (`reanchor()`, and the
+  caller drops the live sub-prints);
+* the owner sees counts/caps/resets in `state()["adaptation"]`, and
+  `POST /api/voice/enroll {"mode": "adapt-reset", "condition"?: ...}` zeroes
+  the counters immediately (numbers only; it never changes the enrolled
+  voice).
+The Live call site is **not wired in this slice**: `record_adaptation()` is the
+hook, and the caller must pass the Live engine's own side-talk/crisis/refusal
+flags. A live condition detector is not built; the caller names the condition.
+
+**Per-condition thresholds and held-out measurement.** `mode=measure` accepts
+`"conditions"` aligned with its clips and now answers `held_out`:
+per-condition **FRR/FAR** at the configured bar (or at the EER point when no
+bar is configured), the **EER** itself, and owner/other row counts. EER/FRR
+are computed only from score rows; a condition with fewer than 10 owner or 10
+other-voice rows is reported as INSUFFICIENT, never given a number.
+`suggested_thresholds` is returned only when every condition has enough rows,
+and `thresholds_applied` is always **false** - a default changes only through
+the owner's measured card. The live verify path still uses ONE global bar;
+passing a clip's condition into the check is the later slice.
+
+**Screen flow proposed (not built).** Phone Settings -> Voice, "Train my
+voice": (1) a short intro saying what will be recorded and that it is local;
+(2) four condition steps, each with its instruction ("hold the phone close" /
+"put it on the table 2-3 m away" / "turn the fan or TV on" / "go to another
+room"), recording up to 12 clips using the balanced phrases and then one
+free-speech prompt; (3) a review screen showing each round's condition and
+count, then the existing ONE card; (4) a "Live additions" row on the same
+page with the count/caps and a Reset button. Desktop Settings -> Voice: the
+same four rounds and phrases, its own per-round progress, and the same
+live-additions count/reset beside the existing strictness controls. Neither
+screen is in this slice; both read the payload that is already here.
+
 ## 6. Memory, the Brain, models, attention, appearance, status
 
 ### The desktop's read allowlist
