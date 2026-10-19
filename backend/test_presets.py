@@ -29,7 +29,8 @@ def main() -> int:
         check(f"{p['id']}: every rendered word is a non-empty string",
               all(isinstance(p[k], str) and p[k] for k in ("title", "focus", "what", "cost", "worse")))
         check(f"{p['id']}: apply is one asked action, never automatic",
-              p["apply"]["action"] == "Use this preset" and p["apply"]["auto"] is False)
+              p["apply"]["action"] == "Use this preset" and p["apply"]["auto"] is False
+              and p["apply"]["apply_route"] == "/api/work/apply")
         check(f"{p['id']}: model and context are stated", bool(p["model"]) and int(p["context"]) > 0)
     gen = P.by_id("general")
     check("General is qwen3.5:9b on the 2060 at 196,608",

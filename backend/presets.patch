@@ -87,3 +87,18 @@ index f134133..41781f1 100644
                      if lane == local_model else
                      f"The cloud model is not set up on this PC - nothing "
                      f"answers at {JARVIS_URL}. Pick the local model and ask "
+@@ -6828,3 +6870,14 @@
+         print(f"  lanes      NOT ON ({type(exc).__name__}) - starting a model lane is off")
+         print("             until jarvis_model_lanes.py is back: run apply-patches.ps1 again")
++    # presets.patch (2026-10-18, the preset model selector): POST /api/work/apply.
++    # ONE switch_model ask card; the named lane is started on demand; the chat lane
++    # is pointed at it; the chosen preset is saved. Nothing auto-applies, pending
++    # and heavy-mode presets refuse, and any failure rolls lane and preset back.
++    try:
++        import jarvis_presets
++        print(jarvis_presets.install(Handler, origin_ok=_origin_ok,
++                                     token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  presets    NOT ON ({type(exc).__name__}) - the preset apply route is off")
++        print("             until jarvis_presets.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.

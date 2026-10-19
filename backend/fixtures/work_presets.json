@@ -36,6 +36,7 @@
       "apply": {
         "action": "Use this preset",
         "switch_route": "/api/models/switch",
+        "apply_route": "/api/work/apply",
         "lane_start": false,
         "auto": false
       }
@@ -80,6 +81,7 @@
       "apply": {
         "action": "Use this preset",
         "switch_route": "/api/models/switch",
+        "apply_route": "/api/work/apply",
         "lane_start": false,
         "auto": false
       }
@@ -122,6 +124,7 @@
       "apply": {
         "action": "Use this preset",
         "switch_route": "/api/models/switch",
+        "apply_route": "/api/work/apply",
         "lane_start": false,
         "auto": false
       }
@@ -172,6 +175,7 @@
       "apply": {
         "action": "Use this preset",
         "switch_route": "/api/models/switch",
+        "apply_route": "/api/work/apply",
         "lane_start": false,
         "auto": false
       }
@@ -208,6 +212,7 @@
       "apply": {
         "action": "Use this preset",
         "switch_route": "/api/models/switch",
+        "apply_route": "/api/work/apply",
         "lane_start": true,
         "auto": false
       }

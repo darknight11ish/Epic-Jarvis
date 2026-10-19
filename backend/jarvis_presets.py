@@ -83,6 +83,7 @@ class Preset:
             "pending": self.pending,
             "heavy_mode": self.heavy_mode,
             "apply": {"action": APPLY_ACTION, "switch_route": SWITCH_ROUTE,
+                      "apply_route": "/api/work/apply",
                       "lane_start": self.lane != "main",
                       "auto": False},
         }
@@ -218,6 +219,189 @@ FOCUS_WORDS = ("quick answers", "writing", "coding", "agentic", "pictures",
                "speed")
 
 
+
+
+# --------------------------------------------------------------------------
+#   Applying a preset (presets.patch, 2026-10-18)
+# --------------------------------------------------------------------------
+
+CHOICE_FILE = "presets-choice.json"
+APPLY_PATH = "/api/work/apply"
+HEAVY_MODE_LINE = ("heavy mode needs the both-card lane, arriving later; nothing was "
+                   "changed")
+PENDING_LINE = "waiting for the model; nothing was changed"
+
+
+def _config_dir() -> "pathlib.Path":
+    import os
+    from pathlib import Path
+    return Path(os.environ.get("OPENJARVIS_CONFIG_DIR", Path.home() / ".openjarvis"))
+
+
+def _choice_path():
+    return _config_dir() / CHOICE_FILE
+
+
+def choice() -> Optional[str]:
+    """The preset id the owner last applied, or None. Never raises."""
+    try:
+        import json
+        doc = json.loads(_choice_path().read_text(encoding="utf-8"))
+        return str(doc.get("preset") or "") or None
+    except Exception:
+        return None
+
+
+def _write_choice(preset_id: str) -> bool:
+    import json
+    try:
+        _config_dir().mkdir(parents=True, exist_ok=True)
+        tmp = _choice_path().with_suffix(".json.tmp")
+        tmp.write_text(json.dumps({"preset": preset_id}, indent=2) + "\n",
+                       encoding="utf-8")
+        tmp.replace(_choice_path())
+        return True
+    except Exception:
+        return False
+
+
+def _lane_url(key: str) -> str:
+    return f"http://127.0.0.1:{LANES[key]['port']}"
+
+
+def _active_url() -> str:
+    import os
+    return os.environ.get("OLLAMA_URL", "http://127.0.0.1:11436").rstrip("/")
+
+
+def _set_active_url(url: str) -> bool:
+    import json
+    try:
+        from pathlib import Path
+        d = _config_dir(); d.mkdir(parents=True, exist_ok=True)
+        f = d / "presets-active-lane.json"
+        tmp = f.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps({"base_url": str(url).rstrip("/")}, indent=2) + "\n",
+                       encoding="utf-8")
+        tmp.replace(f)
+        return True
+    except Exception:
+        return False
+
+
+def apply_preset(preset_id, *, start_lane=None, switch_model=None,
+                 active_url=None, set_active_url=None, read_choice=None,
+                 write_choice=None) -> tuple:
+    """Apply ONE preset after the owner's single switch_model card.
+
+    Order: start the named lane if it is down -> point chat at it -> switch the
+    model (the ask card lives inside switch_model) -> save the chosen preset.
+    `pending` presets and heavy mode refuse before anything happens. Any
+    failure after the lane is pointed AT it rolls chat lane and chosen preset
+    back to exactly what they were, and nothing is half-applied.
+    """
+    p = by_id(preset_id)
+    if p is None:
+        return 400, {"ok": False, "changed": False,
+                     "error": f"no preset called {preset_id!r}; presets are "
+                              f"{', '.join(PRESET_IDS)}"}
+    if p.pending:
+        return 409, {"ok": False, "changed": False, "error": PENDING_LINE}
+    if p.heavy_mode:
+        return 409, {"ok": False, "changed": False, "error": HEAVY_MODE_LINE}
+    start_lane = start_lane or (lambda key: _default_start_lane(key))
+    switch_model = switch_model or (lambda ref: _default_switch(ref))
+    active_url = active_url or _active_url
+    set_active_url = set_active_url or _set_active_url
+    read_choice = read_choice or choice
+    write_choice = write_choice or _write_choice
+    previous_preset = read_choice()
+    previous_lane = active_url()
+    target_lane = _lane_url(p.lane)
+    try:
+        code, start_body = start_lane(p.lane)
+    except Exception as exc:
+        return 503, {"ok": False, "changed": False,
+                     "error": f"the {p.lane} lane could not be started "
+                              f"({type(exc).__name__}); nothing was changed"}
+    if code not in (200, 202) or not start_body.get("ok", True):
+        why = start_body.get("reason") or start_body.get("error") or "the lane did not start"
+        return 503, {"ok": False, "changed": False,
+                     "error": f"the {p.lane} lane did not start: {why}; nothing was changed"}
+    try:
+        switched = switch_model(p.model)
+    except Exception as exc:
+        switched = {"ok": False, "reason": f"{type(exc).__name__}: {exc}"}
+    def rollback(reason: str, code=409) -> tuple:
+        try:
+            set_active_url(previous_lane)
+        except Exception:
+            pass
+        try:
+            if previous_preset is None:
+                try:
+                    _choice_path().unlink()
+                except Exception:
+                    pass
+            else:
+                write_choice(previous_preset)
+        except Exception:
+            pass
+        return code, {"ok": False, "changed": False,
+                      "error": f"{reason}; chat lane and preset were rolled back"}
+    if not isinstance(switched, dict) or not switched.get("ok"):
+        return rollback(f"the model switch did not happen: "
+                        f"{(switched or {}).get('reason', 'refused')}")
+    if not set_active_url(target_lane):
+        return rollback("the chat lane could not be pointed at the new lane")
+    if not write_choice(p.id):
+        return rollback("the chosen preset could not be saved")
+    return 200, {"ok": True, "changed": True, "preset": p.view(),
+                 "lane": dict(p.lane_info), "base_url": target_lane,
+                 "model": p.model, "switched": switched,
+                 "previous_preset": previous_preset}
+
+
+def _default_start_lane(key: str):
+    import jarvis_model_lanes
+    return jarvis_model_lanes.start_lane(key)
+
+
+def _default_switch(ref: str):
+    import jarvis_models
+    return jarvis_models.switch_to(ref, why="preset")
+
+
+def apply_from_body(body) -> tuple:
+    if not isinstance(body, dict):
+        return 400, {"ok": False, "error": "expected a JSON object"}
+    return apply_preset(body.get("preset"))
+
+
+def install(Handler, *, origin_ok, token_ok, read_body):
+    """Wire POST /api/work/apply onto the HUD's Handler. Returns the status
+    line the banner prints. It approves nothing: switch_to raises the one
+    switch_model ask card itself."""
+    original = Handler.do_POST
+
+    def do_POST(self):
+        import json
+        path = str(getattr(self, "path", "") or "").split("?", 1)[0]
+        if path != APPLY_PATH:
+            return original(self)
+        if not origin_ok(self):
+            return self._send(403, {"error": "cross-origin request refused"})
+        if not token_ok(self):
+            return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
+        try:
+            body = json.loads(read_body(self) or b"{}")
+        except (ValueError, json.JSONDecodeError) as exc:
+            return self._send(400, {"error": str(exc)})
+        code, out = apply_from_body(body)
+        return self._send(code, out)
+
+    Handler.do_POST = do_POST
+    return "presets    ready"
 
 # --------------------------------------------------------------------------
 #   Hardware, questionnaire and 1/2/3-GPU recommendations (contract extension)
