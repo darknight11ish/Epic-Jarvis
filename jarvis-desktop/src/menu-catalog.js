@@ -572,16 +572,17 @@ export const MENUS = [
     "title": "Focus presets",
     "about": "The five presets the PC sends, with the model, card, cost and what each is worse at.",
     "apps": [
-      "desktop"
+      "desktop",
+      "phone"
     ],
     "area": "settings",
     "view": "",
     "kind": "card",
     "group": null,
     "parent": null,
-    "hide": true,
+    "hide": false,
     "collapse": true,
-    "why": "",
+    "why": "Drawn inside the Hardware card on the phone and above Hardware and models on the PC; neither app has a separate row to hide.",
     "names": [
       "focus presets",
       "the focus presets",
@@ -2676,6 +2677,7 @@ export const NEVER_HIDE = [
   "settings.devices",
   "settings.animal-options",
   "settings.security",
+  "settings.focus-presets",
   "settings.updates",
   "settings.more-options",
   "settings.start-jarvis",

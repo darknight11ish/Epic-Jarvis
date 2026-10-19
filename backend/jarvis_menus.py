@@ -269,12 +269,15 @@ MENUS: tuple = (
        group="graphics-cards", names=("hardware", "hardware and models")),
     # "Focus presets" (the owner's preset selector, 2026-10-18): the five
     # presets the PC sends, with the model, graphics card, context, cost and
-    # the honest "worse at" line. DESKTOP ONLY until the phone's selector is
-    # on this tree; the card and the registry Section use the same id.
+    # the honest "worse at" line. BOTH apps have it: the desktop draws the
+    # Settings card and command-bar chip, the phone draws FocusPresetsSection
+    # inside HardwarePlate. It is not a fold of its own on either app, so it
+    # is never hideable - hiding Hardware hides the phone's copy.
     _m("settings.focus-presets", "Focus presets",
        "The five presets the PC sends, with the model, card, cost and what each is worse at.",
-       (DESKTOP,), names=("focus presets", "the focus presets", "presets",
-                          "the preset selector", "choose a focus preset")),
+       names=("focus presets", "the focus presets", "presets",
+              "the preset selector", "choose a focus preset"),
+       hide=False, why="Drawn inside the Hardware card on the phone and above Hardware and models on the PC; neither app has a separate row to hide."),
     _m("settings.second-card", "Second graphics card",
        "The second card's switches and its own copy of Ollama.", group="graphics-cards",
        names=("second graphics card", "second card", "second gpu")),
