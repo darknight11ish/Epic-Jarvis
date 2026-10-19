@@ -200,6 +200,10 @@ object OpenPlace {
         "notifications",
         "first-run",
         "hud-window",
+        // "Focus presets" (the owner's preset selector, 2026-10-18): the
+        // PC's five model/lane presets. The phone's selector is not on this
+        // tree yet, so the honest answer is "only on your PC" for now.
+        "focus-presets",
     )
 
     /** Every id this file has made a decision about - for the test. */
