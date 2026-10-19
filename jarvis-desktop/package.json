@@ -30,7 +30,8 @@
     "test:voice": "node tests/voicecheck.mjs && node tests/speech-pieces.mjs",
     "test:release": "node tests/updater-manifest.mjs",
     "test:all": "npm run test:tokens && npm run test:ui && npm run test:a11y && npm run test:palette && npm run test:themes && npm run test:voice && npm run test:release",
-    "faces:spec": "python3 scripts/build-faces-spec.py"
+    "faces:spec": "python3 scripts/build-faces-spec.py",
+    "test:presets": "node tests/focus-presets.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.12.0"

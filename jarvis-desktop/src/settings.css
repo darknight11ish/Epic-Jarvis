@@ -1582,3 +1582,81 @@ select:focus-visible {
     forced-color-adjust: none;
   }
 }
+
+/* --------------------------------------------------------------------------
+   Settings -> Focus presets. The same rows as the command-bar card, with the
+   reading measure the rest of Settings uses. Every preset word comes from the
+   PC (focus-presets.js); this is shape only.
+   -------------------------------------------------------------------------- */
+.preset-settings-one-card {
+  padding: 8px 10px;
+  border: 1px solid var(--border-accent);
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: var(--surface-1);
+  color: var(--text);
+}
+.preset-settings-list {
+  display: grid;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+.preset-settings-item {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.preset-settings-item:hover {
+  border-color: var(--border-accent);
+  background: var(--surface-sunken);
+}
+.preset-settings-item[aria-checked="true"] {
+  border-color: var(--accent);
+  background: var(--accent-faint);
+}
+.preset-settings-item:focus-visible {
+  outline: 2px solid var(--focus-ring, var(--accent));
+  outline-offset: 1px;
+}
+.preset-settings-item-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.preset-settings-item-name {
+  font-weight: 700;
+}
+.preset-settings-description {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+.preset-settings-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 14px;
+  margin-top: 5px;
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+}
+.preset-settings-detail-label {
+  color: var(--text-muted);
+}
+.preset-settings-action {
+  margin-top: 4px;
+}
+.preset-settings-line {
+  margin-top: 10px;
+}
+.preset-settings-line[data-tone="bad"] {
+  color: var(--bad);
+}

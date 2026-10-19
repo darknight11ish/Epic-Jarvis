@@ -173,6 +173,7 @@
           </div>
           <div class="settings-jump-place">
             <span class="settings-jump-place-label">The model and cards</span>
+            <a href="#focus-presets">Focus presets</a>
             <a href="#hardware">Hardware and models</a>
             <a href="#second-card">Second graphics card</a>
             <a href="#big-model">Big model (slow)</a>
@@ -1657,6 +1658,35 @@
         </div>
       </section>
 
+      <!-- ── Focus presets ───────────────────────────────────────────────
+           focus-presets-settings.js fills this from the PC's own preset
+           answer. The names, descriptions, models, cards, costs and
+           worse-at words are all the PC's; the current preset is marked;
+           nothing changes until the one "Use this preset" button is pressed,
+           and that raises the backend's one approval card. The card never
+           applies anything on load. -->
+      <section class="card" id="focus-presets">
+        <h2 id="focus-presets-title">Focus presets</h2>
+        <p class="note" id="focus-presets-kicker">Reading the PC's presets…</p>
+        <p class="note" id="focus-presets-how"></p>
+        <p class="note preset-settings-one-card" id="focus-presets-one-card"></p>
+        <p class="note" id="focus-presets-note" hidden></p>
+        <p class="note" id="focus-presets-lane" hidden></p>
+        <div
+          class="preset-settings-list"
+          id="focus-presets-list"
+          role="radiogroup"
+          aria-labelledby="focus-presets-title"
+        ></div>
+        <div class="row preset-settings-action">
+          <button class="btn" id="focus-presets-apply" type="button" disabled>
+            Use this preset
+          </button>
+          <span class="status" id="focus-presets-apply-why"></span>
+        </div>
+        <p class="note preset-settings-line" id="focus-presets-line" role="status" hidden></p>
+      </section>
+
       <!-- ── Hardware and models ──────────────────────────────────────────
            Read from GET /api/hardware (hardware-panel.js). The graphics
            cards, what runs on them now, and three setups. Nothing changes
@@ -2974,6 +3004,7 @@
     <script type="module" src="first-run-settings.js"></script>
     <script type="module" src="settings-search.js"></script>
     <script type="module" src="settings.js"></script>
+    <script type="module" src="focus-presets-settings.js"></script>
     <script type="module" src="hardware-panel.js"></script>
     <script type="module" src="pc-help.js"></script>
     <script type="module" src="briefing-settings.js"></script>
