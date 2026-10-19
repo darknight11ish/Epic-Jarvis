@@ -17,10 +17,10 @@
  * It also records the two things this desktop build does NOT wire yet, and
  * fails if the page starts claiming them:
  *
- *   1. the PC understands four conditions, but `voice_training.rs` still
- *      accepts rounds 1-3, so the fourth is shown and never recorded;
- *   2. `POST /api/voice/enroll {"mode": "adapt-reset"}` exists on the PC,
- *      but there is no desktop command for it, so the count is read-only.
+ *   1. the PC understands four conditions and `voice_training.rs` accepts
+ *      rounds 1-4, so all four are recorded;
+ *   2. `POST /api/voice/enroll {"mode": "adapt-reset"}` is wired through the
+ *      desktop's `reset_voice_adaptation` command.
  *
  * What it canNOT prove: that a microphone records, that the page looks
  * right, or that the Rust command is granted to the settings window. The
