@@ -6081,7 +6081,8 @@ def tool_diet_on() -> bool:
     return TOOL_DIET_DEFAULT
 
 
-def tool_diet_selection(question: str, allowed, *, limit: int = TOOL_DIET_LIMIT) -> dict:
+def tool_diet_selection(question: str, allowed, *, limit: int = TOOL_DIET_LIMIT,
+                        extra_hints: Optional[dict] = None) -> dict:
     """What a question shows from `allowed`, and how sure the selector is.
 
     {"tools": [...], "fallback": bool, "matched": n}. `fallback` is True when
@@ -6090,6 +6091,12 @@ def tool_diet_selection(question: str, allowed, *, limit: int = TOOL_DIET_LIMIT)
     with at least one match shows the matched tools in TOOLS order, at most
     `limit`; the model can still CALL any allowed tool (check_call reads the
     allowed list), so nothing is made impossible, only unshown.
+
+    `extra_hints`: {name: (compiled regexes,)} for tools whose hints are not
+    in _TOOL_HINTS_RX - the plug-in programs' (jarvis_mcp.py, F4). They are
+    scored by exactly the same rule, so an outside tool is offered through the
+    same selector as a built-in one; an unknown hint is simply never matched
+    and the full-list fallback still applies.
     """
     allowed = list(allowed or ())
     limit = max(1, int(limit))
@@ -6098,9 +6105,10 @@ def tool_diet_selection(question: str, allowed, *, limit: int = TOOL_DIET_LIMIT)
     text = str(question or "").strip().lower()
     if not text:
         return {"tools": allowed, "fallback": True, "matched": 0}
+    extra_hints = extra_hints or {}
     scored = []
     for name in allowed:
-        patterns = _TOOL_HINTS_RX.get(name, ())
+        patterns = _TOOL_HINTS_RX.get(name) or extra_hints.get(name, ())
         scored.append((sum(1 for rx in patterns if rx.search(text)), name))
     hit = [(score, name) for score, name in scored if score > 0]
     if not hit:
@@ -6111,9 +6119,32 @@ def tool_diet_selection(question: str, allowed, *, limit: int = TOOL_DIET_LIMIT)
             "fallback": False, "matched": len(hit)}
 
 
-def tool_diet(question: str, allowed, *, limit: int = TOOL_DIET_LIMIT) -> list:
+def tool_diet(question: str, allowed, *, limit: int = TOOL_DIET_LIMIT,
+              extra_hints: Optional[dict] = None) -> list:
     """The names a question shows, or every allowed name when it is unsure."""
-    return tool_diet_selection(question, allowed, limit=limit)["tools"]
+    return tool_diet_selection(question, allowed, limit=limit,
+                               extra_hints=extra_hints)["tools"]
+
+
+def _outside_tool_hints(tool) -> tuple:
+    """Compiled word hints for one plug-in tool, from its OWN description.
+
+    The description is server-written text; only whole words of 4+ letters are
+    used as hints, never sent anywhere, and the tool is hidden entirely unless
+    the owner pinned it. This is what lets jarvis_mcp tools ride the same
+    top-K selector as the built-ins (F4): a question naming "git status" can
+    show `mcp_repo__git_status`; a question matching nothing falls back to the
+    full list, as tool_diet_selection already says.
+    """
+    text = str(getattr(tool, "description", "") or "")
+    words = sorted({w for w in re.findall(r"[A-Za-z]{4,24}", text.lower())
+                    if w not in getattr(_outside_tool_hints, "_stop", ())})
+    return tuple(re.compile(r"\b" + re.escape(w) + r"\b", re.I) for w in words[:12])
+
+
+_outside_tool_hints._stop = frozenset({"this", "that", "with", "from", "into", "your",
+                                       "tool", "tools", "call", "when", "them", "then",
+                                       "they", "have", "will", "does", "does", "reads"})
 
 
 def tool_offer(allowed, opened=(), *, short: bool, plugins: bool = False) -> list:
@@ -6439,12 +6470,19 @@ def tool_text_tokens(names, *, extra=None) -> int:
     return estimate_tokens(_schemas_for(list(names), [], extra or {}))
 
 
-def _schemas_for(shown: list, groups: list, extra: dict) -> list:
+def _schemas_for(shown: list, groups: list, extra: dict,
+                 *, include_all_extra: bool = True) -> list:
     """The tool schemas a request may carry, every one checked by the shipped
     sanitiser first (`_schema_for_sending`). A tool whose shape cannot be sent
     honestly is LEFT OUT here rather than sent weakened; `check_call` turns a
     call to it into a plain refusal that names it. `more_tools`' own schema goes
-    through the same check, and so do plug-in programs' tools (`extra`)."""
+    through the same check, and so do plug-in programs' tools (`extra`).
+
+    `include_all_extra`: False only on the top-K diet path, where a plug-in
+    tool that the selector did NOT name stays unshown like a built-in one;
+    every other caller keeps the old behaviour (all extras offered), which is
+    the full-list fallback requirement for a question the selector cannot
+    classify."""
     out = []
     for n in shown:
         if n == MORE_TOOLS:
@@ -6455,7 +6493,7 @@ def _schemas_for(shown: list, groups: list, extra: dict) -> list:
             if item is not None:
                 out.append(item)
     for n, tool in extra.items():
-        if n not in shown:
+        if n not in shown and include_all_extra:
             item = _schema_for_sending(tool, shown)
             if item is not None:
                 out.append(item)
@@ -7961,9 +7999,19 @@ def _fill_offer(offer: dict, names: list, question: str = "") -> None:
     reachable = tool_offer(names, offer["opened"], short=False, plugins=offer["plugins"])
     more = MORE_TOOLS in reachable
     base = [n for n in reachable if n != MORE_TOOLS]
-    diet = tool_diet(question, base, limit=TOOL_DIET_LIMIT - (1 if more else 0))
+    extra = offer.get("extra") or {}
+    extra_names = [n for n in extra if n not in base]
+    extra_hints = {n: _outside_tool_hints(extra[n]) for n in extra_names}
+    selection = tool_diet_selection(question, base + extra_names,
+                                    limit=TOOL_DIET_LIMIT - (1 if more else 0),
+                                    extra_hints=extra_hints)
+    diet = selection["tools"]
     offer["shown"] = diet + ([MORE_TOOLS] if more else [])
-    offer["schemas"] = _schemas_for(offer["shown"], offer["groups"], offer["extra"])
+    # F4: a plug-in tool the selector did NOT name stays unshown, exactly like
+    # a built-in one; on tool_diet_selection's fallback every name is shown,
+    # so include_all_extra keeps the full-list fallback as before.
+    offer["schemas"] = _schemas_for(offer["shown"], offer["groups"], extra,
+                                    include_all_extra=selection["fallback"])
 
 
 def chat_prefix(enabled_tools, *, ollama_url: str, model: str, manner="auto") -> tuple:
