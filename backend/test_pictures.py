@@ -771,7 +771,7 @@ def t_the_api_document_has_the_section_and_it_matches_this_code():
 #: writes down that they meant to. That is the price of a check that bites, and
 #: it is why the failure message below spells out the difference instead of
 #: saying "the document changed".
-EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 144))   # 129 ..= 143
+EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 145))   # 129 ..= 144
 #: 137 is a REAL section, not a gap: `## 137. Starting the local model when
 #: it is not running`; 138 is `skills.lock` (PR #455). The tail reads
 #: 129 ..= 138 with no hole.
@@ -781,15 +781,15 @@ EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 144))   # 129 ..= 143
 #: and restore routes (#568/#569/#571); 141 the selection chip (#562); 142
 #: the data-and-maths sandbox's own switch (LM-1C, #583); 143 the person
 #: dossier click door (LM-4, this branch, the drop-in `/api/people/dossier`),
-#: landing last. The Lead owns that numbering plan. The first four are on
-#: main; 143 is this branch's one new section, so the released tail is
-#: 129 ..= 143 with no hole and no repeat.
+#: landing last; 144 the media read slice (F5 S1, its own branch). The Lead owns that numbering plan. Sections 129 ..= 143
+#: are on main; this branch adds 144, so the released tail is 129 ..= 144 with
+#: no hole and no repeat.
 #:
 #: This list names the RELEASED tail, so a dropped section anywhere in it is
 #: caught, and a section above it is reported rather than silently accepted.
 #:
-#: Measured, not reasoned: on main `^## 139\.` .. `^## 142\.` each match once,
-#: on this branch `^## 143\.` matches once, and the tail reads 129 ..= 143
+#: Measured, not reasoned: on main `^## 139\.` .. `^## 143\.` each match once,
+#: and this branch's `^## 144\.` matches once, so the tail reads 129 ..= 144
 #: with no hole.
 
 

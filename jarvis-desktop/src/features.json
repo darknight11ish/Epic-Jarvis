@@ -598,6 +598,17 @@
     ]
   },
   {
+    "id": "media-read",
+    "group": "Memory",
+    "title": "Read the words in a recording or video",
+    "what": "Ask Jarvis to read one audio or video file from a folder it may look in. It transcribes the speech on this PC, with timestamps, and reads the on-screen text in a few sampled video frames. It returns a transcript, never a summary, and saves nothing.",
+    "where": "Either app's chat: name the file, for example `read the words in C:\\Users\\you\\Videos\\talk.mp4`. The file and all the reading are on the PC; the answer is written by the local model.",
+    "asks": "No card of its own for a read: a file already inside a folder you allow is the same read_files_readonly rule as my_files, and the result is treated as outside text. Nothing is kept or sent anywhere.",
+    "limit": "English speech only; one file of at most 10 minutes and 100 MB; a WAV needs nothing else, other formats need ffmpeg installed on the PC (a missing ffmpeg is a plain refusal). It does not understand the picture in a video, cannot label speakers, and never learns or stores a fact from what it reads.",
+    "surface": "both",
+    "covers": []
+  },
+  {
     "id": "look-at-this",
     "group": "Screen and pictures",
     "title": "Look at this",
@@ -1731,7 +1742,8 @@
     "limit": "This PC only: the copies are files on this PC, and a phone has no page for them.",
     "surface": "desktop",
     "covers": [
-      "guardian_history"    ]
+      "guardian_history"
+    ]
   },
   {
     "id": "approvals",

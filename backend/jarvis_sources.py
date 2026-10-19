@@ -147,7 +147,7 @@ def _web_source(url, title) -> Optional[dict]:
     return out
 
 
-def _file_source(path, title) -> Optional[dict]:
+def _file_source(path, title, seconds=None) -> Optional[dict]:
     path = _cap(path)
     if not path:
         return None
@@ -155,6 +155,14 @@ def _file_source(path, title) -> Optional[dict]:
     title = _cap(title)
     if title:
         out["title"] = title
+    # F5 S1: a media read also says how long the recording was, so the source
+    # line can read "C:\...\clip.mp4 (2:31)" without the model's words.
+    try:
+        if isinstance(seconds, (int, float)) and not isinstance(seconds, bool) \
+                and 0 <= float(seconds) <= 24 * 60 * 60:
+            out["seconds"] = round(float(seconds), 2)
+    except Exception:
+        pass
     return out
 
 
@@ -189,7 +197,7 @@ def from_tool_result(name: str, result) -> list:
                 result.get("found") if isinstance(result.get("found"), list) else [result])
         for r in rows[:MAX_PER_TURN]:
             if isinstance(r, dict):
-                s = _file_source(r.get("path"), r.get("name"))
+                s = _file_source(r.get("path"), r.get("name"), r.get("seconds"))
                 if s:
                     out.append(s)
     elif name == "file_read":

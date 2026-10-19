@@ -1010,6 +1010,14 @@ SHIPPED = (
     # and its 85-check suite, and the chat tool that uses it is a later,
     # separately-approved slice. No model call, no route, no file written.
     "jarvis_sandbox_exec.py",
+    # --- F5 S1, 2026-10-18: read the words in ONE audio/video file ---
+    # A read-only read of a file already inside "Folders Jarvis may look in",
+    # under the existing read_files_readonly action (the my_files tool's
+    # action `read_media`). Reuses the local Parakeet speech model and Windows
+    # OCR; the only new prerequisite is the local ffmpeg, run as a bounded
+    # child with -protocol_whitelist file,pipe. It STORES NOTHING: no index, no
+    # memory fact, no file. Its suite is backend/test_media_read.py.
+    "jarvis_media_read.py",
     # --- Pillar 18, 2026-10-17: the local "time machine" for files Jarvis changes ---
     # Before anything writes over a file in a folder Jarvis is allowed to
     # change (the owner's "Folders Jarvis may look in", or the Obsidian vault),

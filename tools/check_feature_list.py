@@ -233,6 +233,8 @@ LESSON_EXEMPT = {
                     "took and asks before a restore",
     "people-dossier": "clicking a name in People and things opens it; the card "
                       "names the person and says it is read-only",
+    "media-read": "it is one sentence in a chat - name a file and read the "
+                  "answer; the module docstring and the tool description are the lesson",
     "quiz": "the deck screen explains itself; it is revision, not a Jarvis feature",
     "decks": "the deck screen explains itself; a deck is yours, not Jarvis's",
     "pc-help": "five answers on one card; the card is the lesson",

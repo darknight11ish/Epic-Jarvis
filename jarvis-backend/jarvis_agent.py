@@ -847,6 +847,17 @@ FILES_PARTS_REFUSED = ("refused: this answer has already read {n} parts of docum
 
 
 def _prepare_my_files(args: dict):
+    if str(args.get("action") or "").strip().lower() == "read_media":
+        # The one media read (F5 S1). Decided under file_read's action like
+        # every other read here; it stores nothing and marks the result as
+        # outside text through the EXISTING took_in path.
+        try:
+            import jarvis_media_read as MEDIA
+            return MEDIA.prepare(args)
+        except ValueError as exc:
+            raise
+        except Exception as exc:                  # noqa: BLE001
+            return None, f"Read one recording (unavailable: {type(exc).__name__})"
     try:
         import jarvis_documents as DOCS
     except Exception as exc:
@@ -855,6 +866,14 @@ def _prepare_my_files(args: dict):
 
 
 def _run_my_files(args: dict, plan_obj, **_) -> dict:
+    if str(args.get("action") or "").strip().lower() == "read_media":
+        try:
+            import jarvis_media_read as MEDIA
+        except Exception as exc:                  # noqa: BLE001
+            return {"ok": False, "error": f"the media reader is not available here "
+                                          f"({type(exc).__name__})"}
+        path = (plan_obj or {}).get("path") if isinstance(plan_obj, dict) else None
+        return MEDIA.read_media(path or args.get("path"))
     try:
         import jarvis_documents as DOCS
     except Exception as exc:
@@ -2124,11 +2143,14 @@ TOOLS: dict = {
         "Find and read the owner's own files, only in folders they listed on the PC. "
         "find: file names with these words. search: words inside notes and text files. "
         "read: one part of one file (PDF, Word, Excel, PowerPoint, Markdown, text, CSV) "
-        "and its list of parts.",
+        "and its list of parts. read_media: the words in ONE audio or video file "
+        "(wav, mp3, m4a, mp4, mkv; at most 10 minutes and 100 MB), with timestamps "
+        "and any on-screen text. Speech is English only and it is a transcript, "
+        "not a summary; it is never saved.",
         {"type": "object", "properties": {
-            "action": {"type": "string", "enum": ["find", "search", "read"]},
+            "action": {"type": "string", "enum": ["find", "search", "read", "read_media"]},
             "words": {"type": "string", "description": "a few words; for read, picks the part"},
-            "path": {"type": "string", "description": "read: the full path find gave"},
+            "path": {"type": "string", "description": "read / read_media: the full path"},
             "part": {"type": "integer", "description": "read: which part, from its list"}},
          "required": ["action"]},
         _prepare_my_files, _run_my_files,
