@@ -308,6 +308,18 @@ class JarvisApi(
         .callTimeout(300, TimeUnit.SECONDS)
         .build()
 
+    /**
+     * The preset apply POST waits for the owner's ONE approval card. The
+     * backend's default approval timeout is 900 s, so the call must outlast it
+     * by a comfortable margin: 1,200 s, not the 20 s [shortCall] gives every
+     * ordinary request. Otherwise the app reports a network failure while the
+     * owner is still reading the card.
+     */
+    private val applyCall: OkHttpClient = client.newBuilder()
+        .readTimeout(1_200, TimeUnit.SECONDS)
+        .callTimeout(1_200, TimeUnit.SECONDS)
+        .build()
+
     fun baseUrl(): String? = settings.baseUrl()
 
     /** Why the saved address is refused (off the owner's own networks), or null. */
@@ -2917,7 +2929,7 @@ class JarvisApi(
             val body = json.toRequestBody("application/json".toMediaType())
             val req = Request.Builder().url(target).post(body).authed().build()
             runCatching {
-                shortCall.newCall(req).execute().use { resp ->
+                applyCall.newCall(req).execute().use { resp ->
                     val text = resp.body?.string().orEmpty()
                     val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
                     if (resp.code == 401) ApiResult.Failed(ApiError.BadToken)
