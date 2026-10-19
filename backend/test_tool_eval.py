@@ -545,6 +545,37 @@ def t_the_multi_runner_uses_the_continuation_nudge():
           stuck_row["pass"] is False and stuck_row["path"] == [first], stuck_row)
 
 
+def t_trial_statistics_are_per_set_mean_min_max():
+    """The --trials report: each list+suite gets its own mean and min/max, and
+    a suite with no token count does not invent one."""
+    def one(multi, tokens):
+        return {"full": {"multi": {"pass": multi, "of": 8,
+                                   "prompt_tokens_avg": tokens}}}
+
+    st = E.trial_stats([one(4, 700), one(5, 800), one(3, 900)])["full"]["multi"]
+    check("trials: the pass mean is a mean, not a rounded single run",
+          st["pass_mean"] == 4.0, st)
+    check("trials: the pass min and max are the trial extremes",
+          (st["pass_min"], st["pass_max"]) == (3, 5), st)
+    check("trials: prompt tokens get their own mean and min/max",
+          (st["prompt_tokens_mean"], st["prompt_tokens_min"],
+           st["prompt_tokens_max"]) == (800, 700, 900), st)
+    check("trials: the denominator and trial count travel with the numbers",
+          st["of"] == 8 and st["trials"] == 3, st)
+
+    def two(multi, tokens, picks):
+        doc = one(multi, tokens)
+        doc["full"]["pick"] = {"pass": picks, "of": 65, "prompt_tokens_avg": None}
+        return doc
+    st2 = E.trial_stats([two(4, 700, 40), two(5, 800, 44), two(3, 900, 42)])["full"]
+    check("trials: a second set gets its own mean/min/max",
+          st2["pick"]["pass_mean"] == 42.0
+          and (st2["pick"]["pass_min"], st2["pick"]["pass_max"]) == (40, 44), st2["pick"])
+    check("trials: a set with no token count reports none, not a fake number",
+          st2["pick"]["prompt_tokens_mean"] is None
+          and st2["multi"]["prompt_tokens_mean"] == 800, st2["pick"])
+
+
 if __name__ == "__main__":
     for fn in (t_the_harness_reads_the_real_rules_and_tools,
                t_pick_scores_right_wrong_crash_and_one_retry,
@@ -559,7 +590,8 @@ if __name__ == "__main__":
                t_a_fair_test_for_every_model,
                t_the_full_list_is_a_top_k_diet_that_keeps_every_needed_tool,
                t_the_multi_runner_uses_the_identical_call_breaker,
-               t_the_multi_runner_uses_the_continuation_nudge):
+               t_the_multi_runner_uses_the_continuation_nudge,
+               t_trial_statistics_are_per_set_mean_min_max):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

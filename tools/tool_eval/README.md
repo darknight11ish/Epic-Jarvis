@@ -51,6 +51,16 @@ instead of 46 (several hours).
 - **`--repeat 3`** runs everything three times. A single run can be lucky or
   unlucky; the WORST of the three is saved under the model's name, and every
   run is listed beside it.
+- **`--trials 3`** is the measurement form added 2026-10-18: it runs the chosen
+  suites three times at the sampled temperature (`--temp` is the short form of
+  `--temperature`) and prints each set's pass mean with its min/max, plus the
+  prompt-token mean/min/max. The worst trial is still saved under the model's
+  name, so the backend's plan check reads the careful number. **`--greedy`**
+  adds one deterministic pass at temperature 0.0 and top_p 1.0 beside the
+  sampled trials. **`--out FILE`** writes only that result file (used by local
+  measurement runs; the default still writes beside this script and into the
+  config folder the backend reads). `--repeat` and `--trials/--greedy` are
+  alternatives, not combined.
 - **`--temperature` and `--top-p`** default to what Jarvis itself sends
   (0.7 and 0.8, Qwen's own values). Give a model maker's recommended values
   to see how that model does at its best.
