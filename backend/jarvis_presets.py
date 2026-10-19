@@ -56,6 +56,7 @@ class Preset:
     diet: str = "balanced"  # the top-K tool diet's grouping word
     tools: tuple = ()       # extra tool groups that matter for this preset
     measured: Optional[dict] = None
+    pending: bool = False
     words: tuple = ()       # trigger words for /api/work/recommend
     strong: tuple = ()
 
@@ -78,6 +79,7 @@ class Preset:
             "policy": {"prompt": self.prompt, "diet": self.diet,
                        "tools": list(self.tools)},
             "measured": self.measured,
+            "pending": self.pending,
             "apply": {"action": APPLY_ACTION, "switch_route": SWITCH_ROUTE,
                       "lane_start": self.lane != "main",
                       "auto": False},
@@ -101,6 +103,21 @@ PRESETS = (
         words=("everyday", "general", "quick question", "writing", "admin",
                "paperwork", "letter", "statement", "form", "tax", "email", "inbox"),
         strong=("everyday use", "quick questions", "life admin", "my admin"),
+    ),
+    Preset(
+        id="general_uncensored", title="General Uncensored",
+        focus="general work with the uncensored model",
+        what="General everyday work with the uncensored model, for answers the "
+             "ordinary model's safety tuning would refuse or water down.",
+        cost="PENDING: the owner chose a newer Qwen3.5-based uncensored model and a "
+             "separate stream is finding and installing it. No model tag, speed or "
+             "memory figure is claimed until that ref is confirmed on this PC.",
+        worse="Uncensored means fewer refusals, not better answers; it is not the "
+              "everyday default and its quality has not been measured here.",
+        model="pending", lane="main", context=196608, pending=True,
+        prompt="balanced", diet="balanced",
+        words=("uncensored", "no filter", "unfiltered", "general uncensored"),
+        strong=("general uncensored", "uncensored"),
     ),
     Preset(
         id="coding", title="Coding", focus="code, files, debugging, multi-step work",

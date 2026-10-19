@@ -31,6 +31,37 @@
         "vram_gib": 9.17,
         "spill_gib": 0.0
       },
+      "pending": false,
+      "apply": {
+        "action": "Use this preset",
+        "switch_route": "/api/models/switch",
+        "lane_start": false,
+        "auto": false
+      }
+    },
+    {
+      "id": "general_uncensored",
+      "title": "General Uncensored",
+      "focus": "general work with the uncensored model",
+      "what": "General everyday work with the uncensored model, for answers the ordinary model's safety tuning would refuse or water down.",
+      "cost": "PENDING: the owner chose a newer Qwen3.5-based uncensored model and a separate stream is finding and installing it. No model tag, speed or memory figure is claimed until that ref is confirmed on this PC.",
+      "worse": "Uncensored means fewer refusals, not better answers; it is not the everyday default and its quality has not been measured here.",
+      "model": "pending",
+      "lane": {
+        "key": "main",
+        "card": "RTX 2060",
+        "port": 11436,
+        "words": "the long-context card"
+      },
+      "context": 196608,
+      "helper": null,
+      "policy": {
+        "prompt": "balanced",
+        "diet": "balanced",
+        "tools": []
+      },
+      "measured": null,
+      "pending": true,
       "apply": {
         "action": "Use this preset",
         "switch_route": "/api/models/switch",
@@ -77,6 +108,7 @@
         "vram_gib": 9.17,
         "spill_gib": 0.0
       },
+      "pending": false,
       "apply": {
         "action": "Use this preset",
         "switch_route": "/api/models/switch",
@@ -111,6 +143,7 @@
         ]
       },
       "measured": null,
+      "pending": false,
       "apply": {
         "action": "Use this preset",
         "switch_route": "/api/models/switch",
@@ -145,6 +178,7 @@
         "vram_gib": 5.84,
         "spill_gib": 0.0
       },
+      "pending": false,
       "apply": {
         "action": "Use this preset",
         "switch_route": "/api/models/switch",

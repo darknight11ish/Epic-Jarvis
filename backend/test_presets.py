@@ -17,8 +17,8 @@ def check(name, cond, detail=""):
 
 def main() -> int:
     fixture = json.loads((HERE / "fixtures" / "work_presets.json").read_text(encoding="utf-8"))
-    check("exactly four presets, in the owner's order",
-          [p["id"] for p in fixture["presets"]] == ["general", "coding", "agentic_vision", "fast"],
+    check("exactly five presets, in the owner's order",
+          [p["id"] for p in fixture["presets"]] == ["general", "general_uncensored", "coding", "agentic_vision", "fast"],
           [p["id"] for p in fixture["presets"]])
     check("the five old ids are named as replaced",
           fixture["old_ids_replaced"] == ["everyday", "coding", "admin", "long", "specialist"])
@@ -38,6 +38,10 @@ def main() -> int:
     check("Fast is qwen3:8b on the coding lane at 16,384",
           P.by_id("fast").model == "qwen3:8b" and P.by_id("fast").lane == "coding"
           and P.by_id("fast").context == 16384)
+    check("General Uncensored is a PENDING replacement: no model tag or speed invented",
+          P.by_id("general_uncensored").pending is True
+          and P.by_id("general_uncensored").measured is None
+          and "PENDING" in P.by_id("general_uncensored").cost)
     check("Agentic+Vision is the vision model on the 2060 (never the display card)",
           P.by_id("agentic_vision").model == "qwen3-vl:8b-thinking"
           and P.by_id("agentic_vision").lane == "main" and P.by_id("agentic_vision").context == 16384)
