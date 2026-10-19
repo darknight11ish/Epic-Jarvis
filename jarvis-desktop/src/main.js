@@ -414,6 +414,7 @@ const dom = {
   liveEnd: $("jarvis-live-end"),
   liveChips: $("jarvis-live-chips"),
   pin: $("pin"),
+  sayableToggle: $("sayable-toggle"),
   openSettings: $("open-settings"),
   hideBar: $("hide-bar"),
   submitHint: $("submit-hint"),
@@ -1177,13 +1178,20 @@ function renderPaletteHint() {
 }
 
 /**
- * The primer is the window's empty state: visible when nothing else in the
- * stack is, gone the instant anything is.
- *
- * Kept as one function rather than a `hidden = false` at each of the six call
- * sites, because the failure mode of the second approach is a primer left
- * behind under a streaming answer, and it only shows up on the one path nobody
- * re-tested.
+ * Whether the owner opened the primer ("Things you can say"). It starts
+ * closed, so the bar opens at its compact input-row height (owner,
+ * 2026-10-19: "the jarvis bar is huge now, i want it back to its compact
+ * size"); #sayable-toggle on the bar is the only thing that opens it, and
+ * the same button closes it again.
+ */
+let primerOpen = false;
+
+/**
+ * The primer is the window's help/empty state: shown only when the owner
+ * opened it with #sayable-toggle AND nothing else in the stack is busy.
+ * Opening or closing it is the only thing that changes its visibility; the
+ * bar's height follows from this one flag, so it cannot be left expanded
+ * behind an answer.
  */
 function syncPrimer() {
   const busy =
@@ -1192,7 +1200,10 @@ function syncPrimer() {
     !dom.approval.hidden ||
     !dom.parked.hidden ||
     !dom.attachments.hidden;
-  dom.primer.hidden = busy;
+  dom.primer.hidden = busy || !primerOpen;
+  if (dom.sayableToggle) {
+    dom.sayableToggle.setAttribute("aria-pressed", primerOpen ? "true" : "false");
+  }
 }
 
 /** Collapses the card and clears everything it was showing. */
@@ -5703,6 +5714,16 @@ if (dom.hideBar) {
   });
 }
 
+// "What can I say?" - the door to the "Things you can say" primer. The bar
+// opens compact by default (owner, 2026-10-19); this button opens the panel,
+// and pressing it again closes it so the bar returns to its input-row height.
+if (dom.sayableToggle) {
+  dom.sayableToggle.addEventListener("click", () => {
+    primerOpen = !primerOpen;
+    syncWindowHeight();
+  });
+}
+
 // "Jarvis settings" - the gear on the bar itself (the owner's request,
 // 2026-10-10). `open_fix_place` is the one door to the Settings window that
 // already existed for this window's own error-fix buttons (plain_errors.rs),
@@ -5871,6 +5892,9 @@ document.addEventListener("click", (event) => {
 listen("focus-input", () => {
   focusInput();
   refreshHealth();
+  // Every summon starts compact: the primer is a panel the owner opens, not
+  // a state a previous summon can leave the bar stuck in.
+  primerOpen = false;
   // A spending table still on screen is asked for again: hidden if the PC
   // has been locked meanwhile, drawn again once it is unlocked.
   if (spendingView) spendingView.recheck();

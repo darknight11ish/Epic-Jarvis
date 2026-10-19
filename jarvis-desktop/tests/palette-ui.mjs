@@ -393,6 +393,10 @@ await check("a search that matches nothing says so in words", async () => {
 
 await check("the bar's own Find button opens it, and Enter in the box still sends", async () => {
   const page = await openBar();
+  // The Find button lives in the primer, which the bar keeps behind its "?"
+  // button now (compact first, owner 2026-10-19), so open it first.
+  await page.locator("#sayable-toggle").click();
+  await page.waitForTimeout(250);
   await page.locator("#palette-hint button").click();
   await page.waitForTimeout(250);
   const opened = await paletteState(page);

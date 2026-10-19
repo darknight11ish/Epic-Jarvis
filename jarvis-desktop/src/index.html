@@ -232,6 +232,22 @@
             <span class="sr-only">Temporary chat</span>
           </button>
 
+          <!-- The bar opens compact (owner, 2026-10-19). "Things you can say"
+               is a help panel, not the empty bar's permanent furniture; this
+               button is its door, and pressing it again closes the panel and
+               lets the bar shrink back to the input row. -->
+          <button
+            id="sayable-toggle"
+            class="icon-button"
+            type="button"
+            aria-pressed="false"
+            aria-controls="primer"
+            title="What can I say?"
+          >
+            <span class="sayable-mark" aria-hidden="true">?</span>
+            <span class="sr-only">What can I say?</span>
+          </button>
+
           <button
             id="pin"
             class="icon-button"
@@ -642,7 +658,12 @@
              comment for why this list is hardcoded, not fetched). Tapping a
              line calls fillFromSayable (main.js), which only fills #prompt -
              it never sends. -->
-        <section class="primer" id="primer" aria-label="What you can do here">
+        <!-- The bar opens compact (owner, 2026-10-19: "the jarvis bar is huge
+             now, i want it back to its compact size"). The "Things you can
+             say" primer is a help panel, not the empty bar's permanent
+             furniture: it stays hidden until #sayable-toggle is pressed, and
+             pressing it again collapses the bar back to the input row. -->
+        <section class="primer" id="primer" aria-label="What you can do here" hidden>
           <h2 class="sr-only">What you can do here</h2>
           <div id="sayable-list"></div>
           <!-- The command palette's way in (palette-ui.js, built from the menu

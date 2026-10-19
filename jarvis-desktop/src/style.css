@@ -486,6 +486,15 @@ html[data-state="error"] .reactor {
   stroke-linejoin: round;
 }
 
+/* "What can I say?" is a text question mark rather than a drawn icon: it is
+   a question, not a picture, and 13 px bold is the smallest size that stays
+   legible without turning the bar's compact toolbar into a row of words. */
+.sayable-mark {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 #pin svg,
 #mic svg,
 #voice-auto svg {
