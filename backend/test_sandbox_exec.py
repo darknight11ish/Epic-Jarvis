@@ -1430,6 +1430,79 @@ def t_the_route_and_both_settings_rows_are_real():
     check("...and its Settings plate", plate.is_file())
 
 
+# --------------------------------------------------------------------------
+#   M7 (security audit, 18 October): the OS boundary, and the file-run card
+# --------------------------------------------------------------------------
+
+
+def t_the_os_boundary_is_applied_and_its_limit_is_said():
+    """The Win32 Job Object now also denies UI access - and says what it can't."""
+    source = Path(SE.__file__).read_text(encoding="utf-8")
+    check("the UI-restriction flags are every Win32 UI limit",
+          SE._JOB_OBJECT_UILIMIT_ALL == 0x000000FF, SE._JOB_OBJECT_UILIMIT_ALL)
+    check("...and the basic UI restriction class is its own information class",
+          SE._JOB_OBJECT_BASIC_UI_RESTRICTIONS == 4)
+    check("...the job sets UILIMIT_ALL through a UIRestrictionsClass field",
+          "UIRestrictionsClass" in source and "JOB_OBJECT_UILIMIT_ALL" in source)
+    check("...and no job is attached when the UI boundary could not be set",
+          "set_ok = bool(set_ok and ui_ok)" in source)
+    check("the module says plainly what a Job Object cannot contain (network)",
+          "cannot stop network access" in SE.OS_BOUNDARY_NOTE, SE.OS_BOUNDARY_NOTE)
+    check("...and that it is not an OS file-access boundary",
+          "restrict which files" in SE.OS_BOUNDARY_NOTE, SE.OS_BOUNDARY_NOTE)
+    check("...in the module's own docstring too",
+          "WHAT IT CANNOT CONTAIN" in source)
+
+
+def t_proxy_variables_never_reach_the_child():
+    """A proxy variable is a route out; the child's environment drops it."""
+    saved = SE._inherited_env
+    SE._inherited_env = lambda: {
+        "PATH": "a-path", "HTTP_PROXY": "http://proxy", "HTTPS_PROXY": "https://proxy",
+        "ALL_PROXY": "socks5://proxy", "NO_PROXY": "*", "FTP_PROXY": "http://proxy",
+        "JARVIS_TOKEN": "a-token", "PYTHONPATH": "a-path",
+    }
+    try:
+        got = SE._child_env()
+    finally:
+        SE._inherited_env = saved
+    check("no proxy variable reaches the child",
+          not any(k.upper() in SE._CHILD_ENV_DROPPED for k in got), got)
+    check("...and a token and PYTHONPATH still do not either",
+          "JARVIS_TOKEN" not in got and not any(k.upper().startswith("PYTHON") for k in got),
+          got)
+    check("...while PATH (the child needs it) still does", got.get("PATH") == "a-path", got)
+
+
+def t_a_file_reading_run_asks_on_its_own_card():
+    """A run that names files is gated as an ASK; a pure sum stays automatic."""
+    import jarvis_agent as AG
+    files_args = {"code": "print(1)", "files": [{"name": "a", "path": "b"}]}
+    pure_args = {"code": "print(1)"}
+    check("the asking action has its own name",
+          AG.SANDBOX_FILES_ACTION == "sandbox_file_run", AG.SANDBOX_FILES_ACTION)
+    check("a run with files is decided under that action",
+          AG._sandbox_action_for(AG.SANDBOX_TOOL, "read_files_readonly", files_args)
+          == AG.SANDBOX_FILES_ACTION)
+    check("...a pure run keeps the calculator action",
+          AG._sandbox_action_for(AG.SANDBOX_TOOL, "calculator", pure_args) == "calculator")
+    check("...and another tool is never rewritten",
+          AG._sandbox_action_for("web_search", "search_the_web", files_args)
+          == "search_the_web")
+    try:
+        import jarvis_framework as fw
+        tier = fw.action_tier(AG.SANDBOX_FILES_ACTION)
+    except Exception:
+        try:
+            import jarvis_gate as G
+            tier = G._tiers().get(AG.SANDBOX_FILES_ACTION)
+        except Exception as exc:                        # noqa: BLE001
+            check("the shipped tier table could be read", False, type(exc).__name__)
+            return
+    check("the shipped tier table makes that action ask", tier == "ask", tier)
+
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn) and fn.__module__ == "__main__":

@@ -97,7 +97,9 @@ anything, and Phase 5 is still not here: this module applies nothing, writes
 nothing, cards nothing and reverts nothing. What IS here now is the read-only
 exposure the wiring queue asked for (2026-10-17): two
 GET routes, behind the core's own origin and token checks, answered by
-`install()` - the same shape every drop-in module's install() has, called from
+this PC's own requests only (another device is refused 403 before anything is
+read), served by `install()` - the same shape every drop-in module's install()
+has, called from
 `plugins/ready/self-improve/`:
 
     GET /api/self-improve/diagnose?q=<question>   diagnose()'s answer, cited
@@ -1447,9 +1449,32 @@ def handle_get(route: str, query: str = "", *, ask=None, ask_ollama=None) -> tup
     }
 
 
+#: One plain sentence for a request that did not come from this PC. The
+#: route is a diagnostic OF this PC's own source, so another device learns
+#: nothing - not even whether a file exists.
+NOT_THIS_PC = ("Reading Jarvis's own source is for this PC only, so nothing "
+               "was read.")
+
+
+def _from_this_pc(peer, local) -> bool:
+    """Is this request from this PC? Fails CLOSED: no helper, no answer.
+
+    The same rule `jarvis_brain_reads._from_this_pc` uses: the project's one
+    answer (`jarvis_owner_check.from_this_pc`) treats loopback and this PC's
+    own addresses as here, so a program on the PC can ask and a phone on the
+    same private network cannot.
+    """
+    try:
+        import jarvis_owner_check
+        return bool(jarvis_owner_check.from_this_pc(peer, local))
+    except Exception:
+        return False
+
+
 def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
     """Wrap `handler_cls.do_GET` so the two read-only diagnostic routes are
-    answered here, after the server's own origin and token checks.
+    answered here, after the server's own origin and token checks - and only
+    for THIS PC's own requests, refused 403 before the module reads anything.
 
     Every other request goes straight to the original do_GET. `do_POST` is NOT
     wrapped, because both routes read and a read must not be reachable by POST.
@@ -1488,6 +1513,17 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
             return get0(self)
         if not _allowed(self):
             return None
+        peer, local = _peer_local(self)
+        # This PC only, BEFORE any file is read: another device is refused
+        # with one sentence and learns nothing. The same owner rule the
+        # guardian and selection routes use.
+        if not _from_this_pc(peer, local):
+            return self._send(403, {
+                "ok": False,
+                "read_only": True,
+                "error": "not_this_pc",
+                "message": NOT_THIS_PC,
+            })
         try:
             code, out = handle_get(route, parts.query)
         except Exception as exc:                            # noqa: BLE001
@@ -1499,6 +1535,20 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
                 "message": "the diagnostic could not be completed, and nothing was changed",
             }
         return self._send(code, out)
+
+    def _peer_local(self) -> tuple:
+        """(peer, local) for this request, best effort; the owner check fails
+        CLOSED when they cannot be had (jarvis_owner_check's own rule)."""
+        peer = local = None
+        try:
+            peer = self.client_address[0]
+        except Exception:
+            pass
+        try:
+            local = self.connection.getsockname()[0]
+        except Exception:
+            pass
+        return peer, local
 
     do_GET._jarvis_self_improve = True
     handler_cls.do_GET = do_GET

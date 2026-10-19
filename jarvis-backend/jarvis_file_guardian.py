@@ -513,7 +513,21 @@ def _store_blob(data: bytes, sha: str) -> tuple:
     path = blob_path(sha)
     try:
         if path.is_file():
+            # THE NAME IS NOT ENOUGH. A blob planted or corrupted under a real
+            # content address must never be trusted just because the file
+            # exists: re-hash it before dedup, and refuse rather than report a
+            # copy that is not this content.
+            try:
+                stored = _load_blob(sha)
+            except Refused:
+                raise
+            except Exception:
+                raise Refused(WORDS["damaged"])
+            if stored != data:
+                raise Refused(WORDS["damaged"])
             return path, path.stat().st_size, False
+    except Refused:
+        raise
     except OSError:
         pass
     packed = _gzip_bytes(data)
@@ -566,27 +580,162 @@ def _load_blob(sha256: str) -> bytes:
     return data
 
 
-def _write_file(real: str, data: bytes) -> None:
-    """Replace one file's bytes in one atomic rename, or a plain refusal.
+def _refuse_reparse(real: str) -> None:
+    """Refuse when any folder between the root and the file is a link/junction.
 
-    Written beside it and renamed over it, so a crash or a full disk cannot
-    leave half a file where a whole one was - which is the point of taking the
-    copy first.
+    Walked with `lstat` at WRITE time, after the card: a parent folder swapped
+    for a junction between the card's last `_check_path` and this write is seen
+    here rather than silently followed. Windows marks the reparse attribute on
+    junctions as well as symlinks, so the attribute is checked too (a junction
+    is not `os.path.islink` on every Python version). A component that has
+    vanished mid-walk is a change too, and refused.
     """
-    parent = os.path.dirname(real) or "."
-    tmp = os.path.join(parent, f".{os.path.basename(real)}.{uuid.uuid4().hex[:8]}.guardian.tmp")
-    try:
-        with open(tmp, "wb") as handle:
-            handle.write(data)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(tmp, real)
-    except OSError as exc:
+    path = os.path.abspath(real)
+    parts = Path(path).parts
+    current = parts[0] if parts else path
+    for part in parts[1:]:
+        current = os.path.join(current, part)
         try:
-            os.unlink(tmp)
+            info = os.lstat(current)
+        except OSError:
+            raise Refused("The folder changed while the card was up, so nothing "
+                          "was written.")
+        attrs = int(getattr(info, "st_file_attributes", 0) or 0)
+        if os.path.islink(current) or (attrs & 0x400):
+            raise Refused("The folder changed while the card was up, so nothing "
+                          "was written.")
+
+
+def _recheck_destination(real: str, roots_list: list) -> None:
+    """Re-prove at WRITE time that `real` is still the allowed file itself.
+
+    The last `_check_path` can be several operations (and one card) away from
+    the write. This resolves the path again, requires it to resolve to itself
+    and to be inside an allowed folder, and refuses ANY link or junction on the
+    way - so a parent-directory swap cannot redirect the restore.
+    """
+    try:
+        resolved = os.path.realpath(real)
+    except Exception:
+        raise Refused(WORDS["no_path"])
+    if os.path.normcase(os.path.abspath(resolved)) != os.path.normcase(os.path.abspath(real)):
+        raise Refused("The file moved while the card was up, so nothing was written.")
+    if not any(_inside(root, resolved) for root in roots_list):
+        raise Refused("The file moved while the card was up, so nothing was written.")
+    _refuse_reparse(real)
+
+
+def _open_destination_handle(real: str, roots_list: list) -> int:
+    """Open the DESTINATION itself, refusing a reparse point, and return its fd.
+
+    This is the second half of the race fix (T slice, 2026-10-18): the last
+    `_check_path` can be a card away from the write, so the write does not
+    follow the path again. A junction/symlink swapped in after the check is
+    refused by `FILE_FLAG_OPEN_REPARSE_POINT` (Windows: open the reparse point
+    ITSELF, then refuse it) / `O_NOFOLLOW` (elsewhere), and the file is written
+    through this one handle. A language-level restore cannot do better without
+    a restricted token; this is the OS boundary the host audit asked for here.
+    """
+    if os.name == "nt":
+        import ctypes
+        import msvcrt
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.CreateFileW.restype = wintypes.HANDLE
+        kernel32.CreateFileW.argtypes = [
+            wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, wintypes.LPVOID,
+            wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
+        kernel32.GetFileInformationByHandle.restype = wintypes.BOOL
+        kernel32.GetFileInformationByHandle.argtypes = [
+            wintypes.HANDLE, wintypes.LPVOID]
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+
+        class _ByHandleFileInformation(ctypes.Structure):
+            _fields_ = [
+                ("dwFileAttributes", wintypes.DWORD),
+                ("ftCreationTime", wintypes.FILETIME),
+                ("ftLastAccessTime", wintypes.FILETIME),
+                ("ftLastWriteTime", wintypes.FILETIME),
+                ("dwVolumeSerialNumber", wintypes.DWORD),
+                ("nFileSizeHigh", wintypes.DWORD),
+                ("nFileSizeLow", wintypes.DWORD),
+                ("nNumberOfLinks", wintypes.DWORD),
+                ("nFileIndexHigh", wintypes.DWORD),
+                ("nFileIndexLow", wintypes.DWORD),
+            ]
+
+        GENERIC_WRITE = 0x40000000
+        OPEN_EXISTING = 3
+        FILE_ATTRIBUTE_REPARSE_POINT = 0x00000400
+        FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000
+        invalid = ctypes.c_void_p(-1).value
+        handle = kernel32.CreateFileW(
+            str(real), GENERIC_WRITE, 0, None, OPEN_EXISTING,
+            FILE_FLAG_OPEN_REPARSE_POINT, None)
+        if not handle or int(handle) == invalid:
+            raise Refused(WORDS["write_failed"].format(why="open refused"))
+        info = _ByHandleFileInformation()
+        if not kernel32.GetFileInformationByHandle(handle, ctypes.byref(info)):
+            kernel32.CloseHandle(handle)
+            raise Refused(WORDS["write_failed"].format(why="handle unreadable"))
+        if int(info.dwFileAttributes) & FILE_ATTRIBUTE_REPARSE_POINT:
+            kernel32.CloseHandle(handle)
+            raise Refused("The file changed while the card was up, so nothing was written.")
+        try:
+            return msvcrt.open_osfhandle(handle, os.O_WRONLY | os.O_BINARY)
+        except OSError:
+            kernel32.CloseHandle(handle)
+            raise Refused(WORDS["write_failed"].format(why="handle"))
+    flags = os.O_WRONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        return os.open(real, flags)
+    except OSError as exc:
+        raise Refused(WORDS["write_failed"].format(why=type(exc).__name__))
+
+
+def _write_file(real: str, data: bytes, roots=None) -> None:
+    """Replace one file's bytes THROUGH ONE OPENED HANDLE, or a plain refusal.
+
+    The destination is re-proved just before it is opened, then opened through
+    `_open_destination_handle` (reparse points refused, by handle), then
+    re-proved once more before a byte is written. The bytes go through that
+    already-open handle, so a folder swapped for a junction after the checks
+    cannot redirect the write - no path is followed a second time.
+
+    This is a deliberate trade: the old write was a temp file plus an atomic
+    path `os.replace`, which could follow a swapped parent. The current write
+    can leave a partial file if the PC dies mid-write; the journal row and the
+    receipt were already written, so a restore that fails is visible, and the
+    host audit's race is closed. `roots` is the card's own allowed-folder list;
+    a caller that omits it gets the live list, never "no rule".
+    """
+    roots_list = _clean_roots(roots) if roots is not None else allowed_roots()
+    if not roots_list:
+        raise Refused(WORDS["no_roots"])
+    _recheck_destination(real, roots_list)
+    handle = _open_destination_handle(real, roots_list)
+    try:
+        # The path may have been swapped between the check and the open; the
+        # handle pins the file, and this proves the path still names it.
+        _recheck_destination(real, roots_list)
+        try:
+            os.ftruncate(handle, 0)
+            offset = 0
+            while offset < len(data):
+                wrote = os.write(handle, data[offset:])
+                if wrote <= 0:
+                    raise OSError("short write")
+                offset += wrote
+            os.fsync(handle)
+        except OSError as exc:
+            raise Refused(WORDS["write_failed"].format(why=type(exc).__name__))
+    finally:
+        try:
+            os.close(handle)
         except OSError:
             pass
-        raise Refused(WORDS["write_failed"].format(why=type(exc).__name__))
+
 
 
 # --------------------------------------------------------------------------
@@ -1438,7 +1587,7 @@ def restore_version(path, sha_before, *, gate=None, roots=None, reason: str = ""
         real_now, _same_roots = _check_path(path, roots_list)
         if os.path.normcase(os.path.realpath(real_now)) != os.path.normcase(real):
             raise Refused("The file moved while the card was up, so nothing was written.")
-        _write_file(real, old)
+        _write_file(real, old, roots_list)
         pruned = prune(protect=now_sha)
         when = ""
         for candidate in reversed(rows()):

@@ -41,6 +41,7 @@ import shutil
 import sys
 import tempfile
 import traceback
+import types
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -1000,6 +1001,9 @@ def t_the_only_route_is_two_read_only_gets_and_no_way_to_draft():
     class Handler:
         def __init__(self, path="/"):
             self.path = path
+            self.client_address = ("127.0.0.1", 50000)
+            self.connection = types.SimpleNamespace(
+                getsockname=lambda: ("127.0.0.1", 8765))
 
         def do_GET(self):
             core.append(("GET", self.path))
@@ -1031,6 +1035,71 @@ def t_the_only_route_is_two_read_only_gets_and_no_way_to_draft():
           sent and sent[-1][0] == 400 and "empty" in str(sent[-1][1]), sent)
     check("... and nothing was written: the core saw no POST",
           all(method == "GET" for method, _ in core), core)
+
+
+def t_another_device_is_refused_before_any_read():
+    """F4 (security audit, 18 October): the two GETs are this PC's own.
+
+    They read the program's own source, so a request from another device is
+    refused 403 BEFORE the module reads a file - the same owner rule the
+    guardian and selection routes use - and the refusal carries one sentence
+    with no file name and no line. A request from this PC is still served.
+    """
+    sent, core, reads = [], [], []
+
+    class Handler:
+        def __init__(self, path="/", peer="100.64.0.9", local="100.64.0.1"):
+            self.path = path
+            self.client_address = (peer, 50000)
+            self.connection = types.SimpleNamespace(getsockname=lambda: (local, 8765))
+
+        def do_GET(self):
+            core.append(("GET", self.path))
+
+        def _send(self, code, payload):
+            sent.append((code, payload))
+            return payload
+
+    saved = M._from_this_pc, M.handle_get
+    read_patches = []
+
+    def spy_handle_get(route, query="", **kwargs):
+        reads.append(route)
+        return 200, {"ok": True, "route": route, "read_only": True}
+
+    M._from_this_pc = lambda peer, local: False
+    M.handle_get = spy_handle_get
+    try:
+        M.install(Handler, origin_ok=lambda r: True, token_ok=lambda r: True,
+                  read_body=lambda r: b"{}")
+        Handler(M.DIAGNOSE_PATH + "?q=where+is+the+taint+latch").do_GET()
+    finally:
+        M._from_this_pc, M.handle_get = saved
+    check("a request from another device is refused 403",
+          sent and sent[-1][0] == 403, sent)
+    check("... in one plain sentence, saying it is this PC only",
+          "for this PC only" in str(sent[-1][1].get("message")), sent[-1] if sent else None)
+    check("... and the route read NOTHING: handle_get was never called",
+          reads == [], reads)
+    check("... and the refusal carries no file:line and no answer",
+          "file" not in str(sent[-1][1]) and "answer" not in str(sent[-1][1]), sent[-1])
+
+    # The same PC's own request is still served.
+    class Local(Handler):
+        def __init__(self, path="/"):
+            super().__init__(path, peer="127.0.0.1", local="127.0.0.1")
+
+    M._from_this_pc = lambda peer, local: True
+    M.handle_get = spy_handle_get
+    try:
+        M.install(Local, origin_ok=lambda r: True, token_ok=lambda r: True,
+                  read_body=lambda r: b"{}")
+        Local(M.DIAGNOSE_PATH + "?q=where").do_GET()
+    finally:
+        M._from_this_pc, M.handle_get = saved
+    check("this PC's own request still reaches the diagnostic",
+          sent and sent[-1][0] == 200 and reads == [M.DIAGNOSE_PATH], (sent, reads))
+    del read_patches
 
 
 if __name__ == "__main__":
@@ -1066,6 +1135,7 @@ if __name__ == "__main__":
         t_the_real_tree_answers_with_a_real_line,
         t_the_repository_ships_this_module_in_all_three_lists,
         t_the_only_route_is_two_read_only_gets_and_no_way_to_draft,
+        t_another_device_is_refused_before_any_read,
     )
     for fn in RUN:
         print(f"\n--- {fn.__name__} ---")

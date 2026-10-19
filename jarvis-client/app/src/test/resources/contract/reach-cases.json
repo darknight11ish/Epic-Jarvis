@@ -5,6 +5,11 @@
    "asks_label": "Asks you first",
    "available": true,
    "detail": "Every way Jarvis can reach something outside itself, and whether each one is on right now. The PC writes this list from its own settings - the AI model does not write it, so it cannot be talked into saying something else. Passwords, keys and private links are never shown.",
+   "enforcement": {
+    "available": true,
+    "line": "Approval enforcement is AVAILABLE but NOT WIRED into the older approval path - this app's own chat is gated, and the other path still approves by itself until patch_openjarvis.py is run on this PC.",
+    "wired": false
+   },
    "everything_else": "Anything not on this list stays on this PC.",
    "on": 2,
    "rows": [
@@ -299,6 +304,11 @@
    "asks_label": "Asks you first",
    "available": true,
    "detail": "Every way Jarvis can reach something outside itself, and whether each one is on right now. The PC writes this list from its own settings - the AI model does not write it, so it cannot be talked into saying something else. Passwords, keys and private links are never shown.",
+   "enforcement": {
+    "available": false,
+    "line": "Approval enforcement is OFF on this PC: no tool call is being checked by the gate right now.",
+    "wired": false
+   },
    "everything_else": "Anything not on this list stays on this PC.",
    "on": 1,
    "rows": [
@@ -589,6 +599,11 @@
    "asks_label": "Asks you first",
    "available": true,
    "detail": "Every way Jarvis can reach something outside itself, and whether each one is on right now. The PC writes this list from its own settings - the AI model does not write it, so it cannot be talked into saying something else. Passwords, keys and private links are never shown.",
+   "enforcement": {
+    "available": false,
+    "line": "Approval enforcement is OFF on this PC: no tool call is being checked by the gate right now.",
+    "wired": false
+   },
    "everything_else": "Anything not on this list stays on this PC.",
    "on": 6,
    "rows": [
@@ -903,6 +918,11 @@
    "asks_label": "Asks you first",
    "available": true,
    "detail": "Every way Jarvis can reach something outside itself, and whether each one is on right now. The PC writes this list from its own settings - the AI model does not write it, so it cannot be talked into saying something else. Passwords, keys and private links are never shown.",
+   "enforcement": {
+    "available": true,
+    "line": "Approval enforcement is ON: tool calls go through the gate, and the older approval path is wired to it.",
+    "wired": true
+   },
    "everything_else": "Anything not on this list stays on this PC.",
    "on": 25,
    "rows": [
@@ -1305,6 +1325,11 @@
    "asks_label": "Asks you first",
    "available": true,
    "detail": "Every way Jarvis can reach something outside itself, and whether each one is on right now. The PC writes this list from its own settings - the AI model does not write it, so it cannot be talked into saying something else. Passwords, keys and private links are never shown.",
+   "enforcement": {
+    "available": false,
+    "line": "Approval enforcement is OFF on this PC: no tool call is being checked by the gate right now.",
+    "wired": false
+   },
    "everything_else": "Anything not on this list stays on this PC.",
    "on": 1,
    "rows": [

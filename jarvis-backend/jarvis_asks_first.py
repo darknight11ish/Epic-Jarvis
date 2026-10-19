@@ -459,7 +459,15 @@ MUST_ASK = frozenset({
 #: row (FIXED) has no tier: the owner decided it and the code does it.
 GROUPS = (
     ("Reading your own things", ["calendar_read", "email_read", "notes_search", "home_read",
-                                 "read_files_readonly", "read_joplin_note",
+                                 "read_files_readonly",
+                                 # M7 (2026-10-18): a sandbox run that reads the
+                                 # files the owner listed raises its own card, so
+                                 # the page must name it. Its shipped tier is
+                                 # "ask"; there is no switch (it is not on LOOSE),
+                                 # so the honest note is NOTE_FILE - going looser
+                                 # would be a hand edit of the settings file.
+                                 "sandbox_file_run",
+                                 "read_joplin_note",
                                  "read_logseq_page"]),
     ("Writing your notes", ["append_obsidian_daily", "append_logseq_journal",
                             "create_joplin_note", "create_logseq_page", "edit_joplin_note",

@@ -952,9 +952,22 @@ fn inet_aton(s: &str) -> Option<u32> {
 /// out of its own backend.
 ///
 /// Returns a note for Settings to show, or `None` when there is nothing to add.
+/// Does this change of connection settings need a person's second factor?
+///
+/// A bind-address-only change cannot redirect a token or a request; a base or
+/// a token change can (the base is where every token-bearing request goes).
+/// Pure, so the matrix is tested without a window.
+pub(crate) fn connection_change_needs_hello(base: bool, token: bool) -> bool {
+    base || token
+}
+
+/// The one sentence the Windows Hello prompt shows for this change.
+const CONNECTION_HELLO: &str = "Windows Hello: changing the Jarvis server address or      token needs your confirmation, because every request with the token goes to that      address.";
+
 #[tauri::command]
-pub fn set_api_settings(
+pub async fn set_api_settings(
     app: AppHandle,
+    window: tauri::WebviewWindow,
     base: Option<String>,
     token: Option<String>,
     bind_address: Option<String>,
@@ -977,6 +990,12 @@ pub fn set_api_settings(
     }
 
     let token = token.map(|t| t.trim().to_string());
+    // SECOND FACTOR, before anything is written (T slice, audit F3). A base or
+    // token change can send the owner's token to a different address; that is
+    // the one answer in Settings a page must not be able to make alone.
+    if connection_change_needs_hello(base.is_some(), token.is_some()) {
+        crate::lock::require_hello(&app, &window, CONNECTION_HELLO).await?;
+    }
     let base_before = jarvis_base(&app);
 
     // What the settings file held before this call, to put back if any step
@@ -7519,5 +7538,27 @@ mod card_open_tests {
     fn an_unknown_target_is_refused() {
         assert!(card_open_target(Some("hud2")).is_err());
         assert!(card_open_target(Some("quickbar")).is_err());
+    }
+}
+
+#[cfg(test)]
+mod second_factor_tests {
+    use super::*;
+
+    #[test]
+    fn a_base_or_a_token_change_asks_a_person() {
+        assert!(
+            !connection_change_needs_hello(false, false),
+            "a port-only change cannot redirect a token"
+        );
+        assert!(
+            connection_change_needs_hello(true, false),
+            "repointing the base must ask"
+        );
+        assert!(
+            connection_change_needs_hello(false, true),
+            "changing the token must ask"
+        );
+        assert!(connection_change_needs_hello(true, true));
     }
 }

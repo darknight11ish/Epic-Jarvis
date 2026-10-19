@@ -844,6 +844,42 @@ def t_phone_push_needs_an_owner_chosen_destination():
           [ln.strip() for ln in src.splitlines() if 'or "https://ntfy.sh"' in ln])
 
 
+def t_the_enforcement_pair_is_honest():
+    """F2 (security audit, 18 October): "available" must never read as "on".
+
+    The answer carries BOTH flags, from the same file the gate reads, and the
+    one sentence is chosen from the pair: available+wired says on, available
+    alone says NOT WIRED, off says off. A caller may hand the pair
+    (`Ctx.enforcement`) so this is proved without touching the owner's file."""
+    def ctx(flags):
+        return R.Ctx(
+            enabled=set(), tier=lambda a: "ask", env=lambda n: "",
+            lanes=[], providers=[], search={"provider": None, "searxng_url": "",
+                                            "ask_every_time": False, "why": ""},
+            key_saved=lambda p: False, enforcement=flags)
+
+    on = R.view(ctx({"available": True, "wired": True}))["enforcement"]
+    check("available AND wired reads as ON, and says so",
+          on["available"] is True and on["wired"] is True and "ON:" in on["line"], on)
+    half = R.view(ctx({"available": True, "wired": False}))["enforcement"]
+    check("available WITHOUT the wiring is NOT on: the sentence says NOT WIRED",
+          half["available"] is True and half["wired"] is False
+          and "AVAILABLE but NOT WIRED" in half["line"], half)
+    check("... and it never claims tool calls are being checked",
+          "tool calls go through" not in half["line"], half["line"])
+    off = R.view(ctx({"available": False, "wired": True}))["enforcement"]
+    check("available false reads as OFF, whatever the wiring says",
+          off["available"] is False and "OFF" in off["line"], off)
+    check("the pair is on every real answer, not only this test's",
+          all(isinstance(v.get("enforcement"), dict)
+              and "line" in v["enforcement"] for v in
+              (R.view(ctx({"available": True, "wired": True})),
+               R.view(ctx({"available": False, "wired": False})))))
+    check("... and it carries booleans, never the file's contents",
+          set(half) == {"available", "wired", "line"}
+          and isinstance(half["available"], bool) and isinstance(half["wired"], bool), half)
+
+
 def t_both_apps_say_the_same_words():
     js = (REPO / "jarvis-desktop" / "src" / "reach.js").read_text(encoding="utf-8")
     kt = (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis" /
@@ -902,7 +938,8 @@ if __name__ == "__main__":
                t_it_only_reads, t_sending_email_is_one_entry,
                t_never_raises, t_cloud_lanes_are_the_modules_own, t_the_quick_answer,
                t_the_patch, t_account_secrets_from_credential_manager_show_too,
-               t_both_apps_say_the_same_words, t_both_apps_read_the_current_contract):
+               t_both_apps_say_the_same_words, t_both_apps_read_the_current_contract,
+               t_the_enforcement_pair_is_honest):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

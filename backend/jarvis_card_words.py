@@ -73,6 +73,9 @@ TITLES = {
     "delete_calendar_event": "delete an event from your calendar",
     # --- files, commands, the computer and the phone
     "read_files_readonly": "read files on this PC",
+    # M7 (2026-10-18): a sandbox run that reads the files the caller listed is
+    # decided under this action and raises its own card.
+    "sandbox_file_run": "run a small script that reads the files you listed",
     "delete_file": "delete a file",
     "run_shell_on_host": "run a command on this PC",
     "control_computer": "use the mouse and keyboard on this PC",
@@ -292,6 +295,7 @@ SUMMARY = {
     "delete_calendar_event": "delete a calendar event",
     # --- files, commands, the computer and the phone
     "read_files_readonly": "read files on this PC",
+    "sandbox_file_run": "run a script that reads your files",
     "delete_file": "delete a file",
     "run_shell_on_host": "run a command on this PC",
     "control_computer": "use your mouse and keyboard",

@@ -879,10 +879,11 @@ def _folders_listed() -> bool:
 # A READ-ONLY local tool. The sandbox has no network, writes nothing, keeps no
 # secret and can reach only files the caller names; this is the chat door for
 # it, the slice #533's own registration note said was still to come. It adds
-# NO way out of the PC and changes nothing, so it asks for no card of its own:
-# a run that reads a file is decided under the same action reading a file
-# already uses (`read_files_readonly`, tier auto), and a pure calculation under
-# the calculator's own auto action. Reading the owner's file still latches the
+# NO way out of the PC and changes nothing. A pure calculation asks for no card
+# of its own; a run that READS A NAMED FILE asks on its own card instead
+# (`sandbox_file_run`, tier "ask"): the card shows the code and the resolved
+# file names, and nothing reads a file until the owner says yes (M7, the
+# 2026-10-18 security audit). Reading the owner's file still latches the
 # turn as private (jarvis_gate.latch_taint, the same latch the voiceprint and
 # self-improvement reads set). Any file the script may read must be inside
 # "Folders Jarvis may look in"; jarvis_projects.py's own folder check delegates
@@ -891,10 +892,16 @@ def _folders_listed() -> bool:
 # ONCE by prepare(), before the gate, and execute() uses exactly that state.
 SANDBOX_TOOL = "run_data_script"
 #: `_TOOL_ACTIONS` keys this tool is decided under (never guessed gate names):
-#: "file_read" -> read_files_readonly, "calculator" -> auto. Both already exist
-#: in jarvis_gate.py, so this tool needs no gate change.
+#: "file_read" -> read_files_readonly, "calculator" -> auto. The file-reading
+#: case is then raised to `sandbox_file_run` (tier "ask", a line in the shipped
+#: jarvis-framework.toml) by `_sandbox_action_for` below.
 SANDBOX_GATE_FILE = "file_read"
 SANDBOX_GATE_PURE = "calculator"
+#: A run that passes non-empty `files` is decided under THIS action, whose
+#: shipped tier is "ask": the owner sees the script, its code and the resolved
+#: file names on one card before anything reads a file (M7, 2026-10-18). A
+#: pure calculation stays under the calculator's own auto action.
+SANDBOX_FILES_ACTION = "sandbox_file_run"
 SANDBOX_MAX_FILES = 8
 _SANDBOX_CODE_SHOWN = 2000
 
@@ -922,6 +929,18 @@ def _sandbox_allowed_file(path):
     except Exception:
         pass
     return None
+
+
+def _sandbox_action_for(name: str, action_name: str, args: dict) -> str:
+    """The action the gate decides a sandbox call under (pure, so it is tested).
+
+    A run that names files goes to the gate as `sandbox_file_run` (shipped
+    "ask"); everything else keeps the action the tool's own lookup produced.
+    Applied AFTER jarvis_gate.action_for_tool(), because that table is keyed by
+    lookup name and knows nothing about this call's arguments."""
+    if name == SANDBOX_TOOL and isinstance(args, dict) and args.get("files"):
+        return SANDBOX_FILES_ACTION
+    return action_name
 
 
 def _prepare_run_data_script(args: dict):
@@ -1515,6 +1534,7 @@ def _plan_step_dispatch(tools: dict, names: list, checker, watch: "_TurnWatch",
             action_name, _ = jarvis_gate.action_for_tool(lookup_name, checked_args)
         except Exception:
             pass
+        action_name = _sandbox_action_for(step.tool, action_name, checked_args)
         # A step the plan card promised would ask again on its own card
         # (risky, or result-filled), and a note write once this turn - this
         # plan included - has read outside text (NOTE_WRITES, the 2026-09-24
@@ -9505,6 +9525,7 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
             action_name, _ = jarvis_gate.action_for_tool(lookup_name, args)
         except Exception:
             pass
+    action_name = _sandbox_action_for(name, action_name, args)
     if name == "send_email":
         action_name = SEND_EMAIL_ACTION
     if name == "draft_email":

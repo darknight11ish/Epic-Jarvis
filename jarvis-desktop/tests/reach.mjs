@@ -21,7 +21,9 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
   DETAIL,
+  ENFORCEMENT_LABEL,
   EVERYTHING_ELSE,
+  enforcementLine,
   MISSING,
   readReach,
   rowLines,
@@ -54,6 +56,28 @@ await check("the words for the screen are the PC's own", async () => {
   const html = read("src/settings.html");
   assert.ok(html.includes(`<h2>${TITLE}</h2>`), "the heading");
   assert.ok(html.includes(DETAIL), "the note under the heading");
+});
+
+await check("the enforcement pair is shown, and available is not on", async () => {
+  for (const [name, view] of Object.entries(C)) {
+    const v = readReach(view);
+    assert.equal(typeof v.enforcement.available, "boolean", name);
+    assert.equal(typeof v.enforcement.wired, "boolean", name);
+    assert.ok(enforcementLine(v).length > 0, `${name}: no enforcement line`);
+  }
+  const notWired = Object.values(C)
+    .map((view) => readReach(view))
+    .find((v) => v.enforcement.available && !v.enforcement.wired);
+  assert.ok(notWired, "no case carries available-but-not-wired");
+  assert.match(enforcementLine(notWired), /AVAILABLE but NOT WIRED/);
+  assert.doesNotMatch(enforcementLine(notWired), /ON:/, "available alone reads as on");
+  const wired = Object.values(C).map((view) => readReach(view))
+    .find((v) => v.enforcement.available && v.enforcement.wired);
+  assert.ok(wired, "no case carries wired enforcement");
+  assert.match(enforcementLine(wired), /ON:/);
+  assert.ok(read("src/settings.html").includes('id="reach-enforcement"'),
+    "the Settings page has no line for it");
+  assert.equal(ENFORCEMENT_LABEL, "Approval enforcement");
 });
 
 await check("readReach reads every real answer, and a PC without it says so", async () => {

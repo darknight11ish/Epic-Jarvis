@@ -134,7 +134,7 @@ def _support(ready: bool) -> dict:
 
 def _ctx(enabled, *, tiers=None, search=None, keys=None, lanes=None, providers=None,
          second=None, big=None, plugins=None, chatbot=None, support=None,
-         picture=None) -> R.Ctx:
+         picture=None, enforcement=None) -> R.Ctx:
     tiers = dict(TIERS_SHIPPED, **(tiers or {}))
     return R.Ctx(enabled=set(enabled), tier=lambda a: tiers.get(a, "ask"),
                  env=lambda n: str(os.environ.get(n, "") or "").strip(),
@@ -145,7 +145,9 @@ def _ctx(enabled, *, tiers=None, search=None, keys=None, lanes=None, providers=N
                  gate_action=lambda lookup: None, plugins=plugins or NO_PLUGINS,
                  chatbot=chatbot or _gemini(False), support=support or _support(False),
                  screen_picture=picture or {"enabled": False, "model": _PICTURE_MODEL},
-                 youtube={"ready": True})
+                 youtube={"ready": True},
+                 enforcement=(enforcement if enforcement is not None
+                              else {"available": False, "wired": False}))
 
 
 def cases() -> dict:
@@ -167,12 +169,14 @@ def cases() -> dict:
         big={"master": True, "wiki": True, "deep_questions": False},
         plugins={"servers": ["repo"], "running": ["repo"], "problem": "",
                  "card_every_start": False}, chatbot=_gemini(True), support=_support(True),
-        picture={"enabled": True, "model": _PICTURE_MODEL}))
+        picture={"enabled": True, "model": _PICTURE_MODEL},
+        enforcement={"available": True, "wired": True}))
     _set_env(EVERYDAY_ENV)
     out["blocked_and_no_key"] = R.view(_ctx(
         {"web_search", "email_check", "browser_control"}, tiers={"email_read": "never"},
         search={"provider": "exa", "searxng_url": "http://127.0.0.1:8888",
-                "ask_every_time": False, "why": ""}, keys={"exa": False}))
+                "ask_every_time": False, "why": ""}, keys={"exa": False},
+        enforcement={"available": True, "wired": False}))
     _set_env({})
     out["damaged_search"] = R.view(_ctx({"web_search"}, search={
         "provider": None, "searxng_url": "http://127.0.0.1:8888", "ask_every_time": True,
