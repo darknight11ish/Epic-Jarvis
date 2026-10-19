@@ -6016,6 +6016,45 @@ TOOL_DIET_LIMIT = 8
 #: this changes what the model sees, never what the gate lets through.
 TOOL_DIET_DEFAULT = True
 
+#: Multi-step safety (blind holdout, 2026-10-19): a prompt that asks for
+#: several actions is not one intent, so a top-K of 8 can hide a tool the
+#: later step needs (home_read, calculator, web_search, notes_search were all
+#: omitted on the blind cases). Such a prompt gets a larger cap and these
+#: chain-core tools added on top of the matches. Single-step prompts keep the
+#: 8-tool diet and its token saving; an unrecognised prompt still falls back
+#: to the full list. The chain core is deliberately small and generic: the
+#: tools a read -> decide -> act chain most often needs.
+TOOL_DIET_MULTI_LIMIT = 16
+CHAIN_CORE = ("calendar_read", "set_reminder", "memory_search", "notes_search",
+              "web_search", "home_read", "home_control", "calculator")
+
+#: An action word a multi-step prompt uses at least twice (check ... then set).
+_MULTI_ACTION_RX = re.compile(
+    r"\b(?:check|look|find|read|search|see|tell|add|set|remind|draft|send|turn|"
+    r"create|make|put|calculate|figure|compare|summari[sz]e|book|order|report)\b",
+    re.I)
+#: A second clause or a condition, which makes one intent into a chain.
+_MULTI_LINK_RX = re.compile(
+    r"\b(?:and then|then|if|whether|before|after|once|also|and|while)\b", re.I)
+
+
+def looks_multi_step(question) -> bool:
+    """Does this prompt ask for/condition on more than one action?
+
+    Conservative in one direction only: a false negative keeps the normal
+    top-K (the full-list fallback still protects a prompt whose words match no
+    hint), while a false positive costs a few more tool descriptions but shows
+    the tools a chain may need. It is pure and deterministic, so the same words
+    always show the same list.
+    """
+    text = str(question or "").strip()
+    if not text:
+        return False
+    actions = len(_MULTI_ACTION_RX.findall(text))
+    if actions >= 2:
+        return True
+    return actions >= 1 and _MULTI_LINK_RX.search(text) is not None
+
 #: What each tool is ABOUT, as regular expressions matched against the owner's
 #: newest question. Written from the tool descriptions and the tool-eval cases,
 #: frozen before the holdout check, and deliberately deterministic: no model,
@@ -6025,7 +6064,7 @@ TOOL_DIET_DEFAULT = True
 TOOL_HINTS = {
     "calculator": (r"\bcalculat", r"\barithmetic\b", r"\bpercent", r"\bmaths?\b", r"\btip\b",
                    r"\bdivid", r"\bmultipl", r"\bsum\b", r"\baverage\b", r"\bconvert\b",
-                   r"how much is"),
+                   r"how much is", r"\d+\s*%"),
     "memory_search": (r"\bremember", r"\bmemor(y|ies)\b", r"\bmention", r"did i (say|tell)",
                       r"\bfacts?\b", r"\blearn(t|ed)\b", r"\bbirthday\b", r"\bsister\b",
                       r"\bdog\b", r"\bfavou?rite\b", r"\bpreference\b", r"\bagain\b"),
@@ -6046,7 +6085,7 @@ TOOL_HINTS = {
     "github_search": (r"\bgithub\b", r"\blibrary\b", r"\bcrate\b", r"\brepo\b",
                       r"\bpackage\b", r"\bexisting\b"),
     "web_search": (r"\bweb\b", r"\binternet\b", r"\bonline\b", r"\blatest\b", r"\bnews\b",
-                   r"\bcurrent\b", r"\bweather\b", r"who is"),
+                   r"\bcurrent\b", r"\bweather\b", r"\bforecast\b", r"\brain\b", r"who is"),
     "read_web_page": (r"web ?page", r"\burl\b", r"https?://", r"\blink\b", r"\barticle\b"),
     "calendar_read": (r"\bcalendar\b", r"\bschedule\b", r"\bmeeting\b", r"\bappointment\b",
                       r"\bfree\b", r"\bbusy\b", r"this week", r"\btomorrow\b",
@@ -6059,13 +6098,14 @@ TOOL_HINTS = {
     "draft_email": (r"\bdraft\b", r"\bcompose\b"),
     "tidy_inbox": (r"\barchive\b", r"\btrash\b", r"mark read", r"\bstar\b", r"\btidy\b"),
     "notes_search": (r"\bnotes?\b", r"\bobsidian\b", r"\bjoplin\b", r"\blogseq\b",
-                     r"\bjott", r"\bwrote\b", r"\bwritten\b"),
+                     r"\bjott", r"\bwrote\b", r"\bwritten\b", r"\bnoted\b"),
     "my_files": (r"\bfiles?\b", r"\bdocuments?\b", r"\bfolder\b", r"\bfind\b",
                  r"\binvoice\b", r"\bpdf\b", r"\blease\b", r"\bagreement\b", r"where is"),
     "my_spending": (r"\bspending\b", r"\bspend\b", r"\bbank\b", r"\bbills?\b", r"\bmoney\b",
                     r"\btransactions?\b", r"\bexpenses?\b"),
     "retirement_whatif": (r"\bretirement\b", r"\bpension\b", r"\bretire\b", r"what-if"),
-    "home_read": (r"\bhome\b", r"\blights?\b", r"\bdoor\b", r"\blocked\b", r"\bthermostat\b",
+    "home_read": (r"\bhome\b", r"\blights?\b", r"\blamp\b", r"\bliving room\b",
+                  r"\bdoor\b", r"\blocked\b", r"\bthermostat\b",
                   r"\bsensor\b", r"\bgarage\b", r"\bkitchen\b", r"\bhall\b", r"\bstate\b"),
     "home_control": (r"\bturn\b.*\boff\b", r"\bturn\b.*\bon\b", r"\bswitch\b", r"\bdim\b",
                      r"\bbrightness\b", r"\bunlock\b", r"\block\b",
@@ -6131,11 +6171,22 @@ def tool_diet_selection(question: str, allowed, *, limit: int = TOOL_DIET_LIMIT,
         scored.append((sum(1 for rx in patterns if rx.search(text)), name))
     hit = [(score, name) for score, name in scored if score > 0]
     if not hit:
-        return {"tools": allowed, "fallback": True, "matched": 0}
+        return {"tools": allowed, "fallback": True, "matched": 0, "multi_step": False}
     order = {name: i for i, name in enumerate(allowed)}
     hit.sort(key=lambda pair: (-pair[0], order[pair[1]]))
+    multi = looks_multi_step(text)
+    if multi:
+        # A chain gets the small always-on core plus the matched tools, under a
+        # larger cap - still far short of the full 31-tool list.
+        chosen = [n for n in CHAIN_CORE if n in allowed]
+        for _score, name in hit:
+            if name not in chosen:
+                chosen.append(name)
+        return {"tools": chosen[:max(limit, TOOL_DIET_MULTI_LIMIT)],
+                "fallback": False, "matched": len(hit), "multi_step": True,
+                "chain_core": [n for n in CHAIN_CORE if n in allowed]}
     return {"tools": [name for _score, name in hit[:limit]],
-            "fallback": False, "matched": len(hit)}
+            "fallback": False, "matched": len(hit), "multi_step": False}
 
 
 def tool_diet(question: str, allowed, *, limit: int = TOOL_DIET_LIMIT,

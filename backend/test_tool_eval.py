@@ -473,8 +473,13 @@ def t_the_full_list_is_a_top_k_diet_that_keeps_every_needed_tool():
                 check(f"{label}: {question[:36]!r}: an unsure question shows every tool",
                       got == allowed, got)
             else:
-                check(f"{label}: {question[:36]!r}: the diet is 1..{AG.TOOL_DIET_LIMIT} tools",
-                      1 <= len(got) <= AG.TOOL_DIET_LIMIT, got)
+                cap = AG.TOOL_DIET_MULTI_LIMIT if sel.get("multi_step") else AG.TOOL_DIET_LIMIT
+                check(f"{label}: {question[:36]!r}: the diet is 1..{cap} tools",
+                      1 <= len(got) <= cap, got)
+                if sel.get("multi_step"):
+                    check(f"{label}: {question[:36]!r}: a chain includes the small chain core",
+                          all(n in got for n in AG.CHAIN_CORE),
+                          (AG.CHAIN_CORE, got))
             check(f"{label}: {question[:36]!r}: every tool the job needs is shown "
                   "or the list fell back", all(n in got for n in need), (need, got))
         check(f"{label}: the diet saves a list on most cases, not a name", fallbacks < len(cases))
@@ -486,6 +491,59 @@ def t_the_full_list_is_a_top_k_diet_that_keeps_every_needed_tool():
     check("the short list keeps its own core + more_tools contract",
           [t["function"]["name"] for t in E.Offer("short", "hi").schemas()]
           == AG.tool_offer(E.NAMES, short=True))
+
+
+def t_multi_step_chain_core_covers_the_blind_omissions_and_single_step_stays_short():
+    """The blind holdout (2026-10-19) found home_read, calculator, web_search
+    and notes_search missing from later steps. A chain prompt now gets the
+    chain core plus its matches under the larger cap; a single-step prompt
+    keeps the 1..8 diet and its token saving, and the full-list fallback is
+    untouched."""
+    allowed = list(AG.TOOLS)
+    blind = (
+        ("Check whether the lamp in the living room is on, and if it is, turn it off.",
+         ("home_read", "home_control")),
+        ("Look at this month's spending and tell me what 20% of the biggest category is.",
+         ("my_spending", "calculator")),
+        ("Check tomorrow's forecast and my calendar. If it's going to rain and I have "
+         "anything outdoors, remind me to take an umbrella.",
+         ("web_search", "calendar_read", "set_reminder")),
+        ("Check the email from my sister about Mum's birthday, look up when Mum's "
+         "birthday is and the restaurant I noted down, and draft a reply to my sister.",
+         ("email_check", "memory_search", "notes_search", "draft_email")),
+        ("Find the order confirmation in my email, check my notes for the return "
+         "window and add returning it to my to-do list.",
+         ("email_check", "notes_search", "todo_add")),
+    )
+    for text, need in blind:
+        sel = AG.tool_diet_selection(text, allowed)
+        got = sel["tools"]
+        check(f"a chain prompt is detected: {text[:36]!r}", sel.get("multi_step"), sel)
+        check(f"...and every later-step tool it needs is shown: {text[:36]!r}",
+              all(n in got for n in need), (need, got))
+        check(f"...within the larger chain cap ({AG.TOOL_DIET_MULTI_LIMIT})",
+              len(got) <= AG.TOOL_DIET_MULTI_LIMIT, got)
+        want_core = [n for n in ("calendar_read", "set_reminder", "memory_search",
+                                 "notes_search", "web_search", "home_read",
+                                 "home_control", "calculator") if n in allowed]
+        check(f"...and the small chain core itself is included: {text[:36]!r}",
+              bool(want_core) and all(n in got for n in want_core),
+              (want_core, got))
+    single = AG.tool_diet_selection("what is on my calendar tomorrow", allowed)
+    check("a single-step prompt keeps the ordinary top-K diet",
+          not single.get("multi_step") and 1 <= len(single["tools"]) <= AG.TOOL_DIET_LIMIT,
+          single)
+    check("...and does NOT pay for the chain core",
+          not any(n in single["tools"] for n in AG.CHAIN_CORE if n not in ("calendar_read",)),
+          single["tools"])
+    check("the unsure/empty fallback is still the whole allowed list",
+          AG.tool_diet_selection("hi", allowed)["tools"] == allowed
+          and AG.tool_diet_selection("", allowed)["tools"] == allowed)
+    check("the single-step diet's own hint still names the right tools",
+          AG.tool_diet_selection("what is on my calendar tomorrow", allowed)["tools"]
+          == ["calendar_read"])
+    check("a single-step percentage prompt still finds the calculator by hint",
+          "calculator" in AG.tool_diet_selection("what is 20% of 420", allowed)["tools"])
 
 
 def t_the_multi_runner_uses_the_identical_call_breaker():
@@ -589,6 +647,7 @@ if __name__ == "__main__":
                t_run_all_and_the_dated_results_file,
                t_a_fair_test_for_every_model,
                t_the_full_list_is_a_top_k_diet_that_keeps_every_needed_tool,
+               t_multi_step_chain_core_covers_the_blind_omissions_and_single_step_stays_short,
                t_the_multi_runner_uses_the_identical_call_breaker,
                t_the_multi_runner_uses_the_continuation_nudge,
                t_trial_statistics_are_per_set_mean_min_max):
