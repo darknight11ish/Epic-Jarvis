@@ -154,8 +154,13 @@ await check("CONTROL: Rust holds what makes Jarvis watch, fetches the line as so
   const caps = (w) => JSON.parse(read(`src-tauri/capabilities/${w}.json`)).permissions;
   assert.ok(caps("brain").includes("focus") && caps("brain").includes("focus-start"));
   assert.ok(caps("widget").includes("focus") && !caps("widget").includes("focus-start"));
+  // Exact set names, not a "focus" prefix: since the preset bridge (2026-10-19)
+  // there is an unrelated "focus-presets" set on the quickbar and Settings, and
+  // a prefix test would call those a focus SESSION set. The session sets stay
+  // exactly where they were.
+  const FOCUS_SESSION = ["focus", "focus-start"];
   for (const other of ["quickbar", "hud", "settings", "faces", "floating", "onboarding"]) {
-    assert.ok(!caps(other).some((c) => c.startsWith("focus")), `${other} holds a focus set`);
+    assert.ok(!caps(other).some((c) => FOCUS_SESSION.includes(c)), `${other} holds a focus session set`);
   }
 });
 
