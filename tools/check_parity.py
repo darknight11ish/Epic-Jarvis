@@ -592,6 +592,15 @@ PHONE_ONLY = {
     # shows the same two choices in the PC's own words. Deliberately NOT under
     # /api/chatbot/handoff/: the desktop must never name one of the hand-off's
     # own picture or input routes (tests/handoff.mjs checks that).
+    # Pairing itself is a PHONE-side flow: only a phone scans or types the
+    # PC's code and asks for its own device key. The desktop is the PC being
+    # paired - its Devices panel calls the PC-side /api/pair/start,
+    # /api/pair/session and /api/pair/cancel routes directly
+    # (jarvis-desktop/src-tauri/src/brain/devices.rs) - so no desktop window
+    # calls this bare prefix. The phone's own two legs are /api/pair/claim and
+    # /api/pair/collect below; /api/pair also appears in JarvisApi.kt's apply
+    # guard, which refuses to post to any /api/pair/ route.
+    "/api/pair": ("phone-only", "Pairing is the phone's side of the handshake (docs/PAIRING-DESIGN.md section 6): it scans or types the PC's code and claims its own device key through /api/pair/claim and /api/pair/collect (below). The desktop is the PC being paired - its Devices panel calls the PC-side /api/pair/start, /api/pair/session and /api/pair/cancel routes directly (jarvis-desktop/src-tauri/src/brain/devices.rs) - and no desktop window calls this bare prefix. ARCHITECTURE section 8."),
     "/api/pair/claim": ("phone-only", "The phone's half of pairing (docs/PAIRING-DESIGN.md 6.2): the phone that scanned the QR code or typed the code asks for its own key, with no key of its own yet; mesh only on the backend, and refused from the PC itself (\"this PC already has its own key\"). ARCHITECTURE section 8."),
     "/api/pair/collect": ("phone-only", "The phone collects its new key, once, after the pair_device card was approved on the PC (docs/PAIRING-DESIGN.md 6.2); mesh only, refused from the PC itself. ARCHITECTURE section 8."),
     "/api/devices/approval-key": ("phone-only", "The phone turns on signed approvals (docs/PAIRING-DESIGN.md 11.2, docs/JARVIS-API.md section 91): it sends its Keystore public key, and ONE register_approval_key card is approved on the PC with Windows Hello. The desktop is the PC - it holds the shared key and approves risky cards with Windows Hello itself - so it has no signing key to register and only READS the result (`approval_key` in the device list). ARCHITECTURE section 8."),
