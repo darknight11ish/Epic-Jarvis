@@ -166,7 +166,8 @@ index a6b1dde..3773f9a 100644
 +                except OSError:
 +                    pass
 +
-+    Handler = _request_gate(Handler)
-     httpd = _HudServer((bind, HUD_PORT), Handler)
++    RequestHandler = _request_gate(Handler)
+-    httpd = _HudServer((bind, HUD_PORT), Handler)
++    httpd = _HudServer((bind, HUD_PORT), RequestHandler)
      _install_shutdown(httpd)
      try:
