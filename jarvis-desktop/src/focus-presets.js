@@ -10,10 +10,12 @@
  * added, renamed or removed by the PC must appear, disappear or move without a
  * desktop release.
  *
- * The LAN/apply half has not landed yet. Every preset's `apply` block has the
- * action, switch route, lane-start bit and `auto: false` - but no apply route -
- * so applyState reports "waiting" and the one action stays disabled. When the
- * lane patch adds its route/field, this reading enables it without a UI change.
+ * The contract may advertise `apply_route` before this desktop app has the
+ * bridge, Rust route and capability needed to use it. The ONE action therefore
+ * needs BOTH: the contract's route AND the app-side `APPLY_BRIDGE_WIRED` flag.
+ * That flag is false until the app-side apply wiring lands, so a backend that
+ * is ahead of the app leaves the button disabled with the existing waiting
+ * line instead of promising an action this app cannot send.
  *
  * It is a plain ES module with no DOM and no Tauri import so `node
  * tests/focus-presets.mjs` can exercise every rule without a browser. The DOM
@@ -54,6 +56,21 @@ export const BEING_PREPARED = "Being prepared";
 export const APPLY_WAITING =
   "The apply/lane patch is not on the PC yet. Until it lands, no preset can " +
   "be applied; nothing changes here.";
+
+/**
+ * Is the DESKTOP APP wired to apply a preset yet?
+ *
+ * A contract route is not enough: `/api/work/apply` can be advertised by the
+ * backend while this app still has no bridge command, Rust forwarding route or
+ * permission grant for it. The one button must stay disabled in that state or
+ * it would promise an action the app cannot carry out.
+ *
+ * Flip this to `true` only in the change that lands the app-side bridge and its
+ * capability - and add/keep the two-state test in tests/focus-presets.mjs. The
+ * test may inject the other state through normaliseReading's `applyWired`
+ * option without changing this constant.
+ */
+export const APPLY_BRIDGE_WIRED = false;
 export const ASKED_WORDS = "Asked the PC. Nothing changes until you answer the card.";
 export const REFUSED_WORDS = "That did not work.";
 
@@ -116,18 +133,22 @@ function presetStatus(row) {
   return { ready: !pending, statusWords: pending ? (statusWords || BEING_PREPARED) : "" };
 }
 
-function applySupport(row) {
+function applySupport(row, applyWired = false) {
   const apply = row && row.apply && typeof row.apply === "object" ? row.apply : {};
-  // The contract half ships switch_route/lane_start/auto but NO apply route.
-  // The LAN/apply patch adds the route (or sets an explicit ready/available
-  // bit); until then the one action is disabled, never guessed.
+  // The contract may advertise the route (or an explicit ready/available bit)
+  // while this desktop still has no bridge command or Rust route for it. The
+  // route is kept and reported, but `ready` needs the app-side flag too.
   const route = field(apply, ["apply_route", "route", "apply_path", "path"]) ||
     field(row, ["apply_route", "apply_path"]);
-  const enabled = Boolean(route) ||
+  const contractReady = Boolean(route) ||
     ((apply.enabled === true || apply.available === true || apply.ready === true) &&
       !isFalse(apply.enabled) && !isFalse(apply.available));
   return {
-    ready: enabled,
+    // BOTH must hold: the PC advertises how to apply, AND this app is wired to
+    // send it. Until the bridge/Rust route lands, the route is remembered but
+    // the one action stays disabled with the honest waiting line.
+    ready: applyWired === true && contractReady,
+    contractReady,
     action: field(apply, ["action", "label", "words"]) || ACTION,
     why: field(apply, ["why", "note", "waiting_words", "disabled_words"]) || APPLY_WAITING,
     route,
@@ -152,13 +173,13 @@ function detailsOf(row) {
   return out;
 }
 
-function normalisePreset(row) {
+function normalisePreset(row, applyWired = false) {
   if (!row || typeof row !== "object") return null;
   const id = field(row, ["id", "preset_id", "slug"]);
   const name = field(row, ["title", "name", "label"]);
   if (!id || !name) return null;
   const status = presetStatus(row);
-  const apply = applySupport(row);
+  const apply = applySupport(row, applyWired);
   return {
     id,
     name,
@@ -168,6 +189,8 @@ function normalisePreset(row) {
     ready: status.ready,
     statusWords: status.statusWords,
     applyReady: apply.ready,
+    applyContractReady: apply.contractReady,
+    applyRoute: apply.route,
     applyAction: apply.action,
     applyWhy: apply.why,
     selectedOnServer: Boolean(row.selected || row.current || row.chosen),
@@ -229,6 +252,9 @@ function emptyReading(why) {
     hardware: normaliseHardware(null),
     applyAction: ACTION,
     applyReady: false,
+    applyContractReady: false,
+    applyRoute: "",
+    applyWired: false,
     applyWhy: APPLY_WAITING,
   };
 }
@@ -242,7 +268,7 @@ function emptyReading(why) {
  * `backend/fixtures/work_presets.json`; tests read that file itself so this
  * reading cannot drift from the contract.
  */
-export function normaliseReading(raw) {
+export function normaliseReading(raw, { applyWired = APPLY_BRIDGE_WIRED } = {}) {
   if (typeof raw === "string") return emptyReading(raw.trim() || BAD_ANSWER_WORDS);
   if (!raw || typeof raw !== "object") return emptyReading(BAD_ANSWER_WORDS);
   if (raw.ok === false) {
@@ -259,7 +285,7 @@ export function normaliseReading(raw) {
   const seen = new Set();
   const presets = [];
   for (const row of rows) {
-    const preset = normalisePreset(row);
+    const preset = normalisePreset(row, applyWired);
     if (!preset || seen.has(preset.id)) return emptyReading(BAD_ANSWER_WORDS);
     seen.add(preset.id);
     presets.push(preset);
@@ -294,7 +320,7 @@ export function normaliseReading(raw) {
   };
   if (!lane.label) lane.label = lane.words;
 
-  const apply = applySupport(presets[0]);
+  const apply = applySupport(rows[0], applyWired);
   const waiting = presets.find((p) => !p.applyReady);
   return {
     available: true,
@@ -313,7 +339,10 @@ export function normaliseReading(raw) {
       ? body.old_ids_replaced.map((x) => plain(x)).filter(Boolean)
       : [],
     applyAction: apply.action,
-    applyReady: presets.every((p) => p.applyReady),
+    applyReady: Boolean(applyWired) && presets.every((p) => p.applyReady),
+    applyContractReady: apply.contractReady,
+    applyRoute: apply.route,
+    applyWired: Boolean(applyWired),
     applyWhy: presets.every((p) => p.applyReady) ? "" : (waiting || {}).applyWhy || APPLY_WAITING,
   };
 }

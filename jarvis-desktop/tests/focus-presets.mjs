@@ -5,13 +5,16 @@
  * `backend/jarvis_presets.py`; this test reads that file itself so the UI
  * cannot drift from the PC's own five presets and hardware block. The fixture
  * is the contract half: it has no apply route yet, so the one action must be
- * disabled with the waiting line, not silently enabled.
+ * disabled with the waiting line, not silently enabled. The test also injects
+ * a contract route and an app-side wiring flag separately, proving BOTH are
+ * required - a backend route alone must never light the button before the
+ * desktop has the bridge/Rust wiring to send it.
  *
  * The feature is deliberately generic: the test proves the UI takes the preset
  * list, names and words from the answer rather than from hardcoded desktop
- * ids/names, and that only the one "Use this preset" action is enabled, and
- * only after the apply route exists - never on load, never on the current
- * preset, never on a stale link, never on a preset the PC is preparing.
+ * ids/names, and that only the one "Use this preset" action is enabled after
+ * BOTH the apply route and the app wiring exist - never on load, never on the
+ * current preset, never on a stale link, never on a preset the PC is preparing.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -86,13 +89,40 @@ await check("a short answer cannot draw invented presets", async () => {
 
 await check("the contract half keeps the one action disabled, with its waiting line", async () => {
   const read = Focus.normaliseReading(clone(FIXTURE));
+  assert.equal(Focus.APPLY_BRIDGE_WIRED, false, "the app-side apply wiring must ship OFF");
   assert.equal(read.applyReady, false);
+  assert.equal(read.applyContractReady, false);
+  assert.equal(read.applyRoute, "");
   assert.equal(read.applyAction, "Use this preset");
   const view = Focus.pickerView(read, "fast");
   assert.equal(view.available, true);
   assert.equal(view.action.label, "Use this preset");
   assert.equal(view.action.disabled, true);
   assert.equal(view.action.why, Focus.APPLY_WAITING);
+});
+
+await check("a contract route alone is not enough: the app wiring decides the button", async () => {
+  const routed = withApplyRoute(FIXTURE);
+  const notWired = Focus.normaliseReading(routed);
+  assert.equal(notWired.applyRoute, "/api/work/apply", "the contract route is kept, not hidden");
+  assert.equal(notWired.applyContractReady, true);
+  assert.equal(notWired.applyWired, false);
+  assert.equal(notWired.applyReady, false);
+  const waiting = Focus.pickerView(notWired, "fast");
+  assert.equal(waiting.action.disabled, true);
+  assert.equal(waiting.action.why, Focus.APPLY_WAITING);
+
+  const wired = Focus.normaliseReading(routed, { applyWired: true });
+  assert.equal(wired.applyContractReady, true);
+  assert.equal(wired.applyWired, true);
+  assert.equal(wired.applyReady, true);
+  assert.equal(Focus.pickerView(wired, "fast").action.disabled, false);
+
+  // ...and app wiring alone, with no contract route, must stay disabled too.
+  const noRouteButWired = Focus.normaliseReading(clone(FIXTURE), { applyWired: true });
+  assert.equal(noRouteButWired.applyReady, false);
+  assert.equal(Focus.pickerView(noRouteButWired, "fast").action.disabled, true);
+  assert.equal(Focus.pickerView(noRouteButWired, "fast").action.why, Focus.APPLY_WAITING);
 });
 
 await check("the chip is hidden without a reading, and names the PC's chosen preset", async () => {
@@ -129,11 +159,12 @@ await check("the card lists every contract preset with its own words and details
   }
 });
 
-await check("an apply route enables the one action; the current preset stays inert", async () => {
+await check("an apply route plus app wiring enables the one action; the current preset stays inert", async () => {
   const other = withApplyRoute(FIXTURE);
   other.chosen = "coding";
-  const read = Focus.normaliseReading(other);
+  const read = Focus.normaliseReading(other, { applyWired: true });
   assert.equal(read.applyReady, true);
+  assert.equal(read.applyRoute, "/api/work/apply");
   const current = Focus.pickerView(read, "coding");
   assert.equal(current.items.find((p) => p.id === "coding").current, true);
   assert.equal(current.action.disabled, true);
@@ -149,7 +180,7 @@ await check("a preset the PC is preparing says so and cannot be applied", async 
   const row = other.presets.find((p) => p.id === "general_uncensored");
   row.pending = true;
   row.pending_words = "The uncensored model is still being installed.";
-  const read = Focus.normaliseReading(other);
+  const read = Focus.normaliseReading(other, { applyWired: true });
   assert.equal(read.presets.find((p) => p.id === "general_uncensored").ready, false);
   const view = Focus.pickerView(read, "general_uncensored");
   assert.equal(view.items.find((p) => p.id === "general_uncensored").statusWords, row.pending_words);
@@ -158,7 +189,7 @@ await check("a preset the PC is preparing says so and cannot be applied", async 
 });
 
 await check("stale and busy never leave the action pressable", async () => {
-  const read = Focus.normaliseReading(withApplyRoute(FIXTURE));
+  const read = Focus.normaliseReading(withApplyRoute(FIXTURE), { applyWired: true });
   for (const state of [{ stale: true }, { busy: true }]) {
     const view = Focus.pickerView(read, "fast", state);
     assert.equal(view.action.disabled, true);
@@ -192,7 +223,7 @@ await check("the hardware block is read generically and shown in Settings", asyn
 await check("Settings draws the same list, the one-card explanation and the current mark", async () => {
   const other = withApplyRoute(FIXTURE);
   other.chosen = "general";
-  const read = Focus.normaliseReading(other);
+  const read = Focus.normaliseReading(other, { applyWired: true });
   const view = Focus.settingsView(read, "general");
   assert.equal(view.oneCard, Focus.ONE_CARD);
   assert.equal(view.items.length, FIXTURE.presets.length);

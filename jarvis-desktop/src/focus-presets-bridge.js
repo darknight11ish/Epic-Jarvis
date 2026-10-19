@@ -8,14 +8,14 @@
  * fixture - not the quickbar or Settings.
  *
  * Commands (Tauri): `get_focus_presets` (read-only) and
- * `apply_focus_preset` (the single approval-gated action). The merged contract
- * half (#603) names the backend shape (`backend/fixtures/work_presets.json`)
- * and the future backend action (`POST /api/work/apply`, in the LAN/apply
- * patch); it does not name the two Tauri forwarding commands yet. Until that
- * patch lands no RUST command exists, so the UI hides/readies nothing and the
- * one action is disabled by the reading's missing apply route. When the patch
- * lands, this file is the one place to match its command names and body field;
- * the quickbar, Settings and the reading do not change.
+ * `apply_focus_preset` (the single approval-gated action). The contract now
+ * advertises `POST /api/work/apply` (#611), but this app still has no bridge
+ * command, Rust forwarding route or capability grant for it. That is why
+ * `focus-presets.js`'s `APPLY_BRIDGE_WIRED` stays false and the one action
+ * stays disabled even when the route is present. The app-side wiring is a
+ * follow-up: once those two commands exist, flip that flag (and update this
+ * file's command/body names if the bridge chooses different ones); the
+ * quickbar, Settings and the reading then need no change.
  */
 import { call } from "./invoke-budget.js";
 
