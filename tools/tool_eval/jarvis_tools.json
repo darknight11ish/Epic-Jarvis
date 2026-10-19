@@ -493,7 +493,7 @@
   "type": "function",
   "function": {
    "name": "my_files",
-   "description": "Find and read the owner's own files, only in folders they listed on the PC. find: file names with these words. search: words inside notes and text files. read: one part of one file (PDF, Word, Excel, PowerPoint, Markdown, text, CSV) and its list of parts. For Obsidian or Joplin notes, use notes_search. For a PDF or Word file, use this, not file_read.",
+   "description": "Find and read the owner's own files, only in folders they listed on the PC. find: file names with these words. search: words inside notes and text files. read: one part of one file (PDF, Word, Excel, PowerPoint, Markdown, text, CSV). read_media: the words in one recording or video. For Obsidian or Joplin notes, use notes_search. For a PDF or Word file, use this, not file_read.",
    "parameters": {
     "type": "object",
     "properties": {
@@ -502,7 +502,8 @@
       "enum": [
        "find",
        "search",
-       "read"
+       "read",
+       "read_media"
       ]
      },
      "words": {
@@ -511,7 +512,7 @@
      },
      "path": {
       "type": "string",
-      "description": "read: the full path find gave"
+      "description": "read / read_media: the full path"
      },
      "part": {
       "type": "integer",

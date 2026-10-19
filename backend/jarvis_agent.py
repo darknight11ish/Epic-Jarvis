@@ -2142,11 +2142,8 @@ TOOLS: dict = {
         "my_files",
         "Find and read the owner's own files, only in folders they listed on the PC. "
         "find: file names with these words. search: words inside notes and text files. "
-        "read: one part of one file (PDF, Word, Excel, PowerPoint, Markdown, text, CSV) "
-        "and its list of parts. read_media: the words in ONE audio or video file "
-        "(wav, mp3, m4a, mp4, mkv; at most 10 minutes and 100 MB), with timestamps "
-        "and any on-screen text. Speech is English only and it is a transcript, "
-        "not a summary; it is never saved.",
+        "read: one part of one file (PDF, Word, Excel, PowerPoint, Markdown, text, CSV). "
+        "read_media: the words in one recording or video.",
         {"type": "object", "properties": {
             "action": {"type": "string", "enum": ["find", "search", "read", "read_media"]},
             "words": {"type": "string", "description": "a few words; for read, picks the part"},
