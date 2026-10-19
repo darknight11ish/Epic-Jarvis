@@ -239,6 +239,15 @@ SECTIONS: tuple = (
     # ARCHITECTURE section 8 keeps off the phone - a limit of the section, not
     # of its existence.
     Section("hardware", ("hardware and models", "hardware", "graphics cards"), app="both"),
+    # "Focus presets" (the owner's preset selector, 2026-10-18): the card
+    # settings.html carries above "Hardware and models", showing the five
+    # presets the PC sends. DESKTOP ONLY for now - the phone's equivalent
+    # selector is not on this tree, and OpenPlace.kt must not claim it. When
+    # the phone lands its selector this becomes `app="both"` in the same
+    # one-word way the approval-cards row above says.
+    Section("focus-presets", ("focus presets", "the focus presets", "presets",
+                              "the preset selector", "choose a focus preset",
+                              "what are you about to work on"), app="desktop"),
     # "Your second graphics card" (corrected 2026-10-10, the parity audit): the
     # phone has SecondCardPlate.kt - all four rows, `MenuPlaces.INSIDE` - under
     # the same menu id `settings.second-card`, which `jarvis_menus.py` already
