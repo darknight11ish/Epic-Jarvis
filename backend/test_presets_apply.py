@@ -145,11 +145,61 @@ def t_install_wires_only_the_apply_route():
     check("... and leaves every other POST alone", h2.do_POST() == "original")
 
 
+
+def t_get_work_serves_the_new_contract():
+    seen = []
+
+    class H:
+        def do_GET(self):
+            return "old-do_get"
+
+        def _send(self, code, body):
+            seen.append((code, body))
+            return code
+
+    P.install(H, origin_ok=lambda h: True, token_ok=lambda h: True,
+              read_body=lambda h: b"{}")
+    h = H(); h.path = "/api/work"
+    code = h.do_GET()
+    check("GET /api/work is the new contract, not the old work setups",
+          code == 200 and "presets" in seen[-1][1]
+          and "setup_ids" not in seen[-1][1], seen[-1][1] if seen else None)
+    body = seen[-1][1]
+    check("... it carries five presets with the apply contract",
+          [p["id"] for p in body["presets"]] == list(P.PRESET_IDS)
+          and body["presets"][0]["apply"]["apply_route"] == "/api/work/apply")
+    check("... and the hardware/questionnaire/recommendations blocks",
+          body["hardware"]["source"] == "jarvis_hardware.detect()"
+          and body["questionnaire"]["focus_choices"] == list(P.PRESET_IDS)
+          and sorted(body["recommendations"]["by_gpu_count"]) == ["1", "2", "3"])
+    check("... and chosen/active-lane fields, never a token",
+          "chosen" in body and "chosen_preset" in body and "active_lane" in body
+          and "X-Jarvis-Token" not in json.dumps(body))
+
+    seen.clear()
+    h = H(); h.path = "/api/presets"
+    check("GET /api/presets is the same contract (alias)", h.do_GET() == 200)
+    seen.clear()
+    h = H(); h.path = "/api/other"
+    check("... and every other GET is left alone", h.do_GET() == "old-do_get")
+
+    seen.clear()
+    P.install(H, origin_ok=lambda h: False, token_ok=lambda h: True,
+              read_body=lambda h: b"{}")
+    h = H(); h.path = "/api/work"
+    check("GET /api/work enforces the origin check", h.do_GET() == 403, seen)
+    seen.clear()
+    P.install(H, origin_ok=lambda h: True, token_ok=lambda h: False,
+              read_body=lambda h: b"{}")
+    h = H(); h.path = "/api/work"
+    check("... and the token check", h.do_GET() == 401, seen)
+
 def main() -> int:
     for fn in (t_default_unchanged_without_a_call, t_general_success_one_card_and_order,
                t_fast_starts_the_coding_lane_on_demand, t_refusals_change_nothing,
                t_lane_start_failure_stops_before_the_switch,
-               t_switch_failure_rolls_back_lane_and_choice, t_install_wires_only_the_apply_route):
+               t_switch_failure_rolls_back_lane_and_choice, t_install_wires_only_the_apply_route,
+               t_get_work_serves_the_new_contract):
         fn()
     print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
     if FAILED:

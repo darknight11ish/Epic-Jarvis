@@ -289,6 +289,41 @@ def _set_active_url(url: str) -> bool:
         return False
 
 
+
+def _active_lane_key() -> Optional[str]:
+    url = _active_url()
+    for key, lane in LANES.items():
+        if url == f"http://127.0.0.1:{lane['port']}":
+            return key
+    return None
+
+
+def live_status() -> dict:
+    """GET /api/work's new answer: the five presets (the one contract both app
+    UIs render), the detected cards, the questionnaire, the 1/2/3-GPU
+    recommendations, the chosen preset and the active lane. Reads only - it
+    starts nothing, switches nothing and writes nothing."""
+    chosen = choice()
+    chosen_preset = by_id(chosen) if chosen else None
+    hw = hardware_block()
+    return {
+        "found": f"{len(PRESETS)} focus presets",
+        "presets": [p.view() for p in PRESETS],
+        "old_ids_replaced": list(OLD_IDS),
+        "hardware": hw["detected"],
+        "questionnaire": hw["questionnaire"],
+        "recommendations": recommendations(),
+        "chosen": chosen,
+        "chosen_preset": chosen,
+        "chosen_model": chosen_preset.model if chosen_preset else None,
+        "active_lane": {"key": _active_lane_key(), "base_url": _active_url()},
+        "apply_path": APPLY_PATH,
+        "switch_path": SWITCH_ROUTE,
+        "auto": False,
+        "not_a_catalogue": ("This lists the presets that exist; it is not a download "
+                            "catalogue. A pending preset waits for its model."),
+    }
+
 def apply_preset(preset_id, *, start_lane=None, switch_model=None,
                  active_url=None, set_active_url=None, read_choice=None,
                  write_choice=None) -> tuple:
@@ -379,15 +414,39 @@ def apply_from_body(body) -> tuple:
 
 
 def install(Handler, *, origin_ok, token_ok, read_body):
-    """Wire POST /api/work/apply onto the HUD's Handler. Returns the status
-    line the banner prints. It approves nothing: switch_to raises the one
-    switch_model ask card itself."""
-    original = Handler.do_POST
+    """Wire GET /api/work (the new preset contract) and POST /api/work/apply
+    onto the HUD's Handler. Returns the status line the banner prints. Reads
+    nothing from the owner's PC except what live_status() reports; it approves
+    nothing: switch_to raises the one switch_model ask card itself."""
+    original_get = getattr(Handler, "do_GET", None)
+
+    def do_GET(self):
+        import json
+        path = str(getattr(self, "path", "") or "").split("?", 1)[0]
+        if path not in ("/api/work", "/api/presets"):
+            if original_get is None:
+                return self._send(404, {"error": "not found"})
+            return original_get(self)
+        if not origin_ok(self):
+            return self._send(403, {"error": "cross-origin request refused"})
+        if not token_ok(self):
+            return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
+        try:
+            out = live_status()
+        except Exception as exc:
+            return self._send(503, {"available": False,
+                                    "error": f"{type(exc).__name__}: {exc}"})
+        return self._send(200, out)
+
+    Handler.do_GET = do_GET
+    original = getattr(Handler, "do_POST", None)
 
     def do_POST(self):
         import json
         path = str(getattr(self, "path", "") or "").split("?", 1)[0]
         if path != APPLY_PATH:
+            if original is None:
+                return self._send(404, {"error": "not found"})
             return original(self)
         if not origin_ok(self):
             return self._send(403, {"error": "cross-origin request refused"})
