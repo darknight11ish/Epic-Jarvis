@@ -1264,17 +1264,37 @@ and `thresholds_applied` is always **false** - a default changes only through
 the owner's measured card. The live verify path still uses ONE global bar;
 passing a clip's condition into the check is the later slice.
 
-**Screen flow proposed (not built).** Phone Settings -> Voice, "Train my
-voice": (1) a short intro saying what will be recorded and that it is local;
-(2) four condition steps, each with its instruction ("hold the phone close" /
-"put it on the table 2-3 m away" / "turn the fan or TV on" / "go to another
-room"), recording up to 12 clips using the balanced phrases and then one
-free-speech prompt; (3) a review screen showing each round's condition and
-count, then the existing ONE card; (4) a "Live additions" row on the same
-page with the count/caps and a Reset button. Desktop Settings -> Voice: the
-same four rounds and phrases, its own per-round progress, and the same
-live-additions count/reset beside the existing strictness controls. Neither
-screen is in this slice; both read the payload that is already here.
+**Screen flow: desktop built (2026-10-19), phone next.** Phone Settings ->
+Voice, "Train my voice": (1) a short intro saying what will be recorded and
+that it is local; (2) four condition steps, each with its instruction ("hold
+the phone close" / "put it on the table 2-3 m away" / "turn the fan or TV on"
+/ "go to another room"), recording up to 12 clips using the balanced phrases
+and then one free-speech prompt; (3) a review screen showing each round's
+condition and count, then the existing ONE card; (4) a "Live additions" row
+on the same page with the count/caps and a Reset button. The phone screen is
+still the next slice.
+
+Desktop Settings -> Voice now reads the payload above directly
+(`voice-training.js`, `voice-panel.js`, `settings.html`):
+* the PC's four conditions are shown in its order; the screen records the
+  first three because `send_voice_training` in `voice_training.rs` still
+  accepts rounds 1-3 only. The fourth (another room or time) is drawn with
+  its instruction and marked "not wired in this desktop build yet", and the
+  page never sends it. The plan's 12 balanced phrases and 3 free-speech
+  prompts are used once each across the three recordable rounds (4 phrases
+  per round, one prompt in each of the first three); the fourth condition
+  repeats four phrases for its own sub-print when the bridge is updated.
+  That is 15 recordings and ONE card at the end.
+* Live additions show the PC's `counts`, caps (4 per condition, 12 in all),
+  drift guard and re-anchoring in the PC's words. `POST /api/voice/enroll
+  {"mode": "adapt-reset"}` exists, but this desktop build has no command for
+  it, so the reset control is read-only and says so.
+* Held-out measurement shows the PC's `held_out.words`, per-condition
+  FRR/FAR/EER and its insufficient-data answer, and repeats
+  `thresholds_applied: false`. The desktop's guided test sends only the
+  owner's clips, so a condition normally reports "not enough other-voice
+  rows" until a later slice measures other voices per condition; no number
+  and no threshold is invented on the page.
 
 ## 6. Memory, the Brain, models, attention, appearance, status
 

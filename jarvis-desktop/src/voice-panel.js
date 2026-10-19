@@ -1,6 +1,7 @@
 /**
  * Settings -> Voice (training on this PC, how strict, private answers, the
- * guided test) and Settings -> Jarvis's voice (custom voices): the page.
+ * guided test, Live additions and held-out numbers) and Settings -> Jarvis's
+ * voice (custom voices): the page.
  *
  * The words are in voice-training.js and custom-voices.js; this only draws
  * them and calls the Rust commands in voice_training.rs. Everything that
@@ -8,15 +9,24 @@
  * stay in the app's memory - this page is told a length and a loudness,
  * never given the audio, and names the recordings to send by slot.
  *
+ * The training screen shows the PC's own plan: four listening conditions,
+ * twelve balanced read phrases and three free-speech prompts. This desktop
+ * build can send rounds 1-3 (voice_training.rs), so the fourth condition is
+ * drawn with its instruction and plainly marked "not wired in this desktop
+ * build yet" - the page never claims it recorded it. The Live-additions
+ * count and the held-out FRR/FAR come from the PC's status and measure
+ * answer; the backend's adapt-reset route exists but has no desktop command
+ * yet, so that count is read-only here and says so.
+ *
  * What changes anything goes one way only: making Jarvis stricter, going
  * back to the built-in voice, deleting a voice and turning the better voice
  * off happen at once; finishing a training, loosening a setting, adding a
  * voice, switching to one, turning the better voice on and using the
  * stricter bar the "someone else" check suggests only raise ONE approval
  * card, and the page says "waiting for your approval" until the PC says
- * how it ended. The guided test and the "someone else" check itself change
- * nothing. While the event stream is stale those are held
- * (by the Rust too, not only here). Nothing here approves anything.
+ * how it ended. The guided test, the "someone else" check itself and the
+ * held-out report change nothing. While the event stream is stale those are
+ * held (by the Rust too, not only here). Nothing here approves anything.
  *
  * settings.js reads GET /api/voice/status and hands it to
  * `paintVoicePanel`; this module reads GET /api/voice/voices itself.
@@ -212,7 +222,7 @@ function makeReader(box, opts) {
     draw();
     try {
       const taken = await stopRecording();
-      const problem = VT.clipProblem(taken, status);
+      const problem = VT.clipProblem(taken, status, item.kind);
       st.clips.set(item.slot, { seconds: Number(taken && taken.seconds) || 0, problem });
       st.problem = problem || "";
     } catch (error) {
@@ -246,8 +256,14 @@ function makeReader(box, opts) {
     if (st.index < total) {
       const item = opts.items[st.index];
       const clip = st.clips.get(item.slot);
-      nodes.push(line(`Sentence ${st.index + 1} of ${total}`, "", "vt-count"));
+      const readItems = opts.items.filter((it) => it.kind !== "free");
+      const label = item.kind === "free"
+        ? "In your own words"
+        : `Sentence ${readItems.indexOf(item) + 1} of ${readItems.length}`;
+      nodes.push(line(label, "", "vt-count"));
       nodes.push(line(item.text, "", "vt-sentence"));
+      if (item.why) nodes.push(line(item.why, "", "note"));
+      if (item.hint) nodes.push(line(item.hint, "", "note"));
       const row = node("div", "row");
       if (st.recording) {
         row.append(button("Stop", () => stop(item)));
@@ -255,8 +271,11 @@ function makeReader(box, opts) {
         row.append(button(clip ? "Redo this one" : "Record", () => record(item), { disabled: st.busy }));
       }
       let words = "";
-      if (st.recording) words = "Recording. Read the sentence, then press Stop.";
-      else if (st.problem) words = st.problem;
+      if (st.recording) {
+        words = item.kind === "free"
+          ? "Recording. Speak in your own words, then press Stop."
+          : "Recording. Read the sentence, then press Stop.";
+      } else if (st.problem) words = st.problem;
       else if (clip && !clip.problem) words = `Recorded: ${VT.lengthLabel(clip.seconds)}`;
       const note = node("span", "status", words);
       note.setAttribute("role", "status");
@@ -330,26 +349,40 @@ function trainBox() {
 }
 
 function slotsFor(round, items) {
-  return items.map((i) => ({ slot: `t${round}-${i}`, text: VT.SENTENCES[i] }));
+  return items.map((it, i) => ({
+    // The PC names a left-out clip by its position in the round it was sent
+    // with; `clip` keeps that position when an outlier round is rebuilt from
+    // a subset. An ordinary round is in plan order, so the index is it.
+    slot: `t${round}-${it.clip !== undefined ? it.clip : i}`,
+    text: it.text,
+    kind: it.kind,
+    why: it.why,
+    hint: it.hint,
+  }));
 }
 
 function startPlan(plan) {
   train.plan = plan;
   train.index = 0;
   train.message = "";
-  train.view = plan.rounds.length ? "intro" : "idle";
+  train.view = plan.rounds.some((r) => r.wired) ? "intro" : "idle";
   paintTrain();
 }
 
 async function finishOnly(round, add) {
-  // Every round is already held on the PC: finish without clips.
+  // Every round is already held on the PC: finish without clips. The round
+  // number only gives the route its shape - the PC finishes every round it
+  // holds - and this desktop's bridge accepts 1-3, so cap it there. A round
+  // the phone held is still finished, because `finish` names the session,
+  // not a new take.
   if (linkStale) {
     train.message = HELD;
     paintTrain();
     return;
   }
   try {
-    const answer = await invoke("send_voice_training", { round, slots: [], add, finish: true, legacy: false });
+    const wiredRound = Math.min(VT.DESKTOP_ROUND_LIMIT, Math.max(1, Number(round) || 1));
+    const answer = await invoke("send_voice_training", { round: wiredRound, slots: [], add, finish: true, legacy: false });
     const reply = VT.roundReply(answer, APPROVE_WHERE);
     train.message = reply.text;
     if (reply.finished) {
@@ -387,7 +420,14 @@ async function cancelTraining() {
 function readRound() {
   const plan = train.plan;
   const r = plan.rounds[train.index];
-  const last = train.index === plan.rounds.length - 1;
+  if (!r || !r.wired) {
+    train.view = "idle";
+    paintTrain();
+    return;
+  }
+  // The last round this build can send is the one that raises the single
+  // card; the plan may still carry a later condition the bridge cannot send.
+  const last = !plan.rounds.slice(train.index + 1).some((x) => x.wired);
   train.view = "reading";
   const box = trainBox();
   train.reader = makeReader(box, {
@@ -425,6 +465,22 @@ function readRound() {
   });
 }
 
+/** The PC's four conditions, which of them this build records, and how. */
+function conditionList(plan) {
+  const rows = VT.conditionRows(plan);
+  if (!rows.length) return null;
+  const ul = node("ul", "sc-cards");
+  for (const c of rows) {
+    const li = node("li", "sc-gpu");
+    const said = c.wired
+      ? `Round ${c.round} - ${c.label}: ${c.ask}.`
+      : `Round ${c.round} - ${c.label}: ${c.ask}. Not wired in this desktop build yet.`;
+    li.append(node("span", "", said));
+    ul.append(li);
+  }
+  return ul;
+}
+
 function paintTrain() {
   const box = trainBox();
   if (!box || !status) return;
@@ -434,17 +490,25 @@ function paintTrain() {
   if (train.view === "intro") {
     for (const text of VT.introLines(plan, status)) nodes.push(line(text, "", "note"));
     nodes.push(line(VT.planLine(plan), "", "sc-line"));
+    const list = conditionList(plan);
+    if (list) nodes.push(list);
     const row = node("div", "row");
     row.append(button("Start", () => readRound()), button("Cancel", () => cancelTraining(), { ghost: true }));
     nodes.push(row);
   } else if (train.view === "between") {
     const next = plan.rounds[train.index];
     nodes.push(line(train.message, "ok"));
-    nodes.push(line(`When you are ready, round ${next.round}: ${next.ask}.`, "", "sc-line"));
-    const row = node("div", "row");
-    row.append(button(`Start round ${next.round}`, () => readRound()),
-      button("Cancel the training", () => cancelTraining(), { ghost: true }));
-    nodes.push(row);
+    if (next) {
+      nodes.push(line(`When you are ready, round ${next.round}: ${next.ask}.`, "", "sc-line"));
+      const row = node("div", "row");
+      row.append(button(`Start round ${next.round}`, () => readRound()),
+        button("Cancel the training", () => cancelTraining(), { ghost: true }));
+      nodes.push(row);
+    } else {
+      const row = node("div", "row");
+      row.append(button("Cancel the training", () => cancelTraining(), { ghost: true }));
+      nodes.push(row);
+    }
   } else if (train.view === "sent") {
     nodes.push(line(train.message || VT.afterSending(APPROVE_WHERE), "ok"));
     nodes.push(line("Nothing changes until the card is approved. If nobody answers it, it expires and the recordings are deleted.", "", "note"));
@@ -466,7 +530,7 @@ function paintTrain() {
         button("Carry on", () => {
           const p = VT.trainingPlan(status, { add: session.add, held: session.rounds });
           train.heldOnServer = true;
-          if (!p.rounds.length) finishOnly(Math.max(...session.rounds), session.add);
+          if (!p.rounds.some((r) => r.wired)) finishOnly(Math.max(...session.rounds), session.add);
           else startPlan(p);
         }),
         button("Delete them", () => cancelTraining(), { ghost: true }),
@@ -476,24 +540,74 @@ function paintTrain() {
       if (outliers) {
         nodes.push(line(outliers, "warn"));
         if (last.outcome === "enrolled") {
-          const row = node("div", "row");
-          row.append(button("Record those again", () => startPlan(VT.outlierPlan(status, last.outliers))));
-          nodes.push(row);
+          const again = VT.outlierPlan(status, last.outliers);
+          if (again.rounds.some((r) => r.wired)) {
+            const row = node("div", "row");
+            row.append(button("Record those again", () => startPlan(again)));
+            nodes.push(row);
+          } else {
+            nodes.push(line("Those recordings are in a condition this desktop build cannot record yet, so they can only be redone on your phone.", "warn"));
+          }
         }
       }
       const plan0 = VT.trainingPlan(status);
-      const where = plan0.legacy ? "" : VT.strictnessOf(status) === "balanced"
-        ? "The voice check is balanced: "
-        : "The voice check is very strict: ";
-      nodes.push(line(`${where}${VT.planLine(plan0)}`, "", "note"));
-      const desktop = ((gate.prints || {}).desktop) || {};
-      const row = node("div", "row");
-      row.append(button("Train my voice", () => startPlan(VT.trainingPlan(status)), { id: "vt-start" }));
-      if (desktop.trained === true && !desktop.needs_retraining && VT.understands(status).rounds) {
-        row.append(button("Train more", () => startPlan(VT.trainingPlan(status, { add: true })), { ghost: true, id: "vt-more" }));
+      if (!plan0.missing) {
+        nodes.push(line(VT.conditionsLine(plan0), "", "note"));
+        nodes.push(line(VT.planLine(plan0), "", "note"));
+        for (const text of VT.planLimitLines(plan0)) nodes.push(line(text, "warn"));
+        const desktop = ((gate.prints || {}).desktop) || {};
+        const row = node("div", "row");
+        row.append(button("Train my voice", () => startPlan(VT.trainingPlan(status)), { id: "vt-start" }));
+        if (desktop.trained === true && !desktop.needs_retraining && VT.understands(status).rounds) {
+          row.append(button("Train more", () => startPlan(VT.trainingPlan(status, { add: true })), { ghost: true, id: "vt-more" }));
+        }
+        nodes.push(row);
       }
-      nodes.push(row);
     }
+  }
+  box.replaceChildren(...nodes);
+}
+
+/* ==========================================================================
+   Live additions: the count, the caps, drifting and re-anchoring
+   ========================================================================== */
+
+let lastHeld = null;
+
+function paintAdaptation() {
+  const box = $("vt-adapt");
+  if (!box || !status) return;
+  const nodes = [];
+  const lines = VT.adaptationLines(status);
+  if (!lines.length) {
+    nodes.push(line(VT.ADAPT_MISSING, "warn"));
+  } else {
+    for (const text of lines) nodes.push(line(text, "", "sc-line"));
+    const row = node("div", "row");
+    // The backend's mode adapt-reset exists; this desktop build has no
+    // command for it yet, so the count is read-only here and says so.
+    const reset = button("Reset the count", () => {}, { disabled: true, id: "vt-adapt-reset" });
+    reset.title = VT.ADAPT_RESET_NOTE;
+    reset.setAttribute("aria-disabled", "true");
+    row.append(reset);
+    nodes.push(row);
+    nodes.push(line(VT.ADAPT_RESET_NOTE, "", "note"));
+  }
+  box.replaceChildren(...nodes);
+}
+
+function paintHeldOut() {
+  const box = $("vt-held");
+  if (!box || !status) return;
+  const nodes = [line(VT.HELD_OUT_INTRO, "", "note")];
+  const last = ((status.gate || {}).training || {}).measure_last;
+  const source = lastHeld || (last && last.held_out ? last : null);
+  const lines = source ? VT.heldOutLines(source) : null;
+  if (lines) {
+    nodes.push(line(lastHeld ? "The last guided test:" : "The last guided test your PC kept:", "", "vt-head"));
+    for (const text of lines) nodes.push(line(text, ""));
+  } else {
+    nodes.push(line(VT.HELD_OUT_NONE, "", "sc-line"));
   }
   box.replaceChildren(...nodes);
 }
@@ -675,7 +789,7 @@ async function changeSetting(setting, value, current) {
    How often Jarvis asks you to repeat, and the guided test
    ========================================================================== */
 
-const test = { view: "idle", lines: null, tone: "" };
+const test = { view: "idle", lines: null, heldOut: [], tone: "" };
 
 function paintRepeat() {
   const list = $("vt-repeat");
@@ -713,6 +827,10 @@ function paintTest() {
   const nodes = [];
   if (test.view === "result") {
     for (const text of test.lines || []) nodes.push(line(text, test.tone === "bad" ? "bad" : ""));
+    if ((test.heldOut || []).length) {
+      nodes.push(line("Held-out measurement (FRR and FAR):", "", "vt-head"));
+      for (const text of test.heldOut) nodes.push(line(text, ""));
+    }
     const row = node("div", "row");
     row.append(button("Done", () => { test.view = "idle"; paintTest(); }));
     nodes.push(row);
@@ -751,8 +869,11 @@ function startTest() {
       if (reply.tone === "ok") {
         test.view = "result";
         test.lines = reply.lines;
+        test.heldOut = reply.heldOut || [];
         test.tone = "ok";
+        lastHeld = answer;
         paintTest();
+        paintHeldOut();
         reload();
         return { ok: true, text: reply.lines[0], tone: "ok" };
       }
@@ -924,9 +1045,11 @@ export function paintVoicePanel(voiceStatus) {
   if (!status) return;
   paintModel();
   paintTrain();
+  paintAdaptation();
   paintSettings();
   paintRepeat();
   paintTest();
+  paintHeldOut();
   paintOthers();
 }
 
