@@ -745,11 +745,18 @@ def t_the_patch_is_registered_and_carries_the_change():
                # rewrite my lines. Ordering is safe: they are the last two before the
                # loader and change nothing another patch's hunks anchor on.
              "hud-origin-module.patch",
-"hud-exclusive-bind.patch",
-             # presets.patch (2026-10-18) is appended after those two and before
-             # plugin-loader.patch: ONE helper block near the top of jarvis_hud.py and
-             # FOUR chat call sites resolved through it. No gate list, no tier row, no
-             # _RISK row, no _TOOL_ACTIONS line, and no line this patch writes.
+             "hud-exclusive-bind.patch",
+               # hud-request-gate.patch (SECPRIV audit 2026-10-18 N3) is appended
+               # after hud-exclusive-bind.patch, immediately before plugin-loader.patch,
+               # and touches ONLY jarvis_hud.py at the server seam: header/request
+               # deadlines, 32 bounded request slots, and the token rate bucket. No gate
+               # list entry, no tier row, no _RISK row, no _TOOL_ACTIONS line, and no
+               # line this patch writes - ordering safe, it rewrites nothing.
+"hud-request-gate.patch",
+             # presets.patch (2026-10-18) is appended after it and before
+             # plugin-loader.patch: the active-lane helper, the four chat call sites
+             # and the install block that wires POST /api/work/apply. No gate list,
+             # no tier row, no _RISK row, no line this patch writes.
              "presets.patch"}
     others = [n for n in names if n not in later]
     check("it is LAST in the stack, bar the ones written after it, and bar "
