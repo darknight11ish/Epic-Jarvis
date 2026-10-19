@@ -194,11 +194,25 @@ def t_get_work_serves_the_new_contract():
     h = H(); h.path = "/api/work"
     check("... and the token check", h.do_GET() == 401, seen)
 
+
+def t_a_later_failure_rolls_the_model_back_too():
+    d = Deps(set_ok=False)      # switch succeeds, pointing the lane fails
+    rolled = []
+    code, out = P.apply_preset("fast", start_lane=d.start, switch_model=d.switch,
+                               active_url=d.get_url, set_active_url=d.set_url,
+                               read_choice=d.read_choice, write_choice=d.write_choice,
+                               rollback_model=lambda: (rolled.append(True), {"ok": True})[1])
+    check("a failure AFTER the switch rolls the switched model back (auto tier)",
+          code == 409 and rolled == [True] and "model were rolled back" in out["error"],
+          (code, rolled, out))
+    check("... and the lane pointer is back where it was", d.lane == "http://127.0.0.1:11436")
+
 def main() -> int:
     for fn in (t_default_unchanged_without_a_call, t_general_success_one_card_and_order,
                t_fast_starts_the_coding_lane_on_demand, t_refusals_change_nothing,
                t_lane_start_failure_stops_before_the_switch,
                t_switch_failure_rolls_back_lane_and_choice, t_install_wires_only_the_apply_route,
+               t_a_later_failure_rolls_the_model_back_too,
                t_get_work_serves_the_new_contract):
         fn()
     print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")

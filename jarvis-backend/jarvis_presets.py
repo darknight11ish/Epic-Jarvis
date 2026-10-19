@@ -232,6 +232,13 @@ HEAVY_MODE_LINE = ("heavy mode needs the both-card lane, arriving later; nothing
 PENDING_LINE = "waiting for the model; nothing was changed"
 
 
+
+#: The contract's lane key -> jarvis_model_lanes' own lane key. The contract
+#: (and both app fixtures) keep "main" for the 2060 chat lane; ma
+#: jarvis_model_lanes calls that SAME lane "everyday". Translating here is the
+#: difference between a working apply and a 409 "no lane called 'main'".
+LANE_START_KEYS = {"main": "everyday", "coding": "coding"}
+
 def _config_dir() -> "pathlib.Path":
     import os
     from pathlib import Path
@@ -326,14 +333,23 @@ def live_status() -> dict:
 
 def apply_preset(preset_id, *, start_lane=None, switch_model=None,
                  active_url=None, set_active_url=None, read_choice=None,
-                 write_choice=None) -> tuple:
+                 write_choice=None, rollback_model=None) -> tuple:
     """Apply ONE preset after the owner's single switch_model card.
 
-    Order: start the named lane if it is down -> point chat at it -> switch the
-    model (the ask card lives inside switch_model) -> save the chosen preset.
-    `pending` presets and heavy mode refuse before anything happens. Any
-    failure after the lane is pointed AT it rolls chat lane and chosen preset
-    back to exactly what they were, and nothing is half-applied.
+    Order: start the named lane if it is down -> switch the model (the ask card
+    lives inside switch_model) -> point chat at it -> save the chosen preset.
+    The lane start is BEFORE the card on purpose: a lane that is down cannot
+    answer the switch's is_installed read, so switch-first is not possible.
+    That means a card the owner DENIES leaves the started lane RUNNING (it
+    starts no model and switches nothing) - stated here and in JARVIS-API
+    section 145 rather than claiming nothing happens before the card.
+
+    The contract lane key is "main" (both apps' fixture says so); the model
+    starter calls that same lane "everyday" - `_default_start_lane` translates
+    through LANE_START_KEYS. `pending` presets and heavy mode refuse before
+    anything happens. Once the model HAS switched, any later failure rolls the
+    model back with the auto-tier jarvis_models.rollback() as well as restoring
+    the chat lane and the remembered preset.
     """
     p = by_id(preset_id)
     if p is None:
@@ -350,6 +366,7 @@ def apply_preset(preset_id, *, start_lane=None, switch_model=None,
     set_active_url = set_active_url or _set_active_url
     read_choice = read_choice or choice
     write_choice = write_choice or _write_choice
+    rollback_model = rollback_model or _default_rollback_model
     previous_preset = read_choice()
     previous_lane = active_url()
     target_lane = _lane_url(p.lane)
@@ -367,7 +384,22 @@ def apply_preset(preset_id, *, start_lane=None, switch_model=None,
         switched = switch_model(p.model)
     except Exception as exc:
         switched = {"ok": False, "reason": f"{type(exc).__name__}: {exc}"}
+    switched_ok = False
+
     def rollback(reason: str, code=409) -> tuple:
+        # The lane start comes first (a down lane cannot answer the switch's
+        # is_installed read), so a refused card can leave a lane RUNNING while
+        # nothing was switched - said in the docstring and docs. Once the model
+        # HAS switched, every later failure undoes it with the auto-tier
+        # rollback, not only the lane pointer and the remembered choice.
+        model_note = ""
+        if switched_ok:
+            try:
+                rb = rollback_model()
+                if not (isinstance(rb, dict) and rb.get("ok")):
+                    model_note = " (the model rollback did not report ok)"
+            except Exception as exc:
+                model_note = f" (the model rollback failed: {type(exc).__name__})"
         try:
             set_active_url(previous_lane)
         except Exception:
@@ -383,10 +415,12 @@ def apply_preset(preset_id, *, start_lane=None, switch_model=None,
         except Exception:
             pass
         return code, {"ok": False, "changed": False,
-                      "error": f"{reason}; chat lane and preset were rolled back"}
+                      "error": f"{reason}; chat lane, chosen preset and model were "
+                               f"rolled back{model_note}"}
     if not isinstance(switched, dict) or not switched.get("ok"):
         return rollback(f"the model switch did not happen: "
                         f"{(switched or {}).get('reason', 'refused')}")
+    switched_ok = True
     if not set_active_url(target_lane):
         return rollback("the chat lane could not be pointed at the new lane")
     if not write_choice(p.id):
@@ -399,7 +433,17 @@ def apply_preset(preset_id, *, start_lane=None, switch_model=None,
 
 def _default_start_lane(key: str):
     import jarvis_model_lanes
-    return jarvis_model_lanes.start_lane(key)
+    mapped = LANE_START_KEYS.get(str(key))
+    if mapped is None or jarvis_model_lanes.lane_by_key(mapped) is None:
+        return 409, {"ok": False, "changed": False,
+                     "reason": f"the preset lane {key!r} has no model lane on this PC "
+                               f"(known lanes: {', '.join(l.key for l in jarvis_model_lanes.LANES)})"}
+    return jarvis_model_lanes.start_lane(mapped)
+
+
+def _default_rollback_model():
+    import jarvis_models
+    return jarvis_models.rollback()
 
 
 def _default_switch(ref: str):

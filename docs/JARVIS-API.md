@@ -21783,13 +21783,19 @@ coder) is not applicable until the pooled both-GPU lane exists. `chosen` is
 the id last applied; `active_lane` is the lane chat is pointed at now.
 
 **`POST /api/work/apply` - the ONE asked action.** `{"preset": "<id>"}`: one
-`switch_model` approval card (never automatic) then, in order - start that
-preset's named lane on demand (one lane, via `jarvis_model_lanes.start_lane`),
-point chat at it, switch the model, save the chosen id. A `pending` preset
-refuses in plain words, heavy-mode Coding refuses with "heavy mode needs the
-both-card lane, arriving later", and **any** failure rolls the chat lane and
-chosen preset back to what they were. The route does nothing before the card
-is answered. The app buttons stay disabled until this ships.
+`switch_model` approval card (never automatic). The lane is started on demand
+BEFORE that card - a lane that is down cannot answer the switch's installed-
+model read, so switch-first is not possible. The contract key `"main"` is
+translated to the model starter's own `"everyday"` lane (`"coding"` stays
+`"coding"`); the apps and fixture keep `"main"`. After approval the model is
+switched, chat is pointed at the lane and the chosen id saved; once the model
+has switched, any later failure rolls it back with the auto-tier
+`jarvis_models.rollback()` as well as restoring the chat lane and chosen
+preset. **Said plainly:** a card the owner DENIES leaves the started lane
+running - it starts no model and switches nothing. A `pending` preset refuses
+before anything happens, heavy-mode Coding refuses with "heavy mode needs the
+both-card lane, arriving later". The app buttons stay disabled until they wire
+the route.
 
 Tests: `backend/test_presets.py`, `test_presets_lanes.py`,
 `test_presets_apply.py` (route shape, origin/token, old shape not served,
