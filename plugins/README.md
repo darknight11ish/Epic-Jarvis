@@ -172,7 +172,7 @@ stack's order and cannot be moved into a folder.
 | `initiative-payload.patch` | edits lines the core already has; it cannot be applied out of order |
 | `hud-origin-module.patch` | edits lines the core already has; it cannot be applied out of order |
 | `hud-exclusive-bind.patch` | edits lines the core already has; it cannot be applied out of order |
-| `hud-request-gate.patch` | edits lines the core already has; it cannot be applied out of order |
+| `presets.patch` | edits lines the core already has; it cannot be applied out of order |
 | `plugin-loader.patch` | the loader itself: the ONE startup call that makes every other drop-in folder possible. It is what replaces the patches, so it can never be replaced by a folder. |
 
 ## Adding and removing one

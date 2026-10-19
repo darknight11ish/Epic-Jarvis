@@ -1003,7 +1003,7 @@
       "why": "edits lines the core already has; it cannot be applied out of order"
     },
     {
-      "patch": "hud-request-gate.patch",
+      "patch": "presets.patch",
       "bucket": "core",
       "order": 146,
       "why": "edits lines the core already has; it cannot be applied out of order"

@@ -560,14 +560,12 @@ def t_hygiene():
                # rewrite my lines. Ordering is safe: they are the last two before the
                # loader and change nothing another patch's hunks anchor on.
              "hud-origin-module.patch",
-             "hud-exclusive-bind.patch",
-               # hud-request-gate.patch (SECPRIV audit 2026-10-18 N3) is appended
-               # after hud-exclusive-bind.patch, immediately before plugin-loader.patch,
-               # and touches ONLY jarvis_hud.py at the server seam: header/request
-               # deadlines, 32 bounded request slots, and the token rate bucket. No gate
-               # list entry, no tier row, no _RISK row, no _TOOL_ACTIONS line, and no
-               # line this patch writes - ordering safe, it rewrites nothing.
-             "hud-request-gate.patch"}
+"hud-exclusive-bind.patch",
+             # presets.patch (2026-10-18) is appended after those two and before
+             # plugin-loader.patch: ONE helper block near the top of jarvis_hud.py and
+             # FOUR chat call sites resolved through it. No gate list, no tier row, no
+             # _RISK row, no _TOOL_ACTIONS line, and no line this patch writes.
+             "presets.patch"}
     check("the patch that wires it is in the script's list, and last",
           "'screen-attach.patch'" in ps1 and "screen-attach.patch" in stack_order
           and [n for n in stack_order if n not in later][-1] == "screen-attach.patch")
