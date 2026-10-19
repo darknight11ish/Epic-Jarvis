@@ -56,6 +56,7 @@ import numpy as np  # noqa: E402
 import jarvis_kokoro as K  # noqa: E402
 import jarvis_voices as V  # noqa: E402
 import jarvis_speech as S  # noqa: E402
+os.environ.setdefault("JARVIS_TEST_UNSEALED_FIXTURES", "1")
 
 PASSED, FAILED = [], []
 

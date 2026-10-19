@@ -65,6 +65,7 @@ import jarvis_money_parse as M  # noqa: E402
 import jarvis_spending as SP  # noqa: E402
 sys.path.insert(0, str(REPO / "tools"))
 import gen_private_aloud_cases as G  # noqa: E402
+os.environ.setdefault("JARVIS_TEST_UNSEALED_FIXTURES", "1")
 
 def _block(src, marker):
     """The block `marker` opens, delimited by INDENTATION, not by a count.

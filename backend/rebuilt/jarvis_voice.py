@@ -124,6 +124,7 @@ from __future__ import annotations
 import array
 import base64
 import hashlib
+import secrets
 import json
 import math
 import os
@@ -168,6 +169,235 @@ MICS = ("phone", "desktop")
 def clean_mic(mic) -> str:
     m = str(mic or "").strip().lower()
     return m if m in MICS else ""
+
+
+# ---------------------------------------------------------------------------
+#   Sealed at rest - the owner's voice files (security audit D2/M2, 2026-10-18)
+# ---------------------------------------------------------------------------
+#
+# The owner's voice template (`voice/owner*.json`) and the wake-word verifier
+# (`voice/wake-verifier*.json`) are numbers, not audio - but they are BIOMETRIC:
+# a speaker template and a verifier trained on the owner's voice belong to the
+# same class as a fingerprint template. They used to sit in plain JSON under the
+# profile ACL. This seals them with AES-256-GCM under a key kept in Windows
+# Credential Manager (the same store the chat-history key and the data-backup
+# key use; jarvis_token_store.WindowsStore, reached through default_store - no
+# second secret store is invented).
+#
+# The file on disk is the envelope Gemini's ruling names:
+#   {"sealed_v": 1, "alg": "AES-256-GCM",
+#    "nonce_b64": "...", "ciphertext_b64": "..."}
+#
+# WHAT THIS DOES NOT SEAL, and why (every consumer was inspected):
+#   * `voices/<id>/clip.wav` - the custom-voice recording IS biometric, but its
+#     consumers need a FILESYSTEM PATH (sherpa/zipvoice load the clip; the F5
+#     worker takes `ref_audio` as a path), so sealing it would mean writing a
+#     decrypted copy to a temp path - a worse at-rest story, not a better one.
+#     Left plaintext and reported as an unresolved consumer.
+#   * `voice/self-test.wav`, `voice/timing-test.wav` - synthetic TTS output, not
+#     the owner's voice.
+#   * `devices/owner-phone.json` - no writer or reader for that path exists in
+#     this repository; the only reference to `owner-phone.json` is the voice
+#     profile in `voice/`. Owner-side code not in this repo may use the
+#     `devices/` path, so sealing it blind could break phone pairing. Left
+#     alone, reported as an unresolved consumer.
+#
+# FIXTURES: true tests keep plaintext fixtures. `JARVIS_TEST_UNSEALED_FIXTURES=1`
+# makes writes plain and reads return plaintext WITHOUT migrating, so the 744
+# voice/wake checks stay tests of the engine rather than of this envelope; a
+# test can also inject `KEY_PROVIDER` (callable(create: bool) -> 32 bytes).
+SEAL_ENV = "JARVIS_TEST_UNSEALED_FIXTURES"
+SEAL_ALG = "AES-256-GCM"
+SEAL_KEY_TARGET = "Jarvis Backend/voice biometrics key"
+_SEAL_AAD = b"jarvis-biometric-v1"
+
+#: Tests replace this: callable(create: bool) -> 32 raw key bytes. None = the
+#: real Windows Credential Manager entry above.
+KEY_PROVIDER = None
+
+
+class BiometricKeyUnavailable(RuntimeError):
+    """The sealed voice file cannot be opened - in plain words, never a traceback.
+
+    A missing Credential Manager key, a wrong key and a tampered ciphertext all
+    end here (GCM authentication is what tells them apart). The voice check's
+    answer to this is REFUSE, and this message is safe to log: it names the
+    target, never the key and never the plaintext.
+    """
+
+
+def _biometric_refusal(why: str) -> BiometricKeyUnavailable:
+    return BiometricKeyUnavailable(
+        "the owner's voice files are sealed at rest and could not be opened "
+        f"({why}). Nothing was read or changed; the voice check refuses until "
+        "the key is back.")
+
+
+def fixture_mode() -> bool:
+    """True when this process is a test fixture run (no sealing, no migration)."""
+    return os.environ.get(SEAL_ENV) == "1"
+
+
+def _seal_aes():
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    except Exception:
+        return None
+    return AESGCM
+
+
+def _seal_key(*, create: bool) -> bytes:
+    """The 32-byte key from WinCred (or the injected provider). Plain refusal."""
+    if KEY_PROVIDER is not None:
+        try:
+            key = KEY_PROVIDER(create)
+        except BiometricKeyUnavailable:
+            raise
+        except Exception as exc:
+            raise _biometric_refusal(f"the injected key provider failed: "
+                                     f"{type(exc).__name__}") from None
+        if not key:
+            raise _biometric_refusal("no key is available")
+        key = bytes(key)
+        if len(key) != 32:
+            raise _biometric_refusal("the key is not 32 bytes")
+        return key
+    try:
+        import jarvis_token_store as ts
+        store = ts.default_store(SEAL_KEY_TARGET)
+    except Exception as exc:
+        raise _biometric_refusal(f"Windows Credential Manager could not be opened: "
+                                 f"{type(exc).__name__}") from None
+    if isinstance(store, Exception):
+        raise _biometric_refusal(f"the key store is not available: {store}")
+    try:
+        text = (store.read() or "").strip()
+    except Exception as exc:
+        raise _biometric_refusal(f"the key could not be read: "
+                                 f"{type(exc).__name__}") from None
+    if text:
+        try:
+            key = base64.b64decode(text, validate=True)
+        except Exception:
+            raise _biometric_refusal("the stored key is not valid text") from None
+        if len(key) != 32:
+            raise _biometric_refusal("the stored key is not 32 bytes")
+        return key
+    if not create:
+        raise _biometric_refusal(f"no key is kept in Windows Credential Manager "
+                                 f"under \"{SEAL_KEY_TARGET}\"")
+    key = secrets.token_bytes(32)
+    try:
+        store.write(base64.b64encode(key).decode("ascii"))
+    except Exception as exc:
+        raise _biometric_refusal(f"a new key could not be saved: "
+                                 f"{type(exc).__name__}") from None
+    return key
+
+
+def is_sealed_doc(doc) -> bool:
+    return (isinstance(doc, dict) and doc.get("sealed_v") == 1
+            and isinstance(doc.get("nonce_b64"), str)
+            and isinstance(doc.get("ciphertext_b64"), str))
+
+
+def seal_envelope(data: bytes) -> dict:
+    """The sealed envelope dict for `data`. Raises BiometricKeyUnavailable and
+    writes nothing when the key cannot be had (fail closed)."""
+    aesgcm = _seal_aes()
+    if aesgcm is None:
+        raise _biometric_refusal("the `cryptography` package is not installed")
+    key = _seal_key(create=True)
+    nonce = secrets.token_bytes(12)
+    cipher = aesgcm(key).encrypt(nonce, bytes(data), _SEAL_AAD)
+    return {"sealed_v": 1, "alg": SEAL_ALG,
+            "nonce_b64": base64.b64encode(nonce).decode("ascii"),
+            "ciphertext_b64": base64.b64encode(cipher).decode("ascii")}
+
+
+def unseal_envelope(doc, *, what: str = "the file") -> bytes:
+    """The plaintext back from an envelope. Tamper/wrong key/missing key raise
+    BiometricKeyUnavailable with a plain sentence (GCM's own exception is never
+    allowed out)."""
+    if not is_sealed_doc(doc):
+        raise _biometric_refusal(f"{what} is not one of Jarvis's sealed voice files")
+    aesgcm = _seal_aes()
+    if aesgcm is None:
+        raise _biometric_refusal("the `cryptography` package is not installed")
+    key = _seal_key(create=False)
+    try:
+        nonce = base64.b64decode(doc["nonce_b64"], validate=True)
+        cipher = base64.b64decode(doc["ciphertext_b64"], validate=True)
+    except Exception:
+        raise _biometric_refusal(f"{what} is damaged") from None
+    if len(nonce) != 12:
+        raise _biometric_refusal(f"{what} does not hold a 12-byte nonce")
+    try:
+        return aesgcm(key).decrypt(nonce, cipher, _SEAL_AAD)
+    except Exception:
+        raise _biometric_refusal(
+            f"{what} could not be opened - the key is not this file's key, or the "
+            "file was changed after it was sealed") from None
+
+
+def _atomic_write(path: Path, data: bytes) -> None:
+    import os as _os
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_name(p.name + ".tmp")
+    tmp.write_bytes(data)
+    _os.replace(tmp, p)
+
+
+def write_biometric_bytes(path, data: bytes) -> None:
+    """Seal `data` into `path` (the envelope JSON). Fixture mode writes it plain.
+    Fails closed: if the envelope cannot be built, NOTHING is written (the old
+    file, if any, is left untouched)."""
+    p = Path(path)
+    if fixture_mode():
+        _atomic_write(p, bytes(data))
+        return
+    envelope = seal_envelope(bytes(data))     # raises before any write
+    _atomic_write(p, json.dumps(envelope).encode("utf-8"))
+
+
+def read_biometric_bytes(path, *, migrate: bool = True) -> bytes:
+    """The plaintext bytes of a sealed file; a legacy plaintext file is read and
+    ATOMICALLY re-sealed in place (one-way migration, live mode only).
+
+    Fixture mode reads plaintext and migrates nothing. Missing key / tampered
+    ciphertext raise BiometricKeyUnavailable; the file is never modified then.
+    """
+    p = Path(path)
+    data = p.read_bytes()
+    doc = None
+    if data.startswith(b"{"):
+        try:
+            doc = json.loads(data.decode("utf-8"))
+        except Exception:
+            doc = None
+    if is_sealed_doc(doc):
+        return unseal_envelope(doc, what=p.name)
+    # Legacy plaintext (or fixture). Only a JSON-object-shaped value is treated
+    # as a legacy biometric file; anything else is returned untouched.
+    if fixture_mode() or not migrate or not isinstance(doc, dict):
+        return data
+    write_biometric_bytes(p, data)           # raises => the file stays as it was
+    return data
+
+
+def read_biometric_json(path, *, migrate: bool = True) -> dict:
+    """`read_biometric_bytes`, parsed as the JSON object a voice file holds."""
+    raw = read_biometric_bytes(path, migrate=migrate)
+    doc = json.loads(raw.decode("utf-8-sig"))
+    if not isinstance(doc, dict):
+        raise ValueError("a voice file must hold a JSON object")
+    return doc
+
+
+def write_biometric_json(path, doc) -> None:
+    """Seal a voice-file dict. Fixture mode writes plaintext JSON."""
+    write_biometric_bytes(path, json.dumps(doc).encode("utf-8"))
 
 
 def profile_path(mic: str = "") -> Path:
@@ -1278,9 +1508,10 @@ class VoiceProfile:
         return []
 
     def save(self, path: Optional[Path] = None) -> Path:
+        """The owner's voice template, SEALED at rest (audit D2/M2): a speaker
+        template is biometric. Fixture mode keeps plaintext fixtures."""
         p = Path(path or PROFILE_PATH)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(self.as_dict()), encoding="utf-8")
+        write_biometric_json(p, self.as_dict())
         return p
 
 
@@ -1351,7 +1582,13 @@ def load_profile(path: Optional[Path] = None) -> Optional[VoiceProfile]:
     if not p.is_file():
         return None
     try:
-        raw = json.loads(p.read_text(encoding="utf-8-sig"))
+        # Sealed at rest; a legacy plaintext template is read and migrated to
+        # the sealed envelope in place (one-way). A sealed file whose key is
+        # gone refuses in plain words inside the helper - here that is the
+        # profile equivalent of "refuse every clip", the safe direction.
+        raw = read_biometric_json(p, migrate=True)
+    except BiometricKeyUnavailable:
+        return None
     except Exception:
         return None
     # A LIST of numbers, specifically. `not raw.get("centroid")` only tested

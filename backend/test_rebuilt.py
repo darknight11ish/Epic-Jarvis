@@ -60,6 +60,7 @@ REBUILT = Path(__file__).resolve().parent / "rebuilt"
 # With JARVIS_BACKEND set, stop plainly unless the backend's copy of every
 # rebuilt module IS this one. (Nothing happens in the dev container or CI.)
 from _where import require_shipped  # noqa: E402
+os.environ.setdefault("JARVIS_TEST_UNSEALED_FIXTURES", "1")
 require_shipped(*[f"rebuilt/{p.name}" for p in sorted(REBUILT.glob("jarvis_*.py"))])
 
 # The rebuilt modules are the ones under test, so they come FIRST on the path -

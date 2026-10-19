@@ -51,6 +51,7 @@ import jarvis_voice as V  # noqa: E402
 import jarvis_voice_enroll as E  # noqa: E402
 import jarvis_voice_flow as F  # noqa: E402
 from _voice_test import semantic_voice  # noqa: E402
+os.environ.setdefault("JARVIS_TEST_UNSEALED_FIXTURES", "1")
 
 KT = REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis" / "client" / "net" / "VoiceModels.kt"
 RS = REPO / "jarvis-desktop" / "src-tauri" / "src" / "voice.rs"
