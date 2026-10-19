@@ -162,6 +162,13 @@ await check("CONTROL: Rust holds what makes Jarvis watch, fetches the line as so
   for (const other of ["quickbar", "hud", "settings", "faces", "floating", "onboarding"]) {
     assert.ok(!caps(other).some((c) => FOCUS_SESSION.includes(c)), `${other} holds a focus session set`);
   }
+  // The other half of the same grant: the preset card lives in the command bar
+  // and in Settings, so those two MUST hold the unrelated focus-presets set;
+  // the Brain and the widget have no preset surface and must not gain it.
+  assert.ok(caps("quickbar").includes("focus-presets"), "the quickbar cannot open the preset card");
+  assert.ok(caps("settings").includes("focus-presets"), "Settings cannot draw the preset page");
+  assert.ok(!caps("brain").includes("focus-presets"), "the Brain does not need the preset UI set");
+  assert.ok(!caps("widget").includes("focus-presets"), "the widget does not need the preset UI set");
 });
 
 /* ── The windows ──────────────────────────────────────────────────────── */
