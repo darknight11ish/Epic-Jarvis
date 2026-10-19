@@ -36,6 +36,7 @@ import com.jarvis.client.net.SignedApproval
 import com.jarvis.client.net.StatusInfo
 import com.jarvis.client.net.Tasks
 import com.jarvis.client.net.VersionInfo
+import com.jarvis.client.net.FocusPresets
 import com.jarvis.client.net.WorkSetups
 import com.jarvis.client.platform.UpdateChecker
 import com.jarvis.client.widget.ApprovalWidget
@@ -509,6 +510,15 @@ object JarvisRuntime {
      */
     private val _workOffer = MutableStateFlow<WorkSetups.Offer?>(null)
     val workOffer: StateFlow<WorkSetups.Offer?> = _workOffer.asStateFlow()
+
+    /**
+     * The focus presets (`GET /api/work`'s `presets[]`, net/FocusPresets.kt):
+     * the one contract both apps render. Nothing here switches a model by
+     * itself; [useFocusPreset] posts the contract's one apply action, which
+     * raises the existing approval card.
+     */
+    private val _focusPresets = MutableStateFlow<FocusPresets.Read>(FocusPresets.Read.NotAsked)
+    val focusPresets: StateFlow<FocusPresets.Read> = _focusPresets.asStateFlow()
 
     private val _power = MutableStateFlow("active")
     val power: StateFlow<String> = _power.asStateFlow()
@@ -2529,6 +2539,49 @@ object JarvisRuntime {
     /** The offer has been read (or dismissed). Nothing on the PC changes. */
     fun clearWorkOffer() {
         _workOffer.value = null
+    }
+
+    // ------------------------------------------------------- focus presets ----
+    // The owner's decision of 2026-10-18: four (then five) focus presets from
+    // ONE backend contract (net/FocusPresets.kt, backend/fixtures/work_presets.json).
+    // Reading never changes anything; using one posts the contract's single
+    // apply action, which raises the existing approval card.
+
+    /** Re-reads the preset contract. Reads only; a failed read is said in words. */
+    suspend fun refreshFocusPresets() {
+        _focusPresets.value = FocusPresets.readOf(api.focusPresets())
+    }
+
+    /**
+     * Uses the preset [id] by posting the ONE apply action the contract names
+     * (never a route invented here). Held on a stale link (rule 4); a pending
+     * preset is never posted. A success means the card was asked for, not that
+     * a model changed - the list is re-read and the PC's answer says which.
+     */
+    suspend fun useFocusPreset(id: String): String {
+        actionBlocker()?.let { return it }
+        refreshFocusPresets()
+        val view = (_focusPresets.value as? FocusPresets.Read.Loaded)?.view
+            ?: return FocusPresets.UPDATE
+        val preset = view.preset(id)
+            ?: return "That preset is not there any more. Open it again."
+        FocusPresets.blocker(view, preset, stale = false, linkUp = true)
+            ?.let { return it }
+        val route = FocusPresets.applyRoute(preset) ?: return FocusPresets.APPLY_UNPUBLISHED
+        val result = api.focusPresetApply(route, FocusPresets.applyBody(preset).toString())
+        refreshFocusPresets()
+        return when (result) {
+            is ApiResult.Ok -> {
+                refreshPending()
+                refreshHardware()
+                FocusPresets.replyLine(result.value.first, result.value.second)
+            }
+            is ApiResult.Failed -> when (result.error) {
+                ApiError.BadToken -> com.jarvis.client.net.KeyRefusal.words()
+                    ?: "Your PC did not accept this phone's key any more. Pair again."
+                else -> "Not changed. " + describe(result.error)
+            }
+        }
     }
 
     // ------------------------------------------------------- web search ----

@@ -3608,6 +3608,10 @@ private fun Composer(
             .background(chrome.surface1)
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
+    // The focus preset chip (owner decision 2026-10-18): the current preset,
+    // and the one-asked-action list behind it. It sits at the top of the chat
+    // bar so the owner can see what the next question will run on.
+    FocusPresetChip(state.link, state.stale)
     // The one quiet line about the chat itself (the chat audit, 2026-09-28):
     // read out by TalkBack as it appears, dismissed by a tap.
     state.chatNote?.let { line ->
