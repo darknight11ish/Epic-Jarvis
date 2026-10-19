@@ -17,7 +17,7 @@
  * - Live additions to the print: the PC's count and caps, the drift guard
  *   and re-anchoring, in the PC's own words. The backend's adapt-reset mode
  *   exists, but this build has no desktop command for it, so the count is
- *   read-only and says so.
+ *   wired here and the count is resettable.
  * - Held-out measurement: FRR, FAR and the EER point per condition, in the
  *   PC's own words, including "not enough measured rows" - never a number
  *   the PC did not send, and never a threshold applied by the page.
@@ -101,14 +101,11 @@ export const SENTENCES = Object.freeze(READ_PHRASES.map((p) => p.text));
  * How many condition rounds THIS desktop build can send to the PC.
  *
  * The PC understands all four (`state()["limits"]["rounds"]` is 4), but the
- * desktop's Rust sender still accepts rounds 1-3
- * (`src-tauri/src/voice_training.rs`, `send_voice_training`). So the page
- * SHOWS the PC's four conditions and records the first three, and says
- * plainly which one is not wired rather than pretending it recorded it.
- * When the bridge accepts round 4, raise this constant: the fourth round is
- * already modelled here (`trainingPlan`) and needs no other change.
+ * desktop's Rust sender accepts rounds 1-4
+ * (`src-tauri/src/voice_training.rs`, `send_voice_training`). All four are
+ * wired, so the page records every condition the PC's plan lists.
  */
-export const DESKTOP_ROUND_LIMIT = 3;
+export const DESKTOP_ROUND_LIMIT = 4;
 
 /**
  * The guided test's twenty sentences: new ones, not the training's, so the
@@ -281,7 +278,7 @@ function freeHint(status, prompt) {
 
 /**
  * The clips each condition round records, as `{kind, id, text, focus?,
- * why?, seconds?, hint?}`. Rounds 1-3 carry four of the twelve phrases and
+ * why?, seconds?, hint?}`. Each round carries its share of the twelve phrases and
  * one free-speech prompt each; the fourth condition repeats the opening
  * phrases. That is every phrase and every prompt exactly once in the three
  * rounds this build records - see DESKTOP_ROUND_LIMIT.
@@ -327,9 +324,8 @@ function buildRoundItems(plan, status) {
 /**
  * The plan for a training, from the PC's own payload (`planOf`):
  *
- * - four condition rounds, in the PC's order; the first three are `wired`
- *   (this desktop build can send them), the fourth is `wired: false` and the
- *   page says so - see DESKTOP_ROUND_LIMIT;
+ * - four condition rounds, in the PC's order, all `wired` - see
+ *   DESKTOP_ROUND_LIMIT;
  * - each round's `items` are the phrases and prompts to record, not indexes;
  * - `held`: rounds the PC already holds for this PC's microphone (carrying on
  *   after the window was closed) are left out, as before;
@@ -652,14 +648,14 @@ export const LIVE_RULES_NOTE =
   "Only a clean, high-confidence Live check can add one: never side talk, a refusal, a crisis turn, a short clip, or a score only just over the bar.";
 
 /**
- * The backend route exists (`POST /api/voice/enroll {"mode":
- * "adapt-reset"}`), but this desktop build has no command for it. The page
- * shows the count and says that rather than offering a button that cannot
- * work. Raise this when a Rust command is added.
+ * The backend route (`POST /api/voice/enroll {"mode": "adapt-reset"}`) and the
+ * desktop command (voice_training.rs `reset_voice_adaptation`) both exist. It
+ * only zeroes counters and drops the live sub-prints; it never changes the
+ * enrolled voice, so it raises no card.
  */
-export const ADAPT_RESET_WIRED = false;
+export const ADAPT_RESET_WIRED = true;
 export const ADAPT_RESET_NOTE =
-  "Resetting the count from this app is not wired yet; it needs a desktop update. The count above is your PC's own.";
+  "Reset the count: this zeroes the PC's Live-additions counters and drops the live sub-prints it kept. It never changes the voice it learned from your training.";
 
 /**
  * The PC's Live additions (`gate.training.adaptation`) as counts and caps, or

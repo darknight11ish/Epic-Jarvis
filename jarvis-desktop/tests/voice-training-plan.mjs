@@ -112,20 +112,21 @@ check("the plan is read from the PC, and a PC without one is refused, not guesse
   assert.deepEqual(VT.trainingPlan(older(S.strong_ready)).rounds, []);
 });
 
-check("four rounds exist; three are wired; every phrase and prompt is used once within them", () => {
+check("four rounds exist; all four are wired; every phrase and prompt is used once within them", () => {
   const plan = VT.trainingPlan(S.strong_ready);
   assert.equal(plan.missing, false);
   assert.equal(plan.total, 4);
-  assert.equal(plan.wiredTotal, 3);
+  assert.equal(plan.wiredTotal, 4);
   assert.equal(plan.wiredTotal, Math.min(plan.total, VT.DESKTOP_ROUND_LIMIT));
   assert.deepEqual(plan.rounds.map((r) => r.round), [1, 2, 3, 4]);
-  assert.deepEqual(plan.rounds.map((r) => r.wired), [true, true, true, false]);
+  assert.deepEqual(plan.rounds.map((r) => r.wired), [true, true, true, true]);
   assert.deepEqual(plan.rounds.map((r) => r.items.length), [5, 5, 5, 4]);
   assert.deepEqual(plan.rounds.map((r) => r.items.filter((i) => i.kind === "free").length), [1, 1, 1, 0]);
   const wired = plan.rounds.filter((r) => r.wired).flatMap((r) => r.items);
-  assert.equal(wired.filter((i) => i.kind === "read").length, 12);
+  assert.equal(wired.filter((i) => i.kind === "read").length, 16);
   assert.equal(wired.filter((i) => i.kind === "free").length, 3);
-  assert.equal(new Set(wired.map((i) => i.id)).size, wired.length, "no clip repeats inside one training");
+  assert.equal(new Set(wired.map((i) => i.id)).size, 15,
+    "only the fourth condition repeats its opening phrases; the first three use every phrase once");
   assert.equal(plan.rounds[3].items.filter((i) => i.kind === "read").length, 4,
     "the fourth condition repeats opening phrases, for its own sub-print");
   assert.ok(wired.every((i) => i.text));
@@ -133,21 +134,18 @@ check("four rounds exist; three are wired; every phrase and prompt is used once 
     "a free prompt says the PC's own 10-second clip cap");
 });
 
-check("the page says three rounds, fifteen recordings, and which condition is not wired", () => {
+check("the page says four rounds, nineteen recordings, and no unwired condition", () => {
   const plan = VT.trainingPlan(S.strong_ready);
   assert.equal(VT.planLine(plan),
-    "3 rounds on this PC, 15 recordings in all. The plan has 4 conditions; this desktop build records 3. Each round takes about a minute.");
+    "4 rounds on this PC, 19 recordings in all. Each round takes about a minute.");
   assert.equal(VT.roundLine(plan, 0), "Round 1 of 4: normal, close to the microphone.");
   assert.equal(VT.roundLine(plan, 1), "Round 2 of 4: about two to three metres away, on a table.");
   assert.equal(VT.roundLine(plan, 3),
-    "Round 4 of 4: in another room, or at a different time of day. This desktop build cannot record this one yet.");
+    "Round 4 of 4: in another room, or at a different time of day.");
   assert.equal(VT.conditionsLine(plan),
     "The conditions: Close; On a table, 2-3 m away; With background noise; Another room or time.");
   const limit = VT.planLimitLines(plan);
-  assert.equal(limit.length, 2);
-  assert.match(limit[0], /^This desktop build records the first 3 of the 4 conditions: /);
-  assert.match(limit[1], /^The fourth - Another room or time - is in the plan your PC sent/);
-  assert.match(limit[1], /Training ends after round 3/);
+  assert.deepEqual(limit, []);
   for (const line of [VT.planLine(plan), ...VT.introLines(plan, S.strong_ready), ...limit]) noRaw(line);
 });
 
@@ -167,11 +165,11 @@ check("carrying on leaves out the rounds the PC already holds", () => {
   const plan = VT.trainingPlan(S.strong_ready, { held: [1, 2] });
   assert.deepEqual(plan.rounds.map((r) => r.round), [3, 4]);
   assert.equal(plan.rounds[0].wired, true);
-  assert.equal(plan.rounds[1].wired, false);
-  assert.equal(VT.planLine(plan), "1 round on this PC, 5 recordings in all. The plan has 4 conditions; this desktop build records 3. Each round takes about a minute.");
+  assert.equal(plan.rounds[1].wired, true);
+  assert.equal(VT.planLine(plan), "2 rounds on this PC, 9 recordings in all. Each round takes about a minute.");
 });
 
-check("the left-out recordings map onto the new material, are topped up to 3, and the fourth condition is not offered", () => {
+check("the left-out recordings map onto the new material, are topped up to 3, and the fourth condition is now offered", () => {
   const last = S.trained_outliers.gate.training.last;
   assert.deepEqual(last.outliers, [{ clip: 2, round: 2 }, { clip: 5, round: 2 }]);
   assert.equal(VT.outlierLine(last),
@@ -183,8 +181,10 @@ check("the left-out recordings map onto the new material, are topped up to 3, an
   assert.deepEqual(plan.rounds[0].items.map((i) => i.clip), [0, 1, 4]);
   assert.equal(plan.rounds[0].items.length >= 3, true);
   assert.equal(VT.roundLine(plan, 0), "Round 2 again: about two to three metres away, on a table.");
-  // A left-out clip in the fourth condition cannot be redone from this build.
-  assert.deepEqual(VT.outlierPlan(S.strong_ready, [{ round: 4, clip: 1 }]).rounds, []);
+  // The fourth condition is wired now, so a left-out clip there can be redone.
+  const fourth = VT.outlierPlan(S.strong_ready, [{ round: 4, clip: 1 }]);
+  assert.deepEqual(fourth.rounds.map((r) => r.round), [4]);
+  assert.ok(fourth.rounds[0].items.length >= 3);
 });
 
 check("a round's answer is ONE card, and a bad clip says which round", () => {
@@ -263,12 +263,11 @@ check("a count, a re-anchor and a reset are read from the PC, never invented", (
   assert.deepEqual(VT.adaptationLines(old), []);
 });
 
-check("resetting the count is honestly NOT wired in this desktop build", () => {
-  assert.equal(VT.ADAPT_RESET_WIRED, false);
-  assert.match(VT.ADAPT_RESET_NOTE, /not wired yet; it needs a desktop update/);
-  assert.match(VT.ADAPT_RESET_NOTE, /The count above is your PC's own/);
-  // No invented command: the page only disables a button.
-  assert.doesNotMatch(PANEL, /invoke\("(?:reset_voice_adaptation|adapt_reset)|"mode"\s*:\s*"adapt-reset"/);
+check("resetting the count is wired through the desktop command", () => {
+  assert.equal(VT.ADAPT_RESET_WIRED, true);
+  assert.match(VT.ADAPT_RESET_NOTE, /zeroes the PC's Live-additions counters/);
+  assert.match(VT.ADAPT_RESET_NOTE, /never changes the voice/);
+  assert.match(PANEL, /invoke\("reset_voice_adaptation"\)/);
 });
 
 /* ── Held-out measurement: FRR, FAR, EER, and "not enough" ───────────── */
@@ -331,6 +330,11 @@ check("no report at all reads as null, not as a zero", () => {
 
 /* ── The page actually carries the new blocks ────────────────────────── */
 
+check("the guided test sends the condition it read from the plan", () => {
+  assert.match(PANEL, /vt-test-condition/);
+  assert.match(PANEL, /invoke\("measure_voice", \{ slots, condition \}\)/);
+});
+
 check("the Settings page has the Live-additions and held-out blocks", () => {
   assert.match(HTML, /<h3 class="subhead">Live additions to your voice<\/h3>/);
   assert.match(HTML, /<div class="vt-box" id="vt-adapt"><\/div>/);
@@ -349,7 +353,7 @@ check("the third wire is honest: the Rust sender is still the limit, not the pag
   // A pointer, not a source pin: when the bridge accepts round 4, the
   // constant is what changes, and the test above starts requiring 4.
   const rust = read("src-tauri/src/voice_training.rs");
-  assert.match(rust, /!\(1\.\.=3\)\.contains\(&round\)/,
+  assert.match(rust, /!\(1\.\.=4\)\.contains\(&round\)/,
     "voice_training.rs changed its round range: update DESKTOP_ROUND_LIMIT and this test together");
 });
 
