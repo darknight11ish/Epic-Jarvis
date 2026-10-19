@@ -31,10 +31,18 @@ def main() -> int:
         check(f"{p['id']}: apply is one asked action, never automatic",
               p["apply"]["action"] == "Use this preset" and p["apply"]["auto"] is False)
         check(f"{p['id']}: model and context are stated", bool(p["model"]) and int(p["context"]) > 0)
-    check("General and Coding are qwen3.5:9b on the 2060 at 196,608",
-          [p["model"] for p in fixture["presets"] if p["id"] in ("general", "coding")] == ["qwen3.5:9b", "qwen3.5:9b"]
-          and all(p["context"] == 196608 and p["lane"]["key"] == "main"
-                  for p in fixture["presets"] if p["id"] in ("general", "coding")))
+    gen = P.by_id("general")
+    check("General is qwen3.5:9b on the 2060 at 196,608",
+          gen.model == "qwen3.5:9b" and gen.context == 196608 and gen.lane == "main")
+    cod = P.by_id("coding")
+    check("Coding now uses the 30B coder across both cards (heavy mode)",
+          cod.model == "qwen3-coder-30b-a3b-ud-q3-k-xl" and cod.heavy_mode is True
+          and cod.measured["tok_s"] == 76.2 and cod.measured["rubric"] == "6/6 coding rubric"
+          and cod.measured["size_gib"] == 14.0 and cod.measured["cold_load_s"] == 32.1
+          and "BOTH GPUs" in cod.cost, cod.model)
+    check("... its words say heavy mode evicts lanes and lane support is arriving",
+          "evicts" in cod.cost and "pooled both-GPU lane" in cod.worse
+          and "lane support arriving" in cod.worse and "No single-card" in cod.worse)
     check("Fast is qwen3:8b on the coding lane at 16,384",
           P.by_id("fast").model == "qwen3:8b" and P.by_id("fast").lane == "coding"
           and P.by_id("fast").context == 16384)

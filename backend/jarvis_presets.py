@@ -57,6 +57,7 @@ class Preset:
     tools: tuple = ()       # extra tool groups that matter for this preset
     measured: Optional[dict] = None
     pending: bool = False
+    heavy_mode: bool = False
     words: tuple = ()       # trigger words for /api/work/recommend
     strong: tuple = ()
 
@@ -80,6 +81,7 @@ class Preset:
                        "tools": list(self.tools)},
             "measured": self.measured,
             "pending": self.pending,
+            "heavy_mode": self.heavy_mode,
             "apply": {"action": APPLY_ACTION, "switch_route": SWITCH_ROUTE,
                       "lane_start": self.lane != "main",
                       "auto": False},
@@ -131,17 +133,26 @@ PRESETS = (
     Preset(
         id="coding", title="Coding", focus="code, files, debugging, multi-step work",
         what="For writing and fixing code, reading a project, and long tool-driven "
-             "coding jobs: the 2060 keeps the best measured model at 196k, and the "
-             "coding lane starts on demand when the job needs a second worker.",
-        cost="The 2060's 44.9 tokens a second is slower than the fast card, and it "
-             "spends 9.17 of 12 GB, so the second model lives on the other card.",
-        worse="The coding lane is on the smaller display card (8 GB); it is started "
-              "for a coding job and is not the everyday lane.",
-        model="qwen3.5:9b", lane="main", context=196608,
-        helper_model="qwen3.5:4b", helper_lane="coding", helper_context=65536,
-        prompt="coding", diet="coding",
+             "coding jobs: the 30B coding model across both cards (heavy mode), with "
+             "the coding lane arriving as part of the lane patch.",
+        cost="HEAVY MODE: it holds BOTH GPUs (14 GB, 100% GPU across both cards) and "
+             "evicts the other lanes' models while it works; cold load is about 32.1 s. "
+             "Measured 76.2 tok/s median eval and 6/6 on the coding rubric. It is not a "
+             "single-card model.",
+        worse="Heavy mode means the Fast/Live and Agentic+Vision lanes lose their models "
+              "while it runs, and its apply path needs a pooled both-GPU lane - the "
+              "pinned 2060/2080S lanes cannot host it. Until that lane patch lands: "
+              "\"heavy mode: both cards; lane support arriving\". No single-card use "
+              "is claimed.",
+        model="qwen3-coder-30b-a3b-ud-q3-k-xl", lane="main", context=28672,
+        prompt="coding", diet="coding", heavy_mode=True,
         tools=("code", "files"),
-        measured={"tok_s": 44.9, "size_gib": 6.10, "vram_gib": 9.17, "spill_gib": 0.0},
+        measured={"tok_s": 76.2, "rubric": "6/6 coding rubric", "size_gib": 14.0,
+                  "gpu_use": "100% GPU across both cards", "cold_load_s": 32.1,
+                  "spill_gib": 0.0,
+                  "source": "measurement 2026-10-18: 76.2 tok/s median eval, 6/6 "
+                            "coding rubric, 14 GB, 100% GPU across both cards, cold "
+                            "load ~32.1 s, no CPU spill"},
         words=("code", "coding", "program", "android", "app", "debug", "bug",
                "kotlin", "python", "script", "compile", "repository", "git"),
         strong=("writing code", "fix a bug", "build an app", "app development",
