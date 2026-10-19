@@ -1592,6 +1592,7 @@ $PATCHES = @(
     'initiative-payload.patch'
 'hud-origin-module.patch'
 'hud-exclusive-bind.patch'
+'hud-request-gate.patch'
     'plugin-loader.patch'
 )
 

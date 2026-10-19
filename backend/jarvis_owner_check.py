@@ -393,6 +393,74 @@ def token_ok(handler, token, cookie, query) -> bool:
     return False
 
 
+#: The token-failure rate bucket (SECPRIV audit 2026-10-18, N3). The HUD calls
+#: it from `_token_ok` through hud-request-gate.patch: count only requests that
+#: actually PRESENTED a token and were refused, so ordinary unauthenticated
+#: status/pre-flight polls are not penalised. Over the limit (the 11th failure) the HUD's
+#: `_request_gate` turns the route's 401 into a 429 with Retry-After: 60.
+class TokenFailureLimiter:
+    """Pure, clock-injectable: MAX failures in WINDOW seconds blocks a peer.
+
+    `clock` defaults to `time.monotonic`; a test passes a fake clock. One
+    peer's history is pruned on every read/write, so memory is bounded by the
+    peers that are actually failing. A valid token resets that peer at once.
+    """
+
+    def __init__(self, max_failures: int = 10, window_s: float = 60.0,
+                 clock=None):
+        self.max_failures = max(1, int(max_failures))
+        self.window_s = max(1.0, float(window_s))
+        self._clock = clock or time.monotonic
+        self._failures = {}          # peer -> [monotonic seconds]
+        self._lock = threading.Lock()
+
+    def _recent(self, peer: str, now: float):
+        stamps = [t for t in self._failures.get(peer, ())
+                  if now - t < self.window_s]
+        if stamps:
+            self._failures[peer] = stamps
+        else:
+            self._failures.pop(peer, None)
+        return stamps
+
+    def blocked(self, peer: str) -> bool:
+        with self._lock:
+            return len(self._recent(peer, self._clock())) > self.max_failures
+
+    def failed(self, peer: str) -> int:
+        """Record one refused request that presented a token; returns the count
+        inside the window (so callers can log the transition)."""
+        with self._lock:
+            now = self._clock()
+            stamps = self._recent(peer, now)
+            stamps.append(now)
+            self._failures[peer] = stamps
+            return len(stamps)
+
+    def succeeded(self, peer: str) -> None:
+        with self._lock:
+            self._failures.pop(peer, None)
+
+
+#: The one bucket the HUD uses when it is installed.
+TOKEN_FAILURES = TokenFailureLimiter()
+
+
+def request_carries_token(handler) -> bool:
+    """Did this request PRESENT a token (any of the three ways)? Used to decide
+    whether a refusal counts against the peer's rate bucket. A request with no
+    token at all is a normal unauthenticated poll and is not counted."""
+    try:
+        if (handler.headers.get(_HUD_TOKEN_HEADER) or "").strip():
+            return True
+        if _HUD_TOKEN_COOKIE + "=" in (handler.headers.get("Cookie") or ""):
+            return True
+        path = getattr(handler, "path", "") or ""
+        return ("token=" in path) or ("?" in path and "token" in path)
+    except Exception:
+        return False
+
+
 # ---------------------------------------------------------------------------
 # The stamp
 # ---------------------------------------------------------------------------

@@ -807,7 +807,14 @@ def t_the_patch_and_the_lists():
                # rewrite my lines. Ordering is safe: they are the last two before the
                # loader and change nothing another patch's hunks anchor on.
              "hud-origin-module.patch",
-             "hud-exclusive-bind.patch"}
+             "hud-exclusive-bind.patch",
+               # hud-request-gate.patch (SECPRIV audit 2026-10-18 N3) is appended
+               # after hud-exclusive-bind.patch, immediately before plugin-loader.patch,
+               # and touches ONLY jarvis_hud.py at the server seam: header/request
+               # deadlines, 32 bounded request slots, and the token rate bucket. No gate
+               # list entry, no tier row, no _RISK row, no _TOOL_ACTIONS line, and no
+               # line this patch writes - ordering safe, it rewrites nothing.
+             "hud-request-gate.patch"}
     check("referee.patch is the last patch in apply-patches.ps1's list, bar the ones written after it",
           [n for n in order if n not in later][-1] == "referee.patch", order[-3:])
     gate, log = _stack.stand_in("jarvis_gate.py")

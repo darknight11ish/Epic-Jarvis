@@ -1,0 +1,172 @@
+diff --git a/jarvis_hud.py b/jarvis_hud.py
+index a6b1dde..3773f9a 100644
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -341,6 +341,63 @@ def _loopback_companion(bind, port, handler):
+     return companion
+ 
+ 
++_HUD_HEADER_TIMEOUT_SECONDS = 10.0
++_HUD_REQUEST_TIMEOUT_SECONDS = 600.0
++
++
++def _request_gate(base):
++    """Header deadline and request slots, at the server seam (SECPRIV N3).
++
++    `setup()` runs before the request line and headers are read, so the 10 s
++    deadline there is the slow-header defence. `parse_request()` then extends
++    the socket deadline to ten minutes, so SSE keepalives and slow model turns
++    are NOT cut; the socket deadline only matters again for a long-bodied
++    request. `_send` is the one place a 401 becomes the rate bucket's 429 -
++    routes are untouched. The class is built once, before the server starts.
++    """
++
++    class Gated(base):
++        def setup(self):
++            super().setup()
++            try:
++                self.connection.settimeout(_HUD_HEADER_TIMEOUT_SECONDS)
++            except OSError:
++                pass
++
++        def parse_request(self):
++            ok = super().parse_request()
++            if ok:
++                try:
++                    self.connection.settimeout(_HUD_REQUEST_TIMEOUT_SECONDS)
++                except OSError:
++                    pass
++            return ok
++
++        def _send(self, code, body, ctype="application/json; charset=utf-8",
++                  extra_headers=None):
++            try:
++                # sys.modules, not an import statement: test_devices pins the ORDER of
++                # the owner-check module-load in main(), and a second load
++                # before it would move that landmark. The module is loaded at boot before
++                # the server starts; if it is not, the bucket is simply off.
++                _oc = sys.modules.get("jarvis_owner_check")
++                peer = (self.client_address or ("",))[0]
++                if _oc is not None and code == 401 and _oc.TOKEN_FAILURES.blocked(peer):
++                    code = 429
++                    body = {"ok": False, "refused": True,
++                            "error": "too many bad tokens - wait a minute",
++                            "words": "Too many bad tokens were sent, so this "
++                                     "PC is refusing for a minute. Nothing was "
++                                     "read and nothing was changed."}
++                    extra_headers = list(extra_headers or []) + [
++                        ("Retry-After", "60")]
++            except Exception:
++                pass
++            return super()._send(code, body, ctype, extra_headers)
++
++    return Gated
++
++
+ HUD_TOKEN = _resolve_token()
+ 
+ # Passwords, keys and the pairing token are taken out of everything this
+@@ -1445,16 +1502,25 @@ def _bind_address() -> str:
+ 
+ 
+ def _token_ok(handler) -> bool:
+-    """Delegates to jarvis_owner_check.token_ok (hud-origin-module.patch).
+-
+-    The DECISION - no token means loopback only; otherwise header, cookie and
+-    one-time query token compared as bytes and never raising - is production
+-    code in the tracked module, where CI tests it on a clean checkout. What
+-    stays here is only what the running server owns: HUD_TOKEN, and this
+-    server's own cookie/query extractors.
++    """The token decision, behind the N3 failure-rate bucket.
++
++    `jarvis_owner_check.token_ok` is the pure decision. Before it runs, a peer
++    already over the bucket is refused without touching the token at all; a
++    valid token resets that peer. Only requests that PRESENTED a token are
++    counted, so ordinary unauthenticated status polls never fill the bucket.
++    The 429 itself is written by `_request_gate`'s `_send`, not here, so no
++    route changes.
+     """
+     import jarvis_owner_check as _oc
+-    return _oc.token_ok(handler, HUD_TOKEN, _cookie2, _query2)
++    peer = (handler.client_address or ("",))[0]
++    if _oc.TOKEN_FAILURES.blocked(peer):
++        return False
++    ok = _oc.token_ok(handler, HUD_TOKEN, _cookie2, _query2)
++    if ok:
++        _oc.TOKEN_FAILURES.succeeded(peer)
++    elif _oc.request_carries_token(handler):
++        _oc.TOKEN_FAILURES.failed(peer)
++    return ok
+ 
+ 
+ def _cookie2(handler) -> str:
+@@ -7092,15 +7158,27 @@ def main() -> None:
+         print(f"  picture-card NOT ON ({type(exc).__name__}) - the three ways of making pictures are off")
+         print("             until jarvis_picture_card.py is back: run apply-patches.ps1 again")
+     class _HudServer(ThreadingHTTPServer):
+-        """The listener's port is taken EXCLUSIVELY (SECPRIV audit N4).
++        """The listener: exclusive port, and at most 32 requests in flight.
+ 
+         http.server.HTTPServer defaults allow_reuse_address = 1; on Windows
+         SO_REUSEADDR lets a second process bind the same port and race/steal
+         connections. False makes the second bind fail, and SO_EXCLUSIVEADDRUSE
+-        closes the hijack window on Windows.
++        closes the hijack window on Windows (SECPRIV audit N4).
++
++        The slots are SECPRIV audit N3: ThreadingHTTPServer starts a thread per
++        request without a ceiling, so a flood could exhaust the process. A
++        request that cannot get a slot within two seconds is answered with a
++        minimal 503 + Retry-After BEFORE a thread is spawned for it, and the
++        slot is released however the handler ends.
+         """
+ 
+         allow_reuse_address = False
++        max_request_slots = 32
++
++        def __init__(self, *args, **kwargs):
++            super().__init__(*args, **kwargs)
++            self._request_slots = threading.BoundedSemaphore(
++                self.max_request_slots)
+ 
+         def server_bind(self):
+             if os.name == "nt":
+@@ -7108,6 +7186,39 @@ def main() -> None:
+                                        socket.SO_EXCLUSIVEADDRUSE, 1)
+             super().server_bind()
+ 
++        def process_request(self, request, client_address):
++            if not self._request_slots.acquire(timeout=2.0):
++                self._refuse_busy(request)
++                return
++            try:
++                super().process_request(request, client_address)
++            except BaseException:
++                self._request_slots.release()
++                raise
++
++        def process_request_thread(self, request, client_address):
++            try:
++                super().process_request_thread(request, client_address)
++            finally:
++                self._request_slots.release()
++
++        def _refuse_busy(self, request):
++            try:
++                request.sendall(
++                    b"HTTP/1.1 503 Service Unavailable\r\n"
++                    b"Retry-After: 2\r\n"
++                    b"Content-Type: text/plain; charset=utf-8\r\n"
++                    b"Content-Length: 4\r\n"
++                    b"Connection: close\r\n\r\nbusy")
++            except OSError:
++                pass
++            finally:
++                try:
++                    request.close()
++                except OSError:
++                    pass
++
++    Handler = _request_gate(Handler)
+     httpd = _HudServer((bind, HUD_PORT), Handler)
+     _install_shutdown(httpd)
+     try:
