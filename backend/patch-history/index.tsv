@@ -20,6 +20,7 @@ auto-learn.patch	auto-learn/b2eef2b.patch	b2eef2b712c15fc47e44845f89e1c8839b0e03
 auto-learn.patch	auto-learn/e446323.patch	e4463232225ea27bdc9cb9c325692efbdd0bd62c	2026-09-24T19:52:44Z	Backend: Jarvis learns automatically, from the owner's own words only (auto-learn.patch)
 big-coder.patch	big-coder/f13d795.patch	f13d795116434212bccbf09fe36402e0f5b750fd	2026-10-11T07:54:49-07:00	the 30B coder: both cards, with Jarvis paused
 big-model.patch	big-model/ee05ef0.patch	ee05ef0b3dcca894079a3ccda259a71560e2f8cc	2026-09-24T04:35:14Z	Big model: big-model.patch, the install lists, and parity
+bind-wildcard.patch	bind-wildcard/90b5682.patch	90b56829c140336a1591ce45c10675ace8cbc02b	2026-09-24T00:20:54Z	Bind address: ship the backend half as a new patch, not an edit
 bitemporal.patch	bitemporal/688640e.patch	688640efca47502ec38032394fa127eabb03101b	2026-09-15T03:28:09Z	bitemporal.patch: the second time axis, and a surface that shows it
 brain-reads.patch	brain-reads/59e753f.patch	59e753f5957b93d8050804473c93ad99612fab6c	2026-09-28T06:49:07Z	Backend: search what was said in old chats, and a fact's history
 briefing.patch	briefing/344c940.patch	344c94087a901ed8751c3ef580ead344fc9da9fb	2026-09-27T05:04:58Z	Open or adjust any setting by voice or chat

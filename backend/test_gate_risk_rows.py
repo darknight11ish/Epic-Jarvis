@@ -207,7 +207,17 @@ def t_the_patch_is_registered_last():
              # line, touches jarvis_gate.py not at all - no gate list entry, no
              # risk row, no _TOOL_ACTIONS line - so it cannot rewrite the two
              # stale rows this patch removes.
-             "initiative-payload.patch"}
+               "initiative-payload.patch",
+               # hud-origin-module.patch + hud-exclusive-bind.patch (SECPRIV audit
+               # 2026-10-18) are appended immediately before plugin-loader.patch and
+               # touch ONLY jarvis_hud.py: the two request-edge decisions delegate to
+               # the tracked jarvis_owner_check module, and the main listener takes the
+               # port exclusively. No gate list entry, no tier row, no _RISK row, no
+               # _TOOL_ACTIONS line, and no line this patch writes - so neither can
+               # rewrite my lines. Ordering is safe: they are the last two before the
+               # loader and change nothing another patch's hunks anchor on.
+             "hud-origin-module.patch",
+             "hud-exclusive-bind.patch"}
     check("it is LAST, like every new patch here, bar the ones written after it",
           [n for n in names if n not in later][-1] == "gate-risk-rows.patch",
           names[-3:] if names else names)

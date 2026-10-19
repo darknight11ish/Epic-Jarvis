@@ -1,0 +1,30 @@
+diff --git a/jarvis_hud.py b/jarvis_hud.py
+index 178fae3..7d025b1 100644
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -7075,7 +7075,24 @@ def main() -> None:
+     except Exception as exc:
+         print(f"  picture-card NOT ON ({type(exc).__name__}) - the three ways of making pictures are off")
+         print("             until jarvis_picture_card.py is back: run apply-patches.ps1 again")
+-    httpd = ThreadingHTTPServer((bind, HUD_PORT), Handler)
++    class _HudServer(ThreadingHTTPServer):
++        """The listener's port is taken EXCLUSIVELY (SECPRIV audit N4).
++
++        http.server.HTTPServer defaults allow_reuse_address = 1; on Windows
++        SO_REUSEADDR lets a second process bind the same port and race/steal
++        connections. False makes the second bind fail, and SO_EXCLUSIVEADDRUSE
++        closes the hijack window on Windows.
++        """
++
++        allow_reuse_address = False
++
++        def server_bind(self):
++            if os.name == "nt":
++                self.socket.setsockopt(socket.SOL_SOCKET,
++                                       socket.SO_EXCLUSIVEADDRUSE, 1)
++            super().server_bind()
++
++    httpd = _HudServer((bind, HUD_PORT), Handler)
+     _install_shutdown(httpd)
+     try:
+         httpd.serve_forever()

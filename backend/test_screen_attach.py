@@ -550,7 +550,17 @@ def t_hygiene():
              # /api/screen route this patch's wrapper takes over - so the request
              # body is still read once, and still by this wrapper. It touches
              # jarvis_gate.py not at all.
-             "initiative-payload.patch"}
+               "initiative-payload.patch",
+               # hud-origin-module.patch + hud-exclusive-bind.patch (SECPRIV audit
+               # 2026-10-18) are appended immediately before plugin-loader.patch and
+               # touch ONLY jarvis_hud.py: the two request-edge decisions delegate to
+               # the tracked jarvis_owner_check module, and the main listener takes the
+               # port exclusively. No gate list entry, no tier row, no _RISK row, no
+               # _TOOL_ACTIONS line, and no line this patch writes - so neither can
+               # rewrite my lines. Ordering is safe: they are the last two before the
+               # loader and change nothing another patch's hunks anchor on.
+             "hud-origin-module.patch",
+             "hud-exclusive-bind.patch"}
     check("the patch that wires it is in the script's list, and last",
           "'screen-attach.patch'" in ps1 and "screen-attach.patch" in stack_order
           and [n for n in stack_order if n not in later][-1] == "screen-attach.patch")

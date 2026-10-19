@@ -1590,6 +1590,8 @@ $PATCHES = @(
     # wires no startup call. backend/test_jobs.py rehearses it against
     # jarvis-backend/jarvis_hud.py: apply, reverse, byte for byte.
     'initiative-payload.patch'
+'hud-origin-module.patch'
+'hud-exclusive-bind.patch'
     'plugin-loader.patch'
 )
 

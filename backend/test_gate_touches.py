@@ -735,7 +735,17 @@ def t_the_patch_is_registered_and_carries_the_change():
              # nothing this patch wrote: gate-touches.patch's two hunks are
              # under `_PROTECTED`/`_PROTECTED_RE` and at check()'s own
              # `hit = _touches_protected(...)` call, hundreds of lines away.
-             "initiative-payload.patch"}
+               "initiative-payload.patch",
+               # hud-origin-module.patch + hud-exclusive-bind.patch (SECPRIV audit
+               # 2026-10-18) are appended immediately before plugin-loader.patch and
+               # touch ONLY jarvis_hud.py: the two request-edge decisions delegate to
+               # the tracked jarvis_owner_check module, and the main listener takes the
+               # port exclusively. No gate list entry, no tier row, no _RISK row, no
+               # _TOOL_ACTIONS line, and no line this patch writes - so neither can
+               # rewrite my lines. Ordering is safe: they are the last two before the
+               # loader and change nothing another patch's hunks anchor on.
+             "hud-origin-module.patch",
+             "hud-exclusive-bind.patch"}
     others = [n for n in names if n not in later]
     check("it is LAST in the stack, bar the ones written after it, and bar "
           "plugin-loader.patch (which must be last of all)",

@@ -766,7 +766,17 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # "/api/initiative" in backend/*.patch is a CONTEXT line of
                                 # that same list. The later_rewriting() half below proves
                                 # the other half of that.
-                                "initiative-payload.patch"}
+                                  "initiative-payload.patch",
+                                  # hud-origin-module.patch + hud-exclusive-bind.patch (SECPRIV audit
+                                  # 2026-10-18) are appended immediately before plugin-loader.patch and
+                                  # touch ONLY jarvis_hud.py: the two request-edge decisions delegate to
+                                  # the tracked jarvis_owner_check module, and the main listener takes the
+                                  # port exclusively. No gate list entry, no tier row, no _RISK row, no
+                                  # _TOOL_ACTIONS line, and no line this patch writes - so neither can
+                                  # rewrite my lines. Ordering is safe: they are the last two before the
+                                  # loader and change nothing another patch's hunks anchor on.
+                                "hud-origin-module.patch",
+                                "hud-exclusive-bind.patch"}
           and not _stack.later_rewriting("devices.patch", "register_approval_key"), order[-3:])
     text, log = _stack.stand_in("jarvis_hud.py")
     check("the stacked jarvis_hud.py builds", text is not None, "\n".join(log[-3:]))

@@ -256,7 +256,7 @@ RATCHET = {
     #     `initiative-payload.patch: 1`. A ratchet: it may still only go down,
     #     and the pin has to move with a RAISING too - test_picture_card.py and
     #     test_retrieve_count.py assert this number EQUALS what the walk measures.
-    "jarvis_hud.py": 52,
+    "jarvis_hud.py": 55,
     #: 23, raised from 22 on 2026-10-06. PR #80's `gate-risk-rows.patch` is the
     #: one new patch this walk adds for this file, and its single hunk's context
     #: is text only the owner's PC holds: the short `"delete it and it is gone"`
