@@ -155,6 +155,33 @@ object VoiceStrict {
         val sessionSeconds: Double = 900.0,
     )
 
+    /** One recording condition the PC asks for, in its own words (`training.training.conditions`). */
+    data class Condition(
+        val id: String = "",
+        val label: String = "",
+        val ask: String = "",
+        val legacy: String = "",
+    )
+
+    /** One free-speech prompt from the PC (`training.training.free_speech`). */
+    data class FreeSpeech(
+        val id: String = "",
+        val text: String = "",
+        val why: String = "",
+        val minSeconds: Int = 0,
+        val maxSeconds: Int = 0,
+    )
+
+    /** The owner-visible Live adaptation count (`training.adaptation`). Numbers only. */
+    data class Adaptation(
+        val available: Boolean = false,
+        val count: Int = 0,
+        val perConditionCap: Int = 0,
+        val totalCap: Int = 0,
+        val counts: Map<String, Int> = emptyMap(),
+        val words: String = "",
+    )
+
     /**
      * Everything the phone's voice screens read about the stricter check.
      * The defaults are an older PC's: none of the new modes, no settings.
@@ -230,6 +257,14 @@ object VoiceStrict {
         /** What each round asks for, from the PC ("1" -> "normal, close to the microphone"). */
         val roundAsks: Map<Int, String> = emptyMap(),
         val limits: Limits = Limits(),
+        /** The four condition rounds the PC asks for, in order (empty on an older PC). */
+        val conditions: List<Condition> = emptyList(),
+        /** Free-speech prompts from the PC; recorded after the read phrases in a round. */
+        val freeSpeech: List<FreeSpeech> = emptyList(),
+        /** The balanced read phrases, word for word (empty on an older PC). */
+        val readPhrases: List<String> = emptyList(),
+        /** Live additions: count, caps and the PC's own words. Numbers only. */
+        val adaptation: Adaptation = Adaptation(),
         /** `gate.note`: the PC's own words about the check. Shown as it is. */
         val note: String = "",
     ) {
@@ -353,8 +388,46 @@ object VoiceStrict {
         val models = gate.obj("models")
         val repeat = gate.obj("repeat")
         val training = gate.obj("training")
+        // `training.training` is the material block from jarvis_voice_training.plan().
+        val material = training?.obj("training")
         val last = training?.obj("last")
         val limits = training?.obj("limits")
+        val conditions = (material?.get("conditions") as? JsonArray).orEmpty().mapNotNull { row ->
+            val c = row as? JsonObject ?: return@mapNotNull null
+            Condition(c.str("id"), c.str("label"), c.str("ask"), c.str("legacy"))
+        }
+        val freeSpeech = (material?.get("free_speech") as? JsonArray).orEmpty().mapNotNull { row ->
+            val f = row as? JsonObject ?: return@mapNotNull null
+            val seconds = (f["seconds"] as? JsonArray).orEmpty().mapNotNull {
+                (it as? JsonPrimitive)?.takeIf { p -> !p.isString }?.intOrNull
+            }
+            FreeSpeech(
+                id = f.str("id"),
+                text = f.str("text"),
+                why = f.str("why"),
+                minSeconds = seconds.getOrNull(0) ?: 0,
+                maxSeconds = seconds.getOrNull(1) ?: 0,
+            )
+        }
+        val readPhrases = (material?.get("read_phrases") as? JsonArray).orEmpty().mapNotNull { row ->
+            val r = row as? JsonObject ?: return@mapNotNull null
+            r.str("text").takeIf { it.isNotEmpty() }
+        }
+        val adaptation = training?.obj("adaptation")?.let { a ->
+            val caps = a.obj("caps")
+            val counts = (a["counts"] as? JsonObject).orEmpty().mapNotNull { (k, v) ->
+                val n = (v as? JsonPrimitive)?.takeIf { !it.isString }?.intOrNull ?: return@mapNotNull null
+                k to n
+            }.toMap()
+            Adaptation(
+                available = a.flag("available"),
+                count = a.int("count"),
+                perConditionCap = caps?.int("per_condition") ?: 0,
+                totalCap = caps?.int("total") ?: 0,
+                counts = counts,
+                words = a.str("words"),
+            )
+        } ?: Adaptation()
         val asks = training?.obj("round_asks")?.entries?.mapNotNull { (k, v) ->
             val n = k.toIntOrNull() ?: return@mapNotNull null
             val words = (v as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim().orEmpty()
@@ -414,6 +487,10 @@ object VoiceStrict {
                 )
             },
             roundAsks = asks,
+            conditions = conditions,
+            freeSpeech = freeSpeech,
+            readPhrases = readPhrases,
+            adaptation = adaptation,
             limits = if (limits == null) {
                 Limits()
             } else {

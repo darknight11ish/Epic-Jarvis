@@ -103,6 +103,32 @@ class VoiceStrictTest {
     }
 
     @Test
+    fun `the merged training contract carries four conditions, phrases, free speech and adaptation`() {
+        val v = view("strong_untrained")
+        assertEquals(listOf("close", "table", "noise", "room"), v.conditions.map { it.id })
+        assertEquals(listOf("Close", "On a table, 2-3 m away", "With background noise", "Another room or time"),
+            v.conditions.map { it.label })
+        assertEquals("with the fan or the TV on, as it usually is", v.conditions[2].ask)
+        assertEquals(4, v.limits.rounds)
+        assertEquals(12, v.readPhrases.size)
+        assertEquals("The blue boat floats slowly over the cold deep water.", v.readPhrases.first())
+        assertEquals(3, v.freeSpeech.size)
+        assertTrue(v.freeSpeech.first().text.startsWith("Introduce yourself in your own words"))
+        assertEquals(10, v.freeSpeech.first().minSeconds)
+        assertEquals(30, v.freeSpeech.first().maxSeconds)
+        assertTrue(v.adaptation.available)
+        assertEquals(0, v.adaptation.count)
+        assertEquals(4, v.adaptation.perConditionCap)
+        assertEquals(12, v.adaptation.totalCap)
+        assertEquals("No Live additions yet.", v.adaptation.words)
+        // An older PC has no material block: empty, never invented.
+        val older = VoiceStrict.View()
+        assertTrue(older.conditions.isEmpty())
+        assertTrue(older.readPhrases.isEmpty())
+        assertTrue(older.freeSpeech.isEmpty())
+    }
+
+    @Test
     fun `a held round and a waiting setting card are read`() {
         val held = view("round_held").session!!
         assertEquals(12, held.clips)

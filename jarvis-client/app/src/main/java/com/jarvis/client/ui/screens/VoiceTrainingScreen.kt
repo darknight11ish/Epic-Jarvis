@@ -38,6 +38,7 @@ import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Primary
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Secondary
+import com.jarvis.client.ui.parts.liveStatus
 import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.voice.StrictVoice
 import com.jarvis.client.voice.VoiceRounds
@@ -50,11 +51,12 @@ import java.util.concurrent.atomic.AtomicBoolean
  * card. Then, optionally, "check it with someone else".
  *
  * HOW MANY SENTENCES depends on the PC's voice check ([VoiceRounds.plan]):
- * balanced keeps one round of twelve; very strict asks for three rounds of
- * the same twelve, in three conditions (close; on a table two to three metres away;
- * another room or time). Each round is sent as it is finished and HELD on
- * the PC, in memory, with no card; the last one raises ONE approval card for
- * all of them. An older PC gets today's single round.
+ * balanced keeps one round; very strict asks for one round per condition the
+ * PC names (four in the merged contract: close; on a table 2-3 m away; with
+ * background noise; another room/time), using the PC's balanced phrases. Each
+ * round is sent as it is finished and HELD on the PC, in memory, with no card;
+ * the last one raises ONE approval card for all of them. An older PC gets
+ * today's single round.
  *
  * Also here: "Train more" (one more round in a condition Jarvis struggles
  * with, ADDED to the voice), "Record them again" (the recordings the PC left
@@ -130,7 +132,7 @@ fun VoiceTrainingScreen(
     var cancelNote by remember { mutableStateOf<String?>(null) }
 
     val sentences: List<String> = plan?.rounds?.getOrNull(roundIndex)?.sentences
-        ?.map { VoiceTraining.SENTENCES[it] }.orEmpty()
+        ?.mapNotNull { plan?.phrases?.getOrNull(it) }.orEmpty()
     val total = sentences.size
 
     // "Check it with someone else": -1 not started, 0..2 that sentence,
@@ -746,9 +748,20 @@ private fun StartPlates(
     }
 
     Plate {
-        Text(VoiceRounds.intro(first), style = MaterialTheme.typography.bodyLarge, color = chrome.textHi)
+        Text(VoiceRounds.intro(first, strict), style = MaterialTheme.typography.bodyLarge, color = chrome.textHi)
         Gap(8)
         Text(VoiceRounds.introDetail(first), style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+        if (strict.adaptation.available) {
+            Gap(8)
+            Text(
+                "Live additions: " + strict.adaptation.words.ifBlank {
+                    "${strict.adaptation.count} of ${strict.adaptation.totalCap} used"
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textMid,
+                modifier = Modifier.liveStatus(),
+            )
+        }
         Gap(12)
         Primary(
             text = "Start",
