@@ -60,22 +60,22 @@ index f134133..41781f1 100644
                      else f"{JARVIS_URL}/v1/chat/completions")
  
          # A rate-limited lane should step down, not surface a 429 to the user.
-@@ -5184,7 +5226,7 @@ class Handler(BaseHTTPRequestHandler):
+@@ -4914,7 +4914,7 @@ def _auth_headers(extra: dict | None = None) -> dict:
                  try:
                      if hasattr(jarvis_agent, "choose_lane"):
                          _lane2 = jarvis_agent.choose_lane(
 -                            messages, lane, ollama_url=OLLAMA_URL, request=payload,
 +                            messages, lane, ollama_url=active_ollama_url(), request=payload,
-                             enabled_tools=set((cfg.get("tools") or {}).get("enabled") or []))
+                             enabled_tools=jarvis_agent.enabled_tools_for_turn(cfg))
                  except Exception:
                      _lane2 = None
-@@ -5203,7 +5245,7 @@ class Handler(BaseHTTPRequestHandler):
+@@ -4933,7 +4933,7 @@ def _auth_headers(extra: dict | None = None) -> dict:
                  try:
                      import jarvis_agent
                      _turn = jarvis_agent.run_local_turn(
 -                        messages, lane, ollama_url=OLLAMA_URL,
 +                        messages, lane, ollama_url=active_ollama_url(),
-                         enabled_tools=set((cfg.get("tools") or {}).get("enabled") or []),
+                         enabled_tools=jarvis_agent.enabled_tools_for_turn(cfg),
                          stream_out=lambda chunk: (self.wfile.write(chunk),
                                                     self.wfile.flush(),
 @@ -5429,7 +5471,7 @@ class Handler(BaseHTTPRequestHandler):
