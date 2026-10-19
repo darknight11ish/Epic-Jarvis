@@ -51,13 +51,12 @@ index f134133..41781f1 100644
  FACTS_FILE = CONFIG_DIR / "memory_facts.jsonl"
  DOCS_DB = CONFIG_DIR / "memory.db"
  KG_DB = CONFIG_DIR / "knowledge_graph.db"
-@@ -4773,7 +4815,7 @@ class Handler(BaseHTTPRequestHandler):
-             # papered over, so the day a cloud lane is actually configured
-             # this is the one place that needs a real answer, not a second
-             # thing to discover broken.
--            return (f"{OLLAMA_URL}/v1/chat/completions" if lane == local_model
-+            return (f"{active_ollama_url()}/v1/chat/completions" if lane == local_model
-                     else f"{JARVIS_URL}/v1/chat/completions")
+@@ -5169,6 +5211,6 @@ class Handler(BaseHTTPRequestHandler):
+             if _state.get("url"):
+                 body["model"] = _state["model"]
+                 return _state["url"]
+-            return f"{OLLAMA_URL}/v1/chat/completions"
++            return f"{active_ollama_url()}/v1/chat/completions"
  
          # A rate-limited lane should step down, not surface a 429 to the user.
 @@ -4914,7 +4914,7 @@ def _auth_headers(extra: dict | None = None) -> dict:

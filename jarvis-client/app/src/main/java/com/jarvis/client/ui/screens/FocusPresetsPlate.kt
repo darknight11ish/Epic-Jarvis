@@ -46,8 +46,7 @@ import kotlinx.coroutines.launch
  * Nothing auto-applies: each button posts the contract's one apply action,
  * which raises the existing approval card (tier "ask"); the list is re-read
  * afterwards. Every press is disabled while the link is stale (rule 4), and a
- * pending preset (General Uncensored until its model ref is confirmed) shows
- * the PC's "being prepared" words and no button.
+ * pending preset shows the PC's "being prepared" words and no button.
  */
 @Composable
 fun FocusPresetChip(link: LinkState, stale: Boolean) {
@@ -131,7 +130,7 @@ internal fun FocusPresetsSection(canAct: Boolean) {
     Text(
         "Presets choose the local model and card for the work you are about to do. " +
             "Using one raises a single approval card on your PC; nothing changes until you approve it. " +
-            "The Fast preset uses the 2080 SUPER, and Coding starts its second worker only on demand.",
+            "The Fast preset uses the 2080 SUPER.",
         style = MaterialTheme.typography.bodySmall,
         color = chrome.textMid,
     )

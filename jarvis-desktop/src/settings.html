@@ -786,6 +786,18 @@
           <h3 class="subhead">Train my voice on this PC</h3>
           <div class="vt-box" id="vt-train"></div>
 
+          <!-- Live additions to the voice print (jarvis_voice_training.py's
+               adaptation; the PC's own count and caps). The backend's
+               adapt-reset mode exists, but this desktop build has no command
+               for it, so the count is read-only here and says so. -->
+          <h3 class="subhead">Live additions to your voice</h3>
+          <p class="note">
+            A clean, high-confidence Jarvis Live check can add a short clip to
+            the print for the condition it was spoken in. The count, the caps
+            and the re-anchoring are your PC's own; nothing here is estimated.
+          </p>
+          <div class="vt-box" id="vt-adapt"></div>
+
           <div id="vt-settings" hidden>
             <h3 class="subhead">How strict</h3>
             <div class="choices" id="vt-strictness" role="group" aria-label="How strict the voice check is"></div>
@@ -863,6 +875,18 @@
           <ul class="sc-cards" id="vt-repeat"></ul>
           <p class="note" id="vt-repeat-note" hidden></p>
           <div class="vt-box" id="vt-test"></div>
+
+          <!-- Held-out measurement (docs/JARVIS-API.md section 5.1): the
+               per-condition FRR/FAR and EER the PC reports, in its own words,
+               with the insufficient-data answer when it has too few rows.
+               Nothing here changes a threshold. -->
+          <h3 class="subhead">Held-out measurement (FRR and FAR)</h3>
+          <p class="note">
+            Measured on clips kept out of training: how often your own voice
+            would be turned away (FRR) and how often other voices would get in
+            (FAR). A number appears only when the PC has enough of both.
+          </p>
+          <div class="vt-box" id="vt-held"></div>
 
           <!-- The "someone else" check (JARVIS-API.md section 16): another
                person's sentences, scored on the PC and thrown away; a

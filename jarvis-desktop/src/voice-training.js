@@ -1,28 +1,38 @@
 /**
  * Settings -> Voice, training on this PC: the words and the rules, with no
  * page in them, so every sentence is tested against the backend's real
- * answers (tests/voice-training.mjs reads tests/fixtures/
- * voice-training-cases.json, made by tools/gen_voice_training_cases.py).
+ * answers (tests/voice-training.mjs and tests/voice-training-plan.mjs read
+ * tests/fixtures/voice-training-cases.json, made by
+ * tools/gen_voice_training_cases.py).
  *
- * What it covers (docs/JARVIS-API.md section 16):
- * - "Train my voice" on this PC's microphone: one round of 12 sentences at
- *   balanced, the PC's own limit of rounds (four today) of the same 12 at very
- *   strict, sent round by round with ONE approval card at the end; "Train
- *   more" adds instead of replacing; recordings the PC left out are
- *   recorded again. A PC too old for rounds gets today's single round.
+ * What it covers (docs/JARVIS-API.md section 5.1):
+ * - "Train my voice" on this PC's microphone, from the PC's OWN plan
+ *   (`gate.training.training`, jarvis_voice_training.plan()): four listening
+ *   conditions, twelve balanced read phrases and three free-speech prompts.
+ *   This desktop build records the first three conditions (its Rust sender
+ *   accepts rounds 1-3) and shows the fourth as not wired rather than
+ *   pretending; ONE approval card at the end; "Train more" adds instead of
+ *   replacing; recordings the PC left out are recorded again. A PC without
+ *   the plan is not offered a training and says why.
+ * - Live additions to the print: the PC's count and caps, the drift guard
+ *   and re-anchoring, in the PC's own words. The backend's adapt-reset mode
+ *   exists, but this build has no desktop command for it, so the count is
+ *   read-only and says so.
+ * - Held-out measurement: FRR, FAR and the EER point per condition, in the
+ *   PC's own words, including "not enough measured rows" - never a number
+ *   the PC did not send, and never a threshold applied by the page.
  * - How strict the voice check is, and whether private answers may be read
  *   aloud: tightening at once, loosening only through a card.
  * - The guided test (20 sentences) and the "asked you to repeat" counts.
  * - Which voice-ID model very strict uses, and what to do when it is not
  *   the stronger one.
  *
- * The phone has the same screen (VoiceTraining.kt, VoiceTrainingScreen.kt);
- * where it has a sentence this uses it, with "tap" made "press" and "this
- * phone" made "this PC". The twelve sentences are the phone's, word for
- * word, so both microphones' prints are trained on the same words.
+ * The settings screens' strictness/private-answer words are still the
+ * phone's, word for word where it has them. The training material is now the
+ * PC's plan instead: the phone reads the same payload in its own next slice.
  *
- * Nothing here turns speech into text: the sentences are shown for the
- * owner to read, and nobody checks the words - only the voice.
+ * Nothing here turns speech into text: the phrases and prompts are shown for
+ * the owner to read and speak, and nobody checks the words - only the voice.
  *
  * Every field is read defensively: anything missing reads as the refusing
  * answer, never as a guess.
@@ -35,21 +45,70 @@ const yes = (v) => v === true;
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
 const count = (v) => (Number.isInteger(v) && v > 0 ? v : 0);
 
-/** The phone's twelve sentences (VoiceTraining.SENTENCES), word for word. */
-export const SENTENCES = Object.freeze([
-  "Hey Jarvis, what's on my calendar today?",
-  "The quick brown fox jumps over the lazy dog.",
-  "Please remind me to call my sister on Thursday.",
-  "Hey Jarvis, turn the lights down a little.",
-  "What is the weather going to be like this weekend?",
-  "Six thick thistle sticks stood by the gate.",
-  "Hey Jarvis, play some quiet music.",
-  "I'd like a cup of tea with milk, no sugar.",
-  "How long will it take to drive into town?",
-  "Hey Jarvis, set a timer for ten minutes.",
-  "My favourite colours are red, green and blue.",
-  "Good morning, it's nice to hear your voice again.",
+/**
+ * The four recording conditions, in the PC's training order
+ * (`backend/jarvis_voice_training.py` CONDITIONS): close; on a table
+ * two to three metres away; with the fan or the TV on; in another room or
+ * at a different time of day.
+ *
+ * The PC sends this plan in `gate.training.training`. This copy is the
+ * documented contract, used by the tests and by the page when it has to name
+ * a condition before the PC has answered; it is never recorded against on a
+ * PC that did not send the plan (`trainingPlan` says the plan is missing).
+ */
+export const CONDITIONS = Object.freeze([
+  { id: "close", label: "Close", ask: "normal, close to the microphone" },
+  { id: "table", label: "On a table, 2-3 m away", ask: "about two to three metres away, on a table" },
+  { id: "noise", label: "With background noise", ask: "with the fan or the TV on, as it usually is" },
+  { id: "room", label: "Another room or time", ask: "in another room, or at a different time of day" },
 ]);
+
+/**
+ * The PC plan's twelve balanced read phrases (`READ_PHRASES`): every English
+ * vowel, the consonant clusters that matter for a microphone, and short,
+ * medium and long sentences. The PC sends the real list; this is the
+ * documented copy, held equal by tests/voice-training-plan.mjs.
+ */
+export const READ_PHRASES = Object.freeze([
+  { id: "vowel-1", text: "The blue boat floats slowly over the cold deep water.", focus: ["vowels", "long"], words: 10 },
+  { id: "vowel-2", text: "Please speak clearly about the meeting on Thursday.", focus: ["vowels", "consonants"], words: 7 },
+  { id: "vowel-3", text: "My eyes see a bright fire by the white gate.", focus: ["vowels", "diphthongs"], words: 10 },
+  { id: "consonant-1", text: "She sells fresh fish from the shelf by the shore.", focus: ["consonants", "fricatives"], words: 10 },
+  { id: "consonant-2", text: "Six thick sticks stand beside the strong tree.", focus: ["consonants", "clusters"], words: 8 },
+  { id: "consonant-3", text: "Judge the quick brown fox before the jazz band.", focus: ["consonants", "clusters", "short"], words: 9 },
+  { id: "short-1", text: "Light the lamp.", focus: ["short", "consonants"], words: 3 },
+  { id: "medium-1", text: "Rain falls on the roof while the kettle sings.", focus: ["medium", "vowels"], words: 9 },
+  { id: "medium-2", text: "The train to town leaves at half past eight.", focus: ["medium", "diphthongs"], words: 9 },
+  { id: "long-1", text: "On the way home I stopped at the market and bought apples, bread and a small paper bag of rice.", focus: ["long", "varied"], words: 15 },
+  { id: "long-2", text: "Please remember to bring the green folder to my office before the morning meeting on Friday.", focus: ["long", "varied"], words: 13 },
+  { id: "natural-1", text: "It was a cold morning, and the car would not start.", focus: ["natural", "varied"], words: 9 },
+]);
+
+/** The PC plan's three free-speech prompts (`FREE_SPEECH`), with their window. */
+export const FREE_SPEECH = Object.freeze([
+  { id: "introduce", text: "Introduce yourself in your own words: who you are, what you do, and something you like.", seconds: [10, 30], why: "natural rhythm and everyday words" },
+  { id: "day", text: "Describe your day so far in your own words - what you did, what you saw, what you are planning next.", seconds: [10, 30], why: "connected speech, not one short sentence" },
+  { id: "passage", text: "Read this aloud, slowly: The morning train was late again, so I stood at the window and watched the rain move across the empty platform.", seconds: [8, 25], why: "a varied passage with long and short sounds" },
+]);
+
+/** The fixed wake words: the detector's own words, never training material. */
+export const WAKE_PHRASES = Object.freeze(["hey Jarvis"]);
+
+/** The twelve texts only, for a caller that does not need the focus labels. */
+export const SENTENCES = Object.freeze(READ_PHRASES.map((p) => p.text));
+
+/**
+ * How many condition rounds THIS desktop build can send to the PC.
+ *
+ * The PC understands all four (`state()["limits"]["rounds"]` is 4), but the
+ * desktop's Rust sender still accepts rounds 1-3
+ * (`src-tauri/src/voice_training.rs`, `send_voice_training`). So the page
+ * SHOWS the PC's four conditions and records the first three, and says
+ * plainly which one is not wired rather than pretending it recorded it.
+ * When the bridge accepts round 4, raise this constant: the fourth round is
+ * already modelled here (`trainingPlan`) and needs no other change.
+ */
+export const DESKTOP_ROUND_LIMIT = 3;
 
 /**
  * The guided test's twenty sentences: new ones, not the training's, so the
@@ -95,7 +154,7 @@ export function limits(status) {
     maxSeconds: num(lim.max_seconds) || 10.0,
     maxTotal: num(lim.max_total_seconds) || 80.0,
     minClips: count(lim.min_clips) || 3,
-    rounds: count(lim.rounds) || 3,
+    rounds: count(lim.rounds) || 4,
     measureMax: count(lim.measure_max_clips) || 20,
     sessionMinutes: Math.round((num(lim.session_seconds) || 900) / 60),
   };
@@ -109,6 +168,10 @@ export function understands(status) {
     rounds: yes(t.rounds),
     settings: yes(t.settings),
     measure: yes(t.measure),
+    // The redesigned plan itself: the phrases, free-speech prompts and four
+    // conditions in `gate.training.training`. An older PC sends none of it,
+    // and this page then says so instead of recording against a guess.
+    plan: Boolean(planOf(status)),
   };
 }
 
@@ -116,6 +179,49 @@ export function understands(status) {
 export function strictnessOf(status) {
   const s = String(obj(obj(status).gate).strictness || "");
   return s === "very_strict" || s === "balanced" ? s : "";
+}
+
+/**
+ * The redesigned plan the PC sent (`gate.training.training`, from
+ * jarvis_voice_training.plan()): conditions, read phrases, free-speech
+ * prompts and the caps. `null` from a PC older than the redesign - nothing
+ * here is guessed, because recording against the wrong material would train
+ * the owner's voice on words the PC does not expect.
+ */
+export function planOf(status) {
+  const raw = obj(obj(obj(status).gate).training).training;
+  if (!raw || typeof raw !== "object") return null;
+  const conditions = (Array.isArray(raw.conditions) ? raw.conditions : [])
+    .map((c) => ({
+      id: String(obj(c).id || "").trim(),
+      label: String(obj(c).label || "").trim(),
+      ask: String(obj(c).ask || "").trim(),
+    }))
+    .filter((c) => c.id);
+  const read = (Array.isArray(raw.read_phrases) ? raw.read_phrases : [])
+    .map((p) => ({
+      id: String(obj(p).id || "").trim(),
+      text: String(obj(p).text || "").trim(),
+      focus: Array.isArray(p && p.focus) ? [...p.focus] : [],
+    }))
+    .filter((p) => p.text);
+  const free = (Array.isArray(raw.free_speech) ? raw.free_speech : [])
+    .map((p) => ({
+      id: String(obj(p).id || "").trim(),
+      text: String(obj(p).text || "").trim(),
+      why: String(obj(p).why || "").trim(),
+      seconds: Array.isArray(p && p.seconds) ? [...p.seconds] : [],
+    }))
+    .filter((p) => p.text);
+  if (!conditions.length || !read.length) return null;
+  return {
+    conditions: conditions.slice(0, 4),
+    read,
+    free: free.slice(0, 3),
+    maxClips: count(raw.max_clips_per_round) || 12,
+    minClips: count(raw.min_clips) || limits(status).minClips,
+    words: String(raw.words || "").trim(),
+  };
 }
 
 /** The server's words for each round (`round_asks`), with its own words when missing. */
@@ -126,6 +232,9 @@ const ROUND_ASKS = {
   4: "in another room, or at a different time of day",
 };
 export function roundAsk(status, round) {
+  const plan = planOf(status);
+  const fromPlan = plan && plan.conditions[Number(round) - 1];
+  if (fromPlan && fromPlan.ask) return fromPlan.ask.trim();
   const asks = obj(obj(obj(obj(status).gate).training).round_asks);
   const said = asks[String(round)];
   return typeof said === "string" && said.trim() ? said.trim() : ROUND_ASKS[round] || "";
@@ -133,7 +242,7 @@ export function roundAsk(status, round) {
 
 /**
  * Why training cannot start on this PC now, in words, or null when it can.
- * Before anything is recorded, so the owner does not read 36 sentences to
+ * Before anything is recorded, so the owner does not read all the phrases to
  * be refused at the end.
  */
 export function trainingBlocker(status) {
@@ -143,6 +252,9 @@ export function trainingBlocker(status) {
   if (st.available === false) return "The voice part of Jarvis is not running on your PC.";
   if (!yes(training.available)) {
     return "This PC's Jarvis cannot train a voice yet. Update the backend by running apply-patches.ps1, then open this again.";
+  }
+  if (!planOf(status)) {
+    return "This PC has not sent the new four-condition training plan yet. Update the backend by running apply-patches.ps1, then open this again.";
   }
   const models = gate.models && typeof gate.models === "object" ? obj(gate.models) : null;
   const mode = String(gate.mode || "").trim().toLowerCase();
@@ -159,99 +271,234 @@ export function trainingBlocker(status) {
   return null;
 }
 
+/** The hint under a free-speech prompt: the PC's own 10-second clip limit. */
+function freeHint(status, prompt) {
+  const max = Math.round(limits(status).maxSeconds);
+  const window = Array.isArray(prompt.seconds) && prompt.seconds.length === 2
+    ? `The prompt suggests ${prompt.seconds[0]}-${prompt.seconds[1]} seconds. ` : "";
+  return `${window}Your PC keeps at most ${max} seconds in one recording, so say as much as fits.`;
+}
+
 /**
- * The plan for a training: which rounds, which sentences in each, and
- * whether it adds to the print or replaces it.
+ * The clips each condition round records, as `{kind, id, text, focus?,
+ * why?, seconds?, hint?}`. Rounds 1-3 carry four of the twelve phrases and
+ * one free-speech prompt each; the fourth condition repeats the opening
+ * phrases. That is every phrase and every prompt exactly once in the three
+ * rounds this build records - see DESKTOP_ROUND_LIMIT.
+ */
+function buildRoundItems(plan, status) {
+  const n = plan.conditions.length;
+  const read = plan.read.length ? plan.read : READ_PHRASES;
+  const free = plan.free.length ? plan.free : FREE_SPEECH;
+  const readRounds = Math.min(3, n);
+  const out = Array.from({ length: n }, () => []);
+  read.forEach((p, i) => {
+    const group = Math.min(readRounds - 1, Math.floor((i * readRounds) / read.length));
+    out[group].push({ kind: "read", id: p.id, text: p.text, focus: p.focus });
+  });
+  for (let i = 0; i < Math.min(3, n); i += 1) {
+    const p = free[i];
+    if (!p) continue;
+    out[i].push({
+      kind: "free", id: p.id, text: p.text, why: p.why, seconds: p.seconds,
+      hint: freeHint(status, p),
+    });
+  }
+  if (n > 3) {
+    // The fourth condition repeats the opening phrases: every phrase is
+    // already covered in the three rounds this build records, and another
+    // room still needs enough clips for a sub-print of its own.
+    const wants = Math.max(plan.minClips, Math.min(4, read.length));
+    out[3] = read.slice(0, wants).map((p) => ({ kind: "read", id: p.id, text: p.text, focus: p.focus }));
+  }
+  for (const items of out) {
+    const have = new Set(items.map((it) => it.id));
+    for (let k = 0; items.length < plan.minClips && k < read.length * 2; k += 1) {
+      const p = read[k % read.length];
+      if (have.has(p.id)) continue;
+      have.add(p.id);
+      items.push({ kind: "read", id: p.id, text: p.text, focus: p.focus });
+    }
+    if (items.length > plan.maxClips) items.length = plan.maxClips;
+  }
+  return out;
+}
+
+/**
+ * The plan for a training, from the PC's own payload (`planOf`):
  *
- * - An older PC (no `rounds`): one round of all twelve, sent the old way.
- * - Balanced: one round of twelve.
- * - Very strict: `limits.rounds` rounds (three) of the same twelve.
- * - `from`: rounds the PC already holds for this PC's microphone (carrying
- *   on after the window was closed) are left out.
+ * - four condition rounds, in the PC's order; the first three are `wired`
+ *   (this desktop build can send them), the fourth is `wired: false` and the
+ *   page says so - see DESKTOP_ROUND_LIMIT;
+ * - each round's `items` are the phrases and prompts to record, not indexes;
+ * - `held`: rounds the PC already holds for this PC's microphone (carrying on
+ *   after the window was closed) are left out, as before;
+ * - `missing: true` from a PC that has not sent the plan - the page offers no
+ *   training then, rather than recording words the PC did not ask for.
  */
 export function trainingPlan(status, { add = false, held = [] } = {}) {
-  const can = understands(status);
-  const all = SENTENCES.map((_, i) => i);
-  if (!can.rounds) {
-    return { add: false, legacy: true, again: false, total: 1, rounds: [{ round: 1, ask: "", items: all }] };
+  const plan = planOf(status);
+  const heldSet = new Set((Array.isArray(held) ? held : []).map(Number));
+  if (!plan) {
+    return {
+      add: Boolean(add), legacy: false, missing: true, again: false, total: 0,
+      wiredTotal: 0, rounds: [], conditions: [], readCount: 0, freeCount: 0,
+      perRound: [], minClips: limits(status).minClips,
+    };
   }
-  const n = strictnessOf(status) === "balanced" ? 1 : limits(status).rounds;
+  const total = plan.conditions.length;
+  const wiredTotal = Math.min(total, DESKTOP_ROUND_LIMIT);
+  const items = buildRoundItems(plan, status);
   const rounds = [];
-  for (let r = 1; r <= n; r += 1) {
-    if (held.includes(r)) continue;
-    rounds.push({ round: r, ask: roundAsk(status, r), items: all.slice() });
+  for (let i = 0; i < total; i += 1) {
+    const round = i + 1;
+    if (heldSet.has(round)) continue;
+    const c = plan.conditions[i];
+    rounds.push({
+      round,
+      condition: c.id,
+      label: c.label,
+      ask: c.ask || roundAsk(status, round),
+      items: items[i],
+      wired: round <= wiredTotal,
+    });
   }
-  return { add: Boolean(add), legacy: false, again: false, total: n, rounds };
+  return {
+    add: Boolean(add), legacy: false, missing: false, again: false, total,
+    wiredTotal, rounds, readCount: plan.read.length, freeCount: plan.free.length,
+    perRound: items.map((x) => x.length), minClips: plan.minClips,
+    conditions: plan.conditions.map((c, i) => ({
+      round: i + 1, id: c.id, label: c.label, ask: c.ask, wired: i + 1 <= wiredTotal,
+    })),
+  };
 }
 
 /**
  * The plan for recording again the clips the PC left out (`outliers`,
- * `[{round, clip}]`, clip counted from 1 within its round). A round needs
- * at least `limits.min_clips` recordings, so a round with fewer left out
- * is topped up with the sentences that follow. Always `add: true`: the
- * print that was made stays, and these join it.
+ * `[{round, clip}]`, clip counted from 1 within its round). A round needs at
+ * least the PC's `min_clips` recordings, so a round with fewer left out is
+ * topped up from that round's own material. Always `add: true`: the print
+ * that was made stays, and these join it. A left-out clip in the fourth
+ * condition is not offered while the bridge cannot send that round.
  */
 export function outlierPlan(status, outliers) {
-  const min = limits(status).minClips;
+  const full = trainingPlan(status, { add: true });
+  if (full.missing) return { ...full, again: true };
   const byRound = new Map();
   for (const o of Array.isArray(outliers) ? outliers : []) {
     const r = Number(o && o.round);
     const c = Number(o && o.clip);
-    if (!Number.isInteger(r) || r < 1 || r > 3 || !Number.isInteger(c) || c < 1 || c > SENTENCES.length) continue;
+    if (!Number.isInteger(r) || r < 1 || r > full.total) continue;
+    const src = full.rounds.find((x) => x.round === r);
+    if (!src || !src.wired || !Number.isInteger(c) || c < 1 || c > src.items.length) continue;
     if (!byRound.has(r)) byRound.set(r, new Set());
     byRound.get(r).add(c - 1);
   }
   const rounds = [...byRound.keys()].sort((a, b) => a - b).map((r) => {
-    const items = [...byRound.get(r)].sort((a, b) => a - b);
-    for (let i = 0; items.length < min && i < SENTENCES.length * 2; i += 1) {
-      const next = (items[items.length - 1] + 1 + i) % SENTENCES.length;
-      if (!items.includes(next)) items.push(next);
+    const src = full.rounds.find((x) => x.round === r);
+    const used = new Set(byRound.get(r));
+    const items = [...used].sort((a, b) => a - b).map((i) => ({ ...src.items[i], clip: i }));
+    let next = items.length ? (Math.max(...items.map((x) => x.clip)) + 1) % src.items.length : 0;
+    for (let k = 0; items.length < full.minClips && k < src.items.length * 2; k += 1) {
+      if (!used.has(next)) {
+        used.add(next);
+        items.push({ ...src.items[next], clip: next });
+      }
+      next = (next + 1) % src.items.length;
     }
-    return { round: r, ask: roundAsk(status, r), items };
+    items.sort((a, b) => a.clip - b.clip);
+    return { round: r, condition: src.condition, label: src.label, ask: src.ask, items, wired: src.wired };
   });
-  return { add: true, legacy: false, again: true, total: 0, rounds };
+  return { ...full, add: true, again: true, rounds };
 }
 
-/** How long a plan takes, in words, for its first screen. */
+/** How many rounds and recordings, in words, for the first screen. */
 export function planLine(plan) {
   const p = obj(plan);
-  const rounds = Array.isArray(p.rounds) ? p.rounds : [];
-  const sentences = rounds.reduce((n, r) => n + (Array.isArray(r.items) ? r.items.length : 0), 0);
-  if (rounds.length <= 1) {
-    return `${sentences} sentences, in one go. It takes about two minutes.`;
-  }
-  return `${rounds.length} rounds, ${sentences} sentences in all. Each round takes about two minutes.`;
+  if (p.missing) return "The new training plan is not on this PC yet.";
+  const rounds = (Array.isArray(p.rounds) ? p.rounds : []).filter((r) => r.wired !== false);
+  const n = rounds.reduce((sum, r) => sum + (Array.isArray(r.items) ? r.items.length : 0), 0);
+  if (!rounds.length) return "Nothing is left to record in the plan on this PC.";
+  const extra = p.wiredTotal < p.total
+    ? ` The plan has ${p.total} conditions; this desktop build records ${p.wiredTotal}.` : "";
+  return `${rounds.length === 1 ? "1 round" : `${rounds.length} rounds`} on this PC, ${n} recordings in all.${extra} Each round takes about a minute.`;
 }
 
-/** The first screen, in the phone's words where it has them. */
+/** The four conditions in one sentence, for the screen before recording. */
+export function conditionsLine(plan) {
+  const rows = conditionRows(plan);
+  if (!rows.length) return "";
+  return `The conditions: ${rows.map((r) => r.label).join("; ")}.`;
+}
+
+/** `[{round, label, ask, wired}]` for every condition in the PC's plan. */
+export function conditionRows(plan) {
+  const p = obj(plan);
+  const list = Array.isArray(p.conditions) ? p.conditions : [];
+  return list.map((c, i) => ({
+    round: Number(c.round) || i + 1,
+    label: String(c.label || ""),
+    ask: String(c.ask || ""),
+    wired: c.wired !== false,
+  }));
+}
+
+/**
+ * The honest lines about the fourth condition: shown in the intro and on the
+ * page before recording. Empty when every condition is wired.
+ */
+export function planLimitLines(plan) {
+  const p = obj(plan);
+  if (p.missing || !p.total || p.wiredTotal >= p.total) return [];
+  const rows = conditionRows(p);
+  const wired = rows.filter((r) => r.wired).map((r) => r.label);
+  const unwired = rows.filter((r) => !r.wired).map((r) => r.label);
+  const which = unwired.length === 1
+    ? `The fourth - ${unwired[0]} -`
+    : `The other ${unwired.length} - ${unwired.join("; ")} -`;
+  return [
+    `This desktop build records the first ${p.wiredTotal} of the ${p.total} conditions: ${wired.join("; ")}.`,
+    `${which} is in the plan your PC sent, but this app's recording bridge cannot send it yet. Training ends after round ${p.wiredTotal}, so this PC will not have a sub-print for it.`,
+  ];
+}
+
+/** The first screen. */
 export function introLines(plan, status) {
   const p = obj(plan);
-  const rounds = Array.isArray(p.rounds) ? p.rounds : [];
   const lines = [];
+  if (p.missing) {
+    lines.push("This PC has not sent the new four-condition training plan yet. Update the backend by running apply-patches.ps1, then open this again.");
+    return lines;
+  }
+  const first = (Array.isArray(p.rounds) ? p.rounds : [])[0];
+  const readPer = first ? first.items.filter((it) => it.kind !== "free").length : 0;
   if (p.again) {
-    lines.push("Record again the sentences your PC left out, so it knows your voice in those conditions too. They are added to what it already knows; nothing it had is deleted.");
+    lines.push("Record again the recordings your PC left out, so it knows your voice in those conditions too. They are added to what it already knows; nothing it had is deleted.");
   } else if (p.add) {
     lines.push("Train more: these recordings are added to what Jarvis already knows about your voice on this PC. Nothing it had is deleted.");
-  } else if (rounds.length > 1) {
-    const minutes = limits(status).sessionMinutes;
-    lines.push(`Jarvis only listens to your voice. Because the voice check is very strict, read the same 12 short sentences ${rounds.length} times, in different conditions, so it knows your voice close up, on a table two to three metres away, with background noise, and in another room or at a different time of day. Your PC keeps each round in memory for ${minutes} minutes after the last one, and asks you to approve them all on one card at the end.`);
   } else {
-    lines.push("Jarvis only listens to your voice. Read these 12 short sentences into this PC's microphone so it learns what you sound like, and how you say \"hey Jarvis\". It takes about two minutes.");
+    lines.push(`Jarvis only listens to your voice. This training records ${p.readCount} short phrases - chosen to cover the vowels, the hard consonant clusters, and short, medium and long sentences - and ${p.freeCount} prompts in your own words, across ${p.total} listening conditions.`);
+    if (readPer) {
+      const free = p.freeCount ? `, and the first ${Math.min(3, p.total)} also ask one prompt in your own words` : "";
+      lines.push(`Each round records ${readPer} of the phrases${free}. The fourth condition repeats ${readPer} phrases for its own sub-print.`);
+    }
   }
+  lines.push(...planLimitLines(p));
   lines.push("Speak normally, at the distance you usually sit from the microphone. Jarvis then asks you to approve the change on an approval card - nothing changes until you do. The recordings are kept in memory only, never saved to a file, and deleted once the card is answered.");
   return lines;
 }
 
 /**
- * The line over a round's sentences: "Round 2 of 4: on a table two to three
- * microphone, or quieter." The PC's own round numbers, because the ones it
- * leaves out are named by them. "" for an older PC's single round.
+ * The line over a round's clips: "Round 2 of 4: about two to three metres
+ * away, on a table." The PC's own round numbers, because the ones it leaves
+ * out are named by them. "" for an older PC's single round.
  */
 export function roundLine(plan, index) {
   const p = obj(plan);
   const r = obj((p.rounds || [])[index]);
-  if (p.legacy || !r.round) return "";
+  if (p.legacy || p.missing || !r.round) return "";
   const ask = r.ask ? `: ${r.ask}.` : ".";
+  if (r.wired === false) return `Round ${r.round} of ${p.total}${ask} This desktop build cannot record this one yet.`;
   if (p.again) return `Round ${r.round} again${ask}`;
   if (p.total > 1) return `Round ${r.round} of ${p.total}${ask}`;
   return r.ask ? `How to record: ${r.ask}.` : "";
@@ -265,16 +512,19 @@ export function lengthLabel(seconds) {
 /**
  * Why this recording must be made again, or null when it is fine. The
  * phone's `clipProblem`, and one more the desktop can see before sending:
- * a microphone that heard nothing (the PC refuses a silent clip).
+ * a microphone that heard nothing (the PC refuses a silent clip). `kind:
+ * "free"` is a free-speech prompt, not a sentence to read aloud.
  */
-export function clipProblem(taken, status) {
+export function clipProblem(taken, status, kind = "read") {
   const t = obj(taken);
   const lim = limits(status);
   if (num(t.peak) < 0.01) {
     return "That was silent. Check the microphone is plugged in and switched on, then record it again.";
   }
   if (num(t.seconds) < lim.minSeconds) {
-    return "That was too short. Press Record, read the whole sentence, then press Stop.";
+    return kind === "free"
+      ? "That was too short. Press Record, speak for a few seconds in your own words, then press Stop."
+      : "That was too short. Press Record, read the whole sentence, then press Stop.";
   }
   if (num(t.seconds) > lim.maxSeconds) {
     return `That was too long. Keep it under ${Math.round(lim.maxSeconds)} seconds.`;
@@ -289,7 +539,7 @@ export function clipProblem(taken, status) {
 export function sendBlocker({ recorded, total, linkBlocker, totalSeconds, status }) {
   const lim = limits(status);
   if (linkBlocker) return linkBlocker;
-  if (recorded < total) return `Record all ${total} sentences first (${recorded} done).`;
+  if (recorded < total) return `Record all ${total} recordings first (${recorded} done).`;
   if (totalSeconds > lim.maxTotal) {
     return `The recordings are ${Math.floor(totalSeconds)} seconds in all; the most is ${Math.round(lim.maxTotal)}. Redo the longest ones a little quicker.`;
   }
@@ -332,7 +582,7 @@ export function roundReply(answer, approveWhere) {
   return { text: "Your PC did not say whether it got the recordings.", tone: "bad", held: false, finished: false };
 }
 
-/** "round 2, sentence 5" lists, joined in plain words. */
+/** "round 2, recording 5" lists, joined in plain words. */
 function listWords(items) {
   if (items.length <= 1) return items.join("");
   return `${items.slice(0, -1).join("; ")} and ${items[items.length - 1]}`;
@@ -352,7 +602,7 @@ export function outlierLine(last) {
     return "Most of those recordings did not sound like the same voice, so nothing was saved. Record them again somewhere quieter, sitting the same way each time.";
   }
   if (l.outcome !== "enrolled") return null;
-  const where = listWords(list.map((o) => `round ${o.round}, sentence ${o.clip}`));
+  const where = listWords(list.map((o) => `round ${o.round}, recording ${o.clip}`));
   const n = list.length === 1 ? "1 recording" : `${list.length} recordings`;
   return `Jarvis left out ${n} because ${list.length === 1 ? "it" : "they"} did not sound like the rest: ${where}. Record ${list.length === 1 ? "it" : "them"} again so it knows your voice in those conditions too.`;
 }
@@ -376,6 +626,154 @@ export function heldSession(status) {
     clips,
     line: `Your PC is keeping ${which} of a training from this PC (${clips === 1 ? "1 recording" : `${clips} recordings`}), in memory only, for about ${minutes} more minute${minutes === 1 ? "" : "s"}.`,
   };
+}
+
+/* ── Live additions: caps, the drift guard, re-anchoring ─────────────── */
+
+/** "21 September 2026", or "" when the PC has no time to give. */
+export function dateWords(seconds) {
+  const n = num(seconds);
+  if (!n) return "";
+  const when = new Date(n * 1000);
+  if (Number.isNaN(when.getTime())) return "";
+  return when.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+}
+
+/** Shown when the PC has not sent `gate.training.adaptation` at all. */
+export const ADAPT_MISSING =
+  "This PC has not sent its Live additions yet. Update the backend by running apply-patches.ps1, then open this again.";
+
+/** The drift guard, in the PC's contract's own words. */
+export const DRIFT_NOTE =
+  "A clip that sounds too different from your enrolled voice is refused before it is counted, so one noisy day cannot become the print.";
+
+/** Which Live checks may add a clip. */
+export const LIVE_RULES_NOTE =
+  "Only a clean, high-confidence Live check can add one: never side talk, a refusal, a crisis turn, a short clip, or a score only just over the bar.";
+
+/**
+ * The backend route exists (`POST /api/voice/enroll {"mode":
+ * "adapt-reset"}`), but this desktop build has no command for it. The page
+ * shows the count and says that rather than offering a button that cannot
+ * work. Raise this when a Rust command is added.
+ */
+export const ADAPT_RESET_WIRED = false;
+export const ADAPT_RESET_NOTE =
+  "Resetting the count from this app is not wired yet; it needs a desktop update. The count above is your PC's own.";
+
+/**
+ * The PC's Live additions (`gate.training.adaptation`) as counts and caps, or
+ * null from a PC that does not report them. Every number is the PC's; nothing
+ * is estimated, and a missing count reads as zero.
+ */
+export function adaptationView(status) {
+  const raw = obj(obj(obj(status).gate).training).adaptation;
+  if (!raw || typeof raw !== "object" || raw.available === false) return null;
+  const caps = obj(raw.caps);
+  const perCondition = count(caps.per_condition) || 4;
+  const totalCap = count(caps.total) || 12;
+  const counts = obj(raw.counts);
+  const rows = CONDITIONS.map((c) => ({
+    id: c.id,
+    label: c.label,
+    count: count(counts[c.id]),
+    cap: perCondition,
+  }));
+  const total = count(raw.count) || rows.reduce((sum, r) => sum + r.count, 0);
+  return {
+    available: true,
+    words: sentence(raw.words) || (total ? `${total} Live additions.` : "No Live additions yet."),
+    count: total,
+    caps: { perCondition, total: totalCap },
+    rows,
+    reanchors: count(raw.reanchors),
+    lastReanchor: num(raw.last_reanchor),
+    resets: count(raw.resets),
+    resetAt: num(raw.reset_at),
+    lastAt: num(raw.last_at),
+  };
+}
+
+/**
+ * The Live-additions block, in the PC's own words first and then the rules
+ * that produced them. Empty from a PC that does not report the block; the
+ * page then shows ADAPT_MISSING.
+ */
+export function adaptationLines(status) {
+  const v = adaptationView(status);
+  if (!v) return [];
+  const lines = [v.words];
+  for (const r of v.rows) lines.push(`${r.label}: ${r.count} of ${r.cap} Live additions.`);
+  lines.push(`The cap is ${v.caps.perCondition} for each condition and ${v.caps.total} in all.`);
+  if (v.reanchors) {
+    const last = dateWords(v.lastReanchor);
+    lines.push(`Re-anchored to your original enrollment ${v.reanchors} time${v.reanchors === 1 ? "" : "s"}${last ? `, the last on ${last}` : ""}.`);
+  } else {
+    lines.push("Not re-anchored yet. The PC goes back to your original enrollment every so often, so a run of Live clips cannot drift away from it.");
+  }
+  lines.push(DRIFT_NOTE);
+  lines.push(LIVE_RULES_NOTE);
+  if (v.resets) {
+    const last = dateWords(v.resetAt);
+    lines.push(`The count has been reset ${v.resets} time${v.resets === 1 ? "" : "s"}${last ? `, the last on ${last}` : ""}.`);
+  }
+  return lines;
+}
+
+/* ── Held-out measurement: FRR, FAR and the EER point ────────────────── */
+
+/** What FRR and FAR mean, before a single number. */
+export const HELD_OUT_INTRO =
+  "FRR is how often your own voice would be turned away. FAR is how often someone else's voice would get in. EER is the point where those two are equally likely. Your PC gives a number for a condition only with at least 10 of your clips and 10 other-voice clips; otherwise it says what is missing, and no threshold is chosen.";
+
+/** Shown before any guided test has run. */
+export const HELD_OUT_NONE =
+  "No guided test has run yet. Run the test above; your PC will say whether it has enough held-out scores for a number, and if not, exactly what is missing.";
+
+/** "4 in 100" - a fraction as the plain count an owner can read. */
+export function in100(value) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? `${Math.round(value * 100)} in 100` : "no number";
+}
+
+/**
+ * The held-out report in the PC's own words: the full `mode=measure`
+ * answer's `held_out`, or the reduced `measure_last.held_out` the status
+ * keeps. `null` when there is no report to read at all. `thresholds_applied`
+ * is never true (the contract says a default changes only through the
+ * owner's measured card), and it is repeated here when the answer carries it.
+ */
+export function heldOutLines(source) {
+  const r = obj(source);
+  const held = r.held_out && typeof r.held_out === "object"
+    ? obj(r.held_out)
+    : ("conditions" in r ? r : null);
+  if (!held) return null;
+  const conditions = obj(held.conditions);
+  const lines = [];
+  const words = String(held.words || "").trim();
+  // The full answer's `words` is the PC's own sentence; the reduced
+  // measure_last keeps no wording, so say what its shape means instead.
+  lines.push(words ? sentence(words)
+    : (held.available === false
+      ? "Not enough held-out scores yet; no threshold was chosen."
+      : "The held-out numbers are below."));
+  for (const [id, raw] of Object.entries(conditions)) {
+    const row = obj(raw);
+    const label = (CONDITIONS.find((c) => c.id === id) || {}).label || id;
+    if (row.available === true) {
+      let line = `${label}: your own voice would be refused ${in100(row.frr)} (FRR); other voices would get in ${in100(row.far)} (FAR)`;
+      if (typeof row.eer === "number") line += `; the two are equally likely at ${in100(row.eer)} (EER)`;
+      lines.push(`${line}.`);
+    } else {
+      const why = String(row.why || "").trim();
+      lines.push(`${label}: ${why ? sentence(why) : "not enough measured rows yet, so no number."}`);
+    }
+  }
+  if (r.thresholds_applied === false) {
+    lines.push("No threshold was changed. A measured bar only changes with your approval.");
+  }
+  return lines;
 }
 
 /* ── How strict, and private answers ──────────────────────────────────── */
@@ -992,12 +1390,15 @@ export function thresholdReply(answer, approveWhere) {
 export const TEST_INTRO =
   "Read 20 sentences. Jarvis checks each one the way it checks a spoken command, at both settings, and tells you how many would have got through. Nothing is saved, no card is raised, and it does not count towards the numbers above.";
 
-/** What the PC answered to the guided test, in words: `{lines, tone}`. */
+/** What the PC answered to the guided test, in words: `{lines, heldOut, tone}`. */
 export function measureReply(answer) {
   const a = obj(answer);
-  if (a.error) return { lines: [sentence(a.error)], tone: "bad" };
+  if (a.error) return { lines: [sentence(a.error)], heldOut: [], tone: "bad" };
   const lines = a.ok === true ? measureLines(a) : null;
-  return lines ? { lines, tone: "ok" } : { lines: ["Your PC did not say how the test went."], tone: "bad" };
+  const heldOut = a.ok === true ? (heldOutLines(a) || []) : [];
+  return lines
+    ? { lines, heldOut, tone: "ok" }
+    : { lines: ["Your PC did not say how the test went."], heldOut: [], tone: "bad" };
 }
 
 /* ── Which voice-ID model very strict uses ───────────────────────────── */
