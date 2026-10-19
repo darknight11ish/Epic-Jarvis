@@ -95,7 +95,7 @@ class VoiceStrictTest {
         assertTrue(v.voiceIsEnoughAllowed)
         assertEquals(2.0, v.minCommandSeconds, 0.0)
         assertEquals("strong", v.veryStrictModel)
-        assertEquals("further away from the microphone, or quieter", v.roundAsks[2])
+        assertEquals("about two to three metres away, on a table", v.roundAsks[2])
         assertEquals(12, v.limits.maxClips)
         assertEquals(20, v.limits.measureMaxClips)
         assertEquals(80.0, v.limits.maxTotalSeconds, 0.0)

@@ -6,7 +6,7 @@
  *
  * What it covers (docs/JARVIS-API.md section 16):
  * - "Train my voice" on this PC's microphone: one round of 12 sentences at
- *   balanced, three rounds of the same 12 in different conditions at very
+ *   balanced, the PC's own limit of rounds (four today) of the same 12 at very
  *   strict, sent round by round with ONE approval card at the end; "Train
  *   more" adds instead of replacing; recordings the PC left out are
  *   recorded again. A PC too old for rounds gets today's single round.
@@ -121,8 +121,9 @@ export function strictnessOf(status) {
 /** The server's words for each round (`round_asks`), with its own words when missing. */
 const ROUND_ASKS = {
   1: "normal, close to the microphone",
-  2: "further away from the microphone, or quieter",
-  3: "at another time of day, or in another room",
+  2: "about two to three metres away, on a table",
+  3: "with the fan or the TV on, as it usually is",
+  4: "in another room, or at a different time of day",
 };
 export function roundAsk(status, round) {
   const asks = obj(obj(obj(obj(status).gate).training).round_asks);
@@ -233,7 +234,7 @@ export function introLines(plan, status) {
     lines.push("Train more: these recordings are added to what Jarvis already knows about your voice on this PC. Nothing it had is deleted.");
   } else if (rounds.length > 1) {
     const minutes = limits(status).sessionMinutes;
-    lines.push(`Jarvis only listens to your voice. Because the voice check is very strict, read the same 12 short sentences ${rounds.length} times, in different conditions, so it knows your voice close up, further away, and at another time or in another room. Your PC keeps each round in memory for ${minutes} minutes after the last one, and asks you to approve them all on one card at the end.`);
+    lines.push(`Jarvis only listens to your voice. Because the voice check is very strict, read the same 12 short sentences ${rounds.length} times, in different conditions, so it knows your voice close up, on a table two to three metres away, with background noise, and in another room or at a different time of day. Your PC keeps each round in memory for ${minutes} minutes after the last one, and asks you to approve them all on one card at the end.`);
   } else {
     lines.push("Jarvis only listens to your voice. Read these 12 short sentences into this PC's microphone so it learns what you sound like, and how you say \"hey Jarvis\". It takes about two minutes.");
   }
@@ -242,7 +243,7 @@ export function introLines(plan, status) {
 }
 
 /**
- * The line over a round's sentences: "Round 2 of 3: further away from the
+ * The line over a round's sentences: "Round 2 of 4: on a table two to three
  * microphone, or quieter." The PC's own round numbers, because the ones it
  * leaves out are named by them. "" for an older PC's single round.
  */

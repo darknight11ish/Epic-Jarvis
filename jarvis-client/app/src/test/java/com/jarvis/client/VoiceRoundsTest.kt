@@ -98,7 +98,7 @@ class VoiceRoundsTest {
         assertEquals(2, b["round"]!!.jsonPrimitive.int)
         assertEquals(true, b["add"]!!.jsonPrimitive.boolean)
         assertEquals(true, b["finish"]!!.jsonPrimitive.boolean)
-        assertEquals("More recordings: further away from the microphone, or quieter",
+        assertEquals("More recordings: about two to three metres away, on a table",
             VoiceRounds.roundTitle(p, 0, view("trained_three_rounds")))
     }
 
@@ -121,8 +121,8 @@ class VoiceRoundsTest {
         assertEquals(12, a.held!!.clips)
         val p = VoiceRounds.plan(view("strong_untrained"))
         assertEquals(
-            "Round 1 is kept on your PC, in memory only. Next: round 2, further away from the " +
-                "microphone, or quieter. Nothing changes until you finish and approve the card.",
+            "Round 1 is kept on your PC, in memory only. Next: round 2, about two to three " +
+                "metres away, on a table. Nothing changes until you finish and approve the card.",
             VoiceRounds.heldLine(a, p, 0),
         )
     }
@@ -284,7 +284,7 @@ class VoiceRoundsTest {
         val p = VoiceRounds.plan(view("strong_untrained"))
         assertTrue(VoiceRounds.intro(p).contains("three times"))
         assertTrue(VoiceRounds.introDetail(p).contains("ONE approval card"))
-        assertEquals("Round 2 of 3: further away from the microphone, or quieter",
+        assertEquals("Round 2 of 3: about two to three metres away, on a table",
             VoiceRounds.roundTitle(p, 1, view("strong_untrained")))
     }
 }

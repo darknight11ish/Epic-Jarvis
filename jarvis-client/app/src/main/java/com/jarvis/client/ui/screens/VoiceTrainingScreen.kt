@@ -51,8 +51,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * HOW MANY SENTENCES depends on the PC's voice check ([VoiceRounds.plan]):
  * balanced keeps one round of twelve; very strict asks for three rounds of
- * the same twelve, in three conditions (close; further away or quieter;
- * another time or room). Each round is sent as it is finished and HELD on
+ * the same twelve, in three conditions (close; on a table two to three metres away;
+ * another room or time). Each round is sent as it is finished and HELD on
  * the PC, in memory, with no card; the last one raises ONE approval card for
  * all of them. An older PC gets today's single round.
  *

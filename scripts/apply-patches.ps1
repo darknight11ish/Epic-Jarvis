@@ -1633,6 +1633,12 @@ $SHIPPED = @(
     'jarvis_owned_tables.py'     # documents-owned.patch
     'jarvis_agent.py'            # tool-calling-wiring.patch; updated for skill-suggest
     'jarvis_voice_enroll.py'     # voice-enroll.patch ("Train my voice")
+# --- 2026-10-18: the voice-training redesign's one backend module:
+# diverse phrases + free speech prompts, four condition rounds,
+# live-adaptation rules/caps/re-anchor, per-condition measured
+# thresholds and the held-out EER/FRR report. Local numbers only;
+# the training screens read state()['training'].
+'jarvis_voice_training.py'
     'jarvis_speech.py'           # voice-503.patch; sends the status shape the phone reads
     # --- task controls, notes, power (2026-09-23) ---
     'jarvis_task_control.py'     # task-control.patch

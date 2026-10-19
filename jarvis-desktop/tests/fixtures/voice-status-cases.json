@@ -343,6 +343,21 @@
         "talk_to_type": "off",
         "threshold": 0.35,
         "training": {
+          "adaptation": {
+            "available": true,
+            "caps": {
+              "per_condition": 4,
+              "total": 12
+            },
+            "count": 0,
+            "counts": {},
+            "last_at": 0.0,
+            "last_reanchor": 0.0,
+            "reanchors": 0,
+            "reset_at": 0.0,
+            "resets": 0,
+            "words": "No Live additions yet."
+          },
           "available": true,
           "calibrate": true,
           "limits": {
@@ -352,19 +367,195 @@
             "measure_max_clips": 20,
             "min_clips": 3,
             "min_seconds": 1.0,
-            "rounds": 3,
+            "rounds": 4,
             "session_seconds": 900.0
           },
           "measure": true,
           "pending": false,
           "round_asks": {
             "1": "normal, close to the microphone",
-            "2": "further away from the microphone, or quieter",
-            "3": "at another time of day, or in another room"
+            "2": "about two to three metres away, on a table",
+            "3": "with the fan or the TV on, as it usually is",
+            "4": "in another room, or at a different time of day"
           },
           "rounds": true,
           "session": null,
-          "settings": true
+          "settings": true,
+          "training": {
+            "conditions": [
+              {
+                "ask": "normal, close to the microphone",
+                "id": "close",
+                "label": "Close",
+                "legacy": "general"
+              },
+              {
+                "ask": "about two to three metres away, on a table",
+                "id": "table",
+                "label": "On a table, 2-3 m away",
+                "legacy": "far"
+              },
+              {
+                "ask": "with the fan or the TV on, as it usually is",
+                "id": "noise",
+                "label": "With background noise",
+                "legacy": ""
+              },
+              {
+                "ask": "in another room, or at a different time of day",
+                "id": "room",
+                "label": "Another room or time",
+                "legacy": "room"
+              }
+            ],
+            "free_speech": [
+              {
+                "id": "introduce",
+                "seconds": [
+                  10,
+                  30
+                ],
+                "text": "Introduce yourself in your own words: who you are, what you do, and something you like.",
+                "why": "natural rhythm and everyday words"
+              },
+              {
+                "id": "day",
+                "seconds": [
+                  10,
+                  30
+                ],
+                "text": "Describe your day so far in your own words - what you did, what you saw, what you are planning next.",
+                "why": "connected speech, not one short sentence"
+              },
+              {
+                "id": "passage",
+                "seconds": [
+                  8,
+                  25
+                ],
+                "text": "Read this aloud, slowly: The morning train was late again, so I stood at the window and watched the rain move across the empty platform.",
+                "why": "a varied passage with long and short sounds"
+              }
+            ],
+            "max_clips_per_round": 12,
+            "min_clips": 3,
+            "read_phrases": [
+              {
+                "focus": [
+                  "vowels",
+                  "long"
+                ],
+                "id": "vowel-1",
+                "text": "The blue boat floats slowly over the cold deep water.",
+                "words": 10
+              },
+              {
+                "focus": [
+                  "vowels",
+                  "consonants"
+                ],
+                "id": "vowel-2",
+                "text": "Please speak clearly about the meeting on Thursday.",
+                "words": 7
+              },
+              {
+                "focus": [
+                  "vowels",
+                  "diphthongs"
+                ],
+                "id": "vowel-3",
+                "text": "My eyes see a bright fire by the white gate.",
+                "words": 10
+              },
+              {
+                "focus": [
+                  "consonants",
+                  "fricatives"
+                ],
+                "id": "consonant-1",
+                "text": "She sells fresh fish from the shelf by the shore.",
+                "words": 10
+              },
+              {
+                "focus": [
+                  "consonants",
+                  "clusters"
+                ],
+                "id": "consonant-2",
+                "text": "Six thick sticks stand beside the strong tree.",
+                "words": 8
+              },
+              {
+                "focus": [
+                  "consonants",
+                  "clusters",
+                  "short"
+                ],
+                "id": "consonant-3",
+                "text": "Judge the quick brown fox before the jazz band.",
+                "words": 9
+              },
+              {
+                "focus": [
+                  "short",
+                  "consonants"
+                ],
+                "id": "short-1",
+                "text": "Light the lamp.",
+                "words": 3
+              },
+              {
+                "focus": [
+                  "medium",
+                  "vowels"
+                ],
+                "id": "medium-1",
+                "text": "Rain falls on the roof while the kettle sings.",
+                "words": 9
+              },
+              {
+                "focus": [
+                  "medium",
+                  "diphthongs"
+                ],
+                "id": "medium-2",
+                "text": "The train to town leaves at half past eight.",
+                "words": 9
+              },
+              {
+                "focus": [
+                  "long",
+                  "varied"
+                ],
+                "id": "long-1",
+                "text": "On the way home I stopped at the market and bought apples, bread and a small paper bag of rice.",
+                "words": 15
+              },
+              {
+                "focus": [
+                  "long",
+                  "varied"
+                ],
+                "id": "long-2",
+                "text": "Please remember to bring the green folder to my office before the morning meeting on Friday.",
+                "words": 13
+              },
+              {
+                "focus": [
+                  "natural",
+                  "varied"
+                ],
+                "id": "natural-1",
+                "text": "It was a cold morning, and the car would not start.",
+                "words": 9
+              }
+            ],
+            "version": 1,
+            "wake_phrases": [
+              "hey Jarvis"
+            ],
+            "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
+          }
         },
         "voice_id_model": "titanet",
         "wake_confirm": "one"
@@ -970,6 +1161,21 @@
         "talk_to_type": "off",
         "threshold": 0.35,
         "training": {
+          "adaptation": {
+            "available": true,
+            "caps": {
+              "per_condition": 4,
+              "total": 12
+            },
+            "count": 0,
+            "counts": {},
+            "last_at": 0.0,
+            "last_reanchor": 0.0,
+            "reanchors": 0,
+            "reset_at": 0.0,
+            "resets": 0,
+            "words": "No Live additions yet."
+          },
           "available": true,
           "calibrate": true,
           "limits": {
@@ -979,19 +1185,195 @@
             "measure_max_clips": 20,
             "min_clips": 3,
             "min_seconds": 1.0,
-            "rounds": 3,
+            "rounds": 4,
             "session_seconds": 900.0
           },
           "measure": true,
           "pending": false,
           "round_asks": {
             "1": "normal, close to the microphone",
-            "2": "further away from the microphone, or quieter",
-            "3": "at another time of day, or in another room"
+            "2": "about two to three metres away, on a table",
+            "3": "with the fan or the TV on, as it usually is",
+            "4": "in another room, or at a different time of day"
           },
           "rounds": true,
           "session": null,
-          "settings": true
+          "settings": true,
+          "training": {
+            "conditions": [
+              {
+                "ask": "normal, close to the microphone",
+                "id": "close",
+                "label": "Close",
+                "legacy": "general"
+              },
+              {
+                "ask": "about two to three metres away, on a table",
+                "id": "table",
+                "label": "On a table, 2-3 m away",
+                "legacy": "far"
+              },
+              {
+                "ask": "with the fan or the TV on, as it usually is",
+                "id": "noise",
+                "label": "With background noise",
+                "legacy": ""
+              },
+              {
+                "ask": "in another room, or at a different time of day",
+                "id": "room",
+                "label": "Another room or time",
+                "legacy": "room"
+              }
+            ],
+            "free_speech": [
+              {
+                "id": "introduce",
+                "seconds": [
+                  10,
+                  30
+                ],
+                "text": "Introduce yourself in your own words: who you are, what you do, and something you like.",
+                "why": "natural rhythm and everyday words"
+              },
+              {
+                "id": "day",
+                "seconds": [
+                  10,
+                  30
+                ],
+                "text": "Describe your day so far in your own words - what you did, what you saw, what you are planning next.",
+                "why": "connected speech, not one short sentence"
+              },
+              {
+                "id": "passage",
+                "seconds": [
+                  8,
+                  25
+                ],
+                "text": "Read this aloud, slowly: The morning train was late again, so I stood at the window and watched the rain move across the empty platform.",
+                "why": "a varied passage with long and short sounds"
+              }
+            ],
+            "max_clips_per_round": 12,
+            "min_clips": 3,
+            "read_phrases": [
+              {
+                "focus": [
+                  "vowels",
+                  "long"
+                ],
+                "id": "vowel-1",
+                "text": "The blue boat floats slowly over the cold deep water.",
+                "words": 10
+              },
+              {
+                "focus": [
+                  "vowels",
+                  "consonants"
+                ],
+                "id": "vowel-2",
+                "text": "Please speak clearly about the meeting on Thursday.",
+                "words": 7
+              },
+              {
+                "focus": [
+                  "vowels",
+                  "diphthongs"
+                ],
+                "id": "vowel-3",
+                "text": "My eyes see a bright fire by the white gate.",
+                "words": 10
+              },
+              {
+                "focus": [
+                  "consonants",
+                  "fricatives"
+                ],
+                "id": "consonant-1",
+                "text": "She sells fresh fish from the shelf by the shore.",
+                "words": 10
+              },
+              {
+                "focus": [
+                  "consonants",
+                  "clusters"
+                ],
+                "id": "consonant-2",
+                "text": "Six thick sticks stand beside the strong tree.",
+                "words": 8
+              },
+              {
+                "focus": [
+                  "consonants",
+                  "clusters",
+                  "short"
+                ],
+                "id": "consonant-3",
+                "text": "Judge the quick brown fox before the jazz band.",
+                "words": 9
+              },
+              {
+                "focus": [
+                  "short",
+                  "consonants"
+                ],
+                "id": "short-1",
+                "text": "Light the lamp.",
+                "words": 3
+              },
+              {
+                "focus": [
+                  "medium",
+                  "vowels"
+                ],
+                "id": "medium-1",
+                "text": "Rain falls on the roof while the kettle sings.",
+                "words": 9
+              },
+              {
+                "focus": [
+                  "medium",
+                  "diphthongs"
+                ],
+                "id": "medium-2",
+                "text": "The train to town leaves at half past eight.",
+                "words": 9
+              },
+              {
+                "focus": [
+                  "long",
+                  "varied"
+                ],
+                "id": "long-1",
+                "text": "On the way home I stopped at the market and bought apples, bread and a small paper bag of rice.",
+                "words": 15
+              },
+              {
+                "focus": [
+                  "long",
+                  "varied"
+                ],
+                "id": "long-2",
+                "text": "Please remember to bring the green folder to my office before the morning meeting on Friday.",
+                "words": 13
+              },
+              {
+                "focus": [
+                  "natural",
+                  "varied"
+                ],
+                "id": "natural-1",
+                "text": "It was a cold morning, and the car would not start.",
+                "words": 9
+              }
+            ],
+            "version": 1,
+            "wake_phrases": [
+              "hey Jarvis"
+            ],
+            "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
+          }
         },
         "voice_id_model": "titanet",
         "wake_confirm": "one"
@@ -1597,6 +1979,21 @@
         "talk_to_type": "off",
         "threshold": 0.35,
         "training": {
+          "adaptation": {
+            "available": true,
+            "caps": {
+              "per_condition": 4,
+              "total": 12
+            },
+            "count": 0,
+            "counts": {},
+            "last_at": 0.0,
+            "last_reanchor": 0.0,
+            "reanchors": 0,
+            "reset_at": 0.0,
+            "resets": 0,
+            "words": "No Live additions yet."
+          },
           "available": true,
           "calibrate": true,
           "limits": {
@@ -1606,19 +2003,195 @@
             "measure_max_clips": 20,
             "min_clips": 3,
             "min_seconds": 1.0,
-            "rounds": 3,
+            "rounds": 4,
             "session_seconds": 900.0
           },
           "measure": true,
           "pending": false,
           "round_asks": {
             "1": "normal, close to the microphone",
-            "2": "further away from the microphone, or quieter",
-            "3": "at another time of day, or in another room"
+            "2": "about two to three metres away, on a table",
+            "3": "with the fan or the TV on, as it usually is",
+            "4": "in another room, or at a different time of day"
           },
           "rounds": true,
           "session": null,
-          "settings": true
+          "settings": true,
+          "training": {
+            "conditions": [
+              {
+                "ask": "normal, close to the microphone",
+                "id": "close",
+                "label": "Close",
+                "legacy": "general"
+              },
+              {
+                "ask": "about two to three metres away, on a table",
+                "id": "table",
+                "label": "On a table, 2-3 m away",
+                "legacy": "far"
+              },
+              {
+                "ask": "with the fan or the TV on, as it usually is",
+                "id": "noise",
+                "label": "With background noise",
+                "legacy": ""
+              },
+              {
+                "ask": "in another room, or at a different time of day",
+                "id": "room",
+                "label": "Another room or time",
+                "legacy": "room"
+              }
+            ],
+            "free_speech": [
+              {
+                "id": "introduce",
+                "seconds": [
+                  10,
+                  30
+                ],
+                "text": "Introduce yourself in your own words: who you are, what you do, and something you like.",
+                "why": "natural rhythm and everyday words"
+              },
+              {
+                "id": "day",
+                "seconds": [
+                  10,
+                  30
+                ],
+                "text": "Describe your day so far in your own words - what you did, what you saw, what you are planning next.",
+                "why": "connected speech, not one short sentence"
+              },
+              {
+                "id": "passage",
+                "seconds": [
+                  8,
+                  25
+                ],
+                "text": "Read this aloud, slowly: The morning train was late again, so I stood at the window and watched the rain move across the empty platform.",
+                "why": "a varied passage with long and short sounds"
+              }
+            ],
+            "max_clips_per_round": 12,
+            "min_clips": 3,
+            "read_phrases": [
+              {
+                "focus": [
+                  "vowels",
+                  "long"
+                ],
+                "id": "vowel-1",
+                "text": "The blue boat floats slowly over the cold deep water.",
+                "words": 10
+              },
+              {
+                "focus": [
+                  "vowels",
+                  "consonants"
+                ],
+                "id": "vowel-2",
+                "text": "Please speak clearly about the meeting on Thursday.",
+                "words": 7
+              },
+              {
+                "focus": [
+                  "vowels",
+                  "diphthongs"
+                ],
+                "id": "vowel-3",
+                "text": "My eyes see a bright fire by the white gate.",
+                "words": 10
+              },
+              {
+                "focus": [
+                  "consonants",
+                  "fricatives"
+                ],
+                "id": "consonant-1",
+                "text": "She sells fresh fish from the shelf by the shore.",
+                "words": 10
+              },
+              {
+                "focus": [
+                  "consonants",
+                  "clusters"
+                ],
+                "id": "consonant-2",
+                "text": "Six thick sticks stand beside the strong tree.",
+                "words": 8
+              },
+              {
+                "focus": [
+                  "consonants",
+                  "clusters",
+                  "short"
+                ],
+                "id": "consonant-3",
+                "text": "Judge the quick brown fox before the jazz band.",
+                "words": 9
+              },
+              {
+                "focus": [
+                  "short",
+                  "consonants"
+                ],
+                "id": "short-1",
+                "text": "Light the lamp.",
+                "words": 3
+              },
+              {
+                "focus": [
+                  "medium",
+                  "vowels"
+                ],
+                "id": "medium-1",
+                "text": "Rain falls on the roof while the kettle sings.",
+                "words": 9
+              },
+              {
+                "focus": [
+                  "medium",
+                  "diphthongs"
+                ],
+                "id": "medium-2",
+                "text": "The train to town leaves at half past eight.",
+                "words": 9
+              },
+              {
+                "focus": [
+                  "long",
+                  "varied"
+                ],
+                "id": "long-1",
+                "text": "On the way home I stopped at the market and bought apples, bread and a small paper bag of rice.",
+                "words": 15
+              },
+              {
+                "focus": [
+                  "long",
+                  "varied"
+                ],
+                "id": "long-2",
+                "text": "Please remember to bring the green folder to my office before the morning meeting on Friday.",
+                "words": 13
+              },
+              {
+                "focus": [
+                  "natural",
+                  "varied"
+                ],
+                "id": "natural-1",
+                "text": "It was a cold morning, and the car would not start.",
+                "words": 9
+              }
+            ],
+            "version": 1,
+            "wake_phrases": [
+              "hey Jarvis"
+            ],
+            "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
+          }
         },
         "voice_id_model": "titanet",
         "wake_confirm": "one"
@@ -2229,6 +2802,21 @@
         "talk_to_type": "off",
         "threshold": 0.35,
         "training": {
+          "adaptation": {
+            "available": true,
+            "caps": {
+              "per_condition": 4,
+              "total": 12
+            },
+            "count": 0,
+            "counts": {},
+            "last_at": 0.0,
+            "last_reanchor": 0.0,
+            "reanchors": 0,
+            "reset_at": 0.0,
+            "resets": 0,
+            "words": "No Live additions yet."
+          },
           "available": true,
           "calibrate": true,
           "limits": {
@@ -2238,19 +2826,195 @@
             "measure_max_clips": 20,
             "min_clips": 3,
             "min_seconds": 1.0,
-            "rounds": 3,
+            "rounds": 4,
             "session_seconds": 900.0
           },
           "measure": true,
           "pending": false,
           "round_asks": {
             "1": "normal, close to the microphone",
-            "2": "further away from the microphone, or quieter",
-            "3": "at another time of day, or in another room"
+            "2": "about two to three metres away, on a table",
+            "3": "with the fan or the TV on, as it usually is",
+            "4": "in another room, or at a different time of day"
           },
           "rounds": true,
           "session": null,
-          "settings": true
+          "settings": true,
+          "training": {
+            "conditions": [
+              {
+                "ask": "normal, close to the microphone",
+                "id": "close",
+                "label": "Close",
+                "legacy": "general"
+              },
+              {
+                "ask": "about two to three metres away, on a table",
+                "id": "table",
+                "label": "On a table, 2-3 m away",
+                "legacy": "far"
+              },
+              {
+                "ask": "with the fan or the TV on, as it usually is",
+                "id": "noise",
+                "label": "With background noise",
+                "legacy": ""
+              },
+              {
+                "ask": "in another room, or at a different time of day",
+                "id": "room",
+                "label": "Another room or time",
+                "legacy": "room"
+              }
+            ],
+            "free_speech": [
+              {
+                "id": "introduce",
+                "seconds": [
+                  10,
+                  30
+                ],
+                "text": "Introduce yourself in your own words: who you are, what you do, and something you like.",
+                "why": "natural rhythm and everyday words"
+              },
+              {
+                "id": "day",
+                "seconds": [
+                  10,
+                  30
+                ],
+                "text": "Describe your day so far in your own words - what you did, what you saw, what you are planning next.",
+                "why": "connected speech, not one short sentence"
+              },
+              {
+                "id": "passage",
+                "seconds": [
+                  8,
+                  25
+                ],
+                "text": "Read this aloud, slowly: The morning train was late again, so I stood at the window and watched the rain move across the empty platform.",
+                "why": "a varied passage with long and short sounds"
+              }
+            ],
+            "max_clips_per_round": 12,
+            "min_clips": 3,
+            "read_phrases": [
+              {
+                "focus": [
+                  "vowels",
+                  "long"
+                ],
+                "id": "vowel-1",
+                "text": "The blue boat floats slowly over the cold deep water.",
+                "words": 10
+              },
+              {
+                "focus": [
+                  "vowels",
+                  "consonants"
+                ],
+                "id": "vowel-2",
+                "text": "Please speak clearly about the meeting on Thursday.",
+                "words": 7
+              },
+              {
+                "focus": [
+                  "vowels",
+                  "diphthongs"
+                ],
+                "id": "vowel-3",
+                "text": "My eyes see a bright fire by the white gate.",
+                "words": 10
+              },
+              {
+                "focus": [
+                  "consonants",
+                  "fricatives"
+                ],
+                "id": "consonant-1",
+                "text": "She sells fresh fish from the shelf by the shore.",
+                "words": 10
+              },
+              {
+                "focus": [
+                  "consonants",
+                  "clusters"
+                ],
+                "id": "consonant-2",
+                "text": "Six thick sticks stand beside the strong tree.",
+                "words": 8
+              },
+              {
+                "focus": [
+                  "consonants",
+                  "clusters",
+                  "short"
+                ],
+                "id": "consonant-3",
+                "text": "Judge the quick brown fox before the jazz band.",
+                "words": 9
+              },
+              {
+                "focus": [
+                  "short",
+                  "consonants"
+                ],
+                "id": "short-1",
+                "text": "Light the lamp.",
+                "words": 3
+              },
+              {
+                "focus": [
+                  "medium",
+                  "vowels"
+                ],
+                "id": "medium-1",
+                "text": "Rain falls on the roof while the kettle sings.",
+                "words": 9
+              },
+              {
+                "focus": [
+                  "medium",
+                  "diphthongs"
+                ],
+                "id": "medium-2",
+                "text": "The train to town leaves at half past eight.",
+                "words": 9
+              },
+              {
+                "focus": [
+                  "long",
+                  "varied"
+                ],
+                "id": "long-1",
+                "text": "On the way home I stopped at the market and bought apples, bread and a small paper bag of rice.",
+                "words": 15
+              },
+              {
+                "focus": [
+                  "long",
+                  "varied"
+                ],
+                "id": "long-2",
+                "text": "Please remember to bring the green folder to my office before the morning meeting on Friday.",
+                "words": 13
+              },
+              {
+                "focus": [
+                  "natural",
+                  "varied"
+                ],
+                "id": "natural-1",
+                "text": "It was a cold morning, and the car would not start.",
+                "words": 9
+              }
+            ],
+            "version": 1,
+            "wake_phrases": [
+              "hey Jarvis"
+            ],
+            "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
+          }
         },
         "voice_id_model": "titanet",
         "wake_confirm": "one"
@@ -2866,6 +3630,21 @@
         "talk_to_type": "off",
         "threshold": 0.35,
         "training": {
+          "adaptation": {
+            "available": true,
+            "caps": {
+              "per_condition": 4,
+              "total": 12
+            },
+            "count": 0,
+            "counts": {},
+            "last_at": 0.0,
+            "last_reanchor": 0.0,
+            "reanchors": 0,
+            "reset_at": 0.0,
+            "resets": 0,
+            "words": "No Live additions yet."
+          },
           "available": true,
           "calibrate": true,
           "limits": {
@@ -2875,19 +3654,195 @@
             "measure_max_clips": 20,
             "min_clips": 3,
             "min_seconds": 1.0,
-            "rounds": 3,
+            "rounds": 4,
             "session_seconds": 900.0
           },
           "measure": true,
           "pending": false,
           "round_asks": {
             "1": "normal, close to the microphone",
-            "2": "further away from the microphone, or quieter",
-            "3": "at another time of day, or in another room"
+            "2": "about two to three metres away, on a table",
+            "3": "with the fan or the TV on, as it usually is",
+            "4": "in another room, or at a different time of day"
           },
           "rounds": true,
           "session": null,
-          "settings": true
+          "settings": true,
+          "training": {
+            "conditions": [
+              {
+                "ask": "normal, close to the microphone",
+                "id": "close",
+                "label": "Close",
+                "legacy": "general"
+              },
+              {
+                "ask": "about two to three metres away, on a table",
+                "id": "table",
+                "label": "On a table, 2-3 m away",
+                "legacy": "far"
+              },
+              {
+                "ask": "with the fan or the TV on, as it usually is",
+                "id": "noise",
+                "label": "With background noise",
+                "legacy": ""
+              },
+              {
+                "ask": "in another room, or at a different time of day",
+                "id": "room",
+                "label": "Another room or time",
+                "legacy": "room"
+              }
+            ],
+            "free_speech": [
+              {
+                "id": "introduce",
+                "seconds": [
+                  10,
+                  30
+                ],
+                "text": "Introduce yourself in your own words: who you are, what you do, and something you like.",
+                "why": "natural rhythm and everyday words"
+              },
+              {
+                "id": "day",
+                "seconds": [
+                  10,
+                  30
+                ],
+                "text": "Describe your day so far in your own words - what you did, what you saw, what you are planning next.",
+                "why": "connected speech, not one short sentence"
+              },
+              {
+                "id": "passage",
+                "seconds": [
+                  8,
+                  25
+                ],
+                "text": "Read this aloud, slowly: The morning train was late again, so I stood at the window and watched the rain move across the empty platform.",
+                "why": "a varied passage with long and short sounds"
+              }
+            ],
+            "max_clips_per_round": 12,
+            "min_clips": 3,
+            "read_phrases": [
+              {
+                "focus": [
+                  "vowels",
+                  "long"
+                ],
+                "id": "vowel-1",
+                "text": "The blue boat floats slowly over the cold deep water.",
+                "words": 10
+              },
+              {
+                "focus": [
+                  "vowels",
+                  "consonants"
+                ],
+                "id": "vowel-2",
+                "text": "Please speak clearly about the meeting on Thursday.",
+                "words": 7
+              },
+              {
+                "focus": [
+                  "vowels",
+                  "diphthongs"
+                ],
+                "id": "vowel-3",
+                "text": "My eyes see a bright fire by the white gate.",
+                "words": 10
+              },
+              {
+                "focus": [
+                  "consonants",
+                  "fricatives"
+                ],
+                "id": "consonant-1",
+                "text": "She sells fresh fish from the shelf by the shore.",
+                "words": 10
+              },
+              {
+                "focus": [
+                  "consonants",
+                  "clusters"
+                ],
+                "id": "consonant-2",
+                "text": "Six thick sticks stand beside the strong tree.",
+                "words": 8
+              },
+              {
+                "focus": [
+                  "consonants",
+                  "clusters",
+                  "short"
+                ],
+                "id": "consonant-3",
+                "text": "Judge the quick brown fox before the jazz band.",
+                "words": 9
+              },
+              {
+                "focus": [
+                  "short",
+                  "consonants"
+                ],
+                "id": "short-1",
+                "text": "Light the lamp.",
+                "words": 3
+              },
+              {
+                "focus": [
+                  "medium",
+                  "vowels"
+                ],
+                "id": "medium-1",
+                "text": "Rain falls on the roof while the kettle sings.",
+                "words": 9
+              },
+              {
+                "focus": [
+                  "medium",
+                  "diphthongs"
+                ],
+                "id": "medium-2",
+                "text": "The train to town leaves at half past eight.",
+                "words": 9
+              },
+              {
+                "focus": [
+                  "long",
+                  "varied"
+                ],
+                "id": "long-1",
+                "text": "On the way home I stopped at the market and bought apples, bread and a small paper bag of rice.",
+                "words": 15
+              },
+              {
+                "focus": [
+                  "long",
+                  "varied"
+                ],
+                "id": "long-2",
+                "text": "Please remember to bring the green folder to my office before the morning meeting on Friday.",
+                "words": 13
+              },
+              {
+                "focus": [
+                  "natural",
+                  "varied"
+                ],
+                "id": "natural-1",
+                "text": "It was a cold morning, and the car would not start.",
+                "words": 9
+              }
+            ],
+            "version": 1,
+            "wake_phrases": [
+              "hey Jarvis"
+            ],
+            "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
+          }
         },
         "voice_id_model": "titanet",
         "wake_confirm": "one"
@@ -3503,6 +4458,21 @@
         "talk_to_type": "off",
         "threshold": 0.35,
         "training": {
+          "adaptation": {
+            "available": true,
+            "caps": {
+              "per_condition": 4,
+              "total": 12
+            },
+            "count": 0,
+            "counts": {},
+            "last_at": 0.0,
+            "last_reanchor": 0.0,
+            "reanchors": 0,
+            "reset_at": 0.0,
+            "resets": 0,
+            "words": "No Live additions yet."
+          },
           "available": true,
           "calibrate": true,
           "last": {
@@ -3523,19 +4493,195 @@
             "measure_max_clips": 20,
             "min_clips": 3,
             "min_seconds": 1.0,
-            "rounds": 3,
+            "rounds": 4,
             "session_seconds": 900.0
           },
           "measure": true,
           "pending": false,
           "round_asks": {
             "1": "normal, close to the microphone",
-            "2": "further away from the microphone, or quieter",
-            "3": "at another time of day, or in another room"
+            "2": "about two to three metres away, on a table",
+            "3": "with the fan or the TV on, as it usually is",
+            "4": "in another room, or at a different time of day"
           },
           "rounds": true,
           "session": null,
-          "settings": true
+          "settings": true,
+          "training": {
+            "conditions": [
+              {
+                "ask": "normal, close to the microphone",
+                "id": "close",
+                "label": "Close",
+                "legacy": "general"
+              },
+              {
+                "ask": "about two to three metres away, on a table",
+                "id": "table",
+                "label": "On a table, 2-3 m away",
+                "legacy": "far"
+              },
+              {
+                "ask": "with the fan or the TV on, as it usually is",
+                "id": "noise",
+                "label": "With background noise",
+                "legacy": ""
+              },
+              {
+                "ask": "in another room, or at a different time of day",
+                "id": "room",
+                "label": "Another room or time",
+                "legacy": "room"
+              }
+            ],
+            "free_speech": [
+              {
+                "id": "introduce",
+                "seconds": [
+                  10,
+                  30
+                ],
+                "text": "Introduce yourself in your own words: who you are, what you do, and something you like.",
+                "why": "natural rhythm and everyday words"
+              },
+              {
+                "id": "day",
+                "seconds": [
+                  10,
+                  30
+                ],
+                "text": "Describe your day so far in your own words - what you did, what you saw, what you are planning next.",
+                "why": "connected speech, not one short sentence"
+              },
+              {
+                "id": "passage",
+                "seconds": [
+                  8,
+                  25
+                ],
+                "text": "Read this aloud, slowly: The morning train was late again, so I stood at the window and watched the rain move across the empty platform.",
+                "why": "a varied passage with long and short sounds"
+              }
+            ],
+            "max_clips_per_round": 12,
+            "min_clips": 3,
+            "read_phrases": [
+              {
+                "focus": [
+                  "vowels",
+                  "long"
+                ],
+                "id": "vowel-1",
+                "text": "The blue boat floats slowly over the cold deep water.",
+                "words": 10
+              },
+              {
+                "focus": [
+                  "vowels",
+                  "consonants"
+                ],
+                "id": "vowel-2",
+                "text": "Please speak clearly about the meeting on Thursday.",
+                "words": 7
+              },
+              {
+                "focus": [
+                  "vowels",
+                  "diphthongs"
+                ],
+                "id": "vowel-3",
+                "text": "My eyes see a bright fire by the white gate.",
+                "words": 10
+              },
+              {
+                "focus": [
+                  "consonants",
+                  "fricatives"
+                ],
+                "id": "consonant-1",
+                "text": "She sells fresh fish from the shelf by the shore.",
+                "words": 10
+              },
+              {
+                "focus": [
+                  "consonants",
+                  "clusters"
+                ],
+                "id": "consonant-2",
+                "text": "Six thick sticks stand beside the strong tree.",
+                "words": 8
+              },
+              {
+                "focus": [
+                  "consonants",
+                  "clusters",
+                  "short"
+                ],
+                "id": "consonant-3",
+                "text": "Judge the quick brown fox before the jazz band.",
+                "words": 9
+              },
+              {
+                "focus": [
+                  "short",
+                  "consonants"
+                ],
+                "id": "short-1",
+                "text": "Light the lamp.",
+                "words": 3
+              },
+              {
+                "focus": [
+                  "medium",
+                  "vowels"
+                ],
+                "id": "medium-1",
+                "text": "Rain falls on the roof while the kettle sings.",
+                "words": 9
+              },
+              {
+                "focus": [
+                  "medium",
+                  "diphthongs"
+                ],
+                "id": "medium-2",
+                "text": "The train to town leaves at half past eight.",
+                "words": 9
+              },
+              {
+                "focus": [
+                  "long",
+                  "varied"
+                ],
+                "id": "long-1",
+                "text": "On the way home I stopped at the market and bought apples, bread and a small paper bag of rice.",
+                "words": 15
+              },
+              {
+                "focus": [
+                  "long",
+                  "varied"
+                ],
+                "id": "long-2",
+                "text": "Please remember to bring the green folder to my office before the morning meeting on Friday.",
+                "words": 13
+              },
+              {
+                "focus": [
+                  "natural",
+                  "varied"
+                ],
+                "id": "natural-1",
+                "text": "It was a cold morning, and the car would not start.",
+                "words": 9
+              }
+            ],
+            "version": 1,
+            "wake_phrases": [
+              "hey Jarvis"
+            ],
+            "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
+          }
         },
         "voice_id_model": "titanet",
         "wake_confirm": "one"
@@ -4146,6 +5292,21 @@
         "talk_to_type": "off",
         "threshold": 0.35,
         "training": {
+          "adaptation": {
+            "available": true,
+            "caps": {
+              "per_condition": 4,
+              "total": 12
+            },
+            "count": 0,
+            "counts": {},
+            "last_at": 0.0,
+            "last_reanchor": 0.0,
+            "reanchors": 0,
+            "reset_at": 0.0,
+            "resets": 0,
+            "words": "No Live additions yet."
+          },
           "available": true,
           "calibrate": true,
           "limits": {
@@ -4155,19 +5316,195 @@
             "measure_max_clips": 20,
             "min_clips": 3,
             "min_seconds": 1.0,
-            "rounds": 3,
+            "rounds": 4,
             "session_seconds": 900.0
           },
           "measure": true,
           "pending": false,
           "round_asks": {
             "1": "normal, close to the microphone",
-            "2": "further away from the microphone, or quieter",
-            "3": "at another time of day, or in another room"
+            "2": "about two to three metres away, on a table",
+            "3": "with the fan or the TV on, as it usually is",
+            "4": "in another room, or at a different time of day"
           },
           "rounds": true,
           "session": null,
-          "settings": true
+          "settings": true,
+          "training": {
+            "conditions": [
+              {
+                "ask": "normal, close to the microphone",
+                "id": "close",
+                "label": "Close",
+                "legacy": "general"
+              },
+              {
+                "ask": "about two to three metres away, on a table",
+                "id": "table",
+                "label": "On a table, 2-3 m away",
+                "legacy": "far"
+              },
+              {
+                "ask": "with the fan or the TV on, as it usually is",
+                "id": "noise",
+                "label": "With background noise",
+                "legacy": ""
+              },
+              {
+                "ask": "in another room, or at a different time of day",
+                "id": "room",
+                "label": "Another room or time",
+                "legacy": "room"
+              }
+            ],
+            "free_speech": [
+              {
+                "id": "introduce",
+                "seconds": [
+                  10,
+                  30
+                ],
+                "text": "Introduce yourself in your own words: who you are, what you do, and something you like.",
+                "why": "natural rhythm and everyday words"
+              },
+              {
+                "id": "day",
+                "seconds": [
+                  10,
+                  30
+                ],
+                "text": "Describe your day so far in your own words - what you did, what you saw, what you are planning next.",
+                "why": "connected speech, not one short sentence"
+              },
+              {
+                "id": "passage",
+                "seconds": [
+                  8,
+                  25
+                ],
+                "text": "Read this aloud, slowly: The morning train was late again, so I stood at the window and watched the rain move across the empty platform.",
+                "why": "a varied passage with long and short sounds"
+              }
+            ],
+            "max_clips_per_round": 12,
+            "min_clips": 3,
+            "read_phrases": [
+              {
+                "focus": [
+                  "vowels",
+                  "long"
+                ],
+                "id": "vowel-1",
+                "text": "The blue boat floats slowly over the cold deep water.",
+                "words": 10
+              },
+              {
+                "focus": [
+                  "vowels",
+                  "consonants"
+                ],
+                "id": "vowel-2",
+                "text": "Please speak clearly about the meeting on Thursday.",
+                "words": 7
+              },
+              {
+                "focus": [
+                  "vowels",
+                  "diphthongs"
+                ],
+                "id": "vowel-3",
+                "text": "My eyes see a bright fire by the white gate.",
+                "words": 10
+              },
+              {
+                "focus": [
+                  "consonants",
+                  "fricatives"
+                ],
+                "id": "consonant-1",
+                "text": "She sells fresh fish from the shelf by the shore.",
+                "words": 10
+              },
+              {
+                "focus": [
+                  "consonants",
+                  "clusters"
+                ],
+                "id": "consonant-2",
+                "text": "Six thick sticks stand beside the strong tree.",
+                "words": 8
+              },
+              {
+                "focus": [
+                  "consonants",
+                  "clusters",
+                  "short"
+                ],
+                "id": "consonant-3",
+                "text": "Judge the quick brown fox before the jazz band.",
+                "words": 9
+              },
+              {
+                "focus": [
+                  "short",
+                  "consonants"
+                ],
+                "id": "short-1",
+                "text": "Light the lamp.",
+                "words": 3
+              },
+              {
+                "focus": [
+                  "medium",
+                  "vowels"
+                ],
+                "id": "medium-1",
+                "text": "Rain falls on the roof while the kettle sings.",
+                "words": 9
+              },
+              {
+                "focus": [
+                  "medium",
+                  "diphthongs"
+                ],
+                "id": "medium-2",
+                "text": "The train to town leaves at half past eight.",
+                "words": 9
+              },
+              {
+                "focus": [
+                  "long",
+                  "varied"
+                ],
+                "id": "long-1",
+                "text": "On the way home I stopped at the market and bought apples, bread and a small paper bag of rice.",
+                "words": 15
+              },
+              {
+                "focus": [
+                  "long",
+                  "varied"
+                ],
+                "id": "long-2",
+                "text": "Please remember to bring the green folder to my office before the morning meeting on Friday.",
+                "words": 13
+              },
+              {
+                "focus": [
+                  "natural",
+                  "varied"
+                ],
+                "id": "natural-1",
+                "text": "It was a cold morning, and the car would not start.",
+                "words": 9
+              }
+            ],
+            "version": 1,
+            "wake_phrases": [
+              "hey Jarvis"
+            ],
+            "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
+          }
         },
         "voice_id_model": "titanet",
         "wake_confirm": "one"
@@ -4778,6 +6115,21 @@
         "talk_to_type": "off",
         "threshold": 0.35,
         "training": {
+          "adaptation": {
+            "available": true,
+            "caps": {
+              "per_condition": 4,
+              "total": 12
+            },
+            "count": 0,
+            "counts": {},
+            "last_at": 0.0,
+            "last_reanchor": 0.0,
+            "reanchors": 0,
+            "reset_at": 0.0,
+            "resets": 0,
+            "words": "No Live additions yet."
+          },
           "available": true,
           "calibrate": true,
           "limits": {
@@ -4787,19 +6139,195 @@
             "measure_max_clips": 20,
             "min_clips": 3,
             "min_seconds": 1.0,
-            "rounds": 3,
+            "rounds": 4,
             "session_seconds": 900.0
           },
           "measure": true,
           "pending": false,
           "round_asks": {
             "1": "normal, close to the microphone",
-            "2": "further away from the microphone, or quieter",
-            "3": "at another time of day, or in another room"
+            "2": "about two to three metres away, on a table",
+            "3": "with the fan or the TV on, as it usually is",
+            "4": "in another room, or at a different time of day"
           },
           "rounds": true,
           "session": null,
-          "settings": true
+          "settings": true,
+          "training": {
+            "conditions": [
+              {
+                "ask": "normal, close to the microphone",
+                "id": "close",
+                "label": "Close",
+                "legacy": "general"
+              },
+              {
+                "ask": "about two to three metres away, on a table",
+                "id": "table",
+                "label": "On a table, 2-3 m away",
+                "legacy": "far"
+              },
+              {
+                "ask": "with the fan or the TV on, as it usually is",
+                "id": "noise",
+                "label": "With background noise",
+                "legacy": ""
+              },
+              {
+                "ask": "in another room, or at a different time of day",
+                "id": "room",
+                "label": "Another room or time",
+                "legacy": "room"
+              }
+            ],
+            "free_speech": [
+              {
+                "id": "introduce",
+                "seconds": [
+                  10,
+                  30
+                ],
+                "text": "Introduce yourself in your own words: who you are, what you do, and something you like.",
+                "why": "natural rhythm and everyday words"
+              },
+              {
+                "id": "day",
+                "seconds": [
+                  10,
+                  30
+                ],
+                "text": "Describe your day so far in your own words - what you did, what you saw, what you are planning next.",
+                "why": "connected speech, not one short sentence"
+              },
+              {
+                "id": "passage",
+                "seconds": [
+                  8,
+                  25
+                ],
+                "text": "Read this aloud, slowly: The morning train was late again, so I stood at the window and watched the rain move across the empty platform.",
+                "why": "a varied passage with long and short sounds"
+              }
+            ],
+            "max_clips_per_round": 12,
+            "min_clips": 3,
+            "read_phrases": [
+              {
+                "focus": [
+                  "vowels",
+                  "long"
+                ],
+                "id": "vowel-1",
+                "text": "The blue boat floats slowly over the cold deep water.",
+                "words": 10
+              },
+              {
+                "focus": [
+                  "vowels",
+                  "consonants"
+                ],
+                "id": "vowel-2",
+                "text": "Please speak clearly about the meeting on Thursday.",
+                "words": 7
+              },
+              {
+                "focus": [
+                  "vowels",
+                  "diphthongs"
+                ],
+                "id": "vowel-3",
+                "text": "My eyes see a bright fire by the white gate.",
+                "words": 10
+              },
+              {
+                "focus": [
+                  "consonants",
+                  "fricatives"
+                ],
+                "id": "consonant-1",
+                "text": "She sells fresh fish from the shelf by the shore.",
+                "words": 10
+              },
+              {
+                "focus": [
+                  "consonants",
+                  "clusters"
+                ],
+                "id": "consonant-2",
+                "text": "Six thick sticks stand beside the strong tree.",
+                "words": 8
+              },
+              {
+                "focus": [
+                  "consonants",
+                  "clusters",
+                  "short"
+                ],
+                "id": "consonant-3",
+                "text": "Judge the quick brown fox before the jazz band.",
+                "words": 9
+              },
+              {
+                "focus": [
+                  "short",
+                  "consonants"
+                ],
+                "id": "short-1",
+                "text": "Light the lamp.",
+                "words": 3
+              },
+              {
+                "focus": [
+                  "medium",
+                  "vowels"
+                ],
+                "id": "medium-1",
+                "text": "Rain falls on the roof while the kettle sings.",
+                "words": 9
+              },
+              {
+                "focus": [
+                  "medium",
+                  "diphthongs"
+                ],
+                "id": "medium-2",
+                "text": "The train to town leaves at half past eight.",
+                "words": 9
+              },
+              {
+                "focus": [
+                  "long",
+                  "varied"
+                ],
+                "id": "long-1",
+                "text": "On the way home I stopped at the market and bought apples, bread and a small paper bag of rice.",
+                "words": 15
+              },
+              {
+                "focus": [
+                  "long",
+                  "varied"
+                ],
+                "id": "long-2",
+                "text": "Please remember to bring the green folder to my office before the morning meeting on Friday.",
+                "words": 13
+              },
+              {
+                "focus": [
+                  "natural",
+                  "varied"
+                ],
+                "id": "natural-1",
+                "text": "It was a cold morning, and the car would not start.",
+                "words": 9
+              }
+            ],
+            "version": 1,
+            "wake_phrases": [
+              "hey Jarvis"
+            ],
+            "words": "Read the short sentences aloud, then speak about yourself in your own words. Each round is recorded in a different condition; the wake words are kept separate."
+          }
         },
         "voice_id_model": "titanet",
         "wake_confirm": "one"
