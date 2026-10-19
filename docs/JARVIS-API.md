@@ -7770,6 +7770,8 @@ through what they already read:
   or web search asks first. `tools_ran` names the tool; the `step` event
   carries its name like any tool's.
 
+**F4 hardening (2026-10-18).** The bridge is the taint-safe local stdio MCP client. Every tool call's FULL serialized arguments and every whole serialized result are scanned with jarvis_gate's own PROTECTED rule (DEF-012's shape: no 1,500-character cut) before the call runs or the result is stored; a hit is refused in plain words. Results are SecAlign marker-stripped (chat-control tokens, Unicode tag characters) before the model sees them, labelled untrusted, and latched with `jarvis_gate.latch_taint(why="mcp_tool")`; the conversation's own `read_outside` is recorded as soon as a reading tool returns. Plug-in tools ride the same top-K tool diet as built-ins (a question naming their own words shows them; an unrecognised question keeps the full-list fallback). `[mcp]` is OFF as shipped: no server exists until the owner edits the TOML and approves its first start, and removing the lines is the only way to remove one - there is no app screen for it on either device (ARCHITECTURE §8, one-sided on purpose).
+
 **The short tool list** (`[tools] short_list = true` in
 `jarvis-framework.toml`; OFF as shipped until the tool test on the PC shows
 it costs nothing) changes only which tool descriptions the PC sends its own
