@@ -8,9 +8,14 @@
  * fixture - not the quickbar or Settings.
  *
  * Commands (Tauri): `get_focus_presets` (read-only) and
- * `apply_focus_preset` (the single approval-gated action). The Rust commands
- * are deliberately thin: they forward the backend's own answer unchanged, so
- * the fixture's field names stay in one JS shape and one Rust shape.
+ * `apply_focus_preset` (the single approval-gated action). The merged contract
+ * half (#603) names the backend shape (`backend/fixtures/work_presets.json`)
+ * and the future backend action (`POST /api/work/apply`, in the LAN/apply
+ * patch); it does not name the two Tauri forwarding commands yet. Until that
+ * patch lands no RUST command exists, so the UI hides/readies nothing and the
+ * one action is disabled by the reading's missing apply route. When the patch
+ * lands, this file is the one place to match its command names and body field;
+ * the quickbar, Settings and the reading do not change.
  */
 import { call } from "./invoke-budget.js";
 

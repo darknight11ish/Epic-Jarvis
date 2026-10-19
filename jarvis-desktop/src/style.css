@@ -3667,3 +3667,10 @@ thead .st-cell {
   color: var(--text-faint);
   font-size: var(--text-xs);
 }
+
+.preset-item-focus {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+}

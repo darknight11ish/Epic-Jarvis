@@ -1660,3 +1660,30 @@ select:focus-visible {
 .preset-settings-line[data-tone="bad"] {
   color: var(--bad);
 }
+
+.preset-settings-focus {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+}
+.preset-settings-hardware {
+  margin: 0 0 14px;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-1);
+}
+.preset-settings-hardware-heading {
+  margin: 0 0 4px;
+  font-weight: 700;
+  font-size: var(--text-sm);
+}
+.preset-settings-hardware-line {
+  margin: 2px 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+.preset-settings-hardware-label {
+  color: var(--text);
+}

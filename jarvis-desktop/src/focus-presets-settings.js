@@ -32,6 +32,7 @@ const how = el("focus-presets-how");
 const oneCard = el("focus-presets-one-card");
 const note = el("focus-presets-note");
 const lane = el("focus-presets-lane");
+const hardware = el("focus-presets-hardware");
 const list = el("focus-presets-list");
 const apply = el("focus-presets-apply");
 const applyWhy = el("focus-presets-apply-why");
@@ -96,6 +97,12 @@ if (card && list && apply && line) {
     }
     button.append(head);
 
+    if (item.focus) {
+      const focus = document.createElement("span");
+      focus.className = "preset-settings-focus";
+      focus.textContent = item.focus;
+      button.append(focus);
+    }
     if (item.description) {
       const description = document.createElement("span");
       description.className = "preset-settings-description";
@@ -109,6 +116,42 @@ if (card && list && apply && line) {
       button.append(details);
     }
     return button;
+  }
+
+  function addHardwareLine(parent, label, value) {
+    if (!value) return;
+    const line = document.createElement("p");
+    line.className = "preset-settings-hardware-line";
+    const strong = document.createElement("span");
+    strong.className = "preset-settings-hardware-label";
+    strong.textContent = `${label}: `;
+    line.append(strong, document.createTextNode(value));
+    parent.append(line);
+  }
+
+  function renderHardware(view) {
+    const hw = view.hardware;
+    if (!hw || !hw.available) {
+      hardware.hidden = true;
+      hardware.replaceChildren();
+      return;
+    }
+    hardware.replaceChildren();
+    const heading = document.createElement("p");
+    heading.className = "preset-settings-hardware-heading";
+    heading.textContent = "On this PC";
+    hardware.append(heading);
+    if (hw.count === 0) {
+      addHardwareLine(hardware, "Graphics cards", "none was detected");
+    } else {
+      const names = hw.cards.map((card) => [card.name, card.vram].filter(Boolean).join(" ")).join(", ");
+      addHardwareLine(hardware, "Graphics cards", `${hw.count}${names ? `: ${names}` : ""}`);
+    }
+    const names = new Map(view.items.map((item) => [item.id, item.name]));
+    const focus = hw.focusChoices.map((id) => names.get(id) || id).join(", ");
+    addHardwareLine(hardware, "Focus choices", focus);
+    addHardwareLine(hardware, "Priorities", hw.priorityChoices.join(", "));
+    hardware.hidden = hardware.childElementCount === 0;
   }
 
   function render() {
@@ -137,6 +180,7 @@ if (card && list && apply && line) {
       } else {
         lane.hidden = true;
       }
+      renderHardware(view);
       list.replaceChildren();
       for (const item of view.items) list.append(itemNode(item));
       apply.disabled = view.action.disabled;
@@ -144,6 +188,8 @@ if (card && list && apply && line) {
       applyWhy.textContent = view.action.why;
     } else {
       lane.hidden = true;
+      hardware.hidden = true;
+      hardware.replaceChildren();
       list.replaceChildren();
       const reason = document.createElement("p");
       reason.className = "note";

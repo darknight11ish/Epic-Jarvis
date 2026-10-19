@@ -1,12 +1,19 @@
 /**
  * Focus presets - the reading and the words the desktop draws.
  *
- * The PC owns this feature: it decides which presets exist, what each one is
- * called, which models and lane it uses, what it costs, what it is worse at,
- * which one is chosen and whether a preset is ready. This file only reads that
- * answer and turns it into the small view objects the quickbar and Settings
- * draw. It deliberately knows no preset name or id: a preset added, renamed or
- * removed by the PC must appear, disappear or move without a desktop release.
+ * The PC owns this feature. `backend/jarvis_presets.py` and the generated
+ * `backend/fixtures/work_presets.json` are the contract: five presets (an id,
+ * title, focus, what, cost, worse, model, lane, context, pending, heavy-mode and
+ * the one apply block), the hardware block and the recommendations. This file
+ * only reads that answer and turns it into the small view objects the quickbar
+ * and Settings draw. It deliberately knows no preset name or id: a preset
+ * added, renamed or removed by the PC must appear, disappear or move without a
+ * desktop release.
+ *
+ * The LAN/apply half has not landed yet. Every preset's `apply` block has the
+ * action, switch route, lane-start bit and `auto: false` - but no apply route -
+ * so applyState reports "waiting" and the one action stays disabled. When the
+ * lane patch adds its route/field, this reading enables it without a UI change.
  *
  * It is a plain ES module with no DOM and no Tauri import so `node
  * tests/focus-presets.mjs` can exercise every rule without a browser. The DOM
@@ -44,6 +51,9 @@ export const BAD_ANSWER_WORDS =
 export const NO_PRESETS_WORDS = "The PC listed no presets.";
 export const NO_CHOICE_WORDS = "No preset chosen yet";
 export const BEING_PREPARED = "Being prepared";
+export const APPLY_WAITING =
+  "The apply/lane patch is not on the PC yet. Until it lands, no preset can " +
+  "be applied; nothing changes here.";
 export const ASKED_WORDS = "Asked the PC. Nothing changes until you answer the card.";
 export const REFUSED_WORDS = "That did not work.";
 
@@ -71,57 +81,137 @@ function field(row, names) {
   return "";
 }
 
+function numberText(value) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(Math.round(value)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
+  return plain(value);
+}
+
 function isFalse(value) {
   return value === false || value === "false" || value === 0 || value === "0";
 }
 
+function laneWords(row) {
+  const lane = row && row.lane;
+  if (typeof lane === "string") return lane.trim();
+  if (!lane || typeof lane !== "object") return "";
+  const card = field(lane, ["card", "name", "label"]);
+  const words = field(lane, ["words", "detail", "why"]);
+  return [card, words].filter(Boolean).join(" · ");
+}
+
+function contextWords(value) {
+  const got = numberText(value);
+  return got ? `${got} tokens` : "";
+}
+
 function presetStatus(row) {
-  const raw = field(row, ["status", "state", "readiness"]);
-  const state = raw.toLowerCase();
-  const beingPrepared = Boolean(row && row.being_prepared) ||
-    isFalse(row && row.prepared) ||
+  const pending = Boolean(row && (row.pending === true || row.preparing === true)) ||
     isFalse(row && row.ready) ||
-    (Array.isArray(row && row.state) && row.state.some((x) => plain(x).toLowerCase() === "preparing"));
-  const known = /prepar|install|download|measur|pending|not ready|preparing/.test(state);
-  const ready = !(beingPrepared || known);
-  const statusWords = field(row, [
-    "status_words", "preparing_words", "why", "note", "not_ready_words",
-  ]);
-  return { ready, statusWords: ready ? "" : (statusWords || BEING_PREPARED) };
+    /preparing|pending|install|download|measuring|not ready/i.test(
+      field(row, ["status", "state", "readiness"]),
+    );
+  const statusWords = field(row, ["status_words", "pending_words", "why", "note", "not_ready_words"]);
+  return { ready: !pending, statusWords: pending ? (statusWords || BEING_PREPARED) : "" };
+}
+
+function applySupport(row) {
+  const apply = row && row.apply && typeof row.apply === "object" ? row.apply : {};
+  // The contract half ships switch_route/lane_start/auto but NO apply route.
+  // The LAN/apply patch adds the route (or sets an explicit ready/available
+  // bit); until then the one action is disabled, never guessed.
+  const route = field(apply, ["apply_route", "route", "apply_path", "path"]) ||
+    field(row, ["apply_route", "apply_path"]);
+  const enabled = Boolean(route) ||
+    ((apply.enabled === true || apply.available === true || apply.ready === true) &&
+      !isFalse(apply.enabled) && !isFalse(apply.available));
+  return {
+    ready: enabled,
+    action: field(apply, ["action", "label", "words"]) || ACTION,
+    why: field(apply, ["why", "note", "waiting_words", "disabled_words"]) || APPLY_WAITING,
+    route,
+    laneStart: apply.lane_start === true || apply.lane_start === "true",
+    auto: apply.auto === true,
+  };
 }
 
 function detailsOf(row) {
   const out = [];
   const model = field(row, ["model", "model_name"]);
-  const lane = field(row, ["lane", "card", "graphics_card", "gpu"]);
-  const context = field(row, ["context", "context_words", "context_size"]);
+  const lane = laneWords(row);
+  const context = contextWords(row && row.context);
   const cost = field(row, ["cost", "cost_words", "costs"]);
-  const worse = field(row, ["worse_at", "worseAt", "worse_words", "worse"]);
+  const worse = field(row, ["worse", "worse_at", "worseAt", "worse_words"]);
   if (model) out.push({ label: "Model", value: model });
   if (lane) out.push({ label: "Lane", value: lane });
   if (context) out.push({ label: "Context", value: context });
   if (cost) out.push({ label: "Cost", value: cost });
   if (worse) out.push({ label: "Worse at", value: worse });
+  if (row && row.heavy_mode === true) out.push({ label: "Mode", value: "Heavy: both cards" });
   return out;
 }
 
 function normalisePreset(row) {
   if (!row || typeof row !== "object") return null;
   const id = field(row, ["id", "preset_id", "slug"]);
-  const name = field(row, ["name", "label", "title"]);
+  const name = field(row, ["title", "name", "label"]);
   if (!id || !name) return null;
   const status = presetStatus(row);
+  const apply = applySupport(row);
   return {
     id,
     name,
-    description: field(row, ["description", "words", "what", "detail", "summary"]),
+    focus: field(row, ["focus", "focus_words", "kicker"]),
+    description: field(row, ["what", "description", "words", "detail", "summary"]),
     details: detailsOf(row),
     ready: status.ready,
     statusWords: status.statusWords,
-    // Kept so a later contract field can be honoured without changing the
-    // drawing code; the PC's own answer wins.
-    canApply: row.can_apply === undefined ? true : !isFalse(row.can_apply),
+    applyReady: apply.ready,
+    applyAction: apply.action,
+    applyWhy: apply.why,
     selectedOnServer: Boolean(row.selected || row.current || row.chosen),
+  };
+}
+
+function hardwareCard(row) {
+  if (!row || typeof row !== "object") return null;
+  const name = field(row, ["name", "model", "title"]);
+  const vram = numberText(row.vram_gib ?? row.memory_gib ?? row.vram);
+  return {
+    name: name || "A graphics card",
+    vram: vram ? `${vram} GB` : "",
+  };
+}
+
+function normaliseHardware(raw) {
+  if (!raw || typeof raw !== "object") {
+    return {
+      available: false, count: 0, cards: [], source: "",
+      focusChoices: [], priorityChoices: [], why: "",
+    };
+  }
+  const detected = raw.detected && typeof raw.detected === "object" ? raw.detected : {};
+  const questionnaire = raw.questionnaire && typeof raw.questionnaire === "object" ? raw.questionnaire : {};
+  const cards = Array.isArray(detected.cards)
+    ? detected.cards.map(hardwareCard).filter(Boolean)
+    : [];
+  const count = Number.isInteger(detected.count) ? detected.count : cards.length;
+  const focusChoices = Array.isArray(questionnaire.focus_choices)
+    ? questionnaire.focus_choices.map((x) => plain(x)).filter(Boolean)
+    : [];
+  const priorityChoices = Array.isArray(questionnaire.priority_choices)
+    ? questionnaire.priority_choices.map((x) => plain(x)).filter(Boolean)
+    : [];
+  return {
+    available: true,
+    count,
+    cards,
+    source: field(detected, ["source"]),
+    focusChoices,
+    priorityChoices,
+    answers: questionnaire.answers,
+    why: "",
   };
 }
 
@@ -136,6 +226,10 @@ function emptyReading(why) {
     chosen: null,
     lane: { words: "", label: "", ready: false, why: "" },
     presets: [],
+    hardware: normaliseHardware(null),
+    applyAction: ACTION,
+    applyReady: false,
+    applyWhy: APPLY_WAITING,
   };
 }
 
@@ -143,21 +237,18 @@ function emptyReading(why) {
  * The PC's answer, read. Never throws; a shape this desktop cannot read is an
  * honest `available: false` with the update line, not a made-up preset list.
  *
- * `raw` is whatever the bridge returned: the HTTP body unchanged, or a Tauri
- * error string. The field names below are the contract the backend branch
- * publishes; the aliases are only tolerance for the few spellings already used
- * by older backend answers (camelCase and snake_case).
+ * `raw` is whatever the bridge returned: the fixture/HTTP body unchanged, or a
+ * Tauri error string. The fixture's real shape is in
+ * `backend/fixtures/work_presets.json`; tests read that file itself so this
+ * reading cannot drift from the contract.
  */
 export function normaliseReading(raw) {
-  if (typeof raw === "string") {
-    return emptyReading(raw.trim() || BAD_ANSWER_WORDS);
-  }
+  if (typeof raw === "string") return emptyReading(raw.trim() || BAD_ANSWER_WORDS);
   if (!raw || typeof raw !== "object") return emptyReading(BAD_ANSWER_WORDS);
   if (raw.ok === false) {
     return emptyReading(field(raw, ["why", "error", "message"]) || UNAVAILABLE_WORDS);
   }
   const body = raw.data && typeof raw.data === "object" ? raw.data : raw;
-  if (!body || typeof body !== "object") return emptyReading(BAD_ANSWER_WORDS);
   if (body.available === false) {
     return emptyReading(field(body, ["why", "detail", "error"]) || UNAVAILABLE_WORDS);
   }
@@ -169,7 +260,6 @@ export function normaliseReading(raw) {
   const presets = [];
   for (const row of rows) {
     const preset = normalisePreset(row);
-
     if (!preset || seen.has(preset.id)) return emptyReading(BAD_ANSWER_WORDS);
     seen.add(preset.id);
     presets.push(preset);
@@ -187,8 +277,10 @@ export function normaliseReading(raw) {
     const selected = presets.find((p) => p.selectedOnServer);
     chosenId = selected ? selected.id : "";
   }
+  // An unknown chosen id is not fatal: the PC may have removed it between reads.
+  // It simply marks no row until the next read, rather than blanking the page.
   const chosen = presets.find((p) => p.id === chosenId) || null;
-  if (chosenId && !chosen) return emptyReading(BAD_ANSWER_WORDS);
+  if (!chosen) chosenId = "";
 
   const laneRaw = body.lane !== undefined ? body.lane
     : body.lane_status !== undefined ? body.lane_status
@@ -202,6 +294,8 @@ export function normaliseReading(raw) {
   };
   if (!lane.label) lane.label = lane.words;
 
+  const apply = applySupport(presets[0]);
+  const waiting = presets.find((p) => !p.applyReady);
   return {
     available: true,
     why: "",
@@ -214,8 +308,13 @@ export function normaliseReading(raw) {
     chosen,
     lane,
     presets,
-    canApply: body.can_apply === undefined ? true : !isFalse(body.can_apply),
-    applyWhy: field(body, ["cannot_apply_words", "apply_why", "apply_note"]),
+    hardware: normaliseHardware(body.hardware),
+    oldIds: Array.isArray(body.old_ids_replaced)
+      ? body.old_ids_replaced.map((x) => plain(x)).filter(Boolean)
+      : [],
+    applyAction: apply.action,
+    applyReady: presets.every((p) => p.applyReady),
+    applyWhy: presets.every((p) => p.applyReady) ? "" : (waiting || {}).applyWhy || APPLY_WAITING,
   };
 }
 
@@ -240,6 +339,7 @@ export function presetView(preset, chosenId) {
   return {
     id: preset.id,
     name: preset.name,
+    focus: preset.focus,
     description: preset.description,
     details: preset.details,
     current: preset.id === chosenId,
@@ -252,12 +352,12 @@ function applyState(reading, selectedId, { stale = false, busy = false } = {}) {
   if (stale) return { ok: false, why: STALE_WORDS };
   if (busy) return { ok: false, why: "Asking the PC..." };
   if (!reading || !reading.available) return { ok: false, why: reading ? reading.why : UNAVAILABLE_WORDS };
-  if (!reading.canApply) return { ok: false, why: reading.applyWhy || REFUSED_WORDS };
+  if (!reading.applyReady) return { ok: false, why: reading.applyWhy || APPLY_WAITING };
   const preset = reading.presets.find((p) => p.id === selectedId);
   if (!preset) return { ok: false, why: PICK_FIRST };
   if (preset.id === reading.chosenId) return { ok: false, why: ALREADY_CHOSEN };
   if (!preset.ready) return { ok: false, why: preset.statusWords || BEING_PREPARED };
-  if (!preset.canApply) return { ok: false, why: preset.statusWords || REFUSED_WORDS };
+  if (!preset.applyReady) return { ok: false, why: preset.applyWhy || APPLY_WAITING };
   return { ok: true, why: "", id: preset.id };
 }
 
@@ -287,13 +387,14 @@ export function pickerView(reading, selectedId, { stale = false, busy = false, l
     kicker: reading.kicker,
     howTo: reading.howTo,
     lane: reading.lane,
+    hardware: reading.hardware,
     items: reading.presets.map((p) => ({
       ...presetView(p, reading.chosenId),
       selected: p.id === selection,
       selectable: true,
     })),
     action: {
-      label: ACTION,
+      label: reading.applyAction,
       disabled: !applied.ok,
       why: applied.why,
     },
@@ -303,7 +404,9 @@ export function pickerView(reading, selectedId, { stale = false, busy = false, l
 
 /**
  * The Settings page: the same list and the same one action, with the one-card
- * explanation. Nothing here writes a setting until the owner posts the action.
+ * explanation and the contract's hardware block. Nothing here writes a
+ * setting until the owner posts the action; and while the apply/lane patch is
+ * absent the one action stays disabled with the PC's own waiting line.
  */
 export function settingsView(reading, selectedId, { stale = false, busy = false, line = "" } = {}) {
   if (!reading || !reading.available) {
@@ -313,7 +416,9 @@ export function settingsView(reading, selectedId, { stale = false, busy = false,
       kicker: KICKER,
       reason: reading ? reading.why : UNAVAILABLE_WORDS,
       oneCard: ONE_CARD,
+      note: "",
       items: [],
+      hardware: normaliseHardware(null),
       action: { label: ACTION, disabled: true, why: reading ? reading.why : UNAVAILABLE_WORDS },
       line: String(line || ""),
     };
@@ -328,12 +433,13 @@ export function settingsView(reading, selectedId, { stale = false, busy = false,
     oneCard: reading.oneCard || ONE_CARD,
     note: reading.note || "",
     lane: reading.lane,
+    hardware: reading.hardware,
     items: reading.presets.map((p) => ({
       ...presetView(p, reading.chosenId),
       selected: p.id === selection,
       selectable: true,
     })),
-    action: { label: ACTION, disabled: !applied.ok, why: applied.why },
+    action: { label: reading.applyAction, disabled: !applied.ok, why: applied.why },
     line: String(line || ""),
   };
 }

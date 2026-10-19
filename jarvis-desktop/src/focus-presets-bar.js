@@ -121,6 +121,12 @@ if (chip && picker && list && apply && line) {
     }
     button.append(head);
 
+    if (item.focus) {
+      const focus = document.createElement("span");
+      focus.className = "preset-item-focus";
+      focus.textContent = item.focus;
+      button.append(focus);
+    }
     if (item.description) {
       const description = document.createElement("span");
       description.className = "preset-item-description";
@@ -134,6 +140,16 @@ if (chip && picker && list && apply && line) {
       button.append(details);
     }
     return button;
+  }
+
+  function hardwareLine(hardware) {
+    if (!hardware || !hardware.available) return "";
+    if (hardware.cards.length) {
+      const names = hardware.cards.map((card) => [card.name, card.vram].filter(Boolean).join(" ")).join(", ");
+      return names;
+    }
+    if (hardware.count === 0) return "No graphics card detected.";
+    return "";
   }
 
   function renderPicker() {
@@ -161,8 +177,9 @@ if (chip && picker && list && apply && line) {
     pickerTitle.textContent = view.heading;
     pickerKicker.textContent = view.kicker;
     pickerHow.textContent = view.howTo;
-    if (view.lane && view.lane.label) {
-      pickerLane.textContent = view.lane.label;
+    const laneLine = (view.lane && view.lane.label) || hardwareLine(view.hardware);
+    if (laneLine) {
+      pickerLane.textContent = laneLine;
       pickerLane.hidden = false;
     } else {
       pickerLane.hidden = true;
