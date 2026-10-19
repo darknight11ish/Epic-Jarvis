@@ -8,8 +8,15 @@ reviewed allow-list below (only calls whose environment arrives another way).
 
 This is a STRUCTURAL test, not a grep: the file's syntax tree is walked, so a
 call split over lines, an `env=` moved into a dict, or a new spawn added
-anywhere in `backend/jarvis_*.py` is seen. A stale allow-list entry fails too,
-so an exception cannot stay behind after its call changes.
+anywhere in `backend/jarvis_*.py` OR `backend/rebuilt/jarvis_*.py` is seen. A
+stale allow-list entry fails too, so an exception cannot stay behind after its
+call changes.
+
+`rebuilt/` was a blind spot until 2026-10-18 (security-wave follow-up): this
+scan only looked at the top level, so `backend/rebuilt/jarvis_compute.py`'s
+`subprocess.run([nvidia-smi], ...)` without `env=` - which hands the child
+HUD_TOKEN if it is in the backend's environment - was invisible. It now scans
+both directories and that spawn passes `jarvis_child_env.inherited()`.
 """
 from __future__ import annotations
 
@@ -81,28 +88,33 @@ def _calls(tree: ast.AST):
 def main() -> int:
     found = 0
     matched = set()
-    for path in sorted(HERE.glob("jarvis_*.py")):
+    paths = (sorted(HERE.glob("jarvis_*.py"))
+             + sorted((HERE / "rebuilt").glob("jarvis_*.py")))
+    for path in paths:
+        relative = path.relative_to(HERE).as_posix()
         try:
             tree = ast.parse(path.read_text(encoding="utf-8"))
         except SyntaxError as exc:
-            check(f"{path.name} parses", False, exc)
+            check(f"{relative} parses", False, exc)
             continue
         for node, function in _calls(tree):
             found += 1
             has_env = any(kw.arg == "env" for kw in node.keywords)
             reviewed = next((r for r in ALLOWED
-                             if r.file == path.name and r.function == function), None)
+                             if r.file == relative and r.function == function), None)
             if has_env:
-                check(f"{path.name}:{node.lineno} {function}: passes env=", True)
+                check(f"{relative}:{node.lineno} {function}: passes env=", True)
                 continue
             if reviewed is not None:
                 matched.add(reviewed)
-                check(f"{path.name}:{node.lineno} {function}: reviewed exception", True,
+                check(f"{relative}:{node.lineno} {function}: reviewed exception", True,
                       reviewed.why)
                 continue
-            check(f"{path.name}:{node.lineno} {function}: passes env= or is reviewed",
+            check(f"{relative}:{node.lineno} {function}: passes env= or is reviewed",
                   False, "a child here would inherit HUD_TOKEN/JARVIS_TOKEN")
     check("the scan found the backend's real spawns (not an empty tree)", found >= 20, found)
+    check("the scan reaches backend/rebuilt/ too (the 2026-10-18 blind spot)",
+          any(path.parent.name == "rebuilt" for path in paths), len(paths))
     for entry in ALLOWED:
         check(f"the reviewed exception is still real: {entry.file}:{entry.function}",
               entry in matched, entry.why if entry in matched else "no such spawn any more")

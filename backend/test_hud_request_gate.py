@@ -273,12 +273,26 @@ def t_the_11th_bad_token_is_429_and_a_valid_one_resets():
 
     check("(c) a request with no token at all is not counted",
           OC.request_carries_token(H()) is False)
+    check("(c) a normal unauthenticated status poll is not counted",
+          OC.request_carries_token(H({}, "/api/status")) is False)
+    check("(c) a path that merely CONTAINS 'token' is not a presentation",
+          OC.request_carries_token(H({}, "/api/token-store/info")) is False)
+    check("(c) a cookie VALUE that looks like a token name is not a presentation",
+          OC.request_carries_token(H({"Cookie": "other=jarvis_token=guess"})) is False)
     check("(c) a request presenting a token is counted (header)",
           OC.request_carries_token(H({"X-Jarvis-Token": "wrong"})) is True)
     check("(c) ... and via the cookie too",
           OC.request_carries_token(H({"Cookie": "a=b; jarvis_token=wrong"})) is True)
     check("(c) ... and via the one-time query token",
           OC.request_carries_token(H({}, "/?token=wrong")) is True)
+    # 2026-10-18 security-wave follow-up (MEDIUM): the HUD decodes the query
+    # with parse_qs, so `tok%65n=` IS the ?token= bootstrap to it. Counting
+    # only the raw spelling let an encoded guess get a 401 without ever
+    # filling the bucket.
+    check("(c) a percent-encoded ?tok%65n= guess IS counted (no bucket bypass)",
+          OC.request_carries_token(H({}, "/?tok%65n=guess")) is True)
+    check("(c) ... and so is a fully encoded token name",
+          OC.request_carries_token(H({}, "/api/x?%74oken=guess")) is True)
 
 
 def t_the_401_becomes_429_only_when_the_bucket_is_full():
