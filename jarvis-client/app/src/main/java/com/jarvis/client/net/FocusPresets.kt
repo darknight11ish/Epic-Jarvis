@@ -18,8 +18,15 @@ import kotlinx.serialization.json.put
  * here (`preset.title`, `focus`, `what`, `cost`, `worse`, the model and lane
  * labels); a client must never write its own description of a preset or name a
  * model itself. The generated fixture both apps build against is
- * `backend/fixtures/work_presets.json` (tools/gen_work_cases.py; regenerate,
+ * `backend/fixtures/work_presets.json` (tools/gen_work_presets.py; regenerate,
  * never hand-edit), and [FocusPresetsTest] reads that real file.
+ *
+ * The new contract's answer carries the five `presets[]`, the PC's `hardware`
+ * (with the `questionnaire`) and `recommendations`, plus the saved `chosen`
+ * id when the PC has one. This object keeps those blocks so the client parses
+ * the WHOLE shape rather than only the rows, but only [presets] and [chosen]
+ * change what the screens draw; the chip and the plate render one row per
+ * preset, never a hardcoded list.
  *
  * Generic over the list: the owner added `general_uncensored` as a fifth
  * preset and may change Agentic+Vision's model after a measurement, so this
@@ -28,13 +35,20 @@ import kotlinx.serialization.json.put
  * no apply button.
  *
  * ONE action: using a preset posts the single apply action the contract names
- * (a switch_model card, tier "ask"). Nothing is automatic ([Apply.auto] must
- * be false), nothing is posted while the link is stale, and a success never
- * means the switch happened - the caller re-reads the list.
+ * (`apply.apply_route`, today `/api/work/apply`; an older contract only names
+ * `switch_route`, which is the existing switch_model card). The body for the
+ * apply route is `{"preset": "<id>"}` - the body its backend test expects -
+ * and the fallback switch route keeps the existing `{"ref": "<model>"}` body.
+ * Nothing is automatic ([Apply.auto] must be false), nothing is posted while
+ * the link is stale, and a success never means the switch happened - the
+ * caller re-reads the list.
  */
 object FocusPresets {
 
     const val PATH = "/api/work"
+
+    /** The contract's own apply route (presets.patch, 2026-10-18). */
+    const val APPLY_PATH = "/api/work/apply"
 
     // ---- local UI labels only; every word about a preset comes from the contract ----
     const val TITLE = "Focus presets"
@@ -82,7 +96,6 @@ object FocusPresets {
         /** The route to post, or null when the contract names no action yet. */
         val postRoute: String? get() = route ?: switchRoute
     }
-
     data class Preset(
         val id: String,
         val title: String,
@@ -106,6 +119,17 @@ object FocusPresets {
         val chosen: String?,
         val found: String?,
         val switchPath: String?,
+        /** The PC's own cards, as the answer sends them (`detected`). */
+        val hardware: JsonObject? = null,
+        /** The detected-card block, whichever shape carried it. */
+        val detected: JsonObject? = null,
+        /** focus/priority choices and answers (inside `hardware` in the fixture; top-level live). */
+        val questionnaire: JsonObject? = null,
+        /** The 1/2/3-GPU rows the PC worked out; parsed, not drawn by this feature yet. */
+        val recommendations: JsonObject? = null,
+        /** The lane the PC's chat points at right now, and the two contract paths. */
+        val activeLane: JsonObject? = null,
+        val applyPath: String? = null,
     ) {
         fun preset(id: String): Preset? = presets.firstOrNull { it.id == id }
         val current: Preset? get() = chosen?.let(::preset)
@@ -159,11 +183,25 @@ object FocusPresets {
             ?: root.str("current")
             ?: presets.firstOrNull { it.id == root.str("current_id") }?.id
             ?: presets.firstOrNull { root.bool("chosen") == true }?.id
+        // The live GET /api/work answer (jarvis_presets.live_status) carries
+        // `hardware` as the detected-card block and `questionnaire` beside it;
+        // the generated fixture's `hardware` wraps both. Accept both, and keep
+        // the active lane and apply path parsed so the live shape is checked
+        // here. This feature draws only the preset rows and the chosen id.
+        val hardware = root.obj("hardware")
+        val detected = hardware?.obj("detected") ?: hardware
+        val questionnaire = hardware?.obj("questionnaire") ?: root.obj("questionnaire")
         return View(
             presets = presets,
             chosen = chosen,
             found = root.str("found"),
             switchPath = root.str("switch_path"),
+            hardware = hardware,
+            detected = detected,
+            questionnaire = questionnaire,
+            recommendations = root.obj("recommendations"),
+            activeLane = root.obj("active_lane"),
+            applyPath = root.str("apply_path"),
         )
     }
 
@@ -188,11 +226,22 @@ object FocusPresets {
         else -> null
     }
 
-    /** The exact body the contract named, or the existing switch body for the fallback route. */
-    fun applyBody(preset: Preset): JsonObject =
-        preset.apply.body ?: buildJsonObject {
-            if (preset.apply.route == null && preset.model.isNotBlank()) put("ref", preset.model)
+    /**
+     * The body for the contract's action: an explicit contract body wins; the
+     * merged apply route takes `{"preset": "<id>"}` (the body its backend
+     * test expects); the old switch fallback keeps `{"ref": "<model>"}`.
+     */
+    fun applyBody(preset: Preset): JsonObject {
+        preset.apply.body?.let { return it }
+        val route = preset.apply.postRoute ?: return buildJsonObject { }
+        return if (route == APPLY_PATH || route.endsWith("/work/apply")) {
+            buildJsonObject { put("preset", preset.id) }
+        } else {
+            buildJsonObject {
+                if (preset.model.isNotBlank()) put("ref", preset.model)
+            }
         }
+    }
 
     fun applyRoute(preset: Preset): String? = preset.apply.postRoute
 
@@ -216,7 +265,14 @@ object FocusPresets {
 
     /** What the PC answered to the one apply POST, in its own words when it gives any. */
     fun replyLine(code: Int, body: JsonObject?): String = when (code) {
-        200, 202 -> body?.str("words") ?: body?.str("message") ?: body?.str("line") ?: WAITING
+        200 -> body?.str("words") ?: body?.str("message") ?: body?.str("line")
+            ?: if (body?.bool("changed") == true) {
+                // The apply route's success body carries no sentence of its own.
+                "Preset applied. Your PC switched its chat lane; nothing else changed."
+            } else {
+                WAITING
+            }
+        202 -> body?.str("words") ?: body?.str("message") ?: body?.str("line") ?: WAITING
         else -> body?.str("error")?.let { "Not changed. $it" } ?: NOTHING_CHANGED
     }
 
@@ -250,7 +306,7 @@ object FocusPresets {
             ?.takeIf { it.startsWith("/api/") }
         return Apply(
             action = o.str("action") ?: USE_THIS,
-            route = routeOf("route") ?: routeOf("path"),
+            route = routeOf("route") ?: routeOf("path") ?: routeOf("apply_route"),
             body = o["body"] as? JsonObject,
             switchRoute = routeOf("switch_route"),
             laneStart = o.bool("lane_start") ?: false,

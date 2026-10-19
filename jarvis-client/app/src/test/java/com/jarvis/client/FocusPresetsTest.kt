@@ -4,7 +4,9 @@ import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.FocusPresets
 import com.jarvis.client.net.JarvisJson
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
@@ -17,13 +19,15 @@ import java.io.File
 
 /**
  * The focus-presets contract (net/FocusPresets.kt), against the REAL generated
- * fixture `backend/fixtures/work_presets.json` (tools/gen_work_cases.py from
- * backend/jarvis_presets.py - never hand-edited). The contract lives on the
- * backend branch until it lands; this test reads the same path both apps will.
+ * fixture `backend/fixtures/work_presets.json` (tools/gen_work_presets.py from
+ * backend/jarvis_presets.py - never hand-edited). The merged answer carries the
+ * five rows plus `hardware`/`questionnaire`/`recommendations`, and the saved
+ * `chosen` id when the PC has one; this test reads that whole shape.
  *
  * The list is deliberately generic: the owner added a fifth preset
- * (general_uncensored, pending), and Agentic+Vision's model may change after a
- * measurement, so nothing here may hardcode four ids, a count, or a model.
+ * (general_uncensored), and Agentic+Vision's model may change after a
+ * measurement, so the parser must not hardcode a count or a model; the fixture
+ * test still pins the five rows the screens actually draw.
  */
 class FocusPresetsTest {
 
@@ -45,6 +49,45 @@ class FocusPresetsTest {
 
     private val view: FocusPresets.View by lazy {
         requireNotNull(FocusPresets.parse(fixture)) { "the generated fixture did not parse" }
+    }
+
+    /**
+     * The documented live GET answer (jarvis_presets.live_status): the same
+     * canonical rows plus `apply_route` on each apply action, `hardware` as the
+     * detected block, top-level `questionnaire`, and chosen/active_lane/paths.
+     * The fixture stays canonical; this is what the PC answers until its
+     * follow-up regenerates the fixture.
+     */
+    private val live: FocusPresets.View by lazy {
+        val hardware = fixture["hardware"] as JsonObject
+        val rows = (fixture["presets"] as JsonArray).map { row ->
+            val p = row as JsonObject
+            val apply = p["apply"] as JsonObject
+            JsonObject(
+                p + ("apply" to JsonObject(apply + ("apply_route" to JsonPrimitive("/api/work/apply")))),
+            )
+        }
+        requireNotNull(
+            FocusPresets.parse(
+                buildJsonObject {
+                    put("found", "5 focus presets")
+                    put("presets", JsonArray(rows))
+                    put("hardware", hardware["detected"]!!)
+                    put("questionnaire", hardware["questionnaire"]!!)
+                    put("recommendations", fixture["recommendations"]!!)
+                    put("chosen", "coding")
+                    put("chosen_preset", "coding")
+                    put("chosen_model", "qwen3-coder-30b-a3b-ud-q3-k-xl")
+                    put("active_lane", buildJsonObject {
+                        put("key", "main")
+                        put("base_url", "http://127.0.0.1:11436")
+                    })
+                    put("apply_path", "/api/work/apply")
+                    put("switch_path", "/api/models/switch")
+                    put("auto", false)
+                },
+            ),
+        ) { "the documented live shape did not parse" }
     }
 
     @Test
@@ -71,6 +114,69 @@ class FocusPresetsTest {
         }
         val generic = requireNotNull(FocusPresets.parse(extra))
         assertEquals(listOf("owner_added_one"), generic.presets.map { it.id })
+    }
+
+    @Test
+    fun `the merged answer carries five rows and the hardware, questionnaire and recommendations blocks`() {
+        // The chip and the plate render one row per preset; the merged contract
+        // has exactly the owner's five today.
+        assertEquals(5, view.presets.size)
+
+        val hardware = requireNotNull(view.hardware) { "hardware block missing" }
+        assertTrue("detected" in hardware)
+        assertTrue("questionnaire" in hardware)
+        val q = requireNotNull(view.questionnaire) { "questionnaire missing" }
+        assertEquals(
+            listOf("general", "general_uncensored", "coding", "agentic_vision", "fast"),
+            (q["focus_choices"] as JsonArray).map { (it as JsonPrimitive).content },
+        )
+        assertEquals(
+            listOf("speed", "quality", "long_context", "vision"),
+            (q["priority_choices"] as JsonArray).map { (it as JsonPrimitive).content },
+        )
+
+        val rec = requireNotNull(view.recommendations) { "recommendations missing" }
+        assertTrue((rec["basis"] as? JsonPrimitive)?.content?.isNotBlank() == true)
+        val by = requireNotNull(rec["by_gpu_count"] as? JsonObject)
+        assertEquals(setOf("1", "2", "3"), by.keys)
+        for ((_, rows) in by) {
+            val row = rows as JsonObject
+            assertEquals(
+                "each GPU count has one row per preset",
+                view.presets.map { it.id }.toSet(),
+                row.keys,
+            )
+        }
+
+        // The GET answer adds the saved id; a contract without one still parses,
+        // and the chip then honestly says no preset is chosen.
+        val chosen = requireNotNull(
+            FocusPresets.parse(
+                buildJsonObject {
+                    put("presets", fixture["presets"]!!)
+                    put("chosen", "coding")
+                },
+            ),
+        )
+        assertEquals("coding", chosen.chosen)
+        assertEquals("Coding", FocusPresets.chipLabel(chosen))
+    }
+
+    @Test
+    fun `the live GET answer - hardware, questionnaire, chosen, active lane and paths - parses`() {
+        assertEquals(5, live.presets.size)
+        assertEquals("coding", live.chosen)
+        assertEquals("Coding", FocusPresets.chipLabel(live))
+        assertEquals("main", (live.activeLane!!["key"] as JsonPrimitive).content)
+        assertEquals("/api/work/apply", live.applyPath)
+        assertEquals("/api/models/switch", live.switchPath)
+        assertNotNull(live.detected)
+        assertNotNull(live.questionnaire)
+        assertNotNull(live.recommendations)
+        for (p in live.presets) {
+            assertEquals(p.id, FocusPresets.APPLY_PATH, FocusPresets.applyRoute(p))
+            assertEquals(p.id, "{\"preset\":\"${p.id}\"}", FocusPresets.applyBody(p).toString())
+        }
     }
 
     @Test
@@ -158,16 +264,22 @@ class FocusPresetsTest {
     }
 
     @Test
-    fun `the apply action is one asked action, never automatic`() {
-        for (p in view.presets) {
+    fun `the apply action is the contract's apply route, one asked action, never automatic`() {
+        for (p in live.presets) {
             assertFalse(p.id, p.apply.auto)
-            val route = FocusPresets.applyRoute(p)
-            assertNotNull(p.id, route)
-            assertTrue(p.id, route!!.startsWith("/api/"))
+            assertEquals(p.id, FocusPresets.APPLY_PATH, FocusPresets.applyRoute(p))
+            assertEquals(
+                p.id,
+                "{\"preset\":\"${p.id}\"}",
+                FocusPresets.applyBody(p).toString(),
+            )
         }
-        // The fixture's fallback route is the existing approval-gated switch.
-        assertEquals("/api/models/switch", FocusPresets.applyRoute(view.preset("general")!!))
-        assertEquals("{\"ref\":\"qwen3.5:9b\"}", FocusPresets.applyBody(view.preset("general")!!).toString())
+        // The canonical fixture (before the backend follow-up adds apply_route)
+        // still carries the honest switch fallback and its own body; an older
+        // PC degrades to the existing switch card rather than misreading it.
+        val general = requireNotNull(view.preset("general"))
+        assertEquals("/api/models/switch", FocusPresets.applyRoute(general))
+        assertEquals("{\"ref\":\"qwen3.5:9b\"}", FocusPresets.applyBody(general).toString())
     }
 
     @Test
@@ -213,6 +325,31 @@ class FocusPresetsTest {
         assertEquals(
             FocusPresets.APPLY_UNPUBLISHED,
             FocusPresets.blocker(v, v.presets.single(), stale = false, linkUp = true),
+        )
+    }
+
+    @Test
+    fun `the apply answer is said honestly - asked, changed, or refused`() {
+        assertEquals(
+            FocusPresets.WAITING,
+            FocusPresets.replyLine(202, buildJsonObject { }),
+        )
+        assertEquals(
+            "Preset applied. Your PC switched its chat lane; nothing else changed.",
+            FocusPresets.replyLine(
+                200,
+                buildJsonObject {
+                    put("ok", true)
+                    put("changed", true)
+                },
+            ),
+        )
+        assertEquals(
+            "Not changed. the model switch did not happen",
+            FocusPresets.replyLine(
+                409,
+                buildJsonObject { put("error", "the model switch did not happen") },
+            ),
         )
     }
 

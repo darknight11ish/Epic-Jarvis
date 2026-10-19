@@ -1608,6 +1608,13 @@ object JarvisRuntime {
                 if (ws is WorkSetups.Read.Loaded && ws.status.chosen != null) {
                     scope.launch { refreshWorkSetups() }
                 }
+                // A preset's apply card was up: the decided card is when the
+                // switch/lane really happened, and the chosen id changes with
+                // it. Re-read only when the preset contract was already loaded,
+                // so an older PC is not asked for a shape it does not have.
+                if (_focusPresets.value is FocusPresets.Read.Loaded) {
+                    scope.launch { refreshFocusPresets() }
+                }
                 // And the voice cards: "hey Jarvis" ON and a voice training.
                 // Neither has an event of its own either, so without this the
                 // Checks screen said "Waiting" over a card already decided.
