@@ -15,6 +15,42 @@ def check(name, cond, detail=""):
     print(("ok   " if cond else "FAIL ") + name + (f"\n        {detail}" if detail and not cond else ""))
 
 
+
+def t_the_live_route_matches_the_generated_contract():
+    """The GET route's deterministic blocks must be the committed fixture itself.
+
+    Hardware detection is the one per-PC input: the fixture stores the cards of
+    the machine that generated it, while the live route reads THIS PC. The test
+    therefore feeds the route the fixture's own detected block, which makes the
+    comparison exact and still catches every shape/word drift between the route
+    and the contract both UIs read. It does not compare `chosen`: that is the
+    owner's local state, deliberately not in the fixture.
+    """
+    import json
+    fixture = json.loads((HERE / "fixtures" / "work_presets.json").read_text(encoding="utf-8"))
+    real = P._detected_cards
+    P._detected_cards = lambda: fixture["hardware"]["detected"]
+    try:
+        live = P.live_status()
+    finally:
+        P._detected_cards = real
+    check("live presets are the fixture's presets, word for word",
+          live["presets"] == fixture["presets"])
+    check("live hardware is the fixture's nested hardware block, word for word",
+          live["hardware"] == fixture["hardware"], live["hardware"])
+    check("live recommendations are the fixture's recommendations, word for word",
+          live["recommendations"] == fixture["recommendations"])
+    check("live old_ids_replaced is the fixture's list",
+          live["old_ids_replaced"] == fixture["old_ids_replaced"])
+    check("there is no second, top-level questionnaire shape",
+          "questionnaire" not in live, list(live))
+    check("the route adds the live-only fields both readers use",
+          live["chosen"] is None or isinstance(live["chosen"], str)
+          and live["lane"]["key"] in ("main", "coding", None)
+          and live["active_lane"]["key"] == live["lane"]["key"]
+          and isinstance(live["auto"], bool) and live["auto"] is False
+          and live["apply_path"] == "/api/work/apply")
+
 def main() -> int:
     fixture = json.loads((HERE / "fixtures" / "work_presets.json").read_text(encoding="utf-8"))
     check("exactly five presets, in the owner's order",
@@ -127,6 +163,8 @@ def main() -> int:
     check("General Uncensored is measured in the 2-GPU rows now",
           rec["by_gpu_count"]["2"]["general_uncensored"]["tok_s"] == 45.6
           and rec["by_gpu_count"]["2"]["general_uncensored"]["measured"] is True)
+
+    t_the_live_route_matches_the_generated_contract()
 
     print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
     if FAILED:

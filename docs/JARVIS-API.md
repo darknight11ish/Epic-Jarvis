@@ -21787,13 +21787,20 @@ render it verbatim. No new token and no new gate action.
 origin and token checks as the old route; the answer is:
 
     {"found", "presets": [five], "old_ids_replaced": [...],
-     "hardware": {"count", "cards": [{"index","name","vram_gib","uuid"}], "source"},
-     "questionnaire": {"focus_choices", "priority_choices", "answers"},
+     "hardware": {"detected": {"count", "cards": [{"index","name","vram_gib","uuid"}],
+                                "source": "jarvis_hardware.detect()"},
+                  "questionnaire": {"focus_choices", "priority_choices", "answers"}},
      "recommendations": {"by_gpu_count": {"1","2","3": {...}}, "three_gpu_plan"},
      "chosen": "<preset id or null>", "chosen_preset", "chosen_model",
-     "active_lane": {"key": "main"|"coding"|null, "base_url"},
+     "lane": {"key", "base_url", "card", "words", "label", "ready", "why"},
+     "lane_status": <same object>, "active_lane": {"key", "base_url"},
      "apply_path": "/api/work/apply", "switch_path": "/api/models/switch",
      "auto": false, "not_a_catalogue"}
+
+The `hardware` block is the SAME shape as the generated contract fixture
+(`detected` + `questionnaire` nested, no second top-level `questionnaire`);
+this is what the desktop and Android readers expect. `chosen`, `lane` and
+`active_lane` are live PC state and are deliberately not in the fixture.
 
 Each preset carries `id/title/focus/what/cost/worse/model/lane{key,card,port,
 words}/context/helper/policy/measured/pending/heavy_mode/apply{action,

@@ -313,17 +313,34 @@ def live_status() -> dict:
     chosen = choice()
     chosen_preset = by_id(chosen) if chosen else None
     hw = hardware_block()
+    lane_key = _active_lane_key()
+    lane_info = LANES.get(lane_key) if lane_key else None
+    lane_label = ""
+    if lane_info:
+        lane_label = f"{lane_info['card']} · {lane_info['words']}"
+    lane = {
+        "key": lane_key,
+        "base_url": _active_url(),
+        "card": lane_info["card"] if lane_info else "",
+        "words": lane_info["words"] if lane_info else "",
+        "label": lane_label,
+        "ready": lane_info is not None,
+        "why": "" if lane_info else "no preset has been applied on this PC yet",
+    }
     return {
         "found": f"{len(PRESETS)} focus presets",
         "presets": [p.view() for p in PRESETS],
         "old_ids_replaced": list(OLD_IDS),
-        "hardware": hw["detected"],
-        "questionnaire": hw["questionnaire"],
+        # The exact shape the generated contract fixture has (and the one the
+        # desktop/Android readers expect): hardware.detected + hardware.questionnaire.
+        "hardware": hw,
         "recommendations": recommendations(),
         "chosen": chosen,
         "chosen_preset": chosen,
         "chosen_model": chosen_preset.model if chosen_preset else None,
-        "active_lane": {"key": _active_lane_key(), "base_url": _active_url()},
+        "active_lane": {"key": lane_key, "base_url": _active_url()},
+        "lane": lane,
+        "lane_status": lane,
         "apply_path": APPLY_PATH,
         "switch_path": SWITCH_ROUTE,
         "auto": False,

@@ -169,9 +169,18 @@ def t_get_work_serves_the_new_contract():
           [p["id"] for p in body["presets"]] == list(P.PRESET_IDS)
           and body["presets"][0]["apply"]["apply_route"] == "/api/work/apply")
     check("... and the hardware/questionnaire/recommendations blocks",
-          body["hardware"]["source"] == "jarvis_hardware.detect()"
-          and body["questionnaire"]["focus_choices"] == list(P.PRESET_IDS)
-          and sorted(body["recommendations"]["by_gpu_count"]) == ["1", "2", "3"])
+          body["hardware"]["detected"]["source"] == "jarvis_hardware.detect()"
+          and body["hardware"]["questionnaire"]["focus_choices"] == list(P.PRESET_IDS)
+          and sorted(body["recommendations"]["by_gpu_count"]) == ["1", "2", "3"]
+          and "questionnaire" not in body, body.keys())
+    check("... and a top-level lane/lane_status beside active_lane",
+          "lane" in body and "lane_status" in body and "active_lane" in body
+          and body["lane"]["key"] == "main"
+          and "RTX 2060" in body["lane"]["label"])
+    check("... the hardware shape is the fixture's nested shape",
+          sorted(body["hardware"]) == ["detected", "questionnaire"]
+          and sorted(body["hardware"]["detected"]) == ["cards", "count", "source"],
+          body["hardware"])
     check("... and chosen/active-lane fields, never a token",
           "chosen" in body and "chosen_preset" in body and "active_lane" in body
           and "X-Jarvis-Token" not in json.dumps(body))
