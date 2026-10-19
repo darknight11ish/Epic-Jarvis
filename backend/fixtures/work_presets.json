@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_by": "tools/gen_work_cases.py",
+  "generated_by": "tools/gen_work_presets.py",
   "source": "backend/jarvis_presets.py",
   "note": "both apps render these same words; regenerate, never hand-edit",
   "presets": [

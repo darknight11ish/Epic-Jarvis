@@ -141,7 +141,13 @@ SOURCE_PIN_CEILING: dict[str, int] = {
     "backend/test_memory_honesty.py": 7,
     "backend/test_memory_recall.py": 1,
     "backend/test_memory_rerank.py": 2,
-    "backend/test_model_lanes.py": 16,
+    # RAISED 2026-10-18, 16 -> 17, for test_model_lanes.py's one named-lane
+    # check: the old "for lane in LANES" string pin was replaced by real
+    # behaviour checks (one start(lane=...) call from start_lane, lane_by_key
+    # present), which is one MORE honest source pin but no weaker test. The
+    # total moves 415 -> 416; measured, not argued: test_no_source_pins reads
+    # 416 on this tree.
+    "backend/test_model_lanes.py": 17,
     "backend/test_news.py": 2,
     "backend/test_note_capture.py": 6,
     "backend/test_notion_obsidian.py": 4,
