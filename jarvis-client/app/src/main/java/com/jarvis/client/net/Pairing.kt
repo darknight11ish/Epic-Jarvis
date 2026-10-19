@@ -181,7 +181,7 @@ object Pairing {
         val mesh = (host.endsWith(".ts.net") && host.length > ".ts.net".length) ||
             (host.endsWith(".nord") && host.length > ".nord".length)
         if (!mesh) return HOST_NOT_MESH
-        return PhoneAddress.problem("http://$host")
+        return PhoneAddress.problem("http://$host", allowLoopback = com.jarvis.client.BuildConfig.DEBUG)
     }
 
     // ── The typed code (design §8.5) ─────────────────────────────────────

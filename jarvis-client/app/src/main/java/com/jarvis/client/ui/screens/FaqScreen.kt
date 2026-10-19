@@ -444,6 +444,16 @@ private fun AboutCard() {
         AboutFact("Version", BuildConfig.VERSION_NAME)
         AboutFact("Made by", "darknight11ish")
         AboutFact("Licence", "MIT, with third-party parts under their own licences")
+        // Release safety (2026-10-18): the certificate digest of the copy in
+        // the owner's hand, so a key rotation is visible here instead of only
+        // when an update is refused. Public data - it is printed from every APK.
+        val signer = remember(context) {
+            com.jarvis.client.platform.AppSignature.installed(context)
+        }
+        AboutFact(
+            "Signed by",
+            com.jarvis.client.platform.AppSignature.short(signer) ?: "could not be read",
+        )
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 "Source",

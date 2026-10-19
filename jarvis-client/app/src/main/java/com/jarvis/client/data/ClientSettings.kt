@@ -370,10 +370,16 @@ class ClientSettings(context: Context) {
      * says why, and every request and the event stream show that sentence
      * where they would show any other connection failure.
      */
-    fun baseUrl(): String? = BaseUrl.normalise(_host.value)?.takeIf { PhoneAddress.problem(it) == null }
+    fun baseUrl(): String? = BaseUrl.normalise(_host.value)?.takeIf {
+        // Debug builds may reach a MockWebServer/emulator on loopback; a
+        // release build keeps the strict ts.net/nord-only rule.
+        PhoneAddress.problem(it, allowLoopback = com.jarvis.client.BuildConfig.DEBUG) == null
+    }
 
     /** Why the saved address is not used, in one plain sentence, or null. */
-    fun baseProblem(): String? = BaseUrl.normalise(_host.value)?.let { PhoneAddress.problem(it) }
+    fun baseProblem(): String? = BaseUrl.normalise(_host.value)?.let {
+        PhoneAddress.problem(it, allowLoopback = com.jarvis.client.BuildConfig.DEBUG)
+    }
 
     private companion object {
         const val PREFS = "jarvis_client"

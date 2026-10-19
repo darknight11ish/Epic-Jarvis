@@ -134,11 +134,19 @@ class PhoneAddressTest {
             assertFalse(h, PhoneAddress.cleartextPermitted(h))
             assertFalse(h, fileAllows(h))
         }
+        // Debug builds add loopback for their MockWebServer tests; the release
+        // rule above still refuses it.
+        assertTrue(PhoneAddress.cleartextPermitted("localhost", allowLoopback = true))
+        assertTrue(PhoneAddress.cleartextPermitted("foo.localhost", allowLoopback = true))
+        assertTrue(PhoneAddress.cleartextPermitted("127.0.0.1", allowLoopback = true))
+        assertFalse(PhoneAddress.cleartextPermitted("127.0.0.10", allowLoopback = true))
     }
 
     /**
      * L7: loopback cleartext exists only in the debug overlay. The release
      * file is the one that ships, and it must not name localhost/127.0.0.1.
+     * The app's own check follows the same split: release-mode refuses loopback,
+     * debug-mode accepts it (the smoke tests' MockWebServer runs on loopback).
      */
     @Test
     fun `the release config refuses loopback and the debug overlay keeps it for tests`() {
@@ -158,6 +166,13 @@ class PhoneAddressTest {
         // The debug overlay also keeps the release's strict default.
         val base = children(debug, "base-config").single()
         assertEquals("false", base.getAttribute("cleartextTrafficPermitted"))
+        // And the app's pre-check follows the same two modes.
+        assertEquals(
+            PhoneAddress.message("http://localhost:4719"),
+            PhoneAddress.problem("http://localhost:4719"),
+        )
+        assertNull(PhoneAddress.problem("http://localhost:4719", allowLoopback = true))
+        assertNull(PhoneAddress.problem("http://127.0.0.1:4719", allowLoopback = true))
     }
 
     /**
@@ -198,12 +213,11 @@ class PhoneAddressTest {
         for (typed in listOf("my-pc.nord", "desktop.tail1234.ts.net/")) {
             assertNull(typed, PhoneAddress.problem(BaseUrl.normalise(typed)!!))
         }
-        // L7: loopback is a debug-only cleartext allowance, and the app's own
-        // check refuses it in every build - no real setup needs it.
-        assertEquals(
-            PhoneAddress.message(BaseUrl.normalise("localhost")!!),
-            PhoneAddress.problem(BaseUrl.normalise("localhost")!!),
-        )
+        // L7: loopback is a debug-only cleartext allowance (MockWebServer), and
+        // the release rule refuses it; a real setup never needs it.
+        val localhost = BaseUrl.normalise("localhost")!!
+        assertEquals(PhoneAddress.message(localhost), PhoneAddress.problem(localhost))
+        assertNull(PhoneAddress.problem(localhost, allowLoopback = true))
         val refused = listOf(
             "192.168.1.20", "10.0.0.5", "172.16.0.1", "homeassistant.local", "desk.lan",
             "nas.home.arpa", "jarvis-pc", "100.64.12.3", "100.101.102.103:4719", "[fd7a:115c:a1e0::1]",
