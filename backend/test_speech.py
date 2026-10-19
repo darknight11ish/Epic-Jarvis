@@ -24,6 +24,7 @@ Run it beside the backend:
 
     python3 backend/test_speech.py
 """
+import os
 import array
 import io
 import json
@@ -42,6 +43,7 @@ REBUILT = Path(__file__).resolve().parent / "rebuilt"
 sys.path.insert(0, str(REBUILT))
 
 import jarvis_speech as S  # noqa: E402
+os.environ.setdefault("JARVIS_TEST_UNSEALED_FIXTURES", "1")
 
 
 def _tone_wav(freq=440.0, seconds=0.5, sample_rate=16000, amplitude=0.4) -> bytes:

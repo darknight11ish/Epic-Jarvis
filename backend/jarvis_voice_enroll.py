@@ -471,9 +471,11 @@ def _wake_verifier(clips: list, mic: str = "", keep_old: bool = False) -> str:
             _drop(p)
             return "not built: " + str(out.get("why", "no reason given"))[:160]
         p.parent.mkdir(parents=True, exist_ok=True)
-        tmp = p.with_name(p.name + ".tmp")
-        tmp.write_text(json.dumps(out["doc"]), encoding="utf-8")
-        tmp.replace(p)
+        # SEALED at rest (audit D2/M2): a wake-word verifier is biometric. The
+        # helper fails CLOSED (writes nothing) when the key cannot be had, and
+        # fixture mode keeps the plaintext fixtures the suites use.
+        import jarvis_voice as _V
+        _V.write_biometric_json(p, out["doc"])
         return f"built from {out['clips']} \"hey Jarvis\" sentences"
     except Exception as exc:
         if p is not None and not keep_old:

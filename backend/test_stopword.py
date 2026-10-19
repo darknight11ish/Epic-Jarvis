@@ -51,6 +51,7 @@ import jarvis_speech as S  # noqa: E402
 import jarvis_stopword as SW  # noqa: E402
 import jarvis_voice as V  # noqa: E402
 import jarvis_voices as VC  # noqa: E402
+os.environ.setdefault("JARVIS_TEST_UNSEALED_FIXTURES", "1")
 
 FAILED, PASSED, SKIPPED = [], [], []
 D = W.EMB_WINDOW * 96

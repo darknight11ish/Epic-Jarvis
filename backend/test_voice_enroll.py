@@ -61,6 +61,8 @@ import jarvis_voice as V  # noqa: E402
 import _skeleton  # noqa: E402
 from _voice_test import semantic_voice  # noqa: E402
 from _voice_test import no_voice_models  # noqa: E402
+import os
+os.environ.setdefault("JARVIS_TEST_UNSEALED_FIXTURES", "1")
 
 SRC = BACKEND / "jarvis_hud.py"
 FAILED, PASSED = [], []
@@ -470,13 +472,14 @@ def t_nothing_logs_audio_or_tokens():
     if hasattr(ast, "unparse"):
         writes = [ast.unparse(n) for n in ast.walk(saver) if isinstance(n, ast.Call)
                   and getattr(n.func, "attr", "") in ("write_text", "write_bytes", "open")]
-        check("...except the verifier, which writes json.dumps(out['doc']) and nothing else",
-              writes == ["tmp.write_text(json.dumps(out['doc']), encoding='utf-8')"], writes)
+        check("...and the verifier is written through the sealed voice-file helper, "
+              "with no direct file write here",
+              writes == [] and "write_biometric_json" in ast.unparse(saver), writes)
     else:
         writes = [getattr(n.func, "attr", "") for n in ast.walk(saver) if isinstance(n, ast.Call)
                   and getattr(n.func, "attr", "") in ("write_text", "write_bytes", "open")]
-        check("...except the verifier, which writes json.dumps(out['doc']) and nothing else",
-              writes == ["write_text"], writes)
+        check("...and the verifier is written through the sealed voice-file helper, "
+              "with no direct file write here", writes == [], writes)
     imports = {a.name for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom))
                for a in n.names} | {n.module for n in ast.walk(tree)
                                     if isinstance(n, ast.ImportFrom) and n.module}

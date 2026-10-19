@@ -69,6 +69,7 @@ import jarvis_chat_log as H  # noqa: E402
 import jarvis_auto_learn as A  # noqa: E402
 import jarvis_sensitive as SENS  # noqa: E402
 import _stack  # noqa: E402
+os.environ.setdefault("JARVIS_TEST_UNSEALED_FIXTURES", "1")
 
 # No local model runs here. The sensitive-topic check's second layer asks
 # the learner's model; this stand-in answers "not sensitive" to everything,

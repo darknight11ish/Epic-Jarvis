@@ -67,6 +67,7 @@ REPO = HERE.parent
 sys.path.insert(0, str(HERE))
 from _where import BACKEND, require_shipped  # noqa: E402
 import _where  # noqa: E402
+os.environ.setdefault("JARVIS_TEST_UNSEALED_FIXTURES", "1")
 require_shipped("jarvis_limits.py", "jarvis_framework.py", "jarvis_owner_check.py",
                 "jarvis_voice.py")
 sys.path.append(str(HERE / "rebuilt"))

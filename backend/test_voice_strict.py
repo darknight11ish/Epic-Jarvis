@@ -69,6 +69,7 @@ require_shipped("jarvis_voice_enroll.py", "jarvis_speech.py", "rebuilt/jarvis_vo
 import jarvis_voice as V  # noqa: E402
 import jarvis_voice_enroll as E  # noqa: E402
 import jarvis_speech as S  # noqa: E402
+os.environ.setdefault("JARVIS_TEST_UNSEALED_FIXTURES", "1")
 
 FAILED, PASSED, SKIPPED = [], [], []
 
@@ -1689,8 +1690,9 @@ def t_no_audio_is_written():
               all(p.stat().st_size < 64_000 for p in written),
               [(p.name, p.stat().st_size) for p in written])
     src = (HERE / "rebuilt" / "jarvis_voice.py").read_text(encoding="utf-8")
-    check("jarvis_voice.py writes only prints, settings and banks (every write_text is one)",
-          src.count("write_text(") == 3, src.count("write_text("))
+    check("jarvis_voice.py's own write_text calls are settings and banks only; "
+          "prints go through the sealed voice-file helper",
+          src.count("write_text(") == 2, src.count("write_text("))
 
 
 # ------------------------------------------------ 13. the real model files --

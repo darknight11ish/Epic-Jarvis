@@ -717,7 +717,15 @@ def _read_verifier(p: Path) -> Optional[Verifier]:
         if key in _VER_CACHE:
             return _VER_CACHE[key]
     try:
-        doc = json.loads(p.read_text(encoding="utf-8"))
+        # Sealed at rest (audit D2/M2). The helper also migrates a legacy
+        # plaintext verifier to the sealed envelope in place; a missing key or
+        # a tampered file raises, and this function's answer is "no verifier",
+        # the safe direction (the first model alone decides).
+        try:
+            import jarvis_voice as _V
+            doc = _V.read_biometric_json(p, migrate=True)
+        except ImportError:
+            doc = json.loads(p.read_text(encoding="utf-8"))
         if not isinstance(doc, dict) or doc.get("version") != VERIFIER_VERSION:
             raise ValueError("not a verifier this version reads")
         ver = Verifier(doc)

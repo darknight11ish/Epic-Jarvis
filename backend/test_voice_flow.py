@@ -30,6 +30,7 @@ code. What it proves:
   6. The warm-up: runs each engine on sound made here, only once, not at
      all with its switch off or with nothing installed.
 """
+import os
 import array
 import io
 import json
@@ -59,6 +60,7 @@ import jarvis_turn as T  # noqa: E402
 import _ollama_wire as OW  # noqa: E402
 
 from _voice_test import no_voice_models  # noqa: E402
+os.environ.setdefault("JARVIS_TEST_UNSEALED_FIXTURES", "1")
 
 FAILED, PASSED = [], []
 
