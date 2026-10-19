@@ -24,7 +24,7 @@ def main() -> int:
     if "--check" in sys.argv:
         got = OUT.read_text(encoding="utf-8") if OUT.is_file() else ""
         if got != want:
-            print(f"FAIL {OUT} is stale: run py -3 tools/gen_work_cases.py")
+            print(f"FAIL {OUT} is stale: run py -3 tools/gen_work_presets.py")
             return 1
         print(f"ok   {OUT} is what the presets say")
         return 0
