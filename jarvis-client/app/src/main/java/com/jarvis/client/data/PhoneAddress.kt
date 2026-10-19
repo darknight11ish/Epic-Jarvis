@@ -41,14 +41,20 @@ object PhoneAddress {
      * [PhoneAddressTest] reads that real XML file and fails when this list and
      * the file differ, so it cannot be "kept in step by hand" and drift.
      *
-     * Loopback is not here: the release file refuses it (apps security audit
-     * L7), even though the debug overlay adds it for local tests. Refusing it
-     * in the app's own check too is the conservative direction - a debug build
-     * simply cannot pair to a loopback desktop, which no real setup needs.
+     * Loopback is not in the RELEASE list: the release file refuses it (apps
+     * security audit L7). Debug builds additionally accept it - see
+     * [cleartextPermitted]'s `allowLoopback` - because their tests and the
+     * emulator serve MockWebServer on 127.0.0.1. A release build never does.
      */
     internal val CLEARTEXT_DOMAINS: List<Pair<String, Boolean>> = listOf(
         "ts.net" to true,
         "nord" to true,
+    )
+
+    /** The debug overlay's extra two rows; release never sees these. */
+    internal val LOOPBACK_DOMAINS: List<Pair<String, Boolean>> = listOf(
+        "localhost" to true,
+        "127.0.0.1" to false,
     )
 
     /**
@@ -67,8 +73,14 @@ object PhoneAddress {
      * as [BaseUrl.normalise] makes it), else the one sentence saying why not:
      * [OwnNetwork]'s when it is off the owner's own networks, [MESSAGE] when
      * it is on them but Android would refuse plain http:// to it.
+     *
+     * [allowLoopback] is true ONLY for debug builds (the caller passes
+     * `BuildConfig.DEBUG`): their network-security overlay permits
+     * localhost/127.0.0.1 for MockWebServer tests and the emulator. A release
+     * build keeps the strict ts.net/nord-only rule.
      */
-    fun problem(base: String): String? = OwnNetwork.problem(base) ?: cleartextProblem(base)
+    fun problem(base: String, allowLoopback: Boolean = false): String? =
+        OwnNetwork.problem(base) ?: cleartextProblem(base, allowLoopback)
 
     /**
      * [MESSAGE] for an http:// address whose host the config file does not
@@ -81,11 +93,11 @@ object PhoneAddress {
      * opens a plain connection (OkHttp 4.12, `RealConnection.connect`:
      * `route.address.url.host`). An address OkHttp cannot parse is refused.
      */
-    internal fun cleartextProblem(base: String): String? {
+    internal fun cleartextProblem(base: String, allowLoopback: Boolean = false): String? {
         val b = base.trim().trimEnd('/')
         val url = runCatching { b.toHttpUrlOrNull() }.getOrNull() ?: return message(b)
         if (url.isHttps) return null
-        return if (cleartextPermitted(url.host)) null else message(b)
+        return if (cleartextPermitted(url.host, allowLoopback)) null else message(b)
     }
 
     /**
@@ -96,12 +108,13 @@ object PhoneAddress {
      * where includeSubdomains is on - a name ending in "." plus it. Plain
      * text only: no address ranges, no wildcards, nothing looked up.
      */
-    fun cleartextPermitted(host: String): Boolean {
+    fun cleartextPermitted(host: String, allowLoopback: Boolean = false): Boolean {
         var h = host.trim().lowercase()
         if (h.isEmpty() || h.startsWith(".")) return false
         if (h.endsWith(".")) h = h.dropLast(1)
         if (h.isEmpty()) return false
-        return CLEARTEXT_DOMAINS.any { (domain, subdomains) ->
+        val domains = if (allowLoopback) CLEARTEXT_DOMAINS + LOOPBACK_DOMAINS else CLEARTEXT_DOMAINS
+        return domains.any { (domain, subdomains) ->
             h == domain || (subdomains && h.endsWith(".$domain"))
         }
     }

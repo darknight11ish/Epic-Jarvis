@@ -1089,10 +1089,6 @@ jobs:
         run: |
           set -euo pipefail
           short="${GITHUB_SHA::7}"
-          # The certificate fingerprint, colon-separated in pairs, as keytool
-          # and most tools print it. Checked equal to the APK's in the step
-          # before this one.
-          key_sha=$(printf '%s' "$KEY_SHA256" | tr 'a-f' 'A-F' | sed 's/../&:/g; s/:$//')
           apk="jarvis-client-$short.apk"
           mv jarvis-client/artifacts/app-release.apk "jarvis-client/artifacts/$apk"
           size=$(du -h "jarvis-client/artifacts/$apk" | cut -f1)
@@ -1105,6 +1101,29 @@ jobs:
           base=$(tr -d ' \r\n' < VERSION)
           version="${base%.*}.$GITHUB_RUN_NUMBER"
           file_sha=$(sha256sum "jarvis-client/artifacts/$apk" | cut -d' ' -f1)
+
+          # The signing certificate's SHA-256 in the same lowercase 64-hex,
+          # no-colons form the app itself pins (UpdateCheck.SIGNER_SHA256) and
+          # its About card shows. The step before this one already proved the
+          # APK carries exactly this certificate.
+          cert_sha=$(printf '%s' "$KEY_SHA256" | tr 'A-F' 'a-f')
+          if [ "${#cert_sha}" -ne 64 ]; then
+            echo "::error::The certificate digest is not 64 hex characters, so the release body would be unverifiable. Not publishing."
+            exit 1
+          fi
+
+          # The FIRST release after a release-key rotation is a one-time
+          # breaking change. The runbook (.dsh-scratch/ANDROID-SIGNING-ROTATION.md)
+          # says the rotator creates this checked-in flag in the rotation PR;
+          # while it exists, this banner is a REQUIRED line at the top of the
+          # release notes (and UpdateCheck has no dual-key transition by design).
+          rotation=()
+          if [ -f jarvis-client/RELEASE-KEY-ROTATION ]; then
+            rotation=(
+              "**[BREAKING: ONE-TIME UNINSTALL + RE-PAIR REQUIRED]** This build is signed with a new release key. Uninstall the old Jarvis app once, install this APK, and pair again. Later updates work normally."
+              ""
+            )
+          fi
 
           # The changes since the PREVIOUS published build, as plain `- `
           # lines (the owner's request of 2026-10-11: the app shows "a simple
@@ -1131,8 +1150,10 @@ jobs:
           fi
 
           # Short and plain. Only main publishes here; the notes still name
-          # the branch, so an old release can be told apart.
+          # the branch, so an old release can be told apart. The rotation
+          # banner, when the flag is present, is always the first line.
           notes=$(printf '%s\n' \
+            "${rotation[@]}" \
             "**Jarvis for Android $version** - from \`$GITHUB_REF_NAME\`, commit [\`$short\`]($commit_url), built $built_at." \
             "" \
             "## What's changed" \
@@ -1143,7 +1164,7 @@ jobs:
             "" \
             "**Checked before publishing:** the tests passed, and this exact file was installed on an Android emulator and started." \
             "" \
-            "**To check your download** (optional): its SHA-256 is \`$file_sha\`. It is signed with the project key, certificate SHA-256 \`$key_sha\`." \
+            "**Verify the download:** APK SHA-256 \`$file_sha\`; signing certificate SHA-256 \`$cert_sha\` (lowercase 64-hex, no colons)." \
             "" \
             "If installing says \`INSTALL_FAILED_UPDATE_INCOMPATIBLE\`, the copy on the phone was signed with a different key (builds from before 19 Sep 2026 were). Uninstall it once, install this one, and pair again. Do not uninstall to get past this for any later build - tell the Claude session instead.")
           title="Jarvis for Android $version ($GITHUB_REF_NAME @ $short)"

@@ -70,7 +70,7 @@ object PlatformReadiness {
         // https is not cleartext at all, so the policy simply does not apply and
         // warning about it would be a false alarm.
         if (!url.isHttp) return true
-        return PhoneAddress.cleartextPermitted(url.host)
+        return PhoneAddress.cleartextPermitted(url.host, allowLoopback = com.jarvis.client.BuildConfig.DEBUG)
     }
 
     /**

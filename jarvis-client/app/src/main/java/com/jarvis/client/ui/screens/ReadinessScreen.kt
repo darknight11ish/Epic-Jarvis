@@ -867,10 +867,20 @@ private fun ThisAppCard(
 ) {
     val chrome = LocalChrome.current
     val now = rememberTickingNow(update.lastTryMs, periodMs = 60_000L)
+    val context = androidx.compose.ui.platform.LocalContext.current
     Plate {
         Text("This app", style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
         Gap(6)
         Field("Build", UpdateCheck.ownSha(BuildConfig.GIT_SHA)?.take(7) ?: "unknown", machine = true)
+        // The certificate of the running APK (release safety, 2026-10-18):
+        // public data, and the one fact that makes a key rotation visible here.
+        val signer = remember(context) { com.jarvis.client.platform.AppSignature.installed(context) }
+        Gap(6)
+        Field(
+            "Signed by",
+            com.jarvis.client.platform.AppSignature.short(signer) ?: "could not be read",
+            machine = true,
+        )
         Gap(6)
         SwitchRow(
             title = "Check for new versions",

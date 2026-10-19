@@ -1,5 +1,6 @@
 package com.jarvis.client
 
+import com.jarvis.client.data.PhoneAddress
 import com.jarvis.client.platform.PlatformReadiness
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -23,11 +24,18 @@ class PlatformReadinessTest {
         assertTrue(PlatformReadiness.cleartextPermitted("ts.net"))
     }
 
-    /** L7: loopback is debug-only, and the readiness screen mirrors the release file. */
+    /**
+     * L7: the debug build permits loopback (the smoke tests' MockWebServer
+     * runs there); the RELEASE policy still refuses it. PlatformReadiness
+     * follows the build's own overlay via BuildConfig.DEBUG.
+     */
     @Test
-    fun `loopback is refused by the release policy`() {
-        assertFalse(PlatformReadiness.cleartextPermitted("localhost"))
-        assertFalse(PlatformReadiness.cleartextPermitted("127.0.0.1"))
+    fun `loopback is debug-only, and the release policy still refuses it`() {
+        assertTrue(PlatformReadiness.cleartextPermitted("localhost"))
+        assertTrue(PlatformReadiness.cleartextPermitted("127.0.0.1"))
+        // The strict rule the release APK uses, checked directly.
+        assertFalse(PhoneAddress.cleartextPermitted("localhost", allowLoopback = false))
+        assertFalse(PhoneAddress.cleartextPermitted("127.0.0.1", allowLoopback = false))
     }
 
     @Test
@@ -45,8 +53,6 @@ class PlatformReadinessTest {
         assertFalse(PlatformReadiness.cleartextPermitted("evilts.net"))
         assertFalse(PlatformReadiness.cleartextPermitted("mylocalhost"))
         assertFalse(PlatformReadiness.cleartextPermitted("not127.0.0.1"))
-        assertFalse(PlatformReadiness.cleartextPermitted("localhost"))
-        assertFalse(PlatformReadiness.cleartextPermitted("127.0.0.1"))
         // Same shape of false positive, for the newer suffix: "mynord.com" and
         // "anordable.net" contain "nord" but are not the "nord" TLD or a label
         // beneath it.
