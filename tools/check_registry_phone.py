@@ -152,6 +152,13 @@ PHONE_LACKS = {
         "where": "jarvis-client/app/src/main/java/com/jarvis/client/ui/OpenPlace.kt",
         "must_contain": '"hud-window",',
     },
+    "settings.focus-presets": {
+        "name": "Focus presets",
+        "why": ("The five model/lane presets are a PC Settings card; the phone's own selector "
+                "is not on this tree yet, so it honestly answers \"only on your PC\"."),
+        "where": "jarvis-client/app/src/main/java/com/jarvis/client/ui/OpenPlace.kt",
+        "must_contain": '"focus-presets",',
+    },
     "settings.first-run": {
         "name": "Set up Jarvis",
         "why": ("The first-run card is the page a new owner meets on the PC; the phone's first "

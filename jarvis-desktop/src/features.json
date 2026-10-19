@@ -1485,6 +1485,19 @@
     ]
   },
   {
+    "id": "focus-presets",
+    "group": "The PC itself",
+    "title": "Focus presets",
+    "what": "Five presets for the kind of work you are about to do, each naming the model, graphics card, context, cost and what it is honestly worse at before you choose.",
+    "where": "Settings, Focus presets, or the preset chip in the Jarvis bar.",
+    "asks": "Opening the list changes nothing. Applying a preset will raise one approval card when the lane/apply patch lands; until then the apply action stays disabled.",
+    "limit": "Desktop only for now - the phone's selector is not on this tree yet. The apply/lane patch is not merged, so no preset can be applied yet and no model changes.",
+    "surface": "desktop",
+    "covers": [
+      "settings.focus-presets"
+    ]
+  },
+  {
     "id": "second-card",
     "group": "The PC itself",
     "title": "The second graphics card",
