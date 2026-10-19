@@ -1998,6 +1998,7 @@ $SHIPPED = @(
     # tool: its one surface is one line in the morning briefing (jarvis_briefing.py)
     # for a person Jarvis already knows who is named in today's calendar.
     'jarvis_people_crm.py'
+    'jarvis_presets.py'          # presets.patch/PR #603: the four focus presets, their plain words, lane/context/helper, hardware questionnaire and 1/2/3-GPU recommendations, and the one asked apply action; pure data + helpers, reads/writes/switches nothing by itself. Shipped whole and in backend/_where.SHIPPED; without the copy the PS 5.1 apply test reports 'jarvis_presets.py was not copied in'
 )
 
 # The settings file. Installed only where none exists; never overwritten.
