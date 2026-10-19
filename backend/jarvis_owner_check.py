@@ -449,14 +449,28 @@ TOKEN_FAILURES = TokenFailureLimiter()
 def request_carries_token(handler) -> bool:
     """Did this request PRESENT a token (any of the three ways)? Used to decide
     whether a refusal counts against the peer's rate bucket. A request with no
-    token at all is a normal unauthenticated poll and is not counted."""
+    token at all is a normal unauthenticated poll and is not counted.
+
+    The query is read the way the HUD's own extractor reads it - through
+    `urllib.parse` (2026-10-18 follow-up audit, MEDIUM): the first version
+    matched the raw string "token=" in the path, so `?tok%65n=<guess>` (a
+    percent-encoded `e`) reached the HUD's `_query_token` as `token` and got a
+    401 while this helper said "no token presented", and the failure never
+    filled the rate bucket. Decode the query names with `parse_qs`; do not
+    import HUD code. The cookie is matched by NAME (a value containing
+    "jarvis_token=" is not a presentation), and the header exactly as the HUD
+    extracts it.
+    """
     try:
         if (handler.headers.get(_HUD_TOKEN_HEADER) or "").strip():
             return True
-        if _HUD_TOKEN_COOKIE + "=" in (handler.headers.get("Cookie") or ""):
-            return True
-        path = getattr(handler, "path", "") or ""
-        return ("token=" in path) or ("?" in path and "token" in path)
+        for part in (handler.headers.get("Cookie") or "").split(";"):
+            name, _, _value = part.strip().partition("=")
+            if name.strip() == _HUD_TOKEN_COOKIE:
+                return True
+        from urllib.parse import parse_qs, urlsplit
+        query = parse_qs(urlsplit(getattr(handler, "path", "") or "").query)
+        return "token" in query
     except Exception:
         return False
 

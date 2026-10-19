@@ -48,6 +48,12 @@ import time
 from dataclasses import dataclass, field, asdict
 from typing import Optional
 
+#: What a child program may inherit (bug audit 3, CONN-2; security-wave
+#: follow-up 2026-10-18): nvidia-smi is a child too, and this was the one
+#: spawn the structural guard could not see, because it scanned only the
+#: top-level jarvis_*.py files and this module lives in rebuilt/.
+import jarvis_child_env
+
 try:
     import jarvis_framework as fw
 except Exception:
@@ -179,7 +185,7 @@ def _run_smi(args: list) -> Optional[str]:
         return None
     try:
         out = subprocess.run([exe] + list(args), capture_output=True, text=True,
-                             timeout=10)
+                             timeout=10, env=jarvis_child_env.inherited())
     except Exception:
         return None
     if out.returncode != 0:
