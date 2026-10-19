@@ -357,9 +357,21 @@ await check("a silent or short recording must be made again before going on", as
 });
 
 await check("on a stale link the round that raises the card is held, and says why; the rounds before it are not", async () => {
+  // The merged plan has four conditions; this desktop can record the first
+  // three. Rounds 1-2 are held on the PC in memory (no card), round 3 is the
+  // one that raises the card, so only round 3 is held on a stale link.
   const page = await open(S.balanced, { link: { stale: true } });
   await click(page, "vt-train", "Train my voice");
   await click(page, "vt-train", "Start");
+  await readAll(page, "vt-train", 5);
+  const round1 = await page.evaluate(() =>
+    [...document.querySelectorAll("#vt-train button")].find((b) => b.innerText === "Send round 1").disabled);
+  assert.equal(round1, false, "a round that is only held in memory is not held back");
+  await click(page, "vt-train", "Send round 1");
+  await click(page, "vt-train", "Start round 2");
+  await readAll(page, "vt-train", 5);
+  await click(page, "vt-train", "Send round 2");
+  await click(page, "vt-train", "Start round 3");
   await readAll(page, "vt-train", 5);
   const send = await page.evaluate(() =>
     [...document.querySelectorAll("#vt-train button")].find((b) => b.innerText === "Send to your PC").disabled);
@@ -367,15 +379,6 @@ await check("on a stale link the round that raises the card is held, and says wh
   await page.close();
   assert.equal(send, true);
   assert.match(words, /The connection to Jarvis is catching up, so this cannot be sent until it does\./);
-
-  const three = await open(S.strong_ready, { link: { stale: true } });
-  await click(three, "vt-train", "Train my voice");
-  await click(three, "vt-train", "Start");
-  await readAll(three, "vt-train", 5);
-  const round1 = await three.evaluate(() =>
-    [...document.querySelectorAll("#vt-train button")].find((b) => b.innerText === "Send round 1").disabled);
-  await three.close();
-  assert.equal(round1, false, "a round that is only held in memory is not held back");
 });
 
 await check("rounds the PC already holds: carry on from the next, or delete them", async () => {
@@ -424,7 +427,7 @@ await check("the left-out recordings are offered again only after THIS PC's trai
   assert.match(said, /Jarvis left out 2 recordings/);
   await click(ours, "vt-train", "Record those again");
   await click(ours, "vt-train", "Start");
-  assert.match(await text(ours, "vt-train"), /^Round 2 again: about two to three[\s\S]*Sentence 1 of 2\s+The blue boat floats slowly over the cold deep water\./);
+  assert.match(await text(ours, "vt-train"), /^Round 2 again: about two to three[\s\S]*Sentence 1 of 2\s+Six thick sticks stand beside the strong tree\./);
   await readAll(ours, "vt-train", 3);
   await click(ours, "vt-train", "Send to your PC");
   const sends = await calls(ours, "send_voice_training");
