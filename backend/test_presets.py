@@ -42,13 +42,29 @@ def main() -> int:
           P.by_id("general_uncensored").pending is True
           and P.by_id("general_uncensored").measured is None
           and "PENDING" in P.by_id("general_uncensored").cost)
-    check("Agentic+Vision is the vision model on the 2060 (never the display card)",
-          P.by_id("agentic_vision").model == "qwen3-vl:8b-thinking"
+    check("Agentic+Vision is qwen3.5:9b on the 2060 (never the display card)",
+          P.by_id("agentic_vision").model == "qwen3.5:9b"
           and P.by_id("agentic_vision").lane == "main" and P.by_id("agentic_vision").context == 16384)
-    measured = [p for p in fixture["presets"] if p["measured"]]
-    check("measured tok/s is present only where a measurement exists",
-          all(isinstance(p["measured"]["tok_s"], (int, float)) for p in measured)
-          and P.by_id("agentic_vision").measured is None, [p["id"] for p in measured])
+    text_measured = [p for p in fixture["presets"] if p["measured"]
+                     and "tok_s" in p["measured"]]
+    check("measured tok/s is present only where that measurement exists",
+          all(isinstance(p["measured"]["tok_s"], (int, float)) for p in text_measured),
+          [p["id"] for p in text_measured])
+    av = fixture["presets"][3]
+    check("Agentic+Vision now uses qwen3.5:9b on the 2060 at 16,384",
+          av["id"] == "agentic_vision" and av["model"] == "qwen3.5:9b"
+          and av["lane"]["key"] == "main" and av["context"] == 16384, av["model"])
+    check("... its measured latency is labelled LATENCY, never tok/s",
+          "tok_s" not in av["measured"]
+          and "LATENCY" in av["measured"]["source"]
+          and av["measured"]["vision_latency_s"]["browser_first_token"] == 4.45
+          and av["measured"]["vision_latency_s"]["desktop_cold_total"] == 70.2,
+          av["measured"])
+    check("... the qwen3-vl fallback note says it gave no answer on the desktop UI",
+          av["measured"]["fallback"]["model"] == "qwen3-vl:8b-thinking"
+          and "no answer" in av["measured"]["fallback"]["note"])
+    check("... and both honest words say pictures are accepted",
+          "accepts pictures" in av["cost"])
 
     hw = fixture["hardware"]
     check("hardware: detected cards come from detect() and carry name/VRAM/index",

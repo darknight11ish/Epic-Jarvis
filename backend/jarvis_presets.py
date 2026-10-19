@@ -144,15 +144,30 @@ PRESETS = (
         what="For work that takes several steps with tools - browser, phone, forms, "
              "notes - and pictures: the vision model reads the image, and a "
              "picture-capable model stays off the display card.",
-        cost="NOT MEASURED for this model on this PC. Its context is planned at "
-             "16,384, and pictures take longer than text; no speed figure is claimed "
-             "until it is measured.",
-        worse="Unmeasured: nothing here says it is faster or better than the general "
-              "preset, and it is not the everyday choice.",
-        model="qwen3-vl:8b-thinking", lane="main", context=16384,
+        cost="Measured 2026-10-18: it accepts pictures and answered correctly (minor "
+             "mislabels of status indicators). Browser: 4.45 s to first token, 25.6 s "
+             "total. Desktop: 0.89 s first token / 46.9 s total warm, 27.6 s / 70.2 s "
+             "cold - these are LATENCY, not tokens a second.",
+        worse="Slow on the desktop UI (about 47 s warm, 70 s cold for a full answer), "
+              "and the faster first-token fallback qwen3-vl:8b-thinking produced NO "
+              "answer on the desktop UI (all thinking, done_reason=length), so it is "
+              "only a simple-page option.",
+        model="qwen3.5:9b", lane="main", context=16384,
         prompt="agentic", diet="agentic",
         tools=("browser", "phone", "forms", "notes"),
-        measured=None,
+        measured={"vision_latency_s": {"browser_first_token": 4.45,
+                                       "browser_total": 25.6,
+                                       "desktop_warm_first_token": 0.89,
+                                       "desktop_warm_total": 46.9,
+                                       "desktop_cold_first_token": 27.6,
+                                       "desktop_cold_total": 70.2},
+                  "source": "vision test 2026-10-18: pictures accepted, answers correct "
+                            "(minor status-indicator mislabels); speeds are LATENCY, not tok/s",
+                  "fallback": {"model": "qwen3-vl:8b-thinking",
+                               "note": "browser 0.39 s first token / 25.9 s total and exact, "
+                                       "but on the desktop UI no answer at 3,000 or 700 tokens "
+                                       "(all thinking, done_reason=length) - a first-token "
+                                       "option for simple pages only, not the default"}},
         words=("agent", "agentic", "multi-step", "browser", "phone", "form",
                "screenshot", "picture", "image", "vision", "steps", "automate"),
         strong=("multi-step work", "use the browser", "read this screenshot",
