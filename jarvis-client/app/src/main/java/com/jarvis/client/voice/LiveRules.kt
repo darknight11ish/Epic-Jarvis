@@ -258,7 +258,7 @@ object LiveRules {
 
     /** Smart Turn in Live: an unfinished-sounding sentence may pause this long. */
     const val TURN_ASK_AFTER_MS = 200L
-    const val TURN_MAX_PAUSE_MS = 3000L
+    const val TURN_MAX_PAUSE_MS = 1500L
 
     /** How far Jarvis's voice drops while another voice is being checked. */
     const val DUCK_VOLUME = 0.3f

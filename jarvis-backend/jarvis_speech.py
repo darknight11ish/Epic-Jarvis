@@ -781,6 +781,106 @@ def _tts_engine():
         return _tts_cache
 
 
+#: Streaming ASR (2026-10-18 speed slice): the endpoint is the client's 1.5 s
+#: pause, and partial text is made from the audio already in while more arrives.
+STREAM_ENDPOINT_S = 1.5
+STREAM_PARTIAL_EVERY_S = 0.4
+
+
+class StreamingAsr:
+    """Incremental transcription for one utterance, with a whole-clip fallback.
+
+    The app sends 16-bit PCM chunks; feed() appends them and periodically asks
+    the same sherpa `_transcribe` for partial text so that work overlaps the
+    incoming audio. finalize() returns the last (full) text. If a streamed
+    transcription raises, `failed` is set and finalize uses the whole-clip
+    fallback once; if that also raises, {ok: False} - the caller then refuses
+    the clip rather than returning a half transcript. Nothing here checks the
+    voice; the caller must have passed the owner check first.
+    """
+
+    def __init__(self, sample_rate: int = 16000, *, transcribe=None,
+                 endpoint_s: float = STREAM_ENDPOINT_S):
+        self.sample_rate = int(sample_rate or 16000)
+        self.endpoint_s = max(0.2, float(endpoint_s))
+        self._transcribe = transcribe or _transcribe
+        self.samples: list = []
+        self.bytes = 0
+        self.silence_s = 0.0
+        self.last_partial = ""
+        self.failed = False
+        self.partials = 0
+        self._last_partial_at = 0.0
+
+    @property
+    def seconds(self) -> float:
+        return len(self.samples) / float(self.sample_rate)
+
+    def feed(self, pcm: bytes, *, silence_s: float = 0.0) -> dict:
+        """Append one PCM chunk and (periodically) make partial words."""
+        import array
+        raw = bytes(pcm or b"")
+        if len(raw) % 2:
+            raw = raw[:-1]
+        a = array.array("h")
+        if raw:
+            a.frombytes(raw)
+        self.samples.extend(x / 32768.0 for x in a)
+        self.bytes += len(raw)
+        self.silence_s = max(0.0, float(silence_s))
+        ended = self.silence_s >= self.endpoint_s
+        if not ended and self.seconds - self._last_partial_at >= STREAM_PARTIAL_EVERY_S:
+            self._last_partial_at = self.seconds
+            try:
+                self.last_partial = self._transcribe(self.samples, self.sample_rate) or ""
+                self.partials += 1
+            except Exception:
+                self.failed = True
+        return {"seconds": round(self.seconds, 2), "ended": bool(ended),
+                "partial": self.last_partial, "partials": self.partials}
+
+    def endpoint(self) -> bool:
+        return self.silence_s >= self.endpoint_s
+
+    def finalize(self) -> dict:
+        """The whole utterance's words, or {ok: False} - never a guess."""
+        try:
+            text = self._transcribe(self.samples, self.sample_rate) or ""
+            return {"ok": True, "text": text, "fallback": bool(self.failed),
+                    "partials": self.partials, "seconds": round(self.seconds, 2)}
+        except Exception as exc:
+            return {"ok": False, "text": "", "fallback": True,
+                    "why": type(exc).__name__, "seconds": round(self.seconds, 2)}
+
+
+def prewarm() -> dict:
+    """Load the three offline engines Live needs, before a session starts.
+
+    The warm path is one thing; the FIRST clip of a session otherwise pays
+    STT's and Kokoro's cold load (measured 2.78 s and 4.4-5.0 s on this PC).
+    Building the cached engines here makes that cost happen at Start Live,
+    concurrently with the model warm, not inside the owner's first turn.
+    Never raises: each engine is reported by name, and a failure leaves the
+    engine lazy so a later clip can still try it (and says why in status).
+    """
+    started = time.monotonic()
+    out = {"ok": True, "stt": False, "tts": False, "vad": False, "why": {}}
+    for name, fn in (("stt", _stt_engine), ("tts", _tts_engine), ("vad", _vad_config)):
+        try:
+            got = fn()
+            out[name] = bool(got) if name != "vad" else got is not None
+        except Exception as exc:
+            out[name] = False
+            out["why"][name] = type(exc).__name__
+            out["ok"] = False
+    out["ms"] = round((time.monotonic() - started) * 1000.0, 1)
+    try:
+        _flow("note_warm", out)
+    except Exception:
+        pass
+    return out
+
+
 def reload_engines() -> None:
     """Drop the cached STT/TTS/VAD engines (and the wake-word models) so a
     config change - a new model path - takes effect on the next call rather
@@ -2267,6 +2367,23 @@ def _live_trust_source(mic: str) -> str:
         return "live_voice"          # cannot tell how it started: the stricter
 
 
+class _SessionTrusted:
+    """A 1.5-2.0 s clip allowed by the session's own recent strict check.
+
+    No speaker model runs for this clip (that is the speed this design buys);
+    the values make the ordinary Heard/common path work while `_really_checked`
+    stays false, so no private/sensitive answer is read aloud on session trust
+    alone. The fresh >= 2.0 s check is what sets `trust_active`.
+    """
+    is_owner = True
+    score = 1.0
+    threshold = 0.0
+    mode = "session"
+    strictness = ""
+    voice_print = ""
+    reason = "session trust"
+
+
 def _live_started(out: dict, engine: str, wake: bool, common: dict) -> Heard:
     """The reply to "let's talk": started, or refused in words."""
     if out.get("ok"):
@@ -2350,6 +2467,7 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
     # How much was said: the VAD's span, or (no VAD installed) the whole
     # clip, which the client already cut at a pause.
     spoken = len(samples) / float(sample_rate or 16000)
+    live_trust = ""
     need = _min_command_seconds()
     # Only once there is a print to check against: with none, the owner
     # needs "train your voice first", not "say a little more".
@@ -2432,6 +2550,32 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
             return Heard(False, source=source, seconds=seconds, stop=True, reason="stop",
                          **_live_fields(mic))
 
+    # Session trust (owner's refinement, 2026-10-18): a >= 2.0 s clip gets
+    # the full strict check and refreshes; 1.5-2.0 s may run on the session's
+    # trust without a check; an expired window refuses short clips and asks
+    # for a full sentence. The first clip is always the >= 2.0 s check.
+    live_trust = ""
+    live_trust_words = ""
+    if live:
+        try:
+            _d = jarvis_live.ENGINE.trust_decision(mic, spoken)
+        except Exception:
+            _d = {"action": "refuse_stale", "words": jarvis_live.SAY_RECHECK}
+        live_trust = str(_d.get("action") or "")
+        live_trust_words = str(_d.get("words") or "")
+        if check_only:
+            # A voice pause is re-entered by the owner's voice: always a real
+            # check, never session trust (the wake/tap paths stay strict too).
+            live_trust = "check"
+        if live_trust in ("refuse_first", "refuse_stale"):
+            words = live_trust_words or jarvis_live.SAY_RECHECK
+            return Heard(False, source=source, seconds=seconds, too_short=True,
+                         min_seconds=jarvis_live.TRUST_FIRST_S, reason=words,
+                         live_say=words, **_live_fields(mic))
+
+    if live_trust == "trusted_short":
+        # 1.5-2.0 s on session trust: no "say a bit more" and no speaker model.
+        short = False
     if jarvis_voice is None:
         return Heard(False, source=source, available=False, seconds=seconds,
                       reason="jarvis_voice is not importable; refusing "
@@ -2496,9 +2640,26 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
         return Heard(False, source=source, seconds=seconds, too_short=True,
                      min_seconds=need, reason=_too_short_reason(spoken, need), **extra)
 
-    t = time.monotonic()
-    verdict, embedder = check_owner()
-    steps["owner_check"] = (time.monotonic() - t) * 1000.0
+    if live_trust == "trusted_short":
+        verdict, embedder = _SessionTrusted(), None
+        steps["owner_check"] = 0.0
+    else:
+        t = time.monotonic()
+        try:
+            verdict, embedder = check_owner()
+        except Exception as exc:
+            if live:
+                try:
+                    jarvis_live.ENGINE.abort_trust("check_error")
+                except Exception:
+                    pass
+                return Heard(False, source=source, seconds=seconds,
+                             available=False,
+                             reason=("the voice check could not run, so Live refused "
+                                     "this clip and its trust is off (" + type(exc).__name__ + ")"),
+                             live_say=jarvis_live.SAY_RECHECK, **_live_fields(mic))
+            raise
+        steps["owner_check"] = (time.monotonic() - t) * 1000.0
     # What this clip is trusted as. A Live clip asks as "live" when the owner
     # pressed Start, or like "hey Jarvis" when Live was started by voice
     # (jarvis_live.trust_source - one switch there decides).
@@ -2538,13 +2699,26 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
         if live:
             # Not the owner's voice: counted (the sign says so after a few,
             # and Live pauses after many), never turned into words, and the
-            # quiet clock does not move - the TV cannot keep Live open.
+            # quiet clock does not move - the TV cannot keep Live open. A
+            # failed >= 2.0 s spot check also ends session trust at once.
+            if live_trust == "check":
+                try:
+                    jarvis_live.ENGINE.abort_trust("low_score")
+                except Exception:
+                    pass
             try:
                 jarvis_live.ENGINE.note_refused(mic, near_miss=_near_miss(verdict))
             except Exception:
                 pass
             return Heard(False, reason=verdict.reason, **common, **_live_fields(mic))
         return Heard(False, reason=verdict.reason, **common)
+    if live and live_trust == "check":
+        # A >= 2.0 s clip passed the full strict check: this IS the spot
+        # check, and it refreshes the session's trust window.
+        try:
+            jarvis_live.ENGINE.note_verified(mic)
+        except Exception:
+            pass
     if check_only:
         # A voice pause, and this was the owner: Live carries on without a
         # tap, and this sentence is taken like any other.
@@ -2574,6 +2748,11 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
                      **common, **live_extra)
     steps["stt"] = (time.monotonic() - t) * 1000.0
     engine = f"{STT_ENGINE}:{_stt_files()[0]}"
+    if live and live_trust == "trusted_short":
+        try:
+            jarvis_live.ENGINE.note_trusted_short(mic)
+        except Exception:
+            pass
 
     def timed(words: str) -> None:
         # One row of numbers for the delay (jarvis_voice_flow): only for a

@@ -127,6 +127,7 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Callable, Optional
 from urllib.parse import urlsplit
+import urllib.request
 
 try:
     import jarvis_framework as fw
@@ -213,6 +214,131 @@ APP_STARTS = ("button", "tray", "hotkey")
 #: owner's `hands_free_live` setting decides what each is trusted as.
 TRUST_LIVE = "live"
 TRUST_VOICE_STARTED = "live_voice"
+
+#: Session trust (owner's refinement, 2026-10-18): a clip >= TRUST_SPOT_S runs
+#: the full strict check and refreshes the window; 1.5-2.0 s clips run on the
+#: session's trust without refreshing; the window dies after TRUST_WINDOW_S or
+#: TRUST_MAX_SHORT short clips. The first clip is always a strict >= 2.0 s check.
+TRUST_SPOT_S = 2.0
+TRUST_STEADY_S = 1.5
+TRUST_FIRST_S = 2.0
+TRUST_WINDOW_S = 120.0
+TRUST_MAX_SHORT = 16
+SAY_RECHECK = "Say a full sentence so I can re-check your voice."
+
+#: The ONE injected Live lane URL. The preset-lane patch will set this (or
+#: JARVIS_LIVE_OLLAMA_URL) to the 2080 SUPER's :11435; nothing else here names
+#: a lane, and jarvis_model_lanes.py is deliberately NOT edited by this slice.
+LIVE_LANE_URL = (os.environ.get("JARVIS_LIVE_OLLAMA_URL")
+                 or "http://127.0.0.1:11434").rstrip("/")
+
+
+def lane_url() -> str:
+    """The Live lane URL (a single injected value - see LIVE_LANE_URL)."""
+    return LIVE_LANE_URL
+
+
+def _live_cfg(key: str, default=None):
+    """Read `[live]` from jarvis-framework.toml, for the Live-only knobs."""
+    if fw is None:
+        return default
+    try:
+        return fw.load_framework().get("live", {}).get(key, default)
+    except Exception:
+        return default
+
+
+def _live_int(key: str, default: int, lo: int, hi: int) -> int:
+    try:
+        return max(lo, min(hi, int(_live_cfg(key, default))))
+    except Exception:
+        return default
+
+
+def _installed_models(url: Optional[str] = None) -> set:
+    """Names Ollama reports, or an empty set when it cannot be asked."""
+    try:
+        with urllib.request.urlopen((url or lane_url()) + "/api/tags", timeout=2.0) as resp:
+            doc = json.loads(resp.read().decode("utf-8"))
+        return {str(m.get("name") or "") for m in (doc.get("models") or [])
+                if isinstance(m, dict)} | {str(m.get("model") or "") for m in (doc.get("models") or [])}
+    except Exception:
+        return set()
+
+
+def live_model_choice(url: Optional[str] = None) -> dict:
+    """The `[live] model` (default qwen3:8b), or the 9B fallback in words.
+
+    Returns {"model", "fallback", "line", "available"}. Missing/unreadable
+    config keeps the shipped default; the model is only changed when Ollama
+    positively says the primary is absent AND the fallback is present. An
+    Ollama that cannot be asked changes nothing (fail closed on the setting).
+    """
+    primary = str(_live_cfg("model", "qwen3:8b") or "qwen3:8b").strip() or "qwen3:8b"
+    fallback = str(_live_cfg("fallback_model", "qwen3.5:9b") or "qwen3.5:9b").strip()
+    models = _installed_models(url)
+    if not models or primary in models:
+        return {"model": primary, "fallback": False, "line": "", "available": bool(models or primary)}
+    if fallback and fallback in models:
+        return {"model": fallback, "fallback": True, "available": True,
+                "line": f"{primary} is not installed, so Live is using {fallback}."}
+    return {"model": primary, "fallback": False, "available": False,
+            "line": f"{primary} is not installed, so Live cannot use the fast model."}
+
+
+def current_live_model() -> str:
+    """The model Live should use now: the prewarm's choice, else `[live] model`.
+
+    The fallback is decided in live_model_choice at warm time (a missing
+    primary is a once-a-session check, not a network call on every turn);
+    this keeps the turn's choice in step with what was actually warmed.
+    """
+    try:
+        eng = globals().get("ENGINE")
+        warm = getattr(eng, "_warm", None) or {}
+        got = str(warm.get("model") or "").strip()
+        if got:
+            return got
+    except Exception:
+        pass
+    return str(_live_cfg("model", "qwen3:8b") or "qwen3:8b").strip() or "qwen3:8b"
+
+
+def turn_overrides(model: str, ollama_url: str, context_length=None) -> dict:
+    """The Live-only turn settings, as one testable value.
+
+    `model` and `ollama_url` are the typed-chat call's arguments; this replaces
+    them for a Live turn with `[live]` model and the one injected lane URL.
+    Context is capped at `[live] context_tokens` (16K) and the tool diet is
+    shortened. Typed chat never calls this.
+    """
+    limits = live_limits()
+    cap = int(limits["context_tokens"])
+    ctx = cap if context_length is None else min(int(context_length), cap)
+    return {"model": current_live_model(), "ollama_url": lane_url(),
+            "context_length": ctx, "tool_limit": live_tool_limit(),
+            "lane_url": lane_url()}
+
+
+def live_tool_limit() -> int:
+    """How many tools Live shows the model (typed chat keeps its own limit).
+
+    The measured warm saving is mostly prompt/context; a Live turn is a
+    spoken question, so the top-K diet is cut to LIVE_TOOL_LIMIT names. It
+    changes what is SHOWN, never what is allowed or what asks.
+    """
+    return _live_int("tool_limit", 6, 3, 12)
+
+
+def live_limits() -> dict:
+    """The Live-only limits exposed in status; `[live]` may override them."""
+    return {"trust_window_s": _live_int("trust_window_s", int(TRUST_WINDOW_S), 10, 3600),
+            "trust_max_short_clips": _live_int("trust_max_short_clips", TRUST_MAX_SHORT, 1, 200),
+            "trust_first_s": TRUST_FIRST_S, "trust_steady_s": TRUST_STEADY_S,
+            "trust_spot_s": TRUST_SPOT_S,
+            "context_tokens": _live_int("context_tokens", 16384, 4096, 65536),
+            "max_pause_ms": _live_int("max_pause_ms", 1500, 500, 4000),
+            "tool_limit": live_tool_limit()}
 #: The route both apps use.
 ROUTE = "/api/voice/live"
 TITLE = "Jarvis Live"
@@ -596,15 +722,39 @@ def _default_power_mode() -> str:
 
 
 def _default_warm() -> None:
-    """Loads the everyday model in the background (jarvis_agent.warm_everyday,
-    this PC's Ollama only), so Live's first answer does not wait for it. The
-    model is the one chat really uses now (jarvis_power_switch.chat_model,
-    as the waking warm-up does), never a fixed name, and Ollama's own
-    keep-alive setting is left alone (effectiveness audit 2026-09-28, 3.2)."""
+    """Pre-warm everything Live's first turn needs, concurrently.
+
+    The measured warm chain makes STT + Kokoro + the model the three cold
+    loads; at Start Live this loads all three at once (STT/TTS/VAD through
+    jarvis_speech.prewarm, then the Live model through warm_everyday). The
+    model is `[live] model`, default qwen3:8b, with the one plain fallback
+    line from live_model_choice; the URL is the single injected lane_url().
+    Never on Standby (the caller decides) and never raises into the session.
+    """
+    choice = live_model_choice()
+    globals().get("ENGINE")._warm = {"model": choice["model"],
+        "fallback": bool(choice["fallback"]), "line": choice["line"],
+        "available": bool(choice["available"]), "lane_url": lane_url(),
+        "warm": False}
     def run():
+        out = {}
+        try:
+            import jarvis_speech
+            out["speech"] = jarvis_speech.prewarm()
+        except Exception as exc:
+            out["speech"] = {"ok": False, "why": {type(exc).__name__: 1}}
         try:
             import jarvis_agent
-            jarvis_agent.warm_everyday(model=_chat_model())
+            out["model"] = bool(jarvis_agent.warm_everyday(
+                ollama_url=lane_url(), model=choice["model"]))
+        except Exception as exc:
+            out["model"] = False
+            out["model_why"] = type(exc).__name__
+        try:
+            eng = globals().get("ENGINE")
+            if eng is not None:
+                eng._warm = {**eng._warm, "warm": bool(out.get("model")),
+                             "speech": out.get("speech") or {}}
         except Exception:
             pass
     threading.Thread(target=run, name="jarvis-live-warm", daemon=True).start()
@@ -721,8 +871,20 @@ class Live:
         self.crisis = False
         self.awake_seen = False       # the power mode was not standby at some tick
         self._gen = 0
+        # Session trust (owner's refinement, 2026-10-18): verified time,
+        # short clips since it, and whether a 1.5-2.0 s clip may run without
+        # another strict check. Numbers/fixed words only - never audio or text.
+        self.trust_verified_at = 0.0
+        self.trust_short_since = 0
+        self.trust_active = False
+        self.trust_first_done = False
+        self.trust_expired = ""
+        self.trust_checks = 0
+        self.trust_short_clips = 0
+        self.trust_aborts = 0
+        self._warm = {}
 
-    # -- plumbing -----------------------------------------------------------------
+    # -- plumbing" -----------------------------------------------------------------
     def _emit(self) -> None:
         try:
             self.publish(EVENT_KIND, self.status())
@@ -740,6 +902,7 @@ class Live:
         self.ends_at, self.warned, self.crisis = 0.0, False, False
         self.muted, self.muted_why = False, ""
         self.refused_row, self.near_row, self.refused_since = 0, 0, 0.0
+        self._trust_end()
         self._gen += 1
 
     def _mode(self) -> str:
@@ -797,6 +960,7 @@ class Live:
             self.conversation_id = cid
             self.refused_row, self.near_row, self.refused_since = 0, 0, 0.0
             self.turns = 0
+            self._trust_start()
             self.awake_seen = not standby
             self.session += 1
             self._gen += 1
@@ -1048,6 +1212,127 @@ class Live:
         if changed:
             self._emit()
 
+    # -- session trust (owner's refinement, 2026-10-18) -------------------------
+    def _trust_start(self) -> None:
+        self.trust_verified_at = 0.0
+        self.trust_short_since = 0
+        self.trust_active = False
+        self.trust_first_done = False
+        self.trust_expired = ""
+        self.trust_checks = 0
+        self.trust_short_clips = 0
+        self.trust_aborts = 0
+
+    def _trust_end(self) -> None:
+        self.trust_active = False
+        self.trust_first_done = False
+        self.trust_expired = "ended"
+
+    def _trust_expire(self, now: float) -> None:
+        if self.trust_active and self.trust_verified_at:
+            if now - self.trust_verified_at >= float(live_limits()["trust_window_s"]):
+                self.trust_active = False
+                self.trust_expired = "time"
+        if self.trust_active and self.trust_short_since >= int(live_limits()["trust_max_short_clips"]):
+            self.trust_active = False
+            self.trust_expired = "count"
+
+    def trust_decision(self, device, seconds) -> dict:
+        """What to do with one Live clip, by its speech seconds.
+
+        Returns {"action": ...}: "check" (run the full strict check and, on a
+        pass, refresh), "trusted_short" (1.5-2.0 s on session trust, no
+        refresh), "refuse_first"/"refuse_stale" (say a full sentence), or
+        "too_short" (the old under-1.5 s path). No audio/text is read here.
+        A session that is off, on another device, or paused-unknown fails
+        closed with "refuse_stale".
+        """
+        with self._lock:
+            if not self._on() or _norm_device(device) != self.device:
+                return {"action": "refuse_stale", "words": SAY_RECHECK}
+            now = self.clock()
+            self._trust_expire(now)
+            try:
+                spoken = float(seconds or 0.0)
+            except (TypeError, ValueError):
+                spoken = 0.0
+            if not self.trust_first_done:
+                if spoken < TRUST_FIRST_S:
+                    return {"action": "refuse_first", "words": SAY_RECHECK}
+                return {"action": "check"}
+            if spoken >= TRUST_SPOT_S:
+                return {"action": "check"}
+            if spoken >= TRUST_STEADY_S:
+                if self.trust_active:
+                    return {"action": "trusted_short"}
+                return {"action": "refuse_stale", "words": SAY_RECHECK}
+            return {"action": "too_short"}
+
+    def note_verified(self, device) -> dict:
+        """A >= 2.0 s clip passed the full strict check: refresh the window."""
+        with self._lock:
+            self._trust_expire(self.clock())
+            self.trust_verified_at = self.clock()
+            self.trust_short_since = 0
+            self.trust_active = True
+            self.trust_first_done = True
+            self.trust_expired = ""
+            self.trust_checks += 1
+            state = self.trust_state()
+        _audit("voice.live", {"did": "trust_refresh", "device": _norm_device(device),
+                              "short_since": state["short_clips_since"],
+                              "window_s": state["window_s"]})
+        return state
+
+    def note_trusted_short(self, device) -> dict:
+        """One 1.5-2.0 s clip transcribed on session trust (no refresh)."""
+        with self._lock:
+            self._trust_expire(self.clock())
+            if self.trust_active:
+                self.trust_short_since += 1
+                self.trust_short_clips += 1
+                self._trust_expire(self.clock())
+            state = self.trust_state()
+        _audit("voice.live", {"did": "trust_short", "device": _norm_device(device),
+                              "short_since": state["short_clips_since"],
+                              "active": state["active"]})
+        return state
+
+    def abort_trust(self, why: str = "check_failed") -> dict:
+        """A failed/erroring strict check ends session trust immediately."""
+        with self._lock:
+            was = self.trust_active
+            self.trust_active = False
+            self.trust_first_done = False
+            self.trust_expired = str(why or "check_failed")[:40]
+            self.trust_aborts += 1
+            state = self.trust_state()
+        _audit("voice.live", {"did": "trust_abort", "why": self.trust_expired,
+                              "was": bool(was)})
+        return state
+
+    def trust_state(self) -> dict:
+        """Honest numbers for status/audit: no words, no audio."""
+        with self._lock:
+            now = self.clock()
+            self._trust_expire(now)
+            last = self.trust_verified_at
+            return {"active": bool(self.trust_active and self._on()),
+                    "first_clip_done": bool(self.trust_first_done),
+                    "last_verified_at": last or None,
+                    "last_verified_ago_s": (max(0, int(round(now - last)))
+                                            if last else None),
+                    "short_clips_since": int(self.trust_short_since),
+                    "short_clips_total": int(self.trust_short_clips),
+                    "checks": int(self.trust_checks),
+                    "aborts": int(self.trust_aborts),
+                    "window_s": int(live_limits()["trust_window_s"]),
+                    "max_short_clips": int(live_limits()["trust_max_short_clips"]),
+                    "expired": self.trust_expired or None,
+                    "first_clip_s": TRUST_FIRST_S,
+                    "steady_clip_s": TRUST_STEADY_S,
+                    "spot_clip_s": TRUST_SPOT_S}
+
     def trust_source(self, device) -> str:
         """What a Live clip from `device` asks jarvis_voice.hands_free_trusted
         about: TRUST_VOICE_STARTED when the session was started by voice,
@@ -1228,7 +1513,21 @@ class Live:
                 "resumable": resumable,
                 "turns": self.turns,
                 "refused_in_a_row": self.refused_row if on else 0,
+                "trust": self.trust_state() if on else {"active": False,
+                    "first_clip_done": False, "last_verified_at": None,
+                    "last_verified_ago_s": None, "short_clips_since": 0,
+                    "short_clips_total": 0, "checks": 0, "aborts": 0,
+                    "window_s": int(live_limits()["trust_window_s"]),
+                    "max_short_clips": int(live_limits()["trust_max_short_clips"]),
+                    "expired": self.trust_expired or None,
+                    "first_clip_s": TRUST_FIRST_S, "steady_clip_s": TRUST_STEADY_S,
+                    "spot_clip_s": TRUST_SPOT_S},
+                "model": dict(self._warm) if self._warm else {},
                 "limits": {"default_minutes": DEFAULT_MINUTES, "max_minutes": MAX_MINUTES,
+                           "trust_window_s": int(live_limits()["trust_window_s"]),
+                           "trust_max_short_clips": int(live_limits()["trust_max_short_clips"]),
+                           "context_tokens": int(live_limits()["context_tokens"]),
+                           "max_pause_ms": int(live_limits()["max_pause_ms"]),
                            "extend_minutes": EXTEND_DEFAULT_MIN, "quiet_s": QUIET_S,
                            "quiet_warn_s": QUIET_WARN_S, "warn_s": WARN_BEFORE_S,
                            "resume_s": RESUME_S, "ended_show_s": ENDED_SHOW_S,

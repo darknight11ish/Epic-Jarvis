@@ -1275,6 +1275,43 @@ def t_a_model_that_cannot_use_tools_is_offered_none_and_told_plainly():
           AG.error_code(msg) is None, AG.error_code(msg))
 
 
+def t_a_live_turn_uses_the_live_model_lane_and_short_tool_list():
+    """Live-only: `[live]` model + the one injected lane URL + 16K context +
+    the shorter top-K diet. Typed chat is untouched (the default arguments)."""
+    import jarvis_live as L
+    responses = [{"choices": [{"message": {"role": "assistant", "content": "hi"}}]}]
+    opener, calls = scripted_stream(responses)
+    urls = []
+
+    def open2(url, payload):
+        urls.append(url)
+        return opener(url, payload)
+
+    saved = L.turn_overrides
+    L.turn_overrides = lambda model, url, ctx: {
+        "model": "live-model:8b", "ollama_url": "http://127.0.0.1:11435",
+        "context_length": 16384, "tool_limit": 6, "lane_url": "http://127.0.0.1:11435"}
+    try:
+        with NoRealIO():
+            AG.run_local_turn(
+                [{"role": "user", "content": "hello", "live": True,
+                  "provenance": "voice"}], "typed:8b",
+                ollama_url="http://127.0.0.1:11434", stream_out=lambda b: None,
+                gate_check=allow, open_stream=open2,
+                request={"messages": [{"role": "user", "content": "hello",
+                                       "live": True, "provenance": "voice"}]})
+    finally:
+        L.turn_overrides = saved
+    check("a Live turn asks the Live model, not the typed chat's",
+          calls and calls[0].get("model") == "live-model:8b", calls[:1])
+    check("...on the one injected lane URL (the preset patch will supply :11435)",
+          urls == ["http://127.0.0.1:11435/v1/chat/completions"], urls)
+    offer = AG._new_offer(list(AG.TOOLS), limit=6)
+    AG._fill_offer(offer, list(AG.TOOLS), "what is on the screen")
+    check("...and the Live-only offer is capped at the short tool limit",
+          len(offer["shown"]) <= 6, len(offer["shown"]))
+
+
 if __name__ == "__main__":
     for fn in (t_no_tool_call_streams_straight_through, t_a_denied_tool_never_executes,
                t_an_approved_tool_actually_runs_and_feeds_back_the_result,
@@ -1309,7 +1346,8 @@ if __name__ == "__main__":
                t_the_default_step_sink_is_the_event_bus,
                t_a_second_card_turn_carries_the_jarvis_system_block,
                t_the_rules_stay_first_after_trimming_and_for_an_app_s_own_note,
-               t_a_model_that_cannot_use_tools_is_offered_none_and_told_plainly):
+               t_a_model_that_cannot_use_tools_is_offered_none_and_told_plainly,
+               t_a_live_turn_uses_the_live_model_lane_and_short_tool_list):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

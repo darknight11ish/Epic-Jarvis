@@ -1276,7 +1276,7 @@ static LIVE_USE_TURN: AtomicBool = AtomicBool::new(false);
 
 /// In Live, a sentence Smart Turn calls unfinished may pause this long (the
 /// voice play test, 2026-09-28: 2 s cut people off mid-thought).
-pub(crate) const LIVE_TURN_MAX_PAUSE: Duration = Duration::from_millis(3000);
+pub(crate) const LIVE_TURN_MAX_PAUSE: Duration = Duration::from_millis(1500);
 
 /// Whether a Live sentence must be dropped instead of sent: the PC paused
 /// Live for a card raised in this session (or cannot read the queue), the

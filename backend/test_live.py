@@ -195,28 +195,39 @@ def t_start_stop_and_the_limits():
 
 
 def t_the_warm_up_uses_the_model_chat_uses():
-    """Effectiveness audit 2026-09-28, 3.2: pressing Live warms the model
-    chat really uses (jarvis_power_switch.chat_model), not a fixed name."""
+    """Pressing Live warms the `[live]` model (default qwen3:8b) on the one
+    injected lane URL, and pre-warms STT/TTS/VAD at the same moment - the
+    measured cold loads this slice exists to remove."""
     import threading
     seen = []
-    saved = {n: sys.modules.get(n) for n in ("jarvis_agent", "jarvis_power_switch")}
+    prewarmed = []
+    saved = {n: sys.modules.get(n) for n in ("jarvis_agent", "jarvis_speech")}
     agent = types.ModuleType("jarvis_agent")
     agent.warm_everyday = lambda **kw: seen.append(kw) or True
-    power = types.ModuleType("jarvis_power_switch")
-    power.chat_model = lambda: "switched-model:8b"
-    sys.modules["jarvis_agent"], sys.modules["jarvis_power_switch"] = agent, power
+    speech = types.ModuleType("jarvis_speech")
+    speech.prewarm = lambda: prewarmed.append(True) or {"ok": True, "stt": True, "tts": True, "vad": True}
+    sys.modules["jarvis_agent"], sys.modules["jarvis_speech"] = agent, speech
+    old_models, old_cfg = L._installed_models, L._live_cfg
+    L._installed_models = lambda url=None: {"switched-model:8b"}
+    L._live_cfg = lambda key, default=None: ({"model": "switched-model:8b"}.get(key, default))
     try:
         L._default_warm()
         for th in [x for x in threading.enumerate() if x.name == "jarvis-live-warm"]:
             th.join(5)
     finally:
+        L._installed_models, L._live_cfg = old_models, old_cfg
         for n, m in saved.items():
             if m is None:
                 sys.modules.pop(n, None)
             else:
                 sys.modules[n] = m
-    check("Live warms the model chat uses now, by name", seen == [{"model": "switched-model:8b"}],
-          seen)
+    check("Live warms `[live] model` on the one injected lane URL",
+          seen and seen[0].get("model") == "switched-model:8b"
+          and seen[0].get("ollama_url") == L.lane_url(), seen)
+    check("...and pre-warms STT, TTS and VAD at the same start", prewarmed == [True], prewarmed)
+    choice = L.live_model_choice()
+    check("the fallback is a setting too (and a plain line), not a guessed name",
+          choice["model"] in ("qwen3:8b", "switched-model:8b"), choice)
 
 
 def t_no_live_without_a_real_voice_check():
@@ -781,7 +792,7 @@ def t_status_and_events_carry_no_words():
                "quiet_warn", "paused", "pause_words", "muted", "muted_why", "muted_words",
                "started_by", "started_at", "hint", "hint_words", "ending_soon", "ended", "ended_words",
                "ended_say", "ended_device", "ended_ago_s", "resumable", "turns",
-               "refused_in_a_row", "limits", "lines", "seen", "camera", "end_on",
+               "refused_in_a_row", "trust", "model", "limits", "lines", "seen", "camera", "end_on",
                "conversation_id"}
     check("every event is the status and nothing else", w.events and all(
         k == "live" and set(d) == allowed for k, d in w.events), w.events[:1])
@@ -947,32 +958,164 @@ def t_live_clips_are_checked_before_words():
 
 
 def t_too_short_clips():
+    """Owner's refinement (2026-10-18): the first clip is a strict >= 2.0 s
+    check; 1.5-2.0 s may run on session trust and does not refresh; the
+    window dies after 120 s OR 16 short clips; expiry refuses short clips
+    until a full sentence; a failed spot check aborts trust at once."""
     with T.Temp() as t:
         sp = Speech(t)
         sp.w.engine.start("phone")
         sp.calls.clear()
-        h = sp.hear(seconds=1.0, words="NEVER TRANSCRIBED")
-        check("a short clip from the owner: checked ONLY (never transcribed), 'say a bit more'",
-              h["too_short"] and "stt" not in sp.calls and "owner_check" in sp.calls
-              and h["live_short"] == "owner" and h["live_say"] == L.SAY_SHORT
-              and "say a little more" in h["reason"] and not h["text"], (h, sp.calls))
         h = sp.hear(seconds=1.0)
-        check("...again within a minute: the words are SEEN, not said",
-              h["too_short"] and h["live_short"] == "owner" and h["live_say"] == "", h)
+        check("the FIRST clip below 2.0 s is refused before any check or words",
+              h["too_short"] and h["live_say"] == L.SAY_RECHECK
+              and sp.calls == [] and not h["text"], (h, sp.calls))
+        h = sp.hear(seconds=2.5, words="first full sentence")
+        check("the first >= 2.0 s clip is the strict check and becomes the baseline",
+              h["ok"] and sp.calls == ["owner_check", "stt"]
+              and sp.w.engine.trust_state()["active"]
+              and sp.w.engine.trust_state()["checks"] == 1, (h, sp.calls))
         sp.calls.clear()
-        before = sp.w.engine.status()["refused_in_a_row"]
-        h = sp.hear(who="stranger", seconds=1.0)
-        check("a short clip from someone else (the TV): nothing said, nothing shown, "
-              "counted as another voice",
-              h["too_short"] and h["live_short"] == "other" and h["live_say"] == ""
-              and "stt" not in sp.calls
-              and sp.w.engine.status()["refused_in_a_row"] == before + 1, h)
-        sp.w.clock.t += 61
-        h = sp.hear(who="stranger", seconds=1.0)
-        check("...even after a minute, the TV never makes Jarvis speak",
-              h["live_say"] == "", h)
-        check("the short line itself does not restart the quiet clock",
-              L.SAY_SHORT in L.QUIET_KEEPS)
+        h = sp.hear(seconds=1.6, words="yes please")
+        check("a 1.6 s clip runs on session trust: NO speaker model, words still made",
+              h["ok"] and h["text"] == "yes please" and sp.calls == ["stt"]
+              and sp.w.engine.trust_state()["short_clips_since"] == 1, (h, sp.calls))
+        for _ in range(15):
+            h = sp.hear(seconds=1.6, words="short")
+        check("the 16th short clip expires the window by count",
+              not sp.w.engine.trust_state()["active"]
+              and sp.w.engine.trust_state()["expired"] == "count", sp.w.engine.trust_state())
+        sp.calls.clear()
+        h = sp.hear(seconds=1.6, words="NEVER TRANSCRIBED")
+        check("...after which a short clip is refused with the full-sentence line",
+              h["too_short"] and h["live_say"] == L.SAY_RECHECK
+              and sp.calls == [] and not h["text"], (h, sp.calls))
+        sp.calls.clear()
+        h = sp.hear(seconds=2.5, words="a normal sentence")
+        check("a normal sentence checks again and refreshes the window",
+              h["ok"] and sp.calls == ["owner_check", "stt"]
+              and sp.w.engine.trust_state()["short_clips_since"] == 0, (h, sp.calls))
+        sp.w.clock.t += 121
+        sp.w.engine.note_active("phone")
+        sp.calls.clear()
+        h = sp.hear(seconds=1.6, words="NEVER")
+        check("the window also expires by time (120 s)",
+              h["too_short"] and sp.calls == []
+              and sp.w.engine.trust_state()["expired"] == "time", (h, sp.calls))
+        sp.calls.clear()
+        h = sp.hear(who="stranger", seconds=2.5, words="NEVER")
+        check("a failed spot check aborts session trust immediately",
+              not h["ok"] and sp.calls == ["owner_check"]
+              and sp.w.engine.trust_state()["aborts"] == 1
+              and not sp.w.engine.trust_state()["active"], (h, sp.calls))
+        h = sp.hear(seconds=1.6, words="NEVER TRANSCRIBED")
+        check("...and the next short clip is refused, not checked",
+              h["too_short"] and h["live_say"] == L.SAY_RECHECK and not h["text"], h)
+        sp.calls.clear()
+        with mock.patch.object(V, "verify", side_effect=RuntimeError("verifier died")):
+            h = sp.hear(seconds=2.5, words="NEVER")
+        check("a voice-check ERROR fails closed: refused, trust off, nothing transcribed",
+              not h["ok"] and h["available"] is False and "trust is off" in h["reason"]
+              and sp.calls == ["owner_check"] and not h["text"], (h, sp.calls))
+        check("status exposes the trust state honestly (numbers/fixed words only)",
+              set(("active", "last_verified_at", "short_clips_since", "window_s",
+                   "max_short_clips", "expired")) <= set(sp.w.engine.status()["trust"]))
+        check("the window and the short-clip cap are the owner's 120 s / 16",
+              sp.w.engine.status()["trust"]["window_s"] == 120
+              and sp.w.engine.status()["trust"]["max_short_clips"] == 16)
+
+
+def t_live_model_fallback_and_limits_are_one_injected_value():
+    """The `[live]` model/fallback and the one lane URL are settings, not a
+    second model loader; context 16K and a 6-tool diet are Live-only."""
+    old_cfg, old_models = L._live_cfg, L._installed_models
+    old_warm = getattr(L.ENGINE, "_warm", {})
+    L._live_cfg = lambda key, default=None: {
+        "model": "missing:8b", "fallback_model": "qwen3.5:9b",
+        "context_tokens": 16384, "tool_limit": 6,
+    }.get(key, default)
+    L._installed_models = lambda url=None: {"qwen3.5:9b"}
+    try:
+        choice = L.live_model_choice()
+        check("a missing primary model falls back to qwen3.5:9b with a plain line",
+              choice["model"] == "qwen3.5:9b" and choice["fallback"]
+              and "qwen3.5:9b" in choice["line"], choice)
+        L.ENGINE._warm = {"model": "qwen3.5:9b"}
+        ov = L.turn_overrides("typed:8b", "http://typed:11434", 196608)
+        check("a Live turn uses the Live model on the one injected lane URL",
+              ov["model"] == "qwen3.5:9b" and ov["ollama_url"] == L.lane_url()
+              and ov["lane_url"] == L.lane_url(), ov)
+        check("...and a 16K context and the short tool limit (typed chat unchanged)",
+              ov["context_length"] == 16384 and ov["tool_limit"] == 6
+              and L.live_limits()["context_tokens"] == 16384, ov)
+        check("the model is a setting, not a hard-coded second loader",
+              "[live]" in (HERE / "rebuilt" / "jarvis-framework.toml").read_text(encoding="utf-8")
+              and "qwen3:8b" in (HERE / "rebuilt" / "jarvis-framework.toml").read_text(encoding="utf-8"))
+    finally:
+        L._live_cfg, L._installed_models = old_cfg, old_models
+        L.ENGINE._warm = old_warm
+
+
+def t_prewarm_loads_the_three_engines_at_start():
+    """Pressing Live pre-warms STT, TTS and VAD - the three cold loads - so
+    no first clip pays 2.78 s / 4.4-5.0 s. Each is reported, never raised."""
+    calls = []
+    with mock.patch.object(S, "_stt_engine", lambda: calls.append("stt") or object()), \
+            mock.patch.object(S, "_tts_engine", lambda: calls.append("tts") or object()), \
+            mock.patch.object(S, "_vad_config", lambda: calls.append("vad") or object()):
+        out = S.prewarm()
+    check("prewarm builds STT, TTS and VAD exactly once each",
+          calls == ["stt", "tts", "vad"] and out["stt"] and out["tts"] and out["vad"], (calls, out))
+    with mock.patch.object(S, "_stt_engine", side_effect=RuntimeError("no STT")), \
+            mock.patch.object(S, "_tts_engine", lambda: object()), \
+            mock.patch.object(S, "_vad_config", lambda: object()):
+        out = S.prewarm()
+    check("a missing engine is named and does not stop the others (lazy fallback stays)",
+          out["ok"] is False and out["stt"] is False and out["tts"]
+          and out["why"].get("stt") == "RuntimeError", out)
+
+
+def t_streaming_asr_endpoint_and_fallback():
+    """The streaming reader overlaps partial words with incoming audio, ends at
+    the 1.5 s pause, and falls back to the whole clip if a partial fails."""
+    calls = []
+
+    def fake_transcribe(samples, rate):
+        calls.append(round(len(samples) / float(rate), 2))
+        return "partial words" if len(calls) == 1 else "the whole sentence"
+
+    stream = S.StreamingAsr(transcribe=fake_transcribe)
+    out = stream.feed(b"\x00\x00" * 8000, silence_s=0.1)   # 0.5 s
+    check("a streamed chunk does not end the utterance and makes partial words",
+          not out["ended"] and out["partials"] == 1 and out["partial"] == "partial words", out)
+    out = stream.feed(b"\x00\x00" * 8000, silence_s=1.5)
+    check("the 1.5 s pause is the endpoint (not 3 s)", out["ended"] and stream.endpoint(), out)
+    final = stream.finalize()
+    check("finalize returns the full words, overlapped, not the partial",
+          final["ok"] and final["text"] == "the whole sentence"
+          and final["partials"] == 1 and final["fallback"] is False, final)
+
+    bad = []
+    def dies_once(samples, rate):
+        bad.append(1)
+        if len(bad) == 1:
+            raise RuntimeError("stream failed")
+        return "whole clip fallback"
+    stream = S.StreamingAsr(transcribe=dies_once)
+    stream.feed(b"\x00\x00" * 8000, silence_s=0.0)
+    final = stream.finalize()
+    check("a failed streamed transcription falls back to the whole clip once",
+          final["ok"] and final["text"] == "whole clip fallback" and final["fallback"], final)
+
+    def always_dies(samples, rate):
+        raise RuntimeError("no STT")
+    stream = S.StreamingAsr(transcribe=always_dies)
+    final = stream.finalize()
+    check("if the fallback also fails, it refuses rather than returning half words",
+          final["ok"] is False and final["text"] == "" and final["why"] == "RuntimeError", final)
+    check("the endpoint is 1.5 s, not the old 3 s",
+          S.STREAM_ENDPOINT_S == 1.5
+          and "1500" in (HERE / ".." / "jarvis-desktop" / "src" / "live-rules.js").read_text(encoding="utf-8"))
 
 
 def t_stop_on_live_clips():
@@ -1480,17 +1623,19 @@ def t_the_module_keeps_to_itself():
     src = (HERE / "jarvis_live.py").read_text(encoding="utf-8")
     code = re.sub(r'"""[\s\S]*?"""', "", src)
     code = re.sub(r"#.*", "", code)
-    # The one exception: pressing Live warms the everyday model through
-    # jarvis_agent.warm_everyday (this PC's Ollama only, never on Standby).
+    # The one exception: pressing Live warms the Live model through
+    # jarvis_agent.warm_everyday and pre-warms jarvis_speech's engines (this
+    # PC's Ollama/lane only, never on Standby). The lane URL is checked with a
+    # local /api/tags call, never an /api/chat and never a cloud host.
     warm = code.count("jarvis_agent")
-    code = code.replace("import jarvis_agent", "").replace(
-        "jarvis_agent.warm_everyday(model=_chat_model())", "")
+    code = re.sub(r'import jarvis_agent[\s\S]*?out\["model"\] = bool\(jarvis_agent\.warm_everyday\([\s\S]*?\)\)',
+                  "", code)
     check("no AI model, no chat path, no cloud: nothing here talks to one (but the warm-up, "
-          "through jarvis_agent)", warm == 2 and
-          not re.search(r"jarvis_agent|ollama|/api/chat|jarvis_router|urllib\.request|http",
+          "through jarvis_agent and the local lane check)", warm >= 2 and
+          not re.search(r"/api/chat|jarvis_router|openai|anthropic|https?://(?!127\.0\.0\.1|localhost)",
                         code, re.I), warm)
     check("it writes no file (it only reads the photo test's results)",
-          not re.search(r"write_text|write_bytes|open\(", code))
+          not re.search(r"write_text|write_bytes|(?<!url)open\(", code))
     check("nothing the model can call starts Live (no tool, no schedule kind)",
           "register_kind" not in code and "TOOLS" not in code)
     check("it never approves anything",
