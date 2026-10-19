@@ -545,7 +545,12 @@ def t_readiness():
 def t_status():
     with World() as w:
         s = W.status()
-        check("GET /api/work carries the five setups, in order",
+        # The LIVE GET /api/work is answered by the preset contract since
+        # presets.patch (2026-10-18, docs/JARVIS-API.md section 145) - this suite
+        # still pins jarvis_work.status() ITSELF, which is what its own module
+        # answers; /api/work/recommend and /choose are still these routes.
+        check("jarvis_work.status() carries the five setups, in order "
+              "(the live GET /api/work route is presets.patch's now)",
               [x["id"] for x in s["setups"]] == list(W.SETUP_IDS))
         check("... the sentence that says what this is",
               "5 work setups" in s["found"] and "RTX" not in s["found"], s["found"])

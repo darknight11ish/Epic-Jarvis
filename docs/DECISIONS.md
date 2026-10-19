@@ -2593,3 +2593,56 @@ starts.
   cites; the wiring tests are in `backend/test_plan.py`
   (`t_enabled_refuses_a_fresh_pass_for_a_different_model`,
   `t_enabled_accepts_only_a_fresh_pass_for_the_current_model`).
+
+## 2026-10-19 - the preset and voice questions, answered as clickable multiple choice
+
+Put to the owner on 2026-10-19, during the preset/voice merge work, as short
+multiple-choice questions he could click. The answers below are his choices;
+they decide what gets built when each slice starts. Nothing below is a
+switch-on by itself: each still needs its own slice, and a feature switch still
+has its own separate approval.
+
+**Decided:**
+
+* **Clearing the old voice training is built, with ONE approval card.** Asked
+  "is there a way to clear previous voice training with an approval card in
+  settings? if not add it". There is none today (only `adapt-reset`, which
+  zeroes the live-addition counters and never touches the enrolled print), so
+  it is added as a mode on the EXISTING `POST /api/voice/enroll` route, raising
+  the same `change_own_config` card enrolling already uses; nothing is deleted
+  until the card is approved, and voice checks refuse until he trains again.
+  **The two Settings buttons land after the in-flight voice PRs merge** (they
+  own those screens); the backend half comes first.
+* **F5 S2, the searchable recordings index: keep the transcript text too, and
+  build it in the next slice ON by default.** His own words: "built in in the
+  next slice on by default." This deliberately overrides the design brief's
+  recommended off-by-default: the index will keep a readable copy of what was
+  said, on this PC, until he deletes it - so that slice MUST ship the one
+  Delete, the backup exclusion (a backup cannot resurrect deleted words), the
+  plain-language disclosure, and an instant OFF. S1 stays read-one-file-and-
+  forget-it until that slice is built.
+* **Coding on both graphics cards: do the measurement run first.** One ~10
+  minute run, in a quiet window, measures the zero-spill start through the real
+  path; the runbook and a read-only probe are prepared
+  (`.dsh-scratch/MEASURE-HEAVY-LANE-RUNBOOK-2026-10-19.md`). **Heavy mode stays
+  refused until the measured numbers exist and he approves the switch
+  separately.** The probe already found the coding-lane server down and both
+  everyday servers holding a model, so the run waits for those to clear.
+* **Live audio: measure one real Live turn first, then build the backend-only
+  streaming receiver.** Streaming audio to the PC was excluded on purpose in
+  `docs/LIVE-DESIGN.md` section 8, so revisiting it is his call; the first step
+  is real end-to-end numbers from one owner Live session, then a dark backend
+  receiver that still passes the complete clip through the voice-print gate.
+  No public tunnel, and the client never does speech-to-text.
+* **Voice-training density: the 12 phrases are recorded once across the three
+  rounds** (about 15 recordings), not every phrase in every condition (about
+  60). The four-condition contract and the free-speech prompts are unchanged.
+* **Old worktrees and branches: delete the 43 clean, already-superseded
+  worktrees and the 209 local branches proven already merged** - nothing else.
+  Origin refs, PR snapshot refs, rescue/backup branches, unproven branches,
+  owner files and backups are explicitly NOT in that approval.
+* **Android signing-key rotation: later, after the current feature work.** The
+  app release stays on the old debug certificate until then (still HIGH-1); a
+  two-hour reminder re-asks him rather than letting it drift.
+* **Third graphics card: not yet** - the second card's own features are still
+  unmeasured, so measuring the two cards comes first.
