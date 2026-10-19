@@ -128,7 +128,7 @@ export const INTERRUPT = Object.freeze([
 ]);
 export const STOP_TALKING = "Stop talking";
 /** Smart Turn in Live: an unfinished-sounding sentence may pause this long. */
-export const TURN = Object.freeze({ askAfterMs: 200, maxPauseMs: 3000 });
+export const TURN = Object.freeze({ askAfterMs: 200, maxPauseMs: 1500 });
 /** How far Jarvis's voice drops while another voice is being checked. */
 export const DUCK_VOLUME = 0.3;
 export const MAX_CHIPS = 3;

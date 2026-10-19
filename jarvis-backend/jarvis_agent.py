@@ -7974,11 +7974,13 @@ def _allowed_tools(enabled_tools, url: str, model: str, *, none: bool = False) -
     return names, False
 
 
-def _new_offer(names: list, opened=()) -> dict:
+def _new_offer(names: list, opened=(), limit: Optional[int] = None) -> dict:
     """What a turn SHOWS the model, before the first round (see the short
-    tool list above). Filled by _fill_offer."""
+    tool list above). Filled by _fill_offer. `limit` is the Live-only diet
+    size; None keeps the typed-chat TOOL_DIET_LIMIT."""
     return {"short": bool(names) and short_list_on(),
             "plugins": bool(names) and _plugins_configured(),
+            "limit": limit,
             "opened": set(opened), "extra": {}, "shown": [], "groups": [], "schemas": []}
 
 
@@ -7988,6 +7990,10 @@ def _fill_offer(offer: dict, names: list, question: str = "") -> None:
     if offer["short"] or not question or not tool_diet_on():
         offer["shown"] = tool_offer(names, offer["opened"], short=offer["short"],
                                     plugins=offer["plugins"])
+        if offer.get("limit"):
+            # Live-only trim (2026-10-18): even when the top-K diet is off or
+            # the question is unrecognised, a Live turn shows only this many.
+            offer["shown"] = offer["shown"][:int(offer["limit"])]
         offer["schemas"] = _schemas_for(offer["shown"], offer["groups"], offer["extra"])
         return
     # The top-K diet (F1, 2026-10-18): the short list keeps its fixed core +
@@ -8002,11 +8008,18 @@ def _fill_offer(offer: dict, names: list, question: str = "") -> None:
     extra = offer.get("extra") or {}
     extra_names = [n for n in extra if n not in base]
     extra_hints = {n: _outside_tool_hints(extra[n]) for n in extra_names}
+    limit = offer.get("limit") or TOOL_DIET_LIMIT
     selection = tool_diet_selection(question, base + extra_names,
-                                    limit=TOOL_DIET_LIMIT - (1 if more else 0),
+                                    limit=int(limit) - (1 if more else 0),
                                     extra_hints=extra_hints)
     diet = selection["tools"]
     offer["shown"] = diet + ([MORE_TOOLS] if more else [])
+    if offer.get("limit"):
+        # The Live cap also applies to the diet's full-list fallback, not only
+        # to the short-list branch: an unrecognised question must not hand a
+        # Live turn every tool description again.
+        keep = [n for n in offer["shown"] if n != MORE_TOOLS][:int(offer["limit"])]
+        offer["shown"] = keep + ([MORE_TOOLS] if MORE_TOOLS in offer["shown"] else [])
     # F4: a plug-in tool the selector did NOT name stays unshown, exactly like
     # a built-in one; on tool_diet_selection's fallback every name is shown,
     # so include_all_extra keeps the full-list fallback as before.
@@ -8418,6 +8431,22 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     recorder = record_chain if record_chain is not None else _record_chain
     steps: list = []
     watch = _TurnWatch(messages, request)
+    # Jarvis Live's own speed slice (2026-10-18): the Live-only model from
+    # `[live]`, the one injected lane URL (the preset-lane patch supplies
+    # :11435 later - jarvis_model_lanes.py is not edited here), a 16K context
+    # and a shorter top-K tool list. Typed chat is untouched.
+    live_turn = bool(getattr(watch, "live", False))
+    if live_turn:
+        try:
+            import jarvis_live
+            _ov = jarvis_live.turn_overrides(model, ollama_url, context_length)
+            model, ollama_url = _ov["model"], _ov["ollama_url"]
+            context_length = _ov["context_length"]
+            # Live's lane is the one injected value; do not let the typed
+            # chat's second-card choice move this turn to another lane.
+            lane_choice = None
+        except Exception:
+            pass
     # The owner's manner (jarvis_manner.py): "auto" reads the setting, or a
     # temporary chat's own "from now on ..." override for its own
     # conversation_id (2026-09-27); None adds no line (a backend without the
@@ -8501,7 +8530,11 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     # "Remind me next time I talk about X" (jarvis_next_time.py): worked out
     # once, from the owner's own newest words, before any round.
     next_time = _next_time_due(watch, messages, req)
-    offer: dict = _new_offer(names, opened_groups(conv_id))
+    try:
+        _live_limit = jarvis_live.live_tool_limit() if live_turn else None
+    except Exception:
+        _live_limit = None
+    offer: dict = _new_offer(names, opened_groups(conv_id), limit=_live_limit)
     # The diet reads the owner's newest own words ONCE for this turn, so every
     # round shows the same tool list (prompt reuse depends on that).
     diet_question = _newest_user_text(messages)

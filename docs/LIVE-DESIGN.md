@@ -608,6 +608,67 @@ speech-to-text on the phone; talk-and-listen-at-once models
 (`CUTTING-EDGE-2026-09-26-voice-vision.md:309-321`: they skip the voice check,
 the on-screen rules and cards); any cloud service.
 
+### 4.1 The measured speed slice (2026-10-18)
+
+Measured on the owner's PC, warm, through the real stages:
+
+| Stage | Warm | Cold |
+|---|---|---|
+| VAD | 31 ms | - |
+| owner check | ~140 ms | - |
+| STT (sherpa) | 219 ms | **2.78 s** |
+| model (qwen3:8b total / first token) | **0.42 s / 125 ms** | **121 s** |
+| Kokoro TTS | **1.36 s** | **4.4-5.0 s** |
+
+TTS is the largest warm stage and the model is the largest cold one. The slice
+therefore **pre-warms STT, Kokoro and the Live model at Start Live**, so no first
+clip pays a cold load; the warm path is still one thing per turn and nothing
+parallel is trusted before the voice check.
+
+**Live-only 16K and a short tool list.** A Live turn uses `[live] context_tokens`
+(default 16384) and `[live] tool_limit` (default 6) names in the top-K diet;
+typed chat keeps its own context and tool list. This changes what is shown,
+never what is allowed, what asks, or what a card says.
+
+**The Live model setting.** `[live] model` defaults to `qwen3:8b` and
+`fallback_model` to `qwen3.5:9b`. If Ollama positively reports the primary
+missing and the fallback present, Live uses the fallback and says one plain line
+(`<primary> is not installed, so Live is using <fallback>.`). Missing config or
+an Ollama that cannot be asked changes nothing. The URL is **one injected value**,
+`jarvis_live.LIVE_LANE_URL` (env `JARVIS_LIVE_OLLAMA_URL`, default
+`http://127.0.0.1:11434`); the preset-lane patch will supply the 2080 SUPER's
+`:11435` after it lands. `jarvis_model_lanes.py` is deliberately not edited here.
+
+**TTS already starts at the first clause.** Both apps' first spoken piece is cut
+at the first comma/semicolon/colon after 10 characters (or after 12 complete
+words), not at the first full sentence (`speech-pieces.js`, `SpeechText.kt`);
+this slice verifies that existing behaviour, not a second splitter.
+
+**Session trust (owner's refinement).** The first clip is always a strict
+>= 2.0 s check. After a pass, a >= 2.0 s clip is itself the periodic spot check
+and refreshes the window; a 1.5-2.0 s clip runs on the session's trust with NO
+speaker model and does not refresh. The window ends after **120 s or 16 short
+clips**, whichever comes first; expired short clips are refused with "Say a full
+sentence so I can re-check your voice." A failed or erroring spot check aborts
+trust at once; wake/tap paths stay strict. The 1.5 s trade, said plainly: short
+clips are quicker because no check runs, so both false-accept (a recording of
+the owner, or someone who sounds like them) and false-reject (the owner's short
+sentence taken for someone else) rise slightly compared with the old 2.0 s
+check-every-clip rule. The first clip and every full sentence still pay the full
+check, and the window is the owner's looser choice.
+
+**Streaming ASR - honest state.** The server-side streaming reader is in
+`jarvis_speech.StreamingAsr` (1.5 s endpoint, partial transcription overlapped
+with incoming audio, whole-clip fallback if streaming fails), and its tests
+use synthetic chunks. **The apps still upload one whole clip per utterance**, so
+end-to-end streaming on real audio is NOT wired or measured yet; the app-side
+chunk upload and a real Live session are the next step. Nothing here claims a
+faster real session from that helper.
+
+**Still unmeasured, said plainly:** the real Live end-to-end turn on the owner's
+PC and phone playback. The warm/cold stage numbers above are measured; the
+combined first-turn latency with all pre-warms is not.
+
 ## 5. The camera
 
 **Which camera: the phone's only, for now (proposed).** The use is pointing

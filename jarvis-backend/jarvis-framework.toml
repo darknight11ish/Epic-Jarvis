@@ -1882,3 +1882,13 @@ quiet_enabled = false
 # all day.
 quiet_start = "22:00"
 quiet_end = "07:00"
+
+[live]
+# Live speed slice (2026-10-18): the spoken lane only. Typed chat is untouched.
+model = "qwen3:8b"
+fallback_model = "qwen3.5:9b"
+context_tokens = 16384
+tool_limit = 6
+trust_window_s = 120
+trust_max_short_clips = 16
+max_pause_ms = 1500

@@ -126,7 +126,7 @@ INTERRUPT = [
 ]
 STOP_TALKING = "Stop talking"
 #: Smart Turn in Live: a sentence it thinks is unfinished may pause this long.
-TURN = {"ask_after_ms": 200, "max_pause_ms": 3000}
+TURN = {"ask_after_ms": 200, "max_pause_ms": 1500}
 #: How far Jarvis's volume drops while another voice is being checked.
 DUCK_VOLUME = 0.3
 #: At most this many option chips.
