@@ -2523,7 +2523,7 @@ class MainActivity : FragmentActivity() {
                             linkBlocker = remember(link, stale) { JarvisRuntime.actionBlocker() },
                             setSetting = { setting, value -> JarvisRuntime.setVoiceSetting(setting, value) },
                             record = { stop, onLevel -> voice.recordTrainingClip(stop, onLevel) },
-                            measure = { clips, seconds -> JarvisRuntime.measureVoice(clips, seconds) },
+                            measure = { clips, seconds, condition -> JarvisRuntime.measureVoice(clips, seconds, condition) },
                             onRefresh = { voice.refreshStatus() },
                             onAskMicrophone = {
                                 micGrantedCallback = null

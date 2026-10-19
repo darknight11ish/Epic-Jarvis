@@ -3491,13 +3491,14 @@ object JarvisRuntime {
      * - like the "someone else" check - it is not held on a stale link. Sent
      * in parts the PC will take (80 seconds each), and the counts added up.
      */
-    suspend fun measureVoice(clips: List<ByteArray>, seconds: List<Float>): StrictVoice.Tested {
+    suspend fun measureVoice(clips: List<ByteArray>, seconds: List<Float>, condition: String = "close"): StrictVoice.Tested {
         val strict = voice.strict.value
         if (!strict.measure) return StrictVoice.Tested(false, listOf(StrictVoice.NO_TEST_ON_THIS_PC))
         val parts = mutableListOf<com.jarvis.client.net.VoiceStrict.Measured?>()
         for (range in StrictVoice.batches(seconds, strict.limits.measureMaxClips, strict.limits.maxTotalSeconds)) {
             val body = com.jarvis.client.net.enrollRequestBody(
                 clips.slice(range), mic = VoiceTraining.MIC, mode = "measure",
+                conditions = List(range.count()) { condition },
             )
             when (val r = api.voiceEnroll(body)) {
                 is ApiResult.Ok -> {

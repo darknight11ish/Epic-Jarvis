@@ -665,7 +665,7 @@ fun VoiceTrainingScreen(
     }
 }
 
-/** The first of three rounds: what to do now. */
+/** The first of the PC's condition rounds: what to do now. */
 private const val ROUND_FIRST =
     "Hold the phone the way you usually do and read each sentence in your normal voice. " +
         "Tap Record, read it, then tap Stop."
@@ -760,6 +760,16 @@ private fun StartPlates(
                 style = MaterialTheme.typography.labelSmall,
                 color = chrome.textMid,
                 modifier = Modifier.liveStatus(),
+            )
+        }
+        if (strict.freeSpeech.isNotEmpty()) {
+            Gap(8)
+            Text(
+                "The PC's plan also includes ${strict.freeSpeech.size} free-speech prompts. " +
+                    "This phone does not record them yet: the desktop training screen records " +
+                    "them first, and the phone follows in its own slice. Nothing is sent for them here.",
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textMid,
             )
         }
         Gap(12)

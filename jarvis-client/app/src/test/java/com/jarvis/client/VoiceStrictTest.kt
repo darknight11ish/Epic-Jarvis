@@ -423,8 +423,33 @@ class VoiceStrictTest {
         assertEquals("Very strict let 14 of your 20 sentences through; balanced let 17 of 20 through.", lines[0])
         assertEquals("So at very strict you would have to say it again about 3 in 10; at balanced, about 2 in 10.", lines[1])
         assertTrue(lines[2], lines[2].startsWith("3 sentences were too short for very strict"))
-        // The same counts come back in the status, for the next visit.
-        assertEquals(m, view("measured").measureLast)
+        // The same counts come back in the status, for the next visit. The
+        // status keeps a REDUCED held_out (no numbers), so compare the counts
+        // and only require that the PC's own held-out answer survived.
+        val again = requireNotNull(view("measured").measureLast)
+        assertEquals(m.copy(heldOut = null), again.copy(heldOut = null))
+        assertNotNull(again.heldOut)
+    }
+
+    @Test
+    fun `the held-out answer is shown in the PC's own words, per condition`() {
+        val held = JarvisJson.parseToJsonElement(
+            """
+            {"available":false,"ok":true,
+             "words":"Not enough held-out scores yet; no threshold was chosen.",
+             "conditions":{
+               "close":{"available":false,"owner_rows":20,"other_rows":0,
+                        "why":"not enough measured rows for this condition (owner 20/10, other 0/10)"},
+               "table":{"available":true,"frr":0.12,"far":0.03,"eer":0.08,"owner_rows":20,"other_rows":22}}}
+            """.trimIndent(),
+        ).jsonObject
+        val lines = StrictVoice.heldOutLines(held)
+        assertEquals("Not enough held-out scores yet; no threshold was chosen.", lines[0])
+        assertTrue(lines[1], lines[1].startsWith("Close: not enough measured rows"))
+        assertTrue(lines[2], lines[2].startsWith("On a table, 2-3 m away: your own voice would be refused 12%"))
+        assertTrue(lines[2], lines[2].contains("other voices would get in 3%"))
+        assertTrue(lines[2], lines[2].contains("equally likely at 8%"))
+        assertTrue(StrictVoice.heldOutLines(null).isEmpty())
     }
 
     @Test
