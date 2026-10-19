@@ -2894,6 +2894,41 @@ class JarvisApi(
     suspend fun workSetups(): ApiResult<JsonObject> = probe(WorkSetups.PATH)
 
     /**
+     * `GET /api/work` for the focus presets ([FocusPresets]): the same route
+     * the work-setup contract uses, because the backend replaces that answer's
+     * `presets[]` with the one contract both apps render. A 404/501 means the
+     * backend predates the presets.
+     */
+    suspend fun focusPresets(): ApiResult<JsonObject> = probe(FocusPresets.PATH)
+
+    /**
+     * The ONE apply action the focus-preset contract names: a POST to the
+     * route the CONTRACT supplies (never one invented here), with the
+     * contract's body. It raises the usual approval card on the PC; [FocusPresets.replyLine]
+     * turns the answer into words. Only `/api/...` routes are accepted, and the
+     * pairing routes are refused outright.
+     */
+    suspend fun focusPresetApply(path: String, json: String): ApiResult<Pair<Int, JsonObject?>> =
+        withContext(Dispatchers.IO) {
+            if (!path.startsWith("/api/") || path.startsWith("/api/pair/")) {
+                return@withContext ApiResult.Failed(ApiError.Malformed("not an apply route"))
+            }
+            val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                    if (resp.code == 401) ApiResult.Failed(ApiError.BadToken)
+                    else ApiResult.Ok(resp.code to obj)
+                }
+            }.getOrElse {
+                ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it)))
+            }
+        }
+
+    /**
      * One of the two work-setup POSTs: choosing a setup
      * ([WorkSetups.CHOOSE_PATH]) or asking which setup to offer for the owner's
      * own words ([WorkSetups.RECOMMEND_PATH]). Anything else is refused here,

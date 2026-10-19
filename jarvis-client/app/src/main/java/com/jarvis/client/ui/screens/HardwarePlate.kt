@@ -54,8 +54,6 @@ internal fun HardwareSection(canAct: Boolean, onOpenApprovals: ((cardId: String?
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
     val read by JarvisRuntime.hardware.collectAsState()
-    val workRead by JarvisRuntime.workSetups.collectAsState()
-    val work = (workRead as? WorkSetups.Read.Loaded)?.status
     // What is in flight ("" for a plain re-read), and what it came back with.
     var busy by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
@@ -141,11 +139,12 @@ internal fun HardwareSection(canAct: Boolean, onOpenApprovals: ((cardId: String?
                     color = if ((status.nowOnCardPercent ?: 100) < 100) chrome.warnInk else chrome.textMid,
                 )
 
-                // 2b. The work setups: model combinations for a kind of work.
-                // Above the three hardware presets on purpose - this is what the
-                // owner picks BEFORE starting work, and it needs no command and
-                // no Ollama restart. It changes nothing by itself.
-                work?.let { WorkSetupsSection(it, canAct, onOpenApprovals) }
+                // 2b. Focus presets (owner decision 2026-10-18): the one
+                // backend contract's presets, replacing the old work-setups
+                // plate. Above the three hardware presets on purpose - this is
+                // what the owner picks BEFORE starting work, and each "Use
+                // this preset" only raises one approval card.
+                FocusPresetsSection(canAct)
 
                 // 3. The three setups.
                 Gap(12)

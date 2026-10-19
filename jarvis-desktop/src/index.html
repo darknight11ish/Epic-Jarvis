@@ -92,6 +92,25 @@
         </div>
 
         <div class="bar-meta">
+          <!-- Focus presets (focus-presets-bar.js, focus-presets.js): the
+               PC's own name for the preset it is set to. Clicking it opens the
+               list the PC sent; selecting a row only selects it, and the one
+               "Use this preset" button asks the PC with its approval card. The
+               label starts empty and hidden - a desktop must never assert a
+               preset before the PC has named one. -->
+          <button
+            class="preset-chip"
+            id="preset-chip"
+            type="button"
+            aria-haspopup="dialog"
+            aria-controls="preset-picker"
+            aria-expanded="false"
+            hidden
+          >
+            <span class="preset-chip-dot" aria-hidden="true"></span>
+            <span id="preset-chip-label">Focus presets</span>
+          </button>
+
           <!-- The model name starts EMPTY. It used to start at "qwen3:8b",
                which is a guess about someone else's machine: the badge asserted
                a specific model before the server had ever named one, and stayed
@@ -368,6 +387,45 @@
            never grow past the window's 720px clamp and hide the Approve and
            Deny buttons below the cut. -->
       <div class="stack" id="stack">
+        <!-- Focus presets, opened from the chip in the bar. Every word of
+             every row is the PC's (focus-presets.js); this page owns only the
+             headings and the one action's name. Selecting a row changes
+             nothing; "Use this preset" is the only thing that posts. Built by
+             focus-presets-bar.js with textContent, never innerHTML. -->
+        <section
+          class="preset-picker"
+          id="preset-picker"
+          role="dialog"
+          aria-modal="false"
+          aria-labelledby="preset-picker-title"
+          hidden
+        >
+          <header class="preset-picker-head">
+            <div>
+              <p class="preset-picker-kicker" id="preset-picker-kicker"></p>
+              <h2 class="preset-picker-title" id="preset-picker-title">Focus presets</h2>
+            </div>
+            <button class="preset-picker-close" id="preset-picker-close" type="button">
+              Close
+            </button>
+          </header>
+          <p class="preset-picker-how" id="preset-picker-how"></p>
+          <p class="preset-picker-lane" id="preset-picker-lane" hidden></p>
+          <div
+            class="preset-list"
+            id="preset-list"
+            role="radiogroup"
+            aria-labelledby="preset-picker-title"
+          ></div>
+          <p class="preset-picker-line" id="preset-picker-line" role="status" hidden></p>
+          <footer class="preset-picker-foot">
+            <button class="preset-apply" id="preset-apply" type="button" disabled>
+              Use this preset
+            </button>
+            <span class="preset-apply-why" id="preset-apply-why"></span>
+          </footer>
+        </section>
+
         <!-- The prompt coach's panel (prompt-coach-panel.js;
              docs/PROMPT-COACH-DESIGN.md, the owner's request of 2026-10-08;
              backend jarvis_prompt_coach.py, JARVIS-API.md section 119). It
@@ -1054,5 +1112,6 @@
     </main>
 
     <script type="module" src="main.js"></script>
+    <script type="module" src="focus-presets-bar.js"></script>
   </body>
 </html>

@@ -568,6 +568,30 @@ export const MENUS = [
     ]
   },
   {
+    "id": "settings.focus-presets",
+    "title": "Focus presets",
+    "about": "The five presets the PC sends, with the model, card, cost and what each is worse at.",
+    "apps": [
+      "desktop",
+      "phone"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "card",
+    "group": null,
+    "parent": null,
+    "hide": false,
+    "collapse": true,
+    "why": "Drawn inside the Hardware card on the phone and above Hardware and models on the PC; neither app has a separate row to hide.",
+    "names": [
+      "focus presets",
+      "the focus presets",
+      "presets",
+      "the preset selector",
+      "choose a focus preset"
+    ]
+  },
+  {
     "id": "settings.second-card",
     "title": "Second graphics card",
     "about": "The second card's switches and its own copy of Ollama.",
@@ -2653,6 +2677,7 @@ export const NEVER_HIDE = [
   "settings.devices",
   "settings.animal-options",
   "settings.security",
+  "settings.focus-presets",
   "settings.updates",
   "settings.more-options",
   "settings.start-jarvis",
@@ -2734,6 +2759,7 @@ export const ALIASES = {
   "chatbot keys": "settings.chatbot-api-keys",
   "chatbots": "group.chatbots",
   "check for tool updates": "settings.tool-updates",
+  "choose a focus preset": "settings.focus-presets",
   "coming up": "brain.work.coming-up",
   "compute": "brain.model.compute",
   "connection": "settings.connection",
@@ -2767,6 +2793,7 @@ export const ALIASES = {
   "floating face": "settings.floating-avatar",
   "floating jarvis": "settings.floating-avatar",
   "focus": "brain.work.focus",
+  "focus presets": "settings.focus-presets",
   "focus session": "brain.work.focus",
   "folders": "settings.folders",
   "folders jarvis may look in": "settings.folders",
@@ -2844,6 +2871,8 @@ export const ALIASES = {
   "pictures": "settings.pictures",
   "pin everyday chat": "settings.second-card.chat-card",
   "pinned facts": "brain.memory.profile",
+  "preset selector": "settings.focus-presets",
+  "presets": "settings.focus-presets",
   "progress": "brain.projects.progress",
   "projects": "brain.tab.projects",
   "projects and goals": "group.goals-projects",
