@@ -264,7 +264,17 @@ RATCHET = {
     #: a pre-image; the local-model URL detail applies exactly. Measured, not
     #: argued: test_installed_stand_in reads 57, and the picture-card/
     #: retrieve-count suites assert this number EQUALS the walk.
-    "jarvis_hud.py": 57,
+    #: LOWERED 2026-10-19, 57 -> 56: `presets.patch`'s first hunk was
+    #: re-anchored onto the shape `ollama-direct.patch` actually writes in
+    #: `_completions_url` (the `if _state.get("url")` / return block) instead of
+    #: the pre-ollama-direct two-branch return that only the owner's own base
+    #: holds. That hunk now applies to patch-written text, so the walk no longer
+    #: invents one pre-image for it; the other three still do (active-lane helper,
+    #: two chat call sites, install block). Measured after the repair:
+    #: `test_installed_stand_in` reads 56 and its by_patch names the remaining
+    #: three, and the pin must EQUAL the walk. A ratchet: it may still only go
+    #: down.
+    "jarvis_hud.py": 56,
     #: 23, raised from 22 on 2026-10-06. PR #80's `gate-risk-rows.patch` is the
     #: one new patch this walk adds for this file, and its single hunk's context
     #: is text only the owner's PC holds: the short `"delete it and it is gone"`
