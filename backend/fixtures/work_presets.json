@@ -193,5 +193,204 @@
     "admin",
     "long",
     "specialist"
-  ]
+  ],
+  "hardware": {
+    "detected": {
+      "count": 0,
+      "cards": [],
+      "source": "jarvis_hardware.detect()"
+    },
+    "questionnaire": {
+      "focus_choices": [
+        "general",
+        "general_uncensored",
+        "coding",
+        "agentic_vision",
+        "fast"
+      ],
+      "priority_choices": [
+        "speed",
+        "quality",
+        "long_context",
+        "vision"
+      ],
+      "answers": null
+    }
+  },
+  "recommendations": {
+    "by_gpu_count": {
+      "1": {
+        "general": {
+          "preset": "general",
+          "model": "qwen3.5:9b",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 196608,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "one card: reasoned, not measured on this PC"
+        },
+        "general_uncensored": {
+          "preset": "general_uncensored",
+          "model": "pending",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 196608,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "waiting for the model; nothing can be placed yet"
+        },
+        "coding": {
+          "preset": "coding",
+          "model": "qwen3.5:9b",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 196608,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "one card: reasoned, not measured on this PC"
+        },
+        "agentic_vision": {
+          "preset": "agentic_vision",
+          "model": "qwen3-vl:8b-thinking",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 16384,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "one card: reasoned, not measured on this PC"
+        },
+        "fast": {
+          "preset": "fast",
+          "model": "qwen3:8b",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 16384,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "one card: reasoned, not measured on this PC"
+        }
+      },
+      "2": {
+        "general": {
+          "preset": "general",
+          "model": "qwen3.5:9b",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 196608,
+          "tok_s": 44.9,
+          "measured": true,
+          "best_effort_not_tested": false,
+          "note": "the agreed 2-GPU mapping: main model on the 2060"
+        },
+        "general_uncensored": {
+          "preset": "general_uncensored",
+          "model": "pending",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 196608,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "waiting for the model; nothing can be placed yet"
+        },
+        "coding": {
+          "preset": "coding",
+          "model": "qwen3.5:9b",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 196608,
+          "tok_s": 44.9,
+          "measured": true,
+          "best_effort_not_tested": false,
+          "note": "the agreed 2-GPU mapping: main model on the 2060"
+        },
+        "agentic_vision": {
+          "preset": "agentic_vision",
+          "model": "qwen3-vl:8b-thinking",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 16384,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "the agreed 2-GPU mapping: main model on the 2060"
+        },
+        "fast": {
+          "preset": "fast",
+          "model": "qwen3:8b",
+          "card_index": 1,
+          "card": "card 1",
+          "context": 16384,
+          "tok_s": 64.0,
+          "measured": true,
+          "best_effort_not_tested": false,
+          "note": "the agreed 2-GPU mapping: Fast on the fast card"
+        }
+      },
+      "3": {
+        "general": {
+          "preset": "general",
+          "model": "qwen3.5:9b",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 196608,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "three cards: Jarvis plans up to two; reasoned, not tested"
+        },
+        "general_uncensored": {
+          "preset": "general_uncensored",
+          "model": "pending",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 196608,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "waiting for the model; nothing can be placed yet"
+        },
+        "coding": {
+          "preset": "coding",
+          "model": "qwen3.5:9b",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 196608,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "three cards: Jarvis plans up to two; reasoned, not tested"
+        },
+        "agentic_vision": {
+          "preset": "agentic_vision",
+          "model": "qwen3-vl:8b-thinking",
+          "card_index": 0,
+          "card": "card 0",
+          "context": 16384,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "three cards: Jarvis plans up to two; reasoned, not tested"
+        },
+        "fast": {
+          "preset": "fast",
+          "model": "qwen3:8b",
+          "card_index": 1,
+          "card": "card 1",
+          "context": 16384,
+          "tok_s": null,
+          "measured": false,
+          "best_effort_not_tested": true,
+          "note": "three cards: Jarvis plans up to two; reasoned, not tested"
+        }
+      }
+    },
+    "basis": "the agreed 2-GPU mapping is measured; 1 and 3 GPUs are best effort and labelled as not tested"
+  }
 }

@@ -183,6 +183,97 @@ FOCUS_WORDS = ("quick answers", "writing", "coding", "agentic", "pictures",
                "speed")
 
 
+
+# --------------------------------------------------------------------------
+#   Hardware, questionnaire and 1/2/3-GPU recommendations (contract extension)
+# --------------------------------------------------------------------------
+
+PRIORITIES = ("speed", "quality", "long_context", "vision")
+
+
+def _detected_cards() -> dict:
+    """Every card this PC reports, from jarvis_hardware.detect() - never a
+    hardcoded two-card table. Never raises; count 0 is said plainly."""
+    try:
+        import jarvis_hardware
+        got = jarvis_hardware.detect() or {}
+        rows = got.get("cards") or []
+    except Exception:
+        rows = []
+    cards = []
+    for i, row in enumerate(rows if isinstance(rows, list) else []):
+        if isinstance(row, dict):
+            name = row.get("name") or row.get("model") or f"card {i}"
+            vram = row.get("vram_gib") or row.get("memory_gib") or row.get("vram")
+            uuid = row.get("uuid") or row.get("id") or ""
+        else:
+            name = str(getattr(row, "name", "") or f"card {i}")
+            vram = getattr(row, "vram_gib", None) or getattr(row, "memory_gib", None)
+            uuid = str(getattr(row, "uuid", "") or "")
+        cards.append({"index": i, "name": str(name),
+                      "vram_gib": (round(float(vram), 1) if isinstance(vram, (int, float)) else None),
+                      "uuid": uuid})
+    return {"count": len(cards), "cards": cards,
+            "source": "jarvis_hardware.detect()"}
+
+
+def hardware_block() -> dict:
+    return {"detected": _detected_cards(),
+            "questionnaire": {"focus_choices": list(PRESET_IDS),
+                              "priority_choices": list(PRIORITIES),
+                              "answers": None}}
+
+
+def _row(p: Preset, index: int, cards: list, measured: bool,
+         best_effort: bool, note: str = "") -> dict:
+    card = cards[index] if index < len(cards) else None
+    return {"preset": p.id, "model": p.model,
+            "card_index": index,
+            "card": (card or {}).get("name") or f"card {index}",
+            "context": p.context,
+            "tok_s": (p.measured or {}).get("tok_s") if measured else None,
+            "measured": bool(measured),
+            "best_effort_not_tested": bool(best_effort),
+            "note": note}
+
+
+def recommendations() -> dict:
+    """The 1-, 2- and 3-GPU rows for every preset.
+
+    The measured 2-GPU mapping is the agreed one (General/Coding/Agentic+Vision
+    on the 2060, Fast on the 2080 SUPER). 1- and 3-GPU layouts are reasoned,
+    not measured: every row there says best_effort_not_tested. A pending preset
+    is never recommended (pending=True comes through and no figure is given).
+    """
+    cards = _detected_cards()["cards"]
+    by = {}
+    for n in (1, 2, 3):
+        rows = {}
+        for p in PRESETS:
+            if p.pending:
+                rows[p.id] = _row(p, 0, cards, False, True,
+                                  "waiting for the model; nothing can be placed yet")
+                continue
+            if n == 1:
+                rows[p.id] = _row(p, 0, cards, False, True,
+                                  "one card: reasoned, not measured on this PC")
+            elif n == 2:
+                if p.id == "fast":
+                    rows[p.id] = _row(p, 1, cards, p.measured is not None,
+                                      p.measured is None,
+                                      "the agreed 2-GPU mapping: Fast on the fast card")
+                else:
+                    rows[p.id] = _row(p, 0, cards, p.measured is not None,
+                                      p.measured is None,
+                                      "the agreed 2-GPU mapping: main model on the 2060")
+            else:
+                rows[p.id] = _row(p, 1 if p.id == "fast" else 0, cards, False, True,
+                                  "three cards: Jarvis plans up to two; reasoned, not tested")
+        by[str(n)] = rows
+    return {"by_gpu_count": by,
+            "basis": ("the agreed 2-GPU mapping is measured; 1 and 3 GPUs are "
+                      "best effort and labelled as not tested")}
+
 def by_id(preset_id) -> Optional[Preset]:
     return _BY_ID.get(str(preset_id or ""))
 
@@ -190,7 +281,9 @@ def by_id(preset_id) -> Optional[Preset]:
 def view() -> dict:
     """{"presets": [...], "old_ids_replaced": [...]} - what both apps render."""
     return {"presets": [p.view() for p in PRESETS],
-            "old_ids_replaced": list(OLD_IDS)}
+            "old_ids_replaced": list(OLD_IDS),
+            "hardware": hardware_block(),
+            "recommendations": recommendations()}
 
 
 def status_view() -> dict:

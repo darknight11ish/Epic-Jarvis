@@ -49,6 +49,43 @@ def main() -> int:
     check("measured tok/s is present only where a measurement exists",
           all(isinstance(p["measured"]["tok_s"], (int, float)) for p in measured)
           and P.by_id("agentic_vision").measured is None, [p["id"] for p in measured])
+
+    hw = fixture["hardware"]
+    check("hardware: detected cards come from detect() and carry name/VRAM/index",
+          hw["detected"]["source"] == "jarvis_hardware.detect()"
+          and isinstance(hw["detected"]["count"], int)
+          and all(set(c) == {"index", "name", "vram_gib", "uuid"} for c in hw["detected"]["cards"]),
+          hw["detected"])
+    check("questionnaire: the five focus ids and the four priorities",
+          hw["questionnaire"]["focus_choices"] == [p["id"] for p in fixture["presets"]]
+          and hw["questionnaire"]["priority_choices"] == ["speed", "quality", "long_context", "vision"]
+          and hw["questionnaire"]["answers"] is None, hw["questionnaire"])
+    rec = fixture["recommendations"]
+    check("recommendations exist for exactly 1, 2 and 3 GPUs",
+          sorted(rec["by_gpu_count"]) == ["1", "2", "3"], sorted(rec["by_gpu_count"]))
+    for n in ("1", "2", "3"):
+        rows = rec["by_gpu_count"][n]
+        check(f"{n} GPU: one row per preset with model/card_index/context",
+              sorted(rows) == sorted(p["id"] for p in fixture["presets"])
+              and all(r["model"] and isinstance(r["card_index"], int)
+                      and isinstance(r["context"], int) for r in rows.values()), rows)
+        check(f"{n} GPU: unmeasured rows are labelled",
+              all(r["measured"] or r["best_effort_not_tested"] for r in rows.values()),
+              {k: (v["measured"], v["best_effort_not_tested"]) for k, v in rows.items()})
+    check("2-GPU mapping: General/Coding/Agentic on the 2060, Fast on the fast card",
+          rec["by_gpu_count"]["2"]["general"]["card_index"] == 0
+          and rec["by_gpu_count"]["2"]["coding"]["card_index"] == 0
+          and rec["by_gpu_count"]["2"]["agentic_vision"]["card_index"] == 0
+          and rec["by_gpu_count"]["2"]["fast"]["card_index"] == 1,
+          {k: v["card_index"] for k, v in rec["by_gpu_count"]["2"].items()})
+    check("1- and 3-GPU rows are best effort, not tested",
+          all(r["best_effort_not_tested"] and not r["measured"]
+              for n in ("1", "3") for r in rec["by_gpu_count"][n].values()),
+          "1/3 GPU rows")
+    check("a pending preset is never given a speed figure",
+          rec["by_gpu_count"]["2"]["general_uncensored"]["tok_s"] is None
+          and rec["by_gpu_count"]["2"]["general_uncensored"]["measured"] is False)
+
     print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
