@@ -1949,6 +1949,11 @@ $SHIPPED = @(
 # tool that will use it is a later, separately-approved slice. No model call,
 # no route, no file written.
 'jarvis_sandbox_exec.py'
+# --- F5 S1 (2026-10-18): read the words in ONE audio/video file.
+# A read inside "Folders Jarvis may look in" (my_files action read_media),
+# reusing the local Parakeet speech model and Windows OCR. The local ffmpeg
+# is a bounded child with -protocol_whitelist file,pipe; it stores NOTHING.
+'jarvis_media_read.py'
 # --- Pillar 18: the local "time machine" for files Jarvis changes (2026-10-17).
 # Before anything writes over a file in a folder Jarvis may change, this keeps a
 # gzip copy of the file's current bytes named by the sha256 of those bytes, and

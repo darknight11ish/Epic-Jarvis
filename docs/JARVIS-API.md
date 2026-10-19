@@ -21641,3 +21641,46 @@ never writes any of it and never sees it.
   `EntitiesPlate`. There is no other window and no new screen: the card opens
   in the Brain, where People and things already is, and the phone shows it
   under the name it already lists.
+
+## 144. Reading the words in one audio or video file (F5 S1, added 2026-10-18)
+
+The first Feasibility-5 slice: a read-only read of ONE audio or video file that
+is already inside a folder on the owner's "Folders Jarvis may look in" list. It
+returns a bounded transcript with timestamps, and for a video the on-screen text
+from a few sampled frames. **It stores nothing** - no index, no transcript file,
+no memory fact - and it has **no HTTP route of its own and no new tool**: it is
+the existing `my_files` tool's action `read_media`, decided under the existing
+`read_files_readonly` action like every other read of the owner's own files.
+The design and measurements are in `docs/MEDIA-READ-DESIGN.md`.
+
+* **Both apps' chats can ask** (it is a backend read, and the file and all the
+  reading are on the PC): "read the words in C:\...\talk.mp4". There is no
+  one-sided decision here; no route was added, so `tools/check_parity.py` has
+  nothing new to classify.
+* **No card of its own.** A read of a file already inside an allowed folder is
+  the `read_files_readonly` tier, exactly as `my_files` read is; it is not a new
+  permission. The result goes through the EXISTING outside-text path:
+  `_TurnWatch.took_in` marks it, it never becomes a learned fact, and
+  `jarvis_sources.from_tool_result` shows `{kind: "file", path, seconds}` as its
+  source. Nothing is sent anywhere.
+* **The limits, in the result's own words:** at most 100 MB and 10 minutes per
+  file; at most ~20,000 characters of transcript + on-screen text; speech is the
+  existing local Parakeet model, **English only**, with segment-level timestamps
+  and no speaker labels; on-screen text is Windows OCR on one frame every 10
+  seconds. A WAV needs no decoder; every other format needs the LOCAL `ffmpeg`
+  already on the PC, run as a child process with `-protocol_whitelist file,pipe`,
+  a scrubbed environment, a wall-clock timeout and a bounded stdout. A missing
+  ffmpeg is one plain refusal: "This PC has no ffmpeg, so this file's sound
+  cannot be read."
+* **It is a transcript, not a summary**, and it is never saved. A later,
+  separate slice (S2) could add a searchable media index; that would be a NEW
+  owner switch with its own storage, deletion and backup rules, and is not built
+  here.
+* **Pause and one-at-a-time:** a caller may pass a "the owner is talking" check;
+  the chat turn itself is already single-flight, and this reader takes a
+  non-blocking lock so two media reads never run together. The live-voice flag
+  is not a public function in this tree yet; the seam and its test are here, and
+  the design note says so honestly.
+* **Other people's voices and incidental secrets** are NOT stored by S1: the
+  words are returned to the model for this answer, marked outside text, and the
+  normal taint/card rules apply.
