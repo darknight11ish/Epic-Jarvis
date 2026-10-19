@@ -76,8 +76,9 @@ object VoiceRounds {
     /** The condition each round is recorded in, in the PC's words when the PC gave them. */
     val DEFAULT_ASKS: Map<Int, String> = mapOf(
         1 to "normal, close to the microphone",
-        2 to "further away from the microphone, or quieter",
-        3 to "at another time of day, or in another room",
+        2 to "about two to three metres away, on a table",
+        3 to "with the fan or the TV on, as it usually is",
+        4 to "in another room, or at a different time of day",
     )
 
     private val ALL: List<Int> = VoiceTraining.SENTENCES.indices.toList()

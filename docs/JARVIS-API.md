@@ -2900,11 +2900,12 @@ sends (both apps do).
              "setting": {"name", "value"},                      while a setting card waits
              "last": {... as before ..., "outliers": [{"round", "clip"}], "added": bool,
                       "subprints": ["close", ...], "setting", "value", "model"},
-             "limits": {... as before ..., "rounds": 3, "session_seconds": 900.0,
+             "limits": {... as before ..., "rounds": 4, "session_seconds": 900.0,
                         "measure_max_clips": 20},
              "round_asks": {"1": "normal, close to the microphone",
-                            "2": "further away from the microphone, or quieter",
-                            "3": "at another time of day, or in another room"}}
+                            "2": "about two to three metres away, on a table",
+                            "3": "with the fan or the TV on, as it usually is",
+                            "4": "in another room, or at a different time of day"}}
 ```
 
 `gate.note` says, in words, when very strict is using one model, when the
@@ -2929,9 +2930,9 @@ as it is.
 
 | answer | when |
 |---|---|
-| `200 {"ok": true, "pending": false, "held": <session>, "round": 1, "next_round": 2, "next_ask": "further away from the microphone, or quieter", "message"}` | the round is held in memory; **no card, nothing changed** |
+| `200 {"ok": true, "pending": false, "held": <session>, "round": 1, "next_round": 2, "next_ask": "about two to three metres away, on a table", "message"}` | the round is held in memory; **no card, nothing changed** |
 | `202 {"ok": true, "pending": true, "clips": 30, "seconds": 104.0, "rounds": 3, "message"}` | `"finish": true` (with the last round's clips, or with no `clips` at all): ONE card for every held round |
-| `400` | a clip is wrong (as today, with `"round"`), `round` is not 1-3, or `finish` with nothing held |
+| `400` | a clip is wrong (as today, with `"round"`), `round` is not 1-4, or `finish` with nothing held |
 | `409 {"error", "session": <session>}` | another training (another mic, or `add` differs) is held - finish or cancel it |
 | `409 {"error", "pending": true, "expires_in"}` | a voice card is already waiting |
 

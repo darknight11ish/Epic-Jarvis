@@ -73,7 +73,7 @@ on this one (docs/JARVIS-API.md, "The stricter voice check", has the JSON):
     {"mode": "train", "round": 1|2|3, "mic", "clips": [...], "add": false,
      "finish": false}
         Training in ROUNDS, each up to 12 clips in its own conditions (1:
-        normal, close; 2: further away or quieter; 3: another time or
+        normal, close; 2: on a table two to three metres away; 3: another time or
         room). Each round is checked and HELD HERE, in memory - no card,
         nothing changed - for up to SESSION_SECONDS after the last one.
         `"finish": true` (with a round, or alone) raises ONE card for
@@ -167,8 +167,9 @@ try:
 except Exception:                                   # noqa: BLE001
     TRAINING = None
     ROUNDS = {1: ("close", "normal, close to the microphone"),
-              2: ("far", "further away from the microphone, or quieter"),
-              3: ("room", "at another time of day, or in another room")}
+              2: ("table", "about two to three metres away, on a table"),
+              3: ("noise", "with the fan or the TV on, as it usually is"),
+              4: ("room", "in another room, or at a different time of day")}
 #: Held rounds are dropped this long after the last one arrived.
 SESSION_SECONDS = 900.0
 #: The guided repeat test: up to this many of the owner's own sentences.

@@ -8020,10 +8020,10 @@ the training fails and says to record again somewhere quieter.
   Said plainly: nothing reads your screen yet (no route, no key in the
   apps), so for now the setting is only stored and shown.
 
-Also new: training in **three rounds** (normal and close; further away or
-quieter; another time or room), all kept in memory until one card at the
-end - deny it, let it time out, cancel, or wait 15 minutes, and every
-recording is deleted. **"Train more"** adds to your voice print instead of
+Also new: training in **four condition rounds** (normal and close; on a table
+two to three metres away; with the fan or the TV on; another room or time),
+all kept in memory until one card at the end - deny it, let it time out,
+cancel, or wait 15 minutes, and every recording is deleted. **"Train more"** adds to your voice print instead of
 replacing it. Each round becomes its own "sub-print", and a new clip is
 compared with the closest one. A **guided test** reads 20 of your
 sentences and says how many each setting would have let through. And the
