@@ -38,10 +38,15 @@ def main() -> int:
     check("Fast is qwen3:8b on the coding lane at 16,384",
           P.by_id("fast").model == "qwen3:8b" and P.by_id("fast").lane == "coding"
           and P.by_id("fast").context == 16384)
-    check("General Uncensored is a PENDING replacement: no model tag or speed invented",
-          P.by_id("general_uncensored").pending is True
-          and P.by_id("general_uncensored").measured is None
-          and "PENDING" in P.by_id("general_uncensored").cost)
+    gu = P.by_id("general_uncensored")
+    check("General Uncensored now names the measured abliterated Qwen3.5 ref",
+          gu.pending is False
+          and gu.model == "hf.co/mradermacher/Huihui-Qwen3.5-9B-abliterated-GGUF:Q4_K_M"
+          and gu.measured["tok_s"] == 45.6 and gu.measured["context_max"] == 262144
+          and gu.measured["licence"] == "Apache-2.0", gu.model)
+    check("... its words say one-run rubric, not independent, and the Homebrew nit",
+          "6/6" in gu.measured["source"] and "not independent" in gu.measured["source"]
+          and "Homebrew" in gu.worse)
     check("Agentic+Vision is qwen3.5:9b on the 2060 (never the display card)",
           P.by_id("agentic_vision").model == "qwen3.5:9b"
           and P.by_id("agentic_vision").lane == "main" and P.by_id("agentic_vision").context == 16384)
@@ -110,9 +115,9 @@ def main() -> int:
     check("the pooled Qwen3.8-27B 28 GB is named as future-only, not a preset",
           "not a preset" in rec["three_gpu_plan"]["future_not_a_preset"]
           and "28 GB" in rec["three_gpu_plan"]["future_not_a_preset"])
-    check("a pending preset is never given a speed figure",
-          rec["by_gpu_count"]["2"]["general_uncensored"]["tok_s"] is None
-          and rec["by_gpu_count"]["2"]["general_uncensored"]["measured"] is False)
+    check("General Uncensored is measured in the 2-GPU rows now",
+          rec["by_gpu_count"]["2"]["general_uncensored"]["tok_s"] == 45.6
+          and rec["by_gpu_count"]["2"]["general_uncensored"]["measured"] is True)
 
     print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
     if FAILED:

@@ -109,12 +109,21 @@ PRESETS = (
         focus="general work with the uncensored model",
         what="General everyday work with the uncensored model, for answers the "
              "ordinary model's safety tuning would refuse or water down.",
-        cost="PENDING: the owner chose a newer Qwen3.5-based uncensored model and a "
-             "separate stream is finding and installing it. No model tag, speed or "
-             "memory figure is claimed until that ref is confirmed on this PC.",
-        worse="Uncensored means fewer refusals, not better answers; it is not the "
-              "everyday default and its quality has not been measured here.",
-        model="pending", lane="main", context=196608, pending=True,
+        cost="Measured 2026-10-18: cold load 18.5-20.5 s, 45.6 tokens a second at 8k "
+             "and 45-46 at 16k; 32k loads 7.3 GB at 100% GPU (it only splits across "
+             "cards when others are resident; no CPU spill). 6.3 GB on disk, "
+             "Apache-2.0, Qwen3.5 family, 8.95B parameters.",
+        worse="A one-run general rubric of 6 prompts (6/6) is not independent "
+              "evidence; it did beat the installed qwen2.5-14b fallback on the quality "
+              "tie and 45.6 against 30.6 tokens a second. Small known nit: it suggested "
+              "Homebrew on Windows.",
+        model="hf.co/mradermacher/Huihui-Qwen3.5-9B-abliterated-GGUF:Q4_K_M",
+        lane="main", context=196608, pending=False,
+        measured={"tok_s": 45.6, "tok_s_16k": 45.0, "cold_load_s": [18.5, 20.5],
+                  "vram_gib_32k": 7.3, "context_max": 262144, "params_b": 8.95,
+                  "disk_gib": 6.3, "licence": "Apache-2.0",
+                  "source": "measurement 2026-10-18: one-run 6-prompt general rubric, "
+                            "6/6; not independent; 45.6 tok/s at 8k, 45-46 at 16k"},
         prompt="balanced", diet="balanced",
         words=("uncensored", "no filter", "unfiltered", "general uncensored"),
         strong=("general uncensored", "uncensored"),
