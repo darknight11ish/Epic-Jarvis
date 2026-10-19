@@ -26,15 +26,18 @@ const OFFLINE = { connected: false, error: "connection refused. Is jarvis_hud.py
 
 /* ── The primer: the window says what it can do before you use it ────────── */
 
-await check("a first run shows what the bar can do", async () => {
-  // Since the ease-of-use audit's do-first table, row 4 ("Things you can
-  // say"), the primer's own kbd chips are gone - Settings -> Shortcuts
-  // teaches those, live (see the three checks below) - but the note-app
-  // prefixes are not keyboard shortcuts, so they stay here: this is still
-  // their only in-app explanation.
+await check("a compact bar opens what it can do on request", async () => {
+  // The bar opens at its input row; the primer is behind the "?" button
+  // (owner, 2026-10-19: "the jarvis bar is huge now, i want it back to its
+  // compact size"). The first-run help is still there, one click away, and
+  // is the only in-app explanation of the note-app prefixes.
   const page = await K.open(browser, base, "index.html", {});
+  assert.equal(await page.locator("#primer").isVisible(), false,
+    "the bar opens with the full help primer instead of its compact input row");
+  await page.locator("#sayable-toggle").click();
+  await page.waitForTimeout(250);
   assert.equal(await page.locator("#primer").isVisible(), true,
-    "the window opens with nothing on screen at all");
+    "the ? button does not open what the bar can do");
   const text = await page.locator("#primer").innerText();
   for (const key of ["Set a timer for 10 minutes.", "What did I miss?", "right-click the "
     + "Jarvis icon", "#log", "#joplin"]) {
@@ -45,6 +48,8 @@ await check("a first run shows what the bar can do", async () => {
 
 await check("tapping a sayable line fills the box and never sends", async () => {
   const page = await K.open(browser, base, "index.html", {});
+  await page.locator("#sayable-toggle").click();
+  await page.waitForTimeout(250);
   const items = page.locator(".sayable-item");
   const first = await items.first().textContent();
   await items.first().click();

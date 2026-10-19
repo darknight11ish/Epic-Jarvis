@@ -1248,6 +1248,9 @@ await check("the bar: Earlier chats opens History; Esc says where the chat went"
   await page.keyboard.press("Escape");
   await page.waitForTimeout(150);
   const ended = await page.locator("#chat-ended-note").innerText();
+  // The Earlier chats link lives in the primer, behind the bar's "?" button.
+  await page.locator("#sayable-toggle").click();
+  await page.waitForTimeout(250);
   await page.locator("#earlier-chats-primer").click();
   await page.waitForTimeout(100);
   const opened = await calls(page, "open_fix_place");
