@@ -261,10 +261,17 @@ class FocusPresetsTest {
         assertEquals(28672, coding.context)
         assertTrue("Coding needs both cards while it runs", coding.heavyMode)
         assertNull("no second worker is planned in this contract", coding.helper)
+        // Heavy mode cannot be used until the PC's pooled lane support lands:
+        // the plate must show the refusal, not an enabled Use button.
+        assertEquals(
+            FocusPresets.HEAVY,
+            FocusPresets.blocker(view, coding, stale = false, linkUp = true),
+        )
+        assertNull(FocusPresets.blocker(view, fast, stale = false, linkUp = true))
     }
 
     @Test
-    fun `the apply action is the contract's apply route, one asked action, never automatic`() {
+    fun `the merged apply action is the apply route and its preset body`() {
         for (p in live.presets) {
             assertFalse(p.id, p.apply.auto)
             assertEquals(p.id, FocusPresets.APPLY_PATH, FocusPresets.applyRoute(p))
@@ -274,12 +281,24 @@ class FocusPresetsTest {
                 FocusPresets.applyBody(p).toString(),
             )
         }
-        // The canonical fixture (before the backend follow-up adds apply_route)
-        // still carries the honest switch fallback and its own body; an older
-        // PC degrades to the existing switch card rather than misreading it.
-        val general = requireNotNull(view.preset("general"))
+    }
+
+    @Test
+    fun `an older contract without apply_route keeps the switch fallback`() {
+        // Deliberately strip apply_route, so the fallback is tested on its own
+        // and cannot pass just because the installed contract is the old one.
+        val oldRows = (fixture["presets"] as JsonArray).map { row ->
+            val p = row as JsonObject
+            val apply = p["apply"] as JsonObject
+            JsonObject(p + ("apply" to JsonObject(apply - "apply_route")))
+        }
+        val old = requireNotNull(
+            FocusPresets.parse(buildJsonObject { put("presets", JsonArray(oldRows)) }),
+        )
+        val general = requireNotNull(old.preset("general"))
         assertEquals("/api/models/switch", FocusPresets.applyRoute(general))
         assertEquals("{\"ref\":\"qwen3.5:9b\"}", FocusPresets.applyBody(general).toString())
+        assertNull(FocusPresets.blocker(old, general, stale = false, linkUp = true))
     }
 
     @Test

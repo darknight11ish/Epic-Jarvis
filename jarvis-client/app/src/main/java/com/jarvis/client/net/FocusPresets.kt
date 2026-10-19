@@ -63,6 +63,9 @@ object FocusPresets {
     const val MODELS = "Model and card:"
     const val HELPER = "Second worker:"
     const val PENDING = "Being prepared"
+    const val HEAVY =
+        "This preset needs both cards at once as one pooled lane. Your PC refuses heavy mode " +
+            "until that lane support lands, so it cannot be used from here yet."
     const val APPLY_UNPUBLISHED =
         "The PC has not published this preset's apply action yet, so nothing can be asked here."
     const val STALE =
@@ -221,6 +224,7 @@ object FocusPresets {
         !linkUp -> STALE
         stale -> STALE
         preset.pending -> PENDING + ". " + preset.cost
+        preset.heavyMode -> HEAVY
         preset.apply.auto -> APPLY_UNPUBLISHED
         preset.apply.postRoute == null -> APPLY_UNPUBLISHED
         else -> null
