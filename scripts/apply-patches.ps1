@@ -1638,6 +1638,7 @@ $SHIPPED = @(
     'jarvis_owned_tables.py'     # documents-owned.patch
     'jarvis_agent.py'            # tool-calling-wiring.patch; updated for skill-suggest
     'jarvis_voice_enroll.py'     # voice-enroll.patch ("Train my voice")
+    'jarvis_voice_training.py'  # voice-training.patch (#605): the voice training route's stored clips and its one approval card; shipped whole and in _where.SHIPPED, so the PS 5.1 apply test must copy it in
     'jarvis_speech.py'           # voice-503.patch; sends the status shape the phone reads
     # --- task controls, notes, power (2026-09-23) ---
     'jarvis_task_control.py'     # task-control.patch
@@ -1908,6 +1909,7 @@ $SHIPPED = @(
     'jarvis_big_coder.py'        # One model the owner asked for by name (qwen3-coder-30b-a3b-ud-q3-k-xl): the best coder and the fastest writer measured on this PC (10/10 coding, ~101/76.5/76.3 tok/s, no thinking mode), and the only model here that needs BOTH cards - it cannot sit beside anything. An OPT-IN mode, off by default, that pauses the two live lanes, proves from /api/ps that both went, loads at the largest zero-spill context measured (28,672), announces the pause BEFORE it starts, and puts both lanes back exactly as they were, proved again. Turning it on is ONE card (change_own_config, ask); the pause goes through power_manage. Nothing downloads; every call is loopback. big-coder.patch wires its two routes
     # --- Start the local model (2026-10-13, the owner's decision; model-lanes.patch) ---
     'jarvis_model_lanes.py'      # GET /api/model-lanes and POST /api/model-lanes/start: the button on the standing "the local model isn't running" line both apps already draw (PR #409). The one action runs HIS OWN Windows logon task - found on this PC with `schtasks`, matched by the stable half of its name, never a name typed from memory and never `ollama serve` - and then watches that lane's `/api/tags` every few seconds for up to 90 s, so "starting" is never reported as "up": a lane that does not come up leaves the warning standing, in plain words. One lane, the one Jarvis talks to (OLLAMA_URL's port - 11436 on his PC), never both, and nothing is started twice: not while it answers, not while a watched start is in flight, not while the PC's own Task Scheduler says that task is running. No approval card, on purpose - his own logon task already runs this command unattended, so a card would only be stricter than the thing it duplicates (see the module's PERMISSION section). Standard library only, no shell, one external program (`schtasks`), no network beyond 127.0.0.1
+    'jarvis_presets.py'          # presets.patch/PR #603: the five focus presets, their plain words, lane/context/helper, hardware questionnaire and 1/2/3-GPU recommendations, and the one asked apply action; shipped whole and in backend/_where.SHIPPED, so the PS 5.1 apply test must copy it in
     # --- Action receipts and one-click undo (2026-10-14) ---
     'jarvis_receipts.py'         # a receipt for every action that CHANGES something: what changed, the before and after snapshots, and the code that can put it back, in its own receipts.db (WAL, one connection per call). record() must never raise into the action it records from and never writes an unscrubbed word; undo() is idempotent - a second call refuses with "this was already undone" - and falls back to the before snapshot when the in-memory callable is gone, saying plainly which path it took. GET /api/receipts and POST /api/receipts/<id>/undo come from its install(), called by the plugins\ready\receipts folder: NO patch, which is what the loader is for. Undo raises ONE card (undo_action, tier ask) and a denied card changes nothing. jarvis_goals.py records a receipt for every step tick
     # --- Cost advice, and the four gates that bound it (2026-10-14) ---
@@ -1954,6 +1956,7 @@ $SHIPPED = @(
 # tool that will use it is a later, separately-approved slice. No model call,
 # no route, no file written.
 'jarvis_sandbox_exec.py'
+    'jarvis_media_read.py'      # media-read.patch: read-only media/transcript text for the model, off unless the owner turns it on; shipped whole and in _where.SHIPPED, so the PS 5.1 apply test must copy it in
 # --- Pillar 18: the local "time machine" for files Jarvis changes (2026-10-17).
 # Before anything writes over a file in a folder Jarvis may change, this keeps a
 # gzip copy of the file's current bytes named by the sha256 of those bytes, and
@@ -2004,7 +2007,6 @@ $SHIPPED = @(
     # tool: its one surface is one line in the morning briefing (jarvis_briefing.py)
     # for a person Jarvis already knows who is named in today's calendar.
     'jarvis_people_crm.py'
-    'jarvis_presets.py'          # presets.patch/PR #603: the four focus presets, their plain words, lane/context/helper, hardware questionnaire and 1/2/3-GPU recommendations, and the one asked apply action; pure data + helpers, reads/writes/switches nothing by itself. Shipped whole and in backend/_where.SHIPPED; without the copy the PS 5.1 apply test reports 'jarvis_presets.py was not copied in'
 )
 
 # The settings file. Installed only where none exists; never overwritten.
