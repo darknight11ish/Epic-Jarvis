@@ -854,6 +854,7 @@ SHIPPED = (
     # "up". One lane, the one Jarvis talks to (OLLAMA_URL's port), never both.
     # No approval card: his own logon task already runs this command unattended.
     "jarvis_model_lanes.py",
+    "jarvis_presets.py",
     # Action receipts and one-click undo (2026-10-14; the owner's brief,
     # borrowed from BasedHardware/omi). Every action that CHANGES something
     # leaves a receipt saying what changed, with one button to put it back:
@@ -1163,24 +1164,3 @@ def require_rebuilt(*modules: str) -> None:
         print("\nNot run: this suite would have tested something other than the "
               "modules it is about.")
         sys.exit(1)
-
-
-# ===== the published base ==================================================
-#
-# THIS IS jarvis-backend/'s COPY, AND IT IS NOT THIS REPOSITORY'S. Everything
-# above this line is backend/_where.py, word for word. These last lines are the
-# whole of the difference, and backend/test_base_regeneration.py fails if the
-# two files differ by anything else.
-#
-# It is in the base at all because import_history.py - which the base carries,
-# and which must run from a cloned folder with no repository around it - imports
-# BACKEND and explain from this file. Nothing else in jarvis-backend/ imports
-# it: the SHIPPED tuple above and require_shipped() below belong to the
-# repository's own test runner, and the base carries none of those tests.
-#
-# It was kept by hand until 2026-10-10, and by then it had gone stale: 77 lines
-# of SHIPPED entries this repository's copy had gained and this one had not,
-# with nothing to notice. tools/gen_base_from_backend.py now DERIVES this file
-# from backend/_where.py, so re-taking the base refreshes it too, and
-# backend/test_base_regeneration.py is what says the two have not drifted apart
-# again.

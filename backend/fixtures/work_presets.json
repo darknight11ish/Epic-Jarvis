@@ -1,0 +1,163 @@
+{
+  "version": 1,
+  "generated_by": "tools/gen_work_cases.py",
+  "source": "backend/jarvis_presets.py",
+  "note": "both apps render these same words; regenerate, never hand-edit",
+  "presets": [
+    {
+      "id": "general",
+      "title": "General",
+      "focus": "everyday questions, writing, life admin",
+      "what": "The everyday preset: questions, writing, checking things, your own paperwork - one balanced setup instead of a separate admin preset.",
+      "cost": "qwen3.5:9b sits on the 2060 and holds 196,608 tokens there, taking 9.17 of its 12 GB; nothing else fits beside it. Writing is 44.9 tokens a second, not the fastest.",
+      "worse": "Not the quickest and not the picture specialist; its thinking has to stay off for ordinary turns, or it answered nothing in the measured run.",
+      "model": "qwen3.5:9b",
+      "lane": {
+        "key": "main",
+        "card": "RTX 2060",
+        "port": 11436,
+        "words": "the long-context card"
+      },
+      "context": 196608,
+      "helper": null,
+      "policy": {
+        "prompt": "balanced",
+        "diet": "balanced",
+        "tools": []
+      },
+      "measured": {
+        "tok_s": 44.9,
+        "size_gib": 6.1,
+        "vram_gib": 9.17,
+        "spill_gib": 0.0
+      },
+      "apply": {
+        "action": "Use this preset",
+        "switch_route": "/api/models/switch",
+        "lane_start": false,
+        "auto": false
+      }
+    },
+    {
+      "id": "coding",
+      "title": "Coding",
+      "focus": "code, files, debugging, multi-step work",
+      "what": "For writing and fixing code, reading a project, and long tool-driven coding jobs: the 2060 keeps the best measured model at 196k, and the coding lane starts on demand when the job needs a second worker.",
+      "cost": "The 2060's 44.9 tokens a second is slower than the fast card, and it spends 9.17 of 12 GB, so the second model lives on the other card.",
+      "worse": "The coding lane is on the smaller display card (8 GB); it is started for a coding job and is not the everyday lane.",
+      "model": "qwen3.5:9b",
+      "lane": {
+        "key": "main",
+        "card": "RTX 2060",
+        "port": 11436,
+        "words": "the long-context card"
+      },
+      "context": 196608,
+      "helper": {
+        "model": "qwen3.5:4b",
+        "lane": {
+          "key": "coding",
+          "card": "RTX 2080 SUPER",
+          "port": 11435,
+          "words": "the fast card"
+        },
+        "context": 65536
+      },
+      "policy": {
+        "prompt": "coding",
+        "diet": "coding",
+        "tools": [
+          "code",
+          "files"
+        ]
+      },
+      "measured": {
+        "tok_s": 44.9,
+        "size_gib": 6.1,
+        "vram_gib": 9.17,
+        "spill_gib": 0.0
+      },
+      "apply": {
+        "action": "Use this preset",
+        "switch_route": "/api/models/switch",
+        "lane_start": false,
+        "auto": false
+      }
+    },
+    {
+      "id": "agentic_vision",
+      "title": "Agentic + Vision",
+      "focus": "tools, steps, forms, browser, phone, pictures",
+      "what": "For work that takes several steps with tools - browser, phone, forms, notes - and pictures: the vision model reads the image, and a picture-capable model stays off the display card.",
+      "cost": "NOT MEASURED for this model on this PC. Its context is planned at 16,384, and pictures take longer than text; no speed figure is claimed until it is measured.",
+      "worse": "Unmeasured: nothing here says it is faster or better than the general preset, and it is not the everyday choice.",
+      "model": "qwen3-vl:8b-thinking",
+      "lane": {
+        "key": "main",
+        "card": "RTX 2060",
+        "port": 11436,
+        "words": "the long-context card"
+      },
+      "context": 16384,
+      "helper": null,
+      "policy": {
+        "prompt": "agentic",
+        "diet": "agentic",
+        "tools": [
+          "browser",
+          "phone",
+          "forms",
+          "notes"
+        ]
+      },
+      "measured": null,
+      "apply": {
+        "action": "Use this preset",
+        "switch_route": "/api/models/switch",
+        "lane_start": false,
+        "auto": false
+      }
+    },
+    {
+      "id": "fast",
+      "title": "Fast",
+      "focus": "the quickest short answers",
+      "what": "The quickest preset: qwen3:8b on the fast card at 16k, while the 2060 keeps the general model warm for when you switch back.",
+      "cost": "16,384 tokens is its ceiling and it is the weakest measured explainer; the 2060's model stays loaded beside it, for the same measured -1.9% off the main model's speed.",
+      "worse": "Weakest answer quality of the measured models and the shortest conversation; chosen for waiting less, not for care.",
+      "model": "qwen3:8b",
+      "lane": {
+        "key": "coding",
+        "card": "RTX 2080 SUPER",
+        "port": 11435,
+        "words": "the fast card"
+      },
+      "context": 16384,
+      "helper": null,
+      "policy": {
+        "prompt": "fast",
+        "diet": "fast",
+        "tools": []
+      },
+      "measured": {
+        "tok_s": 64.0,
+        "size_gib": 4.87,
+        "vram_gib": 5.84,
+        "spill_gib": 0.0
+      },
+      "apply": {
+        "action": "Use this preset",
+        "switch_route": "/api/models/switch",
+        "lane_start": true,
+        "auto": false
+      }
+    }
+  ],
+  "old_ids_replaced": [
+    "everyday",
+    "coding",
+    "admin",
+    "long",
+    "specialist"
+  ]
+}
