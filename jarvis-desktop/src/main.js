@@ -1192,6 +1192,12 @@ let primerOpen = false;
  * Opening or closing it is the only thing that changes its visibility; the
  * bar's height follows from this one flag, so it cannot be left expanded
  * behind an answer.
+ *
+ * The button is a disclosure, so it carries `aria-expanded`, and that state
+ * follows what is on screen rather than `primerOpen` alone: a card or a busy
+ * surface keeps the primer hidden while the flag is still true, and a screen
+ * reader must be told "collapsed" then. The standing feature audit flagged
+ * the old `aria-pressed`, which claimed the panel was open while it was not.
  */
 function syncPrimer() {
   const busy =
@@ -1200,9 +1206,10 @@ function syncPrimer() {
     !dom.approval.hidden ||
     !dom.parked.hidden ||
     !dom.attachments.hidden;
-  dom.primer.hidden = busy || !primerOpen;
+  const hidden = busy || !primerOpen;
+  dom.primer.hidden = hidden;
   if (dom.sayableToggle) {
-    dom.sayableToggle.setAttribute("aria-pressed", primerOpen ? "true" : "false");
+    dom.sayableToggle.setAttribute("aria-expanded", String(!hidden));
   }
 }
 
