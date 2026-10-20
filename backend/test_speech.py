@@ -436,5 +436,152 @@ class ParakeetV3Switch(ReloadsBetweenTests):
             self.assertEqual(S._stt_dir(), named)
 
 
+class SelfEchoGate(ReloadsBetweenTests):
+    """F3 (FRONTIERS-AUDIT-2026-10-18; landed 2026-10-20).
+
+    Jarvis's own spoken answer can reach the microphone through open speakers
+    and CAM++ can verify a cloned voice as the owner, so the AUTOMATIC path
+    (push-to-talk / wake / Live) is refused while the sound or its 250 ms
+    acoustic tail could still be playing. The explicit stop answers are decided
+    before that gate: the barge-in route and a spoken "stop" still work."""
+
+    def setUp(self):
+        super().setUp()
+        S._reset_speaking_for_tests()
+        self._stops = []
+
+    def tearDown(self):
+        for p in self._stops:
+            p.stop()
+        S._reset_speaking_for_tests()
+        super().tearDown()
+
+    def _patch(self, name, value):
+        p = mock.patch.object(S, name, value)
+        p.start()
+        self._stops.append(p)
+        return p
+
+    def _fake_hear_world(self):
+        """Enough fakes that the gate/allow decision is the only real question."""
+        self._patch("_read_wav", lambda raw: ([0] * 8000, 16000))
+        self._patch("_speech_span", lambda *a, **k: "skip")
+        self._patch("_has_print", lambda mic: True)
+        self._patch("_min_command_seconds", lambda: 0)
+        self._patch("_really_checked", lambda v, very=False: True)
+        self._patch("_source_trusted", lambda src: True)
+        self._patch("_private_aloud", lambda: False)
+        self._patch("_memory_aloud", lambda: False)
+        self._patch("_sensitive_aloud", lambda: False)
+        self._patch("_screen_aloud", lambda *a, **k: False)
+        self._patch("_stt_engine", lambda: object())
+        self._patch("_transcribe", lambda samples, rate: "hello owner")
+        self._patch("_stt_files", lambda: ("model.onnx",))
+        self._patch("_note_for_history", lambda *a, **k: None)
+        self._patch("_flow", lambda *a, **k: None)
+        self._patch("_note_timing", lambda *a, **k: None)
+        self._patch("_note_said", lambda *a, **k: None)
+        self._patch("_close_question", lambda *a, **k: None)
+        self._patch("jarvis_live", None)
+
+        class _Emb:
+            pass
+
+        class _Verdict:
+            is_owner = True
+            score = 0.99
+            threshold = 0.5
+            reason = ""
+            mode = "owner"
+            voice_print = "fake"
+            strictness = "very_strict"
+
+        class _Voice:
+            EcapaEmbedder = _Emb
+            Embedder = _Emb
+
+            @staticmethod
+            def verify(audio, embedder, **kw):
+                return _Verdict()
+
+        self._patch("jarvis_voice", _Voice)
+
+    def _say(self, seconds=1.0, mic="desktop"):
+        samples = [0] * int(16000 * seconds)
+        self._patch("_synthesise",
+                    lambda text, **kw: (samples, 16000, "fake", "voice", "", "", False))
+        self._patch("_write_wav", lambda s, r: b"RIFFfake")
+        self._patch("_remember_said", lambda *a, **k: None)
+        self._patch("_mouth", None)
+        return S.say("hello", mic=mic)
+
+    def test_playing_refuses_the_automatic_hear_path(self):
+        self._fake_hear_world()
+        self._say(1.0, mic="desktop")
+        self.assertTrue(S.is_speaking("desktop"))
+        h = S.hear(b"clip", source="push_to_talk", mic="desktop")
+        self.assertFalse(h.is_owner)
+        self.assertIn("still speaking", h.reason)
+        self.assertIn("own voice", h.reason)
+        self.assertEqual(h.text, "")
+
+    def test_the_tail_is_250ms_and_then_hear_allows(self):
+        self._fake_hear_world()
+        self.assertEqual(S.ECHO_TAIL_SECONDS, 0.25)
+        S._mark_speaking("desktop", 0.0)          # the tail only
+        h = S.hear(b"clip", source="push_to_talk", mic="desktop")
+        self.assertFalse(h.is_owner)
+        self.assertIn("still speaking", h.reason)
+        with S._SPEAK_LOCK:                       # 250 ms and a bit later
+            S._SPEAKING_UNTIL["desktop"] = S.time.monotonic() - 0.01
+        h = S.hear(b"clip", source="push_to_talk", mic="desktop")
+        self.assertTrue(h.is_owner)
+        self.assertEqual(h.text, "hello owner")
+
+    def test_say_opens_the_window_for_its_own_length_plus_the_tail(self):
+        self._fake_hear_world()
+        self._say(1.0, mic="desktop")
+        left = S._SPEAKING_UNTIL["desktop"] - S.time.monotonic()
+        self.assertGreater(left, 1.15)
+        self.assertLess(left, 1.35)
+
+    def test_speech_on_one_device_does_not_silence_the_other(self):
+        self._fake_hear_world()
+        S._mark_speaking("desktop", 1.0)
+        h = S.hear(b"clip", source="push_to_talk", mic="phone")
+        self.assertTrue(h.is_owner)
+
+    def test_the_stop_detector_still_fires_during_playback(self):
+        self._fake_hear_world()
+        S._mark_speaking("desktop", 1.0)
+
+        class _Stop:
+            ran = True
+            heard = True
+
+        class _W:
+            @staticmethod
+            def spot_stop(samples, rate):
+                return _Stop()
+
+        self._patch("jarvis_wakeword", _W)
+        self._patch("_wake_enabled", lambda: True)
+        self._patch("_take_awake", lambda mic=None: False)
+        self._patch("_question_open", lambda mic="": False)
+        h = S.hear(b"clip", source="wake_word", mic="desktop")
+        self.assertTrue(h.stop)
+        self.assertEqual(h.reason, "stop")
+        self.assertTrue(S.is_speaking("desktop"))
+
+    def test_the_explicit_barge_in_path_is_not_gated(self):
+        self._fake_hear_world()
+        S._mark_speaking("desktop", 1.0)
+        self._patch("barge_in", lambda raw, mic="": {
+            "available": True, "stop": True, "reason": "stop", "seconds": 0.2})
+        h = S.hear(b"clip", source="barge_in", mic="desktop")
+        self.assertTrue(h.stop)
+        self.assertFalse(h.is_owner)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

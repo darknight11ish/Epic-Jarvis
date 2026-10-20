@@ -113,6 +113,10 @@ class Env:
         self._voice.__enter__()
         S.reload_engines()
         S._reset_wake_for_tests()
+        # F3: the playback window is covered by test_speech.py; this suite is
+        # about the wake/follow-up ORDER, and a say() in the previous test must
+        # not leak into this one.
+        S._reset_speaking_for_tests()
         return self
 
     def __exit__(self, *a):
@@ -324,6 +328,11 @@ def _owner_wake(transcript, heard=True):
 
 
 def _hear(transcript, mic, heard=True, freq=220.0):
+    # F3: a question said just before this (t_after_a_question) would otherwise
+    # be inside its own playback window. These tests prove the ORDER of the
+    # wake checks, so time is advanced past playback rather than waited out;
+    # the gate itself is covered by test_speech.py.
+    S._reset_speaking_for_tests()
     a, b, c = _owner_wake(transcript, heard)
     with a, b, c:
         return S.hear(tone(freq), source="wake_word", mic=mic).as_dict()
@@ -514,10 +523,17 @@ def t_two_devices_at_once():
 
 
 def _said(text, mic=""):
-    """What say() does for one sentence, with a stand-in voice (0.5 s)."""
+    """What say() does for one sentence, with a stand-in voice (0.5 s).
+
+    F3 (test_speech.py) is what tests the playback window itself. Here the
+    sentence is treated as having FINISHED playing before the next clip (the
+    question-window order is the subject), so the speaking window is cleared
+    the way real elapsed playback time would clear it."""
     sound = (np.zeros(12000, dtype=np.float32), 24000, "kokoro", "builtin", "", "", "")
     with mock.patch.object(S, "_synthesise", return_value=sound):
-        return S.say(text, mic=mic)
+        wav = S.say(text, mic=mic)
+    S._reset_speaking_for_tests()
+    return wav
 
 
 def t_after_a_question():

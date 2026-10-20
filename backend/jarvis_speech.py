@@ -1973,6 +1973,57 @@ def _remember_said(text: str, mic: str = "") -> None:
         _RECENT_SAYS.append((now, text[:500], _norm_mic(mic)))
         del _RECENT_SAYS[:-20]
 
+
+#: F3 (the 2026-10-18 frontiers audit; landed 2026-10-20). Jarvis's own
+#: spoken answer can reach the microphone through open speakers, and CAM++ can
+#: verify a cloned voice as the owner. So say() records when its sound should
+#: have finished - the WAV's own length - plus this acoustic tail, and hear()
+#: refuses the AUTOMATIC "the owner said something" path while that window is
+#: open. The explicit barge-in answers are decided before the gate: barge_in()
+#: (source=barge_in) and the "stop" word check below still work during
+#: playback; only turning Jarvis's own words into a command is blocked.
+ECHO_TAIL_SECONDS = 0.25
+_SPEAKING_UNTIL: dict = {}       # mic ("" = every app) -> monotonic end
+_SPEAK_LOCK = threading.Lock()
+ECHO_REFUSAL = ("Jarvis is still speaking, or has just stopped, so this could be "
+                "its own voice through the speakers. The clip was not checked and "
+                "not acted on - say it again once it is quiet.")
+
+
+def _mark_speaking(mic: str = "", seconds: float = 0.0) -> None:
+    """Record that Jarvis's sound for `mic` ends `seconds` from now, plus the
+    acoustic tail. Called by say() after synthesis; never raises."""
+    m = _norm_mic(mic)
+    try:
+        end = time.monotonic() + max(0.0, float(seconds or 0.0)) + ECHO_TAIL_SECONDS
+    except (TypeError, ValueError):
+        return
+    with _SPEAK_LOCK:
+        if end > _SPEAKING_UNTIL.get(m, 0.0):
+            _SPEAKING_UNTIL[m] = end
+
+
+def is_speaking(mic: str = "") -> bool:
+    """True while Jarvis's own playback (or its 250 ms tail) may still reach
+    `mic`'s microphone; `mic` empty asks about any app. Public so status and
+    tests can see the window without playing anything."""
+    m = _norm_mic(mic)
+    now = time.monotonic()
+    with _SPEAK_LOCK:
+        if m:
+            return (_SPEAKING_UNTIL.get(m, 0.0) > now
+                    or _SPEAKING_UNTIL.get("", 0.0) > now)
+        return any(end > now for end in _SPEAKING_UNTIL.values())
+
+
+def _reset_speaking_for_tests() -> None:
+    """Clear the playback windows and the stop-word memory (test helper)."""
+    with _SPEAK_LOCK:
+        _SPEAKING_UNTIL.clear()
+    with _SAYS_LOCK:
+        _RECENT_SAYS.clear()
+
+
 #: hear() takes `mic` (voice-mic.patch checks for this before passing it, so
 #: a jarvis_hud.py patched against a newer jarvis_speech.py never calls an
 #: older one with an argument it does not know).
@@ -2550,6 +2601,17 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
             return Heard(False, source=source, seconds=seconds, stop=True, reason="stop",
                          **_live_fields(mic))
 
+    # F3: an automatic clip heard while Jarvis's own sound (or its tail) can
+    # still reach the microphone is not checked, not transcribed and not
+    # acted on. The stop checks above are before this line ON PURPOSE: a
+    # spoken "stop" (or the 2 s barge-in detector's source=barge_in answer)
+    # still stops Jarvis during playback.
+    if is_speaking(mic):
+        if live:
+            return Heard(False, source=source, seconds=seconds,
+                         reason=ECHO_REFUSAL, **_live_fields(mic))
+        return Heard(False, source=source, seconds=seconds, reason=ECHO_REFUSAL)
+
     # Session trust (owner's refinement, 2026-10-18): a >= 2.0 s clip gets
     # the full strict check and refreshes; 1.5-2.0 s may run on the session's
     # trust without a check; an expired window refuses short clips and asks
@@ -2919,6 +2981,11 @@ def say(text: str, mic: str = "") -> Optional[bytes]:
         _note_timing("none", voice, text, t0, 0.0, fallback, note, failed=failed)
         return None
     _note_timing(engine, voice, text, t0, len(samples) / float(rate), fallback, note)
+    # F3: this sentence's sound starts in the app shortly after the route
+    # hands it back, so the automatic hear() path stays closed for its own
+    # length plus the 250 ms acoustic tail. Not for the stop detector: that is
+    # decided before this gate (see hear()).
+    _mark_speaking(mic, len(samples) / float(rate or 16000))
     # Jarvis asked something aloud: the next wake-word clip needs no phrase.
     _note_said(text, len(samples) / float(rate or 16000), mic)
     # Jarvis Live's quiet clock starts again from Jarvis speaking - but not

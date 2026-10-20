@@ -159,6 +159,10 @@ class World:
         V.PROFILE_PATH.parent.mkdir(parents=True)
         V._reset_repeat_for_tests()
         F._reset_for_tests()
+        # F3: a say() in an earlier test leaves its playback window open; this
+        # world starts with nothing being spoken, which is what these tests are
+        # about (one test drives the self-echo gate itself, in test_speech.py).
+        S._reset_speaking_for_tests()
         emb = Table({"a": OWNER, "b": OWNER, "c": OWNER})
         V.enroll(["a", "b", "c"], embedder=emb)
         cfg = self.cfg

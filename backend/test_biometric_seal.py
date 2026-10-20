@@ -298,6 +298,96 @@ def t_the_wired_consumers_use_the_envelope():
               json.loads(legacy.read_bytes()).get("sealed_v") == 1)
 
 
+def t_the_atomic_write_fsyncs_the_temp_file_before_the_swap():
+    """#600 (the 2026-10-20 audit): .tmp + os.replace is only half the promise.
+
+    A crash after the rename but before the bytes reach the disk can leave an
+    empty or partial file where the owner's print used to be. The write must
+    flush AND fsync the temp file before replacing it. The swap itself is
+    recorded here too, so the shape cannot drift back to write_bytes."""
+    if not have_crypto():
+        skip("atomic write fsync", "the `cryptography` package is not installed")
+        return
+    import unittest.mock as mock
+    with live(Provider()):
+        path = _path("fsync.json")
+        calls = []
+        real_replace, real_fsync = os.replace, os.fsync
+
+        def fake_fsync(fd):
+            calls.append(("fsync", fd))
+            return real_fsync(fd)
+
+        def fake_replace(src, dst):
+            calls.append(("replace", str(src), str(dst)))
+            return real_replace(src, dst)
+
+        with mock.patch("os.fsync", side_effect=fake_fsync), \
+                mock.patch("os.replace", side_effect=fake_replace):
+            V.write_biometric_json(path, {"samples": 1})
+        kinds = [c[0] for c in calls]
+        check("the temp file is fsynced BEFORE it is renamed over the real one",
+              kinds == ["fsync", "replace"], calls)
+        check("... the rename's source is the .tmp sibling",
+              calls[1][1].endswith(".tmp"), calls)
+        check("... and no .tmp copy is left behind",
+              not path.with_name(path.name + ".tmp").exists())
+
+
+def t_an_interrupted_write_or_replace_leaves_the_old_file():
+    """A failed swap must refuse, not report success: the old sealed file stays
+    byte-identical and the half-written .tmp is removed (it is biometric too)."""
+    if not have_crypto():
+        skip("interrupted atomic write", "the `cryptography` package is not installed")
+        return
+    import unittest.mock as mock
+    with live(Provider()):
+        path = _path("interrupted.json")
+        V.write_biometric_json(path, {"samples": 1})
+        before = path.read_bytes()
+        with mock.patch("os.replace", side_effect=OSError("in use by another process")):
+            exc = _raised(lambda: V.write_biometric_json(path, {"samples": 2}))
+        check("a failed replace raises instead of claiming the write happened",
+              isinstance(exc, OSError), repr(exc))
+        check("... the old sealed file is byte-identical", path.read_bytes() == before)
+        check("... and the .tmp copy is gone", not path.with_name(path.name + ".tmp").exists())
+        # An interruption during the durable write itself (fsync fails) is the
+        # same contract: nothing is renamed, the old file still opens.
+        with mock.patch("os.fsync", side_effect=OSError("disk went away")):
+            exc = _raised(lambda: V.write_biometric_json(path, {"samples": 3}))
+        check("an interrupted fsync also refuses", isinstance(exc, OSError), repr(exc))
+        check("... leaving the old file untouched and readable",
+              path.read_bytes() == before and V.read_biometric_json(path)["samples"] == 1)
+        check("... with no .tmp hair left", not path.with_name(path.name + ".tmp").exists())
+
+
+def t_a_legacy_migration_uses_the_durable_atomic_swap():
+    """The first-read migration (the one that runs on the owner's real files)
+    goes through the same .tmp/fsync/replace path, not a direct write."""
+    if not have_crypto():
+        skip("migration atomic swap", "the `cryptography` package is not installed")
+        return
+    import unittest.mock as mock
+    with live(Provider()):
+        path = _path("owner.json")
+        path.write_text(json.dumps({"centroid": [1.0, 0.0], "samples": 5}), encoding="utf-8")
+        calls = []
+        real_replace = os.replace
+
+        def fake_replace(src, dst):
+            calls.append((str(src), str(dst)))
+            return real_replace(src, dst)
+
+        with mock.patch("os.replace", side_effect=fake_replace):
+            profile = V.load_profile(path)
+        check("a legacy plaintext print still loads", profile is not None)
+        check("... and the one-way migration used a .tmp rename",
+              len(calls) == 1 and calls[0][0].endswith(".tmp")
+              and calls[0][1] == str(path), calls)
+        check("... so the file is now the sealed envelope",
+              json.loads(path.read_bytes()).get("sealed_v") == 1)
+
+
 if __name__ == "__main__":
     print(f"voice module: {V.__file__}")
     for name, fn in list(globals().items()):
