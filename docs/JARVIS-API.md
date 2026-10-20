@@ -1298,6 +1298,30 @@ room or at a different time of day**. The caps stay: up to 12 clips per round,
 min 3 clips, and a sub-print is never lowered to the loosest clip. Old stored
 condition names keep working (`far` -> `table`, `general` -> `close`).
 
+**Naming which free-speech prompt a clip answers (added 2026-10-19).** The
+training body takes an OPTIONAL `free_speech` list beside `clips`, one entry
+per clip - in `mode=measure` as well, so a guided test can say the same thing:
+`null` (or `""`) for a clip that reads one of the sentences, or the `id` of one
+of `training.free_speech` ("introduce", "day", "passage" today) for a clip
+that answers that prompt. A screen reads the ids from the same `plan` payload
+it already shows; the ids are not hard-coded in an app. The PC checks every
+name against `jarvis_voice_training.FREE_SPEECH` and answers **400 with a
+plain sentence** when an entry is not a name it knows, is not a string or
+null, or when the list does not line up with the clips; it never drops a label
+silently, because a phone that has just recorded an answer must not be told
+it counted when it did not. **A body without the field is exactly the old
+body.** No route, patch or gate action is added: it is the existing
+`POST /api/voice/enroll` and the same ONE `change_own_config` card at the end.
+The card's words still count clips and rounds only; its stored detail row and
+the audit trail gain the **per-prompt clip counts** (for example
+`{"day": 2}`), so the receipt says what was trained and nothing more. The
+sealed voice profile is unchanged - it holds vectors and scores, never a
+prompt name. Deny, a timeout, cancel and expiry drop the labels with the
+audio. The PC advertises the field as `gate.training.free_speech: true`; a PC
+from before it has no such flag AND would ignore the list, so a screen offers
+the plan's prompts only when the flag is `true`. The phone's free-speech step
+is a client slice of its own; this contract is what it will send.
+
 **Live adaptation (the owner's "train live" request).** After a Live
 verification that is a clean, HIGH-CONFIDENCE owner check - above the bar by a
 margin - one utterance may be added as a capped sub-print for its condition.
@@ -2860,6 +2884,7 @@ mode only when `gate.training` says the PC understands it:
 | `rounds: true` | `train` (rounds, `add`, `finish`, `cancel`) |
 | `settings: true` | `strictness`, `privacy`; and `memory`, `sensitive_memory`, `hands_free`, `hands_free_screen`, `hands_free_live` or `live_end` when `gate.settings` has it (an older PC answers that mode with 503) |
 | `measure: true` | `measure` |
+| `free_speech: true` | the optional `free_speech` list on `train`, the one-shot `{"clips"}` body, and `measure` (added 2026-10-19; §5.1 has the contract) |
 
 ### What changed for every app, even one that changes nothing
 
@@ -2976,15 +3001,22 @@ sends (both apps do).
            "strong_trained": bool,        the stronger model has a print of its own in it
            "strong_threshold": float}},   the owner's own bar for it (0 = the measured one)
 "training": {... as before ..., "rounds": true, "settings": true, "measure": true,
-             "session": null | {"mic", "add", "rounds": [{"round", "condition", "clips", "seconds"}],
+             "free_speech": true,           added 2026-10-19: this PC accepts the field (§5.1).
+                                            Missing from an older PC, which ignores the list.
+             "session": null | {"mic", "add", "rounds": [{"round", "condition", "clips", "seconds",
+                                                          "free_speech"?: {"<id>": n}}],
+                                            the inner free_speech is there only for a round
+                                            whose clips named a prompt
                                 "clips", "seconds", "expires_in"},
              "measure_last": {"at", "clips", "strong_model",
                               "very_strict": {"passed", "of", "too_short", "repeat_rate"},
-                              "balanced": {...}},              only after a guided test
+                              "balanced": {...},              only after a guided test
+                              "free_speech"?: {"<id>": n}},   only when the body named prompts
              "kind": "enroll" | "threshold" | "setting",       while a card waits
              "setting": {"name", "value"},                      while a setting card waits
              "last": {... as before ..., "outliers": [{"round", "clip"}], "added": bool,
-                      "subprints": ["close", ...], "setting", "value", "model"},
+                      "subprints": ["close", ...], "setting", "value", "model",
+                      "free_speech"?: {"<id>": n}},            only when the clips named prompts
              "limits": {... as before ..., "rounds": 4, "session_seconds": 900.0,
                         "measure_max_clips": 20},
              "round_asks": {"1": "normal, close to the microphone",
@@ -3009,20 +3041,28 @@ as it is.
 **Training in rounds** (`rounds: true`):
 
 ```
-{"mode": "train", "round": 1 | 2 | 3, "mic": "phone" | "desktop", "clips": [<base64 WAV>, ...],
- "add": false, "finish": false}
+{"mode": "train", "round": 1 | 2 | 3 | 4, "mic": "phone" | "desktop", "clips": [<base64 WAV>, ...],
+ "free_speech": [null | "<prompt id>", ...], "add": false, "finish": false}
 ```
+
+`free_speech` (added 2026-10-19) is optional; when it is there it has exactly
+one entry per clip: `null` or `""` for a clip that reads a sentence, or the id
+of a prompt in `gate.training.training.free_speech` for a clip that answers
+it. Omit it and every clip is a read sentence, exactly as before. The allowed
+names are the plan's own ids; §5.1 has the full contract (validation, the
+stored counts, why the voice profile is untouched). Only offer it when
+`gate.training.free_speech` is `true`.
 
 | answer | when |
 |---|---|
 | `200 {"ok": true, "pending": false, "held": <session>, "round": 1, "next_round": 2, "next_ask": "about two to three metres away, on a table", "message"}` | the round is held in memory; **no card, nothing changed** |
 | `202 {"ok": true, "pending": true, "clips": 30, "seconds": 104.0, "rounds": 3, "message"}` | `"finish": true` (with the last round's clips, or with no `clips` at all): ONE card for every held round |
-| `400` | a clip is wrong (as today, with `"round"`), `round` is not 1-4, or `finish` with nothing held |
+| `400` | a clip is wrong (as today, with `"round"`), `round` is not 1-4, a `free_speech` entry is not a prompt id, the list does not line up with the clips, or `finish` with nothing held |
 | `409 {"error", "session": <session>}` | another training (another mic, or `add` differs) is held - finish or cancel it |
 | `409 {"error", "pending": true, "expires_in"}` | a voice card is already waiting |
 
 - Each round is 3-12 clips and 80 s at most (the same limits as today).
-  Sending a round again replaces that round's clips.
+  Sending a round again replaces that round's clips and `free_speech` labels.
 - Held clips are dropped, all of them, on `{"mode": "train", "cancel":
   true}` (`200 {"ok": true, "cancelled": bool, "message"}`), on a denied or
   timed-out card, and 15 minutes (`limits.session_seconds`) after the last
@@ -3146,17 +3186,21 @@ Choosing `balanced` also puts private answers back on screen
 **The guided repeat test** (`measure: true`):
 
 ```
-{"mode": "measure", "mic": "phone", "clips": [up to 20 of the owner's own sentences]}
+{"mode": "measure", "mic": "phone", "clips": [up to 20 of the owner's own sentences],
+ "free_speech": [null | "<prompt id>", ...]}
 -> 200 {"ok": true, "clips": 20, "print": "phone", "strong_model": true,
         "very_strict": {"passed": 15, "too_short": 2, "of": 20, "repeat_rate": 0.25},
         "balanced":    {"passed": 19, "too_short": 0, "of": 20, "repeat_rate": 0.05},
         "per_clip": [{"seconds": 2.4, "very_strict": true, "balanced": true, "score": 0.71}, ...],
+        "free_speech": {"day": 2},                     only when the body named prompts
         "message": "Very strict let 15 of 20 through; balanced 19 of 20."}
 ```
 
 No card, nothing stored but the counts (`measure_last`), and not counted in
 `repeat`. 80 s in all per request, as for training; send two halves if the
-sentences are long, and add the counts up.
+sentences are long, and add the counts up. `free_speech` (added 2026-10-19) is
+optional and lines up with `clips` exactly as in `train` (§5.1); the answer
+then adds per-prompt clip counts and keeps nothing but those counts.
 
 **"Someone else"** (`calibrate`, unchanged request): the reply adds
 `"passed": [bool, ...]` (would each clip have been let in, with everything

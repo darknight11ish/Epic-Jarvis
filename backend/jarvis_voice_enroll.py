@@ -49,6 +49,28 @@ voice print by jarvis_voice.enroll() and dropped. Denied, timed out, refused,
 or the enrolment failed: dropped. Either way the list is cleared in a
 `finally`, so no path keeps them.
 
+FREE-SPEECH PROMPTS, AND WHICH ONE A CLIP ANSWERS (added 2026-10-19). The
+redesign's plan (`jarvis_voice_training.FREE_SPEECH`) names three natural
+prompts, and a training screen records an answer to each. The body therefore
+takes an OPTIONAL `free_speech` list next to `clips`, one entry per clip: null
+(or "") for a sentence read aloud, or a prompt id. The PC checks every id
+against the plan and REFUSES an unknown one (400, in plain words) instead of
+dropping it silently, because a phone that has just recorded an answer must
+not be told it counted when it did not. A missing field means every clip is a
+read sentence - exactly what every screen sent before this field existed, so
+an older client's request behaves identically. `/api/voice/status` advertises
+the field as `gate.training.free_speech: true`; an older PC has no such flag
+AND would ignore the list, so a screen offers the prompts only when the flag
+is true.
+
+NOTHING NEW IS KEPT ON DISK FOR IT. The labels are held with the clips in
+memory (they are never in the card's TEXT), and once the card is approved the
+per-prompt clip COUNTS go on the card's own stored detail row and the audit
+trail - a receipt, not biometric material. The voice print is unchanged: the
+sealed profile holds vectors and scores and gains no prompt names. Deny, a
+timeout, cancel or expiry drops the labels with the audio, in the same
+`finally` that clears the clips.
+
 THE "HEY JARVIS" CHECK, FROM THE SAME CLIPS (added 2026-09-24). When the
 card is approved and the voice print is made, the same clips also build the
 owner's wake-word verifier (jarvis_wakeword.build_verifier: the moments
@@ -70,17 +92,21 @@ screen should ever pose. The 409 says how long until the waiting one expires.
 THE STRICTER CHECK (added 2026-09-24) - still no new route; five more modes
 on this one (docs/JARVIS-API.md, "The stricter voice check", has the JSON):
 
-    {"mode": "train", "round": 1|2|3, "mic", "clips": [...], "add": false,
-     "finish": false}
-        Training in ROUNDS, each up to 12 clips in its own conditions (1:
-        normal, close; 2: on a table two to three metres away; 3: another time or
-        room). Each round is checked and HELD HERE, in memory - no card,
-        nothing changed - for up to SESSION_SECONDS after the last one.
-        `"finish": true` (with a round, or alone) raises ONE card for
+    {"mode": "train", "round": 1|2|3|4, "mic", "clips": [...], "add": false,
+     "free_speech": [null | "<prompt id>", ...], "finish": false}
+        Training in ROUNDS, each up to 12 clips in its own condition (the four
+        in jarvis_voice_training.CONDITIONS: close; 2-3 m on a table; background
+        noise; another room or time). Each round is checked and HELD HERE, in
+        memory - no card, nothing changed - for up to SESSION_SECONDS after the
+        last one. `"finish": true` (with a round, or alone) raises ONE card for
         everything held. Deny, a timeout, `"cancel": true`, or the time
         running out: every held clip is dropped. `"add": true` adds the
         recordings to the print already there instead of replacing it.
         Each round becomes its own sub-print (jarvis_voice, "sub-prints").
+        `free_speech` (added 2026-10-19) is OPTIONAL and is one entry per clip:
+        null or "" for a sentence read aloud, or the id of one of the plan's
+        free-speech prompts (`jarvis_voice_training.FREE_SPEECH`). It says
+        which prompt a recording answers; it is never the words spoken.
     {"mode": "strictness", "value": "very_strict"|"balanced"}
     {"mode": "privacy", "value": "private_on_screen"|"voice_is_enough"}
     {"mode": "memory", "value": "memory_aloud"|"memory_on_screen"}
@@ -104,10 +130,13 @@ on this one (docs/JARVIS-API.md, "The stricter voice check", has the JSON):
         choosing `balanced` puts private answers back on screen.
         Talk-to-type (the owner's decision, 2026-09-27) is the same shape:
         "on" is the card, "off" is at once (docs/JARVIS-API.md section 72).
-    {"mode": "measure", "mic", "clips": [up to 20]}
+    {"mode": "measure", "mic", "clips": [up to 20],
+     "free_speech": [null | "<prompt id>", ...]}
         The guided "how often would I have to repeat myself?" test: the
         owner's own sentences, each judged at both settings. Scored and
-        dropped; no card.
+        dropped; no card. `free_speech` is optional and aligned with `clips`,
+        exactly as in mode "train" (added 2026-10-19): the answer adds the
+        per-prompt clip counts and keeps nothing but those counts.
     {"mode": "clear"}   (2026-10-19, the owner's "clear previous voice
         training ... with an approval card ... in settings")
         "Clear previous voice training": raises ONE card (change_own_config,
@@ -298,6 +327,97 @@ def _parse(body, lo: int = MIN_CLIPS, hi: int = MAX_CLIPS) -> list:
         raise BadClip(f"the recordings are {total:.0f} seconds in all; the most is "
                       f"{MAX_TOTAL_SECONDS:.0f} - redo the longest ones a little quicker")
     return out
+
+
+# --------------------------------------------------------------------------
+#   Free-speech prompts: which prompt a clip answers (added 2026-10-19)
+# --------------------------------------------------------------------------
+
+def _free_speech_ids() -> tuple:
+    """The free-speech prompt ids this PC's plan names, in the plan's order.
+
+    Empty on a backend whose design module is older than `FREE_SPEECH`; the
+    field is then refused in words rather than guessed at."""
+    try:
+        rows = getattr(TRAINING, "FREE_SPEECH", ()) or ()
+        return tuple(str(p["id"]) for p in rows
+                     if isinstance(p, dict) and isinstance(p.get("id"), str) and p["id"])
+    except Exception:                                   # noqa: BLE001
+        return ()
+
+
+def _prompt_words(ids) -> str:
+    """`"introduce", "day" or "passage"` - ids for a plain-language message."""
+    ids = list(ids)
+    if not ids:
+        return ""
+    if len(ids) == 1:
+        return f'"{ids[0]}"'
+    return ", ".join(f'"{i}"' for i in ids[:-1]) + f' or "{ids[-1]}"'
+
+
+def _free_speech_help() -> str:
+    """The one sentence a refused `free_speech` list ends with: what to send."""
+    ids = _free_speech_ids()
+    if not ids:
+        return ("this PC's voice-training module has no free-speech prompts, so "
+                "record the sentences to read aloud instead")
+    return f"use null for a sentence to read aloud, or one of {_prompt_words(ids)}"
+
+
+def _free_speech(doc: dict, count: int) -> list:
+    """One label per clip: "" for a sentence read aloud, else a prompt id.
+
+    Absent or null means every clip is a sentence read aloud, which is what
+    every body did before 2026-10-19. A list that IS there must line up with
+    the clips exactly, so a label can never land on the wrong recording; an
+    unknown name is refused in words rather than dropped, so a screen is
+    never told that a prompt counted when it did not.
+    """
+    raw = doc.get("free_speech")
+    if raw is None:
+        return [""] * count
+    if not isinstance(raw, list):
+        raise BadClip("free_speech must be a list with one entry per clip: "
+                      + _free_speech_help())
+    if count == 0:
+        if raw:
+            raise BadClip("free_speech names a prompt, but this request has no "
+                          "clips for it to answer")
+        return []
+    if len(raw) != count:
+        raise BadClip(f"free_speech has {len(raw)} entries but this request has "
+                      f"{count} clips - send one entry per clip: "
+                      + _free_speech_help())
+    ids = _free_speech_ids()
+    out = []
+    for n, item in enumerate(raw, 1):
+        if item is None:
+            out.append("")
+        elif isinstance(item, str):
+            label = item.strip()
+            if not label:
+                out.append("")
+            elif label not in ids:
+                raise BadClip(f"free_speech entry {n} names a prompt this PC does "
+                              f"not know - " + _free_speech_help())
+            else:
+                out.append(label)
+        else:
+            raise BadClip(f"free_speech entry {n} is not a prompt name - "
+                          + _free_speech_help())
+    return out
+
+
+def _free_speech_counts(labels) -> dict:
+    """{prompt id: how many clips answered it}, in the plan's order. Only the
+    prompts that were actually used are named; no clip counts means {}."""
+    counts = {}
+    for pid in _free_speech_ids():
+        n = sum(1 for x in labels or [] if x == pid)
+        if n:
+            counts[pid] = n
+    return counts
 
 
 # --------------------------------------------------------------------------
@@ -523,12 +643,15 @@ def _finish(pid: str, outcome: str, **extra) -> dict:
     with _LOCK:
         if _PENDING is not None and _PENDING["id"] == pid:
             _PENDING["clips"].clear()
+            (_PENDING.get("free_speech") or []).clear()
+            _PENDING.pop("free_speech", None)
             _PENDING = None
         _LAST = {"outcome": outcome, "at": time.time(), **extra}
         last = dict(_LAST)
     _audit("voice.training.decided", {"outcome": outcome,
                                       **{k: v for k, v in extra.items()
-                                         if k in ("samples", "request_id")}})
+                                         if k in ("samples", "request_id",
+                                                  "free_speech")}})
     return last
 
 
@@ -564,13 +687,18 @@ def _decide(pid: str, *, gate: Callable, enroll: Callable,
             return {"outcome": "gone"}
         count, seconds, mic = p["count"], p["seconds"], p.get("mic", "")
         rounds, add = len(p.get("rounds") or [1]), bool(p.get("add"))
+        free_counts = _free_speech_counts(p.get("free_speech"))
     text = describe(count, seconds, mic, rounds=rounds, add=add)
     # Counts and lengths only. The gate stores `detail` on the approvals row
-    # and an audit line; neither is a place for audio.
+    # and an audit line; neither is a place for audio. The free-speech counts
+    # (when any clip answered a prompt) are counts too: they name the prompt,
+    # never the words spoken, so the row is a receipt of what was trained.
     detail = {"text": text, "clips": count, "seconds": seconds, "mic": mic,
               "rounds": rounds, "add": add,
               "what": ("add to the enrolled owner voice print" if add else
                        "replace the enrolled owner voice print")}
+    if free_counts:
+        detail["free_speech"] = free_counts
     try:
         try:
             v = gate(ACTION, detail, text)
@@ -629,6 +757,7 @@ def _decide(pid: str, *, gate: Callable, enroll: Callable,
                            subprints=([sp["condition"] for sp in
                                        subs(str(getattr(prof, "embedder", "")))]
                                       if callable(subs) else []),
+                           **({"free_speech": free_counts} if free_counts else {}),
                            wake_check="being built from the same sentences")
             if _takes(wake_check, "keep_old"):
                 wake = str(wake_check(clips, mic, keep_old=add))
@@ -643,6 +772,8 @@ def _decide(pid: str, *, gate: Callable, enroll: Callable,
         with _LOCK:
             if _PENDING is not None and _PENDING["id"] == pid:
                 _PENDING["clips"].clear()
+                (_PENDING.get("free_speech") or []).clear()
+                _PENDING.pop("free_speech", None)
                 _PENDING = None
 
 
@@ -723,19 +854,25 @@ def stage(body: bytes, *, gate: Optional[Callable] = None,
     mic = _mic(doc)
     try:
         clips = _parse(doc)
+        free = _free_speech(doc, len(clips))
     except BadClip as exc:
         return 400, {"error": str(exc)}
     # The one-shot training (every phone before rounds): one round, in
-    # normal conditions.
-    return _start_card(mic, doc.get("add") is True, {1: clips}, gate=gate,
-                       tier_of=tier_of, enroll=enroll, spawn=spawn,
+    # normal conditions. `free_speech` is optional here too (2026-10-19), so a
+    # simple screen that does not use rounds can still name the prompt.
+    return _start_card(mic, doc.get("add") is True, {1: clips},
+                       free_speech={1: free} if any(free) else None,
+                       gate=gate, tier_of=tier_of, enroll=enroll, spawn=spawn,
                        wake_check=wake_check)
 
 
 def _start_card(mic: str, add: bool, rounds: dict, *, gate, tier_of, enroll, spawn,
-                wake_check) -> tuple:
+                wake_check, free_speech: Optional[dict] = None) -> tuple:
     """Stages the clips of `rounds` ({round: [(pcm, seconds)]}) and raises
-    ONE card for all of them. Enrols nothing."""
+    ONE card for all of them. Enrols nothing.
+
+    `free_speech` is {round: [one label per clip]} when any clip in a round
+    answered a free-speech prompt; a round with no labels needs no entry."""
     global _PENDING
     try:
         tier = tier_of(ACTION)
@@ -752,27 +889,40 @@ def _start_card(mic: str, add: bool, rounds: dict, *, gate, tier_of, enroll, spa
                                f"'ask'. The recordings were deleted."), "pending": False}
 
     pid = uuid.uuid4().hex
-    flat, conditions, index = [], [], []
+    flat, conditions, index, labels = [], [], [], []
     for r in sorted(rounds):
+        named = list((free_speech or {}).get(r) or [])
         for n, (pcm, _secs) in enumerate(rounds[r], 1):
             flat.append(pcm)
             conditions.append(ROUNDS.get(r, ROUNDS[1])[0])
             index.append((r, n))
+            labels.append(named[n - 1] if n <= len(named) else "")
     count = len(flat)
     seconds = round(sum(s for got in rounds.values() for _, s in got), 1)
+    # Counts per prompt only; the ids themselves are carried no further than
+    # this card's stored receipt (the gate's detail row) and the audit line.
+    free_counts = _free_speech_counts(labels)
     with _LOCK:
         if _PENDING is not None:        # lost a race with another request
             return 409, {"error": ("a voice training is already waiting for "
                                    "approval - approve or deny that card first"),
                          "pending": True}
-        _PENDING = {"id": pid, "clips": flat, "conditions": conditions, "index": index,
-                    "rounds": sorted(rounds), "add": bool(add),
-                    "count": count, "seconds": seconds, "mic": mic,
-                    "kind": "enroll", "since": time.time(), "since_m": time.monotonic(), "timeout": _timeout()}
+        pending = {"id": pid, "clips": flat, "conditions": conditions, "index": index,
+                   "rounds": sorted(rounds), "add": bool(add),
+                   "count": count, "seconds": seconds, "mic": mic,
+                   "kind": "enroll", "since": time.time(), "since_m": time.monotonic(),
+                   "timeout": _timeout()}
+        if free_counts:
+            # Plain strings, never audio: dropped with the clips in _finish.
+            pending["free_speech"] = labels
+        _PENDING = pending
     for got in rounds.values():
         got.clear()
-    _audit("voice.training.staged", {"clips": count, "seconds": seconds,
-                                     "rounds": len(rounds), "add": bool(add)})
+    staged = {"clips": count, "seconds": seconds,
+              "rounds": len(rounds), "add": bool(add)}
+    if free_counts:
+        staged["free_speech"] = free_counts
+    _audit("voice.training.staged", staged)
 
     def work():
         try:
@@ -1107,10 +1257,18 @@ def _session_view(sess: Optional[dict], now: Optional[float] = None) -> Optional
     if sess is None:
         return None
     now = time.time() if now is None else now
-    rounds = [{"round": r, "condition": ROUNDS[r][0],
+    held = sess.get("free_speech") or {}
+    rounds = []
+    for r in sorted(sess["rounds"]):
+        row = {"round": r, "condition": ROUNDS[r][0],
                "clips": len(sess["rounds"][r]),
                "seconds": round(sum(s for _, s in sess["rounds"][r]), 1)}
-              for r in sorted(sess["rounds"])]
+        counts = _free_speech_counts(held.get(r))
+        if counts:
+            # Added 2026-10-19, only for a round that HAS free-speech answers:
+            # a body without the field renders exactly the old payload.
+            row["free_speech"] = counts
+        rounds.append(row)
     return {"mic": sess["mic"], "add": sess["add"], "rounds": rounds,
             "clips": sum(x["clips"] for x in rounds),
             "seconds": round(sum(x["seconds"] for x in rounds), 1),
@@ -1125,6 +1283,9 @@ def _drop_session_locked(outcome: str = "") -> None:
     for got in _SESSION["rounds"].values():
         got.clear()
     _SESSION["rounds"].clear()
+    for labels in (_SESSION.get("free_speech") or {}).values():
+        labels.clear()
+    (_SESSION.get("free_speech") or {}).clear()
     _SESSION = None
     if outcome:
         _LAST = {"outcome": outcome, "at": time.time()}
@@ -1176,12 +1337,22 @@ def stage_round(doc: dict, *, gate, tier_of, enroll, spawn, wake_check,
     if isinstance(r, bool) or not isinstance(r, int) or r not in ROUNDS:
         return 400, {"error": f"round must be one of {', '.join(str(k) for k in ROUNDS)}"}
     has = doc.get("clips") is not None
-    clips = []
+    clips, free = [], []
     if has:
         try:
             clips = _parse(doc)
+            # Checked after the clips: a clip error names the clip, and a
+            # free_speech error names the entry; one bad list never hides the
+            # other. Optional and aligned, see _free_speech.
+            free = _free_speech(doc, len(clips))
         except BadClip as exc:
             return 400, {"error": str(exc), "round": r}
+    elif doc.get("free_speech") not in (None, []):
+        # A finish with no clips cannot label anything: the held rounds were
+        # labelled when they were sent. Refuse rather than drop the list.
+        return 400, {"error": ("free_speech names the prompt each clip answers: "
+                               'send one entry per clip beside "clips" in the '
+                               "same request, or leave it out"), "round": r}
     expire_sessions()
     now = time.time()
     with _LOCK:
@@ -1199,12 +1370,20 @@ def stage_round(doc: dict, *, gate, tier_of, enroll, spawn, wake_check,
             return 400, {"error": "nothing has been recorded yet to finish"}
         if sess is None:
             sess = {"id": uuid.uuid4().hex, "mic": mic, "add": add, "rounds": {},
-                    "touched": now}
+                    "free_speech": {}, "touched": now}
+        held = sess.setdefault("free_speech", {})
         if has:
             old = sess["rounds"].pop(r, None)
             if old:
                 old.clear()
             sess["rounds"][r] = clips
+            old_free = held.pop(r, None)
+            if old_free:
+                old_free.clear()
+            if any(free):
+                held[r] = free
+            # A take with no free-speech answers replaces the old one's labels
+            # too: the held round is exactly what was last sent.
         sess["touched"] = now
         if finish:
             _SESSION = None
@@ -1226,7 +1405,8 @@ def stage_round(doc: dict, *, gate, tier_of, enroll, spawn, wake_check,
                                  + "Nothing changes until you finish and approve the card.")}
     rounds = dict(take["rounds"])
     return _start_card(take["mic"], take["add"], rounds, gate=gate, tier_of=tier_of,
-                       enroll=enroll, spawn=spawn, wake_check=wake_check)
+                       enroll=enroll, spawn=spawn, wake_check=wake_check,
+                       free_speech=dict(take.get("free_speech") or {}))
 
 
 def state() -> dict:
@@ -1238,9 +1418,13 @@ def state() -> dict:
         # phone offers the "someone else" check only when it sees this - an
         # older PC would stage those clips as a training. The same for the
         # modes added 2026-09-24: `rounds` (mode train), `settings` (modes
-        # strictness and privacy), `measure`.
+        # strictness and privacy), `measure`. `free_speech` (2026-10-19) is
+        # true only when a body may name which prompt a clip answers: an older
+        # PC has no such key AND would ignore the list, so a screen offers the
+        # plan's prompts only when this is true.
         out = {"available": True, "pending": p is not None, "calibrate": True,
-               "rounds": True, "settings": True, "measure": True, "clear": True}
+               "rounds": True, "settings": True, "measure": True, "clear": True,
+               "free_speech": bool(_free_speech_ids())}
         if p is not None:
             out["clips"] = p.get("count", 0)
             out["kind"] = p.get("kind", "enroll")
@@ -1255,6 +1439,7 @@ def state() -> dict:
             out["last"] = {k: _LAST[k] for k in ("outcome", "at", "samples", "reason",
                                                  "wake_check", "threshold", "mic",
                                                  "outliers", "added", "subprints",
+                                                 "free_speech",
                                                  "setting", "value", "model",
                                                  "removed", "prints", "verifiers",
                                                  "adaptation")
@@ -1631,13 +1816,20 @@ def reset_adaptation(condition=None) -> tuple:
 def measure(doc: dict, *, measure_fn: Optional[Callable] = None) -> tuple:
     """mode "measure": up to MEASURE_MAX_CLIPS of the owner's own sentences,
     each judged at both strictness settings. Scored and dropped; no card;
-    nothing counted as real use."""
+    nothing counted as real use.
+
+    `free_speech` (2026-10-19) is optional and aligned with the clips exactly
+    as in mode "train"; it only lets the answer say how many clips answered
+    each prompt. No audio and no per-clip label is kept - just those counts,
+    in `measure_last` and the audit line."""
     global _LAST_MEASURE
     mic = _mic(doc)
     try:
         clips = _parse(doc, 1, MEASURE_MAX_CLIPS)
+        free = _free_speech(doc, len(clips))
     except BadClip as exc:
         return 400, {"ok": False, "error": str(exc)}
+    free_counts = _free_speech_counts(free)
     pcm = [c for c, _ in clips]
     clips.clear()
     try:
@@ -1699,11 +1891,17 @@ def measure(doc: dict, *, measure_fn: Optional[Callable] = None) -> tuple:
                                                "frr": r.get("frr"),
                                                "far": r.get("far")}
                                            for c, r in (held.get("conditions") or {}).items()}}
+    if free_counts:
+        got["free_speech"] = free_counts
+        keep["free_speech"] = free_counts
     with _LOCK:
         _LAST_MEASURE = keep
-    _audit("voice.training.measured", {"clips": got["clips"],
-                                       "very_strict": got["very_strict"]["passed"],
-                                       "balanced": got["balanced"]["passed"]})
+    measured = {"clips": got["clips"],
+                "very_strict": got["very_strict"]["passed"],
+                "balanced": got["balanced"]["passed"]}
+    if free_counts:
+        measured["free_speech"] = free_counts
+    _audit("voice.training.measured", measured)
     vs, ba, n = got["very_strict"]["passed"], got["balanced"]["passed"], got["clips"]
     return 200, {**got, "message": (f"Very strict let {vs} of {n} through; balanced "
                                     f"{ba} of {n}.")}
