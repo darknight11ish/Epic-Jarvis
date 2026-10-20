@@ -203,8 +203,19 @@ def t_sealed_and_view_only():
     rows = raw_marks(log)
     check("one row for the chat", len(rows) == 1 and rows[0][0] == cid)
     blob = bytes(rows[0][1])
+    # The sealed value is ciphertext: its bytes are random, so any test of its
+    # shape must not depend on a particular byte value. This used to assert
+    # `b"[" not in blob[:1]`, which fails whenever the first random byte happens
+    # to be 0x5B - a 1-in-256 flake unrelated to the feature (it failed CI on
+    # #640). What must hold is that the value cannot be read as a JSON list of
+    # the marked turn numbers, and that neither plain spelling is present.
+    try:
+        readable = json.loads(blob.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        readable = None
     check("the value is sealed: no readable turn-number list in it",
-          b"[3, 7]" not in blob and b"3" != blob and b"[" not in blob[:1], blob)
+          len(blob) > 16 and readable is None
+          and b"[3, 7]" not in blob and b"[3,7]" not in blob, blob)
     raw = log.db_path.read_bytes()
     check("...and none in the database file", b"[3, 7]" not in raw and b"[3,7]" not in raw)
     with closing(sqlite3.connect(str(log.db_path))) as c:
