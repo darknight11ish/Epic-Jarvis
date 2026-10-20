@@ -350,7 +350,7 @@ class JarvisAccessibilityService : AccessibilityService() {
         while (queue.isNotEmpty() && visited < MAX_VISITED) {
             val (node, depth) = queue.removeFirst()
             visited += 1
-            if (node.isPassword) continue
+            if (sensitive(node)) continue
             val id = node.viewIdResourceName.orEmpty()
             val text = node.text?.toString() ?: node.contentDescription?.toString() ?: ""
             val idMatches = target.id.isNotEmpty() && id == target.id

@@ -714,11 +714,14 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
         if not _allowed(self):
             return None
         try:
-            body = read_body(self)
+            raw = read_body(self)
+            body = raw if isinstance(raw, dict) else json.loads(raw or b"{}")
         except Exception:
-            body = {}
+            body = None
+        if not isinstance(body, dict):
+            return self._send(400, {"ok": False, "error": "send a JSON object"})
         try:
-            code, out = request(body if isinstance(body, dict) else {})
+            code, out = request(body)
         except Exception as exc:
             return self._send(503, {"ok": False, "error": type(exc).__name__})
         return self._send(code, out)

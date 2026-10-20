@@ -400,27 +400,83 @@ def has_digits(text: str) -> bool:
 #   Retrieval
 # --------------------------------------------------------------------------
 
+def _stored_exemplars(about: str) -> list:
+    """The owner's OWN saved samples, most relevant first, from voiceprint.db.
+
+    Scored by plain word overlap with `about` - no embeddings, no network - and
+    read from the same `voiceprint_samples` table `add()`, `samples()` and
+    `profile()` write. This is the 2026-10-20 audit's catch: exemplars() used
+    to consult only the memory store and never read a single stored sample.
+    Each row is (sort key, text, kind, when); strip_entities runs at return.
+    """
+    wanted = {w for w in re.findall(r"[a-z0-9']+", str(about or "").lower())
+              if len(w) > 2}
+    try:
+        with closing(_connect()) as c:
+            rows = [dict(r) for r in c.execute(
+                "SELECT created_at, kind, text FROM voiceprint_samples"
+                " ORDER BY created_at DESC LIMIT ?", (MAX_SAMPLES,)).fetchall()]
+    except Exception:
+        return []
+    scored = []
+    for order, row in enumerate(rows):
+        text = str(row.get("text") or "")
+        words = {w for w in re.findall(r"[a-z0-9']+", text.lower()) if len(w) > 2}
+        score = len(wanted & words)
+        scored.append(((-score, -float(row.get("created_at") or 0.0), order),
+                       text, str(row.get("kind") or KIND_SAMPLE),
+                       row.get("created_at")))
+    scored.sort(key=lambda item: item[0])
+    return scored
+
+
 def exemplars(about: str, k: Optional[int] = None,
               store: Any = None, latch: bool = True) -> list:
     """Find how the owner has written about something like this before.
 
-    Goes through the memory store's own search, which is what makes this a
-    memory read rather than a private index. `latch` trips the taint latch, so
-    the turn that asked for a style sample stays on the local model - the same
-    rule that applies to reading their mail, for the same reason.
+    Reads the owner's stored samples from `voiceprint.db` FIRST (the row
+    `add()` writes), scored by lexical overlap with `about`, and supplements
+    with the memory store's own search when the private store has fewer than
+    `k` matches or a store was supplied. Every text is passed through
+    `strip_entities` before it is handed back, so no digit or name survives -
+    the same guarantee the memory rows already had.
+
+    `latch` trips the taint latch, so the turn that asked for a style sample
+    stays on the local model - the same rule that applies to reading their
+    mail, for the same reason.
     """
     if not _cfg("enabled", True):
         return []
     k = int(k if k is not None else _cfg("exemplars", 3) or 3)
     if k <= 0:
         return []
-    try:
-        if store is None:
-            import jarvis_memory
-            store = jarvis_memory.store()
-        rows = store.search(about or "", k=max(1, k * 3))
-    except Exception:
-        return []
+    min_words = int(_cfg("min_words", 6) or 6)
+    found = []
+    seen = set()
+    for _sort, text, kind, when in _stored_exemplars(about):
+        if len(text.split()) < min_words or text in seen:
+            continue
+        seen.add(text)
+        found.append((text, kind, when, False))
+        if len(found) >= k:
+            break
+    if len(found) < k:
+        try:
+            if store is None:
+                import jarvis_memory
+                store = jarvis_memory.store()
+            rows = store.search(about or "", k=max(1, (k - len(found)) * 3))
+        except Exception:
+            rows = []
+        for r in rows:
+            text = str(r.get("text") or "")
+            if len(text.split()) < min_words or text in seen:
+                continue
+            seen.add(text)
+            found.append((text, str(r.get("source") or "memory"),
+                          r.get("at") or r.get("ts"), True))
+            if len(found) >= k:
+                break
 
     if latch:
         # Before returning anything, not after. A latch set after the text has
@@ -432,17 +488,10 @@ def exemplars(about: str, k: Optional[int] = None,
         except Exception:
             pass
 
-    min_words = int(_cfg("min_words", 6) or 6)
     out = []
-    for r in rows:
-        text = str(r.get("text") or "")
-        if len(text.split()) < min_words:
-            continue                       # too short to carry a style
+    for text, kind, when, _from_memory in found:
         clean, n = strip_entities(text)
-        out.append(Exemplar(clean, str(r.get("source") or "memory"),
-                            r.get("at") or r.get("ts"), n))
-        if len(out) >= k:
-            break
+        out.append(Exemplar(clean, kind, when, n))
     _audit("voiceprint.exemplars", {"asked": k, "returned": len(out),
                                     "stripped": sum(e.stripped for e in out)})
     return out
@@ -864,6 +913,12 @@ def add(kind: str, text: str, *, prompt: str = "") -> str:
         if len(raw) > MAX_TEXT:
             _audit("voiceprint.withheld", {"kind": kind, "why": "too long"})
             return ""
+        if _secret_in(raw):
+            # The ROUTE checks this too, but a direct Python caller must not be
+            # able to store a password the scrubber would only partly redact
+            # (2026-10-20 audit, Part I catch 2B).
+            _audit("voiceprint.withheld", {"kind": kind, "why": "secret"})
+            return ""
         scrub = _scrubber()
         if scrub is None:
             # The same rule chat history uses ("no key, nothing is recorded"),
@@ -1051,6 +1106,46 @@ def handle_post(route: str, body: Optional[dict]) -> tuple:
     return 404, {"ok": False, "error": "not_found"}
 
 
+NOT_THIS_PC = ("Adding or forgetting your own writing samples is for this PC "
+               "only, so nothing was changed.")
+
+
+def _peer_local(handler) -> tuple:
+    """(peer, local) for one request, best effort; a missing pair fails closed."""
+    peer = local = None
+    try:
+        peer = handler.client_address[0]
+    except Exception:
+        pass
+    try:
+        local = handler.connection.getsockname()[0]
+    except Exception:
+        pass
+    return peer, local
+
+
+def _from_this_pc(peer, local) -> bool:
+    """Is this request from this PC? Fails CLOSED.
+
+    2026-10-20 audit, Part I catch 2C: a phone on the same private network
+    could add or forget the owner's writing samples with its bearer token.
+    `jarvis_owner_check` is the project's one answer; when it is not beside
+    this module, loopback (and ONLY loopback) is still accepted, so a suite or
+    a checkout without the helper keeps working while a remote peer does not.
+    """
+    try:
+        import jarvis_owner_check
+        return bool(jarvis_owner_check.from_this_pc(peer, local))
+    except Exception:
+        if peer is None:
+            return False
+        try:
+            host = str(peer).strip("[]").lower()
+        except Exception:
+            return False
+        return host in ("127.0.0.1", "::1", "localhost")
+
+
 def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
     """Wrap `handler_cls.do_GET` and `do_POST` so the four routes above are
     answered here, after the server's own origin and token checks.
@@ -1098,6 +1193,13 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
             return post0(self)
         if not _allowed(self):
             return None
+        peer, local = _peer_local(self)
+        # 2026-10-20 audit, Part I catch 2C: every route below WRITES (add,
+        # learn an edit, forget), so another device is refused BEFORE the body
+        # is read. Reads (GET) stay a token-guarded read, as before.
+        if not _from_this_pc(peer, local):
+            return self._send(403, {"ok": False, "error": "not_this_pc",
+                                    "message": NOT_THIS_PC})
         try:
             body = json.loads(read_body(self) or b"{}")
         except Exception:

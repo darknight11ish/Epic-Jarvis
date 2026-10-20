@@ -1,0 +1,55 @@
+                    # reasoning-fallback: a cloud answer that spent its whole
+                    # cap on DeepSeek's hidden reasoning comes back with an
+                    # empty `content`, and nothing in this program read
+                    # `reasoning_content` (measured 2026-10-14 on four
+                    # escalated turns: `finish_reason: "length"`, 2048 of 2048
+                    # completion tokens on `reasoning_tokens`, and a blank
+                    # card in both apps - docs/FIELD-TEST-CLOUD-ESCALATION-
+                    # 2026-10-14.md). The owner's decision the same day: show
+                    # the working-out, marked as such, rather than change the
+                    # cap or turn his thinking off. `jarvis_chatbot_api` owns
+                    # what a cloud reply looks like, so the rule lives there
+                    # and this is only the wire.
+                    #
+                    # The LOCAL lane is not touched - jarvis_agent has its own
+                    # handling for a thinking model's `<think>` block - and an
+                    # older jarvis_chatbot_api.py, without the class, relays a
+                    # cloud answer exactly as it did before.
+                    _says = None
+                    if lane != local_model:
+                        try:
+                            import jarvis_chatbot_api as _api
+                            _says = _api.CloudAnswer("event-stream" in str(
+                                upstream.headers.get("Content-Type", "")).lower())
+                        except Exception:
+                            _says = None
+                    try:
+                        # read1, not read: on a chunked response read(1024)
+                        # waits for a whole 1,024 bytes - several words at a
+                        # time instead of each as it is written.
+                        _read = getattr(upstream, "read1", None) or upstream.read
+                        while True:
+                            chunk = _read(1024)
+                            if not chunk:
+                                break
+                            # reasoning-fallback: what the reader withholds is
+                            # not dropped - close(), below, writes it. The
+                            # meter is fed the SERVICE's own bytes, in the same
+                            # order and the same number as before, so what this
+                            # turn is recorded as spending cannot move because
+                            # of any of this.
+                            _out = chunk if _says is None else _says.feed(chunk)
+                            if _out:
+                                self.wfile.write(_out)
+                                self.wfile.flush()
+                            if _speed is not None:
+                                _speed.feed(chunk)
+                        if _says is not None:
+                            _out = _says.close()
+                            if _out:
+                                self.wfile.write(_out)
+                                self.wfile.flush()
+                        # Only a stream that ended normally is recorded; one
+                        # cut off by the phone dropping out never reaches here.
+                        if _speed is not None:
+                            _speed.finish(lane)

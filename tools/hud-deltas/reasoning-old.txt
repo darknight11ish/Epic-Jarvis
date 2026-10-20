@@ -1,0 +1,17 @@
+                    try:
+                        # read1, not read: on a chunked response read(1024)
+                        # waits for a whole 1,024 bytes - several words at a
+                        # time instead of each as it is written.
+                        _read = getattr(upstream, "read1", None) or upstream.read
+                        while True:
+                            chunk = _read(1024)
+                            if not chunk:
+                                break
+                            self.wfile.write(chunk)
+                            self.wfile.flush()
+                            if _speed is not None:
+                                _speed.feed(chunk)
+                        # Only a stream that ended normally is recorded; one
+                        # cut off by the phone dropping out never reaches here.
+                        if _speed is not None:
+                            _speed.finish(lane)

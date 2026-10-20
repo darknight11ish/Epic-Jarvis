@@ -604,6 +604,9 @@ def t_doctor_readiness_is_honest_in_every_state():
     check("... even though the package is present at the pinned version",
           mismatch.get("installed") is True and mismatch.get("version_pinned_ok") is True,
           mismatch.get("install"))
+    check("... and tier1_static_ready is FALSE for a tampered sha512",
+          mismatch.get("tier1_static_ready") is False,
+          mismatch.get("tier1_static_ready"))
 
     unknown = R.doctor(node_version="v22.23.2", env={}, install=good,
                        integrity=_integrity(None, why="no local lockfile"))

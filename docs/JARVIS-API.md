@@ -20813,6 +20813,18 @@ now flags a draft that copied a stripping placeholder (`[name]`, `[number]`,
 chat-control markers (`<|im_start|>`, `<|im_end|>`, `<|endoftext|>`,
 `<tool_call>`, `<think>`) before the scrubber and the store.
 
+**Slice 1b hardening (2026-10-20, final audit Part I).** `exemplars()` now reads
+the owner's OWN saved samples from `voiceprint_samples` in `voiceprint.db`
+(lexical overlap with the question, each text through `strip_entities`, and the
+memory store only as the supplement when fewer than `k` matches), so a
+calibration sample or edited draft is no longer invisible to `prompt_block()`.
+`add()` itself refuses a secret through `_secret_in()` before the scrubber and
+the store, so a direct Python caller cannot bypass the route's check. And every
+mutating POST (`sample`, `learn_edit`, `forget`) is **this PC only**:
+`_from_this_pc()` uses `jarvis_owner_check.from_this_pc`, failing closed, with
+loopback-only as the fallback when the helper is absent. GET stays the existing
+token-guarded read. This PR adds **no** `enabled` route: PR #665 owns it.
+
 **Scope note.** The plugin already mounts `GET /api/voiceprint` and three POSTs
 through `jarvis_voiceprint.install()` (origin + token); no new route or HUD
 patch is added here. The plugin does not mount `prompt_block` into a drafting
