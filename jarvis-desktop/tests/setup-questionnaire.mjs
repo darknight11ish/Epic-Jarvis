@@ -485,6 +485,14 @@ await check("the page names no route and no gate action, and never applies on lo
   assert.ok(loadAt > 0 && loadEnd > loadAt);
   assert.doesNotMatch(loadBody, /applySetup|applyBody/,
     "loading the card never applies anything");
+  // Two races the card must not lose: a plan answer that arrives after the
+  // answers changed is dropped, and no answer can change while an apply runs.
+  assert.match(page, /generation !== planGeneration/,
+    "a late plan answer must be dropped");
+  assert.match(page, /setQuestionsEnabled\(!busy\)/,
+    "the questionnaire is disabled while the one apply runs");
+  assert.match(page, /confirmYes\.disabled = !gate\(/,
+    "the confirm press is held by the same gate as the first press");
   // The model's planBody must not carry confirm (applyBody is the only one).
   const bareModel = code(model);
   const planAt = bareModel.indexOf("export function planBody");

@@ -100,6 +100,11 @@ let plan = null;
 let busy = false;
 let pending = false;
 let planTimer = 0;
+/** Bumped whenever the plan on screen stops being the one that was asked for
+ *  (an answer changed, the card was re-read). A plan answer that arrives after
+ *  that is thrown away - two requests can finish out of order, and the older
+ *  plan must never overwrite the newer one. */
+let planGeneration = 0;
 let lastResult = null;
 
 function live() {
@@ -215,6 +220,16 @@ function renderQuestionsState() {
   for (const question of (reading && reading.questions) || []) syncQuestion(question);
 }
 
+/** While the one apply runs, no answer may change under it: the whole
+ *  questionnaire is turned off, visibly, not just ignored by the handlers. */
+function setQuestionsEnabled(enabled) {
+  if (!el.questions) return;
+  for (const input of el.questions.querySelectorAll("input")) input.disabled = !enabled;
+  for (const button of el.questions.querySelectorAll("[data-pick]")) {
+    button.disabled = !enabled;
+  }
+}
+
 /* ── The plan (read-only on the PC) ──────────────────────────────────────── */
 
 function planRows(view) {
@@ -273,7 +288,12 @@ function syncConfirm() {
   el.confirm.hidden = !pending;
   if (!pending) return;
   if (el.confirmText) el.confirmText.textContent = confirmWords(plan);
-  if (el.confirmYes) el.confirmYes.textContent = CONFIRM;
+  if (el.confirmYes) {
+    el.confirmYes.textContent = CONFIRM;
+    // The second press is still held by the same gate as the first: a link
+    // that goes stale between the two presses must not send the write.
+    el.confirmYes.disabled = !gate({ reading, plan, busy, stale: !live() }).enabled;
+  }
   if (el.confirmNo) el.confirmNo.textContent = CANCEL;
 }
 
@@ -286,6 +306,7 @@ function paintApply() {
     el.applyWhy.textContent = gateNow.why;
     el.applyWhy.hidden = !gateNow.why;
   }
+  setQuestionsEnabled(!busy);
   syncConfirm();
 }
 
@@ -347,6 +368,7 @@ function resultRows(result) {
 /* ── Reading, planning, applying ─────────────────────────────────────────── */
 
 async function load() {
+  planGeneration += 1; // any plan still in flight is for the old reading
   const raw = await readSetup();
   reading = normaliseReading(raw);
   draft = draftFromAnswers(reading);
@@ -377,6 +399,7 @@ async function load() {
 }
 
 function onAnswered() {
+  planGeneration += 1; // the plan on screen was for the old answers
   renderQuestionsState();
   lastResult = null;
   if (el.result) el.result.replaceChildren();
@@ -401,6 +424,7 @@ function schedulePlan() {
 
 async function refreshPlan() {
   if (!reading || !reading.available) return;
+  const generation = ++planGeneration;
   const answers = planBody(draft).answers;
   if (!Object.keys(answers).length) {
     plan = null;
@@ -411,7 +435,9 @@ async function refreshPlan() {
     return;
   }
   if (el.planStatus) el.planStatus.textContent = PLAN_READING;
-  plan = planView(await planSetup({ answers }), reading);
+  const got = planView(await planSetup({ answers }), reading);
+  if (generation !== planGeneration) return; // a newer plan is on its way
+  plan = got;
   if (el.planStatus) {
     el.planStatus.textContent = plan.ok === false
       ? plan.error
