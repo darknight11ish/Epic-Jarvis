@@ -1010,20 +1010,22 @@ https://www.eff.org/dice), Creative Commons Attribution 3.0 United States
   where this was added (2026-09-28); the licence is to be re-read on EFF's
   own page. Word list (c) Electronic Frontier Foundation.
 
-
 APP CONTROL ON THE PHONE - PATTERNS RE-IMPLEMENTED, NOT COPIED (not generated - keep when regenerating)
 =======================================================================================================
 
-backend/jarvis_app_control.py carries the PC side of the owner's 2026-10-19
-"accessibility service with control by jarvis as an option in the android app"
-decision (the Android side is the next slice). Its contract and this project's
-jarvis_ui_control.py re-implement PATTERNS from MIT-licensed projects; no
-source code from them is copied, vendored or linked, so no notice is legally
-required - it is here because this project credits what it learns from:
+The owner's 2026-10-19 decision, "enable accessibility service with control by
+jarvis as an option in the android app", is built as TWO halves: the ARCHITECTURE
+section 8 entry says why only the phone has the hands. The Android half
+(jarvis-client/.../data/AppControl.kt and service/JarvisAccessibilityService.kt)
+and the PC half (backend/jarvis_app_control.py, #629) re-implement PATTERNS from
+MIT-licensed projects. Their contract and this project's jarvis_ui_control.py
+re-implement those patterns; no source code from them is copied, vendored or
+linked, so no notice is legally required - it is here because this project
+credits what it learns from:
 
   * GiggleWang/MobileAgent-Android (MIT) - the in-app AccessibilityService
-    action set (tap / swipe / type / system button) and the plan -> act ->
-    check loop. Copyright (c) GiggleWang and contributors.
+    action set (tap / swipe / type / system button), the masked UI-tree read and
+    the plan -> act -> check loop. Copyright (c) GiggleWang and contributors.
     https://github.com/GiggleWang/MobileAgent-Android
   * droidrun/mobilerun (MIT) - the accessibility "portal" UI-tree contract for
     reading a phone's screen. Copyright (c) droidrun contributors.

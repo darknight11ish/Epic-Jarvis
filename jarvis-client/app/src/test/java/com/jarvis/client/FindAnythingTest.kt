@@ -284,7 +284,9 @@ class FindAnythingTest {
         // a second one appearing must be looked at, not silently joined.
         assertEquals(
             "a Settings row with no menu id has appeared: give it a place and say so here",
-            listOf("settings-row.jarvis-notify"),
+            // "App control" (2026-10-19): the phone's accessibility service is
+            // phone-only, so the desktop's catalogue has no menu id for it.
+            listOf("settings-row.app-control", "settings-row.jarvis-notify"),
             FindAnything.ROWS.filter { it.id.startsWith("settings-row.") }.map { it.id },
         )
     }

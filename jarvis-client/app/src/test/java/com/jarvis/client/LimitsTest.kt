@@ -392,10 +392,12 @@ class LimitsTest {
         // captcha does about the window it blocks (position 22, directly under
         // the hand-off row), the phone's own "Screen refresh rate" (position
         // 25, immediately above this row) and "Approval cards" (the owner's
-        // request of that day, position 6, under Appearance). Each carries the
-        // same +1 through the map below them, and `SettingsJumpTest` holds
-        // every number there to the row the screen really draws.
-        assertTrue("the index map has no limits row", map.contains("\"limits\" to 26"))
+        // request of that day, position 6, under Appearance). "App control"
+        // (2026-10-19) added one more above it at position 4, right after
+        // Security. Each carries the same +1 through the map below them, and
+        // `SettingsJumpTest` holds every number there to the row the screen
+        // really draws.
+        assertTrue("the index map has no limits row", map.contains("\"limits\" to 27"))
     }
 
     // ------------------------------------------- a time of day, and the PC's

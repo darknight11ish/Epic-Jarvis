@@ -538,6 +538,28 @@
                 android:resource="@xml/widget_board_info" />
         </receiver>
 
+        <!-- The phone's HANDS for app control (the owner's decision of
+             2026-10-19; data/AppControl.kt, service/JarvisAccessibilityService.kt,
+             res/xml/accessibility_service_config.xml). The PC is the brain and
+             the gate: this service reads a MASKED snapshot and performs ONE
+             step only after the PC's /api/app-control/step route returns the
+             step the owner approved on a card. It never decides anything, never
+             reads a password field and never logs the screen. Android's own
+             Accessibility switch must be turned on by hand for it to run; the
+             app's own option is separate and off by default. -->
+        <service
+            android:name=".service.JarvisAccessibilityService"
+            android:exported="true"
+            android:label="@string/accessibility_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
         <!-- Hands a VERIFIED downloaded APK to Android's own installer. A
              bare file path cannot be read by another app on Android 7+, so
              the one file in this app's own cache is shared by content URI
