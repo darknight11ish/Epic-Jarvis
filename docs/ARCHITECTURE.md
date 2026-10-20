@@ -2273,6 +2273,11 @@ counts, switch and Delete. That is the honest gap: the disclosure is a
 promise the feature makes, and it must be on the phone too before this can be
 called parity. When it is built it goes on the same route and the same card as
 the desktop, with the same words; nothing about the permission model changes.
+**One thing is PC-only rather than pending (2026-10-20 audit, Gemini Area 1A):**
+`POST /api/media-index` (ON/OFF/Delete of the stored words) is refused `403`
+from another device with the project's own `from_this_pc` rule, so a phone can
+read the switch but never change or delete the index; the route is PC_ONLY and
+a phone Settings card would only ever be able to READ it.
 `tools/check_parity.py` cannot see it (the route is a drop-in folder, and no
 app source names it yet), which is said plainly here rather than read as a
 clean pass it did not earn.
