@@ -22530,10 +22530,19 @@ search show the exact sentence instantly. The module is
   with file and time (`{"file", "at", "line"}`) plus the counts/words, never a
   recording and never a fact. A fresh index fills in at most two recordings per
   search (`INDEX_PER_RUN`), so a search is never ten minutes of speech-to-text;
-  the answer says how many are still waiting.
+  the answer says how many are still waiting. **It needs two things that are not
+  automatic:** `my_files` in the owner's `[tools].enabled` (the shipped template
+  lists only `web_search`, `change_setting` and `feature_guide`, so a PC using
+  that default does not offer the tool) **and at least one folder in "Folders
+  Jarvis may look in"** - with no folders, `jarvis_agent.offered_tools` omits
+  `my_files` entirely and chat search cannot run even while this switch is ON.
+  The Settings card still shows the switch, the disclosure and Delete in that
+  case; it is the chat path that is unavailable, not the switch.
 * **Desktop Settings.** A hand-written card ("Searchable recordings and
-  videos") shows the PC's disclosure, the stored counts, the switch (off at
-  once; on asks once) and the one Delete, through ONE Rust command
+  videos") shows the PC's disclosure, the switch (off at once; on asks once),
+  the one Delete and a status line that now states how many recordings have
+  been indexed, including "0 recordings indexed so far" (Gemini's empty-state
+  bar, 2026-10-20), through ONE Rust command
   (`jarvis-desktop/src-tauri/src/media_index.rs`) and the route below.
 * **The route, and no patch.** `GET/POST /api/media-index` is installed by the
   drop-in folder **`plugins/ready/media-index/`** - the same no-patch mechanism

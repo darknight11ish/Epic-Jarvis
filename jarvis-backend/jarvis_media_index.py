@@ -893,6 +893,14 @@ def view(*, here: bool = True) -> dict:
         pending = pending_count()
     except Exception:
         pending = 0
+    line = (SWITCH_ON_WORDS if state["enabled"] else SWITCH_OFF_WORDS) \
+        if not state["waiting"] else SWITCH_WAITING_WORDS
+    if state["enabled"] and not state["waiting"]:
+        # Gemini's empty-state bar (2026-10-20): "enabled: true, 0 files" must read as
+        # empty, not broken. The same sentence also gives the count once files exist,
+        # so Settings never shows an unexplained zero.
+        n = int(stats["files"])
+        line = f"{line} {n} recording{'s' if n != 1 else ''} indexed so far."
     return {"enabled": state["enabled"],
             "default": framework_default(),
             "waiting": state["waiting"],
@@ -903,8 +911,7 @@ def view(*, here: bool = True) -> dict:
             "pending": pending,
             "index_file": str(index_path()),
             "disclosure": DISCLOSURE,
-            "line": (SWITCH_ON_WORDS if state["enabled"] else SWITCH_OFF_WORDS)
-                    if not state["waiting"] else SWITCH_WAITING_WORDS}
+            "line": line}
 
 
 # --------------------------------------------------------------------------

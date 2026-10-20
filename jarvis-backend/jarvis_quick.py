@@ -2967,6 +2967,15 @@ _FEATURES_LIST = re.compile(
     r"|what\s+are\s+(?:the|your)\s+features?"
     r"|(?:list|show|name)\s+(?:me\s+)?(?:the\s+)?feature\s+groups?"
     r"|what\s+feature\s+groups?\s+(?:are\s+there|do\s+you\s+have)")
+#: Cloud-sync questions get the guide's fixed privacy answer instead of the model
+#: (Gemini post-review HIGH-4, 2026-10-20): the model used to pad "I do not have
+#: that" with generic OneDrive/Google Drive advice, which nudges the owner toward
+#: pointing a third-party sync folder at Jarvis's private folders. This matcher
+#: is deliberately topic-specific - a bare "sync my files" is not enough.
+_CLOUD_SYNC_TOPIC = re.compile(
+    r"(?:cloud\s+(?:sync|storage|backup)"
+    r"|sync\s+(?:across|between)\s+(?:devices|my\s+devices)"
+    r"|one\s*drive|google\s+drive|dropbox|icloud)")
 _FEATURES_GROUP = re.compile(
     r"(?:list|show|name)\s+(?:me\s+)?(?:the\s+|your\s+)?(.+?)\s+(?:feature\s+group|group|features)"
     r"|what(?:'s|\s+is)\s+in\s+(?:the\s+|your\s+)?(.+?)\s+(?:feature\s+group|group)")
@@ -3162,6 +3171,11 @@ def _feature_guide(s: str, raw: str = "") -> Optional[Intent]:
     `s` is the tidied sentence (no leading "Jarvis,"); `raw` is the message as
     typed/spoken, used only for the explicit-context check (see
     _FEATURE_CONTEXT)."""
+    if _CLOUD_SYNC_TOPIC.search(s):
+        # The guide's #646 note is the answer: Jarvis does not use cloud sync.
+        # Answered here, deterministically, so a model never gets to suggest a
+        # third-party sync folder.
+        return Intent("feature_explain", {"id": s})
     if _FEATURES_LIST.fullmatch(s):
         return Intent("features_list")
     m = _FEATURES_GROUP.fullmatch(s)

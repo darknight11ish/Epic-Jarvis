@@ -416,6 +416,29 @@ def t_the_switch_ships_on_and_off_is_instant():
         check("...and that OFF is instant", "instant" in MI.SWITCH_CARD.lower())
 
 
+def t_the_view_says_how_many_are_indexed():
+    """Gemini's empty-state bar (2026-10-20): `enabled=true, files=0` must read as
+    empty, not broken - and once files exist the same sentence gives the count."""
+    root = fresh("view-count")
+    media_file(root / "a.wav")
+    fake = FakeRead({"a": [("hello", 0.0, 1.0)]})
+    with Env([root]):
+        MI.set_enabled(True)
+        empty = MI.view()
+        check("with the switch on and nothing indexed, the view says 0 recordings",
+              empty["enabled"] is True and empty["files"] == 0
+              and "0 recordings indexed so far" in empty["line"], empty["line"])
+        MI.reconcile(read=fake)
+        one = MI.view()
+        check("...after one recording it says 1 recording, not 1 recordings",
+              one["files"] == 1 and "1 recording indexed so far" in one["line"],
+              one["line"])
+        MI.set_enabled(False)
+        off = MI.view()
+        check("switched off, the line makes no count claim",
+              "recordings indexed so far" not in off["line"], off["line"])
+
+
 def t_the_spoken_switch_reaches_the_same_route():
     setting = next((b for b in R.BOOL_SETTINGS if b.key == "media_index"), None)
     check("the settings table has one spoken switch for this feature",
@@ -623,6 +646,7 @@ if __name__ == "__main__":
                t_a_deleted_word_is_gone_from_every_index_file,
                t_search_media_latches_the_private_lane,
                t_the_switch_ships_on_and_off_is_instant,
+               t_the_view_says_how_many_are_indexed,
                t_the_spoken_switch_reaches_the_same_route,
                t_deleted_and_moved_recordings_leave,
                t_the_index_is_not_a_learned_fact,
