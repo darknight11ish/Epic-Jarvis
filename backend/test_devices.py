@@ -663,6 +663,13 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # devices.patch wrote - and the later_rewriting() half
                                 # below proves it.
                                 "plugin-loader.patch",
+                                # app-control.patch (2026-10-19, the owner's phone
+                                # accessibility option) is appended after this patch and
+                                # touches jarvis_gate.py not at all: TWO ADDED route
+                                # blocks in jarvis_hud.py, on big-coder.patch's own last
+                                # lines and the /api/memory/decide route, so it rewrites
+                                # nothing this patch wrote.
+                                "app-control.patch",
                                 # card-prefs.patch (2026-10-10, "cards read short")
                                 # sits after gate-touches.patch and before
                                 # picture-card.patch (so, before

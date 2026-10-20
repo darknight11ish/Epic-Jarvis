@@ -757,7 +757,13 @@ def t_the_patch_is_registered_and_carries_the_change():
              # plugin-loader.patch: the active-lane helper, the four chat call sites
              # and the install block that wires POST /api/work/apply. No gate list,
              # no tier row, no _RISK row, no line this patch writes.
-             "presets.patch"}
+             "presets.patch",
+             # app-control.patch (2026-10-19, the owner's phone accessibility
+             # option) is appended after that and before plugin-loader.patch:
+             # TWO ADDED route blocks in jarvis_hud.py, on big-coder.patch's own
+             # last lines and the /api/memory/decide route. No gate list, no tier
+             # row, no _RISK row, no line this patch writes.
+             "app-control.patch"}
     others = [n for n in names if n not in later]
     check("it is LAST in the stack, bar the ones written after it, and bar "
           "plugin-loader.patch (which must be last of all)",
