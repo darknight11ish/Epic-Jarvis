@@ -20835,7 +20835,17 @@ report rather than guessed at. `voiceprint.db` is already in
 `jarvis_backup.SOURCE_DBS`; a global Forget hook is also BLOCKED (no safe
 per-database hook in `jarvis_forget_range.py`).
 
-
+**V2 UI slice (2026-10-20, new files; wiring held).** The desktop page
+(`jarvis-desktop/src/voiceprint-settings.js`), its Rust bridge
+(`src-tauri/src/voiceprint.rs`: status/add/forget/set-enabled, every request
+bounded to 30 s, no proxy, no redirects) and the phone's `net/Voiceprint.kt` +
+`ui/screens/VoiceprintPlate.kt` are added but NOT mounted: `settings.html`,
+`settings.js`, `lib.rs`, `JarvisApi`/`JarvisRuntime` and `SettingsScreen.kt` are
+untouched until the Lead clears the wiring (the exact hunks are in the PR). The
+ON/OFF switch is `POST /api/voiceprint/enabled {"on": bool}` - a local setting
+written to `voiceprint.json` beside the other settings, with no card, no model
+and no network; absent means the framework's own `[voiceprint] enabled` value.
+Forget asks "are you sure?" first on both clients, and one tap is one change.
 
 `backend/jarvis_voiceprint.py`, and its drop-in folder
 `plugins/ready/voiceprint/`. Four routes, no patch, its own store.

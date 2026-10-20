@@ -628,6 +628,24 @@ def t_drafting_block_is_guarded_and_latches_only_when_used():
         V._cfg, V.count = real_cfg, real_count
 
 
+def t_the_enabled_switch_is_one_local_setting():
+    """V2 UI: POST /api/voiceprint/enabled {"on": bool} is the only switch.
+    No card, no model, no network - one small JSON file on this PC."""
+    code, out = V.handle_post(V.ENABLED_PATH, {"on": False})
+    check("the switch answers 200", code == 200 and out.get("ok") is True, out)
+    check("... and OFF is what it wrote", out.get("enabled") is False, out)
+    check("... and the module reads it as OFF", V._cfg("enabled", True) is False)
+    check("... and status reports it", V._status().get("enabled") is False, V._status())
+    code2, out2 = V.handle_post(V.ENABLED_PATH, {"on": True})
+    check("ON is accepted", code2 == 200 and out2.get("enabled") is True, out2)
+    check("... and status reports ON", V._status().get("enabled") is True, V._status())
+    bad = V.handle_post(V.ENABLED_PATH, {"on": "yes"})
+    check("anything that is not a real bool is refused", bad[1].get("ok") is False, bad)
+    check("... and the stored value is unchanged by the refusal",
+          V._cfg("enabled", True) is True)
+    check("the enabled route is mounted by install()",
+          V.ENABLED_PATH in (V.SAMPLE_PATH, V.EDIT_PATH, V.FORGET_PATH, V.ENABLED_PATH)
+          and V.ENABLED_PATH == "/api/voiceprint/enabled")
 if __name__ == "__main__":
     # The routes need the real wrapper in place for the two route tests.
     V.install(FakeHandler, origin_ok=lambda h: True, token_ok=lambda h: True,
@@ -657,7 +675,8 @@ if __name__ == "__main__":
                t_drafting_block_is_guarded_and_latches_only_when_used,
                t_sentence_opening_names_are_stripped,
                t_a_leaked_placeholder_is_flagged_by_the_scorer,
-               t_control_markers_never_reach_the_store):
+               t_control_markers_never_reach_the_store,
+               t_the_enabled_switch_is_one_local_setting):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
