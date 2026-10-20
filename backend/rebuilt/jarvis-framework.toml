@@ -1948,6 +1948,6 @@ allowed_packages = []
 #   npm install --prefix "$env:USERPROFILE\.openjarvis\tools\rea" rea-agents@6.7.0 --ignore-scripts --no-audit --no-fund
 # - and the tool's doctor action says what this PC can inspect (JavaScript/
 # Electron and binary layout need no extra engine; APK and native decompile
-# need JADX / Ghidra, which the owner supplies). See docs/JARVIS-API.md 147.
+# need JADX / Ghidra, which the owner supplies). See docs/JARVIS-API.md 148.
 [rea]
 enabled = false
