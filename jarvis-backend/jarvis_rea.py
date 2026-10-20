@@ -308,8 +308,14 @@ def _run_node_version(node: str = "", timeout: float = 15.0) -> tuple:
     if not node:
         return "", "not on PATH"
     try:
+        import jarvis_child_env
+    except Exception as exc:                          # noqa: BLE001 - never raises
+        return "", f"{type(exc).__name__}"
+    try:
+        # The same child-env allowlist every other spawn uses: the probe needs PATH and the
+        # Windows folders, and must never inherit HUD_TOKEN/JARVIS_TOKEN (test_child_env_spawns).
         got = subprocess.run([node, "--version"], capture_output=True, text=True,
-                             timeout=timeout)
+                             timeout=timeout, env=jarvis_child_env.inherited())
         text = (got.stdout or got.stderr or "").strip()
         if got.returncode != 0:
             return text, f"exit {got.returncode}"

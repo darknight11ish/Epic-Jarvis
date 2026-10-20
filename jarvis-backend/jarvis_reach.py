@@ -139,6 +139,11 @@ TOOL_NAMES = {
     # on. Listed here because test_reach.py requires every tool to have plain
     # words for the "What can Jarvis reach" page.
     "feature_guide": "Explaining and checking one of Jarvis's own features (read-only)",
+    # REA (2026-10-20): the reverse-engineering tool ships OFF and asks a person
+    # for every call; the page still needs plain words for it, like every tool
+    # (test_reach.py).
+    "rea_investigate": "Inspecting a program, app or binary with REA (read-only, one "
+                       "card each; off unless you switch it on)",
 }
 
 #: A tool's gate lookup name -> the action it is decided under, as
