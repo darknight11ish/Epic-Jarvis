@@ -43,6 +43,19 @@ object AppControl {
     /** `POST /api/app-control/step` - the ONE approved step, or why there is none. */
     const val STEP_PATH = "/api/app-control/step"
 
+    /** `POST /api/app-control/plan` - the owner's words -> the PC's LOCAL model's ONE step. */
+    const val PLAN_PATH = "/api/app-control/plan"
+
+    /** The owner's own words are the planning request: 1..200 characters. */
+    const val WANT_MAX = 200
+    const val ASK_PLACEHOLDER = "What should Jarvis do in this app?"
+    const val ASK_LABEL = "Ask Jarvis"
+    /** After one step has run, the next step needs a fresh tap and a fresh card. */
+    const val ASK_AGAIN_LABEL = "Ask Jarvis for the next step"
+    const val ASK_OLDER_PC =
+        "Your PC's Jarvis is older than this screen, so it cannot plan a step yet. " +
+            "Update Jarvis on the PC, then come back."
+
     /** At most this many apps on the owner's list (the PC refuses more). */
     const val MAX_APPS = 64
 
@@ -292,6 +305,10 @@ object AppControl {
         val text: String,
         val cls: String,
         val bounds: List<Int>,
+        /** Optional hints for the planner; never private data. */
+        val clickable: Boolean = false,
+        val editable: Boolean = false,
+        val scrollable: Boolean = false,
     )
 
     /** What the phone read, one window at a time. The title is the window's own class name. */
@@ -313,12 +330,225 @@ object AppControl {
         bounds: List<Int>,
         password: Boolean,
         invisible: Boolean,
+        hint: String? = null,
+        clickable: Boolean = false,
+        editable: Boolean = false,
+        scrollable: Boolean = false,
     ): Control? {
         if (password || invisible) return null
         val cleanId = id?.trim().orEmpty()
-        val cleanText = text?.trim()?.take(MAX_CONTROL_TEXT).orEmpty()
-        if (cleanId.isEmpty() && cleanText.isEmpty()) return null
-        return Control(cleanId, cleanText, cls?.trim().orEmpty(), bounds.take(4))
+        // A Compose/Material icon button has no text and no id - its human
+        // label is the contentDescription, and an empty text field's is its
+        // hint/placeholder. Dropping those made "+", Search, Play, More and
+        // empty fields vanish from the snapshot (Gemini's review, 2026-10-20).
+        val label = listOfNotNull(
+            text?.trim()?.takeIf { it.isNotEmpty() },
+            hint?.trim()?.takeIf { it.isNotEmpty() },
+        ).firstOrNull()?.take(MAX_CONTROL_TEXT).orEmpty()
+        if (cleanId.isEmpty() && label.isEmpty()) return null
+        return Control(cleanId, label, cls?.trim().orEmpty(), bounds.take(4),
+            clickable = clickable, editable = editable, scrollable = scrollable)
+    }
+
+    // ------------------------------------------- screen mechanics (pure) --
+    // Everything a real device cannot tell the mocked unit tests lives here as
+    // pure rules, so a JVM test holds each one (Gemini's review, 2026-10-20).
+
+    /** Android `isPassword` is not enough: a "show password" eye keeps the inputType. */
+    fun passwordInputType(inputType: Int): Boolean {
+        val variation = inputType and 0xFF0
+        return variation == 0x80 ||   // TEXT_VARIATION_PASSWORD
+            variation == 0x90 ||      // TEXT_VARIATION_VISIBLE_PASSWORD
+            variation == 0xE0 ||      // TEXT_VARIATION_WEB_PASSWORD
+            variation == 0x10        // NUMBER_VARIATION_PASSWORD
+    }
+
+    /**
+     * True when a node must be skipped WHOLE, children and all: Android's own
+     * `isPassword`, a password `inputType` variation, or the API 34+ "sensitive
+     * data" flag. A refusal to be sure is the safe direction.
+     */
+    fun sensitiveInput(
+        isPassword: Boolean,
+        inputType: Int,
+        isDataSensitive: Boolean,
+        sdk: Int,
+    ): Boolean = isPassword || passwordInputType(inputType) ||
+        (sdk >= 34 && isDataSensitive)
+
+    /**
+     * The tap ladder: 0 = click this node; 1..3 = click that many parents up;
+     * -1 = no clickable ancestor, use the guarded coordinate gesture. A parent
+     * only counts when it is the same package and not inside a password node.
+     */
+    fun tapRung(nodeClickable: Boolean, parents: List<Pair<Boolean, Boolean>>): Int {
+        if (nodeClickable) return 0
+        var passwordSubtree = false
+        parents.take(3).forEachIndexed { index, (clickable, password) ->
+            if (password) passwordSubtree = true
+            if (!passwordSubtree && clickable) return index + 1
+        }
+        return -1
+    }
+
+    /**
+     * The `type` rung: the matched node if it is editable, else the index of
+     * exactly ONE editable, non-password child (a TextInputLayout label's
+     * EditText is one level down); -1 when the answer is not unambiguous.
+     */
+    fun editableChild(children: List<Pair<Boolean, Boolean>>): Int {
+        if (children.isEmpty()) return -1
+        val editable = children.withIndex().filter { (_, child) ->
+            child.first && !child.second
+        }
+        return if (editable.size == 1) editable[0].index else -1
+    }
+
+    /**
+     * A swipe's two points, clamped strictly inside the target's own bounds AND
+     * the screen's central 15%-85% band, so an edge swipe can never trigger
+     * Android's Back or notification-shade gesture. Null when there is no room.
+     */
+    fun swipePoints(bounds: List<Int>, screenW: Int, screenH: Int): Pair<Float, Float>? {
+        if (bounds.size != 4 || screenW <= 0 || screenH <= 0) return null
+        val left = maxOf(bounds[0].toFloat(), screenW * 0.15f)
+        val right = minOf(bounds[2].toFloat(), screenW * 0.85f)
+        val top = maxOf(bounds[1].toFloat(), screenH * 0.15f)
+        val bottom = minOf(bounds[3].toFloat(), screenH * 0.85f)
+        if (right - left < 8f || bottom - top < 8f) return null
+        val y = (top + bottom) / 2f
+        val startX = right - (right - left) * 0.1f
+        val endX = left + (right - left) * 0.1f
+        return if (startX - endX < 4f) null else startX to endX
+    }
+
+    // ------------------------------------------------------ planning wire --
+
+    /** `POST /api/app-control/plan`s body: the owner's words + the masked screen. */
+    fun planBody(allowed: List<AppEntry>, want: String, snapshot: Snapshot): String =
+        buildJsonObject {
+            put("allowed", buildJsonArray { allowed.forEach { add(JsonPrimitive(it.packageName)) } })
+            put("want", want.trim().take(WANT_MAX))
+            put("snapshot", snapshotJson(snapshot))
+        }.toString()
+
+    /** The probe: an empty want is a 400 on a PC with the route, 404 on an older one. */
+    fun planProbeBody(): String = buildJsonObject {
+        put("allowed", buildJsonArray { })
+        put("want", "")
+        put("snapshot", buildJsonObject {
+            put("app", "")
+            put("title", "")
+            put("controls", buildJsonArray { })
+        })
+    }.toString()
+
+    /**
+     * The PC's own sentence for "I know app control, but not that run" - the
+     * answer a REAL PC gives to the empty-run probe. It must stay equal to
+     * `jarvis_app_control.UNKNOWN_RUN` (the backend suite pins that); when a
+     * PC answers anything else to the probe, the phone fails closed to OLDER.
+     */
+    const val NO_SUCH_RUN_MARKER = "That app-control run is not here on this PC any more."
+
+    /** What the run/step probe found: only positive evidence is READY. */
+    enum class ProbeRoute { READY, OLDER, UNREACHABLE }
+
+    /**
+     * Reads the run/step probe's answer, failing closed: a 404 means the route
+     * exists ONLY when its body carries [NO_SUCH_RUN_MARKER] (the empty run id
+     * the probe sends). A 404 with any other or absent error - the common older
+     * backend answer `{"error": "not found"}` - is OLDER, never READY; 200/202
+     * are a real answer to the probe; no answer at all is UNREACHABLE.
+     */
+    fun probeRoute(status: Int, error: String?): ProbeRoute = when {
+        status == 0 -> ProbeRoute.UNREACHABLE
+        status == 200 || status == 202 -> ProbeRoute.READY
+        status == 404 && error == NO_SUCH_RUN_MARKER -> ProbeRoute.READY
+        else -> ProbeRoute.OLDER
+    }
+
+    /** What the probe found about the PC's planning capability. */
+    enum class PlanCapability { AVAILABLE, OLDER, UNREACHABLE }
+
+    /**
+     * Reads the probe's answer: a 404 is the PC's "no such route" (an older
+     * backend); anything else means the route exists - a 400 (bad want), a 409
+     * (switched off) or a 422 all name a PC that understands `plan`.
+     */
+    fun planCapability(status: Int, body: JsonObject?): PlanCapability = when {
+        status == 0 -> PlanCapability.UNREACHABLE
+        status == 404 -> PlanCapability.OLDER
+        else -> PlanCapability.AVAILABLE
+    }
+
+    /** The PC's answer to `plan`. */
+    sealed interface PlanReply {
+        data class Pending(val runId: String, val step: String, val model: String) : PlanReply
+        data class Off(val sentence: String) : PlanReply
+        data class Refused(val sentence: String) : PlanReply
+        data class Failed(val sentence: String) : PlanReply
+        data object RouteMissing : PlanReply
+        data object Unknown : PlanReply
+    }
+
+    /** The PC's answer to the planning round; 202 means ONE card is up. */
+    fun parsePlan(status: Int, body: JsonObject?): PlanReply {
+        if (status == 404) return PlanReply.RouteMissing
+        if (body == null) return PlanReply.Unknown
+        val ok = bodyText(body, "ok")
+        val runId = bodyText(body, "run")
+        if (status == 202 && ok == "true" && !runId.isNullOrBlank()) {
+            return PlanReply.Pending(
+                runId = runId,
+                step = bodyText(body, "step").orEmpty(),
+                model = bodyText(body, "model").orEmpty(),
+            )
+        }
+        if (status == 409) {
+            val available = bodyText(body, "available")
+            return if (available == "false") PlanReply.Off(errorSentence(body, ""))
+            else PlanReply.Refused(errorSentence(body, ""))
+        }
+        if (status == 400 || status == 422) {
+            return PlanReply.Failed(errorSentence(body, ""))
+        }
+        return PlanReply.Unknown
+    }
+
+    /** The waiting line a 202 shows: the ONE step is on the PC's card, nothing ran. */
+    fun planWaitingLine(pending: PlanReply.Pending): String =
+        "One step is on your PC's approval card: ${pending.step.ifBlank { "(the step your PC chose)" }}. " +
+            "Approve or deny it there. Nothing runs until you do." +
+            (if (pending.model.isNotBlank()) " Planned locally by ${pending.model}." else "")
+
+    /** The button's own label: after one step, the next one needs a fresh tap. */
+    fun askLabel(everPerformed: Boolean): String = if (everPerformed) ASK_AGAIN_LABEL else ASK_LABEL
+
+    /** Whether the ask control is offered and can be pressed right now. */
+    fun canAsk(capability: PlanCapability, optionOn: Boolean, busy: Boolean): Boolean =
+        capability == PlanCapability.AVAILABLE && optionOn && !busy
+
+    /**
+     * The ONE-card rule in miniature: after a step has been performed, the only
+     * way to another step is the owner pressing Ask again - there is no state
+     * in which this object plans a second step by itself.
+     */
+    fun afterStep(everPerformed: Boolean, sentence: String): AskState =
+        AskState(phase = AskPhase.IDLE, sentence = sentence, everPerformed = true)
+
+    enum class AskPhase { IDLE, ASKING, WAITING, DONE, REFUSED }
+
+    /** The phone's planning state: one request, one card, then a fresh tap. */
+    data class AskState(
+        val phase: AskPhase = AskPhase.IDLE,
+        val sentence: String = "",
+        val step: String = "",
+        val model: String = "",
+        val everPerformed: Boolean = false,
+    ) {
+        val busy: Boolean get() = phase == AskPhase.ASKING || phase == AskPhase.WAITING
+        val label: String get() = askLabel(everPerformed)
     }
 
     /** The PC's snapshot read: it may only ever be this, never the raw tree. */
@@ -332,6 +562,9 @@ object AppControl {
                     put("text", control.text)
                     put("class", control.cls)
                     put("bounds", buildJsonArray { control.bounds.take(4).forEach { add(JsonPrimitive(it)) } })
+                    if (control.clickable) put("clickable", true)
+                    if (control.editable) put("editable", true)
+                    if (control.scrollable) put("scrollable", true)
                 })
             }
         })
@@ -351,6 +584,9 @@ object AppControl {
                 put("text", target.text)
                 put("class", target.cls)
                 put("bounds", buildJsonArray { target.bounds.take(4).forEach { add(JsonPrimitive(it)) } })
+                if (target.clickable) put("clickable", true)
+                if (target.editable) put("editable", true)
+                if (target.scrollable) put("scrollable", true)
             })
         }
         if (step.action == "type") put("text", step.text.orEmpty().take(MAX_TEXT))
@@ -497,6 +733,9 @@ object AppControl {
                         bounds = runCatching {
                             t["bounds"]!!.jsonArray.map { it.jsonPrimitive.content.toInt() }
                         }.getOrDefault(emptyList()),
+                        clickable = bodyText(t, "clickable") == "true",
+                        editable = bodyText(t, "editable") == "true",
+                        scrollable = bodyText(t, "scrollable") == "true",
                     )
                 }
                 StepReply.Step(Step(action, target, bodyText(obj, "text")))

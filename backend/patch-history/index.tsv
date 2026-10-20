@@ -1,6 +1,7 @@
 # Every earlier committed version of each patch, newest first per patch.
 # Written by tools/build_patch_history.py - do not edit by hand.
 # Columns: patch, file (under backend/patch-history/), commit, date, subject
+app-control.patch	app-control/2759987.patch	2759987e4fd87570b15c2e6846aa6b4bd79e9011	2026-10-19T19:38:16-07:00	feat(phone): app-control backend half - one allow-list, ONE card, ONE atomic step (OFF by default)
 appearance.patch	appearance/cc4d9e6.patch	cc4d9e6f38fd1f373b134cda8044549eb979a23a	2026-09-15T03:11:39Z	Three honesty fixes: /api/visual-spec, the HUD proposal handler, INSTALL
 appearance.patch	appearance/35a1001.patch	35a1001e2028fb245b79606eae6e1e45a8df1750	2026-09-15T02:16:30Z	I invented a NameError, then reported it twice as a finding
 appearance.patch	appearance/647c8ad.patch	647c8ade8ab9f1d3ecc2107ceb89880d912d0f3b	2026-09-14T22:30:27Z	The backend route, written against the real jarvis_hud.py
