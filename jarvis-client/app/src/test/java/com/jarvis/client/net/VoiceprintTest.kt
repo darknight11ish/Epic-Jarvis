@@ -80,4 +80,37 @@ class VoiceprintTest {
         assertEquals(Voiceprint.enabledBody(true), Json.parseToJsonElement("""{"enabled":true}"""))
         assertEquals(Voiceprint.enabledBody(false), Json.parseToJsonElement("""{"enabled":false}"""))
     }
+
+    @Test
+    fun keep_and_forget_send_only_what_the_tap_means() {
+        assertEquals(Json.parseToJsonElement("""{"text":"A message"}"""),
+            Json.parseToJsonElement(Voiceprint.addBody("A message")))
+        assertEquals(Json.parseToJsonElement("""{"id":"vp1","confirm":true}"""),
+            Json.parseToJsonElement(Voiceprint.forgetBody("vp1")))
+    }
+
+    @Test
+    fun an_older_pc_is_missing_not_a_broken_page() {
+        assertTrue(Voiceprint.missing(ApiError.NotFound))
+        assertTrue(Voiceprint.missing(ApiError.NotAvailable))
+        assertTrue(Voiceprint.missing(ApiError.Server(501, "not implemented")))
+        assertTrue(!Voiceprint.missing(ApiError.BadToken))
+    }
+
+    @Test
+    fun a_tap_says_the_pc_words_when_it_sent_some() {
+        val said = Json.parseToJsonElement("""{"ok":true,"message":"Kept."}""") as JsonObject
+        assertEquals("Kept.", Voiceprint.addedLine(ApiResult.Ok(said)))
+        val plain = Json.parseToJsonElement("""{"ok":true}""") as JsonObject
+        assertEquals(Voiceprint.ON_SAID, Voiceprint.enabledLine(ApiResult.Ok(plain), true))
+        assertEquals(Voiceprint.FORGET_SAID, Voiceprint.forgottenLine(ApiResult.Ok(plain)))
+        // A refusal's own sentence is shown as the PC wrote it.
+        val refused = Json.parseToJsonElement(
+            """{"ok":false,"error":"empty","message":"write something first"}"""
+        ) as JsonObject
+        assertEquals("write something first", Voiceprint.addedLine(ApiResult.Ok(refused)))
+        // An older PC, and a real failure, in words rather than a number.
+        assertEquals(Voiceprint.MISSING, Voiceprint.addedLine(ApiResult.Failed(ApiError.NotFound)))
+        assertTrue(Voiceprint.addedLine(ApiResult.Failed(ApiError.BadToken)).isNotBlank())
+    }
 }

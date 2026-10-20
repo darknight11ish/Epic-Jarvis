@@ -38,6 +38,12 @@ object Voiceprint {
             "before it is kept."
     const val FORGET_LABEL = "Forget this sample"
     const val MISSING = "Your PC's Jarvis does not have Write like me yet - run apply-patches.ps1 on the PC."
+    // The same four lines the desktop page says (voiceprint-settings.js), so
+    // the two apps never word one change two ways.
+    const val ON_SAID = "Write like me is on."
+    const val OFF_SAID = "Write like me is off."
+    const val ADD_SAID = "Kept on this PC, with names and numbers removed."
+    const val FORGET_SAID = "That sample is gone."
 
     /** One sample the PC has already stripped. */
     data class Sample(val id: String, val text: String, val kind: String)
@@ -107,4 +113,39 @@ object Voiceprint {
     /** The body ONE switch tap sends. The command answers only when the PC accepted it. */
     fun enabledBody(on: Boolean): JsonObject =
         JsonObject(mapOf("enabled" to JsonPrimitive(on)))
+
+    /** The body ONE "Keep this sample" sends. Nothing else is in it. */
+    fun addBody(text: String): String =
+        JsonObject(mapOf("text" to JsonPrimitive(text))).toString()
+
+    /**
+     * The body ONE Forget sends, after the plate's own "are you sure?".
+     * `confirm: true` is what the PC enforces; the question is asked in the
+     * plate and again by the PC, never skipped by either.
+     */
+    fun forgetBody(id: String): String =
+        JsonObject(mapOf("id" to JsonPrimitive(id), "confirm" to JsonPrimitive(true))).toString()
+
+    /** An older PC has no route: 404, 501, or "not available". */
+    fun missing(error: ApiError): Boolean =
+        error == ApiError.NotFound || error == ApiError.NotAvailable ||
+            (error is ApiError.Server && error.code == 501)
+
+    /**
+     * What to say after a tap: the PC's own sentence when it sent one, else
+     * this app's fixed line - and the plain words of a failure (or "run
+     * apply-patches.ps1" when the PC has no Write like me yet).
+     */
+    private fun line(result: ApiResult<JsonObject>, okWords: String): String = when (result) {
+        is ApiResult.Ok -> result.value.text("message") ?: okWords
+        is ApiResult.Failed ->
+            if (missing(result.error)) MISSING else PlainErrors.forApiError(result.error).text
+    }
+
+    fun enabledLine(result: ApiResult<JsonObject>, on: Boolean): String =
+        line(result, if (on) ON_SAID else OFF_SAID)
+
+    fun addedLine(result: ApiResult<JsonObject>): String = line(result, ADD_SAID)
+
+    fun forgottenLine(result: ApiResult<JsonObject>): String = line(result, FORGET_SAID)
 }

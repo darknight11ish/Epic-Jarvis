@@ -16,6 +16,7 @@
 
 import { announce, currentLink, linkWords, onLink } from "./jarvis-link.js";
 import { HUMOR_SAID, readManner, SAID } from "./manner.js";
+import { mount as mountVoiceprint } from "./voiceprint-settings.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -176,3 +177,16 @@ load();
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) load();
 });
+
+// "Write like me" (jarvis_voiceprint.py; PR #665): the owner's own writing
+// samples and their ON/OFF switch, in this same "How Jarvis talks" card. The
+// module is drawn by voiceprint-settings.js; this file only hands it the two
+// real functions and the link's own staleness. A READ is never held, every
+// write is held on a stale link here (isStale) and again on the PC, and no
+// approval card is raised either way - these are local settings.
+const voiceprint = mountVoiceprint(document.getElementById("voiceprint"), {
+  invoke: (command, args) => invoke(command, args),
+  confirm: (question) => window.confirm(question),
+  isStale: () => !linkWords(currentLink()).canAct,
+});
+onLink(() => voiceprint?.syncLive());
