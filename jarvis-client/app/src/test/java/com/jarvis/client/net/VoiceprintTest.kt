@@ -65,7 +65,7 @@ class VoiceprintTest {
 
     @Test
     fun one_switch_tap_is_one_boolean_body() {
-        assertEquals(Voiceprint.enabledBody(true), Json.parseToJsonElement("""{"on":true}"""))
-        assertEquals(Voiceprint.enabledBody(false), Json.parseToJsonElement("""{"on":false}"""))
+        assertEquals(Voiceprint.enabledBody(true), Json.parseToJsonElement("""{"enabled":true}"""))
+        assertEquals(Voiceprint.enabledBody(false), Json.parseToJsonElement("""{"enabled":false}"""))
     }
 }

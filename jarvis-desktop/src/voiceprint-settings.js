@@ -152,7 +152,7 @@ export function mount(root, { invoke, confirm, document: doc = globalThis.docume
   toggle.addEventListener("change", async () => {
     const want = toggle.checked;
     try {
-      await boundedInvoke(invoke, "voiceprint_set_enabled", { on: want });
+      await boundedInvoke(invoke, "voiceprint_set_enabled", { enabled: want });
       said.textContent = want ? "Write like me is on." : "Write like me is off.";
     } catch (e) {
       toggle.checked = !want;

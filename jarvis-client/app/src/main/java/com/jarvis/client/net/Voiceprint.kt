@@ -97,5 +97,5 @@ object Voiceprint {
 
     /** The body ONE switch tap sends. The command answers only when the PC accepted it. */
     fun enabledBody(on: Boolean): JsonObject =
-        JsonObject(mapOf("on" to JsonPrimitive(on)))
+        JsonObject(mapOf("enabled" to JsonPrimitive(on)))
 }

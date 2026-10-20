@@ -191,7 +191,8 @@ def set_enabled(on: bool) -> dict:
     One small JSON file beside the settings (the same pattern receipts use);
     written to a .tmp then os.replace so a crash cannot leave half a file."""
     if not isinstance(on, bool):
-        return {"ok": False, "error": "bad_body", "message": "on must be true or false"}
+        return {"ok": False, "error": "bad_body",
+                "message": "enabled must be true or false"}
     path = _enabled_file()
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -1144,7 +1145,10 @@ def handle_post(route: str, body: Optional[dict]) -> tuple:
         sample_id = add_owner_edit(before, after, prompt=str(body.get("prompt") or ""))
         return 200, {"ok": True, "id": sample_id, "learned": bool(sample_id)}
     if route == ENABLED_PATH:
-        return 200, set_enabled(body.get("on"))
+        # The ruling's field name is "enabled"; "on" stays as an alias so a
+        # client written against the earlier draft keeps working.
+        value = body["enabled"] if "enabled" in body else body.get("on")
+        return 200, set_enabled(value)
     if route == FORGET_PATH:
         return 200, forget(str(body.get("id") or ""), bool(body.get("confirm")))
     return 404, {"ok": False, "error": "not_found"}

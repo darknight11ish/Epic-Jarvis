@@ -20842,7 +20842,8 @@ bounded to 30 s, no proxy, no redirects) and the phone's `net/Voiceprint.kt` +
 `ui/screens/VoiceprintPlate.kt` are added but NOT mounted: `settings.html`,
 `settings.js`, `lib.rs`, `JarvisApi`/`JarvisRuntime` and `SettingsScreen.kt` are
 untouched until the Lead clears the wiring (the exact hunks are in the PR). The
-ON/OFF switch is `POST /api/voiceprint/enabled {"on": bool}` - a local setting
+ON/OFF switch is `POST /api/voiceprint/enabled {"enabled": bool}` (the earlier
+draft's `"on"` is accepted as an alias) - a local setting
 written to `voiceprint.json` beside the other settings, with no card, no model
 and no network; absent means the framework's own `[voiceprint] enabled` value.
 Forget asks "are you sure?" first on both clients, and one tap is one change.

@@ -82,7 +82,7 @@ fn forget_problem(id: &str, confirm: bool) -> Option<String> {
 
 /// The command answers the page's exact words; kept pure so the tests can pin it.
 fn enabled_body(on: bool) -> serde_json::Value {
-    serde_json::json!({ "on": on })
+    serde_json::json!({ "enabled": on })
 }
 
 async fn answer(response: reqwest::Response) -> Result<serde_json::Value, String> {
@@ -193,7 +193,7 @@ mod tests {
 
     #[test]
     fn the_switch_sends_exactly_on() {
-        assert_eq!(enabled_body(true), serde_json::json!({ "on": true }));
-        assert_eq!(enabled_body(false), serde_json::json!({ "on": false }));
+        assert_eq!(enabled_body(true), serde_json::json!({ "enabled": true }));
+        assert_eq!(enabled_body(false), serde_json::json!({ "enabled": false }));
     }
 }
