@@ -22320,6 +22320,13 @@ boolean: `true` means that action asks first today (its tier in
 `jarvis-framework.toml` is `ask`). `answers` and `completed_at` are the last
 accepted run, for a re-run's prefill and for a first-run offer to show once.
 
+**GET is metadata only** (audited 2026-10-20, Gemini Area 1B): it returns
+question text and setting values, and it reads no folder, no account and no
+lock/hide list - so there is none in it to leak while App lock or the hide
+lists are on. `storage` names the file, not a path. The suite pins that the
+whole GET body holds no drive path, home path, email/account id, token or
+secret, and that every `current` value is a plain setting value.
+
 ### `POST /api/setup/plan` - a READ-ONLY summary
 
 Body `{"answers": {"<question id>": "<option id>" | ["<option id>", ...]}}`;
@@ -22328,13 +22335,16 @@ choose-any question. Answers for questions the caller leaves out change
 nothing. The answer is:
 
     {"ok", "changes": [{"setting", "label", "question", "from", "to", "effect",
-                        "sentence", "change"}],
+                        "pc_only", "sentence", "change"}],
      "summary": ["Takes effect immediately: ..." | "Will ask you on a card: ..."],
      "skipped": [{"setting", "reason"}],
      "recommendation": {"id", "title", "why"} | null}
 
-**Nothing is written and no card is raised.** `effect` is `"card"` exactly where
-the existing setter would ask: the change's direction is the one its own module
+**Nothing is written and no card is raised.** `pc_only` is `true` for the
+answers Settings itself only lets the PC change - loosening "what asks first",
+offering a reading tool, and the face's sky switch - so a caller can say so
+before the owner accepts; it is a label on the EXISTING rule, not a new tier.
+`effect` is `"card"` exactly where the existing setter would ask: the change's direction is the one its own module
 cards (e.g. web search ON, "ask before every search" OFF, an "asks first"
 loosening, offering a reading tool), AND the action's tier is read-only checked
 through `jarvis_framework.action_tier` - the same machinery the setter uses. If
@@ -22368,8 +22378,26 @@ order (tightening and cosmetic changes first, then the carded ONs), and:
   module falls back to "no answers" rather than raising.
 
 A body that is not a JSON object, or `answers` that is not an object, is 400 in
-plain words. Every route is behind the same origin and token checks as every
-other write; the answers are the owner's own choices, never private data.
+plain words. **Two more refusals were added by the 2026-10-20 audit (Gemini
+Area 1B), both before any setter runs:**
+
+* **Taint:** if `jarvis_gate.taint_active()` says outside text may be steering
+  this turn, apply answers **`409`** with `"tainted": true` and the same plain
+  sentence every change uses - nothing is changed, no card is raised. The check
+  fails CLOSED: a backend whose gate cannot be asked counts as tainted. This
+  module only READS the latch (no `latch_taint`, no `clear_taint`, no card of
+  its own).
+* **PC-only, from another device:** if any answer maps to a PC-only setting
+  (loosening "what asks first", offering a reading tool, the sky switch) and
+  the request did not come from this PC, the WHOLE apply is refused **`403`**
+  with `"pc_only": true` - nothing runs, not even the cosmetic answers in the
+  same batch. A LOCAL apply goes ahead and still goes through the EXISTING
+  setter, so that setter's own card and its Windows Hello check are never
+  bypassed by this questionnaire; the suite proves the local path waits for
+  that card and never reports a change while it waits.
+
+Every route is behind the same origin and token checks as every other write;
+the answers are the owner's own choices, never private data.
 **The apply route passes the request's own `peer`/`local` down to the existing
 setters** (read the same way `owner-check.patch`'s wrappers read them), so a
 loosening rule or a reading-tool ON still refuses from the phone - and fails
@@ -22383,8 +22411,12 @@ microphone and no owner's PC: every question/option maps to a real setter;
 non-`ask` tier as skipped); "All"/"None" expand at the data level; `apply()`
 refuses without confirm, calls exactly the mapped setters, waits for each card
 before the next (approved and denied), continues past a failed setting, saves
-only the answers, and round-trips them for prefill; the module imports no gate,
-no model lane and no network, and the three routes keep the origin/token order.
+only the answers, and round-trips them for prefill; the module imports no
+model lane and no network, reads the gate's taint latch and never sets or
+clears it; the taint refusal (409) and the remote PC-only whole-refusal (403)
+happen before any setter; `pc_only` marks exactly the three PC-only families;
+GET exposes no path or account id; and the three routes keep the origin/token
+order.
 
 typed text, and the patch's own pins (two routes, harness position, no
 install-block line, `_stack.py`'s RATCHET unchanged).
@@ -22553,6 +22585,17 @@ search show the exact sentence instantly. The module is
   card, action `change_own_config`, tier `ask`, nothing written first). POST
   `{"action": "delete"}`: the one Delete. Origin and token are checked before
   any body is read, like every route.
+* **POST is PC_ONLY (added 2026-10-20, Gemini Area 1A).** A change to the index
+  - ON, OFF or Delete - is refused `403` from another device over the mesh,
+  before the body is read, using the project's one
+  `jarvis_owner_check.from_this_pc(peer, local)` rule (the same wrapper
+  `jarvis_brain_reads` and `jarvis_self_improve` use) and failing closed when
+  the peer cannot be placed. A phone bearer token can therefore no longer
+  toggle indexing or delete stored words. **GET deliberately stays
+  origin+token only**: it is read-only and returns no recording's words, just
+  the switch, counts, disclosure and the Settings view's own index-file path,
+  the same shape as the phone reading any other Settings row; if that view ever
+  gains words or a search result, GET must become PC_ONLY with the POST.
 * **The spoken switch.** `jarvis_settings_registry.BOOL_SETTINGS` has
   `media_index` ("searchable recordings", "the recording index", ...), whose
   setter calls the module's own `request_enabled()`, so "turn off searchable
@@ -22578,5 +22621,9 @@ the **private-lane latch** on a result carrying lines, the backup exclusion
 driven through `jarvis_backup.py`'s own function, ON by default/OFF instant/
 ON one card, the spoken setter and the `my_files` action under
 `read_files_readonly`, gone/moved rows leaving, nothing learned, the drop-in
-route's four verbs plus its 401/403 shape, and the plain disclosure. The
-feature list's own row was updated in all three copies.
+route's four verbs plus its 401/403 shape, the plain disclosure, and the
+**PC_ONLY mutation-bite** tests (2026-10-20 audit): a remote phone's POST is
+403 BEFORE the body is read and the switch does not move; a local loopback
+request and a PC program calling its own mesh address still work; an
+unplaceable peer fails closed; GET stays a token-guarded read-only view with no
+stored words. The feature list's own row was updated in all three copies.

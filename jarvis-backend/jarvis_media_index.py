@@ -934,6 +934,20 @@ def view(*, here: bool = True) -> dict:
 # The POST never writes the switch itself; it calls request_enabled(), so a
 # direct POST cannot bypass the approval card. Delete never touches a
 # recording: it removes stored words only.
+#
+# PC_ONLY (the 2026-10-20 Gemini audit, Area 1A). POST /api/media-index is a
+# change to PC-only state - it turns recording indexing on/off and deletes the
+# stored words - so it is refused from another device over the mesh, before
+# the body is read, and fails closed when the peer cannot be placed. This is
+# the same jarvis_owner_check.from_this_pc rule jarvis_brain_reads and
+# jarvis_self_improve use; nothing here invents a second rule.
+#
+# GET /api/media-index deliberately stays origin+token only: it is READ-ONLY
+# and returns no recording's words - just the switch state, the counts, the
+# disclosure and the matching Settings view's own index-file path. The phone
+# is allowed to READ the switch it may not change (the same shape as every
+# other Settings row), and a token is still required. If that view ever gains
+# words or a search result, the GET must become PC_ONLY with the POST.
 
 def handle_get() -> tuple:
     try:
@@ -954,11 +968,39 @@ def handle_post(body) -> tuple:
     return request_enabled(body.get("enabled"))
 
 
-def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
+#: What a remote device is told when it tries to CHANGE the index. One plain
+#: sentence, the same shape as the other PC-only refusals.
+PC_ONLY_REFUSAL = ("Changing the media index can only be done on the PC itself, "
+                   "so nothing was changed.")
+
+
+def _from_this_pc(peer, local) -> bool:
+    """Is this request from this PC? Fails CLOSED: no helper, no answer.
+
+    `jarvis_owner_check.from_this_pc` is the project's one answer to this
+    question (jarvis_brain_reads and jarvis_self_improve wrap it the same way),
+    so this module has no second rule of its own.
+    """
+    try:
+        import jarvis_owner_check
+        return bool(jarvis_owner_check.from_this_pc(peer, local))
+    except Exception:
+        return False
+
+
+def install(handler_cls, *, origin_ok, token_ok, read_body,
+            from_this_pc=None) -> str:
     """Wrap `handler_cls` so GET/POST /api/media-index are answered here, after
     the server's own origin and token checks. Every other request goes to the
-    original handler untouched. Returns the banner line."""
+    original handler untouched. Returns the banner line.
+
+    POST is PC_ONLY: a change to the index is refused 403 from another device,
+    before the body is read. GET is read-only and only ever needs the token.
+    `from_this_pc` is injectable so the suite can drive both sides without a
+    network; the shipped default is the project's own owner check.
+    """
     get0, post0 = handler_cls.do_GET, handler_cls.do_POST
+    pc_here = from_this_pc or _from_this_pc
     if getattr(post0, "_jarvis_media_index", False):
         return "  media-index  Searchable recordings answers at /api/media-index (already on)"
 
@@ -990,6 +1032,15 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
             return post0(self)
         if not _allowed(self):
             return None
+        # PC_ONLY, before the body is read: a phone bearer token must never be
+        # able to toggle indexing or delete stored words over the mesh.
+        peer = (getattr(self, "client_address", None) or ("",))[0]
+        try:
+            local = self.connection.getsockname()[0]
+        except Exception:
+            local = None
+        if not pc_here(peer, local):
+            return self._send(403, {"ok": False, "error": PC_ONLY_REFUSAL})
         try:
             body = json.loads(read_body(self) or b"{}")
         except Exception as exc:

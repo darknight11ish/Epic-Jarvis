@@ -560,9 +560,15 @@ def t_the_route_reads_switches_and_deletes():
                 raise AssertionError("the core POST handler must not run for our route")
         return Handler
 
+    class _Conn:
+        def getsockname(self):
+            return ("127.0.0.1", 4719)
+
     def call(handler, method, body=None):
         inst = object.__new__(handler)
         inst.path = "/api/media-index"
+        inst.client_address = ("127.0.0.1", 5555)   # this PC, a local program
+        inst.connection = _Conn()
         inst._send = lambda code, out: {"code": code, "out": out}
         if method == "GET":
             return handler.do_GET(inst)
@@ -612,6 +618,133 @@ def t_the_route_reads_switches_and_deletes():
 
 
 # --------------------------------------------------------------------------
+#   8b. POST is PC_ONLY (the 2026-10-20 Gemini audit, Area 1A)
+# --------------------------------------------------------------------------
+
+def t_the_route_is_pc_only_for_changes_and_read_only_for_reads():
+    """MUTATION-BITE: this FAILS on the old code.
+
+    The old route checked only origin+token, so the "remote peer" case below
+    answered 200/202 and changed the switch. The new code must refuse 403
+    BEFORE reading the body, and a local request must still work.
+    """
+    def handler_class():
+        class Handler:
+            def do_GET(self):
+                raise AssertionError("the core GET handler must not run for our route")
+            def do_POST(self):
+                raise AssertionError("the core POST handler must not run for our route")
+        return Handler
+
+    class _Conn:
+        def __init__(self, local):
+            self._local = local
+        def getsockname(self):
+            return (self._local, 4719)
+
+    def request(H, method, *, peer, local, body=b'{"action": "delete"}', reads=None):
+        inst = object.__new__(H)
+        inst.path = "/api/media-index"
+        inst.client_address = (peer, 5555)
+        inst.connection = _Conn(local)
+        inst._send = lambda code, out: {"code": code, "out": out}
+        if reads is not None:
+            def read_body(_h):
+                reads.append(1)
+                return body
+        else:
+            read_body = lambda _h: body
+        if method == "GET":
+            return inst
+        return inst
+
+    with Env([fresh("pc-only")]):
+        # A phone over the mesh: peer != local, neither is loopback/this PC.
+        H = handler_class()
+        reads = []
+        MI.install(H, origin_ok=lambda _h: True, token_ok=lambda _h: True,
+                   read_body=lambda _h: (reads.append(1), b'{"enabled": false}')[1],
+                   from_this_pc=lambda peer, local: False)  # a phone over the mesh
+        inst = object.__new__(H)
+        inst.path = "/api/media-index"
+        inst.client_address = ("100.64.0.9", 5555)   # the phone's mesh address
+        inst.connection = _Conn("100.64.0.1")        # this PC's mesh address
+        inst._send = lambda code, out: {"code": code, "out": out}
+        got = H.do_POST(inst)
+        check("a remote phone's POST is refused 403 before the body is read",
+              got["code"] == 403 and reads == [], (got, reads))
+        check("...the refusal is one plain sentence naming the PC",
+              "PC itself" in got["out"].get("error", "")
+              and "nothing was changed" in got["out"].get("error", "").lower(),
+              got)
+        check("...and the switch is unchanged", MI.enabled() is True)
+
+        # A program on this PC (loopback) may still use the route.
+        H2 = handler_class()
+        MI.install(H2, origin_ok=lambda _h: True, token_ok=lambda _h: True,
+                   read_body=lambda _h: b'{"enabled": false}')
+        inst = object.__new__(H2)
+        inst.path = "/api/media-index"
+        inst.client_address = ("127.0.0.1", 5555)
+        inst.connection = _Conn("127.0.0.1")
+        inst._send = lambda code, out: {"code": code, "out": out}
+        got = H2.do_POST(inst)
+        check("a local request still turns it off at once (200)",
+              got["code"] == 200 and got["out"].get("enabled") is False, got)
+
+        # The PC's own mesh address calling itself is this PC too.
+        H3 = handler_class()
+        MI.install(H3, origin_ok=lambda _h: True, token_ok=lambda _h: True,
+                   read_body=lambda _h: b'{"enabled": true}')
+        inst = object.__new__(H3)
+        inst.path = "/api/media-index"
+        inst.client_address = ("100.64.0.1", 5555)
+        inst.connection = _Conn("100.64.0.1")
+        inst._send = lambda code, out: {"code": code, "out": out}
+        got = H3.do_POST(inst)
+        check("...and peer == local (a PC program on its own mesh address) is allowed",
+              got["code"] in (200, 202), got)
+
+        # An asker that cannot be placed: fail closed.
+        H4 = handler_class()
+        MI.install(H4, origin_ok=lambda _h: True, token_ok=lambda _h: True,
+                   read_body=lambda _h: b'{"enabled": false}',
+                   from_this_pc=lambda peer, local: False)
+        inst = object.__new__(H4)
+        inst.path = "/api/media-index"
+        inst.client_address = ("", 5555)             # unparsable peer
+        inst.connection = _Conn(None)
+        inst._send = lambda code, out: {"code": code, "out": out}
+        got = H4.do_POST(inst)
+        check("a peer that cannot be placed is refused (fails closed)", got["code"] == 403, got)
+
+        # READ-ONLY GET deliberately stays token-only: the phone may read the
+        # switch it cannot change. (If the view ever gains words, make GET
+        # PC_ONLY too - the docstring says so.)
+        H5 = handler_class()
+        MI.install(H5, origin_ok=lambda _h: True, token_ok=lambda _h: True,
+                   read_body=lambda _h: b"{}")
+        inst = object.__new__(H5)
+        inst.path = "/api/media-index"
+        inst.client_address = ("100.64.0.9", 5555)
+        inst.connection = _Conn("100.64.0.1")
+        inst._send = lambda code, out: {"code": code, "out": out}
+        got = H5.do_GET(inst)
+        check("a remote phone may READ the switch (read-only, token-guarded)",
+              got["code"] == 200 and "disclosure" in got["out"], got)
+        check("...and the read-only view carries no stored words or search result",
+              not (set(got["out"]) & {"words", "matches", "text", "results"}), got["out"])
+
+        src = Path(MI.__file__).read_text(encoding="utf-8")
+        check("the shipped code calls the project's one owner check, fail closed",
+              "jarvis_owner_check.from_this_pc(peer, local)" in src
+              and "def _from_this_pc(peer, local)" in src
+              and "return False" in src[src.index("def _from_this_pc"):src.index("def install(")])
+        check("...and the POST guard runs BEFORE read_body",
+              src.index("if not pc_here(peer, local):") < src.index("body = json.loads(read_body(self)"))
+
+
+# --------------------------------------------------------------------------
 #   9. the saved truths around the switch and the view
 # --------------------------------------------------------------------------
 
@@ -651,6 +784,7 @@ if __name__ == "__main__":
                t_deleted_and_moved_recordings_leave,
                t_the_index_is_not_a_learned_fact,
                t_the_route_reads_switches_and_deletes,
+               t_the_route_is_pc_only_for_changes_and_read_only_for_reads,
                t_no_double_write_and_the_view_is_the_plain_one):
         print(f"\n--- {fn.__name__} ---")
         try:

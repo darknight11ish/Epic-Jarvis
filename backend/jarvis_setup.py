@@ -36,6 +36,20 @@ THE RULES, kept by construction:
   card is never on screen at the same time (no combined/bulk card, ever).
   A denied or missing setting never aborts the rest, and the per-setting
   outcome says exactly what happened in plain words.
+* `apply()` ALSO refuses, before any setter runs, when the approval gate says
+  outside text may be steering this turn (`jarvis_gate.taint_active()`, the
+  same latch every other change refuses under). It fails CLOSED: a gate that
+  cannot be asked means "tainted", never "go ahead".
+* PC-only settings stay PC-only. The answers that can only be changed on this
+  PC (loosening "what asks first", offering a reading tool, the face's sky
+  switch) are marked `pc_only` in the plan; a request from another device
+  whose answers touch one of them is refused WHOLE, before any setter runs.
+  A local apply still goes through the existing setter, so the card and the
+  Windows Hello check those settings require are untouched by this module.
+* `GET /api/setup` is read-only settings metadata: question text and current
+  values (booleans, words, a provider name, an animal-switch list). It reads
+  no folder, no account and no lock/hide list, so it cannot expose one; the
+  suite pins that no answer value is a path or an account identifier.
 * `effect` is "card" exactly where the existing setter would ask. It is read
   from the same machinery the setters use: the action's tier in
   `jarvis-framework.toml` (`jarvis_framework.action_tier`, read-only) and the
@@ -93,6 +107,67 @@ _WRITE_LOCK = threading.Lock()
 
 class Unavailable(Exception):
     """A module this PC does not have - answered in words, never a traceback."""
+
+
+#: Refusals added 2026-10-20 (the Gemini high-impact audit, Area 1B). Both are
+#: plain sentences and neither invents a gate action, a latch or a card.
+TAINTED_APPLY = ("Jarvis read something from outside that may be trying to take "
+                 "over, so settings cannot be changed right now. Nothing was "
+                 "changed and no card was raised.")
+PC_ONLY_APPLY = ("One or more of these answers can only be changed on the PC "
+                 "itself, so nothing was changed. Open Jarvis on the PC and run "
+                 "the questionnaire there.")
+
+
+def _tainted() -> bool:
+    """True when outside text may be steering this turn. Fails CLOSED.
+
+    `jarvis_gate.taint_active()` is the project's one latch for this; this module
+    only READS it (no latch_taint, no clear_taint, no card). A backend that
+    cannot be asked is treated as tainted.
+    """
+    try:
+        import jarvis_gate
+        return bool(jarvis_gate.taint_active())
+    except Exception:
+        return True
+
+
+def _from_this_pc(peer, local) -> bool:
+    """Is this request from this PC? Fails CLOSED: no helper, no answer."""
+    try:
+        import jarvis_owner_check
+        return bool(jarvis_owner_check.from_this_pc(peer, local))
+    except Exception:
+        return False
+
+
+def _here(peer, local) -> bool:
+    """The request's own placement. `peer is None and local is None` is the
+    project's documented in-process convention (a direct call, no request), and
+    is this PC; EVERYTHING else goes through the one owner check, fail closed."""
+    if peer is None and local is None:
+        return True
+    return _from_this_pc(peer, local)
+
+
+def _pc_only_change(ch: dict) -> bool:
+    """True for the answers Settings itself only lets the PC change.
+
+    Loosening "what asks first" and offering a reading tool are in
+    `jarvis_owner_check.PC_ONLY_ACTIONS` (one card approved on the PC, with
+    Windows Hello); the face's sky switch is the desktop's own visual. The
+    existing setters keep enforcing all three - this only lets the plan say so
+    and lets a remote apply be refused whole before anything runs.
+    """
+    kind = str(ch.get("kind") or "")
+    if kind == "asks_first":
+        return ch.get("ask") is False            # loosening is PC-only
+    if kind == "reading_tool":
+        return bool(ch.get("to"))                # offering the tool is PC-only
+    if kind == "sky_show":
+        return True                              # the PC face's own sky
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -1004,6 +1079,7 @@ def plan(answers, *, tier_of: Optional[Callable[[str], str]] = None,
             "from": cur,
             "to": ch.get("to", ch.get("ask")),
             "effect": effect,
+            "pc_only": _pc_only_change(ch),
             "sentence": sentence,
             "change": ch,
         })
@@ -1203,7 +1279,9 @@ def apply(answers, confirm: bool = False, *, peer=None, local=None,
           tier_of: Optional[Callable[[str], str]] = None,
           readers=None, appliers=None,
           wait: Optional[Callable[[dict, float], dict]] = None,
-          timeout_s: Optional[float] = None) -> dict:
+          timeout_s: Optional[float] = None,
+          taint: Optional[Callable[[], bool]] = None,
+          here: Optional[Callable[[], bool]] = None) -> dict:
     """Apply the questionnaire's answers through the existing setters.
 
     Refuses unless `confirm is True`; the summary must have been accepted by a
@@ -1222,6 +1300,10 @@ def apply(answers, confirm: bool = False, *, peer=None, local=None,
                 "error": "Nothing was changed. Send confirm: true to apply these "
                          "settings.",
                 "outcomes": [], "completed_at": None}
+    # Before a single setter runs: outside text could be steering this turn.
+    if (taint or _tainted)():
+        return {"ok": False, "confirmed": False, "tainted": True,
+                "error": TAINTED_APPLY, "outcomes": [], "completed_at": None}
     try:
         planned = plan(answers, tier_of=tier_of, readers=readers)
     except Exception as exc:
@@ -1233,6 +1315,13 @@ def apply(answers, confirm: bool = False, *, peer=None, local=None,
                 "error": planned.get("error") or "The answers could not be read.",
                 "outcomes": [], "completed_at": None}
     changes = list(planned["changes"])
+    # PC-only answers from another device: refuse the whole batch before any
+    # setter runs. A local apply goes ahead and still uses the same setter, so
+    # that setter's own card and Windows Hello check are never bypassed.
+    is_here = here() if here is not None else _here(peer, local)
+    if not is_here and any(row.get("pc_only") for row in changes):
+        return {"ok": False, "confirmed": True, "pc_only": True,
+                "error": PC_ONLY_APPLY, "outcomes": [], "completed_at": None}
     changes.sort(key=lambda row: _order(row["change"], row["effect"]))
     deadline_s = float(timeout_s if timeout_s is not None else _card_wait_s())
     outcomes = []
@@ -1421,6 +1510,10 @@ def handle_post_apply(body, *, peer=None, local=None) -> tuple:
     # request) - never what a routed request should look like.
     out = apply(answers, confirm=body.get("confirm") is True,
                 peer=peer, local=local)
+    if out.get("tainted"):
+        return 409, out
+    if out.get("pc_only"):
+        return 403, out
     if not out.get("confirmed"):
         return 400, out
     return (200 if out.get("ok") else 500), out

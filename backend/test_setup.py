@@ -30,7 +30,15 @@ WHAT IS CHECKED, and why each check matters:
   switches a model, and writes only `setup.json` in the settings folder - it
   cannot approve, cannot clear a latch and cannot move anything off this PC;
 * the three routes are wired (GET /api/setup, POST /api/setup/plan,
-  POST /api/setup/apply) with the same origin and token checks as every write.
+  POST /api/setup/apply) with the same origin and token checks as every write;
+* the two audit refusals (2026-10-20 Gemini, Area 1B): apply refuses when the
+  gate's taint latch says outside text may be steering (409, fail closed when
+  the gate cannot be asked), and a request from another device whose answers
+  touch a PC-only setting is refused WHOLE (403) before any setter runs; a
+  local apply still goes through the same setter, so its card and Windows
+  Hello check are never bypassed;
+* GET /api/setup is metadata only - the suite proves no path or account id is
+  in it, because it reads no folder, no account and no lock/hide list.
 
 No network, no model, no microphone, no owner's PC. Runs in repo mode; the
 suite gives it a temporary settings folder.
@@ -428,7 +436,7 @@ def t_apply_instant_calls_the_mapped_setters():
     rec = Recorder()
     out = S.apply({"talk_style": "plain", "humour": "on",
                    "card_size": "full"},
-                  confirm=True, readers=opposite,
+                  confirm=True, taint=lambda: False, readers=opposite,
                   appliers={"manner": rec, "bool:humor": rec,
                             "card_mode": rec},
                   tier_of=lambda a: "ask")
@@ -456,7 +464,7 @@ def t_apply_carded_change_waits_for_its_own_card_then_continues():
                 "message": "The card was turned down, so it stays off."}
 
     out = S.apply({"screen_pictures": ["screen_picture"], "humour": "on"},
-                  confirm=True, readers=opposite,
+                  confirm=True, taint=lambda: False, readers=opposite,
                   appliers={"bool:screen_picture": rec_wait,
                             "bool:humor": rec_plain},
                   wait=waiter, tier_of=lambda a: "ask")
@@ -475,7 +483,7 @@ def t_apply_carded_change_waits_for_its_own_card_then_continues():
     def approve(ch, deadline):
         return {"state": "asked-and-approved", "message": "You approved the card."}
 
-    out = S.apply({"screen_pictures": ["screen_picture"]}, confirm=True,
+    out = S.apply({"screen_pictures": ["screen_picture"]}, confirm=True, taint=lambda: False,
                   readers=opposite, appliers={"bool:screen_picture": rec2},
                   wait=approve, tier_of=lambda a: "ask")
     check("an approved card is recorded as asked-and-approved",
@@ -493,7 +501,7 @@ def t_a_missing_module_is_reported_and_the_rest_continues():
         calls.append(S.change_key(ch))
         return {"ok": True, "waiting": False, "message": "changed"}
 
-    out = S.apply({"web_search": "on", "humour": "on"}, confirm=True,
+    out = S.apply({"web_search": "on", "humour": "on"}, confirm=True, taint=lambda: False,
                   readers=opposite,
                   appliers={"bool:web_search": missing, "bool:humor": good},
                   tier_of=lambda a: "ask")
@@ -512,7 +520,7 @@ def t_apply_is_safest_first_and_never_combined():
         return {"ok": True, "waiting": False, "message": "changed"}
 
     out = S.apply({"carefulness": "strict", "web_search": "on",
-                   "talk_style": "plain"}, confirm=True,
+                   "talk_style": "plain"}, confirm=True, taint=lambda: False,
                   readers=lambda ch: {"tier": "auto", "asks": False}
                   if ch.get("kind") == "asks_first" else False,
                   appliers={k: rec for k in
@@ -540,7 +548,7 @@ def t_state_round_trips_and_prefills_a_rerun():
     if p.exists():
         p.unlink()
     out = S.apply({"talk_style": "plain", "humour": "on"},
-                  confirm=True, readers=opposite,
+                  confirm=True, taint=lambda: False, readers=opposite,
                   appliers={"manner": lambda ch: {"ok": True, "waiting": False,
                                                   "message": "changed"},
                             "bool:humor": lambda ch: {"ok": True, "waiting": False,
@@ -569,6 +577,171 @@ def t_the_saved_answers_never_hold_private_data():
           and not any(word in raw.lower() for word in
                       ("transcript", "my email", "calendar_read", "chat history")),
           raw[:200])
+
+
+def t_tainted_apply_refuses_before_any_setter():
+    p = Path(_TMP) / "setup.json"
+    if p.exists():
+        p.unlink()
+    rec = Recorder()
+    out = S.apply({"talk_style": "plain"}, confirm=True, taint=lambda: True,
+                  readers=opposite, appliers={"manner": rec},
+                  tier_of=lambda a: "ask")
+    check("a tainted apply is refused in plain words, before any setter",
+          out["ok"] is False and out.get("tainted") is True
+          and "read something from outside" in out.get("error", "")
+          and "Nothing was changed" in out.get("error", ""), out)
+    check("...no setter was called and no answers were saved",
+          rec.calls == [] and not p.exists(), (rec.calls, p.exists()))
+
+
+def t_a_remote_apply_touching_pc_only_settings_is_refused_whole():
+    p = Path(_TMP) / "setup.json"
+    if p.exists():
+        p.unlink()
+    rec = Recorder()
+    # "carefulness: trusting" loosens what-asks-first (PC-only), and a cosmetic
+    # answer rides along: the whole batch must be refused before anything runs.
+    out = S.apply({"carefulness": "trusting", "talk_style": "plain"},
+                  confirm=True, taint=lambda: False, here=lambda: False,
+                  readers=lambda ch: {"tier": "ask", "asks": True}
+                  if ch.get("kind") == "asks_first" else "plain",
+                  appliers={"asks:calendar_read": rec, "manner": rec},
+                  tier_of=lambda a: "ask")
+    check("a remote apply whose answers touch PC-only settings is refused WHOLE",
+          out["ok"] is False and out.get("pc_only") is True
+          and "only be changed on the PC" in out.get("error", "")
+          and out.get("outcomes") == [], out)
+    check("...nothing ran (not even the cosmetic answer) and nothing was saved",
+          rec.calls == [] and not p.exists(), (rec.calls, p.exists()))
+    out = S.apply({"reading_tools": ["calendar"]}, confirm=True,
+                  taint=lambda: False, here=lambda: False,
+                  readers=lambda ch: False, appliers={"tool:calendar_read": rec},
+                  tier_of=lambda a: "ask")
+    check("offering a reading tool from another device is refused the same way",
+          out.get("pc_only") is True and rec.calls == [], out)
+    out = S.apply({"animal_faces": ["sky"]}, confirm=True, taint=lambda: False,
+                  here=lambda: False, readers=lambda ch: False,
+                  appliers={"sky_show:True": rec}, tier_of=lambda a: "ask")
+    check("the face's sky switch from another device is refused too",
+          out.get("pc_only") is True and rec.calls == [], out)
+
+
+def t_a_local_apply_of_pc_only_answers_still_uses_the_existing_setter():
+    rec = Recorder(waiting=True)
+    waits = []
+
+    def waiter(ch, deadline):
+        waits.append(S.change_key(ch))
+        return {"state": "asked-and-denied",
+                "message": "The card was turned down, so it stays off."}
+
+    out = S.apply({"reading_tools": ["calendar"]}, confirm=True,
+                  taint=lambda: False, here=lambda: True,
+                  readers=lambda ch: False,
+                  appliers={"tool:calendar_read": rec}, wait=waiter,
+                  tier_of=lambda a: "ask")
+    check("a LOCAL apply of a PC-only answer goes through its own setter once",
+          rec.calls == ["tool:calendar_read"], rec.calls)
+    check("...waits for that setter's own card instead of reporting a change",
+          out["outcomes"][0]["state"] == "asked-and-denied"
+          and out["changed_count"] == 0, out)
+    check("...and never claimed Windows Hello was done here",
+          "hello" not in json.dumps(out).lower(), out)
+
+
+def t_pc_only_plan_markers_name_the_right_answers():
+    def planned(answers, readers=None):
+        return S.plan(answers, readers=readers or opposite, tier_of=lambda a: "ask")
+
+    out = planned({"carefulness": "trusting"},
+                  readers=lambda ch: {"tier": "ask", "asks": True})
+    asks = [c for c in out["changes"] if c["setting"].startswith("asks:")]
+    check("loosening 'what asks first' is marked pc_only in the plan",
+          asks and all(c["pc_only"] for c in asks), asks)
+    out = planned({"reading_tools": ["calendar"]}, readers=lambda ch: False)
+    check("offering a reading tool is marked pc_only, and still its own card",
+          out["changes"] and all(c["pc_only"] and c["effect"] == "card"
+                                 for c in out["changes"]
+                                 if c["setting"] == "tool:calendar_read"),
+          out["changes"])
+    out = planned({"animal_faces": ["sky"]}, readers=lambda ch: False)
+    check("the face's sky switch is marked pc_only",
+          all(c["pc_only"] for c in out["changes"]
+              if c["setting"] == "sky_show:True"), out["changes"])
+    out = planned({"screen_pictures": ["screen_picture"]}, readers=lambda ch: False)
+    check("a cosmetic switch is NOT marked pc_only",
+          all(c["pc_only"] is False for c in out["changes"]
+              if c["setting"] == "bool:screen_picture"), out["changes"])
+
+
+def t_get_exposes_no_folder_or_account_data():
+    st = S.state(readers=opposite)
+    blob = json.dumps(st)
+    check("GET /api/setup names no drive path, home path or folder location",
+          "C:\\" not in blob and "\\Users" not in blob
+          and "/home/" not in blob and "OneDrive" not in blob
+          and "AppData" not in blob, blob[:400])
+    check("...no account identifier or email address",
+          "@" not in blob and "account" not in blob.lower(), blob[:400])
+    check("...no token, secret or password field",
+          not ({"token", "secret", "password"} & set(st)), sorted(st))
+    check("...every current value is a plain setting value (bool/number/word/list)",
+          all(isinstance(v, (bool, int, float, str, list, dict))
+              for v in st["current"].values()), st["current"])
+    check("...and the storage sentence is the folder's NAME, not its path",
+          st["storage"] == "setup.json in the Jarvis settings folder", st["storage"])
+
+
+def t_the_route_fails_closed_and_maps_the_two_new_refusals():
+    class H(FakeHandler):
+        pass
+    S.install(H, origin_ok=lambda self: True, token_ok=lambda self: True,
+              read_body=lambda self: self.body)
+    # 1. The gate cannot be asked -> taint_active() fails closed -> 409.
+    old_tainted = S._tainted
+    S._tainted = lambda: True
+    try:
+        h = H("/api/setup/apply", body=json.dumps(
+            {"answers": {"humour": "on"}, "confirm": True}).encode())
+        h.do_POST()
+    finally:
+        S._tainted = old_tainted
+    check("with the gate unaskable the apply route refuses 409, nothing changed",
+          FakeHandler.sent[0] == 409
+          and FakeHandler.sent[1].get("tainted") is True, FakeHandler.sent)
+    # 2. A remote apply of a PC-only answer -> 403 before any setter.
+    h = H("/api/setup/apply", body=json.dumps(
+        {"answers": {"carefulness": "trusting"}, "confirm": True}).encode())
+    h.client_address = ("100.64.0.9", 5555)
+    h.connection = _Conn(("100.64.0.1", 4719))
+    old_here, S._here = S._here, lambda peer, local: False
+    # The gate exists and is clear on the owner's PC; this test is about the
+    # PC-only refusal, so give it the same clear-latch answer a real backend
+    # gives when nothing outside steered the turn. The plan is stubbed to one
+    # PC-only change: on the owner's PC the real plan would find it because
+    # jarvis_asks_first/jarvis_sky are installed, and this suite is repo-mode.
+    old_tainted, S._tainted = S._tainted, lambda: False
+    old_plan = S.plan
+
+    def fake_plan(answers, **kw):
+        return {"ok": True, "changes": [{
+            "setting": "sky:show", "label": "Show the sun and moon behind the face",
+            "question": "animal_faces", "from": False, "to": True,
+            "effect": "instant", "pc_only": True, "sentence": "stub",
+            "change": {"kind": "sky_show", "to": True}}],
+            "summary": [], "skipped": [], "recommendation": None}
+
+    S.plan = fake_plan
+    try:
+        h.do_POST()
+    finally:
+        S._here = old_here
+        S._tainted = old_tainted
+        S.plan = old_plan
+    check("a remote apply of a PC-only answer is 403 and nothing ran",
+          FakeHandler.sent[0] == 403
+          and FakeHandler.sent[1].get("pc_only") is True, FakeHandler.sent)
 
 
 def _wired(path, body=b"{}", token=True):
@@ -650,17 +823,20 @@ def t_no_gate_no_model_switch_no_network():
                 calls.add(fn.attr)
         elif isinstance(node, ast.Constant) and isinstance(node.value, str):
             strings.add(node.value)
-    check("it does not import the approval gate, a model lane or the network",
-          not (imports & {"jarvis_gate", "jarvis_models", "socket", "http",
-                          "urllib", "requests", "subprocess", "jarvis_presets"}),
+    check("it imports no model lane, no network and no subprocess",
+          not (imports & {"jarvis_models", "socket", "http", "urllib",
+                          "requests", "subprocess", "jarvis_presets"}),
           imports)
-    check("it never applies a preset, switches a model or calls a gate directly",
-          not (calls & {"apply_preset", "switch_model", "check", "latch_taint"}),
+    check("it READS the gate's taint latch and never sets or clears it",
+          "taint_active" in calls
+          and not (calls & {"apply_preset", "switch_model", "check", "latch_taint",
+                            "clear_taint", "approve_check"}),
           calls)
-    check("it has no gate/latch/model code of its own",
-          "jarvis_gate" not in imports
-          and not any(("change_own_config" in s) or ("latch_taint" in s)
-                      for s in strings), strings)
+    src = Path(S.__file__).read_text(encoding="utf-8")
+    check("it has no gate/latch/model code of its own - it only READS taint_active",
+          "change_own_config" not in strings
+          and "latch_taint(" not in src and "clear_taint(" not in src
+          and "switch_model(" not in src, sorted(strings)[:20])
     check("it writes its answers in the settings folder and never the owner's toml",
           S.ANSWERS_NAME == "setup.json"
           and hasattr(S, "answers_path")
@@ -719,6 +895,12 @@ if __name__ == "__main__":
                t_the_saved_answers_never_hold_private_data,
                t_the_routes_are_wired_and_guarded,
                t_the_apply_route_tells_the_setters_who_asked,
+               t_tainted_apply_refuses_before_any_setter,
+               t_a_remote_apply_touching_pc_only_settings_is_refused_whole,
+               t_a_local_apply_of_pc_only_answers_still_uses_the_existing_setter,
+               t_pc_only_plan_markers_name_the_right_answers,
+               t_get_exposes_no_folder_or_account_data,
+               t_the_route_fails_closed_and_maps_the_two_new_refusals,
                t_no_gate_no_model_switch_no_network):
         print(f"\n--- {fn.__name__} ---")
         try:
