@@ -763,7 +763,13 @@ def t_the_patch_is_registered_and_carries_the_change():
              # TWO ADDED route blocks in jarvis_hud.py, on big-coder.patch's own
              # last lines and the /api/memory/decide route. No gate list, no tier
              # row, no _RISK row, no line this patch writes.
-             "app-control.patch"}
+             "app-control.patch",
+             # setup.patch (2026-10-20, the owner's setup questionnaire) is
+             # appended after app-control.patch and before plugin-loader.patch:
+             # ONE ADDED install block in jarvis_hud.py, on presets.patch's last
+             # printed lines. No gate list, no tier row, no _RISK row, no line
+             # this patch writes.
+             "setup.patch"}
     others = [n for n in names if n not in later]
     check("it is LAST in the stack, bar the ones written after it, and bar "
           "plugin-loader.patch (which must be last of all)",

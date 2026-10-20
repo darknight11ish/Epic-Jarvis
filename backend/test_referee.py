@@ -741,6 +741,12 @@ def t_the_patch_and_the_lists():
              # lines and the /api/memory/decide route, so it rewrites
              # nothing this patch wrote.
              "app-control.patch",
+             # setup.patch (2026-10-20, the owner's setup questionnaire) is
+             # appended after app-control.patch and before plugin-loader.patch:
+             # ONE ADDED install block in jarvis_hud.py, on presets.patch's
+             # last printed lines. No gate list entry, no tier row, no _RISK
+             # row, no line this patch wrote.
+             "setup.patch",
              # card-prefs.patch (2026-10-10, "cards read short") sits after
              # gate-touches.patch and before picture-card.patch (so, before
              # plugin-loader.patch too) and has exactly ONE hunk, in
