@@ -513,6 +513,10 @@ SHIPPED = (
     # /api/history/search and /api/memory/fact-history, for the apps only
     # (and, since the memory dates group, /api/memory/conversation-facts)
     "jarvis_brain_reads.py",
+    # The one read-only App lock / hidden-lists hook (Q1, 2026-10-20): the
+    # three private-view reads (guardian snapshots|diff, person dossier, action
+    # receipts) merge caller flags with it; a flag can only ADD withholding.
+    "jarvis_private_view.py",
     # "remind me next time I talk about X": a kind on the one scheduler,
     # brought up beside the question by jarvis_agent.py - no patch
     "jarvis_next_time.py",

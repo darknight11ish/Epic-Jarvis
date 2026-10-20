@@ -106,6 +106,13 @@ THE ROUTES (installed by install(), below - the drop-in folder's own call)
     GET  /api/receipts                    the recent list. A read.
     POST /api/receipts/<receipt_id>/undo   undo one action.
 
+The list accepts `?app_locked=1` / `?hide_memory_lists=1` (Q1, 2026-10-20):
+the desktop passes its own state there, the answer is the honest "Hidden while
+App lock is on." / hidden-lists sentence with NO rows, and `recent()` is never
+called. The two flags can only ADD withholding - a `0` is not an unlock key,
+and the merge (jarvis_private_view) can never lower the trusted live state.
+Until the live HUD passes the state, the apps keep hiding the drawer themselves.
+
 Undo is a mutating action, so it is put to the ONE permission model like
 everything else that changes something: ONE card, action `undo_action`, and
 the reversal runs only on the gate's own answer. A denied or timed-out card
@@ -939,12 +946,58 @@ def status() -> dict:
                 "last": dict(_STATE["last"]) if _STATE["last"] else None}
 
 
-def list_view(limit: int = DEFAULT_LIMIT) -> dict:
-    """The body of GET /api/receipts."""
+def _flag(value) -> bool:
+    """One query flag: only "1"/"true"/"yes"/"on" (any case) counts.
+
+    A flag can only ADD withholding; `app_locked=0` is not an unlock key."""
+    try:
+        return str(value or "").strip().lower() in ("1", "true", "yes", "on")
+    except Exception:
+        return False
+
+
+def _lock_view(app_locked=None, hide_memory_lists=None) -> dict:
+    """The merged lock answer for GET /api/receipts, from jarvis_private_view.
+
+    The helper ORs the trusted live state and the request flags, so a request
+    can only make the answer more private. With no helper (an older backend),
+    the same two flags are ORed here and an absent state still means unlocked.
+    """
+    try:
+        import jarvis_private_view as private_view
+        return private_view.effective(app_locked=app_locked,
+                                      hide_memory_lists=hide_memory_lists)
+    except Exception:
+        locked = _flag(app_locked) or _flag(hide_memory_lists)
+        why = ("Hidden while App lock is on." if _flag(app_locked) else
+               'Hidden while "Hide memory lists and chat history" is on.'
+               if _flag(hide_memory_lists) else "")
+        return {"app_locked": _flag(app_locked),
+                "hide_memory_lists": _flag(hide_memory_lists),
+                "locked": locked, "why": why}
+
+
+def list_view(limit: int = DEFAULT_LIMIT, *, app_locked=None,
+              hide_memory_lists=None) -> dict:
+    """The body of GET /api/receipts.
+
+    While App lock is on (or the private lists are hidden), the answer carries
+    the same honest marker and NO receipt rows: `recent()` is never called, so
+    no summary, path or snapshot leaves the database for a locked view. The
+    two flags can only add withholding - the merge lives in
+    jarvis_private_view, and a False never clears the trusted live state.
+    """
     try:
         wanted = max(1, min(MAX_LIMIT, int(limit)))
     except Exception:
         wanted = DEFAULT_LIMIT
+    view = _lock_view(app_locked, hide_memory_lists)
+    if view["locked"]:
+        return {"ok": True, "withheld": True, "private": True,
+                "why": view["why"], "receipts": [], "count": 0,
+                "limit": wanted, "undo_action": UNDO_ACTION,
+                "undo_tier": _tier(UNDO_ACTION), "waiting": False,
+                "last": None, "words": dict(WORDS)}
     rows = recent(wanted)
     out = []
     for row in rows:
@@ -966,7 +1019,8 @@ def handle_get(route: str, query: str = "") -> tuple:
         limit = int(raw) if raw else DEFAULT_LIMIT
     except Exception:
         return 400, {"ok": False, "error": "limit must be a whole number"}
-    return 200, list_view(limit)
+    return 200, list_view(limit, app_locked=q.get("app_locked"),
+                          hide_memory_lists=q.get("hide_memory_lists"))
 
 
 def handle_post(route: str, body, *, gate=None, spawn=None) -> tuple:

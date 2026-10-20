@@ -43,9 +43,14 @@ THE PRIVACY INVARIANT, ENFORCED FIRST, NOT LAST
   with no facts, no chats, no mail, no to-dos and no event in it. This module
   cannot see either switch by itself - both live on the apps' side (the
   desktop's Rust and the phone's own lock) - so the state is passed IN by the
-  caller that knows it. The rule is a parameter on purpose: a route or a
-  briefing that knows the state hides the dossier here, in the backend, so no
-  later renderer can leak what it never received.
+  caller that knows it, and since 2026-10-20 (Q1) merged through
+  jarvis_private_view: the caller's two flags, a supplied lock state and the
+  trusted live state are ORed, so a call can only ADD withholding and a False
+  can never unlock. The rule is a parameter on purpose: a route or a briefing
+  that knows the state hides the dossier here, in the backend, so no later
+  renderer can leak what it never received. The live HUD must eventually pass
+  the state (JARVIS-API section 143 / ARCHITECTURE.md); until then the apps
+  keep their own hiding.
 
   The morning-briefing line is the one surface today, and the apps already
   hide a briefing's `items` while either switch is on (desktop
@@ -714,15 +719,31 @@ def build_person_dossier(name, *, now: Optional[float] = None, deps: Optional[De
     """One person's read-only dossier.
 
     The privacy invariant runs FIRST: when `hide_memory_lists` or `app_locked`
-    is true the whole dossier is withheld before any store is opened and
-    before any name is looked at. Then each part is read, and each part fails
-    on its own - one unreadable source never takes the dossier with it.
+    is true - from the caller OR from jarvis_private_view's trusted live state
+    / a supplied lock state - the whole dossier is withheld before any store is
+    opened and before any name is looked at. A caller's False can never clear a
+    lock: the two flags are merged through the one fail-safe hook (Q1 ruling,
+    2026-10-20), and a missing hook leaves the caller's values standing, so an
+    older backend behaves exactly as before. Then each part is read, and each
+    part fails on its own - one unreadable source never takes the dossier with
+    it.
 
     Returns a dict; `ok` is True for a dossier that was allowed to be built
     (it may still be empty of every section - an unknown person). `text` is
     the plain rendering, `read` names the outside sources whose text is in
     it, and `counts` is what a badge would show.
     """
+    try:
+        import jarvis_private_view as private_view
+
+        merged = private_view.effective(app_locked=app_locked,
+                                        hide_memory_lists=hide_memory_lists)
+        app_locked = merged["app_locked"]
+        hide_memory_lists = merged["hide_memory_lists"]
+    except Exception:
+        # No hook module (an older backend): the caller's own booleans stand,
+        # unchanged - the absent hook defaults to unlocked, never to locked.
+        pass
     deps = deps or Deps()
     now = _now_of(now, deps)
     if app_locked:

@@ -40,9 +40,12 @@ The owner's choice of 2026-09-28 (docs/RESEARCH-AUDIT-2026-09-28.md section
         store only - no restore, no write, no file contents and no blob bytes
         beyond the diff itself, which the module already bounds to
         MAX_DIFF_BYTES. A request from another device is refused BEFORE
-        anything is read. The backend cannot see App lock or "Hide memory
-        lists" (both are desktop-side state), so the desktop's own drawer must
-        hide while either is on; JARVIS-API section 140 says that gap plainly.
+        anything is read. Since 2026-10-20 (Q1) these two routes also accept
+        `?app_locked=1` / `?hide_memory_lists=1`: when either is set - or the
+        trusted live state says locked - the answer is the honest withheld
+        marker with an empty page/diff, and the journal or the difference is
+        never read. A flag can only ADD withholding; it can never unlock.
+        JARVIS-API section 140 says the live HUD must eventually pass state.
 
     POST /api/guardian/restore  {"path": <file>, "sha_before": <sha256>}
         (2026-10-18, LM-2B; JARVIS-API section 140.4) "Put that version
@@ -64,8 +67,10 @@ The owner's choice of 2026-09-28 (docs/RESEARCH-AUDIT-2026-09-28.md section
         event, as the module already builds it. The module owns every privacy
         rule: the apps withhold it whole while the hidden lists or App lock are
         on, and the route itself is this PC's only - another device is refused
-        before the name is read or the module imported. A read: no card, no
-        model, nothing stored.
+        before the name is read or the module imported. Since 2026-10-20 (Q1)
+        the route also passes `?app_locked=1` / `?hide_memory_lists=1` into
+        that builder's own withheld path (flags can only ADD withholding; a
+        False cannot unlock). A read: no card, no model, nothing stored.
 
     GET /api/pc/help
         (2026-09-28; JARVIS-API section 84) "PC help": five plain answers
@@ -219,6 +224,58 @@ def _guardian_refusal(why: str, words: str, path: str) -> dict:
             "before_sha256": "", "after_sha256": "", "words": words}
 
 
+def _flag(value) -> bool:
+    """One query flag: only "1"/"true"/"yes"/"on" (any case) counts.
+
+    A flag can only ADD withholding; `app_locked=0` is not an unlock key.
+    Kept local so this module still answers safely if jarvis_private_view is
+    missing from an older install (the helper is the authority when present).
+    """
+    try:
+        return str(value or "").strip().lower() in ("1", "true", "yes", "on")
+    except Exception:
+        return False
+
+
+def _lock_view(params) -> dict:
+    """The merged lock answer for one GET, from jarvis_private_view.
+
+    The helper ORs the trusted live state and the request flags, so a request
+    can only make the answer more private. With no helper (older backend), the
+    same two flags are ORed here and an absent state still means unlocked.
+    """
+    app_locked = _flag(_param(params, "app_locked"))
+    hide_memory_lists = _flag(_param(params, "hide_memory_lists"))
+    try:
+        import jarvis_private_view as private_view
+        return private_view.effective(app_locked=app_locked,
+                                      hide_memory_lists=hide_memory_lists)
+    except Exception:
+        locked = app_locked or hide_memory_lists
+        why = ("Hidden while App lock is on." if app_locked else
+               'Hidden while "Hide memory lists and chat history" is on.'
+               if hide_memory_lists else "")
+        return {"app_locked": app_locked, "hide_memory_lists": hide_memory_lists,
+                "locked": locked, "why": why}
+
+
+def _guardian_withheld(words: str, path: str, limit: int = 0) -> dict:
+    """The guardian's own answer shape, carrying nothing but the marker.
+
+    Deliberately the same keys as a success/refusal answer so an app that
+    already renders these routes needs no new branch: `snapshots`/`diff` are
+    empty, every path/name/reason is "", and `why` is the one honest sentence.
+    """
+    if path == GUARDIAN_SNAPSHOTS_PATH:
+        return {"ok": False, "withheld": True, "refused": False, "why": words,
+                "snapshots": [], "count": 0, "total": 0, "limit": limit,
+                "more": False, "usage": {}, "words": words}
+    return {"ok": False, "withheld": True, "refused": False, "why": words,
+            "path": "", "diff": "", "truncated": False, "binary": False,
+            "same": False, "before_sha256": "", "after_sha256": "",
+            "words": words}
+
+
 def _param(params, name: str) -> str:
     try:
         return str((params.get(name) or [""])[0])
@@ -273,6 +330,11 @@ def _snapshot_page(query: str, read_rows, read_usage) -> tuple:
                 GUARDIAN_SNAPSHOTS_PATH)
     else:
         limit = DEFAULT_SNAPSHOTS
+    # The privacy decision runs BEFORE read_rows(): a locked or hidden view
+    # never opens the journal, so there is nothing to leak even by accident.
+    view = _lock_view(params)
+    if view["locked"]:
+        return 200, _guardian_withheld(view["why"], GUARDIAN_SNAPSHOTS_PATH, limit)
     try:
         found = read_rows()
     except Exception as exc:
@@ -341,6 +403,12 @@ def _diff_answer(query: str, differ) -> tuple:
         return 400, _guardian_refusal(
             "bad_request", "That path or saved version is too long to be one.",
             GUARDIAN_DIFF_PATH)
+    # BEFORE differ(): the diff is computed from the file and the saved
+    # version, so a locked view must not even work it out. The path the
+    # request sent is not echoed back in the withheld answer.
+    view = _lock_view(params)
+    if view["locked"]:
+        return 200, _guardian_withheld(view["why"], GUARDIAN_DIFF_PATH)
     answer = differ(path, sha)
     if not isinstance(answer, dict):
         return 500, _guardian_refusal(
@@ -443,9 +511,9 @@ def handle_get(path: str, query: str = "", *, peer=None, local=None) -> tuple:
         # name, so a denied request cannot be used to probe names either.
         if not _from_this_pc(peer, local):
             return 403, _dossier_refusal("not_this_pc", PEOPLE_NOT_THIS_PC)
+        params = parse_qs(query or "", keep_blank_values=True)
         try:
-            name = str((parse_qs(query or "", keep_blank_values=True).get("name")
-                        or [""])[0]).strip()
+            name = str((params.get("name") or [""])[0]).strip()
         except Exception:
             name = ""
         if not name:
@@ -457,8 +525,13 @@ def handle_get(path: str, query: str = "", *, peer=None, local=None) -> tuple:
         build = getattr(people, "build_person_dossier", None)
         if not callable(build):
             return 501, _dossier_refusal("update", UPDATE)
+        # The route's two lock flags can only ADD a reason to withhold; the
+        # builder merges them through jarvis_private_view, so a False here
+        # never clears the trusted live state.
+        view = _lock_view(params)
         try:
-            answer = build(name)
+            answer = build(name, app_locked=view["app_locked"],
+                           hide_memory_lists=view["hide_memory_lists"])
         except Exception:
             return 500, _dossier_refusal(
                 "unreadable", "The person's dossier could not be put together, so nothing "
