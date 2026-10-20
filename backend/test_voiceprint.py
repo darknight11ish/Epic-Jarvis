@@ -514,6 +514,67 @@ def t_control_markers_never_reach_the_store():
           text)
 
 
+def t_drafting_request_and_register_are_narrow():
+    for text in ("draft an email to Sam about the budget",
+                 "write this in my voice",
+                 "rewrite it in my own voice",
+                 "reply to the client"):
+        check(f"a drafting request is recognised: {text!r}", V.drafting_request(text))
+    for text in ("what is the weather", "how many files are there", "turn off the lights"):
+        check(f"an ordinary question is NOT drafting: {text!r}",
+              V.drafting_request(text) is False)
+    check("work email register", V.infer_register("draft an email to the client") == "work_email")
+    check("casual register", V.infer_register("text my friend a message") == "casual_text")
+    check("pushback register", V.infer_register("write a reply to decline the offer") == "firm_pushback")
+    check("technical register", V.infer_register("write the api spec document") == "technical_doc")
+    check("default register", V.infer_register("write this in my voice") == "general")
+    check("the register set is the closed one the audit names",
+          set(V.REGISTERS) == {"general", "casual_text", "work_email",
+                               "technical_doc", "firm_pushback"})
+
+
+def t_drafting_block_is_guarded_and_latches_only_when_used():
+    import types
+    store = types.SimpleNamespace(search=lambda q, k=0: [
+        {"text": "A sentence written with enough words to carry a real style.", "source": "memory"}])
+    real_cfg, real_count = V._cfg, V.count
+    V._cfg = lambda key, default: (True if key == "enabled" else real_cfg(key, default))
+    V.count = lambda: 2
+    calls = []
+    real = V._latch
+    V._latch = lambda why="": calls.append(why)
+    try:
+        block = V.drafting_block("draft an email to Sam", store=store)
+        check("enabled + a sample injects a style block",
+              bool(block) and "Here is how the owner has written" in block, block[:90])
+        check("... and the block is the rules + examples", "- " in block, block)
+        check("... and the turn is latched local exactly once",
+              calls == ["voiceprint_exemplars"], calls)
+
+        calls.clear()
+        check("Temporary chat injects NOTHING",
+              V.drafting_block("draft an email", temporary=True, store=store) == "")
+        check("... and a Temporary turn does not latch", calls == [], calls)
+
+        check("an external-chatbot path injects NOTHING",
+              V.drafting_block("draft an email", external=True, store=store) == "")
+        check("... and the external path does not latch", calls == [], calls)
+
+        V._cfg = lambda key, default: (False if key == "enabled" else real_cfg(key, default))
+        check("the feature OFF injects nothing",
+              V.drafting_block("draft an email", store=store) == "")
+        check("... and OFF does not latch", calls == [], calls)
+        V._cfg = lambda key, default: (True if key == "enabled" else real_cfg(key, default))
+
+        V.count = lambda: 0
+        check("no stored sample injects nothing",
+              V.drafting_block("draft an email", store=store) == "")
+        check("... and no sample does not latch", calls == [], calls)
+    finally:
+        V._latch = real
+        V._cfg, V.count = real_cfg, real_count
+
+
 if __name__ == "__main__":
     # The routes need the real wrapper in place for the two route tests.
     V.install(FakeHandler, origin_ok=lambda h: True, token_ok=lambda h: True,
@@ -537,6 +598,8 @@ if __name__ == "__main__":
                t_compute_voiceprint_is_pure_and_total,
                t_the_install_wraps_both_verbs_and_is_idempotent,
                t_a_cross_origin_request_is_refused,
+               t_drafting_request_and_register_are_narrow,
+               t_drafting_block_is_guarded_and_latches_only_when_used,
                t_sentence_opening_names_are_stripped,
                t_a_leaked_placeholder_is_flagged_by_the_scorer,
                t_control_markers_never_reach_the_store):

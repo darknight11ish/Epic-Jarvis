@@ -20775,6 +20775,18 @@ cannot see it: it scans the two apps' own source, so a backend route no app
 calls is outside what it decides.
 ## 133. "Write Like Me": drafting in the owner's own voice (added 2026-10-15)
 
+**Drafting-turn wiring (Q4 follow-up, 2026-10-20).** `jarvis_agent.run_local_turn`
+puts the owner's own (stripped) style examples in front of a LOCAL DRAFTING turn
+only: `jarvis_voiceprint.drafting_request()` recognises "draft / write / reply /
+rewrite / in my voice" requests, `infer_register()` picks one of the five
+registers, and `drafting_block()` returns the rules + examples only when the
+feature is on, at least one sample exists, the turn is not Temporary and it is
+not an external-chatbot path. A non-empty block is inserted as a data system
+message before the answer and latches the turn local (`latch_taint`, why
+`voiceprint_exemplars`); the empty/off/temporary/external path returns "" and
+does NOT latch. No lane, tools list, card or route changes.
+
+
 **Slice 1 hardening (Area 5 / 2026-10-20).** The stripping step now replaces a
 name that OPENS a sentence too, by four rules: a possessive (`Priya's` -> `[name]`),
 a direct-address vocative (`Sam,` / `Hi Sam,` -> `[name],`), an honorific

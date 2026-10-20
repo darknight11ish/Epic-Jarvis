@@ -463,7 +463,80 @@ def rules_block() -> str:
     ])
 
 
-def prompt_block(about: str, k: Optional[int] = None, store: Any = None) -> str:
+#: A drafting request, in the owner's own words. Narrow on purpose: a chat
+#: question is not a drafting turn, and injecting style there would taint every
+#: conversation the moment one sample exists.
+_DRAFT_REQUEST = re.compile(
+    r"\b(?:draft|rewrite|compose|write (?:me |this |that |up )?(?:a |an )?(?:message|email|note|reply|letter|post)|"
+    r"reply (?:to |with )|in my (?:own )?voice|write (?:it |this )?in my voice|"
+    r"sound(?:s)? like me|my writing style)\b", re.I)
+
+#: Register inference, in the order the audit names them. Defaults to general.
+_REGISTER_WORDS = (
+    ("work_email", ("email", "subject", "regards", "dear", "meeting", "deadline",
+                    "report", "invoice", "colleague", "boss", "client")),
+    ("firm_pushback", ("no", "decline", "push back", "refuse", "complain",
+                       "not acceptable", "escalate", "cancel")),
+    ("technical_doc", ("spec", "document", "readme", "api", "bug", "test",
+                       "implementation", "technical")),
+    ("casual_text", ("text", "message", "chat", "friend", "mum", "dad", "lol",
+                     "thanks", "hey")),
+)
+
+#: The closed-world registers the UI and the audit name.
+REGISTERS = ("general", "casual_text", "work_email", "technical_doc", "firm_pushback")
+
+
+def drafting_request(text: str) -> bool:
+    """True when this turn asks Jarvis to COMPOSE something, not to answer."""
+    return bool(_DRAFT_REQUEST.search(str(text or "")))
+
+
+def infer_register(text: str) -> str:
+    """The register a drafting request is written in - a hint, never a mode."""
+    low = str(text or "").lower()
+    for name, words in _REGISTER_WORDS:
+        if any(w in low for w in words):
+            return name
+    return "general"
+
+
+def drafting_block(about: str, *, temporary: bool = False, external: bool = False,
+                   store: Any = None) -> str:
+    """The style block for ONE local drafting turn, or "" and no latch.
+
+    Empty when the turn is Temporary, when it is an external-chatbot path, when
+    the feature is off, or when there is no sample to draw on. A non-empty block
+    latches the conversation local (the exemplars are the owner's private words);
+    "" never latches, so an ordinary chat is not made private by an empty block.
+    """
+    if temporary or external:
+        return ""
+    if not _cfg("enabled", True):
+        return ""
+    try:
+        if count() <= 0:
+            return ""
+    except Exception:
+        return ""
+    block = prompt_block(about, store=store, register=infer_register(about))
+    if not block:
+        return ""
+    _latch("voiceprint_exemplars")
+    return block
+
+
+def _latch(why: str = "voiceprint_exemplars") -> None:
+    """Latch the conversation local. One seam, so the suite can see it happen."""
+    try:
+        import jarvis_gate
+        jarvis_gate.latch_taint(why=why)
+    except Exception:
+        pass
+
+
+def prompt_block(about: str, k: Optional[int] = None, store: Any = None,
+                 register: str = "") -> str:
     """The exemplars as a block to put in front of a draft.
 
     Empty when there is nothing to show, and that is on purpose - see
@@ -473,6 +546,7 @@ def prompt_block(about: str, k: Optional[int] = None, store: Any = None) -> str:
     found = exemplars(about, k=k, store=store)
     if not found:
         return ""
+    _ = register        # accepted for the call shape; exemplars have no register yet
     lines = [rules_block(), ""]
     lines += [f"- {e.text}" for e in found]
     return "\n".join(lines)
