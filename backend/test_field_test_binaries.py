@@ -293,6 +293,9 @@ def t_the_live_backend_is_recorded_with_its_token_and_never_faked():
           code == 0
           and seen.get("url") == "http://127.0.0.1:8765/api/version"
           and seen.get("headers", {}).get("X-Jarvis-Token") == "T", (code, seen, out))
+    check("... and it names itself as the HUD, which is the only Origin-less "
+          "client jarvis_owner_check.origin_ok accepts",
+          seen.get("headers", {}).get("X-Jarvis-Client") == "hud", (code, seen, out))
     check("... and the Step 0 line names the server it really reached",
           "live backend: http://127.0.0.1:8765 reachable - server=jarvis-hud"
           in out, out)

@@ -207,6 +207,32 @@ def t_unknown_and_ambiguous_never_guess():
           and [g["group"] for g in rows] == CAT.GROUPS, rows)
 
 
+def t_cloud_sync_is_answered_not_padded():
+    """Gemini's post-review (2026-10-20, HIGH-4): the live model padded "I do not
+    have that" with generic OneDrive/Google Drive advice, which nudges the owner
+    toward pointing a third-party sync folder at Jarvis's private folders. The
+    guide now answers the topic directly, deterministically, and names the real
+    path (Tailscale/Meshnet + encrypted .jbak backups)."""
+    for asked in ("cloud sync", "how do I turn on cloud sync",
+                  "sync across devices", "can I sync my files to OneDrive"):
+        out = FG.explain(asked)
+        check(f'"{asked}" is answered, not invented', out["ok"] is True
+              and out["kind"] == "note", out)
+        check("...and the answer names the private link and the encrypted backup",
+              "does not use cloud sync" in out["words"]
+              and "Tailscale" in out["words"] and "Meshnet" in out["words"]
+              and ".jbak" in out["words"], out.get("words"))
+    out = FG.state("is cloud sync on")
+    check("the on/off question about cloud sync gets the same honest note",
+          out["ok"] is True and out["kind"] == "note" and out.get("state") is None
+          and "does not use cloud sync" in out["words"], out)
+    check("the tool result path (feature_guide) carries it too",
+          FG.tool_result("cloud sync")["kind"] == "note")
+    ambient = FG.explain("the prompt coach")
+    check("...and an ordinary feature question is unaffected",
+          ambient["kind"] == "feature", ambient.get("kind"))
+
+
 # -------------------------------- 2. state: read, or said that it could not be
 
 def t_every_switch_has_a_state_reader():

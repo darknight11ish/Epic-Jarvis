@@ -336,7 +336,12 @@ def check_backend(repo, args, http, say, feature) -> dict:
     recorded = "NOT RECORDED"
     state, detail = PASS, ""
     if url:
-        headers = {"X-Jarvis-Client": "field-test-gate"}
+        # The HUD's origin check accepts an Origin-less request only from the
+        # HUD's own client name (jarvis_owner_check.origin_ok); a made-up
+        # "field-test-gate" name was refused with 403, so the build-SHA gate
+        # could never record the live backend. "hud" is the name the rule
+        # exists for.
+        headers = {"X-Jarvis-Client": "hud"}
         token = (args.backend_token or "").strip()
         if token:
             headers["X-Jarvis-Token"] = token

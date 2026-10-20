@@ -561,6 +561,31 @@ def unknown_words(words: str) -> str:
             + groups_words())
 
 
+#: The owner asked about "cloud sync" in the live field test and the local model padded its
+#: "I do not have that" with generic OneDrive/Google Drive/iCloud advice. Gemini's post-review
+#: (2026-10-20, HIGH-4) asked for a deterministic answer instead: pointing a third-party sync
+#: folder at the private Jarvis folders is a privacy hazard, so the guide says what Jarvis
+#: actually does and never suggests one. These are whole phrases after `_norm` (lower case,
+#: punctuation to spaces), matched as substrings so "how do I turn on cloud sync" also hits.
+_CLOUD_SYNC_TOPICS = (
+    "cloud sync", "cloud storage", "cloud backup", "sync across devices",
+    "sync my files", "sync files between", "sync between my devices",
+    "onedrive", "one drive", "google drive", "dropbox", "icloud",
+)
+
+CLOUD_SYNC_WORDS = (
+    "Jarvis does not use cloud sync. Your PC and phone talk directly over your "
+    "private Tailscale or NordVPN Meshnet link, and backups are saved as encrypted "
+    ".jbak files. Nothing is uploaded to OneDrive, Google Drive, Dropbox or iCloud."
+)
+
+
+def _cloud_sync_asked(words) -> bool:
+    """True when the owner is asking about cloud sync - answered, not invented."""
+    text = " " + _norm(words) + " "
+    return any(topic in text for topic in _CLOUD_SYNC_TOPICS)
+
+
 def _ambiguous_words(rows: list) -> str:
     names = "; ".join(f"{r['title']} ({r['id']})" for r in rows)
     return (f"That could be more than one feature: {names}. "
@@ -592,6 +617,8 @@ def explain(words) -> dict:
         return {"ok": False, "kind": "missing",
                 "words": ("The feature list is not installed on this PC, so I cannot "
                           "read it. Nothing here was invented.")}
+    if _cloud_sync_asked(words):
+        return {"ok": True, "kind": "note", "words": CLOUD_SYNC_WORDS}
     got = find(words, loose=True)
     kind = got["kind"]
     if kind == "feature":
@@ -653,6 +680,9 @@ def state(words) -> dict:
     if CATALOGUE is None:
         return {"ok": False, "kind": "missing",
                 "words": "The feature list is not installed on this PC, so I cannot read it."}
+    if _cloud_sync_asked(words):
+        return {"ok": True, "kind": "note", "state": None,
+                "words": CLOUD_SYNC_WORDS}
     got = find(words, loose=True)
     if got["kind"] == "feature":
         row = got["row"]
