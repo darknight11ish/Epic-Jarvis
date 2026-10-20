@@ -240,6 +240,93 @@ object VoiceTraining {
     /** Whether the PC accepted the clips (a card is up, or was just answered). */
     fun accepted(reply: VoiceTrainingReply): Boolean = reply.ok && reply.error.isBlank()
 
+    // ---------------------------------------- clearing the saved training
+    // (2026-10-19, the owner's "clear previous voice training"): one more
+    // mode on the existing route, ONE change_own_config card, nothing deleted
+    // before it is approved. An older PC answers 400 "unknown mode", so the
+    // screen only offers it when [VoiceStrict.View.clear] is true.
+
+    /** `POST /api/voice/enroll`'s body for the clear - no new route. */
+    const val CLEAR_BODY = """{"mode":"clear"}"""
+
+    /** The button's own words (both apps use the same sentence). */
+    const val CLEAR_LABEL = "Clear previous voice training"
+
+    /** Said once the PC's own status reports the clear (its `last.outcome`). */
+    const val CLEARED_LINE =
+        "Your saved voice training is cleared. Train your voice again to use voice commands."
+
+    /** What the ONE card does, in the owner's words. */
+    const val CLEAR_WHAT_IT_DOES =
+        "Deletes every saved voice print on your PC (one per microphone you trained), " +
+            "the \"hey Jarvis\" check built from those recordings, and the small notes it " +
+            "kept from learning your voice in Live. It does not delete your custom speaking " +
+            "voices, your chat history or your phone pairing. ONE card approves it: nothing " +
+            "is deleted until you say yes, and voice commands and Jarvis Live are refused " +
+            "until you train your voice again."
+
+    /** Said while a voice card is already waiting: a second one is never fired. */
+    fun clearWaitingLine(view: VoiceStrict.View): String? = when {
+        view.pendingKind.isBlank() -> null
+        view.pendingKind == "clear" ->
+            "A clear card is already waiting for your approval - approve or deny it first. " +
+                "Nothing is deleted until you do, and a second clear cannot be asked for " +
+                "while it waits."
+        else ->
+            "A voice card is already waiting for approval. Approve or deny that card first; " +
+                "no second voice card can be raised while it waits."
+    }
+
+    /**
+     * What the PC answered to the clear, in words for the screen. Mirrors
+     * `jarvis_voice_enroll.stage_clear()`: 202 = ONE card is up (nothing
+     * deleted yet); 200 `cleared: false` = nothing saved, no card raised; 409
+     * `pending: true` = another card is already waiting; 409 `pending: false`
+     * = the tier is not `ask`, so no card was raised; an error is the PC's
+     * own sentence. It never reports success.
+     */
+    fun clearReply(reply: VoiceTrainingReply): SendResult = when {
+        reply.error.isNotBlank() -> SendResult(false, reply.error.trim().replaceFirstChar { it.uppercase() }
+            .let { if (it.endsWith(".")) it else "$it." })
+        reply.pending -> SendResult(
+            true,
+            reply.message.ifBlank {
+                "Approve the card ${Approvals.WHERE}. Nothing is deleted until you do."
+            }.trim().let { if (it.endsWith(".")) it else "$it." },
+        )
+        reply.ok && !reply.cleared -> SendResult(
+            false,
+            reply.message.ifBlank {
+                "There is nothing to clear: no saved voice training was found on this PC."
+            }.trim().let { if (it.endsWith(".")) it else "$it." },
+        )
+        else -> SendResult(false, "Your PC did not say whether it cleared anything.")
+    }
+
+    /**
+     * How the clear ended, from the PC's status `last` - only when that
+     * outcome is newer than [sentAt], the moment this screen asked (the PC's
+     * clock and this phone's are not the same, so this is a coarse
+     * "after the request" test, never a success claimed on its own). A
+     * denied or timed-out card leaves every file as it was; a failed delete
+     * is never reported as cleared.
+     */
+    fun clearOutcomeLine(last: VoiceTrainingLast?, sinceAt: Double): String? {
+        // `sinceAt` is the `last.at` the screen saw BEFORE it asked (0 when
+        // none): only an outcome NEWER than that belongs to this clear, so a
+        // phone clock and the PC clock never have to agree.
+        if (last == null || last.at <= sinceAt) return null
+        return when (last.outcome) {
+            "cleared" -> CLEARED_LINE
+            "denied" -> "You said no, so every saved voice file stays and nothing changed."
+            "timed_out" -> "Nobody answered the clear card in time, so every saved voice file stays."
+            "refused" -> "Your PC refused the clear" + reasonSuffix(last.reason)
+            "failed" -> "The clear did not finish" + reasonSuffix(last.reason) +
+                " Nothing is reported as cleared while a saved file remains."
+            else -> null
+        }
+    }
+
     // ------------------------------------------------ the "someone else" check
 
     /** What the PC said about the other person's clips, in plain words. */

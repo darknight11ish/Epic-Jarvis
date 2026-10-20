@@ -241,6 +241,12 @@ object VoiceStrict {
         val settings: Boolean = false,
         /** The PC understands `mode: measure`. */
         val measure: Boolean = false,
+        /**
+         * The PC understands `{"mode": "clear"}` (2026-10-19, the owner's
+         * "clear previous voice training"). An older PC answers 400 "unknown
+         * mode", so the screen offers no button rather than sending it.
+         */
+        val clear: Boolean = false,
         /** "strong", "small", or "" - which voice-ID model very strict uses. */
         val veryStrictModel: String = "",
         val strongInstalled: Boolean = false,
@@ -472,6 +478,7 @@ object VoiceStrict {
             rounds = training?.flag("rounds") ?: false,
             settings = training?.flag("settings") ?: false,
             measure = training?.flag("measure") ?: false,
+            clear = training?.flag("clear") ?: false,
             veryStrictModel = models?.str("very_strict_model").orEmpty(),
             strongInstalled = models?.obj("strong")?.flag("installed") ?: false,
             smallInstalled = models?.obj("small")?.flag("installed") ?: false,

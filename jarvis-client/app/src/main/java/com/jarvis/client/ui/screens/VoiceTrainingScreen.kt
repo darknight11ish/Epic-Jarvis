@@ -100,6 +100,7 @@ fun VoiceTrainingScreen(
     cancelRounds: suspend () -> String,
     checkOthers: suspend (List<ByteArray>) -> VoiceTraining.CheckResult,
     proposeThreshold: suspend (Double) -> VoiceTraining.SendResult,
+    clearTraining: suspend () -> VoiceTraining.SendResult,
     onRefresh: suspend () -> Unit,
     onAskMicrophone: () -> Unit,
     onBack: () -> Unit,
@@ -130,6 +131,15 @@ fun VoiceTrainingScreen(
     var confirmCancel by remember { mutableStateOf(false) }
     var cancelling by remember { mutableStateOf(false) }
     var cancelNote by remember { mutableStateOf<String?>(null) }
+    // "Clear previous voice training" (2026-10-19): ONE card on the PC, and
+    // nothing deleted until it is approved. `clearAsked` is this screen's own
+    // memory, so an outcome line is only shown for the clear it asked for;
+    // `clearSinceAt` is the PC's last outcome timestamp BEFORE that ask, so
+    // the line needs no clock to agree across two devices.
+    var clearAsked by remember { mutableStateOf(false) }
+    var clearSinceAt by remember { mutableStateOf(0.0) }
+    var clearing by remember { mutableStateOf(false) }
+    var clearNote by remember { mutableStateOf<String?>(null) }
 
     val sentences: List<String> = plan?.rounds?.getOrNull(roundIndex)?.sentences
         ?.mapNotNull { plan?.phrases?.getOrNull(it) }.orEmpty()
@@ -272,6 +282,20 @@ fun VoiceTrainingScreen(
     }
 
     /** Deletes everything recorded so far - here, and whatever the PC holds. */
+    fun clearSavedTraining() {
+        if (clearing) return
+        scope.launch {
+            clearing = true
+            clearNote = null
+            clearAsked = true
+            clearSinceAt = status.gate.training.last?.at ?: 0.0
+            val reply = clearTraining()
+            clearNote = reply.message
+            clearing = false
+            onRefresh()
+        }
+    }
+
     fun cancelAll() {
         val onPc = (plan != null && roundIndex > 0) || heldElsewhere || strict.session != null
         stopFlag.set(true)
@@ -478,6 +502,15 @@ fun VoiceTrainingScreen(
                         answered = answered,
                         sentPlan = sentPlan,
                         busy = cancelling,
+                        clearing = clearing,
+                        clearNote = clearNote,
+                        clearOutcome = if (clearAsked) {
+                            VoiceTraining.clearOutcomeLine(status.gate.training.last, clearSinceAt)
+                        } else {
+                            null
+                        },
+                        clearWaiting = VoiceTraining.clearWaitingLine(strict),
+                        onClear = { clearSavedTraining() },
                         onBegin = { p, i -> begin(p, i) },
                         onDeleteHeld = { cancelAll() },
                     )
@@ -686,6 +719,11 @@ private fun StartPlates(
     answered: Boolean,
     sentPlan: VoiceRounds.Plan?,
     busy: Boolean,
+    clearing: Boolean,
+    clearNote: String?,
+    clearOutcome: String?,
+    clearWaiting: String?,
+    onClear: () -> Unit,
     onBegin: (VoiceRounds.Plan, Int) -> Unit,
     onDeleteHeld: () -> Unit,
 ) {
@@ -785,6 +823,47 @@ private fun StartPlates(
                 "Finish or delete the unfinished training above first.",
                 style = MaterialTheme.typography.labelSmall,
                 color = chrome.textMid,
+            )
+        }
+    }
+
+    // "Clear previous voice training" (2026-10-19): one more mode on the
+    // existing route, ONE card, nothing deleted before approval. Offered only
+    // when the PC says it understands it - an older PC answers 400 "unknown
+    // mode". The phone never approves anything: the card is decided on the PC
+    // (or in this phone's own approvals list).
+    if (strict.clear) {
+        Plate {
+            Text(
+                VoiceTraining.CLEAR_LABEL,
+                style = MaterialTheme.typography.titleSmall,
+                color = chrome.textHi,
+            )
+            Gap(6)
+            Text(
+                VoiceTraining.CLEAR_WHAT_IT_DOES,
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textMid,
+            )
+            clearWaiting?.let { waiting ->
+                Gap(6)
+                Text(waiting, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
+            }
+            clearOutcome?.let { outcome ->
+                Gap(6)
+                Text(outcome, style = MaterialTheme.typography.bodySmall, color = chrome.textHi)
+            }
+            clearNote?.let { note ->
+                Gap(6)
+                Text(note, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+            }
+            Gap(10)
+            Secondary(
+                text = VoiceTraining.CLEAR_LABEL,
+                busy = clearing,
+                enabled = !clearing && clearWaiting == null && strict.session == null && !busy,
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onClear,
             )
         }
     }

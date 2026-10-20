@@ -339,7 +339,8 @@ function makeReader(box, opts) {
    Training on this PC
    ========================================================================== */
 
-const train = { view: "idle", plan: null, index: 0, message: "", reader: null, heldOnServer: false };
+const train = { view: "idle", plan: null, index: 0, message: "", reader: null, heldOnServer: false,
+  clearMessage: "", clearTone: "", clearSentAt: 0, clearing: false };
 
 function trainBox() {
   return $("vt-train");
@@ -389,6 +390,51 @@ async function finishOnly(round, add) {
   } catch (error) {
     train.message = problemWords(error);
   }
+  paintTrain();
+  reload();
+}
+
+/** The PC's last outcome, when it belongs to the clear this page asked for. */
+function clearOutcomeForPage() {
+  if (!train.clearSentAt) return null;
+  const last = ((status.gate || {}).training || {}).last || null;
+  if (!last) return null;
+  // Same clock (the PC and this page are one machine); a few seconds of slack
+  // for the PC recording the outcome a moment before the reload reads it.
+  if (Number(last.at) < Number(train.clearSentAt) - 5) return null;
+  return VT.clearOutcomeLine(last);
+}
+
+/**
+ * "Clear previous voice training": ONE card on the PC, nothing deleted until
+ * it is approved. A 202/409 is shown in the PC's own words and the button is
+ * disabled while a card waits (a second request would only be refused), and
+ * a 200 "nothing to clear" answer says exactly that - it is never drawn as a
+ * card-looking success. A denied or timed-out card leaves every file as it
+ * was, and the page says so. Nothing is approved here.
+ */
+async function clearTraining() {
+  if (linkStale) {
+    train.clearMessage = HELD;
+    train.clearTone = "warn";
+    paintTrain();
+    return;
+  }
+  train.clearSentAt = Date.now() / 1000;
+  train.clearMessage = "";
+  train.clearTone = "";
+  train.clearing = true;
+  paintTrain();
+  try {
+    const answer = await invoke("clear_voice_training");
+    const reply = VT.clearReply(answer, APPROVE_WHERE);
+    train.clearMessage = reply.text;
+    train.clearTone = reply.tone === "ok" ? "" : reply.tone;
+  } catch (error) {
+    train.clearMessage = problemWords(error);
+    train.clearTone = "bad";
+  }
+  train.clearing = false;
   paintTrain();
   reload();
 }
@@ -520,6 +566,20 @@ function paintTrain() {
     const last = (gate.training || {}).last || null;
     const outliers = last && ownOutcome(last) ? VT.outlierLine(last) : null;
     if (blocker) nodes.push(line(blocker, "warn"));
+    // A clear card already waiting (any voice card, in fact): say so and never
+    // fire a second request - the PC answers 409 for one.
+    const clearOutcome = clearOutcomeForPage();
+    const clearWaiting = VT.clearWaitingLine(status);
+    const clearTone = clearOutcome ? clearOutcome.tone : (train.clearTone || "warn");
+    // The PC's own outcome wins once it exists: a waiting message from the
+    // click is history the moment the card was denied, timed out or cleared.
+    const clearSaid = clearOutcome ? clearOutcome.text : (train.clearMessage || clearWaiting);
+    if (clearSaid) {
+      const saidEl = line(clearSaid, clearTone, "sc-line");
+      saidEl.id = "vt-clear-status";
+      saidEl.setAttribute("role", "status");
+      nodes.push(saidEl);
+    }
     if (session && !blocker) {
       nodes.push(line(session.line, "warn"));
       const row = node("div", "row");
@@ -557,6 +617,18 @@ function paintTrain() {
         row.append(button("Train my voice", () => startPlan(VT.trainingPlan(status)), { id: "vt-start" }));
         if (desktop.trained === true && !desktop.needs_retraining && VT.understands(status).rounds) {
           row.append(button("Train more", () => startPlan(VT.trainingPlan(status, { add: true })), { ghost: true, id: "vt-more" }));
+        }
+        // "Clear previous voice training" (2026-10-19): only on a PC that
+        // understands the mode and has something saved, and never while a
+        // voice card waits - the PC would only refuse a second one. The words
+        // beside it say ONE card and nothing deleted before approval.
+        if (VT.clearAvailable(status)) {
+          row.append(button(VT.CLEAR_LABEL, () => clearTraining(), {
+            ghost: true,
+            id: "vt-clear",
+            disabled: train.clearing || (gate.training || {}).pending === true,
+          }));
+          nodes.push(line(VT.CLEAR_WHAT_IT_DOES, "", "note"));
         }
         nodes.push(row);
       }

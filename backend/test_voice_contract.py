@@ -311,8 +311,12 @@ def t_training_state_in_every_shape():
         code, reply = E.stage(body, gate=gate, tier_of=lambda a: "ask", enroll=lambda c: None)
         check("the stage reply conforms to VoiceTrainingReply", code == 202, f"{code} {reply}")
         # `error` and `expires_in` come only with a refusal (checked below).
+        # `cleared`/`trained`/`files` (2026-10-19) are sent only by `mode:
+        # clear` (backend/jarvis_voice_enroll.stage_clear); an ordinary
+        # training reply rightly does not carry them.
         conforms(reply, "VoiceTrainingReply", classes, "reply",
-                 optional=("reply.error", "reply.expires_in"))
+                 optional=("reply.error", "reply.expires_in",
+                           "reply.cleared", "reply.trained", "reply.files"))
         waiting = S.status()["gate"]["training"]
         conforms(waiting, "VoiceTrainingState", classes, "pending",
                  optional=("pending.last", "pending.why"))

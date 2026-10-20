@@ -1357,6 +1357,7 @@ pub fn run() {
             voice_training::discard_voice_samples,
             voice_training::send_voice_training,
             voice_training::cancel_voice_training,
+            voice_training::clear_voice_training,
             voice_training::measure_voice,
             voice_training::reset_voice_adaptation,
             voice_training::set_voice_setting,

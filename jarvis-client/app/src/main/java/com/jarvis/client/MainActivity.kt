@@ -2498,6 +2498,7 @@ class MainActivity : FragmentActivity() {
                             cancelRounds = { JarvisRuntime.cancelVoiceRounds() },
                             checkOthers = { clips -> JarvisRuntime.checkVoiceWithSomeoneElse(clips) },
                             proposeThreshold = { value -> JarvisRuntime.proposeVoiceThreshold(value) },
+                            clearTraining = { JarvisRuntime.clearVoiceTraining() },
                             onRefresh = { voice.refreshStatus() },
                             onAskMicrophone = {
                                 // Never starts a recording on the grant - the

@@ -441,6 +441,12 @@ data class VoiceTrainingReply(
     val message: String = "",
     val error: String = "",
     @SerialName("expires_in") val expiresIn: Int = 0,
+    /** `mode: clear` only: the PC did nothing because nothing is saved. */
+    val cleared: Boolean = false,
+    /** `mode: clear` only: whether the PC still has a saved voice print. */
+    val trained: Boolean = false,
+    /** `mode: clear` only: how many saved files the card would delete. */
+    val files: Int = 0,
 )
 
 @Serializable
