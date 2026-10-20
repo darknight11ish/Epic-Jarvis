@@ -7985,6 +7985,28 @@ through what they already read:
 
 **F4 hardening (2026-10-18).** The bridge is the taint-safe local stdio MCP client. Every tool call's FULL serialized arguments and every whole serialized result are scanned with jarvis_gate's own PROTECTED rule (DEF-012's shape: no 1,500-character cut) before the call runs or the result is stored; a hit is refused in plain words. Results are SecAlign marker-stripped (chat-control tokens, Unicode tag characters) before the model sees them, labelled untrusted, and latched with `jarvis_gate.latch_taint(why="mcp_tool")`; the conversation's own `read_outside` is recorded as soon as a reading tool returns. Plug-in tools ride the same top-K tool diet as built-ins (a question naming their own words shows them; an unrecognised question keeps the full-list fallback). `[mcp]` is OFF as shipped: no server exists until the owner edits the TOML and approves its first start, and removing the lines is the only way to remove one - there is no app screen for it on either device (ARCHITECTURE §8, one-sided on purpose).
 
+**Pipe safety (verified 2026-10-20).** The server is spawned with all three
+streams as pipes (`stdin`/`stdout`/`stderr=subprocess.PIPE`,
+`jarvis_mcp.py:754-755`). `stderr` is drained continuously by a daemon reader
+thread started beside the stdout reader (`:961-964`); only the last
+`STDERR_TAIL_BYTES = 64 * 1024` bytes are kept (`:165`, `:1078-1089`), so a
+verbose program cannot fill the OS pipe and deadlock the session, and nothing
+it writes to stderr is logged or written to disk. One JSON message is read
+with `readline(MAX_LINE_BYTES + 1)` (`:1020`); a line over `MAX_LINE_BYTES`
+(4 MiB, `:157`) stops and kills the server (`:1024-1027`), as do more than
+`MAX_BAD_LINES` (50) non-JSON lines. Termination is a tree kill: on Windows a
+Job Object with `KILL_ON_JOB_CLOSE | DIE_ON_UNHANDLED_EXCEPTION` is created
+before the suspended process is assigned and resumed, and a server that cannot
+be put in the job is refused rather than started (`:825-862`); on POSIX the
+child gets a new process group and the group receives SIGTERM, then SIGKILL
+(`:760-762`, `:905-915`); every close kills the tree even when the server
+exits politely (`:1129-1145`). The tests drive real child processes
+(`backend/test_mcp.py`): a fake server writing 512 KiB to stderr before the
+handshake (`t_a_verbose_server_cannot_deadlock_on_stderr`), a 200 KB line with
+no newline (`t_a_runaway_line_with_no_newline_is_capped`), a grandchild that
+must die with the tree (`t_the_whole_tree_dies`), and the Windows Job Object
+path against a fake kernel32 (`t_windows_code_paths_against_a_fake_kernel32`).
+
 **The short tool list** (`[tools] short_list = true` in
 `jarvis-framework.toml`; OFF as shipped until the tool test on the PC shows
 it costs nothing) changes only which tool descriptions the PC sends its own

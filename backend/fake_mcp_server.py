@@ -8,6 +8,8 @@ JSON-RPC, exactly as MCP 2025-11-25 basic/transports.mdx describes. Flags:
   --banner            print a non-JSON line to stdout before anything else
   --orphan PIDFILE    at start, launch a long-sleeping grandchild, write its
                       pid, and exit promptly on stdin EOF (leaving it behind)
+  --stderr-flood N    write N bytes to stderr before reading anything; a
+                      bridge without a background drain deadlocks on this
   --desc-inject       one tool's description tries to instruct the model
   --desc-v2           change echo's description (pin must stop matching)
   --announce-change   send notifications/tools/list_changed after each call
@@ -89,6 +91,8 @@ TOOLS = [
      "inputSchema": {"type": "object", "properties": {}}},
     {"name": "huge", "description": "Returns an enormous line.",
      "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "huge_no_newline", "description": "Returns an enormous line with no newline.",
+     "inputSchema": {"type": "object", "properties": {}}},
     {"name": "lookup", "description": "Looks up a word.",
      "inputSchema": {"type": "object", "properties": {"word": {"type": "string"}},
                      "additionalProperties": False},
@@ -110,6 +114,14 @@ if opt("--orphan"):
 if flag("--banner"):
     out.write(b"Starting fake server v1... ready!\n")
     out.flush()
+
+# A verbose server (rea-agents, a Node/JVM tool) can write far more than an OS
+# pipe holds to stderr. Written BEFORE anything is read, so a bridge that never
+# drains it blocks here on the first write and its start times out.
+if opt("--stderr-flood"):
+    _flood = int(opt("--stderr-flood"))
+    sys.stderr.buffer.write(b"E" * _flood)
+    sys.stderr.buffer.flush()
 
 
 def result(rid, res):
@@ -195,6 +207,12 @@ for raw in sys.stdin.buffer:
                       + b',"result":{"content":[{"type":"text","text":"'
                       + b"A" * 200_000 + b'"}]}}\n')
             out.flush()
+        elif name == "huge_no_newline":
+            # No newline ON PURPOSE: readline(MAX_LINE_BYTES + 1) must return
+            # the cap and the bridge must kill this server, not buffer forever.
+            out.write(b"A" * 200_000)
+            out.flush()
+            time.sleep(2)
         else:
             send({"jsonrpc": "2.0", "id": rid,
                   "error": {"code": -32602, "message": f"Unknown tool: {name}"}})

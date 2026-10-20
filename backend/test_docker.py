@@ -338,6 +338,88 @@ def test_module_source_cannot_pull_or_privilege():
           '"run"' not in src.replace("'run'", '"run"'))
 
 
+def test_caller_strings_can_never_become_docker_flags():
+    """The audit's 2A bite: a caller string that looks like a docker flag.
+
+    `docker` treats an argv element that starts with "-" as an option wherever
+    it appears, so a container name like "--privileged" or a service like
+    "-v=C:/:/host" is a host escape if it ever reaches argv. This suite proves
+    the route refuses each one BEFORE any docker command, and that an accepted
+    request never carries a caller-supplied string into argv at all."""
+    flags = [
+        {"service": "--privileged", "action": "start"},
+        {"service": "-v", "action": "start"},
+        {"service": "-v=C:\\:/host", "action": "start"},
+        {"service": "--mount", "action": "start"},
+        {"service": "--net=host", "action": "start"},
+        {"service": "searxng --privileged", "action": "start"},
+        {"service": "searxng\n--privileged", "action": "start"},
+        {"service": "-", "action": "start"},
+        {"service": "searxng", "action": "--privileged"},
+        {"service": "searxng", "action": "-v"},
+        {"service": "searxng", "action": "start --privileged"},
+        {"service": "", "action": "start"},
+        {},
+    ]
+    f = fresh(present=doc_for(SPEC), running=True)
+    for body in flags:
+        code, out = D.request(body, gate=_gate, tier_of=lambda a: "auto", spawn=sync)
+        check(f"refused before docker: {body!r}", code == 400 and out.get("ok") is False,
+              (code, out))
+    check("...and not one flag-shaped name reached docker", f.calls == [], f.calls)
+    check("...and no approval card was raised for one", CARDS == [], CARDS)
+
+    # A request that IS accepted: extra caller fields (container/image/args)
+    # are ignored - the module uses the Service's own constants only.
+    f = fresh(present=doc_for(SPEC), running=False)
+    code, out = D.request({"service": "searxng", "action": "start",
+                           "container": "--privileged", "image": "evil:latest",
+                           "args": ["--privileged", "-v", "C:\\:/host"]},
+                          gate=_gate, tier_of=lambda a: "ask", spawn=sync)
+    check("an accepted start still waits for a card", code == 202, (code, out))
+    flat = [a for call in f.calls for a in call]
+    check("...and the caller's flag fields changed no argument",
+          "--privileged" not in flat and "evil:latest" not in flat
+          and "C:\\:/host" not in flat, f.calls)
+    started = [call for call in f.calls if call[0] in ("start", "stop")]
+    check("...the start names the Service's own container, not the caller's field",
+          started and all(call == ["start", SPEC.container] for call in started), started)
+
+
+def test_docker_argv_is_a_closed_world():
+    """Every argv the module can make, across the read and act paths.
+
+    The list is short ON PURPOSE: these are the only five commands that exist,
+    so a sixth appears here (and in this test) or it does not happen. No
+    element may be a mount/privilege/network flag, and the container named in
+    argv is always the Service's own constant, never the caller's string."""
+    allowed = [
+        ["version", "--format", "{{.Server.Version}}"],
+        ["ps", "-a", "--format", "{{json .}}"],
+        ["inspect", SPEC.container],
+        ["image", "inspect", SPEC.image],
+        ["start", SPEC.container],
+        ["stop", SPEC.container],
+    ]
+    f = fresh(present=doc_for(SPEC), running=False)
+    code, out = D.request({"service": "searxng", "action": "start"},
+                          gate=_gate, tier_of=lambda a: "ask", spawn=sync)
+    check("a start reaches docker start with the list's container", code != 500 and
+          ["start", SPEC.container] in f.calls, (code, out, f.calls))
+    f.running = True
+    code, out = D.request({"service": "searxng", "action": "stop"},
+                          gate=_gate, tier_of=lambda a: "auto", spawn=sync)
+    check("a stop reaches docker stop with the list's container", code == 200 and
+          ["stop", SPEC.container] in f.calls, (code, out, f.calls))
+
+    for call in f.calls:
+        check(f"only a fixed command can be made: {call}", call in allowed, call)
+    flat = [a for call in f.calls for a in call]
+    for probe in ("-v", "--volume", "--mount", "--privileged", "--net=host",
+                  "-it", "--rm", "0.0.0.0", "C:\\:/host"):
+        check(f"{probe} never appears in argv", probe not in flat, flat)
+
+
 # --------------------------------------------------------------------------
 #   Start and stop, through the gate
 # --------------------------------------------------------------------------
