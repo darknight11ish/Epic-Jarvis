@@ -435,6 +435,25 @@ def t_answering_works_without_a_model_and_says_the_facts():
           and "do not have a feature" in out.reply, out.reply[:200] if out else None)
 
 
+def t_cloud_sync_is_answered_without_a_model():
+    """Gemini post-review HIGH-4: the model used to pad "I do not have that" with
+    generic OneDrive/Google Drive advice. The fixed phrase now answers it from
+    the guide's own note, before any model can add a sync suggestion."""
+    for phrase in ("how do I turn on cloud sync for my files",
+                   "what is cloud sync",
+                   "can I sync across devices"):
+        got = match(phrase)
+        check(f'"{phrase}" is routed to the guide, not the model',
+              got is not None and got.name == "feature_explain", got)
+        if got is None:
+            continue
+        out = say(got)
+        check("...and the fixed answer names the private link and the .jbak backup",
+              out is not None and "does not use cloud sync" in out.reply
+              and "Tailscale" in out.reply and "Meshnet" in out.reply
+              and ".jbak" in out.reply, out.reply[:300] if out else None)
+
+
 # --------------------------- 4. switching by chat goes through the real setter
 
 def t_switching_uses_the_real_setter_and_reports_its_outcome():
@@ -618,6 +637,7 @@ if __name__ == "__main__":
                t_the_fixed_phrases_do_not_swallow_other_questions,
                t_the_phrase_gate_requires_an_exact_name_or_jarvis_context,
                t_answering_works_without_a_model_and_says_the_facts,
+               t_cloud_sync_is_answered_without_a_model,
                t_switching_uses_the_real_setter_and_reports_its_outcome,
                t_a_feature_with_several_switches_changes_nothing,
                t_the_tool_is_listed_short_and_read_only,
