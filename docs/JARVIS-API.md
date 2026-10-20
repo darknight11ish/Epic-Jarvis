@@ -5166,10 +5166,16 @@ three "Features" wordings above read `features/features.json` itself (through
 §130), including which apps have the feature, whether it asks first and, for a
 switchable one, whether it is on right now. A sentence that names no real
 feature or switch falls through to the model exactly as before, so "what is
-the weather" and "is the oven on" are untouched. The "turn on <feature>"
-wording goes through that setting's own setter and approval rule - the same
-`BoolSetting.set` the settings phrases and the `change_setting` tool use - and
-answers with its real outcome.
+the weather" and "is the oven on" are untouched. **Since 2026-10-20 (Gemini's
+review) the gate is exact:** a feature phrase answers only when the message is
+explicitly about Jarvis ("Jarvis", "here", "my settings") or the subject after
+"what is [the] .../is [the] ... on" is EXACTLY a feature name (id or title; case,
+punctuation and a leading article ignored) - so "what is a focus session in
+psychology?" and "how do I turn on dark mode in Chrome?" stay the model's, and
+only an explicit "Jarvis, what is <thing> feature" gets "I do not have that
+one". The "turn on <feature>" wording goes through that setting's own setter
+and approval rule - the same `BoolSetting.set` the settings phrases and the
+`change_setting` tool use - and answers with its real outcome.
 
 **"How long is left" is only ours while something is left to measure.** With
 no timer running, the **bare** sentence ("how long is left", "how much time is
@@ -20283,11 +20289,21 @@ of"). "What features do you have?" / "list the features" answer with the 9 group
 sentence that clearly asks about a feature and names none says so; any sentence that does
 not name a real feature or switch falls through to the model exactly as before - "what is
 the weather", "is the oven on", "how do I turn on my phone's bluetooth" are untouched.
-**Changing** by these words is the existing path: "turn on <feature>" resolves a feature
-to the ONE switch it names and calls that setting's own `BoolSetting.set`, so the card
-rules are unchanged; a feature naming several switches (Custom voices) changes nothing
-and says which ones; the answer is the setter's own outcome, never a "Done" when nothing
-happened.
+**The gate is exact (hardened 2026-10-20 after Gemini's review, §11.8.3):** without the
+words "Jarvis", "here" or "my settings" in the message, the subject after "what is [the]
+..." / "is [the] ... on" must be EXACTLY a feature name (its id or title, case,
+punctuation and a leading article ignored) - no loose substring. So "what is a focus
+session in psychology?", "how do I turn on dark mode in Chrome?", "where is my file
+manager?" and "is my oven on?" are the model's, while "what is the prompt coach" and
+"what is a focus session" still answer here; "I do not have that one" needs an explicit
+"Jarvis"/"here"/"my settings" AND the word feature/option, so a general question never
+gets it. `backend/test_feature_guide.py` pins the exact matcher
+(`jarvis_feature_guide.find_exact`), the four review questions, and the positive
+controls. **Changing** by these words is the existing path: "turn on <feature>" resolves a
+feature to the ONE switch it names and calls that setting's own `BoolSetting.set`, so the
+card rules are unchanged; a feature naming several switches (Custom voices) changes
+nothing and says which ones; the answer is the setter's own outcome, never a "Done" when
+nothing happened.
 
 **Both apps, nothing app-specific:** the fixed phrases and the tool are reached through
 the same `/api/chat` turn both apps already use, so `docs/ARCHITECTURE.md` §8 needs no

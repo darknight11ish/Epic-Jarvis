@@ -22,13 +22,17 @@ WHAT THIS PROVES
      answer says; a reader that raises, or a module that cannot answer, makes
      the answer SAY it could not read it - it never says "on"/"off" from a
      nothing. A feature with no switch says exactly that.
-  3. AN UNKNOWN FEATURE IS SAID PLAINLY. "what is the turbo feature" answers
-     "I do not have a feature called ..." and offers the real groups. It never
-     matches some other feature by a loose word.
+  3. AN UNKNOWN FEATURE IS SAID PLAINLY. "Jarvis, what is the turbo feature"
+     answers "I do not have a feature called ..." and offers the real groups.
+     It never matches some other feature by a loose word.
   4. THE FIXED PHRASES DO NOT HIJACK OTHER QUESTIONS. "what is the weather",
      "is the oven on", "how do I turn on the oven", "what is my name" and the
      like still fall through to the model (or keep the intent they had), proven
-     phrase by phrase.
+     phrase by phrase. Since the 2026-10-20 hardening (Gemini §11.8.3) a
+     feature phrase also needs an EXACT catalogue name, or explicit Jarvis
+     context ("Jarvis", "here", "my settings"): "what is a focus session in
+     psychology?" and "how do I turn on dark mode in Chrome?" stay the
+     model's, and "is my oven on?" finds no feature.
   5. SWITCHING BY CHAT STILL USES THE REAL SETTER. A fixed phrase that changes
      a feature's switch goes through the SAME BoolSetting.set the settings
      phrases and the model's change_setting tool use, so the setting's own card
@@ -283,7 +287,9 @@ def t_the_fixed_phrases_answer_the_right_intent():
         "explain the prompt coach": "feature_explain",
         "tell me about the prompt coach": "feature_explain",
         "what does the prompt coach do": "feature_explain",
-        "what is the turbo feature": "feature_unknown",
+        "what is the clipboard time machine": "feature_explain",
+        "what is a focus session": "feature_explain",
+        "Jarvis, what is the turbo feature": "feature_unknown",
         "is the prompt coach on": "feature_state",
         "is the prompt coach on right now": "feature_state",
         "is the prompt coach enabled": "feature_state",
@@ -315,7 +321,12 @@ def t_the_fixed_phrases_do_not_swallow_other_questions():
              "turn on the kitchen light", "what is my name",
              "what's a good pasta recipe", "what is quantum physics",
              "tell me about your day", "is it going to rain tomorrow",
-             "turn off the weather", "what can you do", "what did I miss")
+             "turn off the weather", "what can you do", "what did I miss",
+             # Gemini's §11.8.3 examples: a general question that merely
+             # CONTAINS a feature's word is not that feature's question.
+             "what is a focus session in psychology",
+             "how do I turn on dark mode in Chrome",
+             "where is my file manager", "is my oven on")
     for phrase in other:
         got = match(phrase)
         check(f"'{phrase}' is not answered as a feature",
@@ -327,6 +338,55 @@ def t_the_fixed_phrases_do_not_swallow_other_questions():
     got = match("turn off the weather")
     check("'turn off the weather' keeps the animal/weather path",
           got is not None and got.name.startswith("animal_"),
+          got.name if got else "the model")
+
+
+def t_the_phrase_gate_requires_an_exact_name_or_jarvis_context():
+    """Gemini's §11.8.3 gate, stated as its own check.
+
+    The fixed phrases fire only when the sentence is explicitly about Jarvis
+    ("Jarvis", "here", "my settings") OR the subject after "what is [the] ..."
+    / "is [the] ... on" EXACTLY matches a catalogue name. A general question
+    that merely CONTAINS a feature's word is not answered with that feature's
+    facts - it falls through to the model."""
+    # The matcher itself: exact names in, loose substrings out.
+    check("find_exact answers an exact title and id, articles ignored",
+          (FG.find_exact("the prompt coach") or {}).get("id") == "prompt-coach"
+          and (FG.find_exact("Focus session") or {}).get("id") == "focus")
+    check("find_exact refuses a sentence that CONTAINS a feature name",
+          FG.find_exact("a focus session in psychology") is None
+          and FG.find_exact("dark mode in chrome") is None
+          and FG.find_exact("focus sessions") is None)
+    check("...while the looser matcher is still there for the model's own tool",
+          FG.find_feature("prompt coach feature", strong=False) is not None
+          and FG.find_feature("a focus session in psychology", strong=False) is None)
+    # The whole grammar: the four questions from the review fall through.
+    for phrase in ("what is a focus session in psychology",
+                   "how do I turn on dark mode in chrome",
+                   "where is my file manager", "is my oven on"):
+        got = match(phrase)
+        check(f"'{phrase}' is the model's, not a feature's",
+              got is None or got.name not in FEATURE_INTENTS,
+              f"got {got.name if got else 'the model'}")
+    # Positive controls: an exact catalogue name answers with no Jarvis word...
+    for phrase, intent in (("what is the prompt coach", "feature_explain"),
+                           ("what is the clipboard time machine", "feature_explain"),
+                           ("what is a focus session", "feature_explain"),
+                           ("is the prompt coach on", "feature_state"),
+                           ("how do I turn on web search", "feature_howto")):
+        got = match(phrase)
+        check(f"...and an exact name still answers: '{phrase}'",
+              got is not None and got.name == intent,
+              f"got {got.name if got else 'the model'}")
+    # ...and explicit Jarvis context still allows the honest unknown answer,
+    # while a general question addressed to Jarvis does NOT get one.
+    got = match("Jarvis, what is the turbo feature")
+    check("...and explicit context still says an unknown feature is unknown",
+          got is not None and got.name == "feature_unknown",
+          got.name if got else "the model")
+    got = match("Jarvis, what is quantum physics")
+    check("...but a general question addressed to Jarvis stays the model's",
+          got is None or got.name not in FEATURE_INTENTS,
           got.name if got else "the model")
 
 
@@ -342,7 +402,7 @@ def t_answering_works_without_a_model_and_says_the_facts():
     check("the groups answer names all 9 groups and the real count",
           out is not None and f"{len(SOURCE)} features" in out.reply
           and all(g["group"] in out.reply for g in FG.groups()), out.reply[:200] if out else None)
-    got = match("what is the turbo feature")
+    got = match("Jarvis, what is the turbo feature")
     out = say(got)
     check("an unknown feature is said plainly, with the groups to pick from",
           out is not None and "turbo" in out.reply
@@ -530,6 +590,7 @@ if __name__ == "__main__":
                t_state_never_claims_what_it_did_not_read,
                t_the_fixed_phrases_answer_the_right_intent,
                t_the_fixed_phrases_do_not_swallow_other_questions,
+               t_the_phrase_gate_requires_an_exact_name_or_jarvis_context,
                t_answering_works_without_a_model_and_says_the_facts,
                t_switching_uses_the_real_setter_and_reports_its_outcome,
                t_a_feature_with_several_switches_changes_nothing,
