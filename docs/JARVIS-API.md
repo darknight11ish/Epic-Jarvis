@@ -20827,11 +20827,11 @@ token-guarded read. This PR adds **no** `enabled` route: PR #665 owns it.
 
 **Scope note.** The plugin already mounts `GET /api/voiceprint` and three POSTs
 through `jarvis_voiceprint.install()` (origin + token); no new route or HUD
-patch is added here. The plugin does not mount `prompt_block` into a drafting
-prompt yet: the drafting prompt is assembled by the model turn loop, not by
-`jarvis_email_draft.py` or `jarvis_notes.py` (they save/search only), so that
-wiring needs the turn-loop seam and is recorded as BLOCKED in the integration
-report rather than guessed at. `voiceprint.db` is already in
+patch is added here. `prompt_block`/`drafting_block` IS mounted into a local
+drafting turn now, at the turn-loop seam this note used to name:
+`jarvis_agent.run_local_turn` inserts the block before the answer - see the Q4
+paragraph at the top of this section, which supersedes the earlier BLOCKED note
+here (2026-10-20). `voiceprint.db` is already in
 `jarvis_backup.SOURCE_DBS`; a global Forget hook is also BLOCKED (no safe
 per-database hook in `jarvis_forget_range.py`).
 
