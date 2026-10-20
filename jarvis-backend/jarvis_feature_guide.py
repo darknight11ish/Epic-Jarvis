@@ -279,6 +279,33 @@ def find_feature(words, *, strong: bool = True):
     return None
 
 
+def find_exact(words):
+    """The one feature whose own name IS `words`, or None.
+
+    THE FIXED PHRASES' GATE (Gemini's review, 2026-10-20, section 11.8.3).
+    The spoken grammar must not swallow a general question, so a sentence with
+    no explicit Jarvis context ("here", "my settings", or the name "Jarvis")
+    only answers when the subject after "what is [the] ..." / "is [the] ... on"
+    is EXACTLY a catalogue name - case, punctuation and a leading article are
+    ignored, and nothing else is. No substring, no shared words:
+
+      "what is the prompt coach"           -> the row (exact title)
+      "what is a focus session"            -> the row (exact title)
+      "what is a focus session in psychology" -> None, falls to the model
+      "how do I turn on dark mode in chrome"  -> None, falls to the model
+
+    A row's names here are its exact id (with hyphens read as spaces) and its
+    exact title; the looser matching in `find()`/`find_feature()` is kept for
+    the model's own tool, whose caller has already said "feature"."""
+    query = _norm(words)
+    if not query:
+        return None
+    for row in features():
+        if _exact(row, query):
+            return row
+    return None
+
+
 # --------------------------------------------------------------------------
 #   Which switch (if any) a feature has, and what it reads right now
 # --------------------------------------------------------------------------

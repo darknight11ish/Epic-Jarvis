@@ -1082,9 +1082,12 @@ def _match(text, now: float) -> Optional[Intent]:
     # "What is <feature>?", "is <feature> on?", "how do I turn it on/off?" and
     # "turn on <feature>" (2026-10-20). AFTER the settings block on purpose:
     # every setting already worded keeps its own path, card rule and words, and
-    # this only answers where those patterns found nothing. Each pattern needs
-    # a real feature/switch after it, so "is the oven on" still falls through.
-    got = _feature_guide(s)
+    # this only answers where those patterns found nothing. Hardened 2026-10-20
+    # (Gemini review 11.8.3): without "Jarvis"/"here"/"my settings" in the RAW
+    # message, the subject must be an EXACT feature/switch name - so "what is a
+    # focus session in psychology?" and "is my oven on?" fall through to the
+    # model, never to a feature's facts. `test_feature_guide.py` pins both.
+    got = _feature_guide(s, text)
     if got is not None:
         return got
 
@@ -3010,14 +3013,36 @@ def _feature_text(words) -> str:
     return str(words or "").strip()
 
 
+#: Words that make a sentence explicitly about JARVIS's own features rather
+#: than a general question. The name "Jarvis" is normally taken off as the
+#: address before the grammar sees the sentence (normalise()'s _LEAD), so the
+#: RAW message is checked too. With one of these present, a multi-word
+#: restatement may be looked up more loosely; without one, the subject must be
+#: an EXACT feature/switch name (Gemini's review, 2026-10-20, section 11.8.3).
+_FEATURE_CONTEXT = re.compile(r"\b(?:jarvis|here|my\s+settings)\b", re.I)
+
+
+def _feature_says_jarvis(raw) -> bool:
+    """Did the sentence put itself in Jarvis's own context ("Jarvis", "here",
+    "my settings")? Checked on the RAW message because "Jarvis," is stripped
+    as an address before the grammar runs."""
+    return bool(_FEATURE_CONTEXT.search(str(raw or "")))
+
+
 def _feature_explicit(s: str) -> bool:
     """Did the owner SAY "feature"? Only then may an unknown name be answered
     with "I do not have that one" instead of falling through to the model."""
     return bool(re.search(r"\b(?:feature|features|option|options)\b", s))
 
 
+def _feature_without_context(words) -> str:
+    """The subject with explicit context words taken out, so "my settings" is
+    not read as part of a feature's name."""
+    return " ".join(_FEATURE_CONTEXT.sub(" ", str(words or "")).split())
+
+
 def _feature_lookup(target: str):
-    """The one feature a fixed phrase names, or None (never a guess)."""
+    """The one feature a restated phrase names, or None (never a guess)."""
     if not target:
         return None
     try:
@@ -3026,6 +3051,25 @@ def _feature_lookup(target: str):
         return None
     try:
         return FG.find_feature(target, strong=True)
+    except Exception:
+        return None
+
+
+def _feature_lookup_exact(target: str):
+    """The one feature whose own name IS exactly `target`, or None.
+
+    THE FIXED PHRASES' GATE. Without explicit Jarvis context, a phrase only
+    answers when this matches - no loose substring, so "a focus session in
+    psychology" is not the feature "Focus session", and "dark mode in chrome"
+    is not a feature at all (Gemini review, 2026-10-20, section 11.8.3)."""
+    if not target:
+        return None
+    try:
+        import jarvis_feature_guide as FG
+    except Exception:
+        return None
+    try:
+        return FG.find_exact(target)
     except Exception:
         return None
 
@@ -3044,42 +3088,67 @@ def _feature_setting(target: str):
         return None
 
 
-def _feature_explain_intent(s: str, target: str):
-    row = _feature_lookup(target)
+def _feature_explain_intent(s: str, raw, target: str):
+    row = _feature_lookup_exact(target)
+    if row is None and _feature_says_jarvis(raw):
+        row = _feature_lookup(_feature_without_context(target))
     if row is not None:
         return Intent("feature_explain", {"id": row["id"]})
-    if _feature_explicit(s):
-        return Intent("feature_unknown", {"words": target})
+    # "I do not have that one" needs BOTH: the sentence said it is Jarvis's
+    # own ("Jarvis", "here", "my settings") AND said the word feature/option.
+    # A general "what is <something>" never receives that answer.
+    if _feature_says_jarvis(raw) and _feature_explicit(s):
+        return Intent("feature_unknown",
+                      {"words": _feature_target(_feature_without_context(target))})
     return None
 
 
-def _feature_state_intent(s: str, target: str):
-    row = _feature_lookup(target)
+def _feature_state_intent(raw, target: str):
+    row = _feature_lookup_exact(target)
     if row is not None:
         return Intent("feature_state", {"id": row["id"]})
     setting = _feature_setting(target)
     if setting is not None:
         return Intent("feature_state_setting", {"key": setting.key})
+    if _feature_says_jarvis(raw):
+        clean = _feature_without_context(target)
+        row = _feature_lookup(clean)
+        if row is not None:
+            return Intent("feature_state", {"id": row["id"]})
+        setting = _feature_setting(clean)
+        if setting is not None:
+            return Intent("feature_state_setting", {"key": setting.key})
     return None
 
 
-def _feature_howto_intent(s: str, target: str, on: bool):
-    row = _feature_lookup(target)
+def _feature_howto_intent(raw, target: str, on: bool):
+    row = _feature_lookup_exact(target)
     if row is not None:
         return Intent("feature_howto", {"id": row["id"], "on": bool(on)})
     setting = _feature_setting(target)
     if setting is not None:
         return Intent("feature_howto_setting", {"key": setting.key, "on": bool(on)})
+    if _feature_says_jarvis(raw):
+        clean = _feature_without_context(target)
+        row = _feature_lookup(clean)
+        if row is not None:
+            return Intent("feature_howto", {"id": row["id"], "on": bool(on)})
+        setting = _feature_setting(clean)
+        if setting is not None:
+            return Intent("feature_howto_setting", {"key": setting.key, "on": bool(on)})
     return None
 
 
-def _feature_switch_intent(target: str, on: bool):
-    row = _feature_lookup(target)
+def _feature_switch_intent(raw, target: str, on: bool):
+    clean = _feature_without_context(target) if _feature_says_jarvis(raw) else target
+    row = _feature_lookup_exact(clean)
+    if row is None and _feature_says_jarvis(raw):
+        row = _feature_lookup(clean)
     if row is None:
         return None
     try:
         import jarvis_feature_guide as FG
-        setting, why = FG.switch_target(target)
+        setting, why = FG.switch_target(clean)
     except Exception:
         return None
     if setting is None:
@@ -3087,8 +3156,12 @@ def _feature_switch_intent(target: str, on: bool):
     return Intent("feature_switch", {"key": setting.key, "on": bool(on)})
 
 
-def _feature_guide(s: str) -> Optional[Intent]:
-    """The whole feature-guidance block, in one place, in this order."""
+def _feature_guide(s: str, raw: str = "") -> Optional[Intent]:
+    """The whole feature-guidance block, in one place, in this order.
+
+    `s` is the tidied sentence (no leading "Jarvis,"); `raw` is the message as
+    typed/spoken, used only for the explicit-context check (see
+    _FEATURE_CONTEXT)."""
     if _FEATURES_LIST.fullmatch(s):
         return Intent("features_list")
     m = _FEATURES_GROUP.fullmatch(s)
@@ -3107,16 +3180,16 @@ def _feature_guide(s: str) -> Optional[Intent]:
             on, target = g[6] == "on", g[7]
         else:                           # where do i enable/disable <x>
             on, target = g[8] == "enable", g[9]
-        return _feature_howto_intent(s, _feature_target(target), on)
+        return _feature_howto_intent(raw, _feature_target(target), on)
     m = _FEATURE_STATE.fullmatch(s)
     if m:
-        return _feature_state_intent(s, _feature_target(m.group(1) or m.group(2) or ""))
+        return _feature_state_intent(raw, _feature_target(m.group(1) or m.group(2) or ""))
     m = _FEATURE_WHAT.fullmatch(s)
     if m:
         target = _feature_target(next(g for g in m.groups() if g is not None))
         if not target:
             return None
-        return _feature_explain_intent(s, target)
+        return _feature_explain_intent(s, raw, target)
     m = _FEATURE_SWITCH.fullmatch(s)
     if m:
         g = m.groups()
@@ -3126,7 +3199,7 @@ def _feature_guide(s: str) -> Optional[Intent]:
             on, target = g[3] == "on", g[2]
         else:                           # enable/disable <x>
             on, target = g[4] == "enable", g[5]
-        return _feature_switch_intent(_feature_target(target), on)
+        return _feature_switch_intent(raw, _feature_target(target), on)
     return None
 
 
