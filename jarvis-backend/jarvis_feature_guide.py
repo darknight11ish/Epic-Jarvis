@@ -334,8 +334,11 @@ def _read_headless_browser():
 
 
 def _read_pictures():
-    import jarvis_pictures as M
-    return M.load_settings().get("enabled") is True
+    # Read through the settings registry: it is the one module allowed to
+    # import jarvis_pictures (test_pictures.py's pin keeps the drawing module
+    # out of every model turn's reach), so the Feature Guide asks it instead.
+    import jarvis_settings_registry as R
+    return R.pictures_on()
 
 
 def _read_briefing_senders():
