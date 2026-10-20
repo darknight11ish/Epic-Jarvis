@@ -20835,18 +20835,33 @@ here (2026-10-20). `voiceprint.db` is already in
 `jarvis_backup.SOURCE_DBS`; a global Forget hook is also BLOCKED (no safe
 per-database hook in `jarvis_forget_range.py`).
 
-**V2 UI slice (2026-10-20, new files; wiring held).** The desktop page
-(`jarvis-desktop/src/voiceprint-settings.js`), its Rust bridge
+**V2 UI slice (2026-10-20; PR #665, wired).** The desktop page
+(`jarvis-desktop/src/voiceprint-settings.js`) and its Rust bridge
 (`src-tauri/src/voiceprint.rs`: status/add/forget/set-enabled, every request
-bounded to 30 s, no proxy, no redirects) and the phone's `net/Voiceprint.kt` +
-`ui/screens/VoiceprintPlate.kt` are added but NOT mounted: `settings.html`,
-`settings.js`, `lib.rs`, `JarvisApi`/`JarvisRuntime` and `SettingsScreen.kt` are
-untouched until the Lead clears the wiring (the exact hunks are in the PR). The
+bounded to 30 s, no proxy, no redirects), and the phone's `net/WriteLikeMe.kt` +
+`ui/screens/VoiceprintPlate.kt`, are now MOUNTED on both apps, in the same
+place and under the same words: the "How Jarvis talks" card. Desktop: the empty
+`<section id="voiceprint">` in `settings.html` is drawn by
+`voiceprint-settings.js`, mounted once from `manner-settings.js`; the four
+commands are registered in `lib.rs` + `build.rs`, with a generated permission
+each and the `voiceprint` set in `permissions/surfaces.toml`, granted to the
+Settings window only (`capabilities/settings.json`). Phone: the same card, under
+`MannerSection` (`MannerPlate.kt`), through `JarvisApi`/`JarvisRuntime`.
+
+A read is never held; the three writes (the switch, "Keep this sample", "Forget
+this sample") are held while the event stream is stale - in the page, in Rust
+(`look::stale`, the same `STALE_HELD` sentence every other Settings write uses)
+and on the phone (`actionBlocker`). The page and the phone read the answer the
+PC really sends: `GET /api/voiceprint` returns
+`{"ok", "samples": [...], "count", "voiceprint", "status": {...}}`, so the
+switch, `available` and `scrubber` are read from `status`, while the samples and
+the count are top-level (measured against `handle_get` on 2026-10-20). The
 ON/OFF switch is `POST /api/voiceprint/enabled {"enabled": bool}` (the earlier
 draft's `"on"` is accepted as an alias) - a local setting
 written to `voiceprint.json` beside the other settings, with no card, no model
 and no network; absent means the framework's own `[voiceprint] enabled` value.
 Forget asks "are you sure?" first on both clients, and one tap is one change.
+No approval card is raised anywhere: these are local settings.
 
 `backend/jarvis_voiceprint.py`, and its drop-in folder
 `plugins/ready/voiceprint/`. Four routes, no patch, its own store.

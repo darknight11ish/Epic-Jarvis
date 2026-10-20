@@ -24,15 +24,17 @@ import androidx.compose.ui.unit.dp
 import com.jarvis.client.net.WriteLikeMe
 
 /**
- * "Write like me", shown under the existing "How Jarvis talks" section
- * ([MannerPlate]'s `MannerSection`) once the Lead clears the wiring. NEW FILE:
- * `SettingsScreen.kt` is not edited yet - the exact hunk is in the PR body.
+ * "Write like me", drawn under the existing "How Jarvis talks" card by
+ * [MannerPlate]'s `MannerSection` - the same card the desktop puts it in
+ * (JARVIS-API section 133). The state and the calls come from `MannerSection`
+ * ([com.jarvis.client.JarvisRuntime.voiceprint] and friends), which holds each
+ * write on a stale link.
  *
- * Renderer only: the values and all four calls arrive as parameters, so this
- * file compiles now and the wiring decides where they come from. Each tap is
- * ONE change; Forget opens the "are you sure?" dialog and only the dialog's
- * yes calls `onForget`. No approval card is raised anywhere: this is a local
- * setting, and the PC's route is loopback-only.
+ * Renderer only: the values and every call arrive as parameters, so all the
+ * rules here can be read in one file. Each tap is ONE change; Forget opens the
+ * "are you sure?" dialog and only the dialog's yes calls `onForget`. No
+ * approval card is raised anywhere: this is a local setting, and the PC's
+ * route is loopback-only.
  */
 @Composable
 internal fun VoiceprintPlate(

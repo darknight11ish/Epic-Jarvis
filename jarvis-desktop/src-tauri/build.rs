@@ -851,6 +851,17 @@ fn main() {
             // PC's current values, ask for the READ-ONLY plan, and apply the
             // owner's confirmed answers one change at a time. Settings only.
             "setup_questionnaire",
+            // "Write like me" (voiceprint.rs; PR #665, 2026-10-20; JARVIS-API
+            // section 133): read the owner's own writing samples and the
+            // switch, keep ONE sample, forget ONE after the page's own
+            // are-you-sure, and set the local ON/OFF switch. Settings only; no
+            // approval card, no model and no network - the PC answers these on
+            // its own loopback route, and the three writes are held on a stale
+            // link in Rust as well as in the page.
+            "voiceprint_status",
+            "voiceprint_add",
+            "voiceprint_forget",
+            "voiceprint_set_enabled",
             // Interrupting by talking and "One moment." (voice_flow.rs):
             // ask for one utterance to be checked, read the status's `flow`
             // block, fetch the clip. Quickbar only; none records anything.

@@ -1,10 +1,13 @@
 /**
- * Settings -> How Jarvis talks -> "Write like me" (NEW FILE; not mounted yet).
+ * Settings -> How Jarvis talks -> "Write like me" (JARVIS-API section 133).
  *
- * The wiring (settings.html, settings.js, src-tauri/src/lib.rs) is deliberately
- * NOT touched until the Lead clears it; the exact hunks are in the PR body.
+ * Mounted into the empty `<section id="voiceprint">` in settings.html by ONE
+ * call from manner-settings.js (the module that owns that card), so there is
+ * one mount for this file on the page. The four Tauri commands it calls are in
+ * src-tauri/src/voiceprint.rs, granted to the Settings window by
+ * capabilities/settings.json's `voiceprint` set.
  *
- * The three Rust commands (src-tauri/src/voiceprint.rs): voiceprint_status,
+ * The four Rust commands (src-tauri/src/voiceprint.rs): voiceprint_status,
  * voiceprint_add, voiceprint_forget, plus voiceprint_set_enabled. One tap is
  * one change. No card is raised anywhere - the switch and samples are local
  * settings, and the PC answers them on its loopback-only route.

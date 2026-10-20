@@ -1,12 +1,16 @@
-//! Write Like Me (jarvis_voiceprint.py): the desktop bridge for the settings page.
+//! Write Like Me (jarvis_voiceprint.py; JARVIS-API section 133): the desktop
+//! bridge for the Settings page `src/voiceprint-settings.js`.
 //!
-//! NEW FILE, deliberately not registered yet: `src/lib.rs` (mod + generate_handler)
-//! is owned by the setup-UI slice until the Lead clears the wiring. The exact
-//! hunks are in the PR body, and every command here stays unreachable until then.
+//! WIRED (PR #665): `src/lib.rs` registers the four commands and `build.rs`
+//! generates a permission for each; `permissions/surfaces.toml`'s `voiceprint`
+//! set names the four `allow-*` permissions and `capabilities/settings.json`
+//! grants that set to the Settings window, and to no other. Settings only.
 //!
 //! The four commands are thin: the PC owns the truth (`GET /api/voiceprint`,
 //! `POST /api/voiceprint/sample|forget|enabled`), the phone and the desktop render
 //! the same words, and nothing here approves a card or applies anything by itself.
+//! A read is never held; the three writes are held while the link catches up
+//! (rule 4), the same way every other Settings write is.
 //! Each request is bounded to 30 s; the client never follows a redirect (a
 //! redirect would carry `X-Jarvis-Token` to wherever it pointed) and never uses a
 //! proxy, the same shape `appearance.rs` uses.
@@ -141,14 +145,20 @@ pub async fn voiceprint_status(app: AppHandle) -> Result<serde_json::Value, Stri
 }
 
 #[tauri::command]
-pub async fn voiceprint_add(app: AppHandle, text: String, prompt: Option<String>) -> Result<serde_json::Value, String> {
+pub async fn voiceprint_add(
+    app: AppHandle,
+    text: String,
+    prompt: Option<String>,
+) -> Result<serde_json::Value, String> {
     if let Some(why) = held(&app) {
         return Err(why.to_string());
     }
     if let Some(problem) = sample_problem(&text) {
         return Err(problem);
     }
-    let Some(client) = client() else { return Err("Could not build an HTTP client.".into()) };
+    let Some(client) = client() else {
+        return Err("Could not build an HTTP client.".into());
+    };
     let url = format!("{}{SAMPLE}", commands::jarvis_base(&app));
     let response = client
         .post(url)
@@ -161,14 +171,20 @@ pub async fn voiceprint_add(app: AppHandle, text: String, prompt: Option<String>
 }
 
 #[tauri::command]
-pub async fn voiceprint_forget(app: AppHandle, id: String, confirm: bool) -> Result<serde_json::Value, String> {
+pub async fn voiceprint_forget(
+    app: AppHandle,
+    id: String,
+    confirm: bool,
+) -> Result<serde_json::Value, String> {
     if let Some(why) = held(&app) {
         return Err(why.to_string());
     }
     if let Some(problem) = forget_problem(&id, confirm) {
         return Err(problem);
     }
-    let Some(client) = client() else { return Err("Could not build an HTTP client.".into()) };
+    let Some(client) = client() else {
+        return Err("Could not build an HTTP client.".into());
+    };
     let url = format!("{}{FORGET}", commands::jarvis_base(&app));
     let response = client
         .post(url)
@@ -187,7 +203,9 @@ pub async fn voiceprint_set_enabled(app: AppHandle, on: bool) -> Result<serde_js
     if let Some(why) = held(&app) {
         return Err(why.to_string());
     }
-    let Some(client) = client() else { return Err("Could not build an HTTP client.".into()) };
+    let Some(client) = client() else {
+        return Err("Could not build an HTTP client.".into());
+    };
     let url = format!("{}{ENABLED}", commands::jarvis_base(&app));
     let response = client
         .post(url)
