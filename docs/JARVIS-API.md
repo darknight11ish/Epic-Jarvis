@@ -22400,7 +22400,7 @@ also be named in `[tools].enabled`. With either missing the tool costs no tokens
 offered. The owner installs the package once, by hand (Jarvis never runs `npx` and never
 downloads):
 
-    npm install --prefix "$env:USERPROFILE\.openjarvis\tools\rea" rea-agents@6.7.0
+    npm install --prefix "$env:USERPROFILE\.openjarvis\tools\rea" rea-agents@6.7.0 --ignore-scripts --no-audit --no-fund
 
 **The one tool.** Arguments: `action`, `target` (a full path inside "Folders Jarvis may look
 in"), and for the query action `query`/`what`; `format` for a saved capture. Actions:

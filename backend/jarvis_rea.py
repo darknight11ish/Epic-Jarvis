@@ -189,7 +189,7 @@ _PROVIDER_ENV_NAMES = ("GHIDRA_INSTALL_DIR", "JAVA_HOME", "REA_JADX_MCP_JAR",
                        "REA_JADX_OPERATION_TIMEOUT_MS")
 
 INSTALL_HINT = (f'npm install --prefix "$env:USERPROFILE\\.openjarvis\\tools\\rea" '
-                f'{PACKAGE}@{PINNED_VERSION}')
+                f'{PACKAGE}@{PINNED_VERSION} --ignore-scripts --no-audit --no-fund')
 
 OFF_WORDS = ("The REA helper is switched off. Turn it on in Settings first - it is its own "
              "switch, and the tool is only offered when both it and the tools list allow it.")

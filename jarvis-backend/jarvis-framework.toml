@@ -1945,7 +1945,7 @@ allowed_packages = []
 # OFF. Two switches must both say yes before the model is even offered the
 # tool: this one, and `rea_investigate` in [tools].enabled below. Nothing is
 # downloaded by Jarvis: the owner installs the pinned version once, by hand -
-#   npm install --prefix "$env:USERPROFILE\.openjarvis\tools\rea" rea-agents@6.7.0
+#   npm install --prefix "$env:USERPROFILE\.openjarvis\tools\rea" rea-agents@6.7.0 --ignore-scripts --no-audit --no-fund
 # - and the tool's doctor action says what this PC can inspect (JavaScript/
 # Electron and binary layout need no extra engine; APK and native decompile
 # need JADX / Ghidra, which the owner supplies). See docs/JARVIS-API.md 147.
