@@ -3,5 +3,5 @@
   "summary": "two read-only diagnostic GETs: a file:line-cited answer to a question about Jarvis's own source, and the three-outcome check that Ollama is telling Jarvis the truth about what the local model can do.",
   "module": "jarvis_self_improve",
   "install": "handler",
-  "stack_order": 149
+  "stack_order": 150
 }

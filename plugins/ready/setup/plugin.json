@@ -1,0 +1,8 @@
+{
+  "name": "setup",
+  "summary": "the setup questionnaire: a guided path through settings that already exist.",
+  "module": "jarvis_setup",
+  "install": "handler",
+  "replaces_patch": "setup.patch",
+  "stack_order": 149
+}

@@ -1613,10 +1613,10 @@ $PATCHES = @(
     # own last three printed lines plus the /api/memory/decide block that patch
     # already anchors on, so it applies to real text rather than a materialised
     # pre-image (_stack.py's RATCHET for jarvis_hud.py reads the same 56 after
-    # this patch, measured). It sits after presets.patch and immediately before
-    # plugin-loader.patch, which must stay LAST of all; because it adds nothing
-    # to the install chain the loader's own anchor (presets.patch's last two
-    # lines) is untouched.
+    # this patch, measured). It sits after presets.patch and before
+    # setup.patch and plugin-loader.patch, which must stay LAST of all; because
+    # it adds nothing to the install chain the loader's own anchor is
+    # setup.patch's last two printed lines now, untouched by this patch.
     #
     # The feature is OFF by default: the framework template carries
     # [app_control] enabled = false, a missing section reads as off, and this
@@ -1625,6 +1625,26 @@ $PATCHES = @(
     # every refusal (empty allow-list, unlisted app, password field, money,
     # send/delete/2FA, a protected file, a changed screen) is a plain sentence.
     'app-control.patch'
+    # setup.patch (2026-10-20, the owner's setup questionnaire): ONE route
+    # install block for GET /api/setup, POST /api/setup/plan and POST
+    # /api/setup/apply, whose rules are entirely in the shipped
+    # jarvis_setup.py: a guided path through the settings that already exist.
+    # Every option calls the existing setter - the same tier check and the same
+    # ONE card per loosening setting - and nothing applies before confirm: true.
+    # It adds no gate tier/action, no model switch, no latch and no preset
+    # apply; the preset answer is a recommendation only.
+    #
+    # It adds the chain's new last install block, so it sits immediately before
+    # plugin-loader.patch (which must stay LAST of all) and the loader's hunk is
+    # re-anchored onto this patch's last two printed lines. Its context is
+    # presets.patch's own last two printed lines plus the "# Before the main
+    # socket" line that was already there, so it applies to real text rather
+    # than a materialised pre-image.
+    #
+    # If another held PR adds a patch in this position (e.g. F5 S2's
+    # media-index.patch), the two meet by construction: whichever merges
+    # second rebases its hunk and the loader's anchor onto the other's block.
+    'setup.patch'
     'plugin-loader.patch'
 )
 
@@ -1712,6 +1732,7 @@ $SHIPPED = @(
     'jarvis_schedule.py'         # schedule.patch: the one scheduler - timers, alarms, reminders, the to-do list
     'jarvis_quick.py'            # schedule.patch: timers and reminders answered without the AI model
     'jarvis_settings_registry.py' # "open"/"adjust" any setting by voice or chat, 2026-09-27; jarvis_quick.py (above) calls it, no patch of its own
+    'jarvis_setup.py'            # the owner's setup questionnaire (2026-10-20): a guided path through the settings that already exist, through the registry's own setters; setup.patch adds the three routes, nothing new is on by itself
     'jarvis_standby_schedule.py' # the standby schedule ("standby from 01:00 to 07:00"): a kind of job on the one scheduler, no patch
     'jarvis_backoff.py'          # briefing.patch: offers nobody asked for - a few at most, not mid-chat, a "no" heard
     'jarvis_briefing.py'         # briefing.patch: the morning briefing, a kind of job on the one scheduler
