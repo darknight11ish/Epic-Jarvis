@@ -32,6 +32,7 @@ Everything runs against a scratch store in a temporary folder. Nothing here
 touches `~/.openjarvis/voiceprint.db`.
 """
 import ast
+import inspect
 import os
 import re
 import shutil
@@ -629,7 +630,7 @@ def t_drafting_block_is_guarded_and_latches_only_when_used():
 
 
 def t_the_enabled_switch_is_one_local_setting():
-    """V2 UI: POST /api/voiceprint/enabled {"on": bool} is the only switch.
+    """V2 UI: POST /api/voiceprint/enabled {"enabled": bool} is the only switch.
     No card, no model, no network - one small JSON file on this PC."""
     code, out = V.handle_post(V.ENABLED_PATH, {"enabled": False})
     check("the switch answers 200", code == 200 and out.get("ok") is True, out)
@@ -648,9 +649,14 @@ def t_the_enabled_switch_is_one_local_setting():
           alias[1].get("enabled") is False, alias)
     check("the ruling's field name is what status reads back",
           V.handle_post(V.ENABLED_PATH, {"enabled": True})[1].get("enabled") is True)
-    check("the enabled route is mounted by install()",
-          V.ENABLED_PATH in (V.SAMPLE_PATH, V.EDIT_PATH, V.FORGET_PATH, V.ENABLED_PATH)
-          and V.ENABLED_PATH == "/api/voiceprint/enabled")
+    # Read the wrapper itself: a check that asked whether ENABLED_PATH is one
+    # of its own constants would be true by construction and prove nothing.
+    wrapper = inspect.getsource(V.install)
+    post = wrapper[wrapper.index("def do_POST"):]
+    check("the page's POST path is hand_routed to this module's handler",
+          "ENABLED_PATH" in post and "handle_post(route, body)" in post)
+    check("the enabled route is the one path",
+          V.ENABLED_PATH == "/api/voiceprint/enabled")
 if __name__ == "__main__":
     # The routes need the real wrapper in place for the two route tests.
     V.install(FakeHandler, origin_ok=lambda h: True, token_ok=lambda h: True,
