@@ -13,6 +13,7 @@ The model's side of every streamed turn below is Ollama's REAL
 """
 import json
 import sys
+from unittest import mock
 import traceback
 from pathlib import Path
 
@@ -204,6 +205,72 @@ def t_no_tool_call_streams_straight_through():
           bool(calls) and calls[0].get("reasoning_effort") == "none", repr(calls))
     check("an answer length is always set, the same for every window",
           bool(calls) and calls[0].get("max_tokens") == AG.DEFAULT_MAX_TOKENS, repr(calls))
+
+
+def t_a_drafting_turn_gets_the_style_block_only_when_asked():
+    """Q4: the style block rides on a DRAFTING turn only, as a data system
+    message before the answer. Temporary chat gets nothing; an ordinary
+    question gets nothing. The block arrives through the real seam in
+    run_local_turn, not by a test calling it."""
+    import jarvis_voiceprint as VP
+
+    content = "Here is how the owner has written about similar things before.\n- a sample"
+    opened = []
+
+    def once():
+        responses = [{"choices": [{"message": {"role": "assistant", "content": "done"}}]}]
+        opener, calls = scripted_stream(responses)
+        return opener, calls
+
+    with mock.patch.object(VP, "drafting_request", return_value=True), \
+            mock.patch.object(VP, "drafting_block", return_value=content):
+        opener, calls = once()
+        with NoRealIO():
+            AG.run_local_turn([{"role": "user", "content": "write this in my voice"}],
+                              "qwen3:8b", ollama_url="http://127.0.0.1:11434",
+                              stream_out=lambda b: None, gate_check=allow,
+                              open_stream=opener)
+        msgs = calls[0]["messages"]
+        style_at = next((i for i, m in enumerate(msgs)
+                         if m.get("role") == "system" and m.get("content") == content), -1)
+        user_at = next((i for i, m in enumerate(msgs) if m.get("role") == "user"), -1)
+        check("a drafting turn carries the style block as a DATA system message",
+              style_at >= 0, repr(msgs[:3])[:200])
+        check("... and the block is before the owner's words",
+              style_at >= 0 and 0 <= style_at < user_at, (style_at, user_at))
+
+    opener, calls = once()
+    with NoRealIO():
+        AG.run_local_turn([{"role": "user", "content": "what is 2+2"}],
+                          "qwen3:8b", ollama_url="http://127.0.0.1:11434",
+                          stream_out=lambda b: None, gate_check=allow,
+                          open_stream=opener)
+    check("an ordinary question does not gain a style message",
+          all(m.get("content") != content for m in calls[0]["messages"]),
+          repr(calls[0]["messages"][:3])[:200])
+
+    opener, calls = once()
+    seen = {}
+
+    def block_for(about, *, temporary=False, external=False, store=None):
+        seen["temporary"] = temporary
+        seen["external"] = external
+        return "" if temporary else content
+
+    with mock.patch.object(VP, "drafting_request", return_value=True), \
+            mock.patch.object(VP, "drafting_block", side_effect=block_for):
+        with NoRealIO():
+            AG.run_local_turn([{"role": "user", "content": "write this in my voice"}],
+                              "qwen3:8b", ollama_url="http://127.0.0.1:11434",
+                              stream_out=lambda b: None, gate_check=allow,
+                              request={"temporary": True}, open_stream=opener)
+    check("a Temporary chat asks drafting_block with temporary=True",
+          seen.get("temporary") is True, repr(seen))
+    check("... and Temporary chat gets no style message",
+          all(m.get("content") != content for m in calls[0]["messages"]),
+          repr(calls[0]["messages"][:3])[:200])
+    check("... and the external-chatbot flag is never set by this path",
+          seen.get("external") is False, repr(seen))
 
 
 def t_a_denied_tool_never_executes():
@@ -1313,7 +1380,9 @@ def t_a_live_turn_uses_the_live_model_lane_and_short_tool_list():
 
 
 if __name__ == "__main__":
-    for fn in (t_no_tool_call_streams_straight_through, t_a_denied_tool_never_executes,
+    for fn in (t_no_tool_call_streams_straight_through,
+               t_a_drafting_turn_gets_the_style_block_only_when_asked,
+               t_a_denied_tool_never_executes,
                t_an_approved_tool_actually_runs_and_feeds_back_the_result,
                t_arguments_already_a_dict_does_not_crash_the_loop,
                t_arguments_as_a_json_scalar_does_not_crash_the_loop,

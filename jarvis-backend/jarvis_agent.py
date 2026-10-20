@@ -8716,6 +8716,24 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     recorder = record_chain if record_chain is not None else _record_chain
     steps: list = []
     watch = _TurnWatch(messages, request)
+    # Write Like Me (Q4, 2026-10-20): on a LOCAL DRAFTING turn only, put the
+    # owner's own (stripped) examples in front of the request. The helper
+    # returns "" - and does not latch - when the feature is off, there is no
+    # sample, the turn is Temporary, or it is an external-chatbot path. A
+    # non-empty block is data, not instructions: the rules line says so, and
+    # the turn is latched local so it cannot escalate to a cloud lane. No
+    # lane, tool list, card or route changes here.
+    try:
+        import jarvis_voiceprint as _VP
+        _draft_text = _newest_user_text(messages)
+        if _draft_text and _VP.drafting_request(_draft_text):
+            _style = _VP.drafting_block(_draft_text,
+                                        temporary=_looks_temporary(request))
+            if _style:
+                messages = ([{"role": "system", "content": _style}]
+                            + list(messages))
+    except Exception:
+        pass
     # Jarvis Live's own speed slice (2026-10-18): the Live-only model from
     # `[live]`, the one injected lane URL (the preset-lane patch supplies
     # :11435 later - jarvis_model_lanes.py is not edited here), a 16K context
