@@ -456,6 +456,98 @@ def t_read_one_part():
         D.MAX_DOC_BYTES = real
 
 
+def _make_dir_link(link: Path, target: Path) -> bool:
+    """A directory link where this machine allows one: a symlink first, an
+    NTFS junction second (on Windows `mklink /J` needs no elevation)."""
+    try:
+        os.symlink(str(target), str(link), target_is_directory=True)
+        return True
+    except (OSError, NotImplementedError):
+        pass
+    if os.name == "nt":
+        r = subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(target)],
+                           capture_output=True, text=True)
+        return r.returncode == 0
+    return False
+
+
+def t_a_link_out_private_places_and_zip_bombs_are_refused():
+    """The 2026-10-20 parser audit (Area 6A): every walked child is resolved,
+    a link out of a listed folder is refused, Jarvis's own config folder is
+    refused even when listed, and a zip-based document/export is checked with
+    infolist() before any parser or extractor sees it."""
+    fresh()
+    root = folder("Guard")
+    listed(root)
+    roots = [os.path.realpath(str(root))]
+    outside = folder("GuardOutside")
+    (outside / "out.md").write_text("outside words", encoding="utf-8")
+    link = root / "escape"
+    if _make_dir_link(link, outside):
+        check("a junction/symlink out of a listed folder: refused",
+              D.allowed_path(str(link / "out.md"), roots) is None)
+        got = D.find("out", roots=roots)
+        check("... and the walk never lists what is behind it",
+              got["ok"] and not got["found"], got)
+    else:
+        skip("a junction out of a listed folder cannot be made here, so nothing was proved")
+    private = folder("Private")
+    (private / "secret.md").write_text("secret", encoding="utf-8")
+    real_private = D._private_roots
+    D._private_roots = lambda: [os.path.realpath(str(private))]
+    try:
+        check("a listed path in Jarvis's own private place: refused",
+              D.allowed_path(str(private / "secret.md"),
+                             [os.path.realpath(str(private))]) is None)
+    finally:
+        D._private_roots = real_private
+
+    calls = []
+
+    def conv(path, ext):
+        calls.append(ext)
+        return {"ok": True, "text": "text"}
+    traversal = root / "traversal.docx"
+    with zipfile.ZipFile(traversal, "w") as z:
+        z.writestr("word/document.xml", "<w/>")
+        z.writestr("../evil.md", "x")
+    got = D.read(str(traversal), roots=roots, convert=conv)
+    check("a .docx with a `..` member: refused before the converter",
+          got["ok"] is False and "points outside" in got["error"] and calls == [], got)
+    real_doc_cap = D.DOC_UNCOMPRESSED_MAX
+    D.DOC_UNCOMPRESSED_MAX = 1024 * 1024
+    try:
+        bomb = root / "bomb.docx"
+        with zipfile.ZipFile(bomb, "w", compression=zipfile.ZIP_DEFLATED) as z:
+            z.writestr("word/document.xml", "a" * (2 * 1024 * 1024))
+        got = D.read(str(bomb), roots=roots, convert=conv)
+        check("a .docx that unpacks past the cap: refused before the converter",
+              got["ok"] is False and "zip-bomb" in got["error"] and calls == [], got)
+    finally:
+        D.DOC_UNCOMPRESSED_MAX = real_doc_cap
+    good = root / "normal.docx"
+    _minimal_docx(good, "Hello")
+    got = D.read(str(good), roots=roots, convert=lambda p, e: {"ok": True, "text": "normal"})
+    check("a normal document still reads", got["ok"] and "normal" in got["text"], got)
+
+    real_export_cap = D.EXPORT_UNCOMPRESSED_MAX
+    D.EXPORT_UNCOMPRESSED_MAX = 1024 * 1024
+    try:
+        zp = TMP / "bomb-export.zip"
+        with zipfile.ZipFile(zp, "w", compression=zipfile.ZIP_DEFLATED) as z:
+            z.writestr("big.md", "a" * (2 * 1024 * 1024))
+        try:
+            D.import_notion(str(zp), roots[0], roots=roots, today="2026-10-20")
+            check("a Notion export past the cap: refused", False)
+        except D.ImportRefused as exc:
+            check("a Notion export past the cap: refused, nothing left behind",
+                  "zip-bomb" in str(exc)
+                  and not (root / "Notion export 2026-10-20").exists(), exc)
+    finally:
+        D.EXPORT_UNCOMPRESSED_MAX = real_export_cap
+    fresh()
+
+
 # ============================================================ 5. the converter
 
 def _minimal_pdf(text: str) -> bytes:

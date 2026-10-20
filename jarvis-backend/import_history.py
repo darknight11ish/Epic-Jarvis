@@ -629,18 +629,85 @@ def _json_items(fh, size_hint: Optional[int] = None) -> Iterator[object]:
             buf, pos = buf[pos:], 0
 
 
-def _json_entries(path: Path) -> Iterator[tuple[str, Iterator[object]]]:
+# --------------------------------------------------------------------------
+#   What a walked file may be (2026-10-20 parser audit, Area 6)
+# --------------------------------------------------------------------------
+
+#: A chat export is a ZIP. Checked BEFORE any member is opened: no member path
+#: may point outside itself, and the declared uncompressed total may not exceed
+#: this (a small ZIP can otherwise declare gigabytes - a zip bomb).
+EXPORT_UNCOMPRESSED_MAX = 250 * 1024 * 1024
+
+
+def _real(path: Path) -> Path:
+    """The one real place (`Path.resolve()`): links and NTFS junctions
+    followed, so a junction inside a chosen export folder cannot smuggle a
+    read to somewhere else."""
+    try:
+        return path.resolve()
+    except OSError:
+        return path
+
+
+def _in_jarvis_own_place(real: Path) -> bool:
+    """Jarvis's own config folder (tokens, setup answers, chat history): never
+    read, even through a link inside an export folder."""
+    try:
+        own = Path.home() / ".openjarvis"
+        own = _real(own)
+        return real == own or own in real.parents
+    except Exception:
+        return True
+
+
+def _within(root: Path, f: Path) -> bool:
+    """True when `f` (links followed) is the root or inside it, and is not in
+    Jarvis's own places."""
+    real, base = _real(f), _real(root)
+    return (real == base or base in real.parents) and not _in_jarvis_own_place(real)
+
+
+def _zip_refusal(z: zipfile.ZipFile) -> str:
+    """'' when this archive may be read, else why not (a sentence fragment)."""
+    total = 0
+    for info in z.infolist():
+        name = str(info.filename or "")
+        flat = name.replace("\\", "/")
+        if (flat.startswith("/") or re.match(r"^[A-Za-z]:", flat)
+                or any(part == ".." for part in flat.split("/"))):
+            return f"it contains a path that points outside itself ({name!r})"
+        total += max(0, int(info.file_size or 0))
+        if total > EXPORT_UNCOMPRESSED_MAX:
+            return "it unpacks to more than 250 MB"
+    return ""
+
+
+def _json_entries(path: Path, root: Optional[Path] = None) -> Iterator[tuple[str, Iterator[object]]]:
     """(label, items) for every .json file in `path` (a .zip, a .json or a
     folder), each file's items streamed by _json_items. Unreadable files are
-    skipped with a note, never an abort."""
+    skipped with a note, never an abort.
+
+    `root` is the export folder the person chose; every walked child is
+    resolved and must stay inside it, and no archive is read until
+    `_zip_refusal` says its members are safe."""
+    root = path if root is None else root
+    if not _within(root, path):
+        _say(f"  {path.name}: skipped - it is not inside the export folder")
+        return
     if path.is_dir():
-        for f in sorted(f for f in path.rglob("*")
-                        if f.is_file() and f.suffix.lower() in (".zip", ".json")):
-            yield from _json_entries(f)
+        files = sorted(f for f in path.rglob("*")
+                       if f.is_file() and f.suffix.lower() in (".zip", ".json"))
+        for f in files:
+            if _within(root, f):
+                yield from _json_entries(f, root)
         return
     if zipfile.is_zipfile(path):
         try:
             with zipfile.ZipFile(path) as z:
+                why = _zip_refusal(z)
+                if why:
+                    _say(f"  {path.name}: skipped - {why}")
+                    return
                 for info in z.infolist():
                     if info.is_dir() or not info.filename.lower().endswith(".json"):
                         continue
@@ -923,7 +990,8 @@ def detect_kind(path: Path) -> Optional[str]:
     """
     names = []
     if path.is_dir():
-        names = [str(f.relative_to(path)) for f in path.rglob("*") if f.is_file()]
+        names = [str(f.relative_to(path)) for f in path.rglob("*")
+                 if f.is_file() and _within(path, f)]
     elif zipfile.is_zipfile(path):
         try:
             with zipfile.ZipFile(path) as z:
@@ -956,16 +1024,25 @@ def detect_kind(path: Path) -> Optional[str]:
 # JSON file inside, not the first or the largest one, and keep going when one
 # entry is unreadable rather than aborting the whole import over it.
 
-def _walk_json_documents(path: Path) -> Iterator[tuple[str, object]]:
+def _walk_json_documents(path: Path, root: Optional[Path] = None) -> Iterator[tuple[str, object]]:
+    root = path if root is None else root
+    if not _within(root, path):
+        _say(f"  {path.name}: skipped - it is not inside the export folder")
+        return
     if path.is_dir():
         files = sorted(f for f in path.rglob("*")
                        if f.is_file() and f.suffix.lower() in (".zip", ".json"))
         for f in files:
-            yield from _walk_json_documents(f)
+            if _within(root, f):
+                yield from _walk_json_documents(f, root)
         return
     if zipfile.is_zipfile(path):
         try:
             with zipfile.ZipFile(path) as z:
+                why = _zip_refusal(z)
+                if why:
+                    _say(f"  {path.name}: skipped - {why}")
+                    return
                 for name in z.namelist():
                     if not name.lower().endswith(".json"):
                         continue

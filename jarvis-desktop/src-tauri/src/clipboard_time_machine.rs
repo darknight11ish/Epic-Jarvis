@@ -125,6 +125,70 @@ pub const EXCLUDED_APPS: &[&str] = &[
     "credential manager",
 ];
 
+/// What Windows says about the copy that has just appeared: which process put
+/// it on the clipboard, which window is in front, and whether the copy carries
+/// one of Microsoft's "do not remember / do not monitor me" formats.
+///
+/// Gathered by [`clipboard_state`] from Win32 and judged by
+/// [`capture_refusal`] - a PURE function, so every rule below is unit-tested
+/// with fake states and no window or clipboard is opened by the tests.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CaptureState {
+    /// The process that OWNS the clipboard (`GetClipboardOwner`), by image
+    /// file name. Empty when Windows will not say.
+    pub owner_app: String,
+    /// The window in front when the watcher noticed, by image file name.
+    pub foreground_app: String,
+    /// That window's title.
+    pub foreground_title: String,
+    /// `ExcludeClipboardContentFromMonitorProcessing` is present: Windows'
+    /// documented "do not put this in a clipboard monitor's history".
+    pub exclude_from_monitor: bool,
+    /// `CanIncludeInClipboardHistory`, when present, and the DWORD it holds.
+    /// `Some(0)` is the documented "keep this out of Win+V" value.
+    pub can_include_in_history: Option<u32>,
+    /// `ClipboardViewerIgnore` is present: what password managers set on a
+    /// secret so clipboard viewers pass over it.
+    pub viewer_ignore: bool,
+}
+
+/// Whether this copy must not be captured, and the reason (the `Offer` ring's
+/// own words) when it must not.
+///
+/// This is the HIGH fix from the 2026-10-20 audit (Area 11A). The old check
+/// looked at `GetForegroundWindow` only, and a password manager's Quick Access
+/// popup closes 10-30 ms after Copy - before the watcher's 700 ms beat - so
+/// the foreground was already the browser and the password was captured. The
+/// clipboard OWNER is recorded by Windows at the moment the data is placed and
+/// does not change when the popup closes, so it catches that race; Microsoft's
+/// exclusion formats are the owning app's own declaration, which catches the
+/// same case even if the process name lookup fails.
+pub fn capture_refusal(state: &CaptureState) -> Option<&'static str> {
+    if state.exclude_from_monitor {
+        return Some("excluded_format"); // "do not monitor this clipboard content"
+    }
+    if state.viewer_ignore {
+        return Some("excluded_format"); // a clipboard viewer must pass over it
+    }
+    if state.can_include_in_history == Some(0) {
+        return Some("excluded_format"); // the owner's app says: keep it out of history
+    }
+    if excluded_name(&state.owner_app)
+        || excluded_name(&state.foreground_app)
+        || excluded_name(&state.foreground_title)
+    {
+        return Some("excluded_app");
+    }
+    None
+}
+
+/// Case-insensitive substring match against [`EXCLUDED_APPS`]: an image name
+/// is `1Password.exe`, and a title reads "Sign in - Bitwarden".
+fn excluded_name(text: &str) -> bool {
+    let low = text.to_lowercase();
+    EXCLUDED_APPS.iter().any(|name| low.contains(name))
+}
+
 /// Query parameters that identify who clicked a link. A parameter that starts
 /// with `utm_` is treated the same way. Everything else is kept.
 pub const TRACKING_PARAMS: &[&str] = &[
@@ -1520,22 +1584,50 @@ fn read_clipboard_text(app: &AppHandle) -> Option<String> {
     app.clipboard().read_text().ok()
 }
 
+/// The process behind a window, by image file name. Empty when Windows will
+/// not tell us (a normal outcome, e.g. for a protected window).
+#[cfg(windows)]
+fn process_app(window: windows_sys::Win32::Foundation::HWND) -> String {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
+
+    // SAFETY: every pointer is to a stack buffer sized beside it; the process
+    // handle this opens is closed once, on every path. No pointer outlives the
+    // call that fills it.
+    unsafe {
+        let mut process_id = 0u32;
+        GetWindowThreadProcessId(window, &mut process_id);
+        if process_id == 0 {
+            return String::new();
+        }
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, process_id);
+        if handle.is_null() {
+            return String::new();
+        }
+        let mut path = [0u16; 1024];
+        let mut size = path.len() as u32;
+        let ok = QueryFullProcessImageNameW(handle, 0, path.as_mut_ptr(), &mut size);
+        CloseHandle(handle);
+        if ok == 0 {
+            return String::new();
+        }
+        let full = String::from_utf16_lossy(&path[..size as usize]);
+        full.rsplit(['\\', '/']).next().unwrap_or("").to_string()
+    }
+}
+
 /// The window in front: its program's file name and its title. Empty when
 /// Windows will not tell us (a normal outcome, e.g. for a protected window):
 /// an empty pair is not excluded, which is exactly the Python ring's rule.
 #[cfg(windows)]
 fn foreground_window() -> (String, String) {
-    use windows_sys::Win32::Foundation::CloseHandle;
-    use windows_sys::Win32::System::Threading::{
-        OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION,
-    };
-    use windows_sys::Win32::UI::WindowsAndMessaging::{
-        GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId,
-    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowTextW};
 
-    // SAFETY: every pointer is to a stack buffer sized beside it; the process
-    // handle this opens is closed once, on every path. No pointer outlives the
-    // call that fills it.
+    // SAFETY: the title buffer is a stack array sized beside the count passed
+    // in; the window handle is only read, never freed.
     unsafe {
         let window = GetForegroundWindow();
         if window.is_null() {
@@ -1548,31 +1640,150 @@ fn foreground_window() -> (String, String) {
         } else {
             String::new()
         };
-        let mut process_id = 0u32;
-        GetWindowThreadProcessId(window, &mut process_id);
-        if process_id == 0 {
-            return (String::new(), title);
-        }
-        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, process_id);
-        if handle.is_null() {
-            return (String::new(), title);
-        }
-        let mut path = [0u16; 1024];
-        let mut size = path.len() as u32;
-        let ok = QueryFullProcessImageNameW(handle, 0, path.as_mut_ptr(), &mut size);
-        CloseHandle(handle);
-        if ok == 0 {
-            return (String::new(), title);
-        }
-        let full = String::from_utf16_lossy(&path[..size as usize]);
-        let app = full.rsplit(['\\', '/']).next().unwrap_or("").to_string();
-        (app, title)
+        (process_app(window), title)
     }
 }
 
 #[cfg(not(windows))]
 fn foreground_window() -> (String, String) {
     (String::new(), String::new())
+}
+
+/// The process that OWNS the clipboard - the one that put the current data
+/// there. This is the HIGH fix from the audit: a password manager's Quick
+/// Access popup closes within 10-30 ms of Copy, so it is long gone when the
+/// 700 ms watcher beat calls `GetForegroundWindow`; the clipboard owner does
+/// not change when the popup closes.
+#[cfg(windows)]
+fn clipboard_owner_app() -> String {
+    // SAFETY: a plain Win32 call with no arguments; the returned handle is
+    // only passed to process_app, which never frees it.
+    unsafe {
+        let owner = windows_sys::Win32::System::DataExchange::GetClipboardOwner();
+        if owner.is_null() {
+            return String::new();
+        }
+        process_app(owner)
+    }
+}
+
+#[cfg(not(windows))]
+fn clipboard_owner_app() -> String {
+    String::new()
+}
+
+/// The exclusion formats Microsoft documents for clipboard monitors. Absent
+/// means the app did not opt out; present means it did.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct ClipboardFormats {
+    exclude_from_monitor: bool,
+    can_include_in_history: Option<u32>,
+    viewer_ignore: bool,
+}
+
+/// How many times to retry Opening the clipboard to read a DWORD, 15 ms apart:
+/// the same short-retry shape clipboard_privacy uses, for the same reason (a
+/// clipboard manager can hold it for a moment).
+#[cfg(windows)]
+const FORMAT_OPEN_TRIES: u32 = 10;
+#[cfg(windows)]
+const FORMAT_OPEN_DELAY_MS: u64 = 15;
+
+#[cfg(windows)]
+fn registered_format(name: &str) -> u32 {
+    let wide: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
+    // SAFETY: `wide` is a NUL-terminated UTF-16 buffer for this call only.
+    unsafe { windows_sys::Win32::System::DataExchange::RegisterClipboardFormatW(wide.as_ptr()) }
+}
+
+#[cfg(windows)]
+fn format_present(format: u32) -> bool {
+    if format == 0 {
+        return false;
+    }
+    // SAFETY: a plain Win32 query with no pointers.
+    unsafe { windows_sys::Win32::System::DataExchange::IsClipboardFormatAvailable(format) != 0 }
+}
+
+/// The DWORD one of the exclusion formats carries, when it is on the clipboard.
+/// `None` when it is absent or the clipboard could not be opened: "could not
+/// read it" must never be reported as "the app did not exclude it".
+#[cfg(windows)]
+fn clipboard_format_dword(format: u32) -> Option<u32> {
+    use windows_sys::Win32::System::DataExchange::{
+        CloseClipboard, GetClipboardData, OpenClipboard,
+    };
+    use windows_sys::Win32::System::Memory::{GlobalLock, GlobalUnlock};
+
+    if !format_present(format) {
+        return None;
+    }
+    for attempt in 0..FORMAT_OPEN_TRIES {
+        // SAFETY: a null owner window is a documented, valid argument.
+        if unsafe { OpenClipboard(std::ptr::null_mut()) } == 0 {
+            if attempt + 1 < FORMAT_OPEN_TRIES {
+                std::thread::sleep(Duration::from_millis(FORMAT_OPEN_DELAY_MS));
+            }
+            continue;
+        }
+        // SAFETY: the clipboard is open, the format was just confirmed present,
+        // GlobalLock is paired with GlobalUnlock, and CloseClipboard runs on
+        // this path exactly once.
+        let value = unsafe {
+            let handle = GetClipboardData(format);
+            let value = if handle.is_null() {
+                None
+            } else {
+                let pointer = GlobalLock(handle);
+                if pointer.is_null() {
+                    None
+                } else {
+                    let value = Some(std::ptr::read_unaligned(pointer as *const u32));
+                    GlobalUnlock(handle);
+                    value
+                }
+            };
+            CloseClipboard();
+            value
+        };
+        return value;
+    }
+    None
+}
+
+#[cfg(windows)]
+fn clipboard_formats() -> ClipboardFormats {
+    let exclude = registered_format("ExcludeClipboardContentFromMonitorProcessing");
+    let viewer = registered_format("ClipboardViewerIgnore");
+    let history = registered_format("CanIncludeInClipboardHistory");
+    ClipboardFormats {
+        exclude_from_monitor: format_present(exclude),
+        viewer_ignore: format_present(viewer),
+        can_include_in_history: if format_present(history) {
+            clipboard_format_dword(history)
+        } else {
+            None
+        },
+    }
+}
+
+#[cfg(not(windows))]
+fn clipboard_formats() -> ClipboardFormats {
+    ClipboardFormats::default()
+}
+
+/// Everything the capture decision needs, read before any clipboard text is.
+fn clipboard_state() -> CaptureState {
+    let formats = clipboard_formats();
+    let (foreground_app, foreground_title) = foreground_window();
+    CaptureState {
+        owner_app: clipboard_owner_app(),
+        foreground_app,
+        foreground_title,
+        exclude_from_monitor: formats.exclude_from_monitor,
+        can_include_in_history: formats.can_include_in_history,
+        viewer_ignore: formats.viewer_ignore,
+    }
 }
 
 /// The clipboard's sequence number: changes every time its contents change,
@@ -1590,13 +1801,21 @@ fn clipboard_sequence() -> u32 {
 
 /// The clipboard changed: offer its text to the ring, with the window it came
 /// from. Returns whether the owner now has one more kept copy (for the drawer).
+///
+/// The privacy decision runs FIRST, on state only: a copy whose owner is a
+/// password manager, or which carries Windows' exclusion formats, is skipped
+/// without ever being read as text.
 fn capture_once(app: &AppHandle) -> bool {
+    let state = clipboard_state();
+    if capture_refusal(&state).is_some() {
+        return false;
+    }
     let Some(text) = read_clipboard_text(app) else {
         return false;
     };
-    let (foreground_app, foreground_title) = foreground_window();
     with_ring(app, |ring| {
-        ring.offer(&text, &foreground_app, &foreground_title).kept
+        ring.offer(&text, &state.foreground_app, &state.foreground_title)
+            .kept
     })
 }
 
@@ -1762,6 +1981,123 @@ mod tests {
         let mut ring = Ring::new();
         ring.enable();
         ring
+    }
+
+    // -- the capture decision (Area 11A, 2026-10-20 audit) --------------------
+    //
+    // Fake states only: no window, no clipboard, no process is opened. These
+    // are the cases the HIGH finding described, and a capture rule that
+    // stopped biting is visible here.
+
+    /// A normal copy: a code editor in front, no exclusion format, no owner
+    /// name that matches a password manager.
+    fn normal_copy() -> CaptureState {
+        CaptureState {
+            owner_app: "Code.exe".to_string(),
+            foreground_app: "Code.exe".to_string(),
+            foreground_title: "notes.py - Visual Studio Code".to_string(),
+            exclude_from_monitor: false,
+            can_include_in_history: Some(1),
+            viewer_ignore: false,
+        }
+    }
+
+    #[test]
+    fn a_normal_copy_is_captured() {
+        assert_eq!(capture_refusal(&normal_copy()), None);
+    }
+
+    #[test]
+    fn a_password_manager_that_closed_its_popup_is_refused_by_the_clipboard_owner() {
+        let state = CaptureState {
+            owner_app: "1Password.exe".to_string(),
+            // The popup has closed by the time the watcher looks: the browser
+            // is in front, which is exactly the race the foreground check lost.
+            foreground_app: "chrome.exe".to_string(),
+            foreground_title: "Inbox - Gmail".to_string(),
+            ..normal_copy()
+        };
+        assert_eq!(capture_refusal(&state), Some("excluded_app"));
+    }
+
+    #[test]
+    fn every_named_password_manager_is_refused_as_the_clipboard_owner() {
+        for app in [
+            "Bitwarden.exe",
+            "KeePassXC.exe",
+            "KeePass.exe",
+            "Dashlane.exe",
+            "LastPass.exe",
+            "1password.exe",
+        ] {
+            let state = CaptureState {
+                owner_app: app.to_string(),
+                foreground_app: String::new(),
+                foreground_title: String::new(),
+                ..normal_copy()
+            };
+            assert_eq!(capture_refusal(&state), Some("excluded_app"), "{app}");
+        }
+    }
+
+    #[test]
+    fn an_excluded_foreground_name_or_title_still_refuses() {
+        let by_title = CaptureState {
+            owner_app: String::new(),
+            foreground_app: "chrome.exe".to_string(),
+            foreground_title: "Sign in - Bitwarden".to_string(),
+            ..normal_copy()
+        };
+        assert_eq!(capture_refusal(&by_title), Some("excluded_app"));
+        let by_app = CaptureState {
+            owner_app: String::new(),
+            foreground_app: "keepassxc.exe".to_string(),
+            foreground_title: String::new(),
+            ..normal_copy()
+        };
+        assert_eq!(capture_refusal(&by_app), Some("excluded_app"));
+    }
+
+    #[test]
+    fn microsofts_exclusion_formats_skip_the_capture_entirely() {
+        let monitor = CaptureState {
+            exclude_from_monitor: true,
+            ..normal_copy()
+        };
+        assert_eq!(capture_refusal(&monitor), Some("excluded_format"));
+
+        let viewer = CaptureState {
+            viewer_ignore: true,
+            ..normal_copy()
+        };
+        assert_eq!(capture_refusal(&viewer), Some("excluded_format"));
+
+        let history_off = CaptureState {
+            can_include_in_history: Some(0),
+            ..normal_copy()
+        };
+        assert_eq!(capture_refusal(&history_off), Some("excluded_format"));
+
+        // Present with a non-zero value means the app ALLOWS history.
+        let history_on = CaptureState {
+            can_include_in_history: Some(1),
+            ..normal_copy()
+        };
+        assert_eq!(capture_refusal(&history_on), None);
+    }
+
+    #[test]
+    fn an_unreadable_history_value_is_not_treated_as_an_exclusion() {
+        let state = CaptureState {
+            can_include_in_history: None,
+            ..normal_copy()
+        };
+        assert_eq!(capture_refusal(&state), None);
+    }
+
+    #[test]
+    fn an_empty_state_is_not_excluded() {
+        assert_eq!(capture_refusal(&CaptureState::default()), None);
     }
 
     #[test]
