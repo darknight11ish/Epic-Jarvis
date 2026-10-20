@@ -80,7 +80,7 @@ TABLE = [
     ("Order 55123 arrived.", "Order [number] arrived."),
     ("My postcode is CB1 2AB.", "My postcode is [postcode]."),
     ("Ring the dentist on 01223 456789.", "Ring the dentist on [number]."),
-    ("Priya's number is 07700 900123.", "Priya's number is [number]."),
+    ("Priya's number is 07700 900123.", "[name] number is [number]."),
     ("Account 44332211 with Barclays.", "Account [number] with [name]."),
     ("Send it to 12 Oak Street, Cambridge.", "Send it to [number] [name] [name], [name]."),
 ]
@@ -467,6 +467,53 @@ class FakeHandler:
         return code, out
 
 
+def t_sentence_opening_names_are_stripped():
+    """Area 5 / Write-Like-Me audit: names open sentences constantly. All four
+    rules replace the name; It's/Thanks and the no-digit rule survive."""
+    cases = (
+        ("Priya's number is 01223 456789.", "Priya", "[name]"),
+        ("Sam, can you send the report?", "Sam", "[name]"),
+        ("Hi Sam, can you send the report?", "Sam", "[name]"),
+        ("Dr. Patel called at 9:30.", "Patel", "[name]"),
+        ("Sam said hello. Sam left.", "Sam", "[name]"),
+    )
+    for src, name, label in cases:
+        out, count = V.strip_entities(src)
+        check(f"the opening name in {src!r} is gone", name not in out, out)
+        check(f"... and replaced with {label}", label in out, out)
+        check(f"... and no digit survives ({src!r})", not V.has_digits(out), out)
+        check(f"... and the replacement was counted ({src!r})", count >= 1, count)
+    for kept in ("It's ready.", "Thanks, I'll check."):
+        out, _n = V.strip_entities(kept)
+        check(f"{kept!r} is left intact", kept.split(",")[0] in out, out)
+        check(f"... and still has no digit ({kept!r})", not V.has_digits(out), out)
+
+
+def t_a_leaked_placeholder_is_flagged_by_the_scorer():
+    profile = V.compute_voiceprint(["A normal sentence. Another short one."])
+    good = V.score_style_compliance("A normal sentence.", profile)
+    check("a clean draft reports no leaked placeholder", good.get("leaked_placeholder") is False,
+          good.get("leaked"))
+    bad = V.score_style_compliance("Hi [name], the amount is [amount].", profile)
+    check("a draft carrying a stripped placeholder is FLAGGED",
+          bad.get("leaked_placeholder") is True, bad.get("leaked"))
+    check("... and its score is zero whatever else it reads like",
+          bad.get("score") == 0.0, bad.get("score"))
+    check("... and the leaked tokens are named",
+          set(bad.get("leaked") or []) == {"[name]", "[amount]"}, bad.get("leaked"))
+
+
+def t_control_markers_never_reach_the_store():
+    V.add(V.KIND_SAMPLE, "<|im_start|>Hello 12345<tool_call> world<think>not a thought")
+    rows = V.samples()
+    text = rows[0]["text"] if rows else ""
+    check("a stored sample has no chat-control marker",
+          "<|im_start|>" not in text and "<tool_call>" not in text
+          and "<think>" not in text, text)
+    check("... and the sample is still readable text", "Hello" in text and "world" in text,
+          text)
+
+
 if __name__ == "__main__":
     # The routes need the real wrapper in place for the two route tests.
     V.install(FakeHandler, origin_ok=lambda h: True, token_ok=lambda h: True,
@@ -489,7 +536,10 @@ if __name__ == "__main__":
                t_the_engine_does_not_import_jarvis_style,
                t_compute_voiceprint_is_pure_and_total,
                t_the_install_wraps_both_verbs_and_is_idempotent,
-               t_a_cross_origin_request_is_refused):
+               t_a_cross_origin_request_is_refused,
+               t_sentence_opening_names_are_stripped,
+               t_a_leaked_placeholder_is_flagged_by_the_scorer,
+               t_control_markers_never_reach_the_store):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
