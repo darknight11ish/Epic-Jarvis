@@ -2261,26 +2261,42 @@ oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
 
 **Not on the phone yet, and that is the scope of this slice rather than a
-one-sided decision** (2026-10-19): **searchable recordings and videos**
-(`backend/jarvis_media_index.py`, `plugins/ready/media-index/`,
-JARVIS-API §149, F5 S2). The owner's decision keeps readable transcript text
-in a PC-side index, ON by default, with one Delete; the desktop has its
-Settings card (disclosure, switch, counts, Delete) through the route. The
-phone's chat path works - `my_files`'s `search_media` action and the spoken
-switch ("turn off searchable recordings") are backend, so both apps' chats can
-use it - but the phone has **no Settings card yet** for the disclosure,
-counts, switch and Delete. That is the honest gap: the disclosure is a
-promise the feature makes, and it must be on the phone too before this can be
-called parity. When it is built it goes on the same route and the same card as
-the desktop, with the same words; nothing about the permission model changes.
-**One thing is PC-only rather than pending (2026-10-20 audit, Gemini Area 1A):**
+**Not on the phone yet, and that is the scope of this slice rather than a
+one-sided decision** (2026-10-19; extended by S3, 2026-10-20): **searchable
+recordings and videos** (`backend/jarvis_media_index.py`,
+`plugins/ready/media-index/`, JARVIS-API §149, F5 S2+S3). The owner's decision
+keeps readable transcript text in a PC-side index, ON by default, with one
+Delete; since S3 the same index also keeps a video's readable **on-screen
+text**, read by the PC's own text reader from a capped number of frames (8 per
+video, spread across the file; 2,000 characters per video; the per-run file cap
+is unchanged, so one search OCRs at most 16 frames). The on-screen rows live in
+the same table and the same file as the transcript, so the same disclosure,
+backup exclusion and Delete cover both, and a search line says whether it was
+said (`source: "speech"`) or shown (`source: "screen"`). The desktop has its
+Settings card (disclosure, switch, counts, Delete) through the route; the
+desktop card's status line counts recordings, and the route additionally
+reports how many stored lines came from on-screen text. The phone's chat path
+works - `my_files`'s `search_media` action (whose result says `on_screen`) and
+the spoken switch ("turn off searchable recordings") are backend, so both
+apps' chats can use it - but the phone has **no Settings card yet** for the
+disclosure, counts, switch and Delete. That is the honest gap: the disclosure
+is a promise the feature makes, and it must be on the phone too before this can
+be called parity. S3 deliberately does not close it by adding a fake control:
+the phone's own menu row for it (`settings.media-index`) is **desktop-only**,
+and asking to open it already answers with the existing PC-only sentence
+(`jarvis-client`'s `OpenPlace.PC_ONLY` lists `media-index`). **One thing is
+PC-only rather than pending (2026-10-20 audit, Gemini Area 1A):**
 `POST /api/media-index` (ON/OFF/Delete of the stored words) is refused `403`
 from another device with the project's own `from_this_pc` rule, so a phone can
 read the switch but never change or delete the index; the route is PC_ONLY and
-a phone Settings card would only ever be able to READ it.
-`tools/check_parity.py` cannot see it (the route is a drop-in folder, and no
-app source names it yet), which is said plainly here rather than read as a
-clean pass it did not earn.
+a phone Settings card would only ever be able to READ it. When the card is
+built it goes on the same route and the same card as the desktop, with the same
+words; nothing about the permission model changes. `tools/check_parity.py`
+cannot see it (the route is a drop-in folder, and no app source names it),
+which is said plainly here rather than read as a clean pass it did not earn.
+**Real OCR is not tested by the S3 suite** - it drives the read seams, so the
+real frame decoder and text reader on the owner's PC remain NOT-TESTABLE until
+field-tested; that is not a pass.
 
 (`backend/jarvis_receipts.py`, `plugins/ready/receipts/`, JARVIS-API §132).
 The store and its two routes are built: `GET /api/receipts` (the recent list)

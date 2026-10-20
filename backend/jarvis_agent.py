@@ -914,7 +914,11 @@ def _run_my_files(args: dict, plan_obj, **_) -> dict:
             return {"ok": False, "error": out.get("words") or out.get("error")
                     or "the recording search did not run"}
         matches = [{"file": m["name"], "at": int(round(float(m.get("start") or 0.0))),
-                    "line": m["text"]}
+                    "line": m["text"],
+                    # S3: true when the words were ON SCREEN in a video, not
+                    # said out loud. The model must not report a slide's words
+                    # as something the owner said.
+                    "on_screen": m.get("source") == "screen"}
                    for m in out.get("matches") or []]
         # Readable private speech reached the model: latch the turn private, so
         # a later cloud decision can never carry these lines out (the same
@@ -922,8 +926,9 @@ def _run_my_files(args: dict, plan_obj, **_) -> dict:
         if matches:
             _latch_media_index_read()
         # No audio/video and no learned fact: the model gets the stored LINES
-        # (file, time, exact text) so it can repeat the owner's own words
-        # without inventing a file or a sentence.
+        # (file, time, exact text, and whether a video showed them on screen)
+        # so it can repeat the owner's own words without inventing a file or a
+        # sentence - or calling a slide something that was said.
         return {"ok": True, "what": "searched the stored words from recordings",
                 "words": out.get("words", ""), "matches": matches,
                 "files": out.get("files", 0), "pending": out.get("pending", 0)}
@@ -2297,7 +2302,8 @@ TOOLS: dict = {
         "Find and read the owner's own files, only in folders they listed. "
         "find: file names. search: words inside notes/text. "
         "read: one part of one file (PDF, Word, Excel, PowerPoint, Markdown, text, CSV). "
-        "read_media: one recording's words. search_media: stored recording words.",
+        "read_media: one recording's words. search_media: stored spoken and "
+        "on-screen recording words.",
         {"type": "object", "properties": {
             "action": {"type": "string", "enum": ["find", "search", "read", "read_media",
                                                   "search_media"]},

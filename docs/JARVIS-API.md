@@ -22633,7 +22633,7 @@ wrong version, sha512 match/mismatch/unknown, no subprocess and no network insid
 and the skill-text checks (no npx, no package-manager install, no shell fence, pinned version
 and sha512, one-card/read-only wording).
 
-## 149. Searchable recordings and videos: readable words kept on the PC, ON by the owner's decision (F5 S2, added 2026-10-19)
+## 149. Searchable recordings and videos: readable words and a video's on-screen text kept on the PC, ON by the owner's decision (F5 S2+S3, added 2026-10-19/20)
 
 F5 slice S2, built to the owner's decision of **2026-10-19 14:50 PT**: they
 chose **B - keep the transcript text**, over the brief's word-list-only
@@ -22642,14 +22642,26 @@ ships with its switch **ON**: a deliberate owner override, recorded where it
 lives (`backend/rebuilt/jarvis-framework.toml`, `[media_index] enabled =
 true`, and the same section in the published base's copy).
 
+**S3 (2026-10-20, Gemini post-review item 10) adds the on-screen text of
+videos.** S1 already reads a few frames of a video per answer; S3 keeps those
+words in the same index, so a slide title, a subtitle or a form on screen is
+searchable beside what was said. It is bounded on purpose: at most
+`INDEX_OCR_FRAMES` frames per video (spread across the whole file, not just its
+opening minutes), at most `INDEX_OCR_CHARS` characters of on-screen text per
+video, and the existing per-run cap unchanged. A video with no recognisable
+speech is still indexed from its on-screen text. The rows live in the same
+table, file, disclosure and Delete as the transcript - no second store.
+
 **What it is.** An index on this PC of the recordings and videos inside the
 owner's "Folders Jarvis may look in" list, so "which of my recordings mention
 X?" is answered once, from the words themselves. It is ONE SQLite file,
 `~/.openjarvis/media-index.db` (`jarvis_framework.CONFIG_DIR`), modelled on
 `documents-index.db` but with the difference the owner chose: the **readable
 transcript lines are stored**, with their times, because that is what makes a
-search show the exact sentence instantly. The module is
-`backend/jarvis_media_index.py` and its own docstring is the contract.
+search show the exact sentence instantly. Since S3 the same file also holds a
+video's **readable on-screen text** (from a capped number of frames), one row
+per line with its frame time. The module is `backend/jarvis_media_index.py`
+and its own docstring is the contract.
 
 **The safeguards (none of them optional in that decision).**
 
@@ -22658,6 +22670,21 @@ search show the exact sentence instantly. The module is
   places refused); an index run only walks those folders.
 * **Never the audio or video.** The recording is only read, never copied, and
   the original file is untouched. The index stores the words and file details.
+* **On-screen text is bounded, and never faked.** For a video only, the PC's
+  own text reader reads at most `INDEX_OCR_FRAMES` (8) frames per video - those
+  frames are sampled evenly across the whole file, so a long lecture's later
+  slides are not skipped - and at most `INDEX_OCR_CHARS` (2,000) characters of
+  that on-screen text are stored per video. The per-run cap is unchanged
+  (`INDEX_PER_RUN` = 2 files, so one search OCRs at most 16 frames). Each stored
+  row says where it came from: `source: "speech"` for what was said,
+  `source: "screen"` for what a video showed; a search result carries the same
+  field, so a slide is never reported as something the owner said. Where the
+  PC's reader is missing or cannot read a frame, that frame simply contributes
+  nothing - nothing is invented, and the video is still indexed from its speech.
+  A silent video's length is reported as 0 (not measured) rather than guessed.
+  The schema version is 2 since S3: an older `media-index.db` is a DERIVED file,
+  so it is dropped and rebuilt, and the recordings are re-read at the normal
+  2-a-search pace (the originals are untouched).
 * **Never a learned fact.** The words are searchable text, not a memory: the
   module imports no memory/learning module, and the `my_files` result is
   outside text like every other read, so the normal taint/card rules apply.
@@ -22697,8 +22724,10 @@ search show the exact sentence instantly. The module is
 * **Chat, both apps.** The existing `my_files` tool grew the action
   `search_media` - no new tool, no new route for chat, and it is decided under
   the EXISTING `read_files_readonly` action. The model gets the stored lines
-  with file and time (`{"file", "at", "line"}`) plus the counts/words, never a
-  recording and never a fact. A fresh index fills in at most two recordings per
+  with file and time (`{"file", "at", "line", "on_screen"}` - S3 added
+  `on_screen`, true when the words were shown in a video rather than said) plus
+  the counts/words, never a recording and never a fact. A fresh index fills in
+  at most two recordings per
   search (`INDEX_PER_RUN`), so a search is never ten minutes of speech-to-text;
   the answer says how many are still waiting. **It needs two things:** the tool
   in the owner's `[tools].enabled` **and at least one folder in "Folders
@@ -22722,7 +22751,8 @@ search show the exact sentence instantly. The module is
 * **The route, and no patch.** `GET/POST /api/media-index` is installed by the
   drop-in folder **`plugins/ready/media-index/`** - the same no-patch mechanism
   the data sandbox switch uses - so this slice adds NO patch, edits no core
-  file and touches `jarvis_hud.py` nowhere. GET: switch, counts, pending,
+  file and touches `jarvis_hud.py` nowhere. GET: switch, counts (including
+  `screen_lines`, how many stored lines came from a video's screen), pending,
   disclosure. POST `{"enabled": bool}`: OFF is `200` at once; ON goes through
   `request_enabled()` and answers `202 {"waiting": true}` (one normal approval
   card, action `change_own_config`, tier `ask`, nothing written first). POST
@@ -22744,11 +22774,18 @@ search show the exact sentence instantly. The module is
   setter calls the module's own `request_enabled()`, so "turn off searchable
   recordings" works from either app's chat and cannot bypass the card.
 
-**What it does not do yet, said plainly.** Videos' on-screen text is not
-indexed (S1 still OCRs a few frames per answer; the index stores the spoken
-words). The phone has no Settings card yet - its chat path and the spoken
-switch work - and `docs/ARCHITECTURE.md` section 8 records that follow-up
-honestly rather than claiming parity. A deploy of this slice needs ONE extra
+**What it does not do yet, said plainly.** The phone has no Settings card yet -
+its chat path and the spoken switch work - and S3 deliberately leaves that
+one-sided instead of adding a control that cannot work: the phone's own menu row
+for this (`settings.media-index` in `backend/jarvis_menus.py`, generated into
+`MenuCatalog.kt`) is desktop-only, and its "open searchable recordings" answer
+is the existing PC-only sentence (`jarvis-client`'s `OpenPlace.PC_ONLY` lists
+`media-index`), so the phone does not pretend to control this PC-side store.
+`docs/ARCHITECTURE.md` section 8 records that follow-up honestly rather than
+claiming parity. **Real OCR is NOT TESTED by this slice's suite**: the tests
+drive the read seams, so a real video frame through the real Windows/RapidOCR
+reader on the owner's PC is a field test, and it stays NOT-TESTABLE until it is
+driven (NOT-TESTABLE is never a pass). A deploy of this slice needs ONE extra
 command on the PC for the Settings card: `scripts\add-plugin.ps1 -Name
 media-index` (the chat path needs nothing). If the switch is left ON after a
 Delete, the next search reads the folders again and rebuilds what it deleted
@@ -22764,9 +22801,18 @@ the **private-lane latch** on a result carrying lines, the backup exclusion
 driven through `jarvis_backup.py`'s own function, ON by default/OFF instant/
 ON one card, the spoken setter and the `my_files` action under
 `read_files_readonly`, gone/moved rows leaving, nothing learned, the drop-in
-route's four verbs plus its 401/403 shape, the plain disclosure, and the
+route's four verbs plus its 401/403 shape, and the plain disclosure, and the
 **PC_ONLY mutation-bite** tests (2026-10-20 audit): a remote phone's POST is
 403 BEFORE the body is read and the switch does not move; a local loopback
 request and a PC program calling its own mesh address still work; an
 unplaceable peer fails closed; GET stays a token-guarded read-only view with no
-stored words. The feature list's own row was updated in all three copies.
+stored words. **S3's own checks:** a video's on-screen text searchable beside
+its speech with `source` saying which it was, a video with no recognised speech
+still indexed from its screen text (length unmeasured, not guessed), the
+`INDEX_OCR_FRAMES`/`INDEX_OCR_CHARS` caps enforced whatever a reader returns,
+frames sampled across the whole file rather than only its start, a silent
+video's fallback to screen text, the per-run cap unchanged, and
+Delete-one/Delete-all removing on-screen rows with the same raw-byte canary.
+Real ffmpeg/OCR is **not** run by the suite - the read seams are - so it is
+NOT-TESTABLE here until it is field-tested. The feature list's own row was
+updated in all three copies.
