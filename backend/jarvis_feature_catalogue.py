@@ -1,9 +1,9 @@
 """GENERATED FILE - do not edit by hand.
 
-The owner's feature list, as data: 138 rows from features/features.json.
+The owner's feature list, as data: 139 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 575be42aa878bab544f5d6f80cf614fc82ec9ea095fcffb6d52203a5a7a481f8); the apps' Features pages read their own
+`features/features.json` (sha256 4aa9db7240e0f081edc371ca4a0be89469bd8903fdaf3fb778b8e0fea03248a7); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "575be42aa878bab544f5d6f80cf614fc82ec9ea095fcffb6d52203a5a7a481f8"
+SOURCE_SHA256 = "4aa9db7240e0f081edc371ca4a0be89469bd8903fdaf3fb778b8e0fea03248a7"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1084,6 +1084,17 @@ FEATURES = (
         "limit": "Desktop only. The phone's first screen is pairing instead.",
         "surface": "desktop",
         "covers": ["settings.first-run", "set-up-jarvis-card"],
+    },
+    {
+        "id": "setup-questionnaire",
+        "group": "The PC itself",
+        "title": "First-time setup questionnaire",
+        "what": "Fourteen questions about how you want Jarvis to behave, in one card. Jarvis says what each answer would change, in its own words, and whether the change happens at once or asks you on a card - and changes nothing until you read that summary and apply it.",
+        "where": "Desktop: Settings, First-time setup. Phone: Settings, First-time setup - the same questions and the same read-only plan, and the changes are made on the PC.",
+        "asks": "No card to see the plan: it writes nothing. Applying is your explicit second press, and anything that loosens a rule still raises its own existing approval card on the PC, one at a time.",
+        "limit": "A guided path through settings that already exist, not a second set of rules. The preset answer only RECOMMENDS a setup and switches no model. The phone is read-only: applying is the PC's step, where each approval card can wait for you.",
+        "surface": "both",
+        "covers": [],
     },
     {
         "id": "menu-visibility",

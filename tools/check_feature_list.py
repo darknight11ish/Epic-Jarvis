@@ -250,7 +250,6 @@ LESSON_EXEMPT = {
     "write-like-me": "the training screen it would teach is the next UI slice; this row is the catalogue half, so a lesson now would teach a screen that is not built yet",
     "setup-questionnaire": "the card explains itself: fourteen questions in the owner's own words, a read-only plan naming each effect, and one Apply that asks twice; a lesson would repeat the card",
 }
-}
 
 #: Rule 6's exemptions: lessons that are deliberately NOT a feature row, each
 #: with the one line saying why nobody reaches it from this list. The reverse of
