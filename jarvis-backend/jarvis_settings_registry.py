@@ -678,6 +678,24 @@ def set_pictures(on: bool, *, peer=None, local=None) -> Outcome:
                    else "Making pictures is off.")
 
 
+def pictures_on() -> Optional[bool]:
+    """Is "Making pictures" switched on? Read here, never by a caller.
+
+    `jarvis_pictures` is imported by exactly one module in this tree, on
+    purpose (`test_pictures.py`'s pin): any second importer would make the
+    drawing module reachable from a model turn. The Feature Guide needs this
+    switch's current state to answer "is making pictures on?", so the read
+    lives here, where the import already exists for `set_pictures`, and the
+    caller gets None when the answer cannot be read - so it says it could not
+    be read rather than guessing "off".
+    """
+    try:
+        import jarvis_pictures as P
+        return P.load_settings().get("enabled") is True
+    except Exception:
+        return None
+
+
 # --- topic controls: a topic's mode (jarvis_topics.py) ---------------------
 
 def find_topic(words: str) -> Optional[dict]:

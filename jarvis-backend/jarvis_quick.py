@@ -1079,6 +1079,14 @@ def _match(text, now: float) -> Optional[Intent]:
     got = _settings_adjust(s)
     if got is not None:
         return got
+    # "What is <feature>?", "is <feature> on?", "how do I turn it on/off?" and
+    # "turn on <feature>" (2026-10-20). AFTER the settings block on purpose:
+    # every setting already worded keeps its own path, card rule and words, and
+    # this only answers where those patterns found nothing. Each pattern needs
+    # a real feature/switch after it, so "is the oven on" still falls through.
+    got = _feature_guide(s)
+    if got is not None:
+        return got
 
     # --- music and video control on this PC (jarvis_media.py, I91) -------------------
     got = _media(s)
@@ -2933,6 +2941,196 @@ def _settings_adjust(s: str) -> Optional[Intent]:
 
 
 # --------------------------------------------------------------------------
+#   Explaining Jarvis's own features (2026-10-20)
+#
+#   THE FIELD-TEST GAP (2026-10-19/20): "how do I turn on the prompt coach?"
+#   was answered thinly by the model, and "is the prompt coach on?" got "I
+#   don't know its current state directly". These are whole-sentence fixed
+#   phrases answered from the owner's own feature list by jarvis_feature_guide,
+#   with NO model - so they work with any model, a slow one, or none.
+#
+#   NOT A LAND GRAB. Every pattern here needs the words after it to NAME a
+#   real feature (or a real switch), or the sentence clearly says "feature";
+#   anything else falls through to the model/other paths exactly as before, so
+#   "what is the weather", "is the oven on" and "how do I turn on my phone's
+#   bluetooth" are not answered with some feature's facts. `test_feature_guide.py`
+#   proves the near misses still fall through.
+# --------------------------------------------------------------------------
+
+_FEATURES_LIST = re.compile(
+    r"(?:what|which)\s+features?\s+(?:do\s+you\s+have|are\s+there|does\s+jarvis\s+have"
+    r"|can\s+you\s+explain|have\s+you\s+got)"
+    r"|(?:list|show|name)\s+(?:me\s+)?(?:the\s+|your\s+|all\s+)?features?(?:\s+groups?)?"
+    r"|what\s+are\s+(?:the|your)\s+features?"
+    r"|(?:list|show|name)\s+(?:me\s+)?(?:the\s+)?feature\s+groups?"
+    r"|what\s+feature\s+groups?\s+(?:are\s+there|do\s+you\s+have)")
+_FEATURES_GROUP = re.compile(
+    r"(?:list|show|name)\s+(?:me\s+)?(?:the\s+|your\s+)?(.+?)\s+(?:feature\s+group|group|features)"
+    r"|what(?:'s|\s+is)\s+in\s+(?:the\s+|your\s+)?(.+?)\s+(?:feature\s+group|group)")
+_FEATURE_HOWTO = re.compile(
+    r"how\s+(?:do|can|should|would)\s+i\s+(?:turn|switch)\s+(on|off)\s+"
+    r"(?:the\s+|my\s+|a\s+|an\s+)?(.+)"
+    r"|how\s+(?:do|can)\s+i\s+(enable|disable)\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+)"
+    r"|how\s+to\s+(?:turn|switch)\s+(on|off)\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+)"
+    r"|where\s+(?:do|can)\s+i\s+(?:turn|switch)\s+(on|off)\s+"
+    r"(?:the\s+|my\s+|a\s+|an\s+)?(.+)"
+    r"|where\s+do\s+i\s+(enable|disable)\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+)")
+#: "is <thing> on?" - the exact job the field test found missing.
+_FEATURE_STATE = re.compile(
+    r"is\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+(?:turned\s+on|switched\s+on"
+    r"|turned\s+off|switched\s+off|on|off|enabled|disabled)"
+    r"(?:\s+(?:right\s+now|now|currently|at\s+the\s+moment))?"
+    r"|what(?:'s|\s+is)\s+the\s+state\s+of\s+(?:the\s+|my\s+|a\s+)?(.+)")
+_FEATURE_WHAT = re.compile(
+    r"(?:what\s+is|what's|whats)\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)"
+    r"(?:\s+(?:feature|option|setting))?"
+    r"|what\s+does\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+do"
+    r"|tell\s+me\s+about\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+)"
+    r"|explain\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+)")
+#: "turn on <feature>" - runs AFTER jarvis_settings_registry's own exact-name
+#: phrases, so every setting already worded keeps its old path and words. A
+#: feature that names several switches changes NOTHING and says which ones.
+_FEATURE_SWITCH = re.compile(
+    r"(?:turn|switch)\s+(on|off)\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+)"
+    r"|(?:turn|switch)\s+(?:the\s+|my\s+|a\s+)?(.+?)\s+(on|off)"
+    r"|(enable|disable)\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+)")
+
+
+def _feature_target(words) -> str:
+    """The words after the pattern, with a trailing "feature"/"option" taken
+    off - "the prompt coach feature" names the prompt coach."""
+    text = " ".join(str(words or "").split())
+    text = re.sub(r"\s*\b(?:feature|features|option|options|setting|settings)\b\s*$",
+                  "", text, flags=re.I)
+    return text.strip()
+
+
+def _feature_text(words) -> str:
+    """A row's id as something jarvis_feature_guide can look up by name."""
+    return str(words or "").strip()
+
+
+def _feature_explicit(s: str) -> bool:
+    """Did the owner SAY "feature"? Only then may an unknown name be answered
+    with "I do not have that one" instead of falling through to the model."""
+    return bool(re.search(r"\b(?:feature|features|option|options)\b", s))
+
+
+def _feature_lookup(target: str):
+    """The one feature a fixed phrase names, or None (never a guess)."""
+    if not target:
+        return None
+    try:
+        import jarvis_feature_guide as FG
+    except Exception:
+        return None
+    try:
+        return FG.find_feature(target, strong=True)
+    except Exception:
+        return None
+
+
+def _feature_setting(target: str):
+    """The one plain switch a fixed phrase names exactly, or None."""
+    if not target:
+        return None
+    try:
+        import jarvis_settings_registry as R
+    except Exception:
+        return None
+    try:
+        return R.find_bool_setting(target)
+    except Exception:
+        return None
+
+
+def _feature_explain_intent(s: str, target: str):
+    row = _feature_lookup(target)
+    if row is not None:
+        return Intent("feature_explain", {"id": row["id"]})
+    if _feature_explicit(s):
+        return Intent("feature_unknown", {"words": target})
+    return None
+
+
+def _feature_state_intent(s: str, target: str):
+    row = _feature_lookup(target)
+    if row is not None:
+        return Intent("feature_state", {"id": row["id"]})
+    setting = _feature_setting(target)
+    if setting is not None:
+        return Intent("feature_state_setting", {"key": setting.key})
+    return None
+
+
+def _feature_howto_intent(s: str, target: str, on: bool):
+    row = _feature_lookup(target)
+    if row is not None:
+        return Intent("feature_howto", {"id": row["id"], "on": bool(on)})
+    setting = _feature_setting(target)
+    if setting is not None:
+        return Intent("feature_howto_setting", {"key": setting.key, "on": bool(on)})
+    return None
+
+
+def _feature_switch_intent(target: str, on: bool):
+    row = _feature_lookup(target)
+    if row is None:
+        return None
+    try:
+        import jarvis_feature_guide as FG
+        setting, why = FG.switch_target(target)
+    except Exception:
+        return None
+    if setting is None:
+        return Intent("feature_switch_refused", {"words": why})
+    return Intent("feature_switch", {"key": setting.key, "on": bool(on)})
+
+
+def _feature_guide(s: str) -> Optional[Intent]:
+    """The whole feature-guidance block, in one place, in this order."""
+    if _FEATURES_LIST.fullmatch(s):
+        return Intent("features_list")
+    m = _FEATURES_GROUP.fullmatch(s)
+    if m:
+        return Intent("features_group", {"group": (m.group(1) or m.group(2) or "").strip()})
+    m = _FEATURE_HOWTO.fullmatch(s)
+    if m:
+        g = m.groups()
+        if g[0] is not None:            # how do i turn on/off <x>
+            on, target = g[0] == "on", g[1]
+        elif g[2] is not None:          # how do i enable/disable <x>
+            on, target = g[2] == "enable", g[3]
+        elif g[4] is not None:          # how to turn on/off <x>
+            on, target = g[4] == "on", g[5]
+        elif g[6] is not None:          # where do i turn on/off <x>
+            on, target = g[6] == "on", g[7]
+        else:                           # where do i enable/disable <x>
+            on, target = g[8] == "enable", g[9]
+        return _feature_howto_intent(s, _feature_target(target), on)
+    m = _FEATURE_STATE.fullmatch(s)
+    if m:
+        return _feature_state_intent(s, _feature_target(m.group(1) or m.group(2) or ""))
+    m = _FEATURE_WHAT.fullmatch(s)
+    if m:
+        target = _feature_target(next(g for g in m.groups() if g is not None))
+        if not target:
+            return None
+        return _feature_explain_intent(s, target)
+    m = _FEATURE_SWITCH.fullmatch(s)
+    if m:
+        g = m.groups()
+        if g[0] is not None:            # turn/switch on|off <x>
+            on, target = g[0] == "on", g[1]
+        elif g[2] is not None:          # turn/switch <x> on|off
+            on, target = g[3] == "on", g[2]
+        else:                           # enable/disable <x>
+            on, target = g[4] == "enable", g[5]
+        return _feature_switch_intent(_feature_target(target), on)
+    return None
+
+
+# --------------------------------------------------------------------------
 #   Animal options, by asking (the owner's decision of 2026-09-28: "Jarvis
 #   can change any of them when asked ... the same rules as the switch").
 #   The shared switches and the sky change on the PC (jarvis_settings_
@@ -4078,6 +4276,94 @@ def _run_settings_tool(f: dict, peer, local) -> Result:
     return Result(out.said, "settings_tool")
 
 
+# --------------------------------------------------------------------------
+#   Explaining a feature, its state and how to change it (2026-10-20) - no
+#   model, no network: every word comes from jarvis_feature_guide, which reads
+#   the owner's own feature list and the switch's owning module. Nothing here
+#   guesses: the guide's own sentences say when it could not read a state.
+# --------------------------------------------------------------------------
+
+FEATURE_MISSING = ("Your PC's Jarvis does not have the feature list yet - run "
+                   "apply-patches.ps1 on the PC.")
+
+
+def _guide():
+    try:
+        import jarvis_feature_guide as FG
+        return FG
+    except Exception:
+        return None
+
+
+def _run_features_list(f: dict) -> Result:
+    FG = _guide()
+    if FG is None:
+        return Result(FEATURE_MISSING, "features_list")
+    return Result(FG.groups_words(), "features_list")
+
+
+def _run_features_group(f: dict) -> Result:
+    FG = _guide()
+    if FG is None:
+        return Result(FEATURE_MISSING, "features_group")
+    out = FG.list_features(f.get("group") or "")
+    return Result(str(out.get("words") or FG.groups_words()), "features_group")
+
+
+def _run_feature_explain(f: dict) -> Result:
+    FG = _guide()
+    if FG is None:
+        return Result(FEATURE_MISSING, "feature_explain")
+    out = FG.explain(f.get("id") or "")
+    return Result(str(out.get("words") or ""), "feature_explain")
+
+
+def _run_feature_unknown(f: dict) -> Result:
+    FG = _guide()
+    if FG is None:
+        return Result(FEATURE_MISSING, "feature_unknown")
+    return Result(FG.unknown_words(f.get("words") or ""), "feature_unknown")
+
+
+def _run_feature_state(f: dict) -> Result:
+    FG = _guide()
+    if FG is None:
+        return Result(FEATURE_MISSING, "feature_state")
+    out = FG.state(f.get("id") or "")
+    return Result(str(out.get("words") or ""), "feature_state")
+
+
+def _run_feature_state_setting(f: dict) -> Result:
+    FG = _guide()
+    if FG is None:
+        return Result(FEATURE_MISSING, "feature_state")
+    out = FG.state(f.get("key") or "")
+    return Result(str(out.get("words") or ""), "feature_state")
+
+
+def _run_feature_howto(f: dict) -> Result:
+    FG = _guide()
+    if FG is None:
+        return Result(FEATURE_MISSING, "feature_howto")
+    out = FG.how_to(f.get("id") or "", bool(f.get("on")))
+    return Result(str(out.get("words") or ""), "feature_howto")
+
+
+def _run_feature_howto_setting(f: dict) -> Result:
+    FG = _guide()
+    if FG is None:
+        return Result(FEATURE_MISSING, "feature_howto")
+    out = FG.how_to(f.get("key") or "", bool(f.get("on")))
+    return Result(str(out.get("words") or ""), "feature_howto")
+
+
+def _run_feature_switch_refused(f: dict) -> Result:
+    """A feature that names NO switch or SEVERAL: nothing was changed, and the
+    answer says which switches it does have - never a "Done"."""
+    return Result(str(f.get("words") or ""), "feature_switch_refused")
+
+
+
 def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         seen: Optional[float] = None, temporary: bool = False,
         peer=None, local=None, messages=None) -> Optional[Result]:
@@ -4116,6 +4402,29 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_settings_asks_first(f, peer, local)
     if n == "settings_tool":
         return _run_settings_tool(f, peer, local)
+    # Explaining a feature (2026-10-20). `feature_switch` goes through
+    # _run_settings_bool below, which calls the SAME BoolSetting.set every other
+    # spoken setting change uses - the setting's own card rule is unchanged.
+    if n == "features_list":
+        return _run_features_list(f)
+    if n == "features_group":
+        return _run_features_group(f)
+    if n == "feature_explain":
+        return _run_feature_explain(f)
+    if n == "feature_unknown":
+        return _run_feature_unknown(f)
+    if n == "feature_state":
+        return _run_feature_state(f)
+    if n == "feature_state_setting":
+        return _run_feature_state_setting(f)
+    if n == "feature_howto":
+        return _run_feature_howto(f)
+    if n == "feature_howto_setting":
+        return _run_feature_howto_setting(f)
+    if n == "feature_switch":
+        return _run_settings_bool({"key": f["key"], "on": f["on"]}, peer, local)
+    if n == "feature_switch_refused":
+        return _run_feature_switch_refused(f)
     if n.startswith("animal_"):
         return _run_animal(n, f, peer, local)
     if n == "manner_from_now_on":
