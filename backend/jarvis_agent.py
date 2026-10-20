@@ -1835,6 +1835,64 @@ def _execute_change_setting(args: dict, state):
                      "path, not this one, so nothing was changed."}
 
 
+# --------------------------------------------------------------------------
+#   "What is this feature?" - explaining Jarvis's own features (2026-10-20)
+# --------------------------------------------------------------------------
+#
+# THE GAP THIS CLOSES (the field test of 2026-10-19/20). The owner asked
+# whether Jarvis could explain the program's features and switch them. It
+# could change 52 settings by phrase, but "how do I turn on the prompt coach?"
+# was answered thinly by the model (it never named what the coach does or
+# where it lives) and "is it on right now?" was answered "I don't know its
+# current state directly". The feature list existed the whole time -
+# features/features.json, the exact rows both apps' Features pages draw - but
+# NO chat path read it.
+#
+# READS ONLY. `jarvis_feature_guide.tool_result()` returns the row's own words
+# (what / where / asks / limit / surface) plus the current on/off read from the
+# switch's owning module. It changes nothing, so it is decided under the gate's
+# own read-only `skill_list` action (tier "auto", NO card): listing what Jarvis
+# can do is not an action, and no new gate action, tier line or card wording is
+# invented for it. The MODEL may reword the result; the fixed phrases in
+# jarvis_quick.py answer without any model at all.
+FEATURE_GUIDE_TOOL = "feature_guide"
+
+
+def _feature_guide_tool_text() -> str:
+    """The feature_guide description.
+
+    KEPT SHORT, like every tool text: this rides in the prompt on every round
+    in which it is offered, and backend/test_tool_text.py holds every tool to
+    300 tokens. It says WHEN to call and, more importantly, what not to do:
+    the failure this replaces is the model answering from general knowledge
+    and inventing a feature, so "never invent" is the instruction, not a note.
+    """
+    return ("Answer a question about one of Jarvis's own features - what it is, "
+            "where to switch it on, whether it asks first, its honest limit, "
+            "which apps have it, and whether its switch is on now - from exact "
+            "data, never general knowledge. Call it when the owner asks what a "
+            "feature is or does, where it lives, how to turn it on or off, or "
+            "whether it is on; \"feature\" may be a group name, or empty to "
+            "list the groups. If it answers that the feature is not in the "
+            "list, say so and offer the groups; never invent one. Reword the "
+            "facts freely but add none. It only reads: nothing changes and no "
+            "approval is needed.")
+
+
+def _run_feature_guide(args: dict) -> dict:
+    """The tool's whole job: ask the guide and hand its exact facts back."""
+    try:
+        import jarvis_feature_guide as FG
+    except Exception as exc:                       # noqa: BLE001
+        return {"ok": False,
+                "error": f"the feature list is not installed here ({type(exc).__name__})"}
+    try:
+        return FG.tool_result(str((args or {}).get("feature") or ""))
+    except Exception as exc:                       # noqa: BLE001
+        return {"ok": False,
+                "error": f"the feature guide could not read the list ({type(exc).__name__})"}
+
+
 TOOLS: dict = {
     "calculator": Tool(
         "calculator", "Evaluate a plain arithmetic expression.",
@@ -2340,6 +2398,20 @@ TOOLS: dict = {
          "required": ["setting", "value"]},
         _prepare_change_setting,
         lambda args, state, **_: _execute_change_setting(args, state)),
+    # Explaining one of Jarvis's own features - read-only, so no card (see
+    # FEATURE_GUIDE_TOOL above). Decided under the gate's own `skill_list`
+    # action ("listing what Jarvis can do", tier "auto"): the arguments are one
+    # feature name, so no new action, tier or patch is invented.
+    FEATURE_GUIDE_TOOL: Tool(
+        FEATURE_GUIDE_TOOL, _feature_guide_tool_text(),
+        {"type": "object", "properties": {
+            "feature": {"type": "string",
+                        "description": "the feature the owner named, in their own "
+                                       "words; a group name, or \"\" to list the groups"}},
+         "required": ["feature"]},
+        _plain_prepare("Explain feature"),
+        lambda args, state, **_: _run_feature_guide(args),
+        gate_lookup_name=lambda args: "skill_list"),
 }
 
 
@@ -4942,7 +5014,13 @@ _NOT_READING = {"calculator", "send_email", "draft_email", "tidy_inbox", "retire
                 # would count as shaped and a later note write in the same turn
                 # would wait for a person for no reason, and shaped_by would say
                 # Jarvis had read something it had not.
-                SETTINGS_TOOL}
+                SETTINGS_TOOL,
+                # FEATURE_GUIDE_TOOL (2026-10-20): the feature list is shipped
+                # WITH the program (a generated module), not read from outside,
+                # and the on/off reads are this PC's own switch flags. Labelling
+                # its result as outside text would make the very answer that
+                # explains a feature look like a page Jarvis had read.
+                FEATURE_GUIDE_TOOL}
 
 
 def strip_chat_markers(text: str) -> str:
@@ -5957,7 +6035,13 @@ TOOL_GROUPS = (
     # It fits the same pattern read_web_page set: one deliberate act, which
     # raises its own approval card whenever the setting's own rule says so.
     # Reached only with `[tools] short_list = true`, which ships OFF.
-    ("settings", "change one of Jarvis's own settings", (SETTINGS_TOOL,)),
+    #
+    # Explaining a feature (FEATURE_GUIDE_TOOL, 2026-10-20) shares this group
+    # rather than adding a group name to more_tools' own enum: changing and
+    # explaining a setting are the same "Jarvis's own switches" subject, and a
+    # group's members cost nothing extra in that enum.
+    ("settings", "change one of Jarvis's own settings",
+     (SETTINGS_TOOL, FEATURE_GUIDE_TOOL)),
     # The plug-in programs (jarvis_mcp.py). Their tools are reached ONLY
     # through here - never in the core, whether or not the short list is on.
     ("plugins", "read-only tools from plug-in programs on this PC", ()),
@@ -6122,6 +6206,13 @@ TOOL_HINTS = {
                   r"to-?do list"),
     "change_setting": (r"\bsettings?\b", r"\benable\b", r"\bdisable\b",
                        r"\bturn\b.*\b(?:on|off)\b"),
+    # FEATURE_GUIDE_TOOL (2026-10-20): "what is the prompt coach", "is it on",
+    # "how do I turn it on". Deliberately narrower than change_setting's own
+    # hints: a plain "what is ..." must not pull a tool in for every question,
+    # so only the feature-worded phrasings here are recognised.
+    "feature_guide": (r"\bfeatures?\b", r"\bexplain\b", r"prompt coach",
+                      r"what does .* do\b", r"how do i (?:turn|switch|enable|disable)",
+                      r"\bis the .* (?:on|off)\b"),
 }
 _TOOL_HINTS_RX = {name: tuple(re.compile(rx, re.I) for rx in patterns)
                   for name, patterns in TOOL_HINTS.items()}

@@ -5114,6 +5114,18 @@ What it understands:
 | "Cancel that" (21.9) | "cancel that", "never mind", "undo", "delete that reminder", "no, cancel that alarm" |
 | Morning briefing | "brief me now", "brief me every weekday at 7" (**a card**), "stop my briefing" - section 22.5 |
 | "What did I miss?" (22.9) | "what did I miss", "did I miss anything", "catch me up", "what's new" |
+| Features (§130) | "what is the prompt coach", "what does the prompt coach do", "is the prompt coach on", "is the prompt coach on right now", "how do I turn on the prompt coach", "how do I turn off the prompt coach", "what features do you have", "list the memory features", "turn on <a feature that names one switch>" - added 2026-10-20 |
+
+**Feature questions are answered from the feature list, not the model.** The
+three "Features" wordings above read `features/features.json` itself (through
+`jarvis_feature_guide.py`, whose exact contract is the last subsection of
+§130), including which apps have the feature, whether it asks first and, for a
+switchable one, whether it is on right now. A sentence that names no real
+feature or switch falls through to the model exactly as before, so "what is
+the weather" and "is the oven on" are untouched. The "turn on <feature>"
+wording goes through that setting's own setter and approval rule - the same
+`BoolSetting.set` the settings phrases and the `change_setting` tool use - and
+answers with its real outcome.
 
 **"How long is left" is only ours while something is left to measure.** With
 no timer running, the **bare** sentence ("how long is left", "how much time is
@@ -20190,6 +20202,65 @@ outside text stops it, and the `ast` check that every setter calls a function th
 exists. `backend/test_tool_text.py`, `test_short_tool_list.py`,
 `test_agent_retirement_wiring.py`, `test_reach.py`, `test_private_aloud.py` and
 `test_tool_eval.py` carry the new tool in their own lists and generated fixtures.
+
+### Explaining a feature: the `feature_guide` tool and the fixed phrases (added 2026-10-20)
+
+**Why it exists (the 2026-10-19/20 field test).** Chat could change 52 settings by
+fixed phrases, but no chat path could EXPLAIN a feature: "how do I turn on the prompt
+coach?" was answered thinly by the model (never saying what the coach does or where it
+lives), and "is the prompt coach on right now?" was answered "I don't know its current
+state directly". The exact answers were already written down - `features/features.json`,
+the 137 rows both apps' Features pages draw - and nothing read them.
+
+**One read-only tool, `feature_guide`** (`jarvis_feature_guide.py`; the tool in
+`jarvis_agent.py`). Its one argument is `feature`, in the owner's words (or a group
+name, or `""` to list the groups). It returns the row's OWN facts - `what`, `where`
+(where to switch it on), `asks` (whether a card is needed), `limit`, `surface` (which
+apps have it) and `covers` (the settings places it names) - plus, for a switchable
+feature, whether its switch is **on or off right now**, read from the module that owns
+that switch through the SAME `jarvis_settings_registry.BoolSetting` entries
+`change_setting` writes (`jarvis_feature_guide.STATE_READERS`). It changes nothing, so
+it is decided under the gate's own read-only `skill_list` action (tier `auto`, **no
+card**) - no new gate action, no tier line, no patch. A switch a module cannot answer
+is reported as "I could not read it", never as off. An unknown or ambiguous name is
+said plainly and the real groups are offered; nothing is guessed.
+
+**The catalogue is a generated module.** `features/features.json` lives in this
+repository and is NOT copied to the PC's backend folder, so the guide ships its rows as
+`jarvis_feature_catalogue.py`, written by `tools/gen_feature_guide_catalogue.py` from the
+same file. `backend/test_feature_guide.py` runs that tool's `--check`, so a changed list
+that was not regenerated fails a suite rather than drifting from what the apps show.
+
+**Three fixed phrases, no model at all** (`jarvis_quick.py`, so they work with any model,
+a slow one, or none): **"what is <feature>"** (and "what does it do", "tell me about",
+"explain"), **"how do I turn on/off <feature>"** (and "enable/disable", "how to", "where
+do I"), and **"is <feature> on?"** (and "off", "enabled", "right now", "what is the state
+of"). "What features do you have?" / "list the features" answer with the 9 groups. A
+sentence that clearly asks about a feature and names none says so; any sentence that does
+not name a real feature or switch falls through to the model exactly as before - "what is
+the weather", "is the oven on", "how do I turn on my phone's bluetooth" are untouched.
+**Changing** by these words is the existing path: "turn on <feature>" resolves a feature
+to the ONE switch it names and calls that setting's own `BoolSetting.set`, so the card
+rules are unchanged; a feature naming several switches (Custom voices) changes nothing
+and says which ones; the answer is the setter's own outcome, never a "Done" when nothing
+happened.
+
+**Both apps, nothing app-specific:** the fixed phrases and the tool are reached through
+the same `/api/chat` turn both apps already use, so `docs/ARCHITECTURE.md` §8 needs no
+entry and `tools/check_parity.py` is clean. It **ships ON** in `[tools].enabled` (the
+owner's decision of 2026-10-19/20); on an existing install the model tool is offered once
+`"feature_guide"` is in the `[tools].enabled` list of `jarvis-framework.toml` (or the
+inherited `config.toml`, if the settings file names no `[tools]` section) - the fixed
+phrases need no config at all.
+
+**Tests.** `backend/test_feature_guide.py`: all 137 rows found with facts equal to the
+JSON; every switch has a state reader and the answers never claim a state they did not
+read; unknown/ambiguous honesty; the fixed phrases and their near misses; switching
+through the real setter with its real words; the tool's 300-token text, `auto`-tier
+no-card turn, and exact facts fed to the model. `test_tool_text.py`,
+`test_short_tool_list.py`, `test_reach.py` and `tools/tool_eval/jarvis_tools.json` carry
+the tool; `test_settings_tool.py`, `test_settings_registry.py`, `test_settings_help.py`
+and `test_quick_wins.py` are unchanged and green.
 
 ---
 

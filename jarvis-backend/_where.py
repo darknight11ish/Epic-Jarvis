@@ -1092,6 +1092,14 @@ SHIPPED = (
     # surface it adds is one line in the morning briefing (jarvis_briefing.py)
     # for a person Jarvis already knows who is named in today's calendar.
     "jarvis_people_crm.py",
+    # "What is this feature?" and "is it on?" (2026-10-20): the guide answers
+    # from the owner's own feature list - a GENERATED copy of
+    # features/features.json, because that file lives in this repository and is
+    # NOT copied to the PC's backend folder - plus each switch's owning module
+    # for its current on/off. No route, no card: the fixed phrases in
+    # jarvis_quick.py answer without a model, and the read-only feature_guide
+    # tool lets the model reword the same facts.
+    "jarvis_feature_guide.py", "jarvis_feature_catalogue.py",
 )
 
 

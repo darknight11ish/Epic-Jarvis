@@ -1793,10 +1793,17 @@ star_floor = 25        # ...but never fewer than this many
 # that missed the fixed phrase grammar was answered by a model that could not
 # change anything and never said so.
 #
+# `feature_guide` ALSO ships ON, by the same decision (the owner asked on
+# 2026-10-19/20 for Jarvis to explain its own features): it is READ-ONLY - it
+# answers from the feature list the Features pages already show, plus each
+# switch's own current on/off - so it changes nothing, asks nobody and opens
+# no way out of the PC. The fixed phrases in jarvis_quick.py answer the same
+# questions with no model at all; this is the model's door to the same facts.
+#
 # Everything else here stays opt-in - send_email, browser_control, my_files
 # and the rest - each for the reasons its own row of backend/README.md gives.
 [tools]
-enabled = ["web_search", "change_setting"]
+enabled = ["web_search", "change_setting", "feature_guide"]
 
 # ------------------------------------------------------------------------
 # ENERGY - what one answer cost the graphics card (jarvis_energy.py)
