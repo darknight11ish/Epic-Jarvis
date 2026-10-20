@@ -316,6 +316,37 @@ class _NoWinrt(Exception):
 
 
 _WINRT: dict = {}
+#: What happened when onnxruntime was loaded BEFORE the first WinRT package:
+#: {"tried": True, "ok": bool}. It is not reset - the load ORDER is a property
+#: of the process, not of one call.
+_WINRT_SAFE_ONNX: dict = {}
+
+
+def _preload_onnxruntime() -> None:
+    """Load onnxruntime BEFORE the first WinRT package, if it is installed.
+
+    WHY (measured 2026-10-20, from Gemini's review of the Windows run). In one
+    process, loading ANY pywinrt package and THEN onnxruntime crashed with
+    `0xC0000005` (STATUS_ACCESS_VIOLATION) inside onnxruntime's own native
+    extension initialisation (`onnxruntime/capi/_pybind_state.py`); the same
+    crash happened in the main thread and in a worker thread. Loading
+    onnxruntime FIRST and the WinRT packages after it is fine (both orders
+    measured with the versions in backend/requirements.txt: onnxruntime 1.30.0,
+    winrt-Windows.* 3.2.1). The two readers must be able to live in one
+    process: `status()` asks Windows' reader, and a reader switched at run time
+    (or `py -3 jarvis_ocr.py measure`, which uses BOTH) reaches RapidOCR after
+    that. So every WinRT entry point below calls this first.
+
+    A failure is ignored on purpose: without onnxruntime there is nothing to
+    protect, and RapidOCR's own path says its plain "not installed" sentence."""
+    if _WINRT_SAFE_ONNX.get("tried"):
+        return
+    _WINRT_SAFE_ONNX["tried"] = True
+    try:
+        import onnxruntime  # noqa: F401
+        _WINRT_SAFE_ONNX["ok"] = True
+    except Exception:
+        _WINRT_SAFE_ONNX["ok"] = False
 
 
 def _winrt_modules() -> tuple:
@@ -328,6 +359,9 @@ def _winrt_modules() -> tuple:
         return _WINRT["mods"]
     if os.name != "nt" or _WINRT.get("missing"):
         raise _NoWinrt()
+    # BEFORE the first WinRT import - see _preload_onnxruntime's docstring for
+    # the measured 0xC0000005 this prevents when RapidOCR is used later.
+    _preload_onnxruntime()
     try:
         from winrt.windows.media.ocr import OcrEngine
         from winrt.windows.graphics.imaging import BitmapAlphaMode, BitmapDecoder, BitmapPixelFormat

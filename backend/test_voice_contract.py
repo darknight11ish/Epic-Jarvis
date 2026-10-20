@@ -533,7 +533,7 @@ _TEMP_PROPERTY_SCRIPT = (
 )
 
 
-def _fresh_runs_at(root: Path) -> dict:
+def _fresh_runs_at(root) -> dict:
     """{producer: [bytes, sha256]} from one fresh interpreter under `root`.
 
     JARVIS_NO_DIRECT_STAGE is set so this branch's own direct-run staging (which
@@ -550,6 +550,33 @@ def _fresh_runs_at(root: Path) -> dict:
         return json.loads(proc.stdout)
     except ValueError:
         return {"error": (proc.stdout or "")[-500:]}
+
+
+def _long_root_path_arg(root: Path) -> str:
+    """Create the LONG temp root and return the path string to hand the
+    producer.
+
+    WHY THIS IS MORE THAN `mkdir`. Windows limits a path to 260 characters
+    unless the path is given to the OS in its extended-length form
+    (`\\\\?\\C:\\...`), the OS's own opt-out, which needs no registry change and
+    no administrator. The root here is `%TEMP%` plus 120 characters; on the
+    owner's PC that still fits, but a longer %TEMP% (a deep user folder, a
+    redirected temporary folder) can push the ROOT itself past the limit, and
+    then this suite cannot even create the root whose long-path behaviour it
+    exists to test. The producers create their own nested folder through the
+    extended form (tools/_voice_temp.py) whether or not the root carries it.
+
+    A root that fits is created normally, so the ordinary case keeps an
+    ordinary path."""
+    text = str(root)
+    if os.name == "nt":
+        absolute = os.path.abspath(text)
+        if len(absolute) + 80 > 260 and not absolute.startswith("\\\\?\\"):
+            extended = "\\\\?\\" + absolute
+            os.makedirs(extended, exist_ok=True)
+            return extended
+    root.mkdir(parents=True, exist_ok=True)
+    return text
 
 
 def _the_fixture_survives_a_short_and_a_long_temp(fixture: Path, name: str,
@@ -644,18 +671,52 @@ def t_the_desktop_fixture_is_fresh():
     # helper for why they must be fresh processes.
     short_root = Path(tempfile.gettempdir())
     long_root = short_root / ("l" * 120)
-    long_root.mkdir(parents=True, exist_ok=True)
+    long_arg = _long_root_path_arg(long_root)
     try:
         short_runs = _fresh_runs_at(short_root)
-        long_runs = _fresh_runs_at(long_root)
+        long_runs = _fresh_runs_at(long_arg)
     finally:
-        shutil.rmtree(long_root, ignore_errors=True)
+        shutil.rmtree(long_arg, ignore_errors=True)
     _the_fixture_survives_a_short_and_a_long_temp(
         G.FIXTURE, "gen_voice_status_cases", short_runs, long_runs)
     _the_fixture_survives_a_short_and_a_long_temp(
         T.FIXTURE, "gen_voice_training_cases", short_runs, long_runs)
     _the_fixture_survives_a_short_and_a_long_temp(
         P.FIXTURE, "gen_phone_voice_cases", short_runs, long_runs)
+
+
+def t_the_voice_training_producer_says_why_its_card_is_missing():
+    """No raw `KeyError: 'id'` again (Gemini's review, 2026-10-20).
+
+    `gen_voice_training_cases.voices_cases()` needs the switch card still
+    waiting before it approves it. It used to read `VO._PENDING["id"]`, so when
+    an earlier step silently failed - on Windows with a %TEMP% path near 260
+    characters the voice could not be saved, the switch request answered 404,
+    no card was raised - the only clue was a bare KeyError seven lines later.
+    The producer now asks `pending_switch_id()`, which raises a sentence naming
+    the two answers it did get. This checks that sentence, and that a real card
+    id still comes back, WITHOUT re-running the producer."""
+    sys.path.insert(0, str(REPO / "tools"))
+    import gen_voice_training_cases as TR
+    real = TR.VO._PENDING
+    try:
+        TR.VO._PENDING = {}
+        try:
+            TR.pending_switch_id({"switch_pending": {"code": 404,
+                                                     "body": {"ok": False}},
+                                  "create_accepted": {"code": 202,
+                                                      "body": {"voice": "grandpa"}}})
+            words = ""
+        except AssertionError as exc:
+            words = str(exc)
+        check("no waiting card says WHY in a plain sentence, naming both answers",
+              "no switch card was waiting" in words and "404" in words
+              and "260" in words, words[:240])
+        TR.VO._PENDING = {"id": "abc123", "kind": "switch"}
+        check("...and a real waiting card's id is returned",
+              TR.pending_switch_id({}) == "abc123")
+    finally:
+        TR.VO._PENDING = real
 
 
 def t_a_status_call_cannot_change_the_producers():
@@ -709,6 +770,7 @@ if __name__ == "__main__":
                t_the_utterance_reply_serves_both_clients, t_the_turn_answer_serves_the_desktop,
                t_the_someone_else_reply_serves_the_phone,
                t_an_older_jarvis_voice_still_works, t_the_desktop_fixture_is_fresh,
+               t_the_voice_training_producer_says_why_its_card_is_missing,
                t_a_status_call_cannot_change_the_producers):
         print(f"\n--- {fn.__name__} ---")
         try:

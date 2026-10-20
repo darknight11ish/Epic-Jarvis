@@ -587,6 +587,18 @@ def t_rapidocr_real():
     if not J.rapidocr_usable():
         print("skip  the rapidocr package is not installed here: the real engine is not run")
         return
+    if os.name == "nt":
+        # THE 2026-10-20 CRASH'S REGRESSION. Loading onnxruntime AFTER any
+        # pywinrt package crashed this process with 0xC0000005
+        # (STATUS_ACCESS_VIOLATION) inside onnxruntime's extension init; this
+        # suite's own order - Windows-reader checks first, this real RapidOCR
+        # read afterwards - is exactly that order, so the read at the end of
+        # this function is the proof. This check names the guard that makes it
+        # safe, and fails the moment the guard is removed.
+        J.winrt_usable()
+        check("onnxruntime is loaded before the WinRT reader's first package "
+              "(loading it after the WinRT packages crashed 0xC0000005)",
+              J._WINRT_SAFE_ONNX.get("ok") is True, J._WINRT_SAFE_ONNX)
     try:
         from PIL import Image, ImageDraw, ImageFont
     except Exception:
