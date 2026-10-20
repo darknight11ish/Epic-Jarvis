@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
 import android.graphics.Rect
+import android.os.Build
 import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -66,7 +67,8 @@ class JarvisAccessibilityService : AccessibilityService() {
                 foregroundPackage = event.packageName?.toString().orEmpty()
                 foregroundTitle = shortClassName(event.packageName?.toString(), event.className?.toString())
             }
-            AccessibilityEvent.TYPE_WINDOWS_CHANGED -> {
+            AccessibilityEvent.TYPE_WINDOWS_CHANGED,
+            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
                 if (foregroundPackage.isEmpty()) {
                     foregroundPackage = event.packageName?.toString().orEmpty()
                 }
@@ -86,6 +88,9 @@ class JarvisAccessibilityService : AccessibilityService() {
      */
     fun snapshot(): AppControl.Snapshot? {
         val root: AccessibilityNodeInfo = rootInActiveWindow ?: return null
+        // Compose/RecyclerView update in place without a window-state event, so
+        // the cached root can be stale: ask Android for the tree again first.
+        runCatching { root.refresh() }
         val app = root.packageName?.toString()?.takeIf { it.isNotBlank() } ?: foregroundPackage
         val title = foregroundTitle.ifBlank { shortClassName(app, root.className?.toString()) }
         val controls = ArrayList<AppControl.Control>(AppControl.MAX_CONTROLS)
@@ -95,20 +100,28 @@ class JarvisAccessibilityService : AccessibilityService() {
         while (queue.isNotEmpty() && controls.size < AppControl.MAX_CONTROLS && visited < MAX_VISITED) {
             val (node, depth) = queue.removeFirst()
             visited += 1
-            // A password field is skipped WHOLE, before any text is read from
-            // it or from anything inside it.
-            if (node.isPassword) continue
+            // A sensitive field is skipped WHOLE, before any text is read from
+            // it or from anything inside it: Android's isPassword, a password
+            // inputType variation (a "show password" eye keeps the inputType),
+            // and API 34+'s own accessibility-sensitive flag (Gemini, 2026-10-20).
+            if (sensitive(node)) continue
             val rect = Rect()
             val visible = node.isVisibleToUser
             if (visible) {
-                val text = node.text?.toString() ?: node.contentDescription?.toString()
                 val masked = AppControl.mask(
                     id = node.viewIdResourceName,
-                    text = text,
+                    text = node.text?.toString(),
                     cls = node.className?.toString(),
                     bounds = boundsOf(node, rect),
                     password = false, // already skipped above, checked first
                     invisible = false,
+                    // text ?: contentDescription ?: hintText - a Compose/Material
+                    // icon button has only a contentDescription, and an empty
+                    // field only its placeholder (Gemini, 2026-10-20).
+                    hint = node.contentDescription?.toString() ?: node.hintText?.toString(),
+                    clickable = node.isClickable,
+                    editable = node.isEditable,
+                    scrollable = node.isScrollable,
                 )
                 if (masked != null) controls.add(masked)
             }
@@ -153,28 +166,75 @@ class JarvisAccessibilityService : AccessibilityService() {
         val target = step.target ?: return Outcome.Refused(AppControl.said(AppControl.Why.VERB))
         val node = find(rootInActiveWindow, target)
         if (node != null) {
-            if (node.isPassword) return Outcome.Refused(AppControl.said(AppControl.Why.PASSWORD))
-            if (node.isVisibleToUser && node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
-                return Outcome.Done
+            if (sensitive(node)) return Outcome.Refused(AppControl.said(AppControl.Why.PASSWORD))
+            // The ladder: click the node itself, then up to three same-package
+            // parents (a list row's listener sits on the parent while the words
+            // sit on a non-clickable child), then one guarded gesture. Gemini's
+            // review, 2026-10-20.
+            val parents = ArrayList<Pair<Boolean, Boolean>>()
+            var parent = node.parent
+            var climbed = 0
+            while (climbed < 3) {
+                val p = parent ?: break
+                parents.add(p.isClickable to sensitive(p))
+                parent = p.parent
+                climbed += 1
+            }
+            val rung = AppControl.tapRung(node.isClickable, parents)
+            if (rung >= 0) {
+                val startNode: AccessibilityNodeInfo = node
+                var clicked: AccessibilityNodeInfo = startNode
+                repeat(rung) { clicked = clicked.parent ?: clicked }
+                if (clicked.isVisibleToUser &&
+                    clicked.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                ) {
+                    return Outcome.Done
+                }
             }
         }
-        // No clickable match: the approved target's own area, AND ONLY IT.
+        // No clickable match: the approved target's own area, AND ONLY IT, and
+        // only when no other window covers the point.
         if (target.bounds.size == 4) {
             val rect = Rect(target.bounds[0], target.bounds[1], target.bounds[2], target.bounds[3])
-            if (dispatchTap(rect.exactCenterX(), rect.exactCenterY())) return Outcome.Done
+            val x = rect.exactCenterX()
+            val y = rect.exactCenterY()
+            if (coveredByAnotherWindow(x, y)) {
+                return Outcome.Refused(
+                    "Another window covers that part of the screen, so nothing was tapped.",
+                )
+            }
+            if (dispatchTap(x, y)) return Outcome.Done
         }
         return Outcome.Refused(AppControl.said(AppControl.Why.TARGET_CHANGED))
     }
 
+    /**
+     * True when a window other than the active app's covers this point (an IME
+     * or an overlay): a coordinate tap there would land on the wrong thing.
+     */
+    private fun coveredByAnotherWindow(x: Float, y: Float): Boolean {
+        val active = rootInActiveWindow ?: return false
+        val mine = active.windowId
+        val point = Rect(x.toInt(), y.toInt(), x.toInt() + 1, y.toInt() + 1)
+        return runCatching {
+            windows.any { window ->
+                if (window.id == mine) return@any false
+                val root = window.root ?: return@any false
+                val bounds = Rect()
+                root.getBoundsInScreen(bounds)
+                bounds.intersect(point) && root.packageName?.toString() != active.packageName?.toString()
+            }
+        }.getOrDefault(false)
+    }
+
     private fun type(step: AppControl.Step): Outcome {
         val target = step.target ?: return Outcome.Refused(AppControl.said(AppControl.Why.VERB))
-        val node = find(rootInActiveWindow, target)
+        val found = find(rootInActiveWindow, target)
             ?: return Outcome.Refused(AppControl.said(AppControl.Why.TARGET_CHANGED))
         // Checked BEFORE the text is looked at, and before anything is typed.
-        if (node.isPassword) return Outcome.Refused(AppControl.said(AppControl.Why.PASSWORD))
-        if (!node.isEditable) {
-            return Outcome.Refused("That control is not a text field, so nothing was typed.")
-        }
+        if (sensitive(found)) return Outcome.Refused(AppControl.said(AppControl.Why.PASSWORD))
+        val node = editableTarget(found)
+            ?: return Outcome.Refused("That control is not a text field, so nothing was typed.")
         val text = step.text.orEmpty().take(AppControl.MAX_TEXT)
         node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         val args = Bundle().apply {
@@ -182,6 +242,38 @@ class JarvisAccessibilityService : AccessibilityService() {
         }
         if (node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) return Outcome.Done
         return Outcome.Refused("Android would not type into that field, so nothing changed.")
+    }
+
+    /**
+     * The node to type into: [found] itself when it is editable, else exactly
+     * one editable, non-password child (depth 1-2) - a TextInputLayout's label
+     * is the node the words sit on, its EditText is one level down. Gemini's
+     * review, 2026-10-20.
+     */
+    private fun editableTarget(found: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        if (found.isEditable) return found
+        if (sensitive(found)) return null
+        val candidates = ArrayList<AccessibilityNodeInfo>()
+        val queue = ArrayDeque<Pair<AccessibilityNodeInfo, Int>>()
+        for (index in 0 until found.childCount) {
+            val child = runCatching { found.getChild(index) }.getOrNull() ?: continue
+            queue.add(child to 1)
+        }
+        while (queue.isNotEmpty()) {
+            val (node, depth) = queue.removeFirst()
+            if (sensitive(node)) continue
+            if (node.isEditable) {
+                candidates.add(node)
+                if (candidates.size > 1) return null
+            }
+            if (depth < 2) {
+                for (index in 0 until node.childCount) {
+                    val child = runCatching { node.getChild(index) }.getOrNull() ?: continue
+                    queue.add(child to depth + 1)
+                }
+            }
+        }
+        return candidates.singleOrNull()
     }
 
     private fun swipe(step: AppControl.Step): Outcome {
@@ -193,10 +285,33 @@ class JarvisAccessibilityService : AccessibilityService() {
         if (rect.width() <= 0 || rect.height() <= 0) {
             return Outcome.Refused(AppControl.said(AppControl.Why.TARGET_CHANGED))
         }
+        // Semantic scroll first: a small model says "scroll", and the
+        // scrollable ancestor is what Android's own action can move.
+        val node = find(rootInActiveWindow, target)
+        if (node != null && !sensitive(node)) {
+            var parent: AccessibilityNodeInfo? = node
+            var climbed = 0
+            while (climbed < 6) {
+                val p = parent ?: break
+                if (p.isScrollable &&
+                    p.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+                ) {
+                    return Outcome.Done
+                }
+                parent = p.parent
+                climbed += 1
+            }
+        }
+        // No scrollable ancestor (or its action was refused): a pixel gesture
+        // clamped inside the target AND the screen's central 15%-85% band, so
+        // an edge swipe can never trigger Back or the notification shade.
+        val metrics = resources.displayMetrics
+        val points = AppControl.swipePoints(target.bounds, metrics.widthPixels, metrics.heightPixels)
+            ?: return Outcome.Refused(AppControl.said(AppControl.Why.TARGET_CHANGED))
         val y = rect.exactCenterY()
         val path = Path().apply {
-            moveTo(rect.right - rect.width() * 0.1f, y)
-            lineTo(rect.left + rect.width() * 0.1f, y)
+            moveTo(points.first, y)
+            lineTo(points.second, y)
         }
         val gesture = GestureDescription.Builder()
             .addStroke(GestureDescription.StrokeDescription(path, 0L, SWIPE_MS))
@@ -204,6 +319,15 @@ class JarvisAccessibilityService : AccessibilityService() {
         if (dispatchGesture(gesture, null, null)) return Outcome.Done
         return Outcome.Refused("Android would not perform that swipe, so nothing ran.")
     }
+
+    /** The wider sensitivity rule, in one place for the whole service. */
+    private fun sensitive(node: AccessibilityNodeInfo): Boolean =
+        AppControl.sensitiveInput(
+            isPassword = node.isPassword,
+            inputType = node.inputType,
+            isDataSensitive = Build.VERSION.SDK_INT >= 34 && node.isAccessibilityDataSensitive,
+            sdk = Build.VERSION.SDK_INT,
+        )
 
     private fun dispatchTap(x: Float, y: Float): Boolean {
         val path = Path().apply { moveTo(x, y) }

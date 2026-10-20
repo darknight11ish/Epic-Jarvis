@@ -1,10 +1,11 @@
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
-@@ -3302,6 +3302,36 @@
+@@ -3302,6 +3302,43 @@
              by = "this PC" if host in ("127.0.0.1", "::1") else "another device"
              code, out = jarvis_big_coder.handle_post(body, by=by)
              return self._send(code, out)
-+        if route in ("/api/app-control/run", "/api/app-control/step"):
++        if route in ("/api/app-control/run", "/api/app-control/step",
++                     "/api/app-control/plan"):
 +            # app-control.patch (2026-10-19) - the backend half of the owner's
 +            # "fuller automation inside other apps". The PC is the brain and
 +            # the gate; the phone is the hands. /run checks the owner's
@@ -15,6 +16,10 @@
 +            # switch it on, so every refusal says so in plain words. Nothing
 +            # here approves anything: the card is the only yes, and
 +            # jarvis_app_control.py's own docstring has the whole contract.
++            # /plan is the same card's other way in (2026-10-20): the owner's
++            # words and the phone's masked screen go to the LOCAL model, which
++            # proposes ONE step; that proposal still goes through /run's own
++            # validation and refusal list before a card exists.
 +            if not _origin_ok(self):
 +                return self._send(403, {"error": "cross-origin request refused"})
 +            if not _token_ok(self):
@@ -30,8 +35,10 @@
 +                                        "error": f"{type(exc).__name__}: {exc}"})
 +            if route == "/api/app-control/run":
 +                code, out = jarvis_app_control.stage_run(body)
-+            else:
++            elif route == "/api/app-control/step":
 +                code, out = jarvis_app_control.step(body)
++            else:
++                code, out = jarvis_app_control.plan_round(body)
 +            return self._send(code, out)
 +
          if route == "/api/memory/decide":

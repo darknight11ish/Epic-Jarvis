@@ -22035,20 +22035,34 @@ anything - this PC-side module turns one request into ONE approval card and
 then hands back exactly the step that card listed, one at a time, re-checking
 the screen the phone shows it.
 
-**This is the backend half only.** The Android `AccessibilityService`, the
-allow-list Settings screen, the running banner and the one-tap Stop are the
-NEXT slice; **no app calls these routes yet**, and the feature is **OFF by
-default**. It is added by `backend/app-control.patch` (two POST routes in
-`jarvis_hud.py`) and the shipped module `backend/jarvis_app_control.py` (twin
-in `jarvis-backend/`); the patch sits after `presets.patch` and before
-`plugin-loader.patch`, which must stay last.
+**The run starts on the phone** (the owner's decision, 2026-10-20): the owner
+types what they want in the app on the phone; the phone sends those words and
+its masked screen to the PC, and the PC's **local model** proposes exactly ONE
+atomic step. That model is picked deliberately, through the project's own lane
+table: the **Agentic + Vision preset's model, `qwen3.5:9b` on the main lane**
+(the 2060, 196k context), never the fast lane by accident, never a cloud model
+and never the heavy Coding 30B - one strict-JSON step does not justify evicting
+every other lane. That proposal is not trusted: it goes through this module's
+own validation and refusal list before any card, and the card names the app,
+the ONE step, that the phone asked, and **which local model planned it**. There
+is **no PC-to-phone channel**, no multi-step plan on one card: the next step is
+another request and another card.
+
+**The backend half.** The Android `AccessibilityService`, the allow-list
+screen, the running banner and the one-tap Stop live in `jarvis-client` (its
+own slice), and the feature is **OFF by default**. It is added by
+`backend/app-control.patch` (three POST routes in `jarvis_hud.py`) and the
+shipped module `backend/jarvis_app_control.py` (twin in `jarvis-backend/`); the
+patch sits after `presets.patch` and before `plugin-loader.patch`, which must
+stay last.
 
 **The switch.** `[app_control] enabled = false` in the framework template. A
 settings file with no `[app_control]` table reads as OFF - a missing section is
 never permission - and this slice adds no way to switch it on. While it is
-off, both routes answer `409 {"ok": false, "available": false, "error": "App
-control is switched off on this PC. It is off by default, and this build has
-no switch yet - nothing was changed."}`.
+off, all three routes answer `409 {"ok": false, "available": false, "error":
+"App control is switched off on this PC. It is off by default, and this build
+has no switch yet - nothing was changed."}` - and the planning route calls no
+model at all.
 
 ### `POST /api/app-control/run` - start ONE carded action
 
@@ -22135,6 +22149,63 @@ of `jarvis_gate._PROTECTED`'s files; and any run while
 `jarvis_gate.taint_active()` is true (outside text may be steering the
 conversation - acting then is what the latch exists to stop).
 
+### `POST /api/app-control/plan` - the owner's words, the LOCAL model's ONE step, ONE card
+
+Added 2026-10-20 (the owner chose: **the run starts on the phone**). Same origin
+and token checks as every other write. Request:
+
+```
+{"allowed": ["com.google.android.deskclock"],
+ "want": "turn on Wi-Fi",                      the owner's own words, 1..200 characters
+ "snapshot": {"app": "com.google.android.deskclock", "title": "Clock",
+              "controls": [ ...the masked controls the phone just read... ]}}
+```
+
+The plan is made **on this PC**, by **the local model only**, over the owner's
+words and the masked controls (ids, words, types, bounds - a password field was
+never read). It is asked for **one JSON step in the `/run` shape**, with Ollama's
+strict `format` constraint; nothing else from its answer is used. **No cloud
+model and no network beyond the local lane**: a missing local model is a plain
+sentence, never a guessed step and never a fallback to a different brain.
+
+**Which local model (the owner's question, 2026-10-20).** `_proposal_model` is
+resolved through the project's own lane/model table (`jarvis_presets.LANES` and
+the Agentic + Vision preset): `qwen3.5:9b` on the **main** lane first; then the
+same model on another LOCAL lane; then another local general model from the
+framework table. The raw fast lane (`:11434`) is never a candidate, a cloud
+model is refused by the loopback/remote checks, and the heavy Coding 30B is
+excluded even from the fallback. If nothing local is installed the answer is the
+existing `MODEL_FAILED` sentence. The 202 names the chosen model (`"model"`,
+`"lane"`) and the card adds a line like *"Planned locally by qwen3.5:9b."*; the
+audit line keeps its app + verb shape and never carries the model.
+
+**The prompt is fenced twice.** The screen labels are scrubbed with the
+project's own `jarvis_scrub` (secrets and one-time codes never reach the model)
+and anything that scans as a planted instruction is replaced; the whole control
+list is then put inside explicit `<untrusted-screen-data>` markers and the model
+is told those lines are data, never instructions. The owner's own `want` words
+are refused against the same category word lists BEFORE the model call, so a
+"send a message" or "delete that" request never spends one. A model that says
+`"scroll"` is normalised to the phone's `swipe` **inside this parser only** - the
+canonical five verbs in the contract are untouched.
+
+Answers:
+
+| code | body | meaning |
+|---|---|---|
+| `202` | `{"ok": true, "run": "<id>", "step": "tap \"Search\"", "card_waiting": true, "model": "qwen3.5:9b", "lane": "main", "message": "Approve the card ..."}` | ONE `change_own_config` card is up. **Nothing has been performed.** The card names the app, the ONE step, *"you asked on your phone: ..."* and *"Planned locally by qwen3.5:9b."*; the phone waits on `/step` exactly as for `/run`. |
+| `400` | `{"ok": false, "error": "..."}` | a bad body, a missing/over-200-character `want`, an empty/unreadable allow-list, an app not on the list (or a snapshot app that is not), or a snapshot with no controls - plain words, **no model call** |
+| `409` | `{"ok": false, "available": false, "error": ..., "pending": ...}` | the feature is off (no model call), the taint latch is set, a run is already waiting, the framework tier is not `ask`, the snapshot's app is on the **hard denylist**, the PC's own `allowed_packages` list does not include it, or the owner's `want` itself names a refused category (a send/delete/money/password/2FA word) - **no model call, no card** |
+| `422` | `{"ok": false, "error": "I could not work out one safe step from that screen. ..."}` | the model did not answer, or its answer is not one usable step; or the proposal fails the same validation/refusal list `/run` uses (not one of the five actions, a control the phone did not send, a password/2FA/money/send/delete step). The reason is always a **closed-world plain sentence** (the validator's own words, or "No matching button or field was visible on that screen") - never raw model JSON or an exception. **No card was raised.** |
+
+**The proposal is never trusted and never widened.** It is put through
+`validate_plan()` and the refusals above exactly as a phone-sent `/run` plan is,
+so the model cannot name a control the phone did not send, a refused category,
+or an action outside `tap/swipe/type/back/home`; the phone still never chooses
+the step and still can only perform the ONE step the `/step` route returns. The
+audit line stays app + verb only; the owner's words and any typed text are on
+the local card, never in the audit log.
+
 ### `POST /api/app-control/step` - the phone asks for the ONE approved step
 
 ```
@@ -22170,8 +22241,8 @@ gate's own `_redact` comment warns about.
 **What this does not do:** it never performs a step on the PC (there is no
 desktop input here); it never runs anything before the card says yes; it never
 lets the phone change the plan; it never switches itself on; and it sends
-nothing anywhere - the two routes are the owner's own private link, local model
-only, with no cloud service and no public tunnel.
+nothing anywhere - the three routes are the owner's own private link, local
+model only, with no cloud service and no public tunnel.
 
 Tests: `backend/test_app_control.py` - off by default, empty allow-list refuses
 everything, unlisted app refuses, ONE card and nothing runs before approval,
@@ -22179,5 +22250,10 @@ denied/timed-out/refused/wrong-tier runs nothing, the approved step is the
 plan's own, stop-on-change (wrong app / vanished / renamed / disabled / became
 a password field), every refused category before any card, Stop is immediate,
 one run at a time, the audit line is app+verb only while the card shows the
-typed text, and the patch's own pins (two routes, harness position, no
-install-block line, `_stack.py`'s RATCHET unchanged).
+typed text; the planning round (the local model pinned to the main lane's
+`qwen3.5:9b`, only masked and scrubbed labels inside the untrusted-data block,
+the owner's refused words and the hard denylist refused BEFORE the model, the
+`"scroll" -> "swipe"` normalisation in the parser only, a closed-world 422, the
+model named on the 202 and the card but never in the audit); and the patch's
+own pins (three routes, harness position, no install-block line, `_stack.py`'s
+RATCHET unchanged).

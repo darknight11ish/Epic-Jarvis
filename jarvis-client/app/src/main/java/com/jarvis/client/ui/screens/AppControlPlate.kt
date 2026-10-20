@@ -15,6 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -25,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.data.AppControl
 import com.jarvis.client.data.AppControlStore
+import com.jarvis.client.service.AppControlExecutor
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import com.jarvis.client.net.ScreenPlateText
@@ -36,6 +38,7 @@ import com.jarvis.client.ui.parts.Section
 import com.jarvis.client.ui.parts.TextInput
 import com.jarvis.client.ui.theme.LocalChrome
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -65,17 +68,13 @@ internal fun AppControlSection(stale: Boolean) {
             PcRouteRow(stale = stale, refresh = reads)
             Gap(4)
             AppControlAllowList()
+            Gap(4)
+            AppControlAskRow(stale = stale, refresh = reads)
             Gap(12)
             Text(
                 AppControl.PLAN_LINE,
                 style = MaterialTheme.typography.bodySmall,
                 color = LocalChrome.current.textMid,
-            )
-            Gap(4)
-            Text(
-                AppControl.NOT_YET_SLICE,
-                style = MaterialTheme.typography.bodySmall,
-                color = LocalChrome.current.textLo,
             )
         }
     }
@@ -146,18 +145,20 @@ private fun PcRouteRow(stale: Boolean, refresh: Int) {
         }
         value = try {
             // A probe that cannot act: an empty run id is unknown to the route,
-            // so a PC that HAS app control answers "no such run" (404) and a
-            // PC that does not answers "no such route" (404). Nothing is read
-            // from the screen and no card can be raised by this.
+            // so a PC that HAS app control answers its own "that run is not
+            // here" sentence, and a PC without the routes answers a plain
+            // 404 "not found". Only the PC's own sentence is positive evidence -
+            // any other 404 is an OLDER backend (field test, 2026-10-20:
+            // `{"error": "not found"}` must never show ROUTE_READY). Nothing is
+            // read from the screen and no card can be raised by this.
             val (status, body) = JarvisRuntime.api.appControlStep(AppControl.probeBody())
             val error = runCatching {
                 body?.get("error")?.jsonPrimitive?.contentOrNull
             }.getOrNull()
-            when {
-                status == 0 -> PcRoute.UNREACHABLE
-                error == "no such route" -> PcRoute.OLDER
-                status == 404 || status == 200 || status == 202 -> PcRoute.READY
-                else -> PcRoute.UNREACHABLE
+            when (AppControl.probeRoute(status, error)) {
+                AppControl.ProbeRoute.READY -> PcRoute.READY
+                AppControl.ProbeRoute.OLDER -> PcRoute.OLDER
+                AppControl.ProbeRoute.UNREACHABLE -> PcRoute.UNREACHABLE
             }
         } catch (_: Exception) {
             PcRoute.UNREACHABLE
@@ -184,6 +185,100 @@ private fun PcRouteRow(stale: Boolean, refresh: Int) {
             style = MaterialTheme.typography.bodySmall,
             color = chrome.warnInk,
         )
+    }
+}
+
+/**
+ * The owner's OWN words, sent to the PC's local model: it proposes exactly ONE
+ * step and raises ONE card. Nothing runs until the owner answers that card,
+ * and after the step has run the next one needs this button pressed again.
+ */
+@Composable
+private fun AppControlAskRow(stale: Boolean, refresh: Int) {
+    val chrome = LocalChrome.current
+    val context = LocalContext.current
+    val store = remember { AppControlStore(context) }
+    val scope = rememberCoroutineScope()
+    var optionOn by remember { mutableStateOf(store.optionOn()) }
+    var want by remember { mutableStateOf("") }
+    var ask by remember { mutableStateOf(AppControl.AskState()) }
+    val capability by produceState(
+        initialValue = AppControl.PlanCapability.UNREACHABLE,
+        refresh, stale, optionOn,
+    ) {
+        value = if (stale) {
+            AppControl.PlanCapability.UNREACHABLE
+        } else {
+            runCatching {
+                val (status, body) = JarvisRuntime.api.appControlPlan(AppControl.planProbeBody())
+                AppControl.planCapability(status, body)
+            }.getOrDefault(AppControl.PlanCapability.UNREACHABLE)
+        }
+    }
+    LaunchedEffect(refresh) { optionOn = store.optionOn() }
+    val allowedNow = AppControl.canAsk(capability, optionOn, ask.busy) && !stale
+
+    Gap(12)
+    Text("Ask Jarvis to act", style = MaterialTheme.typography.labelLarge, color = chrome.textHi)
+    Gap(4)
+    when (capability) {
+        AppControl.PlanCapability.OLDER -> {
+            Text(AppControl.ASK_OLDER_PC, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
+        }
+        AppControl.PlanCapability.UNREACHABLE -> {
+            Text(AppControl.NO_ANSWER, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
+        }
+        AppControl.PlanCapability.AVAILABLE -> {
+            TextInput(
+                value = want,
+                onValueChange = { want = it.take(AppControl.WANT_MAX) },
+                placeholder = AppControl.ASK_PLACEHOLDER,
+                singleLine = false,
+                maxLines = 2,
+            )
+            Gap(8)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Secondary(
+                    ask.label,
+                    modifier = Modifier.weight(1f),
+                    enabled = allowedNow && want.isNotBlank(),
+                    busy = ask.busy,
+                    onClick = {
+                        if (allowedNow && want.isNotBlank()) {
+                            ask = ask.copy(phase = AppControl.AskPhase.ASKING, sentence = "")
+                            val said = want
+                            scope.launch {
+                                val reply = AppControlExecutor.ask(context, said) { waiting ->
+                                    ask = ask.copy(phase = AppControl.AskPhase.WAITING, sentence = waiting)
+                                }
+                                ask = when (reply) {
+                                    is AppControlExecutor.Reply.Done ->
+                                        AppControl.afterStep(ask.everPerformed, reply.sentence)
+                                    is AppControlExecutor.Reply.Stopped ->
+                                        ask.copy(phase = AppControl.AskPhase.IDLE, sentence = reply.sentence)
+                                    is AppControlExecutor.Reply.Refused ->
+                                        ask.copy(phase = AppControl.AskPhase.REFUSED, sentence = reply.sentence)
+                                }
+                                if (reply is AppControlExecutor.Reply.Done) want = ""
+                            }
+                        }
+                    },
+                )
+                if (ask.busy) {
+                    Quiet("Stop", modifier = Modifier.semantics {
+                        contentDescription = "Stop Jarvis"
+                    }, onClick = { AppControlExecutor.stop() })
+                }
+            }
+            if (ask.sentence.isNotBlank()) {
+                Gap(6)
+                Text(
+                    ask.sentence,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (ask.phase == AppControl.AskPhase.REFUSED) chrome.warnInk else chrome.textMid,
+                )
+            }
+        }
     }
 }
 

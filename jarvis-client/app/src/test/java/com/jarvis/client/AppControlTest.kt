@@ -1,6 +1,9 @@
 package com.jarvis.client
 
 import com.jarvis.client.data.AppControl
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -335,6 +338,232 @@ class AppControlTest {
         assertEquals(AppControl.AndroidState.OFF, AppControl.androidState("com.example.other/com.example.other.Thing", component))
         assertEquals(AppControl.AndroidState.OFF, AppControl.androidState("", component))
         assertEquals(AppControl.AndroidState.CANNOT_READ, AppControl.androidState(null, component))
+    }
+
+    // ------------------------------------------ the screen mechanics (F16) --
+
+    @Test
+    fun `a label falls back to contentDescription and then hintText`() {
+        val byDescription = AppControl.mask(
+            id = null, text = null, cls = "android.widget.ImageButton",
+            bounds = listOf(0, 0, 100, 100), password = false, invisible = false,
+            hint = "Search",
+        )
+        assertNotNull(byDescription)
+        assertEquals("Search", byDescription!!.text)
+        val byHint = AppControl.mask(
+            id = null, text = "", cls = "android.widget.EditText",
+            bounds = listOf(0, 0, 100, 100), password = false, invisible = false,
+            hint = "Search messages",
+        )
+        assertEquals("Search messages", byHint!!.text)
+        assertNull(
+            AppControl.mask(
+                id = null, text = null, cls = "android.widget.TextView",
+                bounds = emptyList(), password = false, invisible = false,
+            ),
+        )
+        val flagged = AppControl.mask(
+            id = "x", text = "Play", cls = "android.widget.Button",
+            bounds = listOf(0, 0, 10, 10), password = false, invisible = false,
+            clickable = true, editable = false, scrollable = false,
+        )!!
+        assertTrue(flagged.clickable)
+        assertFalse(flagged.editable)
+    }
+
+    @Test
+    fun `password inputType variations are all treated as password fields`() {
+        assertFalse(AppControl.passwordInputType(0x00000001)) // TYPE_CLASS_TEXT
+        assertTrue(AppControl.passwordInputType(0x00000081))  // text password
+        assertTrue(AppControl.passwordInputType(0x00000091))  // text visible password
+        assertTrue(AppControl.passwordInputType(0x000000e1))  // web password
+        assertTrue(AppControl.passwordInputType(0x00000012))  // number password
+        assertTrue(
+            AppControl.sensitiveInput(isPassword = false, inputType = 0x91, isDataSensitive = false, sdk = 33),
+        )
+        assertTrue(
+            AppControl.sensitiveInput(isPassword = false, inputType = 0x1, isDataSensitive = true, sdk = 34),
+        )
+        assertFalse(
+            AppControl.sensitiveInput(isPassword = false, inputType = 0x1, isDataSensitive = true, sdk = 33),
+        )
+    }
+
+    @Test
+    fun `the tap ladder climbs at most three parents and stops at a password subtree`() {
+        assertEquals(0, AppControl.tapRung(nodeClickable = true, emptyList()))
+        assertEquals(2, AppControl.tapRung(false, listOf(false to false, true to false, true to false)))
+        assertEquals(-1, AppControl.tapRung(false, listOf(false to false)))
+        // A password ancestor makes everything above it unusable too.
+        assertEquals(-1, AppControl.tapRung(false, listOf(false to true, false to true, true to false)))
+        // Only three parents are looked at.
+        assertEquals(-1, AppControl.tapRung(false, List(4) { false to false }))
+    }
+
+    @Test
+    fun `the type ladder descends only into exactly one editable child`() {
+        assertEquals(-1, AppControl.editableChild(emptyList()))
+        assertEquals(1, AppControl.editableChild(listOf(false to false, true to false)))
+        assertEquals(-1, AppControl.editableChild(listOf(true to false, true to false)))
+        assertEquals(-1, AppControl.editableChild(listOf(true to true)))
+        assertEquals(0, AppControl.editableChild(listOf(true to false)))
+    }
+
+    @Test
+    fun `a swipe is clamped inside the target and the central screen band`() {
+        val points = AppControl.swipePoints(listOf(0, 0, 1080, 1920), 1080, 1920)
+        assertNotNull(points)
+        val (startX, endX) = points!!
+        assertTrue(startX in 162f..918f)
+        assertTrue(endX in 162f..918f)
+        assertTrue(startX > endX)
+        // An edge strip has no room: refused rather than risking Android's Back gesture.
+        assertNull(AppControl.swipePoints(listOf(0, 0, 20, 2000), 1080, 1920))
+        assertNull(AppControl.swipePoints(listOf(0, 0, 1080, 1920), 0, 0))
+    }
+
+    // --------------------------------------------- the planning round (F16) --
+
+    @Test
+    fun `the planning body carries the owner's words and the masked screen`() {
+        val snapshot = AppControl.Snapshot("com.android.chrome", "Chrome", listOf(control()))
+        val body = AppControl.planBody(listOf(chrome), "  open search  ", snapshot)
+        val obj = Json.parseToJsonElement(body).jsonObject
+        assertEquals("open search", obj["want"]!!.jsonPrimitive.content)
+        assertEquals("com.android.chrome", obj["app"]?.jsonPrimitive?.content ?: obj["snapshot"]!!.jsonObject["app"]!!.jsonPrimitive.content)
+        assertTrue(body.contains("\"controls\""))
+        // The probe asks nothing and cannot act: no card can come from it.
+        val probe = Json.parseToJsonElement(AppControl.planProbeBody()).jsonObject
+        assertEquals("", probe["want"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `the capability probe reads an older PC from a 404 and a real one from any answer`() {
+        assertEquals(AppControl.PlanCapability.UNREACHABLE, AppControl.planCapability(0, null))
+        assertEquals(AppControl.PlanCapability.OLDER, AppControl.planCapability(404, null))
+        assertEquals(AppControl.PlanCapability.AVAILABLE, AppControl.planCapability(400, null))
+        assertEquals(AppControl.PlanCapability.AVAILABLE, AppControl.planCapability(409, null))
+        assertEquals(AppControl.PlanCapability.AVAILABLE, AppControl.planCapability(202, null))
+    }
+
+    @Test
+    fun `a 202 means ONE card waits and the line names the step and local model`() {
+        val body = Json.parseToJsonElement(
+            "{\"ok\":true,\"run\":\"abc\",\"step\":\"tap \\\"Search\\\"\"," +
+                "\"model\":\"qwen3.5:9b\",\"lane\":\"main\"}",
+        ).jsonObject
+        val reply = AppControl.parsePlan(202, body)
+        assertTrue(reply is AppControl.PlanReply.Pending)
+        val pending = reply as AppControl.PlanReply.Pending
+        assertEquals("abc", pending.runId)
+        assertEquals("qwen3.5:9b", pending.model)
+        val line = AppControl.planWaitingLine(pending)
+        assertTrue(line.contains("approval card"))
+        assertTrue(line.contains("qwen3.5:9b"))
+        assertTrue(line.contains("Nothing runs until you do"))
+    }
+
+    @Test
+    fun `a switched-off PC is its own answer, and a refusal is the PC's own words`() {
+        val off = Json.parseToJsonElement(
+            "{\"ok\":false,\"available\":false,\"error\":\"App control is switched off on this PC.\"}",
+        ).jsonObject
+        assertTrue(AppControl.parsePlan(409, off) is AppControl.PlanReply.Off)
+        val refused = Json.parseToJsonElement(
+            "{\"ok\":false,\"pending\":true,\"error\":\"another run is waiting\"}",
+        ).jsonObject
+        val r = AppControl.parsePlan(409, refused)
+        assertTrue(r is AppControl.PlanReply.Refused && r.sentence.contains("another run"))
+        val failed = Json.parseToJsonElement(
+            "{\"ok\":false,\"error\":\"I could not work out one safe step from that screen.\"}",
+        ).jsonObject
+        assertTrue(AppControl.parsePlan(422, failed) is AppControl.PlanReply.Failed)
+        assertTrue(AppControl.parsePlan(404, null) is AppControl.PlanReply.RouteMissing)
+        assertTrue(AppControl.parsePlan(500, null) is AppControl.PlanReply.Unknown)
+    }
+
+    @Test
+    fun `after one step the only way to another is a fresh ask tap`() {
+        assertFalse(AppControl.canAsk(AppControl.PlanCapability.OLDER, optionOn = true, busy = false))
+        assertFalse(AppControl.canAsk(AppControl.PlanCapability.AVAILABLE, optionOn = false, busy = false))
+        assertFalse(AppControl.canAsk(AppControl.PlanCapability.AVAILABLE, optionOn = true, busy = true))
+        assertTrue(AppControl.canAsk(AppControl.PlanCapability.AVAILABLE, optionOn = true, busy = false))
+        assertEquals(AppControl.ASK_LABEL, AppControl.askLabel(everPerformed = false))
+        assertEquals(AppControl.ASK_AGAIN_LABEL, AppControl.askLabel(everPerformed = true))
+        val after = AppControl.afterStep(everPerformed = false, sentence = "Done.")
+        assertEquals("Done.", after.sentence)
+        assertTrue(after.everPerformed)
+        assertFalse(after.busy)
+        assertEquals(AppControl.ASK_AGAIN_LABEL, after.label)
+    }
+
+    @Test
+    fun `the snapshot and step JSON carry the optional flags and the same wire keys`() {
+        val flagged = AppControl.Control(
+            "id", "Search", "android.widget.EditText", listOf(0, 0, 10, 10),
+            clickable = true, editable = true, scrollable = true,
+        )
+        val snapshot = AppControl.Snapshot("com.android.chrome", "Chrome", listOf(flagged))
+        val snapJson = AppControl.snapshotJson(snapshot)
+        val row = snapJson["controls"]!!.jsonArray[0].jsonObject
+        assertEquals("true", row["clickable"]!!.jsonPrimitive.content)
+        assertEquals("true", row["editable"]!!.jsonPrimitive.content)
+        assertEquals("true", row["scrollable"]!!.jsonPrimitive.content)
+        assertEquals("Search", row["text"]!!.jsonPrimitive.content)
+        val stepJson = AppControl.stepJson(AppControl.Step("tap", flagged, null))
+        val target = stepJson["target"]!!.jsonObject
+        assertEquals("id", target["id"]!!.jsonPrimitive.content)
+        assertEquals("true", target["clickable"]!!.jsonPrimitive.content)
+    }
+
+    // ----------------------------------- the field-test probe finding (F16) --
+
+    @Test
+    fun `an old PC answering not-found to a 404 is never read as ready`() {
+        // The field test (2026-10-20): the live, older backend answers a step
+        // probe with 404 {"error": "not found"} - that must show "no app control
+        // yet", never ROUTE_READY.
+        assertEquals(AppControl.ProbeRoute.OLDER, AppControl.probeRoute(404, "not found"))
+        assertEquals(AppControl.ProbeRoute.OLDER, AppControl.probeRoute(404, null))
+        assertEquals(AppControl.ProbeRoute.OLDER, AppControl.probeRoute(404, ""))
+        // A 404 with an unrelated error is still not positive evidence.
+        assertEquals(AppControl.ProbeRoute.OLDER, AppControl.probeRoute(404, "unknown run"))
+        // 5xx is not positive evidence either: fail closed rather than guess.
+        assertEquals(AppControl.ProbeRoute.OLDER, AppControl.probeRoute(500, "boom"))
+        assertEquals(AppControl.ProbeRoute.OLDER, AppControl.probeRoute(400, "bad body"))
+    }
+
+    @Test
+    fun `a real PC's own not-here sentence is the only ready 404`() {
+        assertEquals(
+            AppControl.ProbeRoute.READY,
+            AppControl.probeRoute(404, AppControl.NO_SUCH_RUN_MARKER),
+        )
+        // A 200/202 answer to the probe is positive evidence too.
+        assertEquals(AppControl.ProbeRoute.READY, AppControl.probeRoute(200, null))
+        assertEquals(AppControl.ProbeRoute.READY, AppControl.probeRoute(202, null))
+        // Nothing answered is "cannot tell", not older and not ready.
+        assertEquals(AppControl.ProbeRoute.UNREACHABLE, AppControl.probeRoute(0, null))
+    }
+
+    @Test
+    fun `the plan probe stays fail-closed on every 404`() {
+        // /plan on a real PC answers 400 to the empty-want probe; an older PC
+        // answers 404, whatever its body says - that is always OLDER.
+        assertEquals(AppControl.PlanCapability.OLDER, AppControl.planCapability(404, null))
+        assertEquals(AppControl.PlanCapability.OLDER, AppControl.planCapability(404, Json.parseToJsonElement("{\"error\":\"not found\"}").jsonObject))
+        assertEquals(AppControl.PlanCapability.AVAILABLE, AppControl.planCapability(400, null))
+        assertEquals(AppControl.PlanCapability.AVAILABLE, AppControl.planCapability(202, null))
+        assertEquals(AppControl.PlanCapability.UNREACHABLE, AppControl.planCapability(0, null))
+    }
+
+    @Test
+    fun `the old probe is still the run route's non-acting probe`() {
+        val body = AppControl.probeBody()
+        assertTrue(body.contains("\"run\":\"\""))
+        assertTrue(body.contains("\"snapshot\""))
+        assertFalse(body.contains("\"action\""))
     }
 
     @Test

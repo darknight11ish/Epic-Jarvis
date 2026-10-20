@@ -3798,6 +3798,15 @@ class JarvisApi(
         appControlPost(AppControl.STEP_PATH, json)
 
     /**
+     * `POST /api/app-control/plan` - the owner's words and the phone's masked
+     * screen go to the PC's local model, which proposes ONE step. Raw status
+     * and body for the same reason as [appControlRun]; a 404 with "no such
+     * route" means an older PC that cannot plan yet.
+     */
+    suspend fun appControlPlan(json: String): Pair<Int, JsonObject?> =
+        appControlPost(AppControl.PLAN_PATH, json)
+
+    /**
      * The one transport both app-control routes use. Status 0 means nothing
      * answered. Nothing about the body is logged: it carries the screen's
      * words and the typed text.
