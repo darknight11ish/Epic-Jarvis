@@ -2531,6 +2531,31 @@ rather than by taking either project as a dependency. All three ship as whole
 files, the same way `jarvis_research.py` and `jarvis_speech.py` already do -
 there is nothing on the owner's machine to patch for something new.
 
+**Prerequisites before any desktop measurement run (2026-10-19).** Gemini's
+review found three gaps in `jarvis_ui_control.py`, and all three are closed
+before a live run: **`DENY_PROCESSES`/`DENY_WINDOW_TITLES`**, the desktop
+counterpart of the phone's F17 hard denylist - password managers and OS
+credential prompts (`1password.exe`, `bitwarden.exe`, `keepass.exe`,
+`keepassxc.exe`, `dashlane.exe`, `nordpass.exe`, `protonpass.exe`,
+`credentialuibroker.exe`), system admin / registry / task killers
+(`regedit.exe`, `taskmgr.exe`, `mmc.exe`, `cmd.exe`, `powershell.exe`,
+`pwsh.exe`, `wt.exe`) and the mesh / VPN admin programs (`tailscale-ipn.exe`,
+`nordvpn.exe`) - checked in the default reader, `get_window_state()`, `plan()`
+(before any card) and `run()` before each step, and refused with one plain
+sentence naming the app; a **password-masked target is refused** when it is
+resolved by name, automation id, control type, index or element token -
+including any control INSIDE a password subtree (`code` `password_control`) -
+by `plan()`, `run()` and `deliver()`; and `run()` writes **one audit row per
+run and per step outcome** through an injectable `audit` callable that defaults
+to `jarvis_framework.audit_log` - exactly `{"window": <app/window label>,
+"verb": <action>, "outcome": <ok|stopped|refused>}`, never the typed text,
+never a key payload and never the window's UIA tree (the phone's
+`app_control.audit_detail` privacy). A `type` step also focuses its control
+before any key and refuses a control that is not an editable field.
+`test_ui_control.py` (202 checks) proves all of it against injected fakes. The
+module is still OFF - `control_computer` is in no `[tools].enabled` - and none
+of this has been run against a live desktop.
+
 This section was rewritten once the owner sent over the real `jarvis_hud.py`
 and `jarvis_gate.py` - the first draft, written without them, guessed wrong
 about where the missing piece lives. Real ground:
