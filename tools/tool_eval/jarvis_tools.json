@@ -493,7 +493,7 @@
   "type": "function",
   "function": {
    "name": "my_files",
-   "description": "Find and read the owner's own files, only in folders they listed. find: file names. search: words inside notes/text. read: one part of one file (PDF, Word, Excel, PowerPoint, Markdown, text, CSV). read_media: one recording's words. search_media: stored recording words. For Obsidian or Joplin notes, use notes_search. For a PDF or Word file, use this, not file_read.",
+   "description": "Find and read the owner's own files, only in folders they listed. find: file names. search: words inside notes/text. read: one part of one file (PDF, Word, Excel, PowerPoint, Markdown, text, CSV). read_media: one recording's words. search_media: stored spoken and on-screen recording words. For Obsidian or Joplin notes, use notes_search. For a PDF or Word file, use this, not file_read.",
    "parameters": {
     "type": "object",
     "properties": {

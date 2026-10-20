@@ -51,7 +51,13 @@ class OpenPlaceTest {
 
     @Test
     fun `a place only the PC has says so instead of opening a screen`() {
-        for (id in listOf("shortcuts", "account-secrets", "tool-updates", "more-options", "start-jarvis", "crash-notes")) {
+        // "media-index" (F5 S2/S3, 2026-10-20): the searchable-recordings
+        // index is a PC-side store whose Settings card, switch and Delete are
+        // the desktop's; S3 keeps that one-sided on purpose, and this line pins
+        // the honest sentence rather than adding a phone control that cannot
+        // work.
+        for (id in listOf("shortcuts", "account-secrets", "tool-updates", "more-options",
+                          "start-jarvis", "crash-notes", "media-index")) {
             assertEquals(id, OpenPlace.Where.OnPc(OpenPlace.ON_PC), OpenPlace.whereFor(id))
         }
         assertTrue(OpenPlace.ON_PC.contains("your PC"))

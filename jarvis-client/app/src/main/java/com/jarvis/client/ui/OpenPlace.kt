@@ -204,13 +204,17 @@ object OpenPlace {
         "notifications",
         "first-run",
         "hud-window",
-        // "Searchable recordings and videos" (F5 S2, 2026-10-19; JARVIS-API
-        // section 149): the desktop's Settings card holds the disclosure, the
-        // switch, the counts and the one Delete. The phone has NO Settings
-        // card yet - its chat path and the spoken switch do work, and
-        // docs/ARCHITECTURE.md section 8 records the follow-up. So "open
-        // searchable recordings" answers with the honest PC-only sentence
-        // rather than opening a screen that does not have it.
+        // "Searchable recordings and videos" (F5 S2, 2026-10-19; S3 added the
+        // video on-screen text, 2026-10-20; JARVIS-API section 149): the
+        // desktop's Settings card holds the disclosure, the switch, the counts
+        // and the one Delete; the index itself lives on the PC. The phone has
+        // NO Settings card for it - its chat path and the spoken switch do
+        // work - and S3 keeps that one-sided on purpose rather than adding a
+        // control that cannot work: the menu row (`settings.media-index`) is
+        // desktop-only, and docs/ARCHITECTURE.md section 8 records the
+        // follow-up honestly. So "open searchable recordings" answers with the
+        // honest PC-only sentence rather than opening a screen that does not
+        // have it.
         "media-index",
     )
 
