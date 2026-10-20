@@ -306,6 +306,26 @@ def t_a_caller_supplied_csv_is_read():
           refused(res, "not a file that exists"), res)
 
 
+def t_a_read_only_file_that_is_a_symlink_is_refused():
+    """Area 8, 2026-10-20: `read_only_files` must name the file itself, never a
+    link that points somewhere else. A link is refused before the script runs."""
+    target = TMP / "real-scores.csv"
+    target.write_text("name,score\nAda,9\n", encoding="utf-8")
+    link = TMP / "link-scores.csv"
+    try:
+        os.symlink(target, link)
+    except (OSError, NotImplementedError) as exc:
+        skip(f"this OS would not make a symlink ({type(exc).__name__}), so the "
+             f"read-only-file link escape is NOT-TESTABLE here")
+        return
+    res = SE.run_data_script("print(read_csv('scores'))", {"scores": str(link)})
+    check("a read-only file that is a symlink is refused before anything runs",
+          refused(res, "link", "read-only file"), res)
+    ok = SE.run_data_script("print(read_csv('scores'))", {"scores": str(target)})
+    check("CONTROL: the ordinary file it pointed at is still read",
+          shape(ok) and ok.get("ok") is True and "Ada,9" in ok.get("stdout", ""), ok)
+
+
 def t_figures_are_verified_json():
     code = ("figure('evens', {'xs': [0, 2, 4], 'ys': [0, 4, 16]})\n"
             "print('done')")

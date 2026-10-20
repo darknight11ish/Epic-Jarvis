@@ -50,7 +50,7 @@ class NotOurs(Exception):
 
 def _ro(db_path) -> sqlite3.Connection:
     uri = Path(db_path).resolve().as_uri() + "?mode=ro"
-    return sqlite3.connect(uri, uri=True, timeout=5.0)
+    return sqlite3.connect(uri, uri=True, timeout=10.0)
 
 
 def _has_table(con: sqlite3.Connection, name: str) -> bool:

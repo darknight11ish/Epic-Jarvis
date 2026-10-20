@@ -79,4 +79,13 @@ def connect(path, timeout: float = 30) -> sqlite3.Connection:
     away. A caller that needs its own subclass wants its own module, and
     test_sqlite_close_guard.py will have something to say about that.
     """
-    return sqlite3.connect(path, timeout=timeout, factory=_ClosingConnection)
+    conn = sqlite3.connect(path, timeout=timeout, factory=_ClosingConnection)
+    try:
+        # F10 (2026-10-20 audit, Area 9B): the busy handler is set once, here,
+        # for every connection this module hands out - 5000 ms, the value the
+        # lock-sensitive callers expect, so a busy database waits instead of
+        # failing with "database is locked".
+        conn.execute("PRAGMA busy_timeout = 5000")
+    except sqlite3.Error:
+        pass
+    return conn

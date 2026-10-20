@@ -632,6 +632,21 @@ def _prepare_files(read_only_files):
         if not isinstance(path, str) or not path:
             return None, (f"Not run: the path for the read-only file {name!r} "
                           f"must be text.")
+        if os.path.islink(path):
+            # A symlink is not the file it names: the sandbox would otherwise
+            # read through it and hand a script whatever it points at (2026-10-20
+            # audit, Area 8: read_only_files must not be escapable by a link).
+            return None, (f"Not run: the read-only file {name!r} is a link; the "
+                          f"sandbox reads the named file itself, never somewhere "
+                          f"a link points.")
+        try:
+            real = os.path.realpath(path)
+        except OSError as exc:
+            return None, (f"Not run: the read-only file {name!r} could not be "
+                          f"resolved ({exc}).")
+        if os.path.abspath(real) != os.path.abspath(path):
+            return None, (f"Not run: the read-only file {name!r} is not the path "
+                          f"it says it is, so it is not read.")
         if not os.path.isfile(path):
             return None, (f"Not run: the read-only file {name!r} is not a file "
                           f"that exists.")

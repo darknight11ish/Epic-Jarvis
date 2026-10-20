@@ -1070,8 +1070,28 @@ TIER_TABLE_NAMES: Tuple[str, ...] = (
 )
 
 #: A test file by name anywhere in the tree. Section 5.1: the model may not
-#: "Disable, weaken or delete a test".
-TEST_FILE_RE = re.compile(r"(^|/)test_[^/]*\.py$")
+#: "Disable, weaken or delete a test". Matched case-insensitively: `TEST_A.py`
+#: is the same test file as `test_a.py` on a Windows workspace (2026-10-20
+#: audit, Area 8A).
+TEST_FILE_RE = re.compile(r"(^|/)test_[^/]*\.py$", re.IGNORECASE)
+
+
+def _target_name(target: str) -> str:
+    """The file a diff path names, lower-cased and with either slash.
+
+    A draft's `+++ b/backend/JARVIS_GATE.py` or `+++ b/backend\\jarvis_gate.py`
+    must land on the same protected-file rule as the ordinary spelling - a
+    Windows workspace and a mixed-case path are not a way around the list
+    (2026-10-20 audit, Area 8A: `jarvis-backend/JARVIS_GATE.py` must not
+    bypass).
+    """
+    text = str(target or "").replace("\\", "/").rstrip("/")
+    return text.rsplit("/", 1)[-1].lower()
+
+
+def _posix_target(target: str) -> str:
+    """The diff path with `/` separators, for the test-file pattern."""
+    return str(target or "").replace("\\", "/")
 
 #: A unified diff names its files in `--- a/...` and `+++ b/...` lines. The `+++`
 #: side is the one `git apply` anchors on, and the one read here.
@@ -1129,16 +1149,22 @@ def refusal_reason(code_diff: str, test_diff: str) -> str:
     if not is_diff(test_diff):
         return "no test was drafted, and a change with no test is not offered"
     targets = diff_targets(code_diff) + diff_targets(test_diff)
+    # Read the two lists HERE, lower-cased, so the comparisons see whatever the
+    # lists hold now (the suite replaces them to prove each guard bites) and a
+    # Windows mixed-case path cannot be the difference between a protected file
+    # and a drafted change (2026-10-20 audit, Area 8A).
+    protected = {str(n).lower() for n in PROTECTED}
+    tiers = {str(n).lower() for n in TIER_TABLE_NAMES}
     for target in targets:
-        name = Path(target).name
-        if name in PROTECTED:
+        name = _target_name(target)
+        if name in protected:
             return (f"{name} is outside what may be changed by a draft: the gate, "
                     f"the approval path and the shipped lists are not the model's to edit")
-        if name in TIER_TABLE_NAMES:
+        if name in tiers:
             return (f"{name} holds a tier or risk table, which decides what needs "
                     f"an approval card, so it is never part of a draft")
     for target in diff_targets(code_diff):
-        if TEST_FILE_RE.search(target):
+        if TEST_FILE_RE.search(_posix_target(target)):
             return (f"{target} is a test file: a draft may add a test, never change "
                     f"one, or a wrong change could make itself pass")
     test_targets = diff_targets(test_diff)
