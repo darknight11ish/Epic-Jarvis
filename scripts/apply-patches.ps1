@@ -2015,6 +2015,11 @@ $SHIPPED = @(
 # reusing the local Parakeet speech model and Windows OCR. The local ffmpeg
 # is a bounded child with -protocol_whitelist file,pipe; it stores NOTHING.
 'jarvis_media_read.py'
+# --- F5 S2, 2026-10-19: the searchable index of recordings and videos ---
+# The owner chose to keep READABLE transcript text, shipped ON by that
+# decision; only the listed folders, never the audio/video itself, and the
+# index file is excluded from backups so the one Delete really deletes.
+'jarvis_media_index.py'
 # --- Pillar 18: the local "time machine" for files Jarvis changes (2026-10-17).
 # Before anything writes over a file in a folder Jarvis may change, this keeps a
 # gzip copy of the file's current bytes named by the sha256 of those bytes, and

@@ -9015,7 +9015,14 @@ copy) and logs. Also never: any backend file that is not a top-level
 `*.py` nested deeper than one level. Also never: `approvals.db`/`holds.db` (pending-approval
 state, not memory - restoring a stale row would be misleading, not a
 security hole, since the in-memory approval stamp is gone the moment the
-backend restarts).
+backend restarts). Also never: **`documents-index.db`** (a derived ranking
+rebuilt from the folders) and **`media-index.db`** (the readable words kept
+from recordings and videos - F5 S2, §149). The second one is the newer and
+more important exclusion: a backup made before a Delete would still hold the
+words afterwards, so deleting the index would not really delete them. Both
+names are in `jarvis_backup.py`'s own `NOT_BACKED_UP` table with their
+reasons, and `backend/test_media_index.py` drives that table's own decision
+function.
 
 ### 45.2 The lock
 
@@ -21956,18 +21963,21 @@ The design and measurements are in `docs/MEDIA-READ-DESIGN.md`.
   a scrubbed environment, a wall-clock timeout and a bounded stdout. A missing
   ffmpeg is one plain refusal: "This PC has no ffmpeg, so this file's sound
   cannot be read."
-* **It is a transcript, not a summary**, and it is never saved. A later,
-  separate slice (S2) could add a searchable media index; that would be a NEW
-  owner switch with its own storage, deletion and backup rules, and is not built
-  here.
+* **It is a transcript, not a summary**, and this read itself never writes a
+  file. A later slice, S2, was authorised by the owner on 2026-10-19: the
+  searchable recordings index (section 149) keeps readable words on this PC,
+  ON by default - it is a separate switch with its own storage, deletion and
+  backup rules, and this read is unchanged by it.
 * **Pause and one-at-a-time:** a caller may pass a "the owner is talking" check;
   the chat turn itself is already single-flight, and this reader takes a
   non-blocking lock so two media reads never run together. The live-voice flag
   is not a public function in this tree yet; the seam and its test are here, and
   the design note says so honestly.
-* **Other people's voices and incidental secrets** are NOT stored by S1: the
-  words are returned to the model for this answer, marked outside text, and the
-  normal taint/card rules apply.
+* **Other people's voices and incidental secrets** are not stored by THIS
+  read: the words are returned to the model for this answer, marked outside
+  text, and the normal taint/card rules apply. Whether they are KEPT for
+  searching is the separate switch in section 149 (on by default, off at
+  once, one Delete).
 
 
 ## 145. Focus presets: the one read route both apps render (added 2026-10-19)
@@ -22452,3 +22462,112 @@ taint latch is called, markers stripped and secrets scrubbed and injections flag
 output, the Node version range (22.19+/24.11+/26+, never 23/25), missing-engine refusals before
 the card, one compact tool in exactly one group selected by the tool diet, and off-by-default
 gating on both switches.
+
+## 149. Searchable recordings and videos: readable words kept on the PC, ON by the owner's decision (F5 S2, added 2026-10-19)
+
+F5 slice S2, built to the owner's decision of **2026-10-19 14:50 PT**: they
+chose **B - keep the transcript text**, over the brief's word-list-only
+recommendation, and added **"built in the next slice, on by default."** So this
+ships with its switch **ON**: a deliberate owner override, recorded where it
+lives (`backend/rebuilt/jarvis-framework.toml`, `[media_index] enabled =
+true`, and the same section in the published base's copy).
+
+**What it is.** An index on this PC of the recordings and videos inside the
+owner's "Folders Jarvis may look in" list, so "which of my recordings mention
+X?" is answered once, from the words themselves. It is ONE SQLite file,
+`~/.openjarvis/media-index.db` (`jarvis_framework.CONFIG_DIR`), modelled on
+`documents-index.db` but with the difference the owner chose: the **readable
+transcript lines are stored**, with their times, because that is what makes a
+search show the exact sentence instantly. The module is
+`backend/jarvis_media_index.py` and its own docstring is the contract.
+
+**The safeguards (none of them optional in that decision).**
+
+* **Only the listed folders.** Every file goes through the SAME
+  `jarvis_documents.allowed_path()` rule S1 uses (hidden folders and protected
+  places refused); an index run only walks those folders.
+* **Never the audio or video.** The recording is only read, never copied, and
+  the original file is untouched. The index stores the words and file details.
+* **Never a learned fact.** The words are searchable text, not a memory: the
+  module imports no memory/learning module, and the `my_files` result is
+  outside text like every other read, so the normal taint/card rules apply.
+* **Rows for files deleted or moved away leave on the next run.** No row is
+  kept for a file that is not there; a resumed/renamed recording is re-read
+  under its new path.
+* **Kept until deleted - no timer.** One Delete in Settings removes every
+  stored word AND the index file; deleting one recording's words removes them
+  from the index. The originals are never touched.
+* **Delete really deletes.** `media-index.db` is in `jarvis_backup.py`'s
+  `NOT_BACKED_UP` table from day one (its own reason: a backup made before a
+  Delete would still hold the words, so "Delete really deletes" would be
+  untrue). The suite drives the backup module's own decision function. The
+  database scrub is not only a main-file `VACUUM`: Delete also runs
+  `PRAGMA wal_checkpoint(TRUNCATE)` (so a WAL cannot hold plaintext pages),
+  and Delete-all unlinks `media-index.db`, `media-index.db-wal` and
+  `media-index.db-shm`. The suite's own **raw-byte canary** test indexes one
+  clip containing a unique word, proves `search_media` returns it, Deletes,
+  and requires **zero** occurrences of that word in the raw bytes of every
+  `media-index.db*` file (Gemini's evidence bar for the disclosure).
+* **The words stay on the local lane.** A `search_media` result carrying
+  stored lines latches the conversation private
+  (`jarvis_gate.latch_taint`, why `media_index_search`) - the same latch every
+  other reading tool sets - so a later turn can never be offered a cloud lane
+  carrying what was said.
+* **The switch ships ON; OFF is instant.** With no owner file the shipped
+  default applies; turning it OFF writes the owner's own state file and the
+  very next run reads and writes nothing (a waiting ON card is taken back).
+  Turning it back ON is ONE normal approval card - it starts keeping readable
+  private speech again - and nothing is written before a person says yes.
+* **Plain-language disclosure.** Settings shows it word for word, including
+  that readable private speech is kept on this PC until deleted and that the
+  audio/video is never copied.
+
+**The surfaces (smallest complete slice).**
+
+* **Chat, both apps.** The existing `my_files` tool grew the action
+  `search_media` - no new tool, no new route for chat, and it is decided under
+  the EXISTING `read_files_readonly` action. The model gets the stored lines
+  with file and time (`{"file", "at", "line"}`) plus the counts/words, never a
+  recording and never a fact. A fresh index fills in at most two recordings per
+  search (`INDEX_PER_RUN`), so a search is never ten minutes of speech-to-text;
+  the answer says how many are still waiting.
+* **Desktop Settings.** A hand-written card ("Searchable recordings and
+  videos") shows the PC's disclosure, the stored counts, the switch (off at
+  once; on asks once) and the one Delete, through ONE Rust command
+  (`jarvis-desktop/src-tauri/src/media_index.rs`) and the route below.
+* **The route, and no patch.** `GET/POST /api/media-index` is installed by the
+  drop-in folder **`plugins/ready/media-index/`** - the same no-patch mechanism
+  the data sandbox switch uses - so this slice adds NO patch, edits no core
+  file and touches `jarvis_hud.py` nowhere. GET: switch, counts, pending,
+  disclosure. POST `{"enabled": bool}`: OFF is `200` at once; ON goes through
+  `request_enabled()` and answers `202 {"waiting": true}` (one normal approval
+  card, action `change_own_config`, tier `ask`, nothing written first). POST
+  `{"action": "delete"}`: the one Delete. Origin and token are checked before
+  any body is read, like every route.
+* **The spoken switch.** `jarvis_settings_registry.BOOL_SETTINGS` has
+  `media_index` ("searchable recordings", "the recording index", ...), whose
+  setter calls the module's own `request_enabled()`, so "turn off searchable
+  recordings" works from either app's chat and cannot bypass the card.
+
+**What it does not do yet, said plainly.** Videos' on-screen text is not
+indexed (S1 still OCRs a few frames per answer; the index stores the spoken
+words). The phone has no Settings card yet - its chat path and the spoken
+switch work - and `docs/ARCHITECTURE.md` section 8 records that follow-up
+honestly rather than claiming parity. A deploy of this slice needs ONE extra
+command on the PC for the Settings card: `scripts\add-plugin.ps1 -Name
+media-index` (the chat path needs nothing). If the switch is left ON after a
+Delete, the next search reads the folders again and rebuilds what it deleted
+from - the disclosure says so.
+
+Tests: `backend/test_media_index.py` - only listed folders, readable text
+stored but no media copy, the exact stored line with file/time and no second
+read, Delete-one really removing rows (with SQLite `secure_delete` and the
+index rebuilt so no deleted word lingers) and Delete-all removing the index
+file, the **raw-byte canary** (with the index forced into WAL mode first: no
+`media-index.db*` file, `-wal`/`-shm` included, may contain the deleted word),
+the **private-lane latch** on a result carrying lines, the backup exclusion
+driven through `jarvis_backup.py`'s own function, ON by default/OFF instant/
+ON one card, the spoken setter and the `my_files` action under
+`read_files_readonly`, gone/moved rows leaving, nothing learned, the drop-in
+route's four verbs plus its 401/403 shape, and the plain disclosure. The
+feature list's own row was updated in all three copies.

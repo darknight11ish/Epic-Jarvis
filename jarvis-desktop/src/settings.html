@@ -208,6 +208,7 @@
             <a href="#limits">Limits and frequency</a>
             <a href="#email-sending">Sending email</a>
             <a href="#sandbox">Data and maths sandbox</a>
+            <a href="#media-index">Searchable recordings and videos</a>
           </div>
           <div class="settings-jump-place">
             <span class="settings-jump-place-label">About this build</span>
@@ -2896,6 +2897,39 @@
         <p class="state" id="sbx-reading" role="status">Asking Jarvis…</p>
       </section>
 
+      <!-- ── Searchable recordings and videos (F5 S2, 2026-10-19) ──────────
+           The owner chose to keep READABLE transcript text, ON by default, and
+           asked for the plain disclosure and one Delete. This card is written
+           by hand rather than generated from SETTINGS_ROWS because it is not a
+           single toggle: it shows the PC's disclosure, the stored counts, the
+           switch (OFF at once; ON asks once) and the one Delete. The PC's own
+           words arrive from GET /api/media-index (media-index-settings.js,
+           src-tauri/src/media_index.rs, backend/jarvis_media_index.py,
+           plugins/ready/media-index/). The disclosure under the title is a
+           plain fallback so it is readable even when the PC is unreachable. -->
+      <section class="card" id="media-index">
+        <h2 id="mi-title">Searchable recordings and videos</h2>
+        <p class="note" id="mi-disclosure">
+          Jarvis can keep the words it reads from recordings and videos in your
+          listed folders, so it can search them. The words are stored as
+          readable text on this PC — including other people's voices and
+          anything read aloud — until you delete them. It never copies the
+          audio or video, never learns the words as a fact, and only looks
+          inside folders you have already listed. Turning it off is instant;
+          Delete removes the stored words for good, because the index is never
+          in a backup. The original recordings are never touched.
+        </p>
+        <div id="mi-body" hidden>
+          <button class="btn" id="mi-switch" type="button">Turn searchable recordings off</button>
+          <p class="note" id="mi-link-note" hidden></p>
+          <p class="sc-line" id="mi-line" role="status"></p>
+          <p class="note" id="mi-counts" hidden></p>
+          <button class="btn ghost" id="mi-delete" type="button">Delete the stored words</button>
+          <span class="status" id="mi-status" role="status"></span>
+        </div>
+        <p class="state" id="mi-reading" role="status">Asking Jarvis…</p>
+      </section>
+
       <!-- ── About ─────────────────────────────────────────────────────────
            Identity, not instructions - the "Tutorials and the FAQ" tab in the
            Brain (where the FAQ moved on 2026-10-08) already answers "how does
@@ -3059,5 +3093,6 @@
     <script type="module" src="hud-window-settings.js"></script>
 <script type="module" src="pictures-settings.js"></script>
     <script type="module" src="sandbox-settings.js"></script>
+    <script type="module" src="media-index-settings.js"></script>
   </body>
 </html>

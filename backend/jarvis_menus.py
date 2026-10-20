@@ -397,6 +397,18 @@ MENUS: tuple = (
        "Let the AI model run small Python scripts for sums and averages.",
        names=("data sandbox", "the data sandbox", "python sandbox",
               "the python sandbox", "data and maths sandbox")),
+    # "Searchable recordings and videos" (F5 S2, 2026-10-19; JARVIS-API
+    # section 149): the desktop's Settings card holding the disclosure, the
+    # switch, the stored counts and the one Delete. The phone has NO card yet
+    # (OpenPlace answers "only in Jarvis on your PC"), so this menu is
+    # desktop-only exactly like the first-run card and the HUD window - the
+    # phone's MenuVisibilityTest/FindAnythingTest must not treat it as a phone
+    # menu it cannot reach.
+    _m("settings.media-index", "Searchable recordings and videos",
+       "Keep readable words from the recordings and videos in your listed "
+       "folders, so you can search them - until you delete them.", (DESKTOP,),
+       names=("searchable recordings", "searchable recordings and videos",
+              "the recording index", "the media index")),
     # "Limits and frequency" (2026-10-08): the numbers the owner can change,
     # ONE table on the PC behind one read route and one write route. The
     # Both apps have a screen for it, so this is one menu for both.

@@ -1951,3 +1951,23 @@ allowed_packages = []
 # need JADX / Ghidra, which the owner supplies). See docs/JARVIS-API.md 148.
 [rea]
 enabled = false
+
+# SEARCHABLE RECORDINGS AND VIDEOS - F5 slice S2 (owner decision, 2026-10-19)
+# ------------------------------------------------------------------------
+# Jarvis can keep the words it reads from the recordings and videos in the
+# owner's listed folders, as READABLE text on this PC, so "which of my
+# recordings mention X?" can be answered from the words themselves
+# (backend/jarvis_media_index.py; docs/JARVIS-API.md section 149).
+#
+# THIS SHIPS ON, by the owner's explicit decision of 2026-10-19 ("keep the
+# transcript text ... built in the next slice, on by default"). That is an
+# override of the decision brief's "off by default" recommendation, and it is
+# written down as the owner's choice, not a default somebody inferred.
+#
+# The safeguards are not optional: only folders already listed for Jarvis;
+# never the audio or video itself; never a learned fact; the index file
+# (media-index.db) is EXCLUDED from backups so the one Delete really deletes;
+# rows for files deleted or moved away leave on the next run; turning it OFF
+# is instant. Turning it back ON is one normal approval card.
+[media_index]
+enabled = true

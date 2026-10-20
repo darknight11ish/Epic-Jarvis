@@ -204,6 +204,14 @@ object OpenPlace {
         "notifications",
         "first-run",
         "hud-window",
+        // "Searchable recordings and videos" (F5 S2, 2026-10-19; JARVIS-API
+        // section 149): the desktop's Settings card holds the disclosure, the
+        // switch, the counts and the one Delete. The phone has NO Settings
+        // card yet - its chat path and the spoken switch do work, and
+        // docs/ARCHITECTURE.md section 8 records the follow-up. So "open
+        // searchable recordings" answers with the honest PC-only sentence
+        // rather than opening a screen that does not have it.
+        "media-index",
     )
 
     /** Every id this file has made a decision about - for the test. */

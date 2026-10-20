@@ -159,6 +159,15 @@ PHONE_LACKS = {
         "where": "jarvis-client/app/src/main/java/com/jarvis/client/ui/OpenPlace.kt",
         "must_contain": '"first-run",',
     },
+    "settings.media-index": {
+        "name": "Searchable recordings and videos",
+        "why": ("The card holds the PC's transcript index, its disclosure and the one Delete; "
+                "the phone has no Settings card for it yet. Its chat path and the spoken switch "
+                "do work, and the phone answers \"only in Jarvis on your PC\" (ARCHITECTURE "
+                "section 8 records the follow-up)."),
+        "where": "jarvis-client/app/src/main/java/com/jarvis/client/ui/OpenPlace.kt",
+        "must_contain": '"media-index",',
+    },
     "settings.start-jarvis": {
         "name": "Starting Jarvis for you",
         "why": ("The backend runs on the PC, next to the desktop app; a phone cannot start or "

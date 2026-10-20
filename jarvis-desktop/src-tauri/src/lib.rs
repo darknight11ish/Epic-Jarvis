@@ -49,6 +49,10 @@ pub mod live;
 pub mod lock;
 pub mod logfile;
 pub mod look;
+// The searchable recordings and videos switch (media_index.rs; F5 S2, the
+// owner's decision of 2026-10-19). Settings only: the stored-word counts, the
+// switch and the one Delete - it never sees the words themselves.
+pub mod media_index;
 pub mod notifications;
 pub mod open_app;
 pub mod plain_errors;
@@ -1338,6 +1342,12 @@ pub fn run() {
             // on the PC) or off at once. Settings only; it runs no script and
             // sees no data.
             sandbox_exec::sandbox_exec,
+            // Searchable recordings and videos (media_index.rs; F5 S2, the
+            // owner's decision of 2026-10-19: readable transcript text kept,
+            // ON by default). Settings only: read the counts and the
+            // disclosure, turn it off at once, ask to turn it back on (ONE
+            // normal approval card), and the one Delete of the stored words.
+            media_index::media_index,
             // Interrupting by talking and "One moment." (voice_flow.rs).
             voice_flow::judge_barge_in,
             voice_flow::get_voice_flow,

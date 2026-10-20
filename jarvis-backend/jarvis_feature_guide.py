@@ -398,6 +398,13 @@ def _read_big_coder():
     return M.enabled() is True
 
 
+def _read_media_index():
+    """F5 S2 (2026-10-19): the owner's own "searchable recordings" switch,
+    read from the module that owns it - never a second copy of the rule."""
+    import jarvis_media_index as M
+    return M.enabled() is True
+
+
 #: BoolSetting.key -> the reader above. One entry per switch in
 #: jarvis_settings_registry.BOOL_SETTINGS; `test_feature_guide.py` fails if a
 #: switch is added to that table without a reader here, so "is it on?" can
@@ -414,6 +421,7 @@ STATE_READERS = {
     "screen_picture": _read_screen_picture,
     "headless_browser": _read_headless_browser,
     "sandbox_exec": _read_sandbox,
+    "media_index": _read_media_index,
     "pictures": _read_pictures,
     "briefing_senders": _read_briefing_senders,
     "big_coder": _read_big_coder,

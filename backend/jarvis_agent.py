@@ -847,7 +847,8 @@ FILES_PARTS_REFUSED = ("refused: this answer has already read {n} parts of docum
 
 
 def _prepare_my_files(args: dict):
-    if str(args.get("action") or "").strip().lower() == "read_media":
+    action = str(args.get("action") or "").strip().lower()
+    if action == "read_media":
         # The one media read (F5 S1). Decided under file_read's action like
         # every other read here; it stores nothing and marks the result as
         # outside text through the EXISTING took_in path.
@@ -858,6 +859,15 @@ def _prepare_my_files(args: dict):
             raise
         except Exception as exc:                  # noqa: BLE001
             return None, f"Read one recording (unavailable: {type(exc).__name__})"
+    if action == "search_media":
+        # F5 S2 (jarvis_media_index.py): search the words the owner chose to
+        # keep from their own recordings. Same read-files permission as every
+        # other line here, and the result is outside text like any read.
+        words = args.get("words")
+        if not isinstance(words, str) or not words.strip():
+            raise ValueError("say which words to look for in the recordings")
+        return {"words": words.strip()}, \
+            f"Search the stored words from recordings and videos: {words.strip()}"
     try:
         import jarvis_documents as DOCS
     except Exception as exc:
@@ -865,8 +875,26 @@ def _prepare_my_files(args: dict):
     return None, DOCS.describe(args)
 
 
+def _latch_media_index_read() -> bool:
+    """Keep a turn that searched the owner's recordings on the local lane.
+
+    Gemini's review of F5 S2 (2026-10-20) asked for this explicitly: the stored
+    transcript lines are readable private speech, so once one reaches the model
+    the conversation must not be offered a cloud lane later. Uses the gate's own
+    process-wide latch (`jarvis_gate.latch_taint`), the same one the sandbox's
+    file read, the people dossier, the voiceprint and the self-improvement reads
+    set. Never raises: a backend without jarvis_gate.py keeps the tool usable,
+    and the result says nothing was found."""
+    try:
+        import jarvis_gate
+        return bool(jarvis_gate.latch_taint(why="media_index_search"))
+    except Exception:
+        return False
+
+
 def _run_my_files(args: dict, plan_obj, **_) -> dict:
-    if str(args.get("action") or "").strip().lower() == "read_media":
+    action = str(args.get("action") or "").strip().lower()
+    if action == "read_media":
         try:
             import jarvis_media_read as MEDIA
         except Exception as exc:                  # noqa: BLE001
@@ -874,9 +902,34 @@ def _run_my_files(args: dict, plan_obj, **_) -> dict:
                                           f"({type(exc).__name__})"}
         path = (plan_obj or {}).get("path") if isinstance(plan_obj, dict) else None
         return MEDIA.read_media(path or args.get("path"))
+    if action == "search_media":
+        try:
+            import jarvis_media_index as MI
+        except Exception as exc:                  # noqa: BLE001
+            return {"ok": False, "error": f"searching recordings is not available here "
+                                          f"({type(exc).__name__})"}
+        words = (plan_obj or {}).get("words") if isinstance(plan_obj, dict) else None
+        out = MI.search(words or args.get("words") or "")
+        if not out.get("ok"):
+            return {"ok": False, "error": out.get("words") or out.get("error")
+                    or "the recording search did not run"}
+        matches = [{"file": m["name"], "at": int(round(float(m.get("start") or 0.0))),
+                    "line": m["text"]}
+                   for m in out.get("matches") or []]
+        # Readable private speech reached the model: latch the turn private, so
+        # a later cloud decision can never carry these lines out (the same
+        # latch the sandbox's own file read sets).
+        if matches:
+            _latch_media_index_read()
+        # No audio/video and no learned fact: the model gets the stored LINES
+        # (file, time, exact text) so it can repeat the owner's own words
+        # without inventing a file or a sentence.
+        return {"ok": True, "what": "searched the stored words from recordings",
+                "words": out.get("words", ""), "matches": matches,
+                "files": out.get("files", 0), "pending": out.get("pending", 0)}
     try:
         import jarvis_documents as DOCS
-    except Exception as exc:
+    except Exception as exc:                      # noqa: BLE001
         return {"ok": False, "error": f"looking in folders is not available here "
                                       f"({type(exc).__name__})"}
     return DOCS.run_tool(args)
@@ -2241,12 +2294,13 @@ TOOLS: dict = {
     # part. Decided under file_read's action - see FILES_TOOL.
     "my_files": Tool(
         "my_files",
-        "Find and read the owner's own files, only in folders they listed on the PC. "
-        "find: file names with these words. search: words inside notes and text files. "
+        "Find and read the owner's own files, only in folders they listed. "
+        "find: file names. search: words inside notes/text. "
         "read: one part of one file (PDF, Word, Excel, PowerPoint, Markdown, text, CSV). "
-        "read_media: the words in one recording or video.",
+        "read_media: one recording's words. search_media: stored recording words.",
         {"type": "object", "properties": {
-            "action": {"type": "string", "enum": ["find", "search", "read", "read_media"]},
+            "action": {"type": "string", "enum": ["find", "search", "read", "read_media",
+                                                  "search_media"]},
             "words": {"type": "string", "description": "a few words; for read, picks the part"},
             "path": {"type": "string", "description": "read / read_media: the full path"},
             "part": {"type": "integer", "description": "read: which part, from its list"}},

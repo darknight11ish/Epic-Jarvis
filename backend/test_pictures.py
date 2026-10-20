@@ -771,7 +771,7 @@ def t_the_api_document_has_the_section_and_it_matches_this_code():
 #: writes down that they meant to. That is the price of a check that bites, and
 #: it is why the failure message below spells out the difference instead of
 #: saying "the document changed".
-EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 149))   # 129 ..= 148 (146 is app control on the phone, added 2026-10-20; 147 is the setup questionnaire, added 2026-10-20; 148 is the REA reverse-engineering tool, added 2026-10-20)
+EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 150))   # 129 ..= 149 (146 app control; 147 setup questionnaire; 148 REA reverse-engineering tool; 149 searchable recordings, F5 S2)
 #: 137 is a REAL section, not a gap: `## 137. Starting the local model when
 #: it is not running`; 138 is `skills.lock` (PR #455). The tail reads
 #: 129 ..= 138 with no hole.
@@ -781,8 +781,10 @@ EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 149))   # 129 ..= 148 (146 is app 
 #: and restore routes (#568/#569/#571); 141 the selection chip (#562); 142
 #: the data-and-maths sandbox's own switch (LM-1C, #583); 143 the person
 #: dossier click door (LM-4); 144 the media read slice (F5 S1); 145 the preset
-#: GET route (2026-10-19); 146 app control on the phone (2026-10-20, this
-#: branch). A section added above 138 gets its row here in the same commit.
+#: GET route (2026-10-19); 146 app control on the phone (2026-10-20); 147 the
+#: setup questionnaire (2026-10-20, #643); 148 the searchable recordings index
+#: (F5 S2, 2026-10-20, #641). A section added above 138 gets its row here in
+#: the same commit.
 #:
 #: This list names the RELEASED tail, so a dropped section anywhere in it is
 #: caught, and a section above it is reported rather than silently accepted.

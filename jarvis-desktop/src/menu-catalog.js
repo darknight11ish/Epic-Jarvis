@@ -1066,6 +1066,28 @@ export const MENUS = [
     ]
   },
   {
+    "id": "settings.media-index",
+    "title": "Searchable recordings and videos",
+    "about": "Keep readable words from the recordings and videos in your listed folders, so you can search them - until you delete them.",
+    "apps": [
+      "desktop"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "card",
+    "group": null,
+    "parent": null,
+    "hide": true,
+    "collapse": true,
+    "why": "",
+    "names": [
+      "searchable recordings",
+      "searchable recordings and videos",
+      "the recording index",
+      "the media index"
+    ]
+  },
+  {
     "id": "settings.limits",
     "title": "Limits and frequency",
     "about": "How long an Undo stays possible, how much Jarvis gets on with at once, and the other numbers you can change.",
@@ -2842,6 +2864,7 @@ export const ALIASES = {
   "look at this and watch with me": "settings.screen-look",
   "making pictures": "settings.pictures",
   "manner": "settings.manner",
+  "media index": "settings.media-index",
   "memory": "brain.tab.memory",
   "memory (model view)": "brain.model.memory",
   "memory counts": "brain.memory.learning",
@@ -2886,6 +2909,7 @@ export const ALIASES = {
   "quiz youtube link": "brain.work.quiz.youtube",
   "quizzes": "brain.work.quiz",
   "reach": "settings.reach",
+  "recording index": "settings.media-index",
   "referee": "settings.second-card.referee",
   "referee suggestions": "settings.second-card.referee",
   "referee suggestions (second card switch)": "settings.second-card.referee",
@@ -2901,6 +2925,8 @@ export const ALIASES = {
   "screen settings": "settings.screen-look",
   "search provider": "settings.web-search",
   "search settings": "settings.web-search",
+  "searchable recordings": "settings.media-index",
+  "searchable recordings and videos": "settings.media-index",
   "second card": "settings.second-card",
   "second gpu": "settings.second-card",
   "second graphics card": "settings.second-card",

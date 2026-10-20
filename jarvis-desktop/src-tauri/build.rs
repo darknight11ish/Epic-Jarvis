@@ -842,6 +842,10 @@ fn main() {
             // ask to turn it on (ONE card on the PC) or off at once. Settings
             // only; it runs no script and sees no data.
             "sandbox_exec",
+            // Searchable recordings and videos (media_index.rs; F5 S2, 2026-10-19):
+            // read the switch and counts, turn it off at once, ask to turn it
+            // back on (ONE card on the PC), and the one Delete. Settings only.
+            "media_index",
             // Interrupting by talking and "One moment." (voice_flow.rs):
             // ask for one utterance to be checked, read the status's `flow`
             // block, fetch the clip. Quickbar only; none records anything.

@@ -146,17 +146,20 @@ EXPLICITLY NOT BACKED UP (CLAUDE.md rule 3; the owner's own words)
     in-memory approval stamp, jarvis_owner_check.stamp, is gone the moment
     the backend restarts, so nothing written into approvals.db by a restore
     can forge an approval).
-  * SIX more databases that were measured on 2026-10-13 (five of them) and
+  * SEVEN more databases that were measured on 2026-10-13 (five of them) and
     2026-10-16 (the search index) and left out on purpose - agents.db,
     audit.db, digest.db, sync_state.db and telemetry.db, plus
-    documents-index.db. Each one's reason is written beside it in
-    `NOT_BACKED_UP` above, so the decision is recorded rather than inferred
-    from its absence. In one line each: agents.db and digest.db are empty
-    template tables the modules recreate, audit.db is a security trail rather
-    than memory, sync_state.db holds sync cursors whose staleness loses data,
-    telemetry.db is measurements of the machine with its writer switched off
-    by design, and documents-index.db is a derived ranking rebuilt from the
-    files it describes, holding no document text.
+    documents-index.db, plus media-index.db (F5 S2, 2026-10-19). Each one's
+    reason is written beside it in `NOT_BACKED_UP` above, so the decision is
+    recorded rather than inferred from its absence. In one line each:
+    agents.db and digest.db are empty template tables the modules recreate,
+    audit.db is a security trail rather than memory, sync_state.db holds sync
+    cursors whose staleness loses data, telemetry.db is measurements of the
+    machine with its writer switched off by design, documents-index.db is a
+    derived ranking rebuilt from the files it describes, holding no document
+    text, and media-index.db is the readable words kept from recordings on the
+    owner's decision - excluded so a Delete cannot be undone from a backup
+    made before it.
   * The File Guardian's store, `$OPENJARVIS_HOME/guardian/`: its
     `guardian.jsonl` journal, `pins.json` and `blobs/<sha256>.gz` (capped at
     250 MiB, jarvis_file_guardian.py) are device-local file history, not
@@ -541,6 +544,16 @@ DB_BUSY_TIMEOUT_S = 10.0
 #:             ANY matching word, so an index there would have changed what a
 #:             vault search returns. That change was made and reverted; see
 #:             backend/test_obsidian_notes.py, which caught it.
+#:
+#: media-index.db  the readable words kept from recordings and videos
+#:             (jarvis_media_index.py; F5 S2, owner decision 2026-10-19).
+#:             This is the one exclusion that is NOT derived: it holds a
+#:             readable copy of what was said, because the owner chose that
+#:             over a word list. It must never be in a backup: a backup made
+#:             before a Delete would still hold the words afterwards, and
+#:             "Delete really deletes" is the promise the Settings card makes.
+#:             The recording itself stays in the owner's own folder, backed up
+#:             by whatever he keeps them in - never by this.
 NOT_BACKED_UP = {
     "agents.db": "template tables the modules recreate; empty today (0 rows)",
     "audit.db": "a security trail, not memory; restoring a stale one misleads",
@@ -548,6 +561,7 @@ NOT_BACKED_UP = {
     "sync_state.db": "sync cursors; a restored old cursor loses un-fetched items",
     "telemetry.db": "machine measurements, not the owner's data; writer off",
     "documents-index.db": "derived word index; rebuilt from the folders on the next search",
+    "media-index.db": "kept readable speech; excluded so Delete cannot be undone from an older backup",
 }
 
 #: Non-SQLite stores under the settings folder that are deliberately NOT
