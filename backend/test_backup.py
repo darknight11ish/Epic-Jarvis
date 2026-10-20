@@ -625,8 +625,8 @@ def t_the_newly_covered_databases_and_named_files_really_go_in():
     check("every covered database is in SOURCE_DBS or in NOT_BACKED_UP",
           not ({n for n in B.SOURCE_DBS} & {n for n in B.NOT_BACKED_UP}),
           "a database is in both lists")
-    check("the databases of the owner's install, split 16 + 6, are all accounted for",
-          len(B.SOURCE_DBS) == 16 and len(B.NOT_BACKED_UP) == 6,
+    check("the databases of the owner's install, split 16 + 7, are all accounted for",
+          len(B.SOURCE_DBS) == 16 and len(B.NOT_BACKED_UP) == 7,
           f"{len(B.SOURCE_DBS)} backed up, {len(B.NOT_BACKED_UP)} excluded")
 
 

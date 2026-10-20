@@ -702,8 +702,12 @@ def t_every_one_of_the_22_switches_resolves_from_its_own_names():
                 missing.append((b.key, name, None if got is None else got.key))
     check(f"all {len(R.BOOL_SETTINGS)} switches answer to every one of their names",
           not missing, repr(missing))
-    check("the count is still the 22 LM-1 measured (21 before it)",
-          len(R.BOOL_SETTINGS) == 22, str(len(R.BOOL_SETTINGS)))
+    # 23 since 2026-10-19 (F5 S2): `media_index` joined the spoken table. Its
+    # setter calls the module's own request_enabled(), the same function the
+    # Settings card route calls, so the tool can reach it exactly as the phrase
+    # can - which is what this test is about.
+    check("the count is still the 23 measured on 2026-10-19 (22 before it)",
+          len(R.BOOL_SETTINGS) == 23, str(len(R.BOOL_SETTINGS)))
 
 
 def gate_signs_in(source: str, fn_name: str) -> list:

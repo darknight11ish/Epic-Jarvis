@@ -70,3 +70,17 @@ A persistent transcript index is a NEW retained copy of private speech and
 needs its own owner switch, storage, deletion/forget and backup-exclusion rules.
 S1 leaves nothing behind; that is the point of calling it a read. S2 is a
 separate decision and is not started.
+
+## S2, built on the owner's decision of 2026-10-19
+
+The separate decision was put to the owner as a clickable multiple choice on
+2026-10-19 14:50 PT. They chose **B - keep the transcript text too**, and added
+**"built in the next slice, on by default."** That slice is
+`backend/jarvis_media_index.py` (JARVIS-API section 149): an index at
+`~/.openjarvis/media-index.db` holding the READABLE words, only from the
+owner's listed folders, never the audio/video itself, never a learned fact,
+with rows for deleted/moved files dropped on the next run, one Delete that
+removes the index file, and `media-index.db` excluded from backups from day
+one so that Delete cannot be undone. The switch ships ON (the owner's explicit
+override of this brief's recommendation), OFF is instant, and turning it back
+ON is one normal approval card. S1's read of one file is unchanged by it.

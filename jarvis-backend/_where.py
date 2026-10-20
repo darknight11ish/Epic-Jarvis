@@ -1038,6 +1038,11 @@ SHIPPED = (
     # child with -protocol_whitelist file,pipe. It STORES NOTHING: no index, no
     # memory fact, no file. Its suite is backend/test_media_read.py.
     "jarvis_media_read.py",
+    # --- F5 S2, 2026-10-19: the searchable index of recordings and videos ---
+    # The owner chose to keep READABLE transcript text, shipped ON by that
+    # decision; only the listed folders, never the audio/video itself, and the
+    # index file is excluded from backups so the one Delete really deletes.
+    "jarvis_media_index.py",
     # --- Pillar 18, 2026-10-17: the local "time machine" for files Jarvis changes ---
     # Before anything writes over a file in a folder Jarvis is allowed to
     # change (the owner's "Folders Jarvis may look in", or the Obsidian vault),

@@ -3,7 +3,7 @@
 The owner's feature list, as data: 137 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 bdb3c676749565e337cfaf86a84cf2e4a9b1fadaad8409852b6c88ffadc93ab3); the apps' Features pages read their own
+`features/features.json` (sha256 0c025ea807dd9ad8fde0dc47ca1c774c931925b8703b5fb95a124c59776a2514); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "bdb3c676749565e337cfaf86a84cf2e4a9b1fadaad8409852b6c88ffadc93ab3"
+SOURCE_SHA256 = "0c025ea807dd9ad8fde0dc47ca1c774c931925b8703b5fb95a124c59776a2514"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -499,12 +499,12 @@ FEATURES = (
         "id": "media-read",
         "group": "Memory",
         "title": "Read the words in a recording or video",
-        "what": "Ask Jarvis to read one audio or video file from a folder it may look in. It transcribes the speech on this PC, with timestamps, and reads the on-screen text in a few sampled video frames. It returns a transcript, never a summary, and saves nothing.",
+        "what": "Ask Jarvis to read one audio or video file from a folder it may look in. It transcribes the speech on this PC, with timestamps, and reads the on-screen text in a few sampled video frames. It returns a transcript, never a summary. A separate switch, on by default, can keep the words it reads searchable as readable text on this PC until you delete them.",
         "where": "Either app's chat: name the file, for example `read the words in C:\\Users\\you\\Videos\\talk.mp4`. The file and all the reading are on the PC; the answer is written by the local model.",
-        "asks": "No card of its own for a read: a file already inside a folder you allow is the same read_files_readonly rule as my_files, and the result is treated as outside text. Nothing is kept or sent anywhere.",
-        "limit": "English speech only; one file of at most 10 minutes and 100 MB; a WAV needs nothing else, other formats need ffmpeg installed on the PC (a missing ffmpeg is a plain refusal). It does not understand the picture in a video, cannot label speakers, and never learns or stores a fact from what it reads.",
+        "asks": "No card of its own for a read: a file already inside a folder you allow is the same read_files_readonly rule as my_files, and the result is treated as outside text. The separate searchable-recordings switch decides whether readable words are kept; nothing is ever sent anywhere.",
+        "limit": "English speech only; one file of at most 10 minutes and 100 MB; a WAV needs nothing else, other formats need ffmpeg installed on the PC (a missing ffmpeg is a plain refusal). It does not understand the picture in a video and cannot label speakers. The words are never learned as a fact; the optional searchable index keeps readable text on this PC until you delete it.",
         "surface": "both",
-        "covers": [],
+        "covers": ["settings.media-index"],
     },
     {
         "id": "look-at-this",

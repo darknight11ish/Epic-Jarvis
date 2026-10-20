@@ -216,12 +216,16 @@ def t_setting_links_are_real():
     # "What asks first"), and two are the phone's own. `big_coder` joined them
     # on 2026-10-11: the 30B coder's opt-in has a route and a spoken switch,
     # and no page row yet. `sandbox_exec` was one of these from LM-1 until
-    # LM-1C (2026-10-18) gave it the real card and row - so it is linked now,
-    # and this list is back to the six that genuinely have no page row.
+    # LM-1C (2026-10-18) gave it the real card and row - so it is linked now.
+    # `media_index` joined on 2026-10-19 (F5 S2): the owner chose readable
+    # transcript text kept ON by default; its desktop Settings card is a
+    # hand-written panel (disclosure, switch, one Delete) drawn from its own
+    # route rather than a generated toggle row, and the phone has no card yet
+    # (ARCHITECTURE section 8 records that follow-up), so this list is seven.
     orphans = sorted(keys - {r.setting for r in R.DESKTOP_ROWS if r.setting})
-    check("...and the BoolSettings with no desktop row are the known six",
+    check("...and the BoolSettings with no desktop row are the known seven",
           orphans == ["background_learning", "big_coder", "learn_sensitive_topics",
-                      "lights_without_card", "phone_notifications",
+                      "lights_without_card", "media_index", "phone_notifications",
                       "smartwatch_notifications"], str(orphans))
     phone_linked = sorted(r.setting for r in R.SETTINGS_ROWS
                           if r.owner == "phone" and r.setting)
@@ -286,6 +290,15 @@ def t_bool_settings_is_the_measured_thirteen():
     clickable card and row on both apps, so it is now one of the linked rows
     above rather than an orphan.
 
+    Twenty-three since 2026-10-19 (F5 S2): `media_index`, "searchable
+    recordings and videos". The owner chose to keep READABLE transcript text
+    and to ship the switch ON; OFF is instant and turning it back on is one
+    normal approval card. It has no generated toggle row (its desktop Settings
+    card is the hand-written panel that draws the disclosure, the switch and
+    the one Delete from its route), so it is one of the orphans above rather
+    than a linked row; the phone has no card yet, recorded in ARCHITECTURE
+    section 8.
+
     Neither is a row added "beside" the spoken table: each is a switch the
     owner can say out loud, which is what this table is. The growth is argued
     where each lives - the BoolSetting's own comment and the setter's docstring
@@ -293,8 +306,8 @@ def t_bool_settings_is_the_measured_thirteen():
     phrase and dispatches on the same key, so both phrases really work. Any
     further growth has to be argued the same way.
     """
-    check("BOOL_SETTINGS holds its twenty-two spoken settings",
-          len(R.BOOL_SETTINGS) == 22, str(len(R.BOOL_SETTINGS)))
+    check("BOOL_SETTINGS holds its twenty-three spoken settings",
+          len(R.BOOL_SETTINGS) == 23, str(len(R.BOOL_SETTINGS)))
 
 
 def main() -> int:

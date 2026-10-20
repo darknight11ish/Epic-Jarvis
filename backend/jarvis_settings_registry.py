@@ -283,6 +283,17 @@ SECTIONS: tuple = (
     # the same words and only a person's approved card flips it.
     Section("sandbox", ("the data sandbox", "the data and maths sandbox",
                         "the python sandbox", "the sandbox")),
+    # "Searchable recordings and videos" (F5 S2, the owner's decision of
+    # 2026-10-19: readable transcript text kept, ON by default). A card on the
+    # desktop drawn from GET /api/media-index; the phone has NO card yet, so
+    # this Section is app="desktop" (the phone's own OpenPlace.kt answers
+    # "only in Jarvis on your PC"), and docs/ARCHITECTURE.md section 8 records
+    # that follow-up. The spoken switch is the BoolSetting later in this file,
+    # so "open searchable recordings" opens the right place on the PC.
+    Section("media-index", ("searchable recordings",
+                            "searchable recordings and videos",
+                            "the recording index", "the media index",
+                            "the recordings index"), app="desktop"),
     # "Limits and frequency" (2026-10-08): the numbers the owner can change,
     # ONE table on the PC (backend/jarvis_limits.py) behind one read route and
     # one write route (limits-read.patch + limits-settings.patch). BOTH apps
@@ -641,6 +652,26 @@ def set_sandbox_exec(on: bool, *, peer=None, local=None) -> Outcome:
     except Exception:
         return _missing("the data and maths sandbox")
     code, out = SANDBOX.request_enabled(bool(on))
+    return _say(code, out)
+
+
+# --- searchable recordings and videos (jarvis_media_index.py, F5 S2 2026-10-19) --
+
+def set_media_index(on: bool, *, peer=None, local=None) -> Outcome:
+    """Keep (or stop keeping) readable words from recordings and videos in the
+    owner's listed folders (F5 S2; owner decision of 2026-10-19: readable
+    transcript text, ON by default).
+
+    OFF is immediate; ON is ONE normal approval card (`change_own_config`, tier
+    ask) raised by the module's own `request_enabled()` - the same function the
+    desktop Settings card and its route call, so a direct POST cannot bypass
+    the card. ON asks because it starts keeping readable private speech on the
+    PC again; OFF never asks, like every narrowing."""
+    try:
+        import jarvis_media_index as MI
+    except Exception:
+        return _missing("searchable recordings")
+    code, out = MI.request_enabled(bool(on))
     return _say(code, out)
 
 
@@ -1702,6 +1733,19 @@ BOOL_SETTINGS: tuple = (
                 "the python sandbox", "the small python sandbox", "the sandbox",
                 "small python scripts", "the data and maths tool"),
                None, set_sandbox_exec),
+    # "Searchable recordings and videos" (F5 S2, the owner's decision of
+    # 2026-10-19: readable transcript text, ON by default). Its switch is the
+    # shipped `[media_index] enabled = true`; the owner's own file wins, so OFF
+    # is instant, and turning it back ON is one normal card (set_media_index,
+    # above). It has no generated settings-toggle row: the desktop's own
+    # Settings card (a hand-written panel, not a toggle row) draws the
+    # disclosure, the switch and the one Delete from its route; the phone has
+    # no card yet (ARCHITECTURE section 8 records that follow-up honestly).
+    BoolSetting("media_index",
+               ("searchable recordings", "the recording index", "the media index",
+                "searchable media", "the recordings index", "searchable videos",
+                "recording and video search", "search my recordings"),
+               None, set_media_index),
     # "Making pictures" (the owner's decision of 2026-09-27; pictures.patch,
     # JARVIS-API section 129). Its own switch, OFF by default: the second card
     # is shared with the everyday model, and CLAUDE.md's rule is that a feature

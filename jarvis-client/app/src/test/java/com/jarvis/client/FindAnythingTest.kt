@@ -198,12 +198,19 @@ class FindAnythingTest {
             // because a place really was added - not because a desktop-only row
             // was emitted into the phone's list.
             //
+            // 121 -> 122 (2026-10-20, F5 S2 / #641): `settings.media-index` is
+            // a desktop-only menu (the searchable recordings card; the phone
+            // has no card yet and answers "only in Jarvis on your PC"). It IS
+            // in the generated catalogue like every other desktop-only entry,
+            // so the catalogue is one larger - the phone's findable list and
+            // MenuVisibilityTest stay unchanged because `phone = false`.
+            //
             // It is here so that a regeneration which drops the `names` field,
             // or a catalogue that comes back a different size, is noticed rather
             // than quietly searched: the check above still proves that every one
-            // of the 121 menus has all of its names searched for.
+            // of the 122 menus has all of its names searched for.
             "the catalogue must still carry the names at all",
-            121,
+            122,
             MenuCatalog.MENUS.size,
         )
         assertTrue(
