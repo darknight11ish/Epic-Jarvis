@@ -384,6 +384,41 @@ def t_recipients_are_optional_but_checked_when_given():
     p = DRAFT.plan([ALEX], None, "Hi", "Hi", reply_to_message_id="<a b@c>")
     check("refused: a message id with a space in it", not p.ready)
 
+    # A line break in To, Cc, Subject or the reply id is REFUSED, never
+    # silently stripped into shape before the IMAP APPEND. Each case is a
+    # mutation bite: the old code `.strip()`ped the value and accepted it, and
+    # the saved draft could then differ from what the card showed.
+    line_break_cases = [
+        ("a trailing CR in To", ([ALEX + "\r"],), {}),
+        ("a leading LF in Cc", ([ALEX], ["sam@example.org\n"]), {}),
+        ("a trailing CRLF in the subject", ([ALEX], None, "Hi\r\n"), {}),
+        ("a leading LF in the subject", ([ALEX], None, "\nHi"), {}),
+        ("a Bcc header in To", ([ALEX + "\r\nBcc: spy@example.net"],), {}),
+        ("a Bcc header in the subject", ([ALEX], None,
+                                          "Hi\r\nBcc: spy@example.net"), {}),
+        ("a trailing LF in the reply id", ([ALEX], None, "Re: Hi", "Hi"),
+         {"reply_to_message_id": "<a@b.example>\r\n"}),
+        ("a Bcc header in the reply id", ([ALEX], None, "Re: Hi", "Hi"),
+         {"reply_to_message_id": "<a@b.example>\r\nBcc: spy@example.net"}),
+    ]
+    for label, args, kwargs in line_break_cases:
+        p = DRAFT.plan(*args, **kwargs)
+        check(f"refused, not stripped, before any header: {label}",
+              not p.ready and "line break" in p.problem, p.problem)
+    check("the hostile value is never echoed back in the problem",
+          "spy@example.net" not in DRAFT.plan(
+              [ALEX + "\r\nBcc: spy@example.net"], None, "Hi", "Hi").problem)
+    hostile = DRAFT.plan([ALEX + "\r\nBcc: spy@example.net"], None, "Hi", "Hi")
+    with NoSockets() as ns:
+        out = DRAFT.run(hostile, approved=True)
+    check("a line-break address cannot become a header: the refused plan saves nothing",
+          out.get("ok") is False and not out.get("saved") and ns.tried == [], out)
+    good = DRAFT.message(DRAFT.plan([ALEX], [SAM], "Hi", "Hi"))
+    check("no Bcc header is ever built, and To/Cc are exactly the checked addresses",
+          "Bcc" not in good
+          and [str(v) for v in good.get_all("To")] == [ALEX]
+          and [str(v) for v in good.get_all("Cc")] == [SAM], good.as_string())
+
 
 def t_settings():
     set_env(**{MAIL.HOST_ENV: None})
