@@ -918,20 +918,31 @@ def _run_my_files(args: dict, plan_obj, **_) -> dict:
                     # S3: true when the words were ON SCREEN in a video, not
                     # said out loud. The model must not report a slide's words
                     # as something the owner said.
-                    "on_screen": m.get("source") == "screen"}
+                    "on_screen": m.get("source") == "screen",
+                    # Gemini 6B: the stored line's injection advisory ("" is
+                    # clean). Advisory, never a block - but the model is told
+                    # the words are data, not an instruction.
+                    "advisory": str(m.get("advisory") or "")}
                    for m in out.get("matches") or []]
         # Readable private speech reached the model: latch the turn private, so
         # a later cloud decision can never carry these lines out (the same
-        # latch the sandbox's own file read sets).
-        if matches:
-            _latch_media_index_read()
+        # latch the sandbox's own file read sets). Stripping the markers does
+        # NOT remove this: the words are still the owner's private speech.
+        tainted = bool(_latch_media_index_read()) if matches else False
         # No audio/video and no learned fact: the model gets the stored LINES
-        # (file, time, exact text, and whether a video showed them on screen)
-        # so it can repeat the owner's own words without inventing a file or a
-        # sentence - or calling a slide something that was said.
-        return {"ok": True, "what": "searched the stored words from recordings",
-                "words": out.get("words", ""), "matches": matches,
-                "files": out.get("files", 0), "pending": out.get("pending", 0)}
+        # (file, time, exact text, whether a video showed them on screen, and
+        # the injection advisory) so it can repeat the owner's own words
+        # without inventing a file or a sentence - or calling a slide something
+        # that was said. When any line looks like an instruction, the result
+        # carries the pattern names and one plain warning sentence.
+        result = {"ok": True, "what": "searched the stored words from recordings",
+                  "words": out.get("words", ""), "matches": matches,
+                  "files": out.get("files", 0), "pending": out.get("pending", 0),
+                  "tainted": tainted}
+        if any(m.get("advisory") for m in matches):
+            result["injection"] = list(out.get("injection") or [])
+            result["warning"] = str(out.get("warning") or "")
+        return result
     try:
         import jarvis_documents as DOCS
     except Exception as exc:                      # noqa: BLE001
