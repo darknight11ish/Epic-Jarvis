@@ -2044,6 +2044,14 @@ $SHIPPED = @(
     # tool: its one surface is one line in the morning briefing (jarvis_briefing.py)
     # for a person Jarvis already knows who is named in today's calendar.
     'jarvis_people_crm.py'
+    # --- "What is this feature?", "is it on?", "how do I turn it on?" (2026-10-20) ---
+    # The guide reads the owner's own feature list (features/features.json,
+    # shipped as a GENERATED module because that file is not copied to the PC
+    # folder) and the owning module's own on/off for each switch. No route, no
+    # card: fixed phrases in jarvis_quick.py answer without a model, and the
+    # read-only feature_guide tool lets the model reword the same facts.
+    'jarvis_feature_guide.py'
+    'jarvis_feature_catalogue.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.

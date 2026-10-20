@@ -945,5 +945,24 @@
     ]
    }
   }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "feature_guide",
+   "description": "Answer a question about one of Jarvis's own features - what it is, where to switch it on, whether it asks first, its honest limit, which apps have it, and whether its switch is on now - from exact data, never general knowledge. Call it when the owner asks what a feature is or does, where it lives, how to turn it on or off, or whether it is on; \"feature\" may be a group name, or empty to list the groups. If it answers that the feature is not in the list, say so and offer the groups; never invent one. Reword the facts freely but add none. It only reads: nothing changes and no approval is needed.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "feature": {
+      "type": "string",
+      "description": "the feature the owner named, in their own words; a group name, or \"\" to list the groups"
+     }
+    },
+    "required": [
+     "feature"
+    ]
+   }
+  }
  }
 ]

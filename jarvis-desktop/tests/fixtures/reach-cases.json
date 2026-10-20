@@ -1312,6 +1312,10 @@
      "name": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)"
     },
     {
+     "id": "feature_guide",
+     "name": "Explaining and checking one of Jarvis's own features (read-only)"
+    },
+    {
      "id": "browser_control",
      "name": "Browser control"
     }

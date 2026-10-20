@@ -134,6 +134,11 @@ TOOL_NAMES = {
     # action name (SETTINGS_GATE_ACTION) is the whole truth.
     "change_setting": "Changing one of Jarvis's own settings when you ask (only a "
                       "loosening, or a switch that reads more, asks first)",
+    # FEATURE_GUIDE_TOOL (2026-10-20): read-only, always no card - it lists and
+    # explains the entries on the Features page and reads whether a switch is
+    # on. Listed here because test_reach.py requires every tool to have plain
+    # words for the "What can Jarvis reach" page.
+    "feature_guide": "Explaining and checking one of Jarvis's own features (read-only)",
 }
 
 #: A tool's gate lookup name -> the action it is decided under, as
