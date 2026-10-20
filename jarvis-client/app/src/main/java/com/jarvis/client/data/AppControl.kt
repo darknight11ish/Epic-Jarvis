@@ -1,0 +1,549 @@
+package com.jarvis.client.data
+
+import com.jarvis.client.net.JarvisJson
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+
+/**
+ * The phone's half of app control: the allow-list, the masked screen read, the
+ * ONE step, and the plain sentences - with no Android in this file, so the JVM
+ * tests can hold every rule.
+ *
+ * The architecture (the owner's decision of 2026-10-19, "enable accessibility
+ * service with control by jarvis as an option in the android app"): **the PC is
+ * the brain and the gate; the phone is the hands.** This file never decides
+ * what to do. It can read the screen into a masked snapshot, hand that snapshot
+ * and ONE proposed step to the PC's `/api/app-control/run` route (which raises
+ * ONE approval card and returns a run id), and then ask `/api/app-control/step`
+ * for the ONE approved step. The phone executes exactly what the route returns
+ * - never a step of its own - and a changed screen ends the run instead of
+ * being retried.
+ *
+ * PATTERNS RE-IMPLEMENTED, NOT COPIED (MIT; credited in THIRD-PARTY-NOTICES.txt
+ * and recorded in .dsh-scratch/RESEARCH-APP-AUTOMATION-REPOS-2026-10-19.md):
+ * the AccessibilityService action set and plan/act/check loop from
+ * GiggleWang/MobileAgent-Android, and the accessibility UI-tree contract from
+ * droidrun/mobilerun. No source code from either project is used.
+ *
+ * NOTHING about a screen is logged: [Snapshot] is built, sent to the owner's
+ * own PC and dropped. The PC's audit records the app and the verb only.
+ */
+object AppControl {
+
+    /** `POST /api/app-control/run` - one plan and ONE approval card on the PC. */
+    const val RUN_PATH = "/api/app-control/run"
+
+    /** `POST /api/app-control/step` - the ONE approved step, or why there is none. */
+    const val STEP_PATH = "/api/app-control/step"
+
+    /** At most this many apps on the owner's list (the PC refuses more). */
+    const val MAX_APPS = 64
+
+    /** Typed text is capped on both sides; the PC refuses anything longer. */
+    const val MAX_TEXT = 200
+
+    /** A snapshot holds at most this many controls, so one screen cannot flood the link. */
+    const val MAX_CONTROLS = 120
+
+    /** Long labels are truncated; a 500-word paragraph is not needed to find a button. */
+    const val MAX_CONTROL_TEXT = 80
+
+    /** The stored allow-list's shape. Missing or unreadable reads as EMPTY, never as everything. */
+    const val STORE_VERSION = 1
+
+    /** The only actions the phone will ever perform for a step. */
+    val ACTIONS = listOf("tap", "swipe", "type", "back", "home")
+
+    // ------------------------------------------------------- plain words ----
+
+    const val OPTION_TITLE = "Let Jarvis control this phone"
+
+    const val OPTION_DETAIL =
+        "Off by default. Jarvis can only act while this is on, only in the apps " +
+            "you add below, and only after you approve ONE step on your PC. " +
+            "Android's own Accessibility switch is separate and must be on too."
+
+    /** The option is stored on THIS phone and never synced, like the notification list. */
+    const val OPTION_STORED = "Saved on this phone only. Your PC is asked before every single step."
+
+    const val ANDROID_TITLE = "Android accessibility service"
+
+    const val ANDROID_DETAIL =
+        "Android needs its own switch as well: Settings -> Accessibility -> Jarvis. " +
+            "Nothing below works until that is on, and turning it off there stops app " +
+            "control immediately. This switch and Android's are separate on purpose."
+
+    const val ANDROID_ON = "Android's Accessibility switch is on."
+
+    const val ANDROID_OFF = "Android's Accessibility switch is off - turn it on in Android's own settings."
+
+    const val ANDROID_UNKNOWN =
+        "Could not read Android's Accessibility switch on this phone. Open Android's " +
+            "settings and check by hand - this screen will not guess."
+
+    const val SNAPSHOT_EMPTY =
+        "No readable controls on this screen right now. Nothing was sent and nothing ran."
+
+    const val NO_ROUTE =
+        "Your PC's Jarvis does not have app control yet (its backend is older). " +
+            "Update Jarvis on the PC, then come back to this screen."
+
+    const val ROUTE_READY = "Your PC has app control. It still asks you before every step."
+
+    const val NO_ANSWER = "Your PC did not answer, so nothing was read and nothing ran."
+
+    const val NOT_YET_SLICE =
+        "This screen and the phone's service are ready. The PC link that asks Jarvis " +
+            "to act - its chat tool - is the next slice, so no step is sent today."
+
+    const val PLAN_LINE =
+        "One step at a time. Jarvis reads the screen, proposes ONE step, and your PC " +
+            "asks you to approve that exact step. A screen that changes after you " +
+            "approve stops the run rather than guessing."
+
+    const val ALLOW_TITLE = "Apps Jarvis may act in"
+
+    const val ALLOW_EMPTY =
+        "None, until you add one. Nothing can be read or done in an app that is not listed."
+
+    const val ALLOW_ONE_AT_A_TIME = "Add one app at a time. Taking one off is instant."
+
+    const val ADD = "Add an app"
+
+    const val CLOSE_LIST = "Close the list"
+
+    const val SEARCH = "Search apps"
+
+    const val LOOKING = "Looking for apps..."
+
+    const val NO_APPS = "No other apps found to add."
+
+    const val NO_MATCH = "No app matches that."
+
+    const val NO_APPS_ADDED = "No apps added yet."
+
+    const val REMOVE = "Remove"
+
+    /** Adding one of these is refused outright, in words, before anything is saved. */
+    const val REFUSE_JARVIS = "Jarvis itself is not an app it may act in, so nothing was added."
+
+    const val REFUSE_PASSWORD_MANAGER =
+        "That looks like a password manager, so nothing was added."
+
+    const val REFUSE_BANKING =
+        "That looks like a bank or payment app, so nothing was added."
+
+    /** The five things a step can be, in the owner's words. */
+    val VERB_WORDS = mapOf(
+        "tap" to "tap a button or a control",
+        "swipe" to "swipe across a control",
+        "type" to "type into the field you approved",
+        "back" to "go back",
+        "home" to "go to the home screen",
+    )
+
+    // ----------------------------------------------------------- refusals --
+
+    /** Why a request may not start. Every one is a plain sentence on screen. */
+    enum class Why {
+        OPTION_OFF,
+        ANDROID_OFF,
+        ANDROID_UNKNOWN,
+        EMPTY,
+        NOT_LISTED,
+        STALE,
+        NO_SERVICE,
+        VERB,
+        PASSWORD,
+        NOT_PLANNED,
+        TARGET_CHANGED,
+    }
+
+    fun said(why: Why): String = when (why) {
+        Why.OPTION_OFF ->
+            "App control is off on this phone. Nothing was read and nothing ran."
+        Why.ANDROID_OFF ->
+            "Android's Accessibility switch for Jarvis is off, so nothing can be read " +
+                "or done. Turn it on in Android's own settings first."
+        Why.ANDROID_UNKNOWN ->
+            "Could not read Android's Accessibility switch, so this phone will not act. " +
+                "Check Android's own settings by hand."
+        Why.EMPTY ->
+            "No apps are allowed on this phone yet, so nothing can be read or done. " +
+                "Add an app first."
+        Why.NOT_LISTED ->
+            "That app is not on your list of apps Jarvis may act in, so nothing was read " +
+                "and nothing ran. Add it in Settings first."
+        Why.STALE ->
+            "The link to your PC is stale, so nothing was read and nothing ran."
+        Why.NO_SERVICE ->
+            "The phone's accessibility service is not connected right now, so nothing " +
+                "can be read or done."
+        Why.VERB ->
+            "That is not one of the actions Jarvis may take (tap, swipe, type, back, home), " +
+                "so nothing ran."
+        Why.PASSWORD ->
+            "That looks like a password or credential field, so Jarvis will not touch it. " +
+                "Nothing was typed."
+        Why.NOT_PLANNED ->
+            "The step that came back is not the one you approved, so Jarvis stopped and " +
+                "did nothing."
+        Why.TARGET_CHANGED ->
+            "The screen changed after you approved it, so Jarvis stopped rather than guess. " +
+                "Nothing ran."
+    }
+
+    // ---------------------------------------------------------- allow-list --
+
+    data class AppEntry(val packageName: String, val label: String)
+
+    data class AddResult(val entries: List<AppEntry>, val error: String?)
+
+    /** A package name: at least two dot-separated parts, letters/digits/underscore, starts with a letter. */
+    fun validPackage(packageName: String?): Boolean {
+        val pkg = packageName?.trim().orEmpty()
+        if (pkg.isEmpty() || pkg.length > 255) return false
+        val parts = pkg.split('.')
+        if (parts.size < 2) return false
+        return parts.all { part ->
+            part.isNotEmpty() && part[0].isLetter() &&
+                part.all { it.isLetterOrDigit() || it == '_' }
+        }
+    }
+
+    fun labelFor(packageName: String, label: String?): String =
+        label?.trim()?.takeIf { it.isNotEmpty() } ?: packageName
+
+    /**
+     * Reads the stored list. Tolerant on purpose: a missing file, bad JSON, a
+     * wrong version or a malformed row reads as the rows that ARE valid, and
+     * anything else is simply not allowed. It never throws and never widens.
+     */
+    fun parseStored(raw: String?): List<AppEntry> {
+        if (raw.isNullOrBlank()) return emptyList()
+        val root = runCatching { JarvisJson.parseToJsonElement(raw) }.getOrNull() as? JsonObject
+            ?: return emptyList()
+        val version = runCatching { root["version"]?.jsonPrimitive?.contentOrNull?.toInt() }
+            .getOrNull() ?: return emptyList()
+        if (version != STORE_VERSION) return emptyList()
+        val apps = runCatching { root["apps"]?.jsonArray }.getOrNull() ?: return emptyList()
+        val seen = LinkedHashMap<String, AppEntry>()
+        for (element in apps) {
+            val row = runCatching { element.jsonObject }.getOrNull() ?: continue
+            val pkg = runCatching { row["package"]?.jsonPrimitive?.contentOrNull }.getOrNull()
+            if (!validPackage(pkg)) continue
+            val label = runCatching { row["label"]?.jsonPrimitive?.contentOrNull }.getOrNull()
+            val clean = pkg!!.trim()
+            seen[clean] = AppEntry(clean, labelFor(clean, label))
+            if (seen.size >= MAX_APPS) break
+        }
+        return seen.values.toList()
+    }
+
+    /** Saves in the one shape [parseStored] reads; sorted, so the file is stable. */
+    fun storeJson(entries: List<AppEntry>): String = buildJsonObject {
+        put("version", STORE_VERSION)
+        put("apps", buildJsonArray {
+            entries.sortedBy { it.packageName }.forEach { entry ->
+                add(buildJsonObject {
+                    put("package", entry.packageName)
+                    put("label", entry.label)
+                })
+            }
+        })
+    }.toString()
+
+    /**
+     * Adds one app. The JDK-free half: the caller has already checked the
+     * phone's own Android category and passed its refusal ([refusedApp]).
+     */
+    fun add(entries: List<AppEntry>, packageName: String, label: String?, refusedApp: String? = null): AddResult {
+        val pkg = packageName.trim()
+        if (!validPackage(pkg)) {
+            return AddResult(entries, "That is not an app package name, so nothing was added.")
+        }
+        if (refusedApp != null) return AddResult(entries, refusedApp)
+        if (entries.any { it.packageName == pkg }) {
+            return AddResult(entries, "That app is already on the list.")
+        }
+        if (entries.size >= MAX_APPS) {
+            return AddResult(entries, "The list is full ($MAX_APPS apps). Take one off first.")
+        }
+        val next = (entries + AppEntry(pkg, labelFor(pkg, label))).sortedBy { it.packageName }
+        return AddResult(next, null)
+    }
+
+    /** Taking one off is instant and needs nothing: it only ever lets Jarvis do less. */
+    fun remove(entries: List<AppEntry>, packageName: String): List<AppEntry> =
+        entries.filterNot { it.packageName == packageName.trim() }
+
+    // ------------------------------------------------------------ snapshot --
+
+    /** One control the screen would show. NEVER a password field. */
+    data class Control(
+        val id: String,
+        val text: String,
+        val cls: String,
+        val bounds: List<Int>,
+    )
+
+    /** What the phone read, one window at a time. The title is the window's own class name. */
+    data class Snapshot(
+        val app: String,
+        val title: String,
+        val controls: List<Control>,
+    )
+
+    /**
+     * The mask, in one place: null means the control is NEVER read. Password
+     * fields are skipped whole (and their children with them in the service),
+     * invisible controls are skipped, and long words are truncated.
+     */
+    fun mask(
+        id: String?,
+        text: String?,
+        cls: String?,
+        bounds: List<Int>,
+        password: Boolean,
+        invisible: Boolean,
+    ): Control? {
+        if (password || invisible) return null
+        val cleanId = id?.trim().orEmpty()
+        val cleanText = text?.trim()?.take(MAX_CONTROL_TEXT).orEmpty()
+        if (cleanId.isEmpty() && cleanText.isEmpty()) return null
+        return Control(cleanId, cleanText, cls?.trim().orEmpty(), bounds.take(4))
+    }
+
+    /** The PC's snapshot read: it may only ever be this, never the raw tree. */
+    fun snapshotJson(snapshot: Snapshot): JsonObject = buildJsonObject {
+        put("app", snapshot.app)
+        put("title", snapshot.title)
+        put("controls", buildJsonArray {
+            snapshot.controls.take(MAX_CONTROLS).forEach { control ->
+                add(buildJsonObject {
+                    put("id", control.id)
+                    put("text", control.text)
+                    put("class", control.cls)
+                    put("bounds", buildJsonArray { control.bounds.take(4).forEach { add(JsonPrimitive(it)) } })
+                })
+            }
+        })
+    }
+
+    // ---------------------------------------------------------------- step --
+
+    /** ONE atomic step. [target] is the control the PC's card names, or null for back/home. */
+    data class Step(val action: String, val target: Control?, val text: String? = null)
+
+    /** The step as the PC's card sees it; text only for `type`, and only up to the cap. */
+    fun stepJson(step: Step): JsonObject = buildJsonObject {
+        put("action", step.action)
+        step.target?.let { target ->
+            put("target", buildJsonObject {
+                put("id", target.id)
+                put("text", target.text)
+                put("class", target.cls)
+                put("bounds", buildJsonArray { target.bounds.take(4).forEach { add(JsonPrimitive(it)) } })
+            })
+        }
+        if (step.action == "type") put("text", step.text.orEmpty().take(MAX_TEXT))
+    }
+
+    /** `POST /api/app-control/run`'s body. The allow-list rides with every request. */
+    fun runBody(allowed: List<AppEntry>, app: String, appName: String, step: Step, snapshot: Snapshot): String =
+        buildJsonObject {
+            put("allowed", buildJsonArray { allowed.forEach { add(JsonPrimitive(it.packageName)) } })
+            put("app", app)
+            put("app_name", appName)
+            put("step", stepJson(step))
+            put("snapshot", snapshotJson(snapshot))
+        }.toString()
+
+    /** `POST /api/app-control/step`'s body with a fresh snapshot. */
+    fun stepBody(run: String, snapshot: Snapshot): String = buildJsonObject {
+        put("run", run)
+        put("snapshot", snapshotJson(snapshot))
+    }.toString()
+
+    /** `{"run": id, "stop": true}` - stop is the safe direction and needs no card. */
+    fun stopBody(run: String): String = buildJsonObject {
+        put("run", run)
+        put("stop", true)
+    }.toString()
+
+    /** `{"run": id, "result": "done"|"failed"}` after doing the approved step. */
+    fun resultBody(run: String, failed: Boolean): String = buildJsonObject {
+        put("run", run)
+        put("result", if (failed) "failed" else "done")
+    }.toString()
+
+    /** The probe that tells an older PC (no route) from a real one, without acting. */
+    fun probeBody(): String = buildJsonObject {
+        put("run", "")
+        put("snapshot", buildJsonObject {
+            put("app", "")
+            put("title", "")
+            put("controls", buildJsonArray { })
+        })
+    }.toString()
+
+    /**
+     * The step the phone posts must be the one the route approved: the same
+     * action, the same control, and the same text. Compared field by field
+     * because the PC answers in its own JSON, not by identity.
+     */
+    fun matches(planned: Step, returned: Step): Boolean {
+        if (planned.action != returned.action) return false
+        if (planned.action == "back" || planned.action == "home") {
+            return planned.target == null && returned.target == null
+        }
+        val a = planned.target ?: return false
+        val b = returned.target ?: return false
+        if (a.id != b.id) return false
+        if (a.text != b.text) return false
+        if (planned.action == "type" && planned.text.orEmpty() != returned.text.orEmpty()) return false
+        return true
+    }
+
+    /** Why this phone may not start a run at all, or null when it may. */
+    fun whyNotAllowed(
+        optionOn: Boolean,
+        android: AndroidState,
+        allowed: List<AppEntry>,
+        foreground: String?,
+        stale: Boolean,
+        serviceConnected: Boolean,
+    ): Why? = when {
+        !optionOn -> Why.OPTION_OFF
+        android != AndroidState.ON -> if (android == AndroidState.OFF) Why.ANDROID_OFF else Why.ANDROID_UNKNOWN
+        !serviceConnected -> Why.NO_SERVICE
+        allowed.isEmpty() -> Why.EMPTY
+        stale -> Why.STALE
+        foreground.isNullOrBlank() -> Why.NO_SERVICE
+        allowed.none { it.packageName == foreground } -> Why.NOT_LISTED
+        else -> null
+    }
+
+    // ------------------------------------------------------ reply parsing --
+
+    /** The PC's answer to `run`. */
+    sealed interface RunReply {
+        data class Pending(val runId: String) : RunReply
+        data class Off(val sentence: String) : RunReply
+        data class Refused(val sentence: String) : RunReply
+        data class Failed(val sentence: String) : RunReply
+        data object RouteMissing : RunReply
+        data object Unknown : RunReply
+    }
+
+    /** The PC's answer to `step`. */
+    sealed interface StepReply {
+        data object Pending : StepReply
+        data class Step(val step: AppControl.Step) : StepReply
+        data class Stopped(val sentence: String) : StepReply
+        data class Ended(val status: String, val sentence: String) : StepReply
+        data class Delivered(val sentence: String) : StepReply
+        data object RouteMissing : StepReply
+        data object Unknown : StepReply
+        data class Failed(val sentence: String) : StepReply
+    }
+
+    private fun bodyText(body: JsonObject?, key: String): String? =
+        body?.let { runCatching { it[key]?.jsonPrimitive?.contentOrNull }.getOrNull() }
+
+    private fun errorSentence(body: JsonObject?, fallback: String): String =
+        bodyText(body, "error")?.takeIf { it.isNotBlank() } ?: fallback
+
+    /** The PC's own plain sentence, or this file's fixed words - never a stack trace. */
+    fun parseRun(status: Int, body: JsonObject?): RunReply {
+        val ok = body?.let { runCatching { it["ok"]?.jsonPrimitive?.contentOrNull }.getOrNull() }
+        val runId = bodyText(body, "run")
+        if (status == 202 && ok == "true" && !runId.isNullOrBlank()) return RunReply.Pending(runId)
+        if (status == 409) {
+            val available = body?.let { runCatching { it["available"]?.jsonPrimitive?.contentOrNull }.getOrNull() }
+            if (available == "false") return RunReply.Off(errorSentence(body, ""))
+            return RunReply.Refused(errorSentence(body, ""))
+        }
+        if (status == 404) return RunReply.RouteMissing
+        if (status == 400 || status == 200) {
+            val text = errorSentence(body, "")
+            return if (text.isNotBlank()) RunReply.Failed(text) else RunReply.Unknown
+        }
+        return RunReply.Unknown
+    }
+
+    /** The PC's answer to `step`; a 200 with `status: step` carries the ONE approved step. */
+    fun parseStep(status: Int, body: JsonObject?): StepReply {
+        if (status == 404) return StepReply.RouteMissing
+        if (body == null) return StepReply.Unknown
+        val statusWord = bodyText(body, "status") ?: return StepReply.Unknown
+        return when (statusWord) {
+            "pending" -> StepReply.Pending
+            "step" -> {
+                val obj = body["step"] as? JsonObject ?: return StepReply.Unknown
+                val action = bodyText(obj, "action") ?: return StepReply.Unknown
+                val target = (obj["target"] as? JsonObject)?.let { t ->
+                    Control(
+                        id = bodyText(t, "id").orEmpty(),
+                        text = bodyText(t, "text").orEmpty(),
+                        cls = bodyText(t, "class").orEmpty(),
+                        bounds = runCatching {
+                            t["bounds"]!!.jsonArray.map { it.jsonPrimitive.content.toInt() }
+                        }.getOrDefault(emptyList()),
+                    )
+                }
+                StepReply.Step(Step(action, target, bodyText(obj, "text")))
+            }
+            "stopped" -> StepReply.Stopped(errorSentence(body, said(Why.TARGET_CHANGED)))
+            "denied", "timed_out", "refused", "failed" -> StepReply.Ended(statusWord, errorSentence(body, ""))
+            "delivered" -> StepReply.Delivered(errorSentence(body, ""))
+            else -> StepReply.Failed(errorSentence(body, ""))
+        }
+    }
+
+    // ------------------------------------------------- Android's own switch --
+
+    /** What Android's read-only settings answer says, never a guess. */
+    enum class AndroidState { ON, OFF, CANNOT_READ }
+
+    /**
+     * Reads `Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES`, which is
+     * `pkg/cls:pkg/cls:...` (a user suffix may follow each). Read-only. A
+     * service is ON when its own component appears; an unreadable answer is
+     * [AndroidState.CANNOT_READ], never OFF-guessed.
+     */
+    fun androidState(raw: String?, component: String): AndroidState {
+        val answer = raw ?: return AndroidState.CANNOT_READ
+        val wanted = normalizeComponent(component)
+        if (wanted.isEmpty()) return AndroidState.CANNOT_READ
+        val entries = answer.split(':').map { it.trim() }.filter { it.isNotEmpty() }
+        val on = entries.any { entry ->
+            // Each entry is pkg/cls; a user suffix may follow it. A class stored
+            // with Android's own "." shorthand is expanded before comparing.
+            val withoutUser = entry.substringBefore(';').substringBefore(' ')
+            normalizeComponent(withoutUser).equals(wanted, ignoreCase = true)
+        }
+        return if (on) AndroidState.ON else AndroidState.OFF
+    }
+
+    /** `pkg/.service.X` becomes `pkg/com.pkg.service.X`, so both spellings compare equal. */
+    private fun normalizeComponent(component: String): String {
+        val clean = component.trim()
+        val slash = clean.indexOf('/')
+        if (slash <= 0 || slash == clean.length - 1) return clean
+        val pkg = clean.substring(0, slash)
+        val cls = clean.substring(slash + 1)
+        return if (cls.startsWith(".")) "$pkg/$pkg$cls" else "$pkg/$cls"
+    }
+
+    /** The component Android must have enabled, from the app's own package and class names. */
+    fun component(packageName: String, serviceClassName: String): String =
+        "$packageName/$serviceClassName"
+}

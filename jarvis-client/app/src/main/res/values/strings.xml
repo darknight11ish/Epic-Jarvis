@@ -125,4 +125,13 @@
          the shade drew "Jarvis", so a tile with Jarvis's own name on it
          silently muted Jarvis. -->
     <string name="link_tile_label">Mute Jarvis</string>
+
+    <!-- App control's accessibility service (service/JarvisAccessibilityService.kt;
+         res/xml/accessibility_service_config.xml; the owner's decision of
+         2026-10-19). Android shows these words on ITS OWN Accessibility screen,
+         so they say plainly what the service may do, that it is off unless the
+         owner turns it on, and that the PC asks before every step. -->
+    <string name="accessibility_service_label">Jarvis app control</string>
+    <string name="accessibility_service_summary">Let Jarvis read the screen and perform one approved step</string>
+    <string name="accessibility_service_description">Off unless you turn it on here. When on, Jarvis can read the controls in the app in front - never a password field - and send a masked copy to your own PC, so your PC can show you ONE step to approve. Nothing is tapped, typed or swiped until you approve that step on your PC, and a screen that changes stops the run. Jarvis never decides anything by itself.</string>
 </resources>

@@ -43,6 +43,12 @@ object SettingsJump {
     val ENTRIES: List<Entry> = listOf(
         Entry("Voice", "voice"),
         Entry("Security", "security"),
+        // "App control" (the owner's decision of 2026-10-19: the accessibility
+        // service as an OPTION in this app, with an EMPTY allow-list he fills
+        // in by hand). A phone-only section, so the label is its own title -
+        // the desktop has no accessibility service and no jump entry to copy
+        // words from.
+        Entry("App control", "app-control"),
         Entry("Show or hide menus", "menu-visibility"),
         Entry("Appearance", "appearance"),
         // "Approval cards" (the owner's request of 2026-10-09): how much of a

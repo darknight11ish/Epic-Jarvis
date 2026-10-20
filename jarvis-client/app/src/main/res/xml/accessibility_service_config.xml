@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Jarvis's app-control accessibility service (the phone's HANDS; the PC is the
+  brain and the gate - see backend/app-control.patch and data/AppControl.kt).
+
+  WHAT IT MAY DO, and nothing else:
+  - retrieve window content, so one screen can be read into a MASKED snapshot
+    (password fields are skipped whole, invisible controls are skipped, long
+    text is truncated) - the snapshot goes only to the owner's own PC;
+  - perform gestures, for the one tap or swipe a PC-approved step names;
+  - report view ids, so the PC's card can name the exact control;
+  - retrieve interactive windows, so the window in front is the one read.
+
+  The service never announces itself as a "notification" and never types by
+  itself: type() is one approved step, into a non-password editable field.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowsChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows"
+    android:canPerformGestures="true"
+    android:canRetrieveWindowContent="true"
+    android:description="@string/accessibility_service_description"
+    android:notificationTimeout="300"
+    android:settingsActivity="com.jarvis.client.MainActivity"
+    android:summary="@string/accessibility_service_summary" />

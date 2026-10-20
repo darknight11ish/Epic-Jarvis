@@ -152,6 +152,22 @@ object SettingsSearch {
             // browser row names net/BrowserEngine.kt for its heading.
             source = SCREEN + listOf(PLATES + "SecurityScreen.kt"),
         ),
+        // "App control" (the owner's decision of 2026-10-19: "enable
+        // accessibility service with control by jarvis as an option in the
+        // android app"). No `titles`: its one switch's title is drawn from
+        // data/AppControl.kt's constants rather than a literal in the plate,
+        // and the switch-name walk only covers the two rows it lists.
+        Row(
+            key = "app-control", title = "App control",
+            label = "Accessibility service; let Jarvis control this phone; " +
+                "apps Jarvis may act in; allow-list; one approval card per step",
+            quotes = listOf(
+                "Off by default. Jarvis can only act while this is on, only in the apps " +
+                    "you add below, and only after you approve ONE step on your PC. " +
+                    "Android's own Accessibility switch is separate and must be on too.",
+            ),
+            source = SCREEN + listOf(PLATES + "AppControlPlate.kt", "data/AppControl.kt"),
+        ),
         Row(
             key = "menu-visibility", title = "Show or hide menus",
             // "Fold a card away" was the phrase here until 2026-10-13, found by

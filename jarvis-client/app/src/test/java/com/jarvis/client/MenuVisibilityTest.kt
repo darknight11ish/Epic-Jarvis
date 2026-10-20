@@ -449,8 +449,12 @@ class MenuVisibilityTest {
         // desktop-only because the PC's four switches and quiet hours are the
         // PC's (docs/SETTINGS-COVERAGE-AUDIT-2026-10-09.md).
         // The assertion is unchanged: any OTHER undecided key still fails it.
+        // "app-control" joined them on 2026-10-19: the phone's accessibility
+        // service is phone-only, so no menu id exists for it in the desktop's
+        // catalogue and the PC has no menu to hide it under. The row is always
+        // drawn, like Security and Limits.
         val undecidedS = settingsKeys - MenuPlaces.SETTINGS.keys -
-            setOf("menus-hidden", "tail", "jump-list", "limits", "jarvis-notify")
+            setOf("menus-hidden", "tail", "jump-list", "limits", "jarvis-notify", "app-control")
         assertTrue("Settings items with no decision in MenuPlaces: $undecidedS", undecidedS.isEmpty())
     }
 

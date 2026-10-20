@@ -117,12 +117,18 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     "search" to SettingsJump.SEARCH_KEY_INDEX,
     "voice" to 2,
     "security" to 3,
+    // "App control" (the owner's decision of 2026-10-19): the accessibility
+    // service as an OPTION, its allow-list and the two switches that must
+    // agree. It sits right after Security - the other "what may Jarvis do with
+    // this phone" section - so every number below it moved down by one, and
+    // SettingsJumpTest holds the map to the screen's real draw order.
+    "app-control" to 4,
     // "Show or hide menus" (docs/JARVIS-API.md section 109) sits right after Security.
-    "menu-visibility" to 4,
-    "appearance-card" to 5,
+    "menu-visibility" to 5,
+    "appearance-card" to 6,
     // "Animal options" lives inside Appearance on the phone (2026-09-28):
     // the Appearance row, whose button opens it.
-    "animal-options" to 5,
+    "animal-options" to 6,
     // "Approval cards" (the owner's request of 2026-10-09: "a more simple
     // summary, with an explain more button ... and approval card preferences
     // such as this should be changeable in the settings"). Its own row, right
@@ -131,39 +137,39 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     // above it. The setting itself is the PC's (GET /api/card-prefs,
     // backend/jarvis_card_summary.py), so the phone and the desktop read one
     // value; every index below this one moved down by one on that day.
-    "approval-cards" to 6,
-    "floating-avatar" to 7,
-    "manner" to 8,
-    "web-search" to 9,
+    "approval-cards" to 7,
+    "floating-avatar" to 8,
+    "manner" to 9,
+    "web-search" to 10,
     // "Prompt coach" (docs/JARVIS-API.md section 119) sits right after Web search.
-    "prompt-coach" to 10,
-    "asks-first" to 11,
-    "reach" to 12,
-    "email-sending" to 13,
-    "folders" to 14,
-    "backup" to 15,
-    "watch-notify" to 16,
-    "phone-notify" to 17,
+    "prompt-coach" to 11,
+    "asks-first" to 12,
+    "reach" to 13,
+    "email-sending" to 14,
+    "folders" to 15,
+    "backup" to 16,
+    "watch-notify" to 17,
+    "phone-notify" to 18,
     // "Notifications from Jarvis" (the owner's decision of 2026-10-09, after
     // docs/SETTINGS-COVERAGE-AUDIT-2026-10-09.md's GAP 1): one row pointing at
     // Android's own per-app notification screen, not a second copy of the PC's
     // Notifications card. It sits with the two other notification rows, which
     // moved every index below it down by one on that day.
-    "jarvis-notify" to 18,
-    "screen-look" to 19,
-    "browser-engine" to 20,
+    "jarvis-notify" to 19,
+    "screen-look" to 20,
+    "browser-engine" to 21,
     // How long the captcha hand-off stays on offer (the owner's decision of
     // 2026-10-08). Sits with the browser it belongs to, so the two exposure
     // rows are together; every index below it moved down by one on that day,
     // and by one more when the search box landed above the jump list.
-    "handoff" to 21,
+    "handoff" to 22,
     // What a captcha does about the browser window it is blocking (the owner's
     // decision of 2026-10-09). Sits with the hand-off row above, so the two
     // captcha rows are together; every index below it moved down by one - and
     // by one more for "Notifications from Jarvis" above it.
-    "handoff-front" to 22,
-    "devices" to 23,
-    "quick-tiles" to 24,
+    "handoff-front" to 23,
+    "devices" to 24,
+    "quick-tiles" to 25,
     // "Screen refresh rate" (2026-10-09): the panel's rate while Jarvis is on
     // screen (ScreenRatePlate.kt, data/ScreenRate.kt). Its own row, phone-only,
     // and it sits immediately above "Limits" on the screen - so Limits' own
@@ -172,22 +178,22 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     // screen, item by item`, which reads this map against the screen's real row
     // order - and by backend/test_settings_registry.py, which does the same from
     // the Python side. Both moved down one more for "Approval cards" above.
-    "screen-rate" to 25,
+    "screen-rate" to 26,
     // "Limits and how often Jarvis does things" (the PC's own
     // backend/jarvis_limits.py table, 2026-10-08; LimitsPlate.kt) sits last
     // but one: it is about how much Jarvis does rather than about one feature.
-    "limits" to 26,
+    "limits" to 27,
     // "A new conversation starts after" (the audit of 2026-10-08): the one
     // timing the owner could not change anywhere. It is added BELOW "limits"
     // rather than beside "How Jarvis talks", on purpose: an insert in the
     // middle moves every index under it, and the limits work in flight owns
     // those numbers and their own test (`LimitsTest`'s "the index map has no
     // limits row" pins 25). A row added at the end moves nothing.
-    "idle-new" to 27,
+    "idle-new" to 28,
     // "Data and maths sandbox" (LM-1C, 2026-10-18): whether the AI model is
     // offered the small read-only Python tool. A row added at the end moves no
     // other number; it sits under Idle new on the screen and in the jump list.
-    "sandbox" to 28,
+    "sandbox" to 29,
 )
 
 /**
@@ -509,6 +515,15 @@ fun SettingsScreen(
                     }
                 }
             }
+
+// "App control" (the owner's decision of 2026-10-19: the accessibility
+// service as an OPTION in this app, with an EMPTY allow-list he fills in by
+// hand). No menu id: registering one is a backend change, and this screen is
+// the phone's half of a feature whose PC half is its own patch, so the row is
+// always drawn. It never decides anything - every step still needs ONE card on
+// the PC. Its own line carries `drawn("app-control")`, the same search guard
+// every other section has (SettingsSearchTest holds that).
+            if (drawn("app-control")) item(key = "app-control") { AppControlSection(stale = stale) }
 
 // "Show or hide menus" (docs/JARVIS-API.md section 109): never hideable itself.
             if (drawn("menu-visibility")) item(key = "menu-visibility") { MenuVisibilitySection() }

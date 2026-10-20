@@ -1,6 +1,7 @@
 package com.jarvis.client.net
 
 import android.util.Log
+import com.jarvis.client.data.AppControl
 import com.jarvis.client.data.ClientSettings
 import com.jarvis.client.data.TokenStore
 import kotlinx.coroutines.Dispatchers
@@ -3758,6 +3759,53 @@ class JarvisApi(
         503 -> ApiError.NotAvailable
         else -> ApiError.Server(resp.code, resp.body?.string().orEmpty().take(200))
     }
+
+    // ------------------------------------------------ app control (S1) ----
+
+    /**
+     * `POST /api/app-control/run` - the phone's half of app control (the PC's
+     * route, backend/app-control.patch, is the gate): it carries the owner's
+     * allow-list, ONE proposed step and the masked screenshot-free snapshot,
+     * and the PC answers with a run id after raising ONE approval card.
+     *
+     * The RAW status and body are returned on purpose: a 202 is the card
+     * waiting, a 409 is "switched off / not on the list / refused", a 400 is a
+     * malformed plan, and a 404 means the PC's backend is older than this
+     * screen. Each carries its own plain sentence, and the caller shows it -
+     * this client never invents a reason.
+     */
+    suspend fun appControlRun(json: String): Pair<Int, JsonObject?> =
+        appControlPost(AppControl.RUN_PATH, json)
+
+    /**
+     * `POST /api/app-control/step` - ask for the ONE approved step (with a
+     * fresh masked snapshot), report `done`/`failed`, or stop. Raw status and
+     * body for the same reason as [appControlRun]; a 404 with "no such route"
+     * means an older PC, not a run that vanished.
+     */
+    suspend fun appControlStep(json: String): Pair<Int, JsonObject?> =
+        appControlPost(AppControl.STEP_PATH, json)
+
+    /**
+     * The one transport both app-control routes use. Status 0 means nothing
+     * answered. Nothing about the body is logged: it carries the screen's
+     * words and the typed text.
+     */
+    private suspend fun appControlPost(path: String, json: String): Pair<Int, JsonObject?> =
+        withContext(Dispatchers.IO) {
+            val target = url(path) ?: return@withContext 0 to null
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching {
+                        JarvisJson.parseToJsonElement(text) as? JsonObject
+                    }.getOrNull()
+                    resp.code to obj
+                }
+            }.getOrElse { 0 to null }
+        }
 
     companion object {
         private const val TAG = "JarvisApi"
