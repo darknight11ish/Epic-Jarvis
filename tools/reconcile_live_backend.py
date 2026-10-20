@@ -1,0 +1,982 @@
+#!/usr/bin/env python3
+"""reconcile_live_backend.py - deploy the repository's backend onto a live Jarvis folder, safely.
+
+WHY THIS EXISTS
+    The 2026-10-20 deploy was done by two hand-written throwaway scripts
+    (`.dsh-scratch/reconcile-hud-2026-10-20.py`, `reconcile-setup-2026-10-20.py`). This
+    is that work made reusable, and it answers Gemini's review: sync what the repository
+    ships, add only the HUD deltas that are genuinely missing, rehearse before swapping,
+    back up everything it overwrites, clear stale bytecode, add the ready plug-ins, then
+    prove the routes with the live server.
+
+    It is DRY-RUN BY DEFAULT. `--apply` is the only thing that writes.
+
+WHAT IT DOES, IN ORDER (see --help and the summary it prints)
+
+    1. SHIPPED SYNC. Reads the authoritative `$SHIPPED` list out of
+       `scripts/apply-patches.ps1` (the same extraction the deploy used), flattens
+       `rebuilt/<name>` to the live base name, compares each file with
+       `origin/main:backend/<path>` BY BYTES, and copies only changed or missing files.
+       Every file it overwrites is first copied into
+       `<live>/_jarvis-deploy-backup-tool-<stamp>/`. It writes the repository's bytes
+       exactly, so LF stays LF and no line-ending rewriting happens.
+       `jarvis-backend/*` is NEVER copied over live: that folder is a stale 2026-10-14
+       snapshot (`.dsh-scratch/LINEAGE-CORRECTION-2026-10-20.md`), not a runtime tree.
+
+    2. HUD DELTAS for the five patched base files (`jarvis_hud.py`, `jarvis_gate.py`,
+       `jarvis_extract.py`, `jarvis_models.py`, `jarvis_skills.py`). Those files are
+       never replaced, because the live copies are newer than the published base. For
+       every `.patch` in `$PATCHES` that touches one of them, the tool decides
+       ALREADY_PRESENT from that patch's distinctive added lines; when absent it inserts
+       the patch's added lines at the logical anchor the stack uses. The anchors are a
+       small data table (`DELTA_TABLE`) - today app-control's route block before
+       `if route == "/api/memory/decide":`, setup's install block and plugin-loader's
+       block in their stack order. A patch that is absent, touches a patched file, and
+       has no anchor rule is REFUSED loudly: the tool changes nothing and names the
+       patch, the file and what it would need. A missing or ambiguous anchor is refused
+       the same way - it never guesses.
+
+    3. REHEARSAL. Every staged Python file is compiled with `py_compile` before any live
+       file is touched. If compilation fails, nothing is written.
+
+    4. PYCACHE PURGE. `__pycache__/*.pyc` in the live folder is deleted after the write,
+       so a changed module cannot run from stale bytecode (the `jarvis_speech` trap).
+
+    5. READY PLUG-INS. Every `plugins/ready/<name>/plugin.json` that is not already in
+       `<live>/jarvis_plugins/<name>` is added by running
+       `scripts/add-plugin.ps1 -BackendPath <live> -Name <name>` non-interactively.
+       One safety guard: if the live `jarvis_hud.py` already calls that module's own
+       `install()` (the patch stack wired the feature), the folder is NOT added - a
+       second call would double-wire the same feature - and the run says SKIP, with the
+       module named. Only genuinely unwired ready plug-ins are added. `--skip-plugins`
+       leaves this step out.
+
+    6. ROUTE PROBES. With the HUD token read by `python jarvis_token_store.py show` in
+       the live folder (never printed), it sends `X-Jarvis-Client: hud` and probes:
+         GET  /api/setup            -> 200
+         GET  /api/media-index      -> 200, only when the media-index plug-in is present
+         POST /api/app-control/run  -> 409 while `[app_control]` is absent (it may be)
+         GET  /api/voice/status     -> 200 and `gate.training` present
+       It prints PASS / FAIL / SKIP per probe and exits non-zero if an expected probe
+       fails.
+
+    A second `--apply` on an already-current tree changes nothing and all probes pass.
+
+WHAT IT DOES NOT DO
+    * It never runs the patch script and never edits `scripts/apply-patches.ps1`.
+    * It never copies `jarvis-backend/*` over live and has no code path that reads it.
+    * It never writes a token, prints one, or puts one in the report.
+    * It does not restart Jarvis; restart after it and read the start-up banner.
+    * It does not handle the non-Python "beside-files" (requirements.lock etc.) that
+      apply-patches.ps1 carries; the $SHIPPED list is the contract this tool follows.
+
+USAGE
+    py -3 tools/reconcile_live_backend.py --backend-path "<live backend>"            # dry run
+    py -3 tools/reconcile_live_backend.py --backend-path "<live backend>" --apply
+    py -3 tools/reconcile_live_backend.py --backend-path ... --apply --skip-plugins
+
+EXIT CODES
+    0 success (dry run planned cleanly, or apply + all probes PASS)
+    1 a plugin add or a route probe failed
+    2 refused before writing (bad arguments, unknown HUD delta, missing anchor, rehearsal)
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import py_compile
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+from dataclasses import dataclass, field
+from pathlib import Path, PurePosixPath
+from typing import Callable, Iterable, Optional
+
+# ---------------------------------------------------------------------------
+#   Constants that describe the repository's deploy contract
+# ---------------------------------------------------------------------------
+
+#: The five patched base files: the live copies are newer, so they are never replaced.
+PATCHED_FILES = ("jarvis_hud.py", "jarvis_gate.py", "jarvis_extract.py",
+                 "jarvis_models.py", "jarvis_skills.py")
+
+#: Where the stack puts the setup block: before the plugin-loader block, which is LAST.
+PLUGIN_LOADER_MARKER = "    # plugin-loader.patch (this branch)."
+
+#: The POST route-dispatch line app-control's route block goes in front of.
+APP_CONTROL_ANCHOR = '        if route == "/api/memory/decide":'
+
+#: The line plugin-loader's install block goes in front of.
+BEFORE_SOCKET = "    # Before the main socket, so the banner lists every address together."
+
+#: The data-driven HUD-delta table. Each entry says, for one patch and one patched file:
+#:   probes: distinctive post-image lines; ALL must be in the live file to count as present
+#:   anchor: the exact line the patch's added lines are inserted BEFORE (must appear once)
+#: A patch touching a patched file that is absent and has no entry here is refused, not
+#: guessed. Adding a new HUD patch is one small entry, not new code.
+DELTA_TABLE = {
+    "app-control.patch": {
+        "jarvis_hud.py": {
+            "probes": ('"/api/app-control/run"', '"/api/app-control/step"'),
+            "anchor": APP_CONTROL_ANCHOR,
+        },
+    },
+    "setup.patch": {
+        "jarvis_hud.py": {
+            "probes": ("/api/setup", "jarvis_setup.install("),
+            "anchor": PLUGIN_LOADER_MARKER,
+        },
+    },
+    "plugin-loader.patch": {
+        "jarvis_hud.py": {
+            "probes": ("plugin-loader.patch (this branch)", "jarvis_plugins.install("),
+            "anchor": BEFORE_SOCKET,
+        },
+    },
+}
+
+#: Lines too generic to prove a patch is present.
+_GENERIC_PROBES = frozenset({
+    "try:", "except Exception:", "except Exception as exc:", "pass", "return True",
+    "return False", "import os", "import sys", "import json", "else:", "endif",
+})
+
+#: A file that must never be sourced from the base folder (stale snapshot).
+_NEVER_FROM_BASE = ("jarvis-backend/",)
+
+BACKUP_PREFIX = "_jarvis-deploy-backup-tool-"
+
+CLIENT_HEADER = "X-Jarvis-Client"
+TOKEN_HEADER = "X-Jarvis-Token"
+CLIENT_VALUE = "hud"
+
+
+class Refused(Exception):
+    """The deploy will not start or will not continue; nothing has been written."""
+
+
+@dataclass
+class ShippedAction:
+    repo_path: str          # e.g. "rebuilt/jarvis_compute.py"
+    live_name: str          # e.g. "jarvis_compute.py"
+    status: str             # "add" | "update" | "unchanged"
+    blob: Optional[bytes] = None
+
+
+@dataclass
+class DeltaAction:
+    patch: str
+    file: str
+    status: str             # "already" | "insert"
+    lines: tuple = ()
+    anchor: str = ""
+
+
+@dataclass
+class Plan:
+    shipped: list = field(default_factory=list)
+    deltas: list = field(default_factory=list)
+    staged: dict = field(default_factory=dict)   # file -> new text, only for changed files
+    refusals: list = field(default_factory=list)
+    pycache: list = field(default_factory=list)
+    plugins_missing: list = field(default_factory=list)
+    plugins_present: list = field(default_factory=list)
+    plugins_wired: list = field(default_factory=list)
+    broken_plugins: list = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+#   Reading the authoritative lists out of apply-patches.ps1
+# ---------------------------------------------------------------------------
+
+_LIST_START = re.compile(r"^\s*\$([A-Za-z_][A-Za-z0-9_]*)\s*=\s*@\(\s*$")
+_QUOTED = re.compile(r"""^\s*['"]([^'"]+)['"]""")
+
+
+def parse_powershell_list(text: str, variable: str) -> list:
+    """The quoted first item of every non-comment line of `$<variable> = @( ... )`.
+
+    This is the same extraction apply-patches.ps1's own `$SHIPPED` consumers use: one
+    quoted file name per line, comments and blank lines ignored, a trailing comment
+    after the quote ignored. It refuses a variable that is not there or an unterminated
+    block, because silently reading an empty list would skip the whole sync."""
+    marker = f"${variable} = @("
+    start = text.find(marker)
+    if start < 0:
+        raise Refused(f"scripts/apply-patches.ps1 has no ${variable} = @( block")
+    start += len(marker)
+    end = text.find("\n)", start)
+    if end < 0:
+        raise Refused(f"the ${variable} list is not closed with a line containing only ')'")
+    out = []
+    for line in text[start:end].splitlines():
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        match = _QUOTED.match(s)
+        if match:
+            out.append(match.group(1))
+    if not out:
+        raise Refused(f"the ${variable} list parsed as empty")
+    return out
+
+
+def read_patch_lists(repo: Path) -> tuple:
+    script = Path(repo) / "scripts" / "apply-patches.ps1"
+    if not script.is_file():
+        raise Refused(f"no scripts/apply-patches.ps1 under {repo}")
+    text = script.read_text(encoding="utf-8")
+    return parse_powershell_list(text, "SHIPPED"), parse_powershell_list(text, "PATCHES")
+
+
+def flatten_shipped(entries: Iterable[str]) -> list:
+    """[(repo_path, live_name)] for the $SHIPPED entries.
+
+    `rebuilt/<name>` lands as `<name>` beside jarvis_hud.py on the live PC. Every other
+    entry is already a bare name. Absolute paths, `..` and duplicates are refused."""
+    out = []
+    seen = set()
+    for entry in entries:
+        repo_path = str(entry).replace("\\", "/")
+        if repo_path.startswith(_NEVER_FROM_BASE):
+            raise Refused(f"the $SHIPPED list names {repo_path!r}; the base folder must "
+                          f"never be deployed over live")
+        posix = PurePosixPath(repo_path)
+        if (repo_path.startswith("/") or ":" in repo_path or posix.is_absolute()
+                or ".." in posix.parts or not posix.name):
+            raise Refused(f"the $SHIPPED entry {entry!r} is not a safe relative path")
+        live_name = posix.name
+        if live_name in seen:
+            raise Refused(f"the $SHIPPED list names {live_name!r} twice")
+        seen.add(live_name)
+        out.append((repo_path, live_name))
+    return out
+
+
+# ---------------------------------------------------------------------------
+#   Git and the shipped-byte comparison
+# ---------------------------------------------------------------------------
+
+def git_show(repo: Path, ref: str, repo_path: str) -> bytes:
+    """`git show <ref>:backend/<repo_path>` as bytes - the exact blob, no checkout."""
+    full = f"{ref}:backend/{repo_path}"
+    try:
+        proc = subprocess.run(["git", "-C", str(repo), "show", full],
+                              capture_output=True, timeout=120)
+    except Exception as exc:                                  # noqa: BLE001
+        raise Refused(f"could not run git show {full} ({type(exc).__name__})") from exc
+    if proc.returncode != 0:
+        msg = (proc.stderr or b"").decode("utf-8", "replace").strip()
+        raise Refused(f"git show {full} failed: {msg or 'no such blob'}")
+    return proc.stdout
+
+
+def plan_shipped(repo: Path, ref: str, live: Path, shipped: list,
+                 show: Optional[Callable] = None) -> list:
+    """Compare every shipped file's bytes with the ref; copy only changed/missing."""
+    show = show or git_show
+    actions = []
+    for repo_path, live_name in flatten_shipped(shipped):
+        blob = show(repo, ref, repo_path)
+        target = Path(live) / live_name
+        if not target.is_file():
+            actions.append(ShippedAction(repo_path, live_name, "add", blob))
+            continue
+        current = target.read_bytes()
+        status = "unchanged" if current == blob else "update"
+        actions.append(ShippedAction(repo_path, live_name, status, blob))
+    return actions
+
+
+# ---------------------------------------------------------------------------
+#   Unified-diff parsing and the HUD-delta decision
+# ---------------------------------------------------------------------------
+
+_FILE_HEADER = re.compile(r"^--- a/(\S+)\s*$")
+
+
+def parse_patch_files(patch_text: str) -> dict:
+    """{file: {"added": [...], "removed": [...]}} from one unified diff.
+
+    Only `+`/`-` body lines are collected (the `+++ b/...` and `--- a/...` headers are
+    not body lines). A patch that touches several files is handled section by section."""
+    files = {}
+    current = None
+    for line in str(patch_text).splitlines():
+        header = _FILE_HEADER.match(line)
+        if header:
+            current = header.group(1)
+            files.setdefault(current, {"added": [], "removed": []})
+            continue
+        if current is None:
+            continue
+        if line.startswith("+") and not line.startswith("+++"):
+            files[current]["added"].append(line[1:])
+        elif line.startswith("-") and not line.startswith("---"):
+            files[current]["removed"].append(line[1:])
+    return files
+
+
+def probe_candidates(added: Iterable[str], limit: int = 3) -> tuple:
+    """The most distinctive added lines of one patch/file, best first.
+
+    A line is distinctive when it is long enough to mean something and is not one of the
+    generic Python shapes every patch contains. Routes and install() calls rank highest."""
+    scored = []
+    seen = set()
+    for raw in added:
+        s = str(raw).strip()
+        if len(s) < 12 or s in _GENERIC_PROBES or s in seen:
+            continue
+        seen.add(s)
+        score = 0
+        if "/api/" in s:
+            score += 4
+        if "install(" in s:
+            score += 3
+        if s.startswith(("def ", "class ")):
+            score += 2
+        if '"' in s or "'" in s:
+            score += 1
+        score += min(len(s), 120) / 200.0
+        scored.append((score, s))
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    return tuple(s for _score, s in scored[:limit])
+
+
+def patch_present(patch: str, target: str, added: Iterable[str], live_text: str,
+                  table: Optional[dict] = None,
+                  state_patches: Optional[Iterable[str]] = None) -> bool:
+    """Is this patch's delta already in the live file?
+
+    Table entries carry their own distinctive probes and ALL must be present (so a
+    half-inserted block is not mistaken for present). Other patches use their most
+    distinctive added lines - any one is enough, because later patches legitimately
+    rewrite neighbouring lines. When the lines cannot prove anything (a very old patch
+    later rewritten), the live `_jarvis-state.json` patch list is the honest fallback."""
+    table = DELTA_TABLE if table is None else table
+    entry = ((table.get(patch) or {}).get(target) or {})
+    probes = tuple(entry.get("probes") or ())
+    if probes:
+        return all(str(p) in live_text for p in probes)
+    candidates = probe_candidates(added)
+    if candidates and any(c in live_text for c in candidates):
+        return True
+    # A patch applied long ago can have its added lines rewritten by later patches, so
+    # its text may no longer survive. The live deploy's own patch list is the fallback
+    # evidence: if the PC recorded that patch as applied, it is not missing again.
+    state = {str(s).replace("\\", "/").split("/")[-1] for s in (state_patches or ())}
+    return patch.split("/")[-1] in state
+
+
+def insert_before_anchor(text: str, block_lines: Iterable[str], anchor: str,
+                         *, where: str = "") -> str:
+    """Insert one patch's added lines immediately before `anchor`, exactly once.
+
+    The anchor must appear exactly once; zero or several occurrences is a refusal (a
+    deploy that guesses is how a route lands in the wrong dispatch chain). The block
+    keeps the patch's own bytes and gets a newline before it if the file lacks one."""
+    anchor = str(anchor)
+    if not anchor:
+        raise Refused(f"{where}: no anchor text is configured")
+    count = text.count(anchor)
+    if count != 1:
+        raise Refused(f"{where}: the anchor {anchor!r} appears {count} time(s) in the "
+                      f"live file; expected exactly 1. Refusing rather than guessing.")
+    block = "\n".join(str(l) for l in block_lines) + "\n"
+    at = text.index(anchor)
+    prefix = text[:at]
+    if prefix and not prefix.endswith("\n"):
+        prefix += "\n"
+    return prefix + block + text[at:]
+
+
+def _live_state_patches(live: Path) -> list:
+    state = Path(live) / "_jarvis-state.json"
+    try:
+        doc = json.loads(state.read_text(encoding="utf-8"))
+        items = doc.get("patchList") or []
+        return [str(i if isinstance(i, str) else (i or {}).get("name") or "")
+                for i in items if i]
+    except Exception:                                         # noqa: BLE001
+        return []
+
+
+def plan_deltas(live: Path, patches: Iterable[str], *,
+                show: Optional[Callable] = None, repo: Optional[Path] = None,
+                ref: str = "origin/main", table: Optional[dict] = None,
+                state_patches: Optional[Iterable[str]] = None) -> tuple:
+    """(deltas, staged_texts, refusals) for the five patched files. Reads only.
+
+    `show(repo, ref, "<patch>")` supplies the patch text (tests inject it).
+    The staged_texts dict holds a new copy for each changed file; nothing is written."""
+    show = show or git_show
+    repo = Path(repo) if repo is not None else Path(__file__).resolve().parent.parent
+    table = DELTA_TABLE if table is None else table
+    state = list(state_patches) if state_patches is not None else _live_state_patches(live)
+    live_text = {}
+    staged = {}
+    for name in PATCHED_FILES:
+        path = Path(live) / name
+        if path.is_file():
+            live_text[name] = path.read_text(encoding="utf-8", errors="surrogateescape")
+        else:
+            live_text[name] = ""
+            staged[name] = ""       # recorded so a "missing patched file" is seen below
+
+    deltas = []
+    refusals = []
+    missing_files = [n for n in PATCHED_FILES if not (Path(live) / n).is_file()]
+    if missing_files:
+        refusals.append("the live folder has no " + ", ".join(missing_files))
+        return deltas, staged, refusals
+
+    for patch in patches:
+        raw = show(repo, ref, patch)          # patch text lives at backend/<patch>
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8", errors="replace")
+        files = parse_patch_files(raw)
+        for target in PATCHED_FILES:
+            added = (files.get(target) or {}).get("added") or []
+            if not added:
+                continue
+            text = staged.get(target) or live_text[target]
+            if patch_present(patch, target, added, text, table=table, state_patches=state):
+                deltas.append(DeltaAction(patch, target, "already"))
+                continue
+            entry = (table.get(patch) or {}).get(target) or {}
+            anchor = entry.get("anchor") or ""
+            if not anchor:
+                refusals.append(
+                    f"{patch} touches {target} and is not present, but there is no "
+                    f"insertion rule for it. Add one to DELTA_TABLE (anchor + probes) "
+                    f"after reading the patch; refusing to guess.")
+                continue
+            try:
+                text = insert_before_anchor(text, added, anchor,
+                                            where=f"{patch} -> {target}")
+            except Refused as exc:
+                refusals.append(str(exc))
+                continue
+            if text != (staged.get(target) or live_text[target]):
+                staged[target] = text
+                deltas.append(DeltaAction(patch, target, "insert", tuple(added), anchor))
+    # Only files that really changed need staging/swapping.
+    staged = {name: text for name, text in staged.items()
+              if text != live_text.get(name, "")}
+    if refusals:
+        return deltas, {}, refusals
+    return deltas, staged, []
+
+
+# ---------------------------------------------------------------------------
+#   Rehearsal, backup and writing
+# ---------------------------------------------------------------------------
+
+def rehearse(staged: dict) -> list:
+    """Compile every staged Python file with py_compile. Returns plain error sentences."""
+    errors = []
+    if not staged:
+        return errors
+    tmp = Path(tempfile.mkdtemp(prefix="reconcile-rehearsal-"))
+    try:
+        for name, text in sorted(staged.items()):
+            if not name.endswith(".py"):
+                continue
+            path = tmp / name
+            path.write_text(text, encoding="utf-8", errors="surrogateescape")
+            try:
+                py_compile.compile(str(path), doraise=True)
+            except py_compile.PyCompileError as exc:
+                errors.append(f"{name}: {exc.msg}")
+            except Exception as exc:                          # noqa: BLE001
+                errors.append(f"{name}: {type(exc).__name__}: {exc}")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    return errors
+
+
+class Backup:
+    """One timestamped folder under the live backend; every overwritten byte kept."""
+
+    def __init__(self, live: Path, stamp: Optional[str] = None):
+        self.live = Path(live)
+        stamp = stamp or time.strftime("%Y%m%d-%H%M%S")
+        self.root = self.live / f"{BACKUP_PREFIX}{stamp}"
+        self.saved = []
+
+    def save(self, path: Path) -> Path:
+        path = Path(path)
+        rel = path.relative_to(self.live)
+        dest = self.root / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, dest)
+        self.saved.append(str(rel).replace("\\", "/"))
+        return dest
+
+
+def apply_shipped(actions: Iterable[ShippedAction], live: Path,
+                  backup: Backup, *, write: bool = True) -> tuple:
+    """Write the add/update actions (bytes exact). Returns (written, names)."""
+    written = []
+    for action in actions:
+        if action.status == "unchanged":
+            continue
+        target = Path(live) / action.live_name
+        if not write:
+            written.append(action.live_name)
+            continue
+        if target.exists() and action.status == "update":
+            backup.save(target)          # back up only what is being overwritten
+        target.write_bytes(action.blob or b"")
+        written.append(action.live_name)
+    return written
+
+
+def apply_deltas(staged: dict, live: Path, backup: Backup, *, write: bool = True) -> list:
+    written = []
+    for name, text in sorted(staged.items()):
+        target = Path(live) / name
+        if not write:
+            written.append(name)
+            continue
+        backup.save(target)
+        target.write_text(text, encoding="utf-8", errors="surrogateescape", newline="")
+        written.append(name)
+    return written
+
+
+# ---------------------------------------------------------------------------
+#   Pycache purge
+# ---------------------------------------------------------------------------
+
+def plan_pycache(live: Path) -> list:
+    folder = Path(live) / "__pycache__"
+    if not folder.is_dir():
+        return []
+    return sorted(folder.glob("*.pyc"))
+
+
+def purge_pycache(live: Path) -> list:
+    deleted = []
+    for path in plan_pycache(live):
+        try:
+            path.unlink()
+            deleted.append(path.name)
+        except OSError:
+            pass
+    return deleted
+
+
+# ---------------------------------------------------------------------------
+#   Ready plug-ins
+# ---------------------------------------------------------------------------
+
+def ready_plugins(repo: Path) -> tuple:
+    """([names], [broken]) for plugins/ready/<name>/plugin.json; never raises."""
+    root = Path(repo) / "plugins" / "ready"
+    names, broken = [], []
+    if not root.is_dir():
+        return names, broken
+    for child in sorted(root.iterdir(), key=lambda p: p.name.lower()):
+        manifest = child / "plugin.json"
+        if not manifest.is_file():
+            continue
+        try:
+            doc = json.loads(manifest.read_text(encoding="utf-8"))
+        except Exception as exc:                              # noqa: BLE001
+            broken.append(f"{child.name}: plugin.json will not parse ({type(exc).__name__})")
+            continue
+        if not isinstance(doc, dict) or not doc.get("module"):
+            broken.append(f"{child.name}: plugin.json names no module")
+            continue
+        names.append(str(doc.get("name") or child.name))
+    return names, broken
+
+
+def plan_plugins(live: Path, repo: Path) -> tuple:
+    """(missing, present, broken, hud_wired). `hud_wired` is the safety guard.
+
+    A ready folder is skipped when the live HUD already calls `<module>.install(...)`:
+    the patch stack wired that feature, and letting jarvis_plugins.install() call the
+    same module a second time would double-wire it for no gain."""
+    names, broken = ready_plugins(repo)
+    present, hud_wired = [], []
+    live_hud = ""
+    try:
+        live_hud = (Path(live) / "jarvis_hud.py").read_text(encoding="utf-8",
+                                                            errors="surrogateescape")
+    except Exception:                                         # noqa: BLE001
+        live_hud = ""
+    manifest_module = {}
+    for name in names:
+        manifest = Path(repo) / "plugins" / "ready" / name / "plugin.json"
+        try:
+            manifest_module[name] = str(json.loads(
+                manifest.read_text(encoding="utf-8")).get("module") or "")
+        except Exception:                                     # noqa: BLE001
+            manifest_module[name] = ""
+        if (Path(live) / "jarvis_plugins" / name).is_dir():
+            present.append(name)
+        elif manifest_module[name] and f"{manifest_module[name]}.install(" in live_hud:
+            hud_wired.append(name)
+    missing = [n for n in names if n not in present and n not in hud_wired]
+    return missing, present, broken, hud_wired
+
+
+def _powershell() -> str:
+    for exe in ("powershell", "powershell.exe", "pwsh", "pwsh.exe"):
+        found = shutil.which(exe)
+        if found:
+            return found
+    return ""
+
+
+def add_plugin(repo: Path, live: Path, name: str,
+               runner: Optional[Callable] = None) -> tuple:
+    """Run scripts/add-plugin.ps1 for one ready plug-in. Returns (ok, one-line why)."""
+    runner = runner or (lambda argv, cwd=None: subprocess.run(
+        argv, cwd=str(cwd) if cwd else None, capture_output=True, text=True, timeout=180))
+    exe = _powershell()
+    if not exe:
+        return False, "no PowerShell found (scripts/add-plugin.ps1 needs it)"
+    script = Path(repo) / "scripts" / "add-plugin.ps1"
+    if not script.is_file():
+        return False, "scripts/add-plugin.ps1 is not in this repository"
+    argv = [exe, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+            "-File", str(script), "-BackendPath", str(live), "-Name", name]
+    try:
+        proc = runner(argv, cwd=repo)
+    except Exception as exc:                                  # noqa: BLE001
+        return False, f"{type(exc).__name__}: {exc}"
+    out = ((getattr(proc, "stdout", "") or "") + (getattr(proc, "stderr", "") or "")).strip()
+    last = out.splitlines()[-1].strip() if out else ""
+    ok = int(getattr(proc, "returncode", 1) or 0) == 0 and "SKIP" not in out.upper() \
+        and "FAIL" not in out.upper()
+    return ok, last or f"exit {getattr(proc, 'returncode', '?')}"
+
+
+# ---------------------------------------------------------------------------
+#   Route probes (read-only; the token is never printed)
+# ---------------------------------------------------------------------------
+
+class ProbeError(Exception):
+    pass
+
+
+def read_token(live: Path, runner: Optional[Callable] = None) -> str:
+    """`python jarvis_token_store.py show` in the live folder. Never printed or logged."""
+    runner = runner or (lambda argv, cwd=None: subprocess.run(
+        argv, cwd=str(cwd) if cwd else None, capture_output=True, text=True, timeout=30))
+    script = Path(live) / "jarvis_token_store.py"
+    if not script.is_file():
+        raise ProbeError("jarvis_token_store.py is not in the live folder")
+    try:
+        proc = runner([sys.executable or "python", "jarvis_token_store.py", "show"],
+                      cwd=live)
+    except Exception as exc:                                  # noqa: BLE001
+        raise ProbeError(f"could not read the token ({type(exc).__name__})") from exc
+    if int(getattr(proc, "returncode", 1) or 0) != 0:
+        raise ProbeError("jarvis_token_store.py show did not succeed")
+    token = (getattr(proc, "stdout", "") or "").strip()
+    if not token:
+        raise ProbeError("jarvis_token_store.py show printed no token")
+    return token
+
+
+def probe_http(url: str, method: str = "GET", body: Optional[dict] = None,
+               token: str = "", timeout: float = 10.0) -> tuple:
+    """(status, payload). Raises ProbeError only when no HTTP answer arrived."""
+    import urllib.error
+    import urllib.request
+    data = None
+    headers = {CLIENT_HEADER: CLIENT_VALUE, "Accept": "application/json"}
+    if token:
+        headers[TOKEN_HEADER] = token
+    if body is not None:
+        data = json.dumps(body).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    request = urllib.request.Request(url, data=data, headers=headers,
+                                     method=str(method).upper())
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as answer:
+            raw = answer.read()
+            status = int(answer.status)
+    except urllib.error.HTTPError as exc:
+        raw = exc.read()
+        status = int(exc.code)
+    except Exception as exc:                                  # noqa: BLE001
+        raise ProbeError(f"no answer from {url} ({type(exc).__name__})") from exc
+    try:
+        payload = json.loads(raw.decode("utf-8", "replace") or "{}")
+    except ValueError:
+        payload = (raw or b"").decode("utf-8", "replace")
+    return status, payload
+
+
+def _hud_port(live: Path) -> int:
+    try:
+        text = (Path(live) / "jarvis_hud.py").read_text(encoding="utf-8",
+                                                        errors="surrogateescape")
+        match = re.search(r'JARVIS_HUD_PORT"\s*,\s*"(\d+)"', text)
+        if match:
+            return int(match.group(1))
+    except Exception:                                         # noqa: BLE001
+        pass
+    return 4719
+
+
+def _app_control_absent(live: Path) -> bool:
+    try:
+        text = (Path(live) / "jarvis-framework.toml").read_text(encoding="utf-8")
+        return re.search(r"(?m)^\s*\[app_control\]\s*$", text) is None
+    except Exception:                                         # noqa: BLE001
+        return True
+
+
+def run_probes(live: Path, base_url: str = "", *,
+               client: Optional[Callable] = None,
+               token_reader: Optional[Callable] = None,
+               out: Optional[Callable] = None) -> int:
+    """PASS/FAIL/SKIP per probe. Returns the number of FAILED expected probes."""
+    client = client or probe_http
+    token_reader = token_reader or read_token
+    out = out or print
+    base = (base_url or f"http://127.0.0.1:{_hud_port(live)}").rstrip("/")
+    try:
+        token = token_reader(live)
+    except ProbeError as exc:
+        out(f"FAIL  token: {exc}")
+        return 1
+
+    probes = []   # (name, method, path, body, expected status, extra check or None)
+    probes.append(("setup", "GET", "/api/setup", None, 200, None))
+    if (Path(live) / "jarvis_plugins" / "media-index").is_dir():
+        probes.append(("media-index", "GET", "/api/media-index", None, 200, None))
+    else:
+        probes.append(("media-index", "", "", None, None,
+                       "the media-index plug-in is not installed"))
+    if _app_control_absent(live):
+        probes.append(("app-control", "POST", "/api/app-control/run", {}, 409, None))
+    else:
+        probes.append(("app-control", "", "", None, None,
+                       "[app_control] is present, so 409-when-off is not the expectation"))
+
+    def voice_ok(payload) -> bool:
+        return (isinstance(payload, dict) and isinstance(payload.get("gate"), dict)
+                and "training" in payload["gate"])
+
+    probes.append(("voice", "GET", "/api/voice/status", None, 200, voice_ok))
+
+    failed = 0
+    for name, method, path, body, expected, extra in probes:
+        if not method:
+            out(f"SKIP  {name}: {extra}")
+            continue
+        url = base + path
+        try:
+            status, payload = client(url, method, body, token)
+        except ProbeError as exc:
+            out(f"FAIL  {name}: {exc}")
+            failed += 1
+            continue
+        ok = status == expected and (extra is None or extra(payload))
+        detail = f"{method} {path} -> {status} (expected {expected})"
+        if extra is not None and status == expected and not ok:
+            detail += "; response shape did not match"
+        out(f"{'PASS' if ok else 'FAIL'}  {name}: {detail}")
+        if not ok:
+            failed += 1
+    return failed
+
+
+# ---------------------------------------------------------------------------
+#   The deploy itself
+# ---------------------------------------------------------------------------
+
+def _summ(out, label, items, limit=12):
+    if not items:
+        out(f"  {label}: none")
+        return
+    out(f"  {label}: {len(items)}")
+    for item in items[:limit]:
+        out(f"      {item}")
+    if len(items) > limit:
+        out(f"      ... and {len(items) - limit} more")
+
+
+def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origin/main",
+               skip_plugins: bool = False, base_url: str = "",
+               show: Optional[Callable] = None, out: Optional[Callable] = None,
+               probe_client: Optional[Callable] = None,
+               token_reader: Optional[Callable] = None,
+               plugin_runner: Optional[Callable] = None,
+               stamp: Optional[str] = None) -> int:
+    out = out or print
+    repo = Path(repo)
+    live = Path(live)
+    mode = "APPLY" if apply else "DRY RUN"
+    out(f"Jarvis live-backend reconcile - {mode}")
+    out(f"  repo: {repo}")
+    out(f"  live: {live}")
+    out(f"  ref : {ref}")
+    out("")
+    if not (live / "jarvis_hud.py").is_file():
+        raise Refused(f"no jarvis_hud.py in {live} - is this the live backend folder?")
+    if not (repo / "scripts" / "apply-patches.ps1").is_file():
+        raise Refused(f"no scripts/apply-patches.ps1 under {repo}")
+    if apply and not (repo / ".git").exists() and not (repo / ".git").is_file():
+        raise Refused(f"{repo} is not a git repository")
+
+    # 1. Plan the shipped sync.
+    shipped, patches = read_patch_lists(repo)
+    plan = Plan()
+    try:
+        plan.shipped = plan_shipped(repo, ref, live, shipped, show=show)
+    except Refused as exc:
+        out(f"REFUSED: {exc}")
+        return 2
+    adds = [a for a in plan.shipped if a.status == "add"]
+    updates = [a for a in plan.shipped if a.status == "update"]
+    unchanged = [a for a in plan.shipped if a.status == "unchanged"]
+    out(f"SHIPPED ({len(plan.shipped)} files in $SHIPPED, flattened):")
+    _summ(out, "to add", [a.live_name for a in adds])
+    _summ(out, "to update", [a.live_name for a in updates])
+    out(f"  unchanged: {len(unchanged)}")
+
+    # 2. Plan the HUD deltas.
+    try:
+        deltas, staged, refusals = plan_deltas(live, patches, show=show, repo=repo, ref=ref)
+    except Refused as exc:
+        out(f"REFUSED: {exc}")
+        return 2
+    plan.deltas = deltas
+    plan.staged = staged
+    if refusals:
+        out("HUD DELTAS - REFUSED (nothing has been written):")
+        _summ(out, "refusals", refusals, limit=20)
+        return 2
+    already = [d for d in deltas if d.status == "already"]
+    inserts = [d for d in deltas if d.status == "insert"]
+    out("")
+    out(f"HUD DELTAS ({len(deltas)} patch/file delta(s) checked):")
+    out(f"  already present: {len(already)}")
+    _summ(out, "to insert", [f"{d.patch} -> {d.file} ({len(d.lines)} lines)" for d in inserts])
+
+    # 3. Rehearse before anything is swapped.
+    errors = rehearse(staged)
+    if errors:
+        out("REHEARSAL FAILED (nothing has been written):")
+        _summ(out, "errors", errors, limit=20)
+        return 2
+    if staged:
+        out(f"  rehearsal: py_compile OK for {', '.join(sorted(staged))}")
+
+    # 4. Pycache and plug-ins plans.
+    plan.pycache = plan_pycache(live)
+    out("")
+    out(f"PYCACHE: {len(plan.pycache)} stale .pyc file(s)")
+    if not skip_plugins:
+        (plan.plugins_missing, plan.plugins_present, plan.broken_plugins,
+         plan.plugins_wired) = plan_plugins(live, repo)
+        out(f"READY PLUG-INS: {len(plan.plugins_present)} present, "
+            f"{len(plan.plugins_missing)} to add, {len(plan.plugins_wired)} already "
+            f"wired by the HUD")
+        _summ(out, "to add", plan.plugins_missing)
+        _summ(out, "skipped (the HUD already calls their install())", plan.plugins_wired)
+        _summ(out, "broken manifests", plan.broken_plugins)
+    else:
+        out("READY PLUG-INS: skipped (--skip-plugins)")
+
+    changes = len(adds) + len(updates) + len(inserts) + len(plan.pycache)
+    out("")
+    out(f"PLANNED CHANGES: {changes} file-level change(s)"
+        + ("" if apply else " - DRY RUN, nothing written"))
+    if not apply:
+        out("Probes are not run in a dry run; use --apply after reviewing this plan.")
+        return 0
+
+    # 5. Write: shipped bytes, then the staged HUD files.
+    backup = Backup(live, stamp=stamp)
+    written = []
+    try:
+        written += apply_shipped(plan.shipped, live, backup, write=True)
+        written += apply_deltas(staged, live, backup, write=True)
+    except OSError as exc:
+        out(f"FAIL  writing the backend: {exc}")
+        return 2
+    if backup.saved:
+        out(f"BACKUP: {backup.root} ({len(backup.saved)} file(s))")
+    else:
+        out("BACKUP: nothing overwritten, nothing to back up")
+
+    # 6. Purge stale bytecode.
+    purged = purge_pycache(live)
+    out(f"PYCACHE: purged {len(purged)} stale .pyc file(s)")
+
+    # 7. Ready plug-ins.
+    plugin_failures = 0
+    if not skip_plugins:
+        for name in plan.plugins_missing:
+            ok, why = add_plugin(repo, live, name, runner=plugin_runner)
+            out(f"{'PASS' if ok else 'FAIL'}  plugin {name}: {why}")
+            if not ok:
+                plugin_failures += 1
+
+    # 8. Route probes against the live server.
+    out("")
+    out("ROUTE PROBES:")
+    probe_failures = run_probes(live, base_url, client=probe_client,
+                                token_reader=token_reader, out=out)
+    out("")
+    if plugin_failures or probe_failures:
+        out(f"RESULT: FAIL ({plugin_failures} plug-in failure(s), "
+            f"{probe_failures} expected probe failure(s)). Restart Jarvis and re-check.")
+        return 1
+    out("RESULT: PASS - backend reconciled; restart Jarvis and read the start-up banner.")
+    if written:
+        out(f"        wrote {len(written)} file(s); backup in {backup.root}")
+    else:
+        out("        no file changed (already current)")
+    return 0
+
+
+def main(argv: Optional[list] = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Deploy the repository's backend onto the live Jarvis folder safely "
+                    "(dry run by default).")
+    parser.add_argument("--backend-path", required=True,
+                        help="the folder holding the live jarvis_hud.py")
+    parser.add_argument("--repo", default="",
+                        help="the repository checkout (default: this tool's parent folder)")
+    parser.add_argument("--ref", default="origin/main",
+                        help="git ref whose backend/ blobs are the source (default: origin/main)")
+    parser.add_argument("--apply", action="store_true", help="write; without it, dry run")
+    parser.add_argument("--dry-run", action="store_true", help="explicit dry run (the default)")
+    parser.add_argument("--skip-plugins", action="store_true",
+                        help="do not add ready plug-ins")
+    parser.add_argument("--base-url", default="",
+                        help="live server base URL for the probes (default: from HUD_PORT)")
+    ns = parser.parse_args(argv)
+    if ns.apply and ns.dry_run:
+        print("Choose one: --apply or --dry-run (dry run is the default).")
+        return 2
+    repo = Path(ns.repo) if ns.repo else Path(__file__).resolve().parent.parent
+    try:
+        return run_deploy(repo, Path(ns.backend_path).expanduser(), apply=bool(ns.apply),
+                          ref=ns.ref, skip_plugins=bool(ns.skip_plugins),
+                          base_url=ns.base_url)
+    except Refused as exc:
+        print(f"REFUSED: {exc}")
+        return 2
+    except KeyboardInterrupt:
+        print("Stopped.")
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
