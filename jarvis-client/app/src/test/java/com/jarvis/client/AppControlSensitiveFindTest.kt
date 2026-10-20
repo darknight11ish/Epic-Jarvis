@@ -37,7 +37,16 @@ class AppControlSensitiveFindTest {
         )
         assertTrue(
             "the shared helper must still cover the wider Android checks",
-            text.contains("isAccessibilityDataSensitive") && text.contains("passwordInputType"),
+            (text + "\n" + sharedHelperSource()).contains("isAccessibilityDataSensitive") &&
+                (text + "\n" + sharedHelperSource()).contains("passwordInputType"),
         )
     }
+
+    /** `sensitive()` delegates to `AppControl.sensitiveInput`, where the wider
+     *  password-input-type and API-34 data-sensitive checks live. Read it too,
+     *  rather than requiring those words in this service file. */
+    private fun sharedHelperSource(): String = listOf(
+        File("src/main/java/com/jarvis/client/data/AppControl.kt"),
+        File("app/src/main/java/com/jarvis/client/data/AppControl.kt"),
+    ).firstOrNull { it.isFile }?.readText() ?: ""
 }
