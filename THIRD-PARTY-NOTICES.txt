@@ -1010,6 +1010,33 @@ https://www.eff.org/dice), Creative Commons Attribution 3.0 United States
   where this was added (2026-09-28); the licence is to be re-read on EFF's
   own page. Word list (c) Electronic Frontier Foundation.
 
+
+APP CONTROL ON THE PHONE - PATTERNS RE-IMPLEMENTED, NOT COPIED (not generated - keep when regenerating)
+=======================================================================================================
+
+backend/jarvis_app_control.py carries the PC side of the owner's 2026-10-19
+"accessibility service with control by jarvis as an option in the android app"
+decision (the Android side is the next slice). Its contract and this project's
+jarvis_ui_control.py re-implement PATTERNS from MIT-licensed projects; no
+source code from them is copied, vendored or linked, so no notice is legally
+required - it is here because this project credits what it learns from:
+
+  * GiggleWang/MobileAgent-Android (MIT) - the in-app AccessibilityService
+    action set (tap / swipe / type / system button) and the plan -> act ->
+    check loop. Copyright (c) GiggleWang and contributors.
+    https://github.com/GiggleWang/MobileAgent-Android
+  * droidrun/mobilerun (MIT) - the accessibility "portal" UI-tree contract for
+    reading a phone's screen. Copyright (c) droidrun contributors.
+    https://github.com/droidrun/mobilerun
+  * microsoft/UFO (MIT) - the Windows UI-Automation plan / verify /
+    stop-on-change discipline jarvis_ui_control.py follows (the desktop
+    control engine is this repository's own, not UFO's).
+    Copyright (c) Microsoft Corporation. https://github.com/microsoft/UFO
+
+The GPL-licensed project named in the research report
+(.dsh-scratch/RESEARCH-APP-AUTOMATION-REPOS-2026-10-19.md, khimaros/mimic) was
+read as a design reference only and is not used.
+
 2. RUST LIBRARIES IN THE DESKTOP PROGRAM (generated)
 ====================================================
 

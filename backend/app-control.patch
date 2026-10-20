@@ -1,0 +1,39 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -3302,6 +3302,36 @@
+             by = "this PC" if host in ("127.0.0.1", "::1") else "another device"
+             code, out = jarvis_big_coder.handle_post(body, by=by)
+             return self._send(code, out)
++        if route in ("/api/app-control/run", "/api/app-control/step"):
++            # app-control.patch (2026-10-19) - the backend half of the owner's
++            # "fuller automation inside other apps". The PC is the brain and
++            # the gate; the phone is the hands. /run checks the owner's
++            # allow-list and one atomic plan and raises ONE change_own_config
++            # card - it runs nothing. /step is the phone asking for the ONE
++            # approved step, or reporting after it; a changed screen stops the
++            # run. The feature is OFF by default and this patch adds no way to
++            # switch it on, so every refusal says so in plain words. Nothing
++            # here approves anything: the card is the only yes, and
++            # jarvis_app_control.py's own docstring has the whole contract.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                body = json.loads(_read_body(self) or b"{}")
++            except (ValueError, json.JSONDecodeError) as exc:
++                return self._send(400, {"error": str(exc)})
++            try:
++                import jarvis_app_control
++            except Exception as exc:
++                return self._send(503, {"available": False,
++                                        "error": f"{type(exc).__name__}: {exc}"})
++            if route == "/api/app-control/run":
++                code, out = jarvis_app_control.stage_run(body)
++            else:
++                code, out = jarvis_app_control.step(body)
++            return self._send(code, out)
++
+         if route == "/api/memory/decide":
+             if not _origin_ok(self):
+                 return self._send(403, {"error": "cross-origin request refused"})

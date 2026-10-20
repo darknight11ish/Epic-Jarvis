@@ -8,7 +8,7 @@ this folder into the backend's `jarvis_plugins\` folder (or run
 
 - Module the loader calls: `jarvis_model_lanes.install()` (takes the core's Handler)
 - The patch this replaces: `backend/model-lanes.patch`
-- Position in the old patch stack: 142 of 149
+- Position in the old patch stack: 142 of 150
 
 The module itself is one of the ones this repository already ships
 (`backend/jarvis_model_lanes.py`), copied into the backend by

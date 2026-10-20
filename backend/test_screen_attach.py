@@ -493,6 +493,13 @@ def t_hygiene():
     later = {"retrieve-count.patch", "handoff-mode.patch", "handoff-front.patch",
              "gate-raise-rows.patch",
              "plugin-loader.patch",
+             # app-control.patch (2026-10-19, the owner's phone
+             # accessibility option) is appended after this patch and
+             # touches jarvis_gate.py not at all: TWO ADDED route
+             # blocks in jarvis_hud.py, on big-coder.patch's own last
+             # lines and the /api/memory/decide route, so it rewrites
+             # nothing this patch wrote.
+             "app-control.patch",
              # card-prefs.patch (2026-10-10, "cards read short"): ONE added block
              # in jarvis_hud.py, straight after animal.patch's own and before
              # plugin-loader.patch - nowhere near

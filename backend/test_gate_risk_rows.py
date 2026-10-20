@@ -140,6 +140,13 @@ def t_the_patch_is_registered_last():
              # touch jarvis_gate.py at all, so it rewrites nothing this patch
              # wrote.
              "plugin-loader.patch",
+             # app-control.patch (2026-10-19, the owner's phone
+             # accessibility option) is appended after this patch and
+             # touches jarvis_gate.py not at all: TWO ADDED route
+             # blocks in jarvis_hud.py, on big-coder.patch's own last
+             # lines and the /api/memory/decide route, so it rewrites
+             # nothing this patch wrote.
+             "app-control.patch",
              # card-prefs.patch (2026-10-10, "cards read short") sits after
              # gate-touches.patch and before picture-card.patch (so, before
              # plugin-loader.patch too) and has exactly ONE hunk, in
