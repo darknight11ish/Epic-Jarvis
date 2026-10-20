@@ -1346,7 +1346,9 @@
     "asks": "No card to see the plan: it writes nothing. Applying is your explicit second press, and anything that loosens a rule still raises its own existing approval card on the PC, one at a time.",
     "limit": "A guided path through settings that already exist, not a second set of rules. The preset answer only RECOMMENDS a setup and switches no model. The phone is read-only: applying is the PC's step, where each approval card can wait for you.",
     "surface": "both",
-    "covers": []
+    "covers": [
+      "settings.setup-questionnaire"
+    ]
   },
   {
     "id": "menu-visibility",
