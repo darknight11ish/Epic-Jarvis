@@ -15,6 +15,8 @@ already put in front of the local model.
 """
 import io
 import json
+import os
+import subprocess
 import sys
 import tempfile
 import traceback
@@ -351,6 +353,66 @@ def t_a_bad_progress_file_degrades_to_starting_over_rather_than_crashing():
               f"raised {exc!r}")
 
 
+def _make_dir_link(link: Path, target: Path) -> bool:
+    """A directory link where this machine allows one: symlink first, NTFS
+    junction second (mklink /J needs no elevation on Windows)."""
+    try:
+        os.symlink(str(target), str(link), target_is_directory=True)
+        return True
+    except (OSError, NotImplementedError):
+        pass
+    if os.name == "nt":
+        r = subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(target)],
+                           capture_output=True, text=True)
+        return r.returncode == 0
+    return False
+
+
+def t_a_link_out_and_an_unsafe_zip_are_never_read():
+    """The 2026-10-20 parser audit (Area 6A) on the chat-export importer: a
+    junction/symlink out of the chosen export folder is not followed, a zip
+    whose member paths point outside itself is refused as a whole, and a zip
+    that declares more than the export cap is refused before any member is
+    parsed. A normal export still reads."""
+    tmp = Path(tempfile.mkdtemp(prefix="jarvis-import-guard-"))
+    export = tmp / "export"
+    export.mkdir()
+    outside = tmp / "outside"
+    outside.mkdir()
+    (outside / "secret.json").write_text('{"mapping": {}}', encoding="utf-8")
+    link = export / "escape"
+    if _make_dir_link(link, outside):
+        docs = list(I._walk_json_documents(export))
+        labels = [label for label, _doc in docs]
+        check("a junction out of the export folder: not read",
+              not any("secret" in label for label in labels), labels)
+    else:
+        skip("a junction out of the export folder cannot be made here, "
+             "so nothing was proved")
+    traversal = export / "traversal.zip"
+    with zipfile.ZipFile(traversal, "w") as z:
+        z.writestr("../outside.json", "{}")
+        z.writestr("good.json", '{"mapping": {}}')
+    docs = list(I._walk_json_documents(traversal))
+    check("a zip with a `..` member: refused as a whole", docs == [], docs)
+    real_cap = I.EXPORT_UNCOMPRESSED_MAX
+    I.EXPORT_UNCOMPRESSED_MAX = 1024
+    try:
+        bomb = export / "bomb.zip"
+        with zipfile.ZipFile(bomb, "w", compression=zipfile.ZIP_DEFLATED) as z:
+            z.writestr("big.json", "{}" * 1200)
+        docs = list(I._walk_json_documents(bomb))
+        check("a zip that declares more than the export cap: refused", docs == [], docs)
+    finally:
+        I.EXPORT_UNCOMPRESSED_MAX = real_cap
+    good = export / "normal.zip"
+    with zipfile.ZipFile(good, "w") as z:
+        z.writestr("mapping.json", '{"mapping": {}}')
+    docs = list(I._walk_json_documents(good))
+    check("a normal export still reads", len(docs) == 1 and docs[0][1] == {"mapping": {}},
+          docs)
+
+
 def main():
     for fn in (t_claude_parser_reads_every_file_not_just_the_index,
                t_claude_parser_skips_a_monologue,
@@ -363,6 +425,7 @@ def main():
                t_resuming_does_not_re_offer_an_already_seen_conversation,
                t_resuming_after_a_pause_only_offers_what_was_not_already_offered,
                t_a_chatgpt_export_shows_the_model_only_the_owners_words,
+               t_a_link_out_and_an_unsafe_zip_are_never_read,
                t_a_bad_progress_file_degrades_to_starting_over_rather_than_crashing):
         print(f"\n--- {fn.__name__} ---")
         try:

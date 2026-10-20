@@ -230,6 +230,10 @@ SEARCH_MAX_FILES = 5000
 SEARCH_FILE_BYTES = 256 * 1024
 MAX_TEXT_BYTES = 4 * 1024 * 1024     # a .md/.txt/.csv read whole, at most this much
 MAX_DOC_BYTES = 50 * 1024 * 1024     # a PDF/Word/Excel/PowerPoint file going in
+#: A .docx/.xlsx/.pptx is a ZIP: the most its members may declare in total
+#: before any parser sees it (the 2026-10-20 parser audit; a 50 MB compressed
+#: file can otherwise unpack to gigabytes - a zip bomb).
+DOC_UNCOMPRESSED_MAX = 100 * 1024 * 1024
 MAX_CONVERTED_CHARS = 4_000_000      # the text coming back
 CONVERT_SECONDS = 120.0
 CACHE_FILES = 4
@@ -243,6 +247,10 @@ IMPORT_MAX_FILES = 20_000
 IMPORT_MAX_BYTES = 1024 * 1024 * 1024
 IMPORT_MAX_ONE = 200 * 1024 * 1024
 IMPORT_MAX_ZIP = 2 * 1024 * 1024 * 1024
+#: A chat/Notion export is also a ZIP. The same member check as DOC above, with
+#: the export ceiling the 2026-10-20 audit asks for (250 MiB, not 100); the
+#: byte counter in _copy still bounds what is really written.
+EXPORT_UNCOMPRESSED_MAX = 250 * 1024 * 1024
 IMPORT_NAME_CHARS = 150
 
 #: Notion's ids in names: "Trip plan 1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d.md".
@@ -664,6 +672,66 @@ def _sentence(exc) -> str:
 # --------------------------------------------------------------------------
 
 
+def _real(path) -> str:
+    """One real place: `Path.resolve()` (links AND NTFS junctions followed,
+    each part of the path resolved), never the spelling a caller typed. The
+    2026-10-20 parser audit asks for exactly this on every walked child, so a
+    junction inside a listed folder cannot smuggle a read out of it."""
+    return str(Path(os.path.expanduser(str(path))).resolve())
+
+
+def _private_roots() -> list:
+    """Places always refused, even when a listed folder links to them: Jarvis's
+    own config folder (tokens, setup answers, chat history). The program folder
+    is refused by `protected()`; the folders a person may list are never inside
+    AppData because `_too_broad()` refuses it at add time, so refusing all of
+    AppData here would also refuse the scratch folders the suites run in."""
+    try:
+        return [_real(_config_dir())]
+    except Exception:
+        return []
+
+
+def _in_a_private_place(real: str) -> bool:
+    return any(_inside(root, real) for root in _private_roots())
+
+
+def zip_path_problem(zf: zipfile.ZipFile) -> str:
+    """'' when no member path points outside the archive, else why not.
+
+    Rejected: an absolute path, a drive-qualified path, or any `..` segment -
+    the traversal half of the 2026-10-20 parser audit. Used where an archive
+    is unpacked or handed to a parser (a `.docx` and a chat export), never to
+    decide whether a Notion export may be read: that importer has always
+    skipped such a member and kept the rest (`safe_parts`), which is safer for
+    the person than refusing the whole export over one junk name."""
+    for info in zf.infolist():
+        name = str(info.filename or "")
+        flat = name.replace("\\", "/")
+        if (flat.startswith("/") or re.match(r"^[A-Za-z]:", flat)
+                or any(part == ".." for part in flat.split("/"))):
+            return f"it contains a path that points outside itself ({name!r})"
+    return ""
+
+
+def zip_bomb_problem(zf: zipfile.ZipFile, limit: int) -> str:
+    """'' when the declared uncompressed total is at or under `limit`, else why
+    not. Declared sizes do not replace counting what is written on extraction;
+    `IMPORT_MAX_BYTES` still does that."""
+    total = 0
+    for info in zf.infolist():
+        total += max(0, int(info.file_size or 0))
+        if limit and total > limit:
+            return (f"it unpacks to more than {limit // (1024 * 1024)} MB "
+                    "(a zip-bomb guard)")
+    return ""
+
+
+def zip_problem(zf: zipfile.ZipFile, limit: int) -> str:
+    """'' when this archive may be parsed, else why not (a sentence's end)."""
+    return zip_path_problem(zf) or zip_bomb_problem(zf, limit)
+
+
 def allowed_path(path, roots: Optional[list] = None) -> Optional[tuple]:
     """(real path, the listed folder it is in) when `path` may be read, else
     None: inside a listed folder once links are followed, no hidden folder on
@@ -671,7 +739,9 @@ def allowed_path(path, roots: Optional[list] = None) -> Optional[tuple]:
     if not isinstance(path, str) or not path.strip() or "\x00" in path:
         return None
     roots = folders() if roots is None else roots
-    real = os.path.realpath(os.path.expanduser(path.strip()))
+    real = _real(path.strip())
+    if _in_a_private_place(real):
+        return None
     try:
         import jarvis_agent
         if jarvis_agent._is_reserved_windows_name(real):
@@ -712,7 +782,7 @@ def _walk(roots: list, visit: Callable[[str, str, str], bool], *,
             # nor a protected place.
             dirnames[:] = sorted(
                 d for d in dirnames if not d.startswith(".")
-                and _inside(r, os.path.realpath(os.path.join(dirpath, d)))
+                and _inside(r, _real(os.path.join(dirpath, d)))
                 and not protected(os.path.join(dirpath, d)))
             for name in sorted(filenames):
                 entries += 1
@@ -1467,7 +1537,7 @@ def search(words: str, *, roots: Optional[list] = None,
                 idx.embed_missing(model)
                 ranked = idx.query(words, embedder=model)
                 if ranked["ranked"] or not ranked["how"].startswith("none"):
-                    return _index_results(words, want, ranked, idx, model)
+                    return _index_results(words, want, ranked, idx, model, roots)
         except Exception:
             pass
 
@@ -1479,22 +1549,30 @@ def search(words: str, *, roots: Optional[list] = None,
 
 
 def _index_results(words: str, want: list, ranked: dict, idx: "TextIndex",
-                   model) -> dict:
+                   model, roots: Optional[list] = None) -> dict:
     """Build search()'s answer from a ranking, reading every snippet from the
     file. A file that has gone since it was indexed is left out here and
     dropped by the next reconcile - the index can rank, and only the disk can
-    say what a file says."""
+    say what a file says. The path from the index is resolved through
+    `allowed_path()` AGAIN before it is opened: a file that was a normal note
+    when indexed and is a junction to Jarvis's config folder now is refused,
+    not read (2026-10-20 parser audit)."""
+    roots = folders() if roots is None else roots
     results, read = [], 0
     for hit in ranked["ranked"]:
         if len(results) >= SEARCH_MAX:
             break
+        got = allowed_path(str(hit.get("path") or ""), roots)
+        if got is None:
+            continue
+        real = got[0]
         try:
-            with open(hit["path"], "rb") as f:
+            with open(real, "rb") as f:
                 text = f.read(SEARCH_FILE_BYTES).decode("utf-8", "replace")
         except OSError:
             continue
         read += 1
-        results.append({"name": display_name(hit["name"]), "path": hit["path"],
+        results.append({"name": display_name(hit["name"]), "path": real,
                         "snippet": _snippet(text, want)})
     why = idx.why if not results and not ranked["ranked"] else ""
     out = {"ok": True, "results": results, "matches": int(ranked["matches"]),
@@ -1688,6 +1766,17 @@ def _text_of(real: str, ext: str, convert: Callable[[str, str], dict]) -> dict:
         if stt.st_size > MAX_DOC_BYTES:
             return {"ok": False, "error": f"it is larger than {MAX_DOC_BYTES // (1024 * 1024)} "
                                           f"MB, so Jarvis does not turn it into text"}
+        # A .docx/.xlsx/.pptx is a ZIP: check its members BEFORE the converter
+        # (and its parser) sees it. A 50 MB file can otherwise declare an
+        # enormous unpacked size - the zip-bomb half of the 2026-10-20 audit.
+        if ext != ".pdf" and zipfile.is_zipfile(real):
+            try:
+                with zipfile.ZipFile(real) as zf:
+                    why = zip_problem(zf, DOC_UNCOMPRESSED_MAX)
+            except (zipfile.BadZipFile, OSError):
+                why = "it is not a readable Word, Excel or PowerPoint file"
+            if why:
+                return {"ok": False, "error": f"Jarvis will not open it: {why}"}
         got = convert(real, ext)
         if not got.get("ok"):
             return {"ok": False, "error": str(got.get("error") or "it could not be turned into "
@@ -1843,6 +1932,9 @@ def _is_link(info: zipfile.ZipInfo) -> bool:
 
 
 def _unzip(zf: zipfile.ZipFile, dest: str, counts: dict, depth: int) -> None:
+    why = zip_bomb_problem(zf, EXPORT_UNCOMPRESSED_MAX)
+    if why:
+        raise ImportRefused(f"Jarvis will not open that export: {why}")
     for info in zf.infolist():
         if info.is_dir():
             continue
@@ -1954,6 +2046,9 @@ def import_notion(zip_path, into, *, roots: Optional[list] = None,
         os.makedirs(tmp)
         try:
             with zipfile.ZipFile(zp) as zf:
+                why = zip_bomb_problem(zf, EXPORT_UNCOMPRESSED_MAX)
+                if why:
+                    raise ImportRefused(f"Jarvis will not open that export: {why}")
                 _unzip(zf, tmp, counts, 0)
         except zipfile.BadZipFile:
             raise ImportRefused("that file is not a zip Jarvis can open")

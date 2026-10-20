@@ -471,7 +471,8 @@ pub async fn ensure_backend(app: &AppHandle) -> Result<String, String> {
     if !config.configured() {
         return Err(
             "Supervision is on but no backend command is configured. Set the program \
-             (for example `python`) and its arguments (the path to jarvis_hud.py)."
+             to the FULL path of python.exe (or a frozen Jarvis executable), and its \
+             arguments to the path of jarvis_hud.py."
                 .to_string(),
         );
     }
@@ -479,9 +480,41 @@ pub async fn ensure_backend(app: &AppHandle) -> Result<String, String> {
     start(app, &config, &base).map(|pid| format!("Started the backend (pid {pid})."))
 }
 
+/// The program to spawn, as an explicit path, or a plain refusal naming why.
+///
+/// The setting's own doc says "the full path to python.exe", but nothing made
+/// that a rule: `Command::new("python")` lets Windows resolve a bare name
+/// through PATH, and on a fresh PC that is the Microsoft Store alias, not the
+/// real interpreter (docs/INSTALL.md 1.1 and 2.5). Resolving here - absolute
+/// only, then `canonicalize` so a symlink or an 8.3 name becomes the real
+/// executable - is the "resolved path" half of the 2026-10-20 Area 11B audit;
+/// `std::process::Command` already quotes every argument, which is the other
+/// half (it never goes through a shell).
+fn resolved_program(program: &str) -> Result<std::path::PathBuf, String> {
+    let trimmed = program.trim();
+    if trimmed.is_empty() {
+        return Err("the backend program is empty".to_string());
+    }
+    let path = std::path::Path::new(trimmed);
+    if !path.is_absolute() {
+        return Err(format!(
+            "the backend program must be the FULL path to python.exe (or a frozen \
+             Jarvis executable), not `{trimmed}`. A bare name can be the Windows \
+             Store alias instead of the real program; set the full path in Settings."
+        ));
+    }
+    std::fs::canonicalize(path).map_err(|e| {
+        format!(
+            "the backend program `{trimmed}` could not be found ({e}) - check the \
+                 full path in Settings"
+        )
+    })
+}
+
 /// Spawns the child, inside a process tree that can be killed whole.
 fn start(app: &AppHandle, config: &BackendConfig, base: &str) -> Result<u32, String> {
-    let mut command = Command::new(config.program.trim());
+    let program = resolved_program(&config.program)?;
+    let mut command = Command::new(&program);
     command.args(&config.args);
     if let Some(dir) = config.working_dir() {
         command.current_dir(dir);
@@ -1088,6 +1121,54 @@ mod tests {
             ..Default::default()
         }
         .configured());
+    }
+
+    // -- the spawn path is resolved (Area 11B, 2026-10-20 audit) ------------
+
+    #[test]
+    fn a_bare_program_name_is_refused_with_the_full_path_sentence() {
+        let why = resolved_program("python").expect_err("a bare name must be refused");
+        assert!(why.contains("FULL path"), "{why}");
+        assert!(why.contains("python"), "{why}");
+        let why = resolved_program("python.exe").expect_err("a bare name must be refused");
+        assert!(why.contains("FULL path"), "{why}");
+    }
+
+    #[test]
+    fn a_full_path_to_a_real_program_is_resolved_and_accepted() {
+        let me = std::env::current_exe().expect("the test executable has a path");
+        let got = resolved_program(&me.display().to_string()).expect("a real program is accepted");
+        assert!(got.is_absolute());
+        assert!(got.exists());
+        // canonicalize() may shorten a Windows 8.3 name or follow a link; the
+        // resolved path must still be the same file.
+        assert_eq!(
+            std::fs::canonicalize(&me).expect("the executable resolves"),
+            got
+        );
+    }
+
+    #[test]
+    fn a_full_path_that_does_not_exist_is_refused_in_plain_words() {
+        let missing = std::env::temp_dir().join("jarvis-sidecar-no-such-program.exe");
+        let why = resolved_program(&missing.display().to_string())
+            .expect_err("a missing program must be refused before spawning");
+        assert!(why.contains("could not be found"), "{why}");
+        assert!(why.contains("full path"), "{why}");
+    }
+
+    #[test]
+    fn the_start_path_only_reaches_command_with_a_resolved_program() {
+        // A source pin: start() must resolve before it spawns, so a later edit
+        // cannot quietly put `Command::new(config.program)` back.
+        let src = include_str!("sidecar.rs");
+        let start = src
+            .split("fn start(app: &AppHandle, config: &BackendConfig, base: &str)")
+            .nth(1)
+            .expect("start() is still there");
+        let head = &start[..start.len().min(600)];
+        assert!(head.contains("resolved_program(&config.program)"), "{head}");
+        assert!(head.contains("Command::new(&program)"), "{head}");
     }
 
     // -- the watchdog's cap (feasibility I98) ------------------------------
