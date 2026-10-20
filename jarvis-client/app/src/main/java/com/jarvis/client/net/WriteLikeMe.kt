@@ -17,7 +17,7 @@ import kotlinx.serialization.json.intOrNull
  * these are local settings, so rule 4's "held on a stale link" is the only
  * holding that applies.
  */
-object Voiceprint {
+object WriteLikeMe {
     const val PATH = "/api/voiceprint"
     const val SAMPLE_PATH = "/api/voiceprint/sample"
     const val FORGET_PATH = "/api/voiceprint/forget"

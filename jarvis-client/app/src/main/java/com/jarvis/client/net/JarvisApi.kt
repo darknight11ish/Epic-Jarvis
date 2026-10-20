@@ -2615,22 +2615,22 @@ class JarvisApi(
     // `probe` reads; `postExplained` carries each write's answer -
     // `{"ok": true, ...}` or `{"ok": false, "message": "<plain words>"}` - as
     // the PC wrote it, so a refusal reaches the screen as a sentence. The
-    // bodies come from [Voiceprint], which the JVM test pins.
+    // bodies come from [WriteLikeMe], which the JVM test pins.
 
     /** `GET /api/voiceprint` - the samples, the count and the switch's state. */
-    suspend fun voiceprint(): ApiResult<JsonObject> = probe(Voiceprint.PATH)
+    suspend fun voiceprint(): ApiResult<JsonObject> = probe(WriteLikeMe.PATH)
 
     /** `POST /api/voiceprint/sample` - ONE piece of the owner's own writing. */
     suspend fun addVoiceprint(json: String): ApiResult<JsonObject> =
-        postExplained(Voiceprint.SAMPLE_PATH, json)
+        postExplained(WriteLikeMe.SAMPLE_PATH, json)
 
     /** `POST /api/voiceprint/forget {"id", "confirm": true}` - ONE sample. */
     suspend fun forgetVoiceprint(json: String): ApiResult<JsonObject> =
-        postExplained(Voiceprint.FORGET_PATH, json)
+        postExplained(WriteLikeMe.FORGET_PATH, json)
 
     /** `POST /api/voiceprint/enabled` - the local ON/OFF switch. */
     suspend fun setVoiceprintEnabled(json: String): ApiResult<JsonObject> =
-        postExplained(Voiceprint.ENABLED_PATH, json)
+        postExplained(WriteLikeMe.ENABLED_PATH, json)
 
     /**
      * `GET /api/thinking` - Per-model thinking levels (Section 5.5; [Thinking.parse]). A read.

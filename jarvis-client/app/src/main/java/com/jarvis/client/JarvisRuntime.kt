@@ -3041,7 +3041,7 @@ object JarvisRuntime {
 
     // -------------------------------------------------- write like me ----
     // "Write like me" (jarvis_voiceprint.py) - see
-    // [com.jarvis.client.net.Voiceprint] and ui/screens/VoiceprintPlate.kt.
+    // [com.jarvis.client.net.WriteLikeMe] and ui/screens/VoiceprintPlate.kt.
     // The samples and the local switch, under "How Jarvis talks". NO approval
     // card anywhere: these are local settings, so rule 4's stale-link hold is
     // the only holding that applies. A read is never held; each of the three
@@ -3054,15 +3054,15 @@ object JarvisRuntime {
     /** The switch, ONE tap, held on a stale link. */
     suspend fun setVoiceprintEnabled(on: Boolean): String {
         actionBlocker()?.let { return it }
-        val body = com.jarvis.client.net.Voiceprint.enabledBody(on).toString()
-        return com.jarvis.client.net.Voiceprint.enabledLine(api.setVoiceprintEnabled(body), on)
+        val body = com.jarvis.client.net.WriteLikeMe.enabledBody(on).toString()
+        return com.jarvis.client.net.WriteLikeMe.enabledLine(api.setVoiceprintEnabled(body), on)
     }
 
     /** Keep ONE sample the owner wrote; held on a stale link. */
     suspend fun addVoiceprint(text: String): String {
         actionBlocker()?.let { return it }
-        val body = com.jarvis.client.net.Voiceprint.addBody(text)
-        return com.jarvis.client.net.Voiceprint.addedLine(api.addVoiceprint(body))
+        val body = com.jarvis.client.net.WriteLikeMe.addBody(text)
+        return com.jarvis.client.net.WriteLikeMe.addedLine(api.addVoiceprint(body))
     }
 
     /**
@@ -3072,8 +3072,8 @@ object JarvisRuntime {
      */
     suspend fun forgetVoiceprint(id: String): String {
         actionBlocker()?.let { return it }
-        val body = com.jarvis.client.net.Voiceprint.forgetBody(id)
-        return com.jarvis.client.net.Voiceprint.forgottenLine(api.forgetVoiceprint(body))
+        val body = com.jarvis.client.net.WriteLikeMe.forgetBody(id)
+        return com.jarvis.client.net.WriteLikeMe.forgottenLine(api.forgetVoiceprint(body))
     }
 
     // ------------------------------------------ thinking levels (5.5) ----

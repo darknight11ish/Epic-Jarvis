@@ -20,7 +20,7 @@ import androidx.compose.ui.semantics.Role
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.Manner
-import com.jarvis.client.net.Voiceprint
+import com.jarvis.client.net.WriteLikeMe
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
@@ -56,7 +56,7 @@ internal fun MannerSection(canAct: Boolean) {
     // runtime ([JarvisRuntime.setVoiceprintEnabled] and friends) and again on
     // the PC. No approval card anywhere: these are local settings.
     var vpReads by remember { mutableIntStateOf(0) }
-    var vpView by remember { mutableStateOf<Voiceprint.View?>(null) }
+    var vpView by remember { mutableStateOf<WriteLikeMe.View?>(null) }
     var vpMissing by remember { mutableStateOf(false) }
     var vpReadError by remember { mutableStateOf<String?>(null) }
     var vpBusy by remember { mutableStateOf(false) }
@@ -65,7 +65,7 @@ internal fun MannerSection(canAct: Boolean) {
     LaunchedEffect(vpReads) {
         when (val r = JarvisRuntime.voiceprint()) {
             is ApiResult.Ok -> {
-                val v = Voiceprint.parse(r.value)
+                val v = WriteLikeMe.parse(r.value)
                 if (v == null) {
                     vpMissing = true
                 } else {
@@ -74,7 +74,7 @@ internal fun MannerSection(canAct: Boolean) {
                 }
                 vpReadError = null
             }
-            is ApiResult.Failed -> if (Voiceprint.missing(r.error)) {
+            is ApiResult.Failed -> if (WriteLikeMe.missing(r.error)) {
                 vpMissing = true
                 vpReadError = null
             } else {
@@ -208,7 +208,7 @@ internal fun MannerSection(canAct: Boolean) {
                     // controls that could only fail.
                     val vpErr = vpReadError
                     when {
-                        vpMissing -> Text(Voiceprint.MISSING,
+                        vpMissing -> Text(WriteLikeMe.MISSING,
                             style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
                         vpView == null && vpErr != null -> Text(
                             "Couldn't read it: $vpErr",

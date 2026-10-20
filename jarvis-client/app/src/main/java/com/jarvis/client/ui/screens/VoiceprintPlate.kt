@@ -21,7 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
-import com.jarvis.client.net.Voiceprint
+import com.jarvis.client.net.WriteLikeMe
 
 /**
  * "Write like me", shown under the existing "How Jarvis talks" section
@@ -37,20 +37,20 @@ import com.jarvis.client.net.Voiceprint
 @Composable
 internal fun VoiceprintPlate(
     canAct: Boolean,
-    view: Voiceprint.View?,
+    view: WriteLikeMe.View?,
     busy: Boolean,
     said: String?,
     onToggle: (Boolean) -> Unit,
     onAdd: (String) -> Unit,
-    onForget: (Voiceprint.Sample) -> Unit,
+    onForget: (WriteLikeMe.Sample) -> Unit,
 ) {
     var draft by remember { mutableStateOf("") }
-    var pendingForget by remember { mutableStateOf<Voiceprint.Sample?>(null) }
+    var pendingForget by remember { mutableStateOf<WriteLikeMe.Sample?>(null) }
     var problem by remember { mutableStateOf<String?>(null) }
 
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-        Text(Voiceprint.TITLE, style = MaterialTheme.typography.titleMedium)
-        Text(Voiceprint.DETAIL, style = MaterialTheme.typography.bodySmall)
+        Text(WriteLikeMe.TITLE, style = MaterialTheme.typography.titleMedium)
+        Text(WriteLikeMe.DETAIL, style = MaterialTheme.typography.bodySmall)
         Row(
             modifier = Modifier.fillMaxWidth()
                 .toggleable(
@@ -62,19 +62,19 @@ internal fun VoiceprintPlate(
                 .padding(vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(Voiceprint.SWITCH_LABEL, modifier = Modifier.weight(1f))
+            Text(WriteLikeMe.SWITCH_LABEL, modifier = Modifier.weight(1f))
             Switch(
                 checked = view?.enabled == true,
                 onCheckedChange = { onToggle(it) },
                 enabled = canAct && !busy,
             )
         }
-        Text(Voiceprint.SWITCH_DETAIL, style = MaterialTheme.typography.bodySmall)
+        Text(WriteLikeMe.SWITCH_DETAIL, style = MaterialTheme.typography.bodySmall)
         OutlinedTextField(
             value = draft,
             onValueChange = { draft = it; problem = null },
             label = { Text("A message you wrote") },
-            supportingText = { Text(problem ?: Voiceprint.SAMPLE_HINT) },
+            supportingText = { Text(problem ?: WriteLikeMe.SAMPLE_HINT) },
             isError = problem != null,
             enabled = canAct && !busy,
             modifier = Modifier.fillMaxWidth(),
@@ -83,7 +83,7 @@ internal fun VoiceprintPlate(
         Button(
             enabled = canAct && !busy && draft.isNotBlank(),
             onClick = {
-                val why = Voiceprint.sampleProblem(draft)
+                val why = WriteLikeMe.sampleProblem(draft)
                 if (why != null) problem = why else {
                     onAdd(draft.trim())
                     draft = ""
@@ -94,7 +94,7 @@ internal fun VoiceprintPlate(
         said?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         val samples = view?.samples.orEmpty()
         if (samples.isEmpty()) {
-            Text(Voiceprint.EMPTY, style = MaterialTheme.typography.bodySmall)
+            Text(WriteLikeMe.EMPTY, style = MaterialTheme.typography.bodySmall)
         }
         for (sample in samples) {
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -102,7 +102,7 @@ internal fun VoiceprintPlate(
                 TextButton(
                     enabled = canAct && !busy,
                     onClick = { pendingForget = sample },
-                ) { Text(Voiceprint.FORGET_LABEL) }
+                ) { Text(WriteLikeMe.FORGET_LABEL) }
             }
         }
     }
@@ -113,7 +113,7 @@ internal fun VoiceprintPlate(
         AlertDialog(
             onDismissRequest = { pendingForget = null },
             title = { Text("Forget this sample?") },
-            text = { Text(Voiceprint.forgetAsk(asking)) },
+            text = { Text(WriteLikeMe.forgetAsk(asking)) },
             confirmButton = {
                 TextButton(onClick = {
                     val sample = asking
