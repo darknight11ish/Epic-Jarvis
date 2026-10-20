@@ -354,6 +354,52 @@ def t_a_remote_device_cannot_add_or_forget():
     check("... and nothing was written", V.count() == before)
 
 
+def t_the_switch_is_phone_reachable_but_the_samples_are_not():
+    """The owner's decision (2026-10-20): the local ON/OFF switch is an ordinary
+    client setting (like "How Jarvis talks"), so the paired phone may flip it -
+    turning it off is instant and neither direction raises a card. The SAMPLES
+    are the owner's own words, so only this PC may add or forget them (audit
+    catch 2C, kept)."""
+    class Remote(FakeHandler):
+        client_address = ("100.101.102.103", 5555)   # a phone on the mesh
+
+        class connection:                              # noqa: N801 - attribute
+            @staticmethod
+            def getsockname():
+                return ("192.168.1.10", 4719)          # the PC's own LAN address
+
+    # The __main__ block already installed the wrapper on FakeHandler (the two
+    # route tests need it), and installing it on a SUBCLASS is a no-op on
+    # purpose: the wrapper is inherited and already marked installed. So this
+    # drives the real wrapper exactly as a request would, with `body` as the
+    # JSON payload it reads.
+    V.handle_post(V.ENABLED_PATH, {"enabled": True})
+    h = Remote()
+    h.path = V.ENABLED_PATH
+    h.body = {"enabled": False}
+    h.do_POST()
+    check("the phone's own switch POST is accepted", h.sent[0] == 200,
+          getattr(h, "sent", None))
+    check("... and the PC's answer says it is off",
+          h.sent[1].get("ok") is True and h.sent[1].get("enabled") is False,
+          h.sent[1])
+    check("... and it really turned Write like me off",
+          V._cfg("enabled", True) is False, V._cfg("enabled", True))
+    h.body = {"on": True}
+    h.do_POST()
+    check("... and the earlier draft's 'on' alias works from the phone too",
+          h.sent[0] == 200 and V._cfg("enabled", True) is True, getattr(h, "sent", None))
+    for path, body in ((V.SAMPLE_PATH, {"text": "a phone sample"}),
+                       (V.FORGET_PATH, {"id": "vp1", "confirm": True})):
+        h.path = path
+        h.body = body
+        h.do_POST()
+        check(f"the phone still cannot POST {path}", h.sent[0] == 403,
+              getattr(h, "sent", None))
+        check(f"... and it hears the PC-only answer for {path}",
+              "this PC" in str(h.sent[1].get("message", "")), h.sent[1])
+
+
 def t_a_sample_is_learned_and_listed():
     sid = V.add(V.KIND_CALIBRATION, "A short message asking them to be quick about it.",
                 prompt="a message")
@@ -675,6 +721,7 @@ if __name__ == "__main__":
                t_a_secret_is_never_stored,
                t_exemplars_reads_the_owners_own_samples,
                t_a_remote_device_cannot_add_or_forget,
+               t_the_switch_is_phone_reachable_but_the_samples_are_not,
                t_a_sample_is_learned_and_listed,
                t_forget_asks_first,
                t_forget_asks_first_over_the_route,

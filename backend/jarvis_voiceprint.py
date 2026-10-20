@@ -1241,13 +1241,21 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
             return post0(self)
         if not _allowed(self):
             return None
-        peer, local = _peer_local(self)
-        # 2026-10-20 audit, Part I catch 2C: every route below WRITES (add,
-        # learn an edit, forget), so another device is refused BEFORE the body
-        # is read. Reads (GET) stay a token-guarded read, as before.
-        if not _from_this_pc(peer, local):
-            return self._send(403, {"ok": False, "error": "not_this_pc",
-                                    "message": NOT_THIS_PC})
+        # 2026-10-20 audit, Part I catch 2C: adding, learning an edit or
+        # forgetting the owner's OWN WRITING SAMPLES is for this PC only, so
+        # another device is refused BEFORE the body is read. Reads (GET) stay a
+        # token-guarded read, as before.
+        #
+        # The local ON/OFF switch is EXEMPT on the owner's decision of
+        # 2026-10-20: it carries none of the owner's words, it is an ordinary
+        # client setting like "How Jarvis talks" (which the paired phone may
+        # also change), and the phone plate's switch has to keep working -
+        # turning it off is instant, and neither direction raises a card.
+        if route != ENABLED_PATH:
+            peer, local = _peer_local(self)
+            if not _from_this_pc(peer, local):
+                return self._send(403, {"ok": False, "error": "not_this_pc",
+                                        "message": NOT_THIS_PC})
         try:
             body = json.loads(read_body(self) or b"{}")
         except Exception:

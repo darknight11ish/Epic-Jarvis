@@ -20863,6 +20863,15 @@ and no network; absent means the framework's own `[voiceprint] enabled` value.
 Forget asks "are you sure?" first on both clients, and one tap is one change.
 No approval card is raised anywhere: these are local settings.
 
+Who may send what (2026-10-20 audit, catch 2C; owner's decision the same day):
+adding or forgetting a sample is **this PC only** - `install()` refuses
+`sample`/`learn_edit`/`forget` from another device before the body is read,
+because the sample text is the owner's own words. The local ON/OFF switch is
+deliberately **exempt** from that guard: it carries none of the owner's words,
+it is an ordinary client setting like "How Jarvis talks", and the paired
+phone's switch has to keep working - turning it off is instant, and neither
+direction raises a card. `backend/test_voiceprint.py` pins both halves.
+
 `backend/jarvis_voiceprint.py`, and its drop-in folder
 `plugins/ready/voiceprint/`. Four routes, no patch, its own store.
 
