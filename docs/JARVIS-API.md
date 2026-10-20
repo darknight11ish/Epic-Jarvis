@@ -22257,3 +22257,121 @@ the owner's refused words and the hard denylist refused BEFORE the model, the
 model named on the 202 and the card but never in the audit); and the patch's
 own pins (three routes, harness position, no install-block line, `_stack.py`'s
 RATCHET unchanged).
+
+## 147. The setup questionnaire: a guided path through the settings that already exist (backend half, added 2026-10-20)
+
+The owner asked (2026-10-20): *"there should be a setup questionnaire when
+someone first starts jarvis (or can be filled out again) if they want jarvis to
+act a different way overall ... a series of questions with multiple choices ...
+jarvis sets the settings with a summary for the user at the end ... that the
+user can choose to accept afterwards".* The design is
+`.dsh-scratch/DESIGN-SETUP-QUESTIONNAIRE-2026-10-20.md`. **This is the backend
+half only** - the desktop page (S2) and the phone screens (S3) come next; **no
+app calls these routes yet**.
+
+**It is a GUIDE, not a second settings system.** `backend/jarvis_setup.py`
+(shipped whole, twin in `jarvis-backend/`) holds 14 ordered questions and their
+options as pure data. Every option maps to an EXISTING setter: the
+`BoolSetting`s and named setters in `jarvis_settings_registry.py` (which call
+the exact function the matching Settings control calls, with the same tier
+check and the same words), plus `jarvis_asks_first.py` for the "how careful"
+bundle and the reading tools. It invents no gate action or tier, adds no latch,
+switches no model, and never calls a preset's apply route: the "what will you
+mostly use it for" answer is a **recommendation** only (its `id`/`title` come
+from `jarvis_presets.PRESETS`; applying one stays the preset selector's own
+`POST /api/work/apply` and its ONE `switch_model` card).
+
+**The switch/flag:** none of its own. The routes are installed by
+`backend/setup.patch` (ONE install block, after `presets.patch` and
+`app-control.patch`, immediately before `plugin-loader.patch`, whose hunk is
+re-anchored onto setup.patch's last two printed lines). When `jarvis_setup.py`
+is missing, the three routes are simply absent and the boot banner says so.
+Nothing about the questionnaire is on by itself: it is only read when an app
+asks, and an app that never calls it changes nothing.
+
+### `GET /api/setup` - the questions, the current values, the last answers
+
+Read-only, behind the same origin and token checks as every route:
+
+    {"available",
+     "questions": [{"id", "title", "help", "multi",
+                    "options": [{"id", "label", "detail"}], "all_none"}],
+     "current": {"<change key>": <current value>},
+     "answers": {<question id>: <option id> | [<option id>...]},
+     "completed_at": <float or null>,
+     "last_outcomes": [{"setting", "label", "effect", "state", "message"}],
+     "storage": "setup.json in the Jarvis settings folder",
+     "card_wait_s": <seconds>, "about": "..."}
+
+`current` is the PC's own reading, one entry per change; a value that cannot be
+read is LEFT OUT rather than guessed. For the "what asks first" rows it is a
+boolean: `true` means that action asks first today (its tier in
+`jarvis-framework.toml` is `ask`). `answers` and `completed_at` are the last
+accepted run, for a re-run's prefill and for a first-run offer to show once.
+
+### `POST /api/setup/plan` - a READ-ONLY summary
+
+Body `{"answers": {"<question id>": "<option id>" | ["<option id>", ...]}}`;
+the two data-level answers `"all"` and `"none"` are expanded for every
+choose-any question. Answers for questions the caller leaves out change
+nothing. The answer is:
+
+    {"ok", "changes": [{"setting", "label", "question", "from", "to", "effect",
+                        "sentence", "change"}],
+     "summary": ["Takes effect immediately: ..." | "Will ask you on a card: ..."],
+     "skipped": [{"setting", "reason"}],
+     "recommendation": {"id", "title", "why"} | null}
+
+**Nothing is written and no card is raised.** `effect` is `"card"` exactly where
+the existing setter would ask: the change's direction is the one its own module
+cards (e.g. web search ON, "ask before every search" OFF, an "asks first"
+loosening, offering a reading tool), AND the action's tier is read-only checked
+through `jarvis_framework.action_tier` - the same machinery the setter uses. If
+that tier is not `"ask"` the setter itself refuses, so the change is reported
+in `skipped`, never promised. A value that cannot be read is skipped in words,
+and an answer already in force is skipped as "already ...". No transcript,
+audio, fact or file is ever in this payload.
+
+### `POST /api/setup/apply` - one change at a time, through the existing setters
+
+Body `{"answers": {...}, "confirm": true}`. **Without `confirm: true` it
+refuses with 400 and does nothing at all** - the summary must have been accepted
+by a person first. Then it calls the mapped setters in a fixed safest-first
+order (tightening and cosmetic changes first, then the carded ONs), and:
+
+* every loosening change still raises **its OWN existing card** - never a
+  combined card and never an auto-approval. After a carded change it WAITS for
+  that card (up to `card_wait_s`, default 300 s), reading only what the
+  module already reports (`view()`/`state()`/`status()` and the setting's own
+  new value), before raising the next one, so two cards are never on screen at
+  once. A card still unanswered when the wait ends is left waiting and the
+  outcome says so; nothing is approved by this module;
+* a denied, unavailable or failed setting never aborts the rest; `outcomes`
+  carries one row per attempted change with a `state` of `changed`,
+  `asked-and-approved`, `asked-and-denied`, `asked-no-answer`, `not-available`,
+  `not-changed` or `failed`, and a plain sentence;
+* only then are the owner's own answers and `completed_at` saved (atomically)
+  in `<CONFIG_DIR>/setup.json`. **No chat, fact, voice, picture or file is
+  written** - the file holds choice ids and one timestamp. A damaged file is
+  reported by `GET /api/data-health` like every other settings JSON; this
+  module falls back to "no answers" rather than raising.
+
+A body that is not a JSON object, or `answers` that is not an object, is 400 in
+plain words. Every route is behind the same origin and token checks as every
+other write; the answers are the owner's own choices, never private data.
+**The apply route passes the request's own `peer`/`local` down to the existing
+setters** (read the same way `owner-check.patch`'s wrappers read them), so a
+loosening rule or a reading-tool ON still refuses from the phone - and fails
+closed when the PC cannot tell where the request came from. `peer is None` is
+only the project's documented in-process convention, never how a routed
+request is treated.
+
+`backend/test_setup.py` is the proof, with no network, no model, no
+microphone and no owner's PC: every question/option maps to a real setter;
+`plan()` writes nothing and marks every direction's card correctly (and marks a
+non-`ask` tier as skipped); "All"/"None" expand at the data level; `apply()`
+refuses without confirm, calls exactly the mapped setters, waits for each card
+before the next (approved and denied), continues past a failed setting, saves
+only the answers, and round-trips them for prefill; the module imports no gate,
+no model lane and no network, and the three routes keep the origin/token order.
+

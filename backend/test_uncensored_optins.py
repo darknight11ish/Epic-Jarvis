@@ -605,9 +605,9 @@ def t_listed_and_applies():
     # - so this check names the derived answer rather than losing its teeth: the
     # loader is anchored on the block it now follows, not invented from nothing.
     check("...and the loader's own hunk was re-anchored onto the block it now follows",
-          "until jarvis_presets.py is back"
+          "until jarvis_setup.py is back"
           in (HERE / "plugin-loader.patch").read_text(encoding="utf-8"),
-          "presets.patch (2026-10-18, the preset model selector) is now the LAST "
+          "setup.patch (2026-10-20, the setup questionnaire) is now the LAST "
           "block in the install chain before the loader; tools/check_plugins.py "
           "derives that anchor from the patch text, and fails if it drifts")
     check("a core patch in front of the loader is named in the plug-in catalogue",

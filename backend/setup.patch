@@ -1,0 +1,19 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -6839,3 +6839,16 @@
+         print(f"  presets    NOT ON ({type(exc).__name__}) - the preset apply route is off")
+         print("             until jarvis_presets.py is back: run apply-patches.ps1 again")
++    # setup.patch (the owner's setup questionnaire, 2026-10-20; design
++    # .dsh-scratch/DESIGN-SETUP-QUESTIONNAIRE-2026-10-20.md, docs/JARVIS-API.md
++    # section 147): GET /api/setup, POST /api/setup/plan and POST
++    # /api/setup/apply - a guided path through settings that already exist.
++    # Every option calls the existing setter and its own existing card; the plan
++    # is read-only, and nothing applies before confirm: true.
++    try:
++        import jarvis_setup
++        print(jarvis_setup.install(Handler, origin_ok=_origin_ok,
++                                   token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  setup      NOT ON ({type(exc).__name__}) - the setup questionnaire is off")
++        print("             until jarvis_setup.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
