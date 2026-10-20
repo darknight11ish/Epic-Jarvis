@@ -223,6 +223,28 @@ export const MENUS = [
     ]
   },
   {
+    "id": "settings.setup-questionnaire",
+    "title": "First-time setup",
+    "about": "Fourteen questions about how you want Jarvis to behave, with a read-only plan before anything is applied.",
+    "apps": [
+      "desktop",
+      "phone"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "card",
+    "group": null,
+    "parent": null,
+    "hide": false,
+    "collapse": false,
+    "why": "Never hideable on either app: it is a start-here setup card. The phone's row is the read-only plan; the changes are applied on the PC.",
+    "names": [
+      "first time setup",
+      "the setup questionnaire",
+      "the setup questions"
+    ]
+  },
+  {
     "id": "settings.devices",
     "title": "Devices",
     "about": "Every paired device with its own key.",
@@ -2696,6 +2718,7 @@ export const MENUS = [
 export const NEVER_HIDE = [
   "settings.connection",
   "settings.first-run",
+  "settings.setup-questionnaire",
   "settings.devices",
   "settings.animal-options",
   "settings.security",
@@ -2812,6 +2835,8 @@ export const ALIASES = {
   "finances": "group.finance",
   "findings": "brain.now.findings",
   "first run setup": "settings.first-run",
+  "first time setup": "settings.setup-questionnaire",
+  "first-time setup": "settings.setup-questionnaire",
   "floating face": "settings.floating-avatar",
   "floating jarvis": "settings.floating-avatar",
   "focus": "brain.work.focus",
@@ -2938,6 +2963,8 @@ export const ALIASES = {
   "settings": "entry.settings",
   "settings button": "entry.settings",
   "setup page": "settings.first-run",
+  "setup questionnaire": "settings.setup-questionnaire",
+  "setup questions": "settings.setup-questionnaire",
   "shortcuts": "settings.shortcuts",
   "show or hide": "settings.menu-visibility",
   "show the prompt coach": "settings.prompt-coach",

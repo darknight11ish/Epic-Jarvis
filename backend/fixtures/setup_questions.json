@@ -1,0 +1,400 @@
+{
+  "version": 1,
+  "generated_by": "tools/gen_setup_questions.py",
+  "source": "backend/jarvis_setup.py",
+  "note": "both apps render these same questions; regenerate, never hand-edit",
+  "count": 14,
+  "questions": [
+    {
+      "id": "talk_style",
+      "title": "How should Jarvis talk?",
+      "help": "This changes only how answers are worded. It never changes what Jarvis does or what it asks you first.",
+      "multi": false,
+      "options": [
+        {
+          "id": "warm",
+          "label": "Warm and brief (default)",
+          "detail": "Friendly and short, like a helpful person."
+        },
+        {
+          "id": "plain",
+          "label": "Plain",
+          "detail": "Neutral and businesslike - just the answer."
+        }
+      ],
+      "all_none": false
+    },
+    {
+      "id": "humour",
+      "title": "Should Jarvis use a little humour?",
+      "help": "Occasional light humour when it fits. Never on cards, errors, or serious topics.",
+      "multi": false,
+      "options": [
+        {
+          "id": "on",
+          "label": "Yes, a little humour",
+          "detail": ""
+        },
+        {
+          "id": "off",
+          "label": "No, keep it plain (default)",
+          "detail": ""
+        }
+      ],
+      "all_none": false
+    },
+    {
+      "id": "carefulness",
+      "title": "How careful should Jarvis be before it acts?",
+      "help": "Which of your things Jarvis may read, and whether it asks first. Making it MORE careful happens at once; making it LESS careful asks you on its own card, one for each thing.",
+      "multi": false,
+      "options": [
+        {
+          "id": "strict",
+          "label": "Strict - ask me first for all seven",
+          "detail": "Calendar, email, notes, home status, and writing to Obsidian, Logseq and Joplin: always ask first."
+        },
+        {
+          "id": "balanced",
+          "label": "Balanced - leave my current first-time choices alone",
+          "detail": "The setup changes none of the \"what asks first\" rows; you can see and change them in Settings, What asks first."
+        },
+        {
+          "id": "trusting",
+          "label": "Trusting - go ahead without a card",
+          "detail": "Jarvis may read and write those seven without asking. Each one still asks you on its own card before it changes, and it can only be changed from the PC."
+        }
+      ],
+      "all_none": false
+    },
+    {
+      "id": "learning",
+      "title": "How should Jarvis learn?",
+      "help": "Facts about you and your projects are learned from YOUR own words only. Turning learning on, or letting sensitive topics be learned automatically, asks you on a card. Turning things off is instant.",
+      "multi": false,
+      "options": [
+        {
+          "id": "learn",
+          "label": "Learn automatically (recommended)",
+          "detail": "Facts are saved without a per-fact yes; sensitive topics still wait for your yes."
+        },
+        {
+          "id": "learn_all",
+          "label": "Learn automatically, including sensitive topics",
+          "detail": "Health, money and private details about other people are also saved without asking. Turning this on raises its own card."
+        },
+        {
+          "id": "learn_off",
+          "label": "Don't learn automatically; ask me for each fact",
+          "detail": ""
+        }
+      ],
+      "all_none": false
+    },
+    {
+      "id": "reading_tools",
+      "title": "Which of your things may the AI model read when you ask?",
+      "help": "These are the tools Jarvis may be offered at all. Turning one on shows its own approval card and asks for Windows Hello, on the PC; turning one off is instant. All / None applies to the whole list.",
+      "multi": true,
+      "options": [
+        {
+          "id": "calendar",
+          "label": "My calendar",
+          "detail": ""
+        },
+        {
+          "id": "email",
+          "label": "My email",
+          "detail": ""
+        },
+        {
+          "id": "notes",
+          "label": "My notes",
+          "detail": ""
+        },
+        {
+          "id": "home",
+          "label": "Home status",
+          "detail": ""
+        }
+      ],
+      "all_none": true
+    },
+    {
+      "id": "web_search",
+      "title": "Should Jarvis be able to search the web?",
+      "help": "A search still shows its exact words on a card first when private things could slip in. Turning web search on raises its one card; turning it off is instant.",
+      "multi": false,
+      "options": [
+        {
+          "id": "on",
+          "label": "Yes, search the web when it helps",
+          "detail": ""
+        },
+        {
+          "id": "off",
+          "label": "No web search",
+          "detail": ""
+        }
+      ],
+      "all_none": false
+    },
+    {
+      "id": "search_asking",
+      "title": "How often should Jarvis ask before a web search?",
+      "help": "By default a search asks only when it could include something private. Asking before EVERY search is stricter and instant; turning that back off raises a card.",
+      "multi": false,
+      "options": [
+        {
+          "id": "ask_every",
+          "label": "Ask before every search (strictest)",
+          "detail": ""
+        },
+        {
+          "id": "ask_private",
+          "label": "Ask only when private things could slip in (default)",
+          "detail": ""
+        }
+      ],
+      "all_none": false
+    },
+    {
+      "id": "search_provider",
+      "title": "Which search service should Jarvis use?",
+      "help": "The service only sees the words of a search Jarvis decides to make. Some need a key you add later in Settings; changing this is instant.",
+      "multi": false,
+      "options": [
+        {
+          "id": "searxng",
+          "label": "SearXNG on this PC (default, no key)",
+          "detail": ""
+        },
+        {
+          "id": "duckduckgo",
+          "label": "DuckDuckGo (no key)",
+          "detail": ""
+        },
+        {
+          "id": "exa",
+          "label": "Exa (needs a key)",
+          "detail": ""
+        },
+        {
+          "id": "tavily",
+          "label": "Tavily (needs a key)",
+          "detail": ""
+        },
+        {
+          "id": "brave",
+          "label": "Brave Search (needs a key and a card)",
+          "detail": ""
+        }
+      ],
+      "all_none": false
+    },
+    {
+      "id": "screen_pictures",
+      "title": "What may Jarvis look at or draw on this PC?",
+      "help": "Each of these has its own existing card or switch. Picture mode and the headless browser each raise their own card when turned on. All / None applies to the whole list.",
+      "multi": true,
+      "options": [
+        {
+          "id": "screen_picture",
+          "label": "Picture mode - read the words on my screen",
+          "detail": ""
+        },
+        {
+          "id": "headless_browser",
+          "label": "The headless browser (Obscura)",
+          "detail": ""
+        },
+        {
+          "id": "pictures",
+          "label": "Let me ask Jarvis to make pictures",
+          "detail": ""
+        },
+        {
+          "id": "sandbox",
+          "label": "Data and maths sandbox (small Python runs)",
+          "detail": ""
+        }
+      ],
+      "all_none": true
+    },
+    {
+      "id": "notifications",
+      "title": "Which notifications do you want?",
+      "help": "Each switch only changes when this PC or your phone speaks up; none of them raises a card, and none of them is ever a way out of your own devices. All / None applies to the whole list.",
+      "multi": true,
+      "options": [
+        {
+          "id": "phone",
+          "label": "Read notifications on my phone",
+          "detail": ""
+        },
+        {
+          "id": "watch",
+          "label": "Show notifications on my smartwatch",
+          "detail": ""
+        },
+        {
+          "id": "senders",
+          "label": "Show who new emails are from in the morning briefing",
+          "detail": ""
+        },
+        {
+          "id": "alarm",
+          "label": "Alarm sounds",
+          "detail": ""
+        },
+        {
+          "id": "reminder",
+          "label": "Reminder sounds",
+          "detail": ""
+        },
+        {
+          "id": "briefing",
+          "label": "A notification when the briefing is ready",
+          "detail": ""
+        },
+        {
+          "id": "handoff",
+          "label": "\"A website needs you\" notifications",
+          "detail": ""
+        },
+        {
+          "id": "quiet",
+          "label": "Quiet hours on the PC",
+          "detail": ""
+        }
+      ],
+      "all_none": true
+    },
+    {
+      "id": "card_size",
+      "title": "How much of an approval card should be shown at first?",
+      "help": "This only changes how much of the card is open when it appears: the same card, the same words underneath, the same buttons. Instant either way.",
+      "multi": false,
+      "options": [
+        {
+          "id": "short",
+          "label": "Start short, with \"Explain more\" (default)",
+          "detail": ""
+        },
+        {
+          "id": "full",
+          "label": "Always show the whole card",
+          "detail": ""
+        }
+      ],
+      "all_none": false
+    },
+    {
+      "id": "voice",
+      "title": "Which voice options should be on?",
+      "help": "These only change how Jarvis sounds. This questionnaire never starts voice training - that stays your own step, in Settings. All / None applies to the whole list.",
+      "multi": true,
+      "options": [
+        {
+          "id": "prompt_coach",
+          "label": "Prompt coach",
+          "detail": ""
+        },
+        {
+          "id": "face_voice",
+          "label": "Voice follows the face",
+          "detail": ""
+        },
+        {
+          "id": "better_voice",
+          "label": "Better voice on the second card",
+          "detail": "Turning this on raises its own card, and needs a second card."
+        }
+      ],
+      "all_none": true
+    },
+    {
+      "id": "animal_faces",
+      "title": "How should the animal faces behave?",
+      "help": "Small cosmetic switches, shared by the PC and the phone. None of them raises a card. All / None applies to the whole list.",
+      "multi": true,
+      "options": [
+        {
+          "id": "still",
+          "label": "Keep the animal still",
+          "detail": ""
+        },
+        {
+          "id": "nods",
+          "label": "Listening nods",
+          "detail": ""
+        },
+        {
+          "id": "focus_buddy",
+          "label": "Focus buddy",
+          "detail": ""
+        },
+        {
+          "id": "acks",
+          "label": "Small acknowledgements",
+          "detail": ""
+        },
+        {
+          "id": "petting",
+          "label": "Petting",
+          "detail": ""
+        },
+        {
+          "id": "cute_moments",
+          "label": "Cute idle moments",
+          "detail": ""
+        },
+        {
+          "id": "seasonal",
+          "label": "Seasonal touches",
+          "detail": ""
+        },
+        {
+          "id": "sky",
+          "label": "Show the sun and moon behind the face",
+          "detail": ""
+        }
+      ],
+      "all_none": true
+    },
+    {
+      "id": "main_use",
+      "title": "What will you mostly use Jarvis for?",
+      "help": "This recommends one of the existing work presets. It changes NO model by itself: a preset is only applied by choosing it in the preset selector, where its own ONE card asks you.",
+      "multi": false,
+      "options": [
+        {
+          "id": "general",
+          "label": "Everyday questions, writing and life admin",
+          "detail": ""
+        },
+        {
+          "id": "agentic",
+          "label": "Browser-and-forms, multi-step work",
+          "detail": ""
+        },
+        {
+          "id": "coding",
+          "label": "Coding and long jobs with tools",
+          "detail": ""
+        },
+        {
+          "id": "uncensored",
+          "label": "Uncensored answers",
+          "detail": ""
+        },
+        {
+          "id": "quick",
+          "label": "Quick, short answers",
+          "detail": ""
+        }
+      ],
+      "all_none": false
+    }
+  ]
+}

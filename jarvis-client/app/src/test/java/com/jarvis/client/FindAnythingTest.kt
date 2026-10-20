@@ -205,12 +205,18 @@ class FindAnythingTest {
             // so the catalogue is one larger - the phone's findable list and
             // MenuVisibilityTest stay unchanged because `phone = false`.
             //
+            // 122 -> 123 (2026-10-20, S2 / the setup questionnaire):
+            // `settings.setup-questionnaire` is a real menu on BOTH apps and is
+            // never hideable - a start-here card. The phone has its own
+            // Settings row and a place for it in MenuPlaces, so the catalogue is
+            // one larger because a place really was added.
+            //
             // It is here so that a regeneration which drops the `names` field,
             // or a catalogue that comes back a different size, is noticed rather
             // than quietly searched: the check above still proves that every one
-            // of the 122 menus has all of its names searched for.
+            // of the 123 menus has all of its names searched for.
             "the catalogue must still carry the names at all",
-            122,
+            123,
             MenuCatalog.MENUS.size,
         )
         assertTrue(
@@ -286,14 +292,16 @@ class FindAnythingTest {
             )
         }
         // Every Settings row on the screen is one of the two: a menu, or a row
-        // MenuPlaces has no id for. Today exactly one is the second kind
-        // ("Notifications from Jarvis"), because it is not a hideable menu -
-        // a second one appearing must be looked at, not silently joined.
+        // MenuPlaces has no id for. A second one appearing must be looked at,
+        // not silently joined.
         assertEquals(
             "a Settings row with no menu id has appeared: give it a place and say so here",
             // "App control" (2026-10-19): the phone's accessibility service is
             // phone-only, so the desktop's catalogue has no menu id for it.
-            listOf("settings-row.app-control", "settings-row.jarvis-notify"),
+            listOf(
+                "settings-row.app-control",
+                "settings-row.jarvis-notify",
+            ),
             FindAnything.ROWS.filter { it.id.startsWith("settings-row.") }.map { it.id },
         )
     }

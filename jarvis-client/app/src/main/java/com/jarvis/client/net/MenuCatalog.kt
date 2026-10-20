@@ -44,6 +44,7 @@ object MenuCatalog {
     val MENUS: List<Menu> = listOf(
         Menu("settings.connection", "Connection", "The pairing key, the server address and the link status.", true, true, "settings", "", "card", null, null, false, false, "Acting is blocked when the link is stale (rule 4), so its status is always visible.", listOf("connection", "connection settings", "pairing", "the server address")),
         Menu("settings.first-run", "Set up Jarvis", "The first-run card: the five choices that matter on a new install.", true, false, "settings", "", "card", null, null, false, false, "Desktop only, and never hideable: it is the page a new owner meets first.", listOf("set up jarvis", "first run setup", "the setup page", "getting started with jarvis")),
+        Menu("settings.setup-questionnaire", "First-time setup", "Fourteen questions about how you want Jarvis to behave, with a read-only plan before anything is applied.", true, true, "settings", "", "card", null, null, false, false, "Never hideable on either app: it is a start-here setup card. The phone's row is the read-only plan; the changes are applied on the PC.", listOf("first time setup", "the setup questionnaire", "the setup questions")),
         Menu("settings.devices", "Devices", "Every paired device with its own key.", true, true, "settings", "", "card", null, null, false, true, "Removing a lost phone must stay reachable.", listOf("devices", "paired devices")),
         Menu("settings.appearance-card", "Appearance", "Theme, faces and how it all looks.", true, true, "settings", "", "card", null, null, true, true, "", listOf("appearance", "the theme", "themes", "faces")),
         Menu("settings.animal-options", "Animal options", "Every animal-face option in one place.", true, true, "settings", "", "card", null, null, false, false, "On the phone it is drawn inside Appearance; the Appearance menu is how it is hidden.", listOf("animal options", "animal settings")),
@@ -170,6 +171,7 @@ object MenuCatalog {
     val NEVER_HIDE: List<String> = listOf(
         "settings.connection",
         "settings.first-run",
+        "settings.setup-questionnaire",
         "settings.devices",
         "settings.animal-options",
         "settings.security",

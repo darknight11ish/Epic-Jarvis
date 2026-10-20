@@ -2312,6 +2312,30 @@ which is said plainly here rather than read as a clean pass it did not earn.
 real frame decoder and text reader on the owner's PC remain NOT-TESTABLE until
 field-tested; that is not a pass.
 
+**The setup questionnaire is shared, and its APPLY step is the desktop's alone,
+one-sided on purpose** (2026-10-20; JARVIS-API §147; `backend/jarvis_setup.py`,
+`setup.patch`). Both apps read the same fourteen questions (`GET /api/setup`)
+and both may ask the read-only plan (`POST /api/setup/plan`, which writes
+nothing and raises no card): the desktop draws it in Settings → First-time
+setup (`setup-questionnaire.js`, `setup-bridge.js`, `setup-settings.js`,
+`src-tauri/src/setup_questionnaire.rs`) and the phone reads the same questions
+on its own Settings card (`net/SetupQuestionnaire.kt`,
+`ui/screens/SetupQuestionnairePlate.kt`), with the same prefill, the same
+effects (instant / asks you on a card / blocked) and the same "would not
+change" reasons. **Applying (`POST /api/setup/apply`) is the PC's alone**: it
+calls the EXISTING setters in a fixed safest-first order, ONE at a time, and
+every loosening change raises its OWN existing approval card and waits for it,
+so one apply can take minutes and needs a person at the PC; several of those
+changes are PC-only by rules that already exist (`jarvis_asks_first` refuses a
+loosening request from any device but the PC, and fails closed when it cannot
+tell). A phone button would either fail halfway or sit behind cards it cannot
+answer, so the phone has no apply path at all and says the changes are made on
+the PC. That is not a missing screen - the read-only half is built and tested,
+the write is deliberately not. `tools/check_parity.py` classifies
+`/api/setup/apply` `deliberate`, and nothing here invents a gate action, a tier
+or a latch: every option maps to a setter the matching Settings control already
+calls, and the preset answer is a recommendation that changes no model.
+
 (`backend/jarvis_receipts.py`, `plugins/ready/receipts/`, JARVIS-API §132).
 The store and its two routes are built: `GET /api/receipts` (the recent list)
 and `POST /api/receipts/<receipt_id>/undo`, which raises ONE `undo_action`

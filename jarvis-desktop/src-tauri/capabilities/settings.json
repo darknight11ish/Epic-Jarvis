@@ -28,6 +28,7 @@
     "browser-engine",
     "sandbox-exec",
     "media-index",
+    "setup-questionnaire",
     "spending-settings",
     "pictures-settings",
     "focus-presets",

@@ -122,6 +122,12 @@ object OpenPlace {
         // (SettingsScreen.kt, item "sandbox"), so "open the data sandbox" lands
         // on it instead of the top of Settings.
         "sandbox" to Where.Go(Screen.SETTINGS, "sandbox"),
+        // "First-time setup" (S2, 2026-10-20; JARVIS-API section 147): the PC's
+        // fourteen questions and its read-only plan. An ordinary Settings row
+        // on the phone (SettingsScreen.kt, item "setup-questionnaire", always
+        // drawn), so "open first time setup" lands on it rather than the top of
+        // Settings; the changes themselves are made on the PC.
+        "setup-questionnaire" to Where.Go(Screen.SETTINGS, "setup-questionnaire"),
         // "Platform checks": its Connection card, and "This app" with the
         // phone's own "Check for new versions" (the desktop's "updates" card
         // is the desktop app's; this is the nearest thing the phone has).

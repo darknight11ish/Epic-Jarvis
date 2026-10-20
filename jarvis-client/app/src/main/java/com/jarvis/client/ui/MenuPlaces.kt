@@ -91,6 +91,13 @@ object MenuPlaces {
         // phone could not hide it and its row would be an undecided item key -
         // MenuVisibilityTest checks both halves.
         "sandbox" to "settings.sandbox",
+        // "First-time setup" (S2, 2026-10-20; JARVIS-API section 147): the PC's
+        // fourteen questions and its read-only plan. Its own Settings row on the
+        // phone (SettingsScreen.kt, item "setup-questionnaire") and a menu that
+        // is never hideable on either app - a start-here card - so the row still
+        // needs its PLACE here: Find anything lists every phone menu with a
+        // place, and MenuVisibilityTest holds this map to the screen's rows.
+        "setup-questionnaire" to "settings.setup-questionnaire",
     )
 
     /** BrainScreen.kt `item(key = ...)` -> menu id (a key not listed is never hideable or is not a menu). */

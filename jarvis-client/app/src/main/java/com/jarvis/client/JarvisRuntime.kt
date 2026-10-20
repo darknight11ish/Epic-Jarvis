@@ -2625,6 +2625,24 @@ object JarvisRuntime {
     /** `GET /api/prompt/coach`. A read: never held. */
     suspend fun promptCoach(): ApiResult<JsonObject> = api.promptCoach()
 
+    // ---------------------------------------- the setup questionnaire ----
+    // JARVIS-API.md section 147. BOTH calls here are READS on the PC: the
+    // reading, and the plan - which writes nothing and raises no card - so
+    // neither is held on a stale link (rule 4 holds ACTING). The phone never
+    // applies anything: the apply works through the PC's existing setters one
+    // at a time and several of those changes are PC-only
+    // (docs/ARCHITECTURE.md section 8).
+
+    /** `GET /api/setup` - the fourteen questions, values and last outcomes. */
+    suspend fun setupQuestionnaire(): ApiResult<JsonObject> = api.setupQuestionnaire()
+
+    /**
+     * `POST /api/setup/plan` - the PC's own READ-ONLY plan. `body` is
+     * `SetupQuestionnaire.planBody(...)`, and it carries no `confirm` field at
+     * all: nothing here can change a setting.
+     */
+    suspend fun setupPlan(body: String): ApiResult<JsonObject> = api.setupPlan(body)
+
     /**
      * The prompt coach switch. Held on a stale link like every change sent to
      * the PC ([actionBlocker], rule 4): "at once" means no approval card, not

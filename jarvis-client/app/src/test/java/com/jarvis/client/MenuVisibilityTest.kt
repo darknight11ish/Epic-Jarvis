@@ -453,6 +453,9 @@ class MenuVisibilityTest {
         // service is phone-only, so no menu id exists for it in the desktop's
         // catalogue and the PC has no menu to hide it under. The row is always
         // drawn, like Security and Limits.
+        // "setup-questionnaire" (S2, 2026-10-20) is NOT one of these: it has a
+        // menu id in the catalogue now ("settings.setup-questionnaire"), never
+        // hideable on either app, and its place is in MenuPlaces.SETTINGS.
         val undecidedS = settingsKeys - MenuPlaces.SETTINGS.keys -
             setOf("menus-hidden", "tail", "jump-list", "limits", "jarvis-notify", "app-control")
         assertTrue("Settings items with no decision in MenuPlaces: $undecidedS", undecidedS.isEmpty())

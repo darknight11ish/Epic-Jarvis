@@ -162,6 +162,15 @@ SECTIONS: tuple = (
     # lists it PC-only and the phone answers "only on your PC".
     Section("first-run", ("set up jarvis", "first run setup", "the setup page",
                           "getting started with jarvis"), app="desktop"),
+    # "First-time setup" (S2, 2026-10-20; JARVIS-API section 147): the fourteen
+    # questions in one card. BOTH apps - the desktop card is settings.html's
+    # id="setup-questionnaire", and the phone has its own READ-ONLY row with the
+    # same item key (SettingsScreen.kt). Opening it is pure navigation on either
+    # app; applying is the PC's step, where every loosening change raises its
+    # own existing approval card (docs/ARCHITECTURE.md section 8).
+    Section("setup-questionnaire", ("first time setup", "the setup questionnaire",
+                                    "the setup questions", "how jarvis behaves"),
+            app="both"),
     Section("connection", ("connection", "the connection settings", "where jarvis is running")),
     # Paired devices (docs/PAIRING-DESIGN.md section 7.2): a card on both apps
     # (settings.html id="devices"; the phone's item(key = "devices")).

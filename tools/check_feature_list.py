@@ -248,6 +248,7 @@ LESSON_EXEMPT = {
     "data-sandbox": "one switch in Settings whose card says what it does; the PC's own line says what the last card did",
     "focus-presets": "the preset card explains itself in the PC's own words; its one action stays disabled until the lane/apply patch, so a lesson would teach a button that does nothing yet",
     "write-like-me": "the training screen it would teach is the next UI slice; this row is the catalogue half, so a lesson now would teach a screen that is not built yet",
+    "setup-questionnaire": "the card explains itself: fourteen questions in the owner's own words, a read-only plan naming each effect, and one Apply that asks twice; a lesson would repeat the card",
 }
 
 #: Rule 6's exemptions: lessons that are deliberately NOT a feature row, each

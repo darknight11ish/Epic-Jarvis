@@ -194,6 +194,10 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     // offered the small read-only Python tool. A row added at the end moves no
     // other number; it sits under Idle new on the screen and in the jump list.
     "sandbox" to 29,
+    // "First-time setup" (S2, 2026-10-20; JARVIS-API section 147): the PC's
+    // fourteen questions and its READ-ONLY plan, drawn by
+    // SetupQuestionnairePlate.kt. A row added at the end moves no other number.
+    "setup-questionnaire" to 30,
 )
 
 /**
@@ -769,6 +773,19 @@ fun SettingsScreen(
             // one normal approval card on the PC, and OFF is instant.
             if (menus.shows("settings.sandbox")) if (drawn("sandbox")) if (menus.shows("settings.sandbox")) item(key = "sandbox") {
                 MenuFrame(menus, "settings.sandbox") { SandboxSection(canAct = canAct) }
+            }
+
+            // "First-time setup" (S2, 2026-10-20; JARVIS-API section 147): the
+            // PC's fourteen questions and its READ-ONLY plan, drawn by
+            // SetupQuestionnairePlate.kt. It is NOT a hideable menu: no menu id
+            // exists for it (registering one is a backend change), and the
+            // desktop card has no menu id either - so, like "What asks first"
+            // and "App control", the row is always drawn. It applies nothing:
+            // the changes are made on the PC (docs/ARCHITECTURE.md section 8).
+            // A row added at the end of the screen moves no other row's
+            // position (see SETTINGS_ITEM_INDEX).
+            if (drawn("setup-questionnaire")) item(key = "setup-questionnaire") {
+                SetupQuestionnaireSection()
             }
 
             item(key = "tail") { Gap(24) }

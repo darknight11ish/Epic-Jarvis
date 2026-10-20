@@ -159,6 +159,18 @@ MENUS: tuple = (
        why="Desktop only, and never hideable: it is the page a new owner meets first.",
        names=("set up jarvis", "first run setup", "the setup page",
               "getting started with jarvis")),
+    # "First-time setup" (S2, 2026-10-20; JARVIS-API section 147): the fourteen
+    # questions in one card, with the read-only plan before anything is applied.
+    # A MENU on BOTH apps, and never hideable - like "Set up Jarvis" above, it
+    # is a start-here card. The phone's row is the same questions and the same
+    # read-only plan (its changes are applied on the PC, ARCHITECTURE section
+    # 8), so the phone really has this menu; being never-hideable is the same
+    # answer on both apps.
+    _m("settings.setup-questionnaire", "First-time setup",
+       "Fourteen questions about how you want Jarvis to behave, with a read-only plan before anything is applied.",
+       hide=False, collapse=False,
+       why="Never hideable on either app: it is a start-here setup card. The phone's row is the read-only plan; the changes are applied on the PC.",
+       names=("first time setup", "the setup questionnaire", "the setup questions")),
     _m("settings.devices", "Devices", "Every paired device with its own key.",
        hide=False, kind="card", names=("devices", "paired devices"),
        why="Removing a lost phone must stay reachable."),
