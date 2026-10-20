@@ -9627,6 +9627,16 @@ ever read as a failure, and nothing here writes to, moves, deletes or
 repairs anything it finds wrong - fixing a damaged file is the owner's
 call.
 
+**Connections wait instead of failing (F10, 2026-10-20).** Every connection
+handed out by `jarvis_sqlite.connect()` now sets `PRAGMA busy_timeout = 5000`,
+and the four shipped modules that used a 5-second raw `sqlite3.connect` timeout
+(`jarvis_chat_log.py`, `jarvis_decks.py`, `jarvis_owned_tables.py`,
+`jarvis_data_health.py`) now use 10 seconds. That is the lock half of F10. The
+`traces.db` half - capping its rows and age - is **not** in this repository:
+the only mention here is `jarvis_backup.py:470`, and the live HUD that writes
+it is not part of this repository, so its retention is reported as out of
+reach, not claimed fixed.
+
 ### 49.2 The route
 
 No settings, no approval card either way - the same shape as `jarvis_reach.py`
@@ -21065,6 +21075,17 @@ the reason written beside it (`jarvis_skills.py:621`) - and never loaded. **The
 original is not deleted.** A skill that merely fails to parse is `skipped` with
 the reason, not quarantined, because nothing was scanned to refuse.
 
+**Added 2026-10-20 (Area 8B):** before the scan and before anything is
+returned, the manual's text goes through
+`jarvis_agent.strip_chat_markers` - the recursive SecAlign-style strip every
+built-in tool result gets - so a chat-template instruction
+(`<|im_start|>...<|im_end|>`) is removed rather than blended into a manual. A
+reference name is one `.md` file name inside the skill's own `references/`
+folder: `..`, `/`, `\` and absolute paths are refused, and the resolved parent
+must be `<skill_dir>/references/`, so a symlink inside `references/` that
+points out of the skill is refused too (`backend/test_skill_hub.py`, "a
+reference is marker-stripped and a symlink cannot escape").
+
 ### 135.5 What it deliberately does not do
 
 - **It does not re-document `GET /api/skills` or `POST /api/skills/decide`.**
@@ -21896,6 +21917,17 @@ it decides, and it stays clean. No app menu, no Brain read section, and no
 modules whose own claims are already registered, and adding a row would force
 an ABOUT recount against every open PR.
 
+### 139.4 The draft boundary reads a path the way Windows does (added 2026-10-20)
+
+`refusal_reason()` compares a diff target by its last path component,
+lower-cased and with `/` and `\` treated the same, so a draft naming
+`backend\JARVIS_GATE.py`, `Backend/Jarvis_Gate.py` or
+`backend/jarvis-backend\JARVIS_GATE.py` is refused exactly as
+`backend/jarvis_gate.py` is (`backend/test_self_improve.py`, "a case or
+backslash cannot smuggle a protected file"). The `PROTECTED` and
+`TIER_TABLE_NAMES` lists are still the two lists; only the comparison stopped
+depending on spelling or platform.
+
 ## 140. The file guardian's history: what changed, and what did this file look like before (LM-2A, added 2026-10-18)
 
 Jarvis keeps a copy of the bytes of a file BEFORE it overwrites it (the file guardian, `backend/jarvis_file_guardian.py`, JARVIS-API-adjacent design in its own docstring). Until now that store was write-only from the owner's point of view. Two **read-only** routes put it on screen; the restore route is deliberately NOT part of this slice.
@@ -22013,7 +22045,11 @@ and no edit to `jarvis_hud.py` for this route.
 - **origin first**: a cross-origin / another-device request is refused with
   **403** *before its body is read* (the read callback is not called at all);
 - then the token: **401** without `X-Jarvis-Token`;
-- only then is the body parsed.
+- only then is the body parsed;
+- **a read-only file must be the file itself** (added 2026-10-20, Area 8): a
+  `read_only_files` entry that is a symlink, or that resolves somewhere other
+  than the path given, is refused before the script runs, so a link cannot hand
+  a script a file it was not given (`backend/test_sandbox_exec.py`).
 
 An older PC that has the module but not this folder answers **404** on the
 route. Both apps treat 404 (and 501) as "not on this PC's Jarvis yet" and draw

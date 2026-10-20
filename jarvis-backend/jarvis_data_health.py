@@ -82,7 +82,7 @@ def _sqlite_problem(path: Path) -> Optional[str]:
     if not path.is_file():
         return None
     try:
-        conn = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True, timeout=5.0)
+        conn = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True, timeout=10.0)
         try:
             row = conn.execute("PRAGMA integrity_check").fetchone()
         finally:

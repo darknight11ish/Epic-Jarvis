@@ -550,6 +550,19 @@ def t_no_shipped_module_hands_a_with_block_an_unclosed_connection():
           "never closes", not found, detail)
 
 
+def t_the_shared_connection_waits_on_a_busy_database():
+    """F10 (2026-10-20 audit, Area 9B): the one shared connection asks SQLite to
+    WAIT on a locked database (5000 ms), rather than failing at once."""
+    import jarvis_sqlite
+    conn = jarvis_sqlite.connect(":memory:")
+    try:
+        busy = conn.execute("PRAGMA busy_timeout").fetchone()[0]
+    finally:
+        conn.close()
+    check("the shared connection asks SQLite to wait 5000 ms on a busy database",
+          busy == 5000, busy)
+
+
 if __name__ == "__main__":
     for fn in (t_the_check_reads_the_backend_it_thinks_it_does,
                t_the_check_catches_the_old_shape,
@@ -557,6 +570,7 @@ if __name__ == "__main__":
                t_the_legitimate_shapes_in_this_repo_are_not_flagged,
                t_exactly_one_module_owns_the_closing_connection,
                t_the_three_modules_share_it,
+               t_the_shared_connection_waits_on_a_busy_database,
                t_no_shipped_module_hands_a_with_block_an_unclosed_connection):
         print(f"\n--- {fn.__name__} ---")
         try:

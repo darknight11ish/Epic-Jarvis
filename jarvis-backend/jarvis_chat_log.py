@@ -934,7 +934,7 @@ class ChatLog:
     # -- the database -----------------------------------------------------
     def _connect(self):
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        c = sqlite3.connect(str(self.db_path), timeout=5.0)
+        c = sqlite3.connect(str(self.db_path), timeout=10.0)
         c.execute("PRAGMA secure_delete = ON")
         c.execute("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v BLOB)")
         c.execute("CREATE TABLE IF NOT EXISTS conversations ("

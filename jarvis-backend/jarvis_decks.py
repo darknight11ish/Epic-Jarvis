@@ -583,7 +583,7 @@ class Decks:
 
     def _connect(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        c = sqlite3.connect(str(self.path), timeout=5.0, isolation_level=None)
+        c = sqlite3.connect(str(self.path), timeout=10.0, isolation_level=None)
         c.execute("PRAGMA secure_delete = ON")
         for stmt in _SCHEMA:
             c.execute(stmt)

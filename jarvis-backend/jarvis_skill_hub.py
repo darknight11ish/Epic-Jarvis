@@ -185,6 +185,22 @@ def _scrubber():
         return None
 
 
+def _strip_markers(text: str) -> str:
+    """SecAlign-style chat-template strip before a reference reaches a model.
+
+    Reuses `jarvis_agent.strip_chat_markers`, the same recursive strip every
+    built-in tool result already gets, so this module cannot drift from that
+    one (2026-10-20 audit, Area 8B: a reference is read AND stripped before it
+    is handed over). When the helper is not beside this file the text is left
+    as it is - the scanner below is still the block - and this never raises.
+    """
+    try:
+        import jarvis_agent
+        return jarvis_agent.strip_chat_markers(str(text or ""))
+    except Exception:
+        return str(text or "")
+
+
 def _tier(action: str = ACTION) -> str:
     """The tier `action` has right now, or "unknown" if it cannot be read.
 
@@ -343,6 +359,10 @@ def level2_reference(name: str, ref_file: str, *, skills_dir=None) -> dict:
     except OSError as exc:
         return {"ok": False, "reason": f"that reference could not be read ({exc})"}
 
+    # A reference is text an agent will read and follow: strip the chat-template
+    # markers FIRST (SecAlign-style, 2026-10-20 audit Area 8B) and scan the text
+    # that would actually reach a model.
+    text = _strip_markers(text)
     where = f"references/{ref}"
     try:
         findings = sk.scan_text(text, where)

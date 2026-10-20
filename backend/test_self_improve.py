@@ -757,6 +757,34 @@ def t_the_boundary_refuses_the_gate_a_tier_table_and_a_test_file():
         check(f"... and the refusal names it", needle in reason, reason)
 
 
+def t_a_case_or_backslash_cannot_smuggle_a_protected_file():
+    """Area 8A, 2026-10-20: a draft naming the gate in MIXED CASE or with
+    BACKSLASHES must be refused like the ordinary path (a Windows workspace must
+    not be a way around the protected-file list). Mutation bite: with the name
+    taken out of the list, the same diff is allowed."""
+    _code, test = _good_diffs()
+
+    def code_for(path: str) -> str:
+        return (f"--- a/{path}\n+++ b/{path}\n@@ -1,3 +1,4 @@\n"
+                " line one\n+an added line\n line two\n line three\n")
+
+    for path in ("backend/JARVIS_GATE.py", "backend\\jarvis_gate.py",
+                 "Backend/Jarvis_Gate.py", "backend\\JARVIS_GATE.py",
+                 "backend/TEST_Alpha.py"):
+        reason = M.refusal_reason(code_for(path), test)
+        check(f"a draft naming {path!r} is refused", bool(reason), reason or "ALLOWED")
+
+    real_protected, real_tiers = M.PROTECTED, M.TIER_TABLE_NAMES
+    M.PROTECTED = tuple(n for n in real_protected if n != "jarvis_gate.py")
+    M.TIER_TABLE_NAMES = tuple(n for n in real_tiers if n != "jarvis_gate.py")
+    try:
+        allowed = M.refusal_reason(code_for("backend/JARVIS_GATE.py"), test)
+    finally:
+        M.PROTECTED, M.TIER_TABLE_NAMES = real_protected, real_tiers
+    check("BITE: without the name in the list, that same mixed-case diff is ALLOWED",
+          allowed == "", allowed)
+
+
 def t_the_boundary_bites():
     """BITE for all three mandated refusals, one guard at a time.
 
@@ -1126,6 +1154,7 @@ if __name__ == "__main__":
         t_a_draft_carries_a_diff_a_test_and_an_explanation_and_applies_nothing,
         t_no_test_means_no_proposal,
         t_the_boundary_refuses_the_gate_a_tier_table_and_a_test_file,
+        t_a_case_or_backslash_cannot_smuggle_a_protected_file,
         t_the_boundary_bites,
         t_the_test_diff_must_create_a_new_test,
         t_a_diff_that_is_not_a_diff_is_refused,
