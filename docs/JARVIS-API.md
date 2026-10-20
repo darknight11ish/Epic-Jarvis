@@ -20566,6 +20566,18 @@ The list answers `{"ok", "receipts", "count", "limit", "undo_action",
 button that can only refuse. `"last"` is how the most recent Undo card ended,
 in fixed plain words from the module's own table - never a payload.
 
+**A locked view withholds the whole list (Q1, 2026-10-20).** `GET /api/receipts`
+also accepts `?app_locked=1` / `?hide_memory_lists=1`. When either is set - or
+the one trusted hook, `jarvis_private_view`, says so - the answer is
+`{"ok": true, "withheld": true, "private": true, "why": "...", "receipts": [],
+"count": 0, ...}` with the honest sentence (`"Hidden while App lock is on."` or
+`"Hidden while \"Hide memory lists and chat history\" is on."`), and `recent()`
+is never called, so no summary or path leaves the database. The flags can only
+ADD withholding: `0`, `false`, an unknown spelling or a `force_unlock` key
+changes nothing, and no request can clear the trusted state. The live HUD must
+eventually pass the state; until it does, the apps keep hiding the drawer
+themselves.
+
 **Undo is a mutating action, so it goes through the ONE permission model**
 (ARCHITECTURE §3): ONE card, action `undo_action`, and the reversal runs only
 on the gate's own answer. A denied or timed-out card changes nothing at all,
@@ -21828,7 +21840,7 @@ The bounded unified diff the module already works out: `jarvis_file_guardian.dif
 
 Both routes are **this PC's own**. A request from another device (a phone on the same private network, say) is refused with `403` and `why: "not_this_pc"` by `jarvis_owner_check.from_this_pc` - BEFORE the guardian module is imported or anything is read. The desktop apps are the intent: the drawer belongs where the files are, and the phone has no PC files to show. A missing or older `jarvis_file_guardian.py` answers `501` in the same refusal shape with the "run apply-patches.ps1" sentence.
 
-**The gap, said plainly rather than papered over:** the backend cannot see App lock or "Hide memory lists and chat history" - both are desktop-side state that never reaches the backend. So these routes cannot withhold themselves while either is on. The desktop drawer that will use them **must** hide while App lock is on or those lists are hidden, exactly as its other private surfaces do; until that drawer lands, this is a documented gap. The two routes above never write and raise no card.
+**The gap, said plainly rather than papered over:** the backend cannot see App lock or "Hide memory lists and chat history" by itself - both are desktop-side state that never reaches the backend process. Since 2026-10-20 (Q1) both read routes DO accept the desktop's own report, `?app_locked=1` / `?hide_memory_lists=1`, and answer the honest marker with an empty page/diff without reading the journal or working out the difference: `{"ok": false, "withheld": true, "why": "Hidden while App lock is on." (or the hidden-lists sentence), "snapshots": [] (or "path": "", "diff": ""), ...}`. Those flags can only ADD withholding - `app_locked=0`, an unknown spelling and a `force_unlock=1` change nothing, and `jarvis_private_view`'s trusted in-process state cannot be cleared by a request. **The remaining gap: the live HUD does not pass the state yet**, so until it does the desktop drawer that will use these routes **must** still hide while App lock is on or those lists are hidden, exactly as its other private surfaces do. The two routes above never write and raise no card.
 
 ### 140.4 `POST /api/guardian/restore` - putting a version back, on a person's yes (LM-2B, 2026-10-18)
 
@@ -21995,7 +22007,14 @@ never writes any of it and never sees it.
   a name cannot be tapped then and the dossier lives inside the same section.
   The module itself also withholds the dossier when a caller passes either flag
   (`build_person_dossier(hide_memory_lists=..., app_locked=...)`), which is the
-  same rule for any future caller.
+  same rule for any future caller. **Since 2026-10-20 (Q1) the route accepts
+  `?app_locked=1` / `?hide_memory_lists=1` too** and merges them through
+  `jarvis_private_view`: a flag can only ADD withholding, a `0` cannot unlock
+  the trusted state, and a locked answer is the module's own withheld dict
+  (`{"ok": false, "withheld": true, "why": "Hidden while App lock is on." ...}`)
+  with no facts, chats, mail, to-dos or event in it. **The live HUD must
+  eventually pass the state** (ARCHITECTURE.md, App lock section); until it
+  does, the apps' own hiding above is what protects the view.
 * **A refusal is one plain sentence:** an empty name is `400` (`"Say whose
   dossier to put together - a name."`); a PC whose backend predates the route
   answers `501` with the apply-patches sentence; an unreadable module or store

@@ -132,10 +132,15 @@ WHAT THIS MODULE DOES NOT DO, SAID PLAINLY
     It is POST-only, the only route here that writes, and a request from
     another device is refused before the request body is read. There is
     still no chat tool: no model can reach any of this.
-  * The backend cannot see App lock or "Hide memory lists" (both are
-    desktop-side state), so no read route can withhold itself on those; the
-    desktop's own drawer must hide while either is on, and JARVIS-API section
-    140 records that as the remaining gap rather than pretending it does.
+  * The backend cannot see App lock or "Hide memory lists" by itself (both are
+    desktop-side state), so the desktop's own drawer hides while either is on.
+    Since 2026-10-20 (Q1) the two read routes can ALSO withhold at the server:
+    when the request carries `?app_locked=1` or `?hide_memory_lists=1` (which
+    only ADD withholding - jarvis_private_view merges them, a False can never
+    unlock), jarvis_brain_reads answers with the honest marker and an empty
+    page/diff, before it reads the journal or works out the difference.
+    JARVIS-API section 140 records that the live HUD must eventually pass the
+    state; until it does, the drawer rule above is the one in force.
   * It is not a backup and not encryption. The copies sit in the owner's
     settings folder on this PC, readable by this process and by anything else
     that can read that folder; nothing here sends them anywhere, and nothing

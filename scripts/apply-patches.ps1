@@ -1815,6 +1815,8 @@ $SHIPPED = @(
     'jarvis_phone_notifications.py'  # off by default; ON is one approval card, phone_notifications_read; OFF is instant; never sees a notification's own text
     # --- the Brain upgrades (2026-09-28, brain-reads.patch) ---
     'jarvis_brain_reads.py'      # brain-reads.patch: GET /api/history/search, /api/memory/fact-history, /api/memory/conversation-facts and /api/pc/help, reads for the apps only
+    # --- the read-only App lock / hidden-lists hook (Q1, 2026-10-20) ---
+    'jarvis_private_view.py'     # the one hook the three private-view reads merge with: a request's app_locked/hide_memory_lists can only ADD withholding, never unlock; absent means unlocked in-process; the live HUD must eventually pass its state
     # --- "remind me next time I talk about X" and "ring my phone" (2026-09-28) ---
     'jarvis_next_time.py'        # a reminder with no time of its own, brought up beside the question; a kind on jarvis_schedule.py, no patch
     'jarvis_find_phone.py'       # "ring my phone": ONE ring_phone event the phone rings for, no card, no patch

@@ -5,7 +5,9 @@ What this proves, in words:
   * a request from another device is refused BEFORE the module is imported or
     the name is read, and the refusal carries no name and no dossier word;
   * the module's own answer is passed back unchanged (dossier builder owns
-    every field, including the withheld answer while the apps hide it);
+    every field, including the withheld answer while the apps hide it), and the
+    route hands the builder `app_locked` / `hide_memory_lists` - through
+    jarvis_private_view, so a request flag can only ADD withholding (Q1);
   * a missing name, a missing backend and an unreadable module each answer in
     the dossier's own shape with one plain sentence;
   * nothing is written and no name is printed anywhere in the exchange.
@@ -75,7 +77,7 @@ def t_another_device_learns_nothing_before_the_module_is_read():
     saved_from, saved_mod = B._from_this_pc, sys.modules.get("jarvis_people_crm")
     B._from_this_pc = lambda peer, local: False
     sys.modules["jarvis_people_crm"] = fake_module(
-        lambda name: (calls.append(name), {"ok": True, "text": "not reached"})[1])
+        lambda name, **_kw: (calls.append(name), {"ok": True, "text": "not reached"})[1])
     try:
         code, out = B.handle_get(B.PEOPLE_DOSSIER_PATH, "name=Priya",
                                  peer="100.64.0.9", local="100.64.0.1")
@@ -102,10 +104,20 @@ def t_the_answer_is_the_modules_own_dict_unchanged():
     called = []
     B._from_this_pc = lambda peer, local: True
     sys.modules["jarvis_people_crm"] = fake_module(
-        lambda name: (called.append(name), dict(built))[1])
+        lambda name, **kw: (called.append((name, dict(kw))), dict(built))[1])
     try:
         code, out = B.handle_get(B.PEOPLE_DOSSIER_PATH, "name=Priya",
                                  peer="127.0.0.1", local="127.0.0.1")
+        code_lock, out_lock = B.handle_get(
+            B.PEOPLE_DOSSIER_PATH, "name=Priya&app_locked=1",
+            peer="127.0.0.1", local="127.0.0.1")
+        import jarvis_private_view as PV
+        PV.note_state(app_locked=True)
+        try:
+            B.handle_get(B.PEOPLE_DOSSIER_PATH, "name=Priya&app_locked=0",
+                         peer="127.0.0.1", local="127.0.0.1")
+        finally:
+            PV._reset_for_tests()
     finally:
         B._from_this_pc = saved_from
         if saved_mod is None:
@@ -115,7 +127,14 @@ def t_the_answer_is_the_modules_own_dict_unchanged():
     check("this PC gets 200 and the builder's own dict", code == 200 and out == built,
           (code, out))
     check("... the name is handed to the builder, unescaped once",
-          called == ["Priya"], called)
+          called[0][0] == "Priya", called)
+    check("... with both lock flags off by default (the absent hook is unlocked)",
+          called[0][1].get("app_locked") is False
+          and called[0][1].get("hide_memory_lists") is False, called)
+    check("... and ?app_locked=1 hands the builder the lock",
+          code_lock == 200 and called[1][1].get("app_locked") is True, called)
+    check("... a caller's app_locked=0 cannot clear the trusted lock",
+          called[2][1].get("app_locked") is True, called)
 
 
 def t_a_missing_name_is_a_plain_sentence():
@@ -184,7 +203,7 @@ def t_a_withheld_module_answer_is_passed_through():
                 "name": "", "private": True, "made": 0.0, "states": {}, "read": []}
     saved_from, saved_mod = B._from_this_pc, sys.modules.get("jarvis_people_crm")
     B._from_this_pc = lambda peer, local: True
-    sys.modules["jarvis_people_crm"] = fake_module(lambda name: dict(withheld))
+    sys.modules["jarvis_people_crm"] = fake_module(lambda name, **_kw: dict(withheld))
     try:
         code, out = B.handle_get(B.PEOPLE_DOSSIER_PATH, "name=Priya",
                                  peer="127.0.0.1", local="127.0.0.1")
@@ -205,7 +224,7 @@ def t_the_install_door_answers_it_after_the_servers_checks():
     saved_from, saved_mod = B._from_this_pc, sys.modules.get("jarvis_people_crm")
     B._from_this_pc = lambda peer, local: True
     sys.modules["jarvis_people_crm"] = fake_module(
-        lambda name: {"ok": True, "withheld": False, "name": name, "text": "x"})
+        lambda name, **_kw: {"ok": True, "withheld": False, "name": name, "text": "x"})
     try:
         class Hd(FakeGet):
             pass
@@ -240,7 +259,7 @@ def t_nothing_is_printed_and_no_name_is_logged():
     saved_from, saved_mod = B._from_this_pc, sys.modules.get("jarvis_people_crm")
     B._from_this_pc = lambda peer, local: True
     sys.modules["jarvis_people_crm"] = fake_module(
-        lambda name: {"ok": True, "name": name, "text": "a dossier"})
+        lambda name, **_kw: {"ok": True, "name": name, "text": "a dossier"})
     out = io.StringIO()
     try:
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):

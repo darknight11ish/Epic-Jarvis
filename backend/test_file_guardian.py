@@ -63,9 +63,11 @@ What it proves:
     folders are refused in words; ONLY this PC may ask (403 before the journal
     is read, fail-closed with no owner-check module); a foreign origin or no
     token never reaches it; no write or restore function is called and not one
-    store byte changes; and the route does not pretend a client-supplied lock
-    flag withholds anything - the backend has no such flag, which is the one
-    documented gap.
+    store byte changes; and since 2026-10-20 (Q1) a client-supplied
+    `app_locked=1` / `hide_memory_lists=1` CAN withhold the answer (the honest
+    marker, empty page/diff) - but those flags only ADD withholding: a false
+    or unknown flag changes nothing, and the trusted live state cannot be
+    cleared by one.
 15. THE ONE WRITE ROUTE (LM-2B): POST /api/guardian/restore calls
     restore_version() with the EXISTING undo_action card - an approved restore
     puts exactly the saved bytes back and leaves a NEW receipt whose Undo
@@ -1554,17 +1556,49 @@ def t_no_restore_or_write_is_reachable_from_the_read_routes():
           not any("restore" in route for route in B.PATHS), B.PATHS)
 
 
-def t_a_client_lock_flag_is_not_faked():
+def t_a_client_lock_flag_can_only_add_withholding():
     fresh()
     path = write("note.txt", b"one\n")
-    snapshot(path)
-    plain = call("/api/guardian/snapshots")[1]
-    claimed = call("/api/guardian/snapshots",
-                   "app_locked=1&hide_memory=1&private=1")[1]
-    check("the route takes no client-supplied lock flag: it answers the same either way",
-          claimed == plain)
-    check("... and it does not pretend to have withheld anything",
-          "withheld" not in json.dumps(claimed).lower(), claimed.get("words"))
+    snap = snapshot(path)
+    import jarvis_private_view as PV
+    PV._reset_for_tests()
+    try:
+        plain = call("/api/guardian/snapshots")[1]
+        locked = call("/api/guardian/snapshots", "app_locked=1")[1]
+        hidden = call("/api/guardian/snapshots", "hide_memory_lists=1")[1]
+        zero = call("/api/guardian/snapshots",
+                    "app_locked=0&hide_memory_lists=false&force_unlock=1")[1]
+        check("?app_locked=1 withholds the journal at the server",
+              locked.get("withheld") is True and locked.get("snapshots") == []
+              and "App lock" in str(locked.get("why")), locked)
+        check("?hide_memory_lists=1 answers the hidden-lists sentence",
+              hidden.get("withheld") is True
+              and "Hide memory lists" in str(hidden.get("why")), hidden)
+        check("... the plain answer still carries the journal",
+              bool(plain.get("snapshots")) and not plain.get("withheld"), plain)
+        check("a false or unknown flag does not unlock and does not fake a hide",
+              zero == plain, (zero, plain))
+        check("... the withheld journal carries no path, reason or receipt id",
+              all(not row for row in locked.get("snapshots") or []), locked)
+        diff_q = ("path=" + quote(str(path))
+                  + "&sha_before=" + snap["before_sha256"])
+        locked_diff = call("/api/guardian/diff", diff_q + "&app_locked=1")[1]
+        check("?app_locked=1 withholds the diff too, and echoes no path",
+              locked_diff.get("withheld") is True
+              and locked_diff.get("diff") == "" and locked_diff.get("path") == ""
+              and "App lock" in str(locked_diff.get("why")), locked_diff)
+        PV.note_state(app_locked=True)
+        still = call("/api/guardian/snapshots",
+                     "app_locked=0&force_unlock=1")[1]
+        diff_still = call("/api/guardian/diff",
+                          diff_q + "&app_locked=0")[1]
+    finally:
+        PV._reset_for_tests()
+    check("a caller's false cannot clear the trusted locked state",
+          still.get("withheld") is True, still)
+    check("... the diff route stays withheld the same way",
+          diff_still.get("withheld") is True and diff_still.get("diff") == "",
+          diff_still)
 
 
 def t_an_older_backend_says_update_in_the_same_shape():

@@ -2129,6 +2129,20 @@ apps security audit (M3 and L5, the owner's decisions of 2026-09-25):
   the strip lives on Home, behind App lock like everything on it; while the
   lists are hidden it says the same short line and Undo waits for Show. Both
   apps hold Undo on a stale link (rule 4: it acts on a mailbox).
+- **Private views on the server (2026-10-20, Q1):** the Guardian's journal and
+  diff, the person dossier and the action-receipts list all accept
+  `?app_locked=1` / `?hide_memory_lists=1` from the desktop, and a locked view
+  answers the honest marker (`"Hidden while App lock is on."` / the hidden-lists
+  sentence) with no names, diffs, summaries or rows - the store read is skipped
+  entirely. The merge lives in `jarvis_private_view.py` and is fail-safe: it ORs
+  the trusted in-process state with the request's flags, so a request can only
+  ADD withholding and a `0`/`force_unlock` key can never unlock; only the
+  trusted `note_state()` hook can clear it, and an absent hook means unlocked.
+  **The live HUD must eventually pass its App lock / hidden-lists state** - that
+  wiring is not in this slice, so until it lands each app's own hiding above is
+  what protects the view. **Q2's `traces.db` retention cap stays BLOCKED and
+  live-only:** `traces.db` is written only by the live HUD, this repository
+  ships no module for it, and this wave deliberately adds no writer.
 - **Who asks on the PC:** since the approval gap's step 1, the backend
   asks Windows Hello itself for a risky approval from the PC, and the
   desktop does not ask as well (`lock::check_approval`,
