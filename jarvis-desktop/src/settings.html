@@ -122,6 +122,7 @@
           <div class="settings-jump-place">
             <span class="settings-jump-place-label">Start here</span>
             <a href="#first-run">Set up Jarvis</a>
+            <a href="#setup-questionnaire">First-time setup</a>
           </div>
           <div class="settings-jump-place">
             <span class="settings-jump-place-label">Your devices</span>
@@ -309,6 +310,64 @@
           <button class="btn ghost small" id="fr-intro" type="button">Show the intro again</button>
           <span class="status" id="fr-intro-status" role="status"></span>
         </div>
+      </section>
+
+      <!-- ── First-time setup: the questionnaire (S2, 2026-10-20) ──────────
+           The owner asked (2026-10-20): "there should be a setup questionnaire
+           when someone first starts jarvis (or can be filled out again) if they
+           want jarvis to act a different way overall ... a series of questions
+           with multiple choices and jarvis sets the settings with a summary for
+           the user at the end ... that the user can choose to accept
+           afterwards". This card is that questionnaire for the DESKTOP.
+
+           A GUIDE, NOT A SECOND SETTINGS SYSTEM. Every question and choice is
+           the PC's own data (`backend/jarvis_setup.py`, JARVIS-API section
+           147); every option maps to a setter the matching card below already
+           calls, with its own tier check and its own approval card. This page
+           invents no action, approves nothing and applies nothing by itself:
+           a plan is READ-ONLY (POST /api/setup/plan writes nothing and raises
+           no card), and the one Apply is a two-press action whose second press
+           is the only thing that sends `confirm: true` (setup-settings.js,
+           src-tauri/src/setup_questionnaire.rs, setup-questionnaire.js). It is
+           written by hand rather than generated: it is not a toggle row.
+        -->
+      <section class="card" id="setup-questionnaire">
+        <h2 id="sq-title">First-time setup</h2>
+        <p class="note" id="sq-kicker">
+          Fourteen questions about how you want Jarvis to behave. Every answer
+          changes settings that already exist; nothing here is a new kind of
+          rule.
+        </p>
+        <p class="note" id="sq-help">
+          Pick the answers that sound like you, then read what would change
+          before anything happens. Instant changes happen the moment you apply;
+          anything that loosens a rule still shows its own approval card on the
+          PC, one at a time. This page never applies anything by itself.
+        </p>
+        <div id="sq-body" hidden>
+          <p class="state" id="sq-plan-status" role="status"></p>
+          <div id="sq-questions"></div>
+          <div id="sq-plan"></div>
+          <p class="sc-line" id="sq-counts"></p>
+          <div id="sq-last" hidden></div>
+          <p class="note" id="sq-about"></p>
+          <p class="note" id="sq-storage" hidden></p>
+          <p class="note" id="sq-card-wait"></p>
+          <div class="row">
+            <button class="btn" id="sq-apply" type="button" disabled>Apply these changes</button>
+          </div>
+          <p class="note" id="sq-apply-why" hidden></p>
+          <div id="sq-confirm" hidden>
+            <p class="note" id="sq-confirm-text"></p>
+            <div class="row">
+              <button class="btn" id="sq-confirm-yes" type="button">Yes, apply them now</button>
+              <button class="btn ghost" id="sq-confirm-no" type="button">Cancel</button>
+            </div>
+          </div>
+          <div id="sq-result" hidden></div>
+        </div>
+        <p class="state" id="sq-reading" role="status">Reading this PC…</p>
+        <span class="status" id="sq-status" role="status"></span>
       </section>
 
       <section class="card" id="connection">
@@ -3094,5 +3153,6 @@
 <script type="module" src="pictures-settings.js"></script>
     <script type="module" src="sandbox-settings.js"></script>
     <script type="module" src="media-index-settings.js"></script>
+    <script type="module" src="setup-settings.js"></script>
   </body>
 </html>

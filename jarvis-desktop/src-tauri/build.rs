@@ -846,6 +846,11 @@ fn main() {
             // read the switch and counts, turn it off at once, ask to turn it
             // back on (ONE card on the PC), and the one Delete. Settings only.
             "media_index",
+            // The setup questionnaire (setup_questionnaire.rs; S2, 2026-10-20;
+            // JARVIS-API section 147): read the fourteen questions and the
+            // PC's current values, ask for the READ-ONLY plan, and apply the
+            // owner's confirmed answers one change at a time. Settings only.
+            "setup_questionnaire",
             // Interrupting by talking and "One moment." (voice_flow.rs):
             // ask for one utterance to be checked, read the status's `flow`
             // block, fetch the clip. Quickbar only; none records anything.

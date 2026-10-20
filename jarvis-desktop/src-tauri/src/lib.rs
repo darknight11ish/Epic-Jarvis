@@ -53,6 +53,10 @@ pub mod look;
 // owner's decision of 2026-10-19). Settings only: the stored-word counts, the
 // switch and the one Delete - it never sees the words themselves.
 pub mod media_index;
+// The setup questionnaire (setup_questionnaire.rs; S2, the owner's ask of
+// 2026-10-20; JARVIS-API section 147): the fourteen questions, the READ-ONLY
+// plan and the one confirmed apply through the existing setters. Settings
+// only; the page names no route and this command invents no gate action.
 pub mod notifications;
 pub mod open_app;
 pub mod plain_errors;
@@ -63,6 +67,7 @@ pub mod reach;
 pub mod sandbox_exec;
 pub mod screen_work;
 pub mod selection;
+pub mod setup_questionnaire;
 pub mod sidecar;
 pub mod sky;
 pub mod spec;
@@ -1348,6 +1353,12 @@ pub fn run() {
             // disclosure, turn it off at once, ask to turn it back on (ONE
             // normal approval card), and the one Delete of the stored words.
             media_index::media_index,
+            // The setup questionnaire (setup_questionnaire.rs; S2, 2026-10-20;
+            // JARVIS-API section 147): read the questions and the PC's current
+            // values, ask for the READ-ONLY plan, and apply the owner's
+            // confirmed answers through the existing setters, one change at a
+            // time. Settings only; nothing here approves a card.
+            setup_questionnaire::setup_questionnaire,
             // Interrupting by talking and "One moment." (voice_flow.rs).
             voice_flow::judge_barge_in,
             voice_flow::get_voice_flow,

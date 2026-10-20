@@ -3275,6 +3275,51 @@ class JarvisApi(
         }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
     }
 
+    // -------------------------------------------- the setup questionnaire ----
+    // JARVIS-API.md section 147. The reading and the READ-ONLY plan; there is
+    // deliberately no apply call on the phone (ARCHITECTURE.md section 8): the
+    // apply works through the PC's existing setters one at a time, waiting on
+    // each existing approval card, and several of those changes are PC-only.
+
+    /** `GET /api/setup` - the fourteen questions and the PC's own values. */
+    suspend fun setupQuestionnaire(): ApiResult<JsonObject> = probe(SetupQuestionnaire.PATH)
+
+    /** `POST /api/setup/plan {"answers": {...}}` - writes nothing on the PC. */
+    suspend fun setupPlan(json: String): ApiResult<JsonObject> =
+        postObject(SetupQuestionnaire.PLAN_PATH, json)
+
+    /**
+     * One POST whose answer is a JSON object, passed on as it is.
+     *
+     * A 2xx that is not an object is wrapped the same way [probe] wraps a bare
+     * array, so one renderer handles both; anything else is the PC's own
+     * refusal ([errorFor]). No body field is invented: the caller hands in the
+     * exact JSON, and the plan body comes from
+     * `SetupQuestionnaire.planBody()`.
+     */
+    private suspend fun postObject(path: String, json: String): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use {
+                    if (!it.isSuccessful) return@use ApiResult.Failed(errorFor(it))
+                    val text = it.body?.string().orEmpty()
+                    runCatching {
+                        when (val el = JarvisJson.parseToJsonElement(text)) {
+                            is JsonObject -> ApiResult.Ok(el)
+                            else -> ApiResult.Ok(JsonObject(mapOf("items" to el)))
+                        }
+                    }.getOrElse {
+                        ApiResult.Failed(ApiError.Malformed(it.message ?: "bad json"))
+                    }
+                }
+            }.getOrElse {
+                ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it)))
+            }
+        }
+
     // ------------------------------------------------------------ voice ----
 
     /**

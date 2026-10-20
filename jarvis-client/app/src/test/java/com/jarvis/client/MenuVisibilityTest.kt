@@ -453,8 +453,14 @@ class MenuVisibilityTest {
         // service is phone-only, so no menu id exists for it in the desktop's
         // catalogue and the PC has no menu to hide it under. The row is always
         // drawn, like Security and Limits.
+        // "setup-questionnaire" joined them on 2026-10-20 (S2; JARVIS-API
+        // section 147): the PC's fourteen questions and its READ-ONLY plan.
+        // Registering a menu id for it is a backend change, and the desktop's
+        // own card has no menu id either - it is a "start here" page, not a
+        // feature that can be hidden. The row is always drawn.
         val undecidedS = settingsKeys - MenuPlaces.SETTINGS.keys -
-            setOf("menus-hidden", "tail", "jump-list", "limits", "jarvis-notify", "app-control")
+            setOf("menus-hidden", "tail", "jump-list", "limits", "jarvis-notify", "app-control",
+                "setup-questionnaire")
         assertTrue("Settings items with no decision in MenuPlaces: $undecidedS", undecidedS.isEmpty())
     }
 
