@@ -510,6 +510,91 @@ def t_a_huge_raw_answer_is_cut_before_anything_else():
           len(out) <= R.MAX_RAW_CHARS, len(out))
 
 
+def t_doctor_reports_the_five_audit_fields():
+    """The owner's audit (2026-10-20) names five fields; they are reported every time, by exact
+    name, and the engines stay False until their inputs exist."""
+    keys = ("installed", "version_pinned_ok", "tier1_static_ready",
+            "tier2_ghidra_ready", "tier2_jadx_ready")
+    good = with_ready_install()
+    facts = R.doctor(node_version="v22.23.2", env={}, install=good)
+    missing = [k for k in keys if k not in facts]
+    check("doctor reports all five audit fields by name", not missing, missing)
+    check("... installed is true for a pinned local package", facts.get("installed") is True,
+          facts.get("installed"))
+    check("... version_pinned_ok is true for 6.7.0", facts.get("version_pinned_ok") is True,
+          facts.get("version_pinned_ok"))
+    check("... tier1_static_ready is true on Node v22.23.2",
+          facts.get("tier1_static_ready") is True, facts.get("tier1_static_ready"))
+    check("... tier2_ghidra_ready is false with no Ghidra/JDK configured",
+          facts.get("tier2_ghidra_ready") is False, facts.get("tier2_ghidra_ready"))
+    check("... tier2_jadx_ready is false with no JADX configured",
+          facts.get("tier2_jadx_ready") is False, facts.get("tier2_jadx_ready"))
+    none = {"found": False, "ok": False, "root": "", "version": "", "license": "", "entry": "",
+            "install_dir": "", "why": "no package"}
+    empty = R.doctor(node_version="v22.23.2", env={}, install=none)
+    check("... installed is false with no package", empty.get("installed") is False,
+          empty.get("installed"))
+    check("... and tier1 cannot be ready without the package",
+          empty.get("tier1_static_ready") is False, empty.get("tier1_static_ready"))
+    wrong = dict(good)
+    wrong.update(version="9.9.9", ok=False)
+    wrong_version = R.doctor(node_version="v22.23.2", env={}, install=wrong)
+    check("... a package at the wrong version is 'installed' but not version-pinned",
+          wrong_version.get("installed") is True
+          and wrong_version.get("version_pinned_ok") is False
+          and wrong_version.get("tier1_static_ready") is False, wrong_version.get("install"))
+    ghidra_env = {"GHIDRA_INSTALL_DIR": "C:/Tools/Ghidra", "JAVA_HOME": "C:/Tools/JDK"}
+    with_ghidra = R.doctor(node_version="v22.23.2", env=ghidra_env, install=good)
+    check("... tier2_ghidra_ready needs BOTH Ghidra and Java",
+          with_ghidra.get("tier2_ghidra_ready") is True, with_ghidra.get("tier2_ghidra_ready"))
+    half = R.doctor(node_version="v22.23.2", env={"GHIDRA_INSTALL_DIR": "C:/Tools/Ghidra"},
+                    install=good)
+    check("... and stays false with only one of them", half.get("tier2_ghidra_ready") is False,
+          half.get("tier2_ghidra_ready"))
+    jar = R.doctor(node_version="v22.23.2", env={"REA_JADX_MCP_JAR": "C:/Tools/jadx.jar"},
+                   install=good)
+    check("... tier2_jadx_ready turns true when REA has its JADX jar",
+          jar.get("tier2_jadx_ready") is True, jar.get("tier2_jadx_ready"))
+    with mock.patch.object(R.shutil, "which",
+                           side_effect=lambda n: "C:/bin/jadx" if n == "jadx" else None):
+        on_path = R.doctor(node_version="v22.23.2", env={}, install=good)
+    check("... or when a jadx command is on PATH", on_path.get("tier2_jadx_ready") is True,
+          on_path.get("tier2_jadx_ready"))
+
+
+def t_hard_deny_is_exactly_the_ruled_list():
+    """Gemini's ruling, 2026-10-20: six ADB mutators and four capture tools are hard-denied,
+    whatever the action map says. Export/close are NOT hard-denied - they are simply not
+    exposed in Slice 1 and will be card-gated later."""
+    expected = frozenset({
+        "install_adb_package", "uninstall_adb_package", "push_adb_file",
+        "start_adb_app", "start_adb_activity", "stop_adb_app",
+        "capture_process_scenario", "capture_browser_scenario",
+        "capture_electron_scenario", "capture_native_ui_scenario",
+    })
+    check("HARD_DENY is exactly the ten ruled names", R.HARD_DENY == expected,
+          sorted(R.HARD_DENY))
+    conn = FakeConn()
+    for tool in sorted(expected):
+        refused = ""
+        try:
+            R._call_tool(tool, {}, conn=conn)
+        except R.ReaRefused as exc:
+            refused = str(exc)
+        check(f"hard-denied before any session: {tool}", refused == R.DENIED, refused)
+    check("... and none of the ten reached the session", conn.calls == [], str(conn.calls))
+    for later in ("export_evidence_bundle", "close_binary"):
+        check(f"{later} is NOT hard-denied (a later slice card-gates it)",
+              later not in R.HARD_DENY and later not in R._DENY_EXACT, later)
+        refused = ""
+        try:
+            R._call_tool(later, {}, conn=conn)
+        except R.ReaRefused as exc:
+            refused = str(exc)
+        check(f"... but Slice 1's closed-world allowlist still refuses {later}",
+              refused == R.DENIED, refused)
+
+
 def t_the_delivery_carries_it():
     import _where
     check("backend/_where.py's SHIPPED list carries jarvis_rea.py",
@@ -540,6 +625,8 @@ def main():
                t_missing_engines_refuse_before_the_card,
                t_one_compact_tool_in_one_group_selected_by_the_diet,
                t_doctor_reads_and_starts_nothing,
+               t_doctor_reports_the_five_audit_fields,
+               t_hard_deny_is_exactly_the_ruled_list,
                t_identity_mismatch_is_refused,
                t_off_by_default_and_no_start_without_it,
                t_prepare_runs_before_the_card_and_starts_nothing,

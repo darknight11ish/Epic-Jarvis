@@ -60,6 +60,12 @@ WHAT THIS SLICE DOES NOT DO (recorded so the gaps are visible)
   rule; later slice;
 * no ADB anything - Jarvis's own app-control path owns phone actions;
 * no vetted skill text - the upstream `SKILL.md` is untrusted content and is a later slice.
+
+BEFORE ANY LOCAL INSTALL (the owner's four-point audit; the evidence is recorded in
+`.dsh-scratch/REA-INTEGRATION-PLAN-2026-10-20.md`, NOT done by this module): (1) the tarball's
+SHA-512 pin, (2) `package.json` has no preinstall/install/postinstall hooks and the future install
+uses `npm install --ignore-scripts --no-audit --no-fund`, (3) a static egress scan of the
+extracted `dist/`, (4) these doctor fields. This module downloads and installs nothing.
 """
 from __future__ import annotations
 
@@ -141,19 +147,32 @@ ALLOWED_CALL_TOOLS = frozenset({
     "binary_session",
 }) | frozenset(tool for tool, _words in ACTIONS.values() if tool)
 
-#: Refused even if something above ever grows a hole: device mutators, runtime capture,
-#: debugger sessions, file export. Not reachable through any action; this is the second belt.
+#: HARD DENY - the exact list the owner's audit ruled on (2026-10-20). Every name here is
+#: refused by `_call_tool` before it can reach a session, whatever the action map says.
+#: (a) the six ADB mutators: Jarvis's own app-control path owns phone actions, never REA.
+#: (b) the four runtime / PTY / Electron capture tools: these launch or attach to live programs.
+HARD_DENY = frozenset({
+    "install_adb_package", "uninstall_adb_package", "push_adb_file",
+    "start_adb_app", "start_adb_activity", "stop_adb_app",
+    "capture_process_scenario", "capture_browser_scenario",
+    "capture_electron_scenario", "capture_native_ui_scenario",
+})
+
+#: A wider belt: device verbs, runtime capture verbs, debugger sessions and script export.
+#: Not reachable through any action either; this catches a future action map that grows a hole.
 _DENY_PREFIXES = ("install_adb", "uninstall_adb", "push_adb", "pull_adb", "start_adb",
                   "stop_adb", "read_adb", "list_adb", "capture_adb", "collect_adb",
                   "inspect_adb")
 _DENY_EXACT = frozenset({
-    "capture_browser_scenario", "capture_electron_scenario", "capture_native_ui_scenario",
-    "capture_process_scenario", "capture_web_screenshot", "export_evidence_bundle",
-    "export_web_scripts", "start_frida_session", "close_frida_session",
+    "capture_web_screenshot", "export_web_scripts",
+    "start_frida_session", "close_frida_session",
     "start_gdb_session", "close_gdb_session", "debug_with_gdb",
     "start_rizin_debug_session", "close_rizin_debug_session", "rizin_debug_command",
     "rizin_debug_session_status", "execute_rizin_command", "cutter_command",
 })
+#: NOT exposed and NOT hard-denied, on purpose: `export_evidence_bundle` (writes a file) and
+#: `close_binary` (ends a session) are absent from Allowed_CALL_TOOLS, so Slice 1's closed-world
+#: allowlist refuses them; a later slice card-gates them (export also needs the file guardian).
 
 #: Which actions need a REA engine that is not part of the zero-engine install. The value is
 #: the environment variable (or env vars) the owner sets to give REA that engine.
@@ -350,7 +369,7 @@ def install_info(folder: Optional[Path] = None) -> dict:
     """What the pinned install is: root, version, license, entry file. Never raises."""
     base = Path(folder) if folder is not None else install_dir()
     root = _package_root(base)
-    out = {"ok": False, "install_dir": str(base), "root": "", "version": "",
+    out = {"found": False, "ok": False, "install_dir": str(base), "root": "", "version": "",
            "license": "", "entry": "", "why": ""}
     if root is None:
         out["why"] = f"no `{PACKAGE}` package under {base}"
@@ -361,7 +380,7 @@ def install_info(folder: Optional[Path] = None) -> dict:
         out["why"] = f"its package.json could not be read ({type(exc).__name__})"
         return out
     entry = root / "scripts" / "rea.mjs"
-    out.update(root=str(root), version=str(doc.get("version") or ""),
+    out.update(found=True, root=str(root), version=str(doc.get("version") or ""),
                license=str(doc.get("license") or ""), entry=str(entry))
     if out["version"] != PINNED_VERSION:
         out["why"] = BAD_VERSION.format(found=out["version"] or "(none)", want=PINNED_VERSION)
@@ -647,7 +666,8 @@ atexit.register(_close_session)
 
 def _denied(tool: str) -> bool:
     name = str(tool or "")
-    return name in _DENY_EXACT or any(name.startswith(p) for p in _DENY_PREFIXES)
+    return (name in HARD_DENY or name in _DENY_EXACT
+            or any(name.startswith(p) for p in _DENY_PREFIXES))
 
 
 def _content_text(result) -> str:
@@ -908,10 +928,23 @@ def doctor(*, env: Optional[dict] = None, node_version: Optional[str] = None,
         if available and action == "query_native_binary" and not _STATE.get("open_target"):
             available, why = False, "open a binary first"
         actions[action] = {"available": bool(available), "why": why}
+    # The five fields the owner's audit ruled on (2026-10-20): reported by name, every time.
+    installed = bool(info.get("root"))
+    version_pinned_ok = bool(info.get("version") == PINNED_VERSION)
+    tier1_static_ready = bool(installed and version_pinned_ok and ok_node)
+    tier2_ghidra_ready = bool(_provider_available("GHIDRA_INSTALL_DIR", source)
+                              and _provider_available("JAVA_HOME", source))
+    tier2_jadx_ready = bool(_provider_available("REA_JADX_MCP_JAR", source)
+                            or shutil.which("jadx"))
     ready = bool(ok_node and info.get("ok"))
     return {
         "ok": ready,
         "available": ready,
+        "installed": installed,
+        "version_pinned_ok": version_pinned_ok,
+        "tier1_static_ready": tier1_static_ready,
+        "tier2_ghidra_ready": tier2_ghidra_ready,
+        "tier2_jadx_ready": tier2_jadx_ready,
         "tool": TOOL,
         "enabled": enabled(),
         "node": {"ok": bool(ok_node), "version": version_text or "",
