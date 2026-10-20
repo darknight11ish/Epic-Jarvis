@@ -2,6 +2,11 @@ package com.jarvis.client.voice
 
 import com.jarvis.client.net.Approvals
 import com.jarvis.client.net.VoiceStrict
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -576,6 +581,9 @@ object StrictVoice {
             strongModel = p.all { it.strongModel },
             veryStrict = sum { it.veryStrict },
             balanced = sum { it.balanced },
+            // The held-out report is the PC's own; the first part that carries
+            // one is shown as it is (a batch split does not change its words).
+            heldOut = p.mapNotNull { it.heldOut }.firstOrNull(),
         )
     }
 
@@ -608,7 +616,46 @@ object StrictVoice {
             lines += "This was checked with the small voice-ID model only; the stronger one is " +
                 "not installed on your PC."
         }
+        lines += heldOutLines(m.heldOut)
         return lines
+    }
+
+    /** The PC's own held-out report (`held_out`), condition by condition. */
+    fun heldOutLines(held: JsonObject?): List<String> {
+        if (held == null) return emptyList()
+        val out = mutableListOf<String>()
+        (held["words"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }?.let { out += it }
+        val conditions = held["conditions"] as? JsonObject ?: return out
+        for ((id, raw) in conditions) {
+            val row = raw as? JsonObject ?: continue
+            val label = when (id) {
+                "close" -> "Close"
+                "table" -> "On a table, 2-3 m away"
+                "noise" -> "With background noise"
+                "room" -> "Another room or time"
+                else -> id
+            }
+            val available = (row["available"] as? JsonPrimitive)?.booleanOrNull == true
+            if (available) {
+                val frr = percent(row["frr"])
+                val far = percent(row["far"])
+                val eer = percent(row["eer"])
+                var line = "$label: your own voice would be refused ${frr ?: "not measured"} (FRR); " +
+                    "other voices would get in ${far ?: "not measured"} (FAR)"
+                if (eer != null) line += "; equally likely at $eer (EER)"
+                out += "$line."
+            } else {
+                val why = (row["why"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+                    ?: "not enough measured rows yet, so no number."
+                out += "$label: $why"
+            }
+        }
+        return out
+    }
+
+    private fun percent(raw: kotlinx.serialization.json.JsonElement?): String? {
+        val n = (raw as? JsonPrimitive)?.doubleOrNull ?: return null
+        return "${(n * 100).roundToInt()}%"
     }
 
     /**

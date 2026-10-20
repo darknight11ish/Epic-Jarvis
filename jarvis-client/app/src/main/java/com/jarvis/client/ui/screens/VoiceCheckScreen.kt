@@ -3,6 +3,7 @@ package com.jarvis.client.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -66,7 +67,7 @@ fun VoiceCheckScreen(
     linkBlocker: String?,
     setSetting: suspend (setting: String, value: String) -> String,
     record: suspend (stop: () -> Boolean, onLevel: (Float) -> Unit) -> VoiceTraining.Take,
-    measure: suspend (List<ByteArray>, List<Float>) -> StrictVoice.Tested,
+    measure: suspend (List<ByteArray>, List<Float>, String) -> StrictVoice.Tested,
     onRefresh: suspend () -> Unit,
     onAskMicrophone: () -> Unit,
     onBack: () -> Unit,
@@ -87,6 +88,12 @@ fun VoiceCheckScreen(
     var problem by remember { mutableStateOf<String?>(null) }
     var needsMic by remember { mutableStateOf(false) }
     var testing by remember { mutableStateOf(false) }
+    // The PC files each measure clip under a condition. The owner records all
+    // 20 in the place they are now, so they pick that one condition once; the
+    // PC's own condition ids/labels are used, never invented here.
+    var measureCondition by remember {
+        mutableStateOf(strict.conditions.firstOrNull()?.id ?: "close")
+    }
     var tested by remember { mutableStateOf<StrictVoice.Tested?>(null) }
 
     DisposableEffect(Unit) {
@@ -153,7 +160,7 @@ fun VoiceCheckScreen(
         tested = null
         scope.launch {
             tested = try {
-                measure(wavs, secs)
+                measure(wavs, secs, measureCondition)
             } finally {
                 testing = false
             }
@@ -222,6 +229,8 @@ fun VoiceCheckScreen(
                     testing = testing,
                     tested = tested,
                     recordingAny = recording != null,
+                    measureCondition = measureCondition,
+                    onMeasureCondition = { measureCondition = it },
                     onPick = { s, v -> pick(s, v) },
                     onStartTest = {
                         tested = null
@@ -248,6 +257,8 @@ private fun CheckPlates(
     testing: Boolean,
     tested: StrictVoice.Tested?,
     recordingAny: Boolean,
+    measureCondition: String,
+    onMeasureCondition: (String) -> Unit,
     onPick: (String, String) -> Unit,
     onStartTest: () -> Unit,
     onRefresh: () -> Unit,
@@ -450,6 +461,27 @@ private fun CheckPlates(
                     )
                 }
                 Gap(10)
+                if (strict.conditions.isNotEmpty()) {
+                    Text(
+                        "Where are you doing this test? The PC files the clips under one condition.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textMid,
+                    )
+                    Gap(4)
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        for (c in strict.conditions) {
+                            Quiet(
+                                c.label,
+                                color = if (measureCondition == c.id) chrome.okInk else chrome.textMid,
+                                onClick = { onMeasureCondition(c.id) },
+                            )
+                        }
+                    }
+                    Gap(8)
+                }
                 val canTest = strict.measure && status.gate.enrolled && !status.gate.needsRetraining
                 Secondary(
                     text = if (tested != null || strict.measureLast != null) "Test again" else "Start the test",

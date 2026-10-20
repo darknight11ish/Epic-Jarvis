@@ -10,13 +10,13 @@ import com.jarvis.client.net.VoiceStrict
  *
  * THE OWNER'S DECISION (2026-09-24). Balanced keeps today's training: one
  * round of the 12 sentences. Very strict gets "extended training": the same
- * 12 sentences three times, in three conditions - close and normal; further
- * away or quieter; another time or another room - because very strict holds
- * the voice to a higher bar, and a print made in one place turns the owner
- * away in the others. Each round goes to the PC as it is finished and is
- * HELD there, in memory, with no card; the last one is sent with `finish`,
- * and ONE approval card covers them all. Cancel drops everything, here and
- * on the PC.
+ * 12 sentences once per condition the PC names (four in the merged contract:
+ * close; on a table 2-3 m away; with background noise; another room or time),
+ * because very strict holds the voice to a higher bar, and a print made in
+ * one place turns the owner away in the others. Each round goes to the PC as
+ * it is finished and is HELD there, in memory, with no card; the last one is
+ * sent with `finish`, and ONE approval card covers them all. Cancel drops
+ * everything, here and on the PC.
  *
  * "Train more" adds recordings to the print already there (`add: true`) -
  * one round, in whichever condition Jarvis struggles with. And when the PC
@@ -37,7 +37,7 @@ object VoiceRounds {
         /** Balanced: one round, replacing the print. */
         SINGLE,
 
-        /** Very strict: three rounds, replacing the print. */
+        /** Very strict: one round per PC-named condition, replacing the print. */
         EXTENDED,
 
         /** "Train more": one round added to the print. */
@@ -198,8 +198,8 @@ object VoiceRounds {
      * still held on the PC ([session], just read)? It drops them 15 minutes
      * after the last one arrived - and a round sent after that would start a
      * NEW training with only itself in it, so the card would cover one round
-     * while the owner thinks it covers three. Null when all is well, or the
-     * sentence saying what happened.
+     * while the owner thinks it covers every condition. Null when all is well,
+     * or the sentence saying what happened.
      */
     fun lostRounds(plan: Plan, index: Int, session: VoiceStrict.Session?): String? {
         if (index <= 0 || plan.kind == Kind.SINGLE_OLD) return null
@@ -216,7 +216,7 @@ object VoiceRounds {
     /**
      * An unfinished training the PC is holding that this screen can pick up:
      * the plan to continue, and which round index is next. Only an ordinary
-     * three-round training from this phone - "train more" and "record
+     * multi-round training from this phone - "train more" and "record
      * again" hold sentences this screen cannot know after a restart.
      */
     fun resume(view: VoiceStrict.View, mic: String): Pair<Plan, Int>? {
@@ -345,7 +345,7 @@ object VoiceRounds {
     /**
      * Why "Send" cannot be pressed for a round, or null. [linkBlocker] (the
      * runtime's `actionBlocker()`) holds only the round that raises the card
-     * ([raisesCard]); an earlier round of a three-round training goes on a
+     * ([raisesCard]); an earlier round of a multi-round training goes on a
      * stale link, since the PC only keeps it in memory.
      */
     fun sendBlocker(

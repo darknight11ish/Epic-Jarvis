@@ -375,18 +375,28 @@ data class VoiceTrainingLast(
  * java.util.Base64 rather than android.util.Base64, so the unit test runs on
  * a plain JVM; it has been on Android since API 26 and minSdk is 33.
  */
-fun enrollRequestBody(clips: List<ByteArray>, mic: String? = null, mode: String? = null): String {
+fun enrollRequestBody(
+    clips: List<ByteArray>,
+    mic: String? = null,
+    mode: String? = null,
+    conditions: List<String>? = null,
+): String {
     val enc = java.util.Base64.getEncoder()
-    // `mode` and `mic` are fixed words from this app (never user text), so
-    // they need no escaping either. Absent, the PC reads "enrol" and "no
-    // microphone named" - which is what a PC older than 2026-09-24 does anyway.
+    // `mode`, `mic` and the condition ids are fixed words from this app/the
+    // PC's contract (never user text), so they need no escaping either.
+    // Absent, the PC reads "enrol" and "no microphone named".
     val head = buildString {
         append("{")
         if (mode != null) append("\"mode\":\"").append(mode).append("\",")
         if (mic != null) append("\"mic\":\"").append(mic).append("\",")
         append("\"clips\":[")
     }
-    return clips.joinToString(prefix = head, postfix = "]}", separator = ",") {
+    val tail = if (conditions == null) {
+        "]}"
+    } else {
+        "],\"conditions\":[" + conditions.joinToString(",") { "\"$it\"" } + "]}"
+    }
+    return clips.joinToString(prefix = head, postfix = tail, separator = ",") {
         "\"" + enc.encodeToString(it) + "\""
     }
 }

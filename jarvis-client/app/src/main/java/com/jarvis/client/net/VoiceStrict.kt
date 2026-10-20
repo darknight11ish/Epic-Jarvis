@@ -117,6 +117,8 @@ object VoiceStrict {
         val strongModel: Boolean = false,
         val veryStrict: Tally = Tally(),
         val balanced: Tally = Tally(),
+        /** `held_out`: the PC's per-condition FRR/FAR/EER, or its own "not enough rows" answer. */
+        val heldOut: JsonObject? = null,
     )
 
     /** A clip the PC left out of the voice print: round, and clip counted from 1 in it. */
@@ -304,7 +306,13 @@ object VoiceStrict {
     /** `measure_last`, or the guided test's own 200 answer - the same keys. */
     fun measured(o: JsonObject?): Measured? {
         if (o == null || o["very_strict"] !is JsonObject) return null
-        return Measured(o.int("clips"), o.flag("strong_model"), tally(o.obj("very_strict")), tally(o.obj("balanced")))
+        return Measured(
+            o.int("clips"),
+            o.flag("strong_model"),
+            tally(o.obj("very_strict")),
+            tally(o.obj("balanced")),
+            o.obj("held_out"),
+        )
     }
 
     private fun outliers(e: JsonElement?): List<Outlier> =

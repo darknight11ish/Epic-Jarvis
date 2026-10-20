@@ -144,6 +144,23 @@ class VoiceTrainingTest {
     }
 
     @Test
+    fun `a measure request carries each clip's condition, aligned with the clips`() {
+        val body = enrollRequestBody(
+            listOf(byteArrayOf(1), byteArrayOf(2)),
+            mic = "phone",
+            mode = "measure",
+            conditions = listOf("close", "table"),
+        )
+        val obj = JarvisJson.parseToJsonElement(body) as JsonObject
+        assertEquals("measure", (obj["mode"] as JsonPrimitive).content)
+        assertEquals(
+            listOf("close", "table"),
+            (obj["conditions"] as JsonArray).map { (it as JsonPrimitive).content },
+        )
+        assertEquals(2, (obj["clips"] as JsonArray).size)
+    }
+
+    @Test
     fun `an empty list is still valid JSON`() {
         assertEquals("""{"clips":[]}""", enrollRequestBody(emptyList()))
     }
