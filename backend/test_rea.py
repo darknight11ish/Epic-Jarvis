@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import sys
 import tempfile
 from pathlib import Path
@@ -562,6 +563,185 @@ def t_doctor_reports_the_five_audit_fields():
           on_path.get("tier2_jadx_ready"))
 
 
+# --------------------------------------------------------------------------
+#   Bite 9 - Slice 2: doctor-first readiness, and the vetted skill text
+# --------------------------------------------------------------------------
+
+def _integrity(ok, recorded="", why="", source=""):
+    return {"expected": R.PINNED_INTEGRITY, "recorded": recorded or (
+        R.PINNED_INTEGRITY if ok else ""), "ok": ok, "source": source, "why": why}
+
+
+def _no_install():
+    return {"found": False, "ok": False, "install_dir": "", "root": "", "version": "",
+            "license": "", "entry": "", "why": "no package"}
+
+
+def t_doctor_readiness_is_honest_in_every_state():
+    """Slice 2's contract: one `ready` answer and one plain `why`, and never a pass
+    for a state that is not actually ready."""
+    good = with_ready_install()
+    match = R.doctor(node_version="v22.23.2", env={}, install=good,
+                     integrity=_integrity(True, source="package-lock.json"))
+    check("ready is true when Node, the pin and the recorded sha512 all agree",
+          match.get("ready") is True and match.get("ok") is True, match.get("why"))
+    check("... and a ready answer has no why sentence", match.get("why") == "",
+          match.get("why"))
+    check("... signatures are reported as NOT checked, with the reason",
+          match["signatures"]["checked"] is False
+          and "network" in match["signatures"]["why"], match["signatures"])
+    check("... and the pinned package facts are still stated",
+          match["pinned"]["version"] == R.PINNED_VERSION
+          and match["pinned"]["integrity"] == R.PINNED_INTEGRITY, match["pinned"])
+
+    mismatch = R.doctor(node_version="v22.23.2", env={}, install=good,
+                        integrity=_integrity(False, recorded="sha512-AAAA",
+                                             why=R.BAD_INTEGRITY))
+    check("a sha512 mismatch is NOT ready", mismatch.get("ready") is False,
+          mismatch.get("ready"))
+    check("... and why names the hash problem", "sha512" in mismatch.get("why", ""),
+          mismatch.get("why"))
+    check("... even though the package is present at the pinned version",
+          mismatch.get("installed") is True and mismatch.get("version_pinned_ok") is True,
+          mismatch.get("install"))
+
+    unknown = R.doctor(node_version="v22.23.2", env={}, install=good,
+                       integrity=_integrity(None, why="no local lockfile"))
+    check("a missing local sha512 record is unknown, not verified",
+          unknown["integrity"]["ok"] is None, unknown["integrity"])
+    check("... and a pinned package stays ready on Node and version alone",
+          unknown.get("ready") is True, unknown.get("why"))
+
+    missing = R.doctor(node_version="v22.23.2", env={}, install=_no_install(),
+                       integrity=_integrity(None, why="nothing installed"))
+    check("not installed is ready false with a plain why",
+          missing.get("ready") is False and bool(missing.get("why")),
+          (missing.get("ready"), missing.get("why")))
+    check("... and every one of the five audit fields is still reported",
+          all(k in missing for k in ("installed", "version_pinned_ok",
+                                     "tier1_static_ready", "tier2_ghidra_ready",
+                                     "tier2_jadx_ready")))
+
+    wrong = dict(good)
+    wrong.update(version="9.9.9", ok=False)
+    wrong_version = R.doctor(node_version="v22.23.2", env={}, install=wrong,
+                             integrity=_integrity(True))
+    check("a package at another version is NOT ready",
+          wrong_version.get("ready") is False, wrong_version.get("why"))
+
+    old = R.doctor(node_version="v23.4.0", env={}, install=good,
+                   integrity=_integrity(True))
+    check("an unsupported Node range (23) is NOT ready", old.get("ready") is False,
+          old.get("node"))
+
+
+def t_package_integrity_compares_npm_s_local_record_only():
+    """The sha512 check reads npm's own lockfile; it never contacts the registry and
+    it never trusts the package's package.json for a hash."""
+    root = Path(tempfile.mkdtemp(prefix="rea-integrity-"))
+    try:
+        base = root / "install"
+        pkg = base / "node_modules" / "rea-agents"
+        pkg.mkdir(parents=True)
+        (pkg / "package.json").write_text(json.dumps(
+            {"name": "rea-agents", "version": R.PINNED_VERSION, "license": "MIT"}),
+            encoding="utf-8")
+        hidden = base / "node_modules" / ".package-lock.json"
+        hidden.write_text(json.dumps({"packages": {
+            "node_modules/rea-agents": {"version": R.PINNED_VERSION,
+                                        "integrity": R.PINNED_INTEGRITY}}}),
+            encoding="utf-8")
+        got = R.package_integrity(base)
+        check("a matching npm lockfile record is ok", got["ok"] is True, got)
+        check("... and the source names the lockfile it read",
+              got["source"] == "node_modules/.package-lock.json", got["source"])
+        check("... and it records the pinned hash as the expected one",
+              got["expected"] == R.PINNED_INTEGRITY, got["expected"])
+
+        hidden.write_text(json.dumps({"packages": {
+            "node_modules/rea-agents": {"version": R.PINNED_VERSION,
+                                        "integrity": "sha512-AAAA"}}}),
+            encoding="utf-8")
+        mismatch = R.package_integrity(base)
+        check("a different recorded hash is a mismatch", mismatch["ok"] is False,
+              mismatch)
+        check("... with the plain bad-integration sentence, not a stack trace",
+              "sha512" in mismatch["why"], mismatch["why"])
+
+        hidden.unlink()
+        unknown = R.package_integrity(base)
+        check("no local record is unknown (None), never a pass", unknown["ok"] is None,
+              unknown)
+        check("... and it says why it could not compare", bool(unknown["why"]), unknown)
+
+        (base / "package-lock.json").write_text(json.dumps({"dependencies": {
+            "rea-agents": {"version": R.PINNED_VERSION,
+                           "integrity": R.PINNED_INTEGRITY}}}), encoding="utf-8")
+        legacy = R.package_integrity(base)
+        check("the older dependencies lockfile shape is read too",
+              legacy["ok"] is True and legacy["source"] == "package-lock.json", legacy)
+
+        empty = R.package_integrity(root / "empty")
+        check("no installed package is unknown with a plain why",
+              empty["ok"] is None and "no `rea-agents` package" in empty["why"], empty)
+    finally:
+        import shutil
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_doctor_never_installs_or_uses_the_network():
+    """`doctor` is a local read: no spawn when the Node version is supplied, no socket,
+    no package-manager command. The install line stays for the owner, not for the model."""
+    good = with_ready_install()
+    calls = []
+
+    def refuse_spawn(*args, **kwargs):
+        calls.append(list(args))
+        raise AssertionError("doctor must not start a process")
+
+    def refuse_socket(*args, **kwargs):
+        raise AssertionError("doctor must not open a socket")
+
+    with mock.patch.object(R.subprocess, "run", side_effect=refuse_spawn), \
+            mock.patch("socket.socket", side_effect=refuse_socket), \
+            mock.patch("socket.create_connection", side_effect=refuse_socket):
+        facts = R.doctor(node_version="v22.23.2", env={}, install=good,
+                         integrity=_integrity(True))
+    check("doctor with a known Node version starts no process", calls == [], calls)
+    check("... and opens no socket", facts.get("ready") is True, facts.get("why"))
+    check("the install command is the owner's line, not something doctor runs",
+          R.INSTALL_HINT.startswith("npm install")
+          and "--ignore-scripts" in R.INSTALL_HINT, R.INSTALL_HINT)
+
+
+def t_the_vetted_skill_has_no_shell_and_names_the_pins():
+    """Slice 2's skill is instructions for this model, not an installer: no npx, no
+    package-manager command, no shell fence, no external address, and the pinned facts
+    the audit relies on are stated plainly."""
+    skill = REPO / "skills" / "reverse-engineer-anything" / "SKILL.md"
+    check("the vetted skill exists at its recorded path", skill.is_file(), str(skill))
+    text = skill.read_text(encoding="utf-8")
+    for banned in ("npx", "npm install", "```bash", "```sh", "http://", "https://",
+                   "brew install", "apt-get install", "pip install", "sudo ",
+                   "export_evidence_bundle", "close_binary", "install_adb_package",
+                   "capture_process_scenario", R.INSTALL_HINT):
+        check(f"the skill carries no {banned!r}", banned not in text,
+              f"found {banned!r}")
+    for required in ("rea_investigate", "rea-agents", R.PINNED_VERSION,
+                     R.PINNED_INTEGRITY, "approval gate", "read-only",
+                     "does not install", "four-point", "sha512", "preinstall",
+                     "egress", "doctor"):
+        check(f"the skill names {required!r}", required in text, "missing")
+    missing_actions = [a for a in R.ACTION_ORDER if a not in text]
+    check("the skill names every action the facade exposes", missing_actions == [],
+          missing_actions)
+    check("the skill says one card is required for every call",
+          "one approval card" in text.lower() or "every call asks a person" in text.lower(),
+          "no one-card sentence")
+    check("the skill says the upstream reference files are not shipped",
+          "references" in text.lower() and "not shipped" in text.lower(), "missing")
+
+
 def t_hard_deny_is_exactly_the_ruled_list():
     """Gemini's ruling, 2026-10-20: six ADB mutators and four capture tools are hard-denied,
     whatever the action map says. Export/close are NOT hard-denied - they are simply not
@@ -626,6 +806,10 @@ def main():
                t_one_compact_tool_in_one_group_selected_by_the_diet,
                t_doctor_reads_and_starts_nothing,
                t_doctor_reports_the_five_audit_fields,
+               t_doctor_readiness_is_honest_in_every_state,
+               t_package_integrity_compares_npm_s_local_record_only,
+               t_doctor_never_installs_or_uses_the_network,
+               t_the_vetted_skill_has_no_shell_and_names_the_pins,
                t_hard_deny_is_exactly_the_ruled_list,
                t_identity_mismatch_is_refused,
                t_off_by_default_and_no_start_without_it,

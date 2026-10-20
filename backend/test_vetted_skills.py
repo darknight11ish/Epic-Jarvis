@@ -290,13 +290,44 @@ def t_the_attribution_names_the_licence_the_upstream_file_states():
           "no licence file" in block, repr(block[:300]))
 
 
+#: Each shipped skill, and the origin + licence its own text must name. A skill with
+#: no entry here is not silently passed: the check below fails for it, because an
+#: adaptation with no recorded source is exactly the gap this suite exists to catch.
+SKILL_ORIGINS = {
+    "pdf-workflow": ("openai/skills", "Apache"),
+    "reverse-engineer-anything": ("morluto/rea", "MIT"),
+}
+
+
 def t_the_skill_itself_records_its_own_origin():
     for d in skill_dirs():
         text = (d / "SKILL.md").read_text(encoding="utf-8")
-        check(f"{d.name}: names its upstream origin", "openai/skills" in text,
+        origin, licence = SKILL_ORIGINS.get(d.name, ("", ""))
+        check(f"{d.name}: has a recorded upstream origin", bool(origin),
+              "no SKILL_ORIGINS entry for this skill")
+        check(f"{d.name}: names its upstream origin", bool(origin) and origin in text,
               "no origin line in the skill")
-        check(f"{d.name}: names its licence", "Apache" in text,
+        check(f"{d.name}: names its licence", bool(licence) and licence in text,
               "no licence line in the skill")
+
+
+def t_the_rea_skill_credit_is_in_the_hand_written_half_of_the_notices():
+    """The MIT credit for the adapted REA skill lands where tools/gen_notices.py
+    keeps it (the hand-written region), names the upstream, the licence and the
+    adapted file, and says the upstream reference files are not shipped."""
+    check("the notices file is there", NOTICES.is_file())
+    text = NOTICES.read_text(encoding="utf-8")
+    gen_at = text.find("\n2. RUST LIBRARIES IN THE DESKTOP PROGRAM")
+    check("the generated section was found", gen_at > 0, repr(gen_at))
+    hand = text[:gen_at]
+    check("morluto/rea is named in the hand-written half", "morluto/rea" in hand)
+    check("the MIT licence is named there", "MIT" in hand)
+    check("the adapted file is named",
+          "skills/reverse-engineer-anything/SKILL.md" in hand)
+    check("it says the six reference files are not shipped",
+          "references/` files are NOT shipped" in hand
+          or "reference files are not shipped" in hand.lower(),
+          "no sentence about the unshipped references")
 
 
 if __name__ == "__main__":
@@ -309,7 +340,8 @@ if __name__ == "__main__":
                t_a_skill_grants_no_permission_and_says_so,
                t_the_attribution_is_in_the_hand_written_half_of_the_notices,
                t_the_attribution_names_the_licence_the_upstream_file_states,
-               t_the_skill_itself_records_its_own_origin):
+               t_the_skill_itself_records_its_own_origin,
+               t_the_rea_skill_credit_is_in_the_hand_written_half_of_the_notices):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
