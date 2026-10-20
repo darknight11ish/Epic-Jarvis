@@ -706,6 +706,91 @@ def t_cli_is_dry_run_by_default_and_validates_paths():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def t_traces_retention_is_recorded_blocked_not_guessed():
+    """F10 / Q2 (2026-10-20): traces.db retention is recorded as BLOCKED.
+
+    The live HUD was read read-only and has no traces.db writer, schema or anchor.
+    A retention cap must not be guessed into a database this program does not own,
+    so the decision lives in BLOCKED_DELTAS and is printed - never staged."""
+    entry = R.BLOCKED_DELTAS.get("traces-retention")
+    check("traces-retention is recorded in BLOCKED_DELTAS", isinstance(entry, dict), entry)
+    check("... and is NOT in DELTA_TABLE, so no deploy ever tries to insert it",
+          "traces-retention" not in R.DELTA_TABLE, sorted(R.DELTA_TABLE))
+    evidence = " ".join([str(entry.get("why") or "")]
+                        + [str(x) for x in (entry.get("evidence") or ())])
+    for probe in ("traces.db", "jarvis_hud.py", "no traces.db writer",
+                  "6238-6265", "snapshot", "no delete trigger"):
+        check(f"... the evidence names {probe!r}", probe in evidence, evidence[:200])
+    lines = R.blocked_delta_lines()
+    check("... the dry-run summary will print it as blocked, not as an insert",
+          len(lines) == 1 and lines[0].startswith("traces-retention -> jarvis_hud.py:"),
+          lines)
+
+
+def t_a_fake_traces_delta_uses_the_anchored_mechanism_without_writing():
+    """What the tool WOULD do if the live HUD ever grew a safe anchor.
+
+    A test-local delta (not in DELTA_TABLE) is fed the same fake HUD text and a
+    synthetic patch: the shared ALREADY_PRESENT probe, the anchored insert, a
+    missing-anchor refusal and a dry run that writes nothing are all exercised.
+    The live files stay untouched; this is the mechanism the blocked entry cannot
+    use today."""
+    root = tmpdir()
+    try:
+        live = make_live(root)
+        anchor = 'FACTS_FILE = CONFIG_DIR / "memory_facts.jsonl"'
+        hud = ('"""a fake live HUD for the blocked delta"""\n\n'
+               'CONFIG_DIR = 1\n' + anchor + '\n')
+        write(live / "jarvis_hud.py", hud)
+        block = ("# F10 traces.db retention (test block)",
+                 "_TRACES_KEEP_ROWS = 2000",
+                 "def _prune_traces_db():",
+                 "    pass",
+                 "_prune_traces_db()")
+        patch = ("--- a/jarvis_hud.py\n+++ b/jarvis_hud.py\n@@\n"
+                 + "".join("+" + line + "\n" for line in block))
+        table = {"traces-retention": {"jarvis_hud.py": {
+            "probes": tuple(block), "anchor": anchor}}}
+        show = lambda repo, ref, path: patch                  # noqa: E731
+
+        deltas, staged, refusals = R.plan_deltas(
+            live, ["traces-retention"], show=show, repo=live, table=table)
+        check("a fake traces delta with an anchor is PLANNED as an insert",
+              refusals == [] and any(d.status == "insert" for d in deltas),
+              (deltas, refusals))
+        check("... the staged HUD contains the block before the anchor",
+              anchor in staged.get("jarvis_hud.py", "")
+              and "_prune_traces_db()" in staged["jarvis_hud.py"])
+        check("... planning wrote NOTHING to the live file",
+              (live / "jarvis_hud.py").read_text(encoding="utf-8") == hud)
+
+        backup = R.Backup(live, stamp="traces-dry")
+        would = R.apply_deltas(staged, live, backup, write=False)
+        check("... a dry-run apply lists the file and writes nothing",
+              would == ["jarvis_hud.py"]
+              and (live / "jarvis_hud.py").read_text(encoding="utf-8") == hud
+              and not backup.saved, (would, backup.saved))
+
+        write(live / "jarvis_hud.py", staged["jarvis_hud.py"])
+        deltas2, staged2, refusals2 = R.plan_deltas(
+            live, ["traces-retention"], show=show, repo=live, table=table)
+        check("... once present, the same probes say ALREADY_PRESENT",
+              refusals2 == [] and [d.status for d in deltas2] == ["already"]
+              and staged2 == {}, (deltas2, staged2, refusals2))
+
+        bad = hud.replace(anchor, "OTHER = 1")
+        write(live / "jarvis_hud.py", bad)
+        deltas3, staged3, refusals3 = R.plan_deltas(
+            live, ["traces-retention"], show=show, repo=live, table=table)
+        check("... and a missing anchor is REFUSED loudly, with nothing staged",
+              bool(refusals3) and "appears 0 time" in refusals3[0] and staged3 == {},
+              (refusals3, staged3))
+        check("... the file stays exactly as it was",
+              (live / "jarvis_hud.py").read_text(encoding="utf-8") == bad)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def main():
     for fn in (t_the_lists_parse_from_apply_patches,
                t_the_list_parser_refuses_rather_than_reading_nothing,
@@ -725,6 +810,8 @@ def main():
                t_probes_skip_what_cannot_be_expected,
                t_a_missing_token_fails_the_probes_without_printing_one,
                t_end_to_end_and_idempotent,
+               t_traces_retention_is_recorded_blocked_not_guessed,
+               t_a_fake_traces_delta_uses_the_anchored_mechanism_without_writing,
                t_cli_is_dry_run_by_default_and_validates_paths):
         fn()
     print()

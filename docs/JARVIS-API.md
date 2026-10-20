@@ -9672,11 +9672,25 @@ call.
 handed out by `jarvis_sqlite.connect()` now sets `PRAGMA busy_timeout = 5000`,
 and the four shipped modules that used a 5-second raw `sqlite3.connect` timeout
 (`jarvis_chat_log.py`, `jarvis_decks.py`, `jarvis_owned_tables.py`,
-`jarvis_data_health.py`) now use 10 seconds. That is the lock half of F10. The
-`traces.db` half - capping its rows and age - is **not** in this repository:
-the only mention here is `jarvis_backup.py:470`, and the live HUD that writes
-it is not part of this repository, so its retention is reported as out of
-reach, not claimed fixed.
+`jarvis_data_health.py`) now use 10 seconds. That is the lock half of F10.
+
+The `traces.db` half is **BLOCKED, and recorded as blocked rather than
+guessed.** The Gemini Q2 ruling said it is written only by the live HUD and
+should be a small live-HUD/reconcile delta, not a fake backend module. Reading
+the live HUD on 2026-10-20 found **no `traces.db` writer, no trace schema and no
+insert/startup anchor there**: the live `jarvis_hud.py` (393,012 bytes) has zero
+`traces.db` matches, its `sqlite3` use is the read-only memory readers (around
+lines 6238-6265), the live folder has no writer, and `~/.openjarvis` has no
+`traces.db` today. The only evidence of the store is a snapshot
+(`Jarvis Backups/jarvis-snap-20261014-000438/traces.db`): tables `traces`
+(`trace_id`, `started_at`, `ended_at`, ...), `trace_steps` and an external-content
+FTS5 `traces_fts` with only an INSERT trigger. A retention cap cannot reuse the
+HUD's anchored ALREADY_PRESENT/insert mechanism against a store with no writer;
+adding a standalone prune would delete a database this program does not own.
+`tools/reconcile_live_backend.py` therefore records this under
+**`BLOCKED_DELTAS["traces-retention"]`** (with the evidence) and every dry run
+prints it as **BLOCKED LIVE DELTAS**, never as a planned insert. It becomes a
+delta only when a live HUD writer and a real anchor exist.
 
 ### 49.2 The route
 
