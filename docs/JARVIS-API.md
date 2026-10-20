@@ -22039,14 +22039,14 @@ no switch yet - nothing was changed."}`.
 Same origin and token checks as every other write; body is one JSON object:
 
 ```
-{"allowed": ["com.android.settings"],        the OWNER'S allow-list, from the phone's Settings
- "app": "com.android.settings",              the app the ONE step is in; must be on the list
- "app_name": "Settings",                     the label the card shows (falls back to the package)
+{"allowed": ["com.google.android.deskclock"], the OWNER'S allow-list, from the phone's Settings
+ "app": "com.google.android.deskclock",      the app the ONE step is in; must be on the list
+ "app_name": "Clock",                        the label the card shows (falls back to the package)
  "step": {"action": "tap",                   tap | swipe | type | back | home
-          "target": {"id": "com.android.settings:id/search", "text": "Search",
+          "target": {"id": "com.google.android.deskclock:id/search", "text": "Search",
                      "class": "android.widget.TextView", "bounds": [0,100,1080,200]},
           "text": "only for type", "why": "open search"},
- "snapshot": {"app": "com.android.settings", "title": "Settings",
+ "snapshot": {"app": "com.google.android.deskclock", "title": "Clock",
               "controls": [ ...the masked controls read just now... ]}}
 ```
 
@@ -22061,23 +22061,28 @@ Answers:
 
 **The card** (action `change_own_config`, raised on the card's own thread; its
 `detail` carries the same text plus `app`, `app_name`, `verb` and a `what` line
-- never a snapshot):
+- never a snapshot). Since F17 (2026-10-20) it names the human app, its
+package, the exact verb and target label, and **where the permission came
+from**:
 
-> Let Jarvis act in Settings on your phone?
+> Jarvis wants to perform 1 step in Clock (com.google.android.deskclock) on
+> your phone (allowed on phone): tap "Search".
 >
-> App: Settings (com.android.settings)
-> Step 1 of 1: tap "Search"
-> Why: open search
+> Nothing else will be tapped or sent without another card.
 >
-> This is ONE step, and one card approves it - nothing is touched until you say
-> yes. The phone checks the screen again just before it acts; a screen that
-> changed stops the run. Stop on the phone cancels it, and no second step runs
-> without a new plan and a new card.
+> You asked: open search.
+>
+> Nothing is touched until you say yes. The phone checks the screen again just
+> before it acts; a screen that changed stops the run. Stop on the phone
+> cancels it.
 >
 > If you say no: nothing is touched, and nothing runs.
 
-A `type` step's line adds `- the exact text: "<the text>"` so the owner approves
-the exact words; that text is on the local card only, never in the audit log.
+`(allowed on phone)` means the phone's list is the only permission;
+`(allowed on this PC and your phone)` means the PC keeps its own list and the
+app is on both. A `type` step adds `The exact text: "<the text>"` so the owner
+approves the exact words; that text is on the local card only, never in the
+audit log.
 
 **The allow-list is the owner's, and empty means nothing.** It lives on the
 phone (his Settings screen), is carried in every request, and this module only
@@ -22086,12 +22091,31 @@ refuses shapes that are not Android package names (at most 64 per request).
 `allowed: []` or a missing list refuses every request in words and raises no
 card.
 
-**Refused outright, before any card exists:** a password/credential field
-(target flagged `password`, or the label/target/why names one); a 2FA/one-time
-code field; an app or label that looks like a bank, payment or money app; a
-step that would send, post, share, message or email; a step that would delete,
-move, rename or uninstall; any action other than tap/swipe/type/back/home; a
-plan that names one of `jarvis_gate._PROTECTED`'s files; and any run while
+**The PC's own allow-list (F17, 2026-10-20).** `[app_control]
+allowed_packages` in the PC's framework config is a second list, **empty by
+default**. Empty keeps the rule above - the phone's list is the permission, and
+the card says `(allowed on phone)`. Non-empty means the app must be on **both**
+lists: a run request can never widen it, and an app the phone allows but the PC
+does not is refused before any card. Every entry is still subject to the hard
+denylist below.
+
+**Refused outright, before any card exists - the hard denylist first (F17,
+2026-10-20), whatever either allow-list says:** Jarvis's own packages
+(`com.jarvis.*`); Android's system settings, permission controller and package
+installer (`com.android.settings`, `com.google.android.permissioncontroller`,
+`com.android.packageinstaller` and their variants); well-known password
+managers (1Password, Bitwarden, KeePass, LastPass, Dashlane and others); and
+well-known banking, wallet and payment apps. Each is refused in plain words
+naming the human app, so **the enable runbook's measurement app can no longer
+be Android Settings** - use a harmless app such as the phone's calculator or
+clock.
+
+Then, also before any card: a password/credential field (target flagged
+`password`, or the label/target/why names one); a 2FA/one-time code field; an
+app or label that looks like a bank, payment or money app; a step that would
+send, post, share, message or email; a step that would delete, move, rename or
+uninstall; any action other than tap/swipe/type/back/home; a plan that names one
+of `jarvis_gate._PROTECTED`'s files; and any run while
 `jarvis_gate.taint_active()` is true (outside text may be steering the
 conversation - acting then is what the latch exists to stop).
 

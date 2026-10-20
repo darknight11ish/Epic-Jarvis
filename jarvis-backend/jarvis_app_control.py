@@ -34,9 +34,25 @@ THE OWNER'S TWO DECISIONS, 2026-10-19, both load-bearing:
     run. Banner + one-tap Stop are mandatory from the first slice (the phone
     shows them; the PC's /api/task/stop is the existing path both clients use).
 
+F17 - THE TRUST-MODEL HARDENING (2026-10-20, mandatory before the feature can
+ever be enabled). Three rules now sit in front of every card:
+  * a HARD DENYLIST of packages Jarvis will never act in, refused in plain
+    words whatever ANY allow-list says: Jarvis's own app, Android's own system
+    settings / permission controller / package installer, well-known password
+    managers, and well-known banking, wallet and payment apps;
+  * the PC can hold its OWN `[app_control] allowed_packages` list. Empty (the
+    default) keeps the phone's list as the permission and the card says
+    "(allowed on phone)"; non-empty requires the app to be on BOTH lists, so
+    the phone's request can never be the only authority;
+  * the card names the human app, its package, the exact verb, the target
+    label and where the permission came from, and says nothing else will be
+    tapped or sent without another card.
+
 WHAT IT REFUSES OUTRIGHT, before any card exists (so there is nothing to
-approve): any app not on the owner's allow-list (and an empty list refuses
-everything); password/credential fields and anything said to look like 2FA;
+approve): anything on the hard denylist above; any app not on the owner's
+allow-list (and an empty list refuses everything); any app missing from the
+PC's list when that list is configured; password/credential fields and anything
+said to look like 2FA;
 money, banking and payment apps; steps that send, post or share anything;
 steps that delete or move anything; anything that names one of
 jarvis_gate._PROTECTED's files; any action other than tap/swipe/type/back/home;
@@ -111,6 +127,70 @@ RUN_SECONDS = 900.0
 
 #: One Android package name: at least one dot, no spaces or slashes.
 PACKAGE_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$")
+
+#: THE HARD DENYLIST (F17, the 2026-10-20 Gemini review, made mandatory before
+#: the feature can ever be enabled). These are refused BEFORE the card and
+#: REGARDLESS of any allow-list either side sends - the phone's list, the PC's
+#: list, or both: a package here is never acted in, full stop.
+#:
+#: Package-based on purpose: the PC has no Play-Store category to read, and the
+#: phone's own heuristic lists live in the Android app. This PC-side list is
+#: the one that cannot be edited away from the phone, so only the narrowest,
+#: well-known targets are here - Jarvis's own app, Android's own system
+#: settings/permission/installer packages, the major password managers, and the
+#: well-known banking, wallet and payment packages.
+DENY_EXACT = {
+    "com.android.settings": "Android Settings",
+    "com.android.settings.intelligence": "Android's Settings search",
+    "com.google.android.settings": "Android Settings",
+    "com.android.permissioncontroller": "Android's permission controller",
+    "com.google.android.permissioncontroller": "Android's permission controller",
+    "com.android.packageinstaller": "the app installer",
+    "com.google.android.packageinstaller": "the app installer",
+    "com.android.providers.settings": "Android's settings storage",
+}
+
+#: Prefix: Jarvis's own packages (the app, the launcher, any future split).
+DENY_PREFIX = (("com.jarvis.", "Jarvis itself"),)
+
+#: Well-known password managers, as package substrings, with the human name.
+DENY_PASSWORD_MANAGERS = (
+    ("onepassword", "1Password"), ("agilebits", "1Password"),
+    ("bitwarden", "Bitwarden"), ("lastpass", "LastPass"),
+    ("dashlane", "Dashlane"), ("keepassxc", "KeePassXC"),
+    ("keepass", "KeePass"), ("nordpass", "NordPass"),
+    ("proton.android.pass", "Proton Pass"), ("enpass", "Enpass"),
+    ("keepersecurity", "Keeper"), ("passwordmanager", "a password manager"),
+)
+
+#: Well-known banking, wallet and payment packages, as package substrings.
+#: This is deliberately a NAMED list (plus the words the existing `_MONEY`
+#: heuristic already refuses); a bank nobody here has heard of is caught by
+#: the owner's own list instead, which is the only place that can name it.
+DENY_MONEY = (
+    ("google.android.apps.walletnfcrel", "Google Wallet"),
+    ("samsung.android.spay", "Samsung Wallet"),
+    ("paypal", "PayPal"), ("venmo", "Venmo"), ("cash.app", "Cash App"),
+    ("cashapp", "Cash App"), ("zellepay", "Zelle"), ("chime", "Chime"),
+    ("revolut", "Revolut"), ("transferwise", "Wise"), ("wise.money", "Wise"),
+    ("coinbase", "Coinbase"), ("robinhood", "Robinhood"), ("fidelity", "Fidelity"),
+    ("schwab", "Schwab"), ("vanguard", "Vanguard"), ("chase", "Chase"),
+    ("wellsfargo", "Wells Fargo"), ("citibank", "Citibank"),
+    ("bankofamerica", "Bank of America"), ("capitalone", "Capital One"),
+    ("americanexpress", "American Express"), ("discover.card", "Discover"),
+    ("barclays", "Barclays"), ("hsbc", "HSBC"), ("santander", "Santander"),
+)
+
+#: What a hard-denied package is refused with: plain words, naming the app.
+DENIED_APP = ("{app} is {human}, and Jarvis will never act there - that is a hard "
+              "rule, not a setting. Nothing was changed and no card was raised.")
+
+#: A PC allow-list is configured and the app is not on it. The phone's list
+#: alone must never be the only permission then.
+NOT_ON_PC_LIST = ("{app} ({app_name}) is not on the allowed_packages list in this "
+                  "PC's jarvis-framework.toml, so Jarvis will not act in it even "
+                  "though the phone allows it. Nothing was changed and no card "
+                  "was raised.")
 
 #: Refusal sentences. Fixed here so every refusal is one plain sentence and
 #: the tests can hold each one; never a traceback, never a JSON dump.
@@ -245,6 +325,62 @@ def enabled(framework: Optional[dict] = None) -> bool:
 # --------------------------------------------------------------------------
 #   The owner's allow-list - empty means nothing, always
 # --------------------------------------------------------------------------
+
+def denied_app(package_name) -> tuple:
+    """(refusal sentence, human name) for a hard-denied package, or ("", "").
+
+    Applied before the card and regardless of any allow-list: this is the rule
+    the 2026-10-20 review made mandatory, and it is not configurable.
+    """
+    pkg = str(package_name or "").strip().lower()
+    if not pkg:
+        return "", ""
+    human = DENY_EXACT.get(pkg, "")
+    if not human:
+        for prefix, name in DENY_PREFIX:
+            if pkg.startswith(prefix):
+                human = name
+                break
+    if not human:
+        for part, name in DENY_PASSWORD_MANAGERS + DENY_MONEY:
+            if part in pkg:
+                human = name
+                break
+    if not human:
+        # The words this module already refuses by name in a label also count
+        # as package words, so a bank package with a blank app_name cannot slip
+        # in: the hard list is the wider of the two, never the narrower.
+        hit = _find_word(pkg, _MONEY)
+        if hit:
+            human = f"a banking, wallet or payment app ({hit} in its package name)"
+    if not human:
+        return "", ""
+    return DENIED_APP.format(app=pkg, human=human), human
+
+
+def pc_allowed(framework: Optional[dict] = None) -> list:
+    """The PC's own allowed_packages list, or [].
+
+    New in F17 (2026-10-20): the PC can hold its OWN allow-list as well as the
+    phone's. An empty list keeps today's behaviour (the phone's list is the
+    permission, and the card says so); a non-empty list means the target must
+    be in BOTH lists. The body of a run request can never widen it.
+    """
+    try:
+        cfg = framework if isinstance(framework, dict) else _fw().load_framework()
+        section = (cfg or {}).get("app_control") or {}
+        raw = section.get("allowed_packages") if isinstance(section, dict) else []
+    except Exception:
+        return []
+    if not isinstance(raw, (list, tuple)):
+        return []
+    out = []
+    for item in raw[:MAX_ALLOWED]:
+        pkg = str(item or "").strip()
+        if PACKAGE_RE.match(pkg) and pkg not in out:
+            out.append(pkg)
+    return out
+
 
 def parse_allowed(value) -> tuple:
     """(list, error) for the `allowed` list in a run request.
@@ -466,22 +602,29 @@ def _target_words(plan: dict) -> str:
 
 
 def plan_card(plan: dict) -> str:
-    """The card text: the app, the ONE step, what it types, and what refusing costs."""
+    """The card text (F17 wording, 2026-10-20).
+
+    It names the human app, its package, the exact verb and target label, and
+    where the permission came from - "(allowed on phone)" when the phone's list
+    is the only permission, or both lists when this PC keeps its own. The ONE
+    card and the existing `change_own_config` tier are unchanged.
+    """
     step = plan["step"]
     action = step["action"]
-    line = f"Step 1 of 1: {_VERB_WORDS.get(action, action)}{_target_words(plan)}"
+    origin = plan.get("allow_origin") or "allowed on phone"
+    first = (f"Jarvis wants to perform 1 step in {plan['app_name']} "
+             f"({plan['app']}) on your phone ({origin}): "
+             f"{_VERB_WORDS.get(action, action)}{_target_words(plan)}.")
     if action == "type":
-        line += f' - the exact text: "{step.get("text")}"'
+        first += f'\nThe exact text: "{step.get("text")}"'
     why = step.get("why") or ""
     return (
-        f"Let Jarvis act in {plan['app_name']} on your phone?\n\n"
-        f"App: {plan['app_name']} ({plan['app']})\n"
-        f"{line}\n"
-        + (f"Why: {why}\n" if why else "")
-        + "\nThis is ONE step, and one card approves it - nothing is touched "
-          "until you say yes. The phone checks the screen again just before it "
-          "acts; a screen that changed stops the run. Stop on the phone cancels "
-          "it, and no second step runs without a new plan and a new card.\n\n"
+        first + "\n\n"
+        "Nothing else will be tapped or sent without another card.\n\n"
+        + (f"You asked: {why}.\n\n" if why else "")
+        + "Nothing is touched until you say yes. The phone checks the screen "
+          "again just before it acts; a screen that changed stops the run. Stop "
+          "on the phone cancels it.\n\n"
           "If you say no: nothing is touched, and nothing runs."
     )
 
@@ -586,9 +729,23 @@ def stage_run(doc, *, gate: Optional[Callable] = None, spawn: Optional[Callable]
     allowed, why = parse_allowed(doc.get("allowed"))
     if why:
         return 400, {"ok": False, "error": why}
+    denied, _human = denied_app(_clean(doc.get("app"), 200))
+    if denied:
+        return 409, {"ok": False, "available": False, "error": denied}
     plan, code, error = validate_plan(doc, allowed)
     if plan is None:
         return code, {"ok": False, "error": error, "allowed": len(allowed)}
+    # F17: a non-empty PC list must ALSO allow the app. An empty one keeps the
+    # phone's list as the permission, and the card says where it came from.
+    pc_list = pc_allowed(framework)
+    if pc_list:
+        if plan["app"] not in pc_list:
+            return 409, {"ok": False, "available": False,
+                         "error": NOT_ON_PC_LIST.format(app=plan["app"],
+                                                        app_name=plan["app_name"])}
+        plan["allow_origin"] = "allowed on this PC and your phone"
+    else:
+        plan["allow_origin"] = "allowed on phone"
     try:
         tier = tier_of(ACTION)
     except Exception as exc:

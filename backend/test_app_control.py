@@ -25,7 +25,14 @@ What it proves, in the order the owner's decisions were made:
   9. the AUDIT LINE is app + verb only - never the typed text, never the
      screen's words - while the card (the local approval row) does show the
      exact text so the owner can judge it;
- 10. the patch itself is what this repository applies: two POST routes, the
+ 10. the TRUST-MODEL HARDENING (F17, the 2026-10-20 Gemini review, mandatory
+     before enabling): a hard PC-side denylist refuses Jarvis itself, Android's
+     system settings/permission/installer, password managers and
+     banking/wallet/payment apps whatever either allow-list says; a non-empty
+     PC-side allowed_packages list must ALSO allow the app; an empty one keeps
+     the phone's list and the card says "(allowed on phone)"; and the card
+     names the human app, package, exact verb and target.
+ 11. the patch itself is what this repository applies: two POST routes, the
      right position in the stack, no install-block line, and it applies to the
      real route context without moving the _stack.py RATCHET.
 The gate and the card's thread are injected, so no owner's PC is needed and no
@@ -61,15 +68,15 @@ def skip(why):
 # ---------------------------------------------------------------- helpers --
 
 FRAMEWORK = {"app_control": {"enabled": True}}
-APP = "com.android.settings"
-LABEL = "Settings"
-TARGET = {"id": "com.android.settings:id/search", "text": "Search",
+APP = "com.google.android.deskclock"
+LABEL = "Clock"
+TARGET = {"id": "com.google.android.deskclock:id/search", "text": "Search",
           "class": "android.widget.TextView", "bounds": [0, 100, 1080, 200]}
 TYPED = "hunter2-SECRET-do-not-log"
 
 
 def snapshot(target=None, app=APP):
-    return {"app": app, "title": "Settings",
+    return {"app": app, "title": "Clock",
             "controls": [dict(target or TARGET, password=False, enabled=True)]}
 
 
@@ -215,11 +222,14 @@ def t_nothing_runs_before_approval():
     check("the card was raised once", gate.asked.wait(5) and len(gate.calls) == 1, gate.calls)
     action, detail, prompt = gate.calls[0]
     check("ONE change_own_config card", action == "change_own_config", action)
-    check("the card names the app and the ONE step",
-          LABEL in prompt and APP in prompt and "Step 1 of 1: tap" in prompt
-          and "Search" in prompt, prompt)
+    check("the card names the human app, the package, the verb and the target",
+          LABEL in prompt and f"{LABEL} ({APP})" in prompt
+          and 'tap "Search"' in prompt, prompt)
+    check("the card says where the permission came from and that nothing else runs",
+          "(allowed on phone)" in prompt
+          and "Nothing else will be tapped or sent without another card" in prompt, prompt)
     check("the card says nothing runs until yes, and what refusing costs",
-          "nothing is touched until you say yes" in prompt
+          "Nothing is touched until you say yes" in prompt
           and "If you say no: nothing is touched" in prompt, prompt)
     check("the detail carries the card plus names, not a second copy of the screen",
           detail.get("text") == prompt and detail.get("app") == APP
@@ -332,9 +342,14 @@ def t_refused_categories_before_any_card():
     cases = [
         ("a password field", doc(step={"action": "type", "text": "x",
                                        "target": dict(TARGET, password=True)}), A.PASSWORD_FIELD),
-        ("a bank app", doc(allowed=[APP, "com.bank.app"], app="com.bank.app",
-                           app_name="My Bank", snapshot=snapshot(app="com.bank.app")),
-         A.MONEY_APP),
+        # a safe package with a bank-looking label: the label heuristic still
+        # refuses it (the package denylist is tested separately below)
+        ("a bank label", doc(app_name="My Bank"), A.MONEY_APP),
+        # the package itself looks like a bank: the HARD denylist refuses it
+        # even though the phone's own list allows it.
+        ("a bank package", doc(allowed=[APP, "com.bank.app"], app="com.bank.app",
+                               app_name="My Bank", snapshot=snapshot(app="com.bank.app")),
+         "Jarvis will never act there"),
         ("a payment label", doc(app_name="Checkout"), A.MONEY_APP),
         ("a send step", doc(step={"action": "tap", "target": dict(TARGET),
                                   "why": "send the message"}), A.SEND_STEP),
@@ -386,7 +401,7 @@ def t_approved_step_is_the_plan_and_typed_text_stays_off_the_audit():
         rid = out["run"]
         _action, detail, prompt = gate.calls[0]
         check("the card shows the exact text the owner is approving",
-              f'the exact text: "{TYPED}"' in prompt, prompt)
+              f'The exact text: "{TYPED}"' in prompt, prompt)
         code, got = step_call({"run": rid, "snapshot": snapshot()})
         check("the approved type step returns the planned target and text",
               got.get("status") == "step"
@@ -404,6 +419,132 @@ def t_approved_step_is_the_plan_and_typed_text_stays_off_the_audit():
     check("...and the app/verb are there", any(
         d.get("app") == APP and d.get("verb") == "type" for _e, d in lines), lines)
 
+
+def t_the_hard_denylist_refuses_even_when_the_phone_allows_it():
+    """F17 (2026-10-20): the PC's own denylist, whatever either list says."""
+    cases = [
+        ("Jarvis's own app", "com.jarvis.client", "Jarvis itself"),
+        ("Android Settings", "com.android.settings", "Android Settings"),
+        ("the permission controller", "com.google.android.permissioncontroller",
+         "permission controller"),
+        ("the package installer", "com.android.packageinstaller", "app installer"),
+        ("Bitwarden", "com.x8bit.bitwarden", "Bitwarden"),
+        ("1Password", "com.onepassword.android", "1Password"),
+        ("KeePass", "keepass2android.keepass2android", "KeePass"),
+        ("Chase", "com.chase.sig.android", "Chase"),
+        ("Google Wallet", "com.google.android.apps.walletnfcrel", "Google Wallet"),
+        ("PayPal", "com.paypal.android.p2pmobile", "PayPal"),
+        ("a bank by package word", "com.mybank.mobile", "banking"),
+    ]
+    for label, pkg, human in cases:
+        fresh()
+        gate = Gate(Verdict(True, outcome="approved"))
+        # The phone's OWN list names the denied package - and it still refuses.
+        document = doc(allowed=[pkg], app=pkg, app_name=label,
+                       snapshot=snapshot(app=pkg))
+        code, out = stage(document, gate)
+        check(f"denylist: {label} is refused in words even on the phone's list",
+              code == 409 and "will never act" in out.get("error", "")
+              and human.lower() in out.get("error", "").lower()
+              and not gate.calls, (label, code, out))
+    # ...and an empty phone list does not hide the hard rule either.
+    fresh()
+    gate = Gate(Verdict(True, outcome="approved"))
+    code, out = stage(doc(allowed=[], app="com.android.settings",
+                          snapshot=snapshot(app="com.android.settings")), gate)
+    check("denylist: the hard rule is checked before the empty-list refusal",
+          code == 409 and "will never act" in out.get("error", "")
+          and not gate.calls, (code, out))
+
+
+def t_pc_allow_list_is_required_when_the_pc_keeps_one():
+    """F17: a non-empty PC list means BOTH lists must allow the app."""
+    pc_list = {"app_control": {"enabled": True,
+                               "allowed_packages": ["com.google.android.chrome"]}}
+    fresh()
+    gate = Gate(Verdict(True, outcome="approved"))
+    code, out = stage(doc(), gate, framework=pc_list)   # the phone allows Clock
+    check("pc list: an app the phone allows but the PC list does not is refused, no card",
+          code == 409 and APP in out.get("error", "") and LABEL in out.get("error", "")
+          and "even though the phone allows it" in out.get("error", "")
+          and "nothing was changed" in out.get("error", "").lower()
+          and not gate.calls, (code, out))
+    # ...and a request body can never widen the PC's list.
+    fresh()
+    gate = Gate(Verdict(True, outcome="approved"))
+    code, out = stage(doc(allowed=[APP, "com.google.android.chrome"]), gate,
+                      framework=pc_list)
+    check("pc list: the phone's list cannot widen the PC's list",
+          code == 409 and not gate.calls, (code, out))
+    # Both lists allow it: the ONE card is raised, and says BOTH places.
+    both = {"app_control": {"enabled": True, "allowed_packages": [APP]}}
+    fresh()
+    gate = Gate(Verdict(True, outcome="approved"))
+    code, out = stage(doc(), gate, framework=both)
+    _action, _detail, prompt = gate.calls[0] if gate.calls else ("", {}, "")
+    check("pc list: when both lists allow it ONE card is raised, saying both places",
+          code == 202 and len(gate.calls) == 1
+          and "(allowed on this PC and your phone)" in prompt, (code, out, prompt))
+    check("pc list: the wording still names the human app, package and verb",
+          f"{LABEL} ({APP})" in prompt and 'tap "Search"' in prompt
+          and "Nothing else will be tapped or sent without another card" in prompt, prompt)
+
+
+def t_pc_list_empty_keeps_the_phone_list_and_says_so():
+    """F17: an empty PC list = today's rule, and the card is honest about it."""
+    fresh()
+    gate = Gate(Verdict(True, outcome="approved"))
+    code, out = stage(doc(), gate, framework=FRAMEWORK)
+    _action, _detail, prompt = gate.calls[0] if gate.calls else ("", {}, "")
+    check("empty pc list: the phone's list is the permission and the card says so",
+          code == 202 and len(gate.calls) == 1
+          and "(allowed on phone)" in prompt
+          and "this PC" not in prompt.split("\n")[0], (code, prompt))
+    fresh()
+    gate = Gate(Verdict(True, outcome="approved"))
+    code, out = stage(doc(), gate, framework={"app_control": {
+        "enabled": True, "allowed_packages": []}})
+    _action, _detail, prompt = gate.calls[0] if gate.calls else ("", {}, "")
+    check("empty pc list written as [] behaves exactly the same",
+          code == 202 and "(allowed on phone)" in prompt, (code, prompt))
+
+
+def t_pc_list_values_are_read_strictly():
+    good = {"app_control": {"enabled": True, "allowed_packages": [
+        "com.a.b", "not a package", 42, "com.a.b", "com.c.d"]}}
+    check("pc list: only valid, de-duplicated package names are read",
+          A.pc_allowed(good) == ["com.a.b", "com.c.d"], A.pc_allowed(good))
+    check("pc list: missing or unreadable reads as empty, never as everything",
+          A.pc_allowed({}) == [] and A.pc_allowed({"app_control": {"allowed_packages": "x"}}) == [])
+    off = {"app_control": {"enabled": False, "allowed_packages": ["com.a.b"]}}
+    fresh()
+    gate = Gate(Verdict(True, outcome="approved"))
+    code, out = stage(doc(), gate, framework=off)
+    check("feature off beats the PC list: 409 OFF, no card",
+          code == 409 and out.get("available") is False and not gate.calls, (code, out))
+
+
+def t_the_card_names_the_human_app_and_wears_the_F17_shape():
+    fresh()
+    gate = Gate(Verdict(True, outcome="approved"))
+    code, out = stage(typed_doc(), gate)
+    _action, detail, prompt = gate.calls[0] if gate.calls else ("", {}, "")
+    first = prompt.split("\n")[0]
+    check("card: the first line has the human app, package, phone and origin",
+          first.startswith(f"Jarvis wants to perform 1 step in {LABEL} ({APP}) on "
+                           "your phone (allowed on phone): type into"),
+          first)
+    check("card: the first line names the exact verb and target label",
+          'type into "Search"' in first, first)
+    check("card: the exact typed words are on it, for the owner to judge",
+          f'The exact text: "{TYPED}"' in prompt, prompt)
+    check("card: the ONE-card and refusing sentences are still there",
+          "Nothing else will be tapped or sent without another card" in prompt
+          and "Nothing is touched until you say yes" in prompt
+          and "If you say no: nothing is touched" in prompt, prompt)
+    check("card: the action and detail are unchanged (change_own_config, ask tier)",
+          _action == A.ACTION and detail.get("app") == APP
+          and detail.get("verb") == "type", (_action, detail))
 
 def t_patch_is_what_the_stack_applies():
     patch = (REPO / "backend" / "app-control.patch")
@@ -459,6 +600,11 @@ if __name__ == "__main__":
                t_denied_and_timed_out_run_nothing, t_one_run_at_a_time_and_stop,
                t_changed_screen_stops, t_refused_categories_before_any_card,
                t_approved_step_is_the_plan_and_typed_text_stays_off_the_audit,
+               t_the_hard_denylist_refuses_even_when_the_phone_allows_it,
+               t_pc_allow_list_is_required_when_the_pc_keeps_one,
+               t_pc_list_empty_keeps_the_phone_list_and_says_so,
+               t_pc_list_values_are_read_strictly,
+               t_the_card_names_the_human_app_and_wears_the_F17_shape,
                t_patch_is_what_the_stack_applies):
         print(f"\n--- {fn.__name__} ---")
         try:
