@@ -35,9 +35,13 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 BACKEND = ROOT / "backend"
 FIXTURE = ROOT / "jarvis-desktop" / "tests" / "fixtures" / "voice-status-cases.json"
-for p in (BACKEND, BACKEND / "rebuilt"):
+for p in (BACKEND, BACKEND / "rebuilt", ROOT / "tools"):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
+# A temporary folder under a LONG %TEMP% on Windows needs the extended-length
+# form of its path: see tools/_voice_temp.py (WinError 206 otherwise, which
+# backend/test_voice_contract.py's SHORT vs LONG check caught on 2026-10-20).
+import _voice_temp  # noqa: E402
 # The fixture is the SHARED contract between the backend and both apps, so it
 # must not depend on the machine that generated it. The owner's own
 # jarvis-framework.toml sets [voice] stt_engine, the cases below print that
@@ -64,7 +68,7 @@ import jarvis_voice_flow as F  # noqa: E402
 # backend/run_suites.py does and for the same reason.
 import jarvis_framework as FW  # noqa: E402
 _ORIG_LOAD_FRAMEWORK = FW.load_framework
-_GEN_LOG_DIR = str(Path(tempfile.gettempdir()) / "jarvis-gen-audit-logs")
+_GEN_LOG_DIR = str(Path(_voice_temp.temp_root()) / "jarvis-gen-audit-logs")
 
 
 def _load_framework_with_scratch_log(*a, **k):
@@ -176,7 +180,7 @@ class World:
         self.models = models
 
     def __enter__(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = _voice_temp.temporary_dir()
         d = Path(self.tmp.name)
         self.dir = d
         self.profile = d / "voice" / "owner.json"

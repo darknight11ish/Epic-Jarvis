@@ -55,9 +55,13 @@ ROOT = Path(__file__).resolve().parent.parent
 BACKEND = ROOT / "backend"
 FIXTURE = (ROOT / "jarvis-client" / "app" / "src" / "test" / "resources" / "contract"
            / "phone-voice-cases.json")
-for p in (BACKEND, BACKEND / "rebuilt"):
+for p in (BACKEND, BACKEND / "rebuilt", ROOT / "tools"):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
+# A temporary folder under a LONG %TEMP% on Windows needs the extended-length
+# form of its path: see tools/_voice_temp.py (WinError 206 otherwise, which
+# backend/test_voice_contract.py's SHORT vs LONG check caught on 2026-10-20).
+import _voice_temp  # noqa: E402
 # The fixture is the SHARED contract between the backend and both apps, so it
 # must not depend on the machine that generated it. The owner's own
 # jarvis-framework.toml sets [voice] settings, the cases below print them, and
@@ -210,7 +214,7 @@ class World:
         self.models = models
 
     def __enter__(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = _voice_temp.temporary_dir()
         d = Path(self.tmp.name)
         self.dir = d
         profile = d / "voice" / "owner.json"

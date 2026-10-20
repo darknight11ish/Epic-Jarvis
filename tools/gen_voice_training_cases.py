@@ -78,6 +78,7 @@ import jarvis_kokoro as K  # noqa: E402
 import jarvis_voices as VO  # noqa: E402
 import jarvis_wakeword as W  # noqa: E402
 import gen_second_card_cases as SCG  # noqa: E402
+import _voice_temp  # noqa: E402
 
 FIXED_TIME = 1790000000.0
 FIXED_EXPIRES_IN = 170
@@ -293,7 +294,7 @@ class World:
         # asks jarvis_second_card, which is replaced here for the whole block.
         self.cards_world = SCG.World(self.cards, windows=self.windows)
         self.cards_world.install()
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = _voice_temp.temporary_dir()
         d = Path(self.tmp.name)
         self.dir = d
         profile = d / "voice" / "owner.json"
@@ -658,8 +659,34 @@ class Blends:
         VO._BLEND_CHECKS.clear()
 
 
+def pending_switch_id(posts: dict) -> str:
+    """The id of the voice card that MUST be waiting before it is approved.
+
+    WHY THIS IS A FUNCTION AND NOT `VO._PENDING["id"]`. That expression raised a
+    bare `KeyError: 'id'` when an earlier step silently failed: on Windows with
+    a %TEMP% path near 260 characters the voice could not be saved, so the
+    switch request answered 404, raised no card, and the only clue was a raw
+    KeyError seven lines later (Gemini's review, 2026-10-20). tools/_voice_temp.py
+    prevents that cause; this function makes the next cause say what happened."""
+    pending = dict(VO._PENDING) if isinstance(VO._PENDING, dict) else {}
+    if pending.get("id"):
+        return pending["id"]
+    raise AssertionError(
+        "could not build the voice-switch case: no switch card was waiting, so there "
+        "was no card to approve. The switch request answered "
+        f"{posts.get('switch_pending')!r}, and the voice it names came from "
+        f"{posts.get('create_accepted')!r}. A cause seen on Windows is a %TEMP% path "
+        "close to the 260-character limit, where the voice cannot be saved and the "
+        "switch then has nothing to switch to (see tools/_voice_temp.py).")
+
+
 def voices_cases():
     statuses, posts = {}, {}
+    # No voice card from an earlier case may be read as this run's card. Every
+    # World block resets the module too, but the reset is repeated HERE so the
+    # requirement is visible where the card is used (an earlier version read a
+    # pending card that was not there and died with a raw KeyError: 'id').
+    VO._reset_for_tests()
 
     def keep(world, name, value, into):
         into[name] = scrub(value, folders_of(world))
@@ -704,8 +731,9 @@ def voices_cases():
                                             voice_body("Aunt May"), **kw), posts)
         keep(w, "builtin", post("/api/voice/voices/active", {"voice": "builtin"}), posts)
         # The switch card is still on screen; approving it now changes
-        # nothing (the real decision, answered "approved").
-        VO._decide_switch(VO._PENDING["id"], approved, None)
+        # nothing (the real decision, answered "approved"). `pending_switch_id`
+        # says WHY if no card is waiting, instead of a raw KeyError: 'id'.
+        VO._decide_switch(pending_switch_id(posts), approved, None)
         keep(w, "switch_withdrawn", VO.status(), statuses)
         post("/api/voice/voices/active", {"voice": vid}, **kw)
         S.say("Of course. I have added the dentist to Tuesday at ten.")
