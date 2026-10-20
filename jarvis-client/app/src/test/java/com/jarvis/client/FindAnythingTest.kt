@@ -286,14 +286,22 @@ class FindAnythingTest {
             )
         }
         // Every Settings row on the screen is one of the two: a menu, or a row
-        // MenuPlaces has no id for. Today exactly one is the second kind
-        // ("Notifications from Jarvis"), because it is not a hideable menu -
-        // a second one appearing must be looked at, not silently joined.
+        // MenuPlaces has no id for. A second one appearing must be looked at,
+        // not silently joined.
         assertEquals(
             "a Settings row with no menu id has appeared: give it a place and say so here",
             // "App control" (2026-10-19): the phone's accessibility service is
             // phone-only, so the desktop's catalogue has no menu id for it.
-            listOf("settings-row.app-control", "settings-row.jarvis-notify"),
+            // "First-time setup" (S2, 2026-10-20; JARVIS-API section 147): the
+            // PC's fourteen questions and its read-only plan. No menu id exists
+            // for it - registering one is a backend change - and the desktop's
+            // own card is not a menu either, so the row is always drawn, like
+            // Security and What asks first.
+            listOf(
+                "settings-row.app-control",
+                "settings-row.jarvis-notify",
+                "settings-row.setup-questionnaire",
+            ),
             FindAnything.ROWS.filter { it.id.startsWith("settings-row.") }.map { it.id },
         )
     }

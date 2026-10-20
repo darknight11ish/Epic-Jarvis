@@ -90,7 +90,8 @@ class SetupQuestionnaireTest {
                     put("about", "A guided path through settings that already exist.")
                 },
             ),
-        ) ?: error("the PC's own question shape did not parse")
+            { "the PC's own question shape did not parse" },
+        )
     }
 
     // -- The PC's questions ---------------------------------------------------
