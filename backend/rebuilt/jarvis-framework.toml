@@ -1800,10 +1800,22 @@ star_floor = 25        # ...but never fewer than this many
 # no way out of the PC. The fixed phrases in jarvis_quick.py answer the same
 # questions with no model at all; this is the model's door to the same facts.
 #
-# Everything else here stays opt-in - send_email, browser_control, my_files
-# and the rest - each for the reasons its own row of backend/README.md gives.
+# `calculator`, `memory_search` and `my_files` ALSO ship ON, added 2026-10-20
+# after the post-install field test: the shipped list named only the three
+# above, so a fresh install was offered no calculator, no memory search and no
+# file search - even though chat search of recordings (`search_media`) lives
+# on `my_files` (JARVIS-API.md section 149). None of the three is a way out of
+# the PC: the calculator evaluates arithmetic only (no file, no network);
+# memory_search reads only the owner's own saved memories on this PC; and
+# `my_files` is still NOT offered at all until a folder is in "Folders Jarvis
+# may look in" (`jarvis_agent.offered_tools`), so with no folder listed it
+# costs no tokens and reads nothing.
+#
+# Everything else here stays opt-in - send_email, browser_control,
+# control_computer, control_phone, read_web_page and the rest - each for the
+# reasons its own row of backend/README.md gives.
 [tools]
-enabled = ["web_search", "change_setting", "feature_guide"]
+enabled = ["web_search", "change_setting", "feature_guide", "calculator", "memory_search", "my_files"]
 
 # ------------------------------------------------------------------------
 # ENERGY - what one answer cost the graphics card (jarvis_energy.py)

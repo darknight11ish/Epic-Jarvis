@@ -18126,7 +18126,7 @@ the gate as `page_read`. One name for this feature, and it is neither.
 | **Never-loosened** | `jarvis_asks_first.HARD_LIMITS` and `MUST_ASK`; on the "What asks first" page under **The internet**; on `LOCKDOWN_ACTIONS`, so Lockdown covers it |
 | **Only a person's yes runs it** | `jarvis_agent.NEEDS_A_PERSON` - at any tier, a run nobody was asked about is refused |
 | **Read aloud** | `tools/gen_private_aloud_cases.py`'s `READ_ALOUD_TOOLS`, beside `web_search` |
-| **Off until switched on** | add `"read_web_page"` to `[tools].enabled` in `jarvis-framework.toml`, like every tool but `web_search` (that file is the owner's; `apply-patches.ps1` never overwrites it) |
+| **Off until switched on** | add `"read_web_page"` to `[tools].enabled` in `jarvis-framework.toml` - it is not one of the shipped defaults (that file is the owner's; `apply-patches.ps1` never overwrites it) |
 
 ### 115.2 One card, then one plain GET
 
@@ -22530,14 +22530,19 @@ search show the exact sentence instantly. The module is
   with file and time (`{"file", "at", "line"}`) plus the counts/words, never a
   recording and never a fact. A fresh index fills in at most two recordings per
   search (`INDEX_PER_RUN`), so a search is never ten minutes of speech-to-text;
-  the answer says how many are still waiting. **It needs two things that are not
-  automatic:** `my_files` in the owner's `[tools].enabled` (the shipped template
-  lists only `web_search`, `change_setting` and `feature_guide`, so a PC using
-  that default does not offer the tool) **and at least one folder in "Folders
-  Jarvis may look in"** - with no folders, `jarvis_agent.offered_tools` omits
-  `my_files` entirely and chat search cannot run even while this switch is ON.
-  The Settings card still shows the switch, the disclosure and Delete in that
-  case; it is the chat path that is unavailable, not the switch.
+  the answer says how many are still waiting. **It needs two things:** the tool
+  in the owner's `[tools].enabled` **and at least one folder in "Folders
+  Jarvis may look in"**. The shipped template now lists `web_search`,
+  `change_setting`, `feature_guide`, `calculator`, `memory_search` and
+  `my_files` by default (2026-10-20: the post-install field test found a fresh
+  install was offered only the first three, so the calculator and memory
+  search the docs describe were missing too; the full default list is in the
+  template and pinned by `backend/test_tool_defaults.py`). With no folders,
+  `jarvis_agent.offered_tools` omits `my_files` entirely - chat search cannot
+  run even while this switch is ON, and that omission is on purpose: with no
+  folder listed the tool costs no tokens and reads nothing. The Settings card
+  still shows the switch, the disclosure and Delete in that case; it is the
+  chat path that is unavailable, not the switch.
 * **Desktop Settings.** A hand-written card ("Searchable recordings and
   videos") shows the PC's disclosure, the switch (off at once; on asks once),
   the one Delete and a status line that now states how many recordings have
