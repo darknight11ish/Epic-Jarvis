@@ -34,7 +34,9 @@ WHAT IT DOES, IN ORDER (see --help and the summary it prints)
        block in their stack order. A patch that is absent, touches a patched file, and
        has no anchor rule is REFUSED loudly: the tool changes nothing and names the
        patch, the file and what it would need. A missing or ambiguous anchor is refused
-       the same way - it never guesses.
+       the same way - it never guesses. A delta whose live anchor does not exist at all
+       (F10 `traces.db` retention, Q2) is recorded in `BLOCKED_DELTAS` with its evidence,
+       printed as BLOCKED LIVE DELTAS, and never staged: blocked is reported, not guessed.
 
     3. REHEARSAL. Every staged Python file is compiled with `py_compile` before any live
        file is touched. If compilation fails, nothing is written.
@@ -138,6 +140,57 @@ DELTA_TABLE = {
         },
     },
 }
+
+#: Live-HUD deltas that are RECORDED BUT DELIBERATELY NOT APPLIED. They are kept
+#: as data so the decision is visible, testable and not lost; run_deploy prints
+#: them and never stages them. A blocked entry is NOT a small patch waiting for
+#: an anchor - it is the evidence that no safe anchor exists today.
+#:
+#: F10 / Gemini Q2 ruling (2026-10-20): traces.db retention was to be a live-HUD
+#: delta, not a fake backend module. The live HUD was read read-only and has no
+#: traces.db writer, no schema and no insert/startup anchor for it (evidence in
+#: the entry). Adding a startup prune anyway would delete a database this
+#: program does not own, so the honest result is BLOCKED, not a guess.
+BLOCKED_DELTAS = {
+    "traces-retention": {
+        "file": "jarvis_hud.py",
+        "why": ("the live jarvis_hud.py has no traces.db writer, no trace schema "
+                "and no insert/startup anchor to attach a retention cap to; a "
+                "standalone prune would delete a database this program does not "
+                "own, so nothing is staged or applied"),
+        "evidence": (
+            "live jarvis_hud.py (2026-10-20, 393,012 bytes): zero 'traces.db' "
+            "matches; sqlite3 is imported only for the read-only memory readers "
+            "(around lines 6238-6265); CONFIG_DIR is at :81. No live module in "
+            "the Desktop program folder writes traces.db.",
+            "the live config folder (~/.openjarvis) has no traces.db today, and "
+            "the live folder has no traces.db writer or reader to anchor to.",
+            "the last evidence of the store is a snapshot, not live code: "
+            "Jarvis Backups/jarvis-snap-20261014-000438/traces.db (36,864 B) has "
+            "tables traces(id, trace_id, query, result, agent, started_at, "
+            "ended_at, ...), trace_steps(trace_id, timestamp, ...) and an FTS5 "
+            "traces_fts with only an INSERT trigger (traces_fts_ai), no delete "
+            "trigger; the repository names traces.db only in "
+            "backend/jarvis_backup.py:470/487.",
+            "therefore a delta cannot reuse the HUD's anchored ALREADY_PRESENT/"
+            "insert mechanism for this store: there is no post-image line to "
+            "probe and no insert to anchor to.",
+        ),
+    },
+}
+
+
+def blocked_delta_lines() -> list:
+    """Plain one-line summaries of BLOCKED_DELTAS, for the dry-run summary.
+
+    These are REPORTED, never staged: the deploy summary says BLOCKED and the
+    exit code is not changed by them (they are not a failed required step)."""
+    out = []
+    for name, entry in sorted(BLOCKED_DELTAS.items()):
+        out.append(f"{name} -> {entry.get('file', '')}: "
+                   f"{entry.get('why', 'recorded blocked')}")
+    return out
+
 
 #: Lines too generic to prove a patch is present.
 _GENERIC_PROBES = frozenset({
@@ -866,6 +919,12 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
     out(f"HUD DELTAS ({len(deltas)} patch/file delta(s) checked):")
     out(f"  already present: {len(already)}")
     _summ(out, "to insert", [f"{d.patch} -> {d.file} ({len(d.lines)} lines)" for d in inserts])
+    blocked = blocked_delta_lines()
+    if blocked:
+        out("")
+        out(f"BLOCKED LIVE DELTAS ({len(blocked)} recorded, NOT applied):")
+        for line in blocked:
+            out(f"  {line}")
 
     # 3. Rehearse before anything is swapped.
     errors = rehearse(staged)

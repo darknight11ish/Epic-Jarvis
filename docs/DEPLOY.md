@@ -88,10 +88,27 @@ writing.
 backend folder: exit 0, **0 refusals**, `$SHIPPED` 217 files all unchanged, all
 185 HUD patch/file deltas already present, planned changes 153 (153 stale
 `.pyc` files; "DRY RUN, nothing written"), 7 ready plug-ins to add. Its own suite,
-`backend/test_reconcile_live_backend.py`, passes (105 checks, all on temporary
+`backend/test_reconcile_live_backend.py`, passes (121 checks, all on temporary
 folders). As an extra read-only check, its `run_probes()` was called directly
 against `http://127.0.0.1:4719` - no `--apply`, nothing written - and all four
 probes PASS (setup 200, media-index 200, app-control 409 while off, voice 200).
+
+**A recorded BLOCKED delta: `traces.db` retention (F10 / Q2, 2026-10-20).**
+Gemini's Q2 ruling asked for the trace store's retention to be a small
+live-HUD/reconcile delta, not a fake backend module. The live HUD was read
+read-only and has **no `traces.db` writer, schema or insert/startup anchor**:
+`jarvis_hud.py` has zero `traces.db` matches, its `sqlite3` use is the read-only
+memory readers, the live folder has no writer, and `~/.openjarvis` has no
+`traces.db` today. The only shape evidence is a snapshot
+(`Jarvis Backups/jarvis-snap-20261014-000438/traces.db`: `traces`,
+`trace_steps`, external-content `traces_fts` with only an INSERT trigger). A
+prune cannot use the tool's anchored ALREADY_PRESENT/insert path against a
+store with no writer, and a standalone prune would delete a database this
+program does not own. The tool therefore keeps the decision in
+**`BLOCKED_DELTAS["traces-retention"]`** (with that evidence) and every run
+prints **BLOCKED LIVE DELTAS** - it is never staged, and the exit code is not
+turned into a false success by it. This is BLOCKED, not a PASS; it becomes a
+delta when a live writer and a real anchor exist.
 
 ## 3. The old one-off scripts are superseded
 
