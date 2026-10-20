@@ -1306,7 +1306,10 @@ def _prepare_home_control(args: dict):
         problem = HOME.group_problem(domain, service, targets, data)
         if problem:
             raise ValueError(problem)
-    p = HOME.plan_services(domain, service, targets, data)
+    names = args.get("names") if isinstance(args.get("names"), dict) else {}
+    if len(targets) == 1 and str(args.get("name") or "").strip():
+        names = {**names, targets[0]: str(args.get("name")).strip()}
+    p = HOME.plan_services(domain, service, targets, data, names=names)
     return p, HOME.describe(p)
 
 
@@ -2352,15 +2355,15 @@ TOOLS: dict = {
     # owner's decision of 2026-09-25) - jarvis_home.plan_services.
     "home_control": Tool(
         "home_control",
-        "Call a Home Assistant service on one entity, or up to 10 in "
-        "entity_ids, e.g. lights off or unlock a door. Locks, alarms, doors, "
-        "covers: one per call. Changes something real.",
+        "Call a Home Assistant service on one entity or up to 10 in "
+        "entity_ids. Locks, alarms, doors, covers: one per call.",
         {"type": "object", "properties": {
             "domain": {"type": "string", "description": "e.g. \"light\""},
             "service": {"type": "string", "description": "e.g. \"turn_on\""},
             "entity_id": {"type": "string"},
             "entity_ids": {"type": "array", "items": {"type": "string"}},
-            "data": {"type": "object", "description": "e.g. {\"brightness\": 200}"}},
+            "data": {"type": "object", "description": "e.g. brightness"},
+            "name": {"type": "string", "description": "device name, if known"}},
          "required": ["domain", "service"]},
         _prepare_home_control,
         lambda args, state, **_: _run_home_control(args, state),
