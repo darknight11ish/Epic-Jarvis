@@ -9,7 +9,7 @@ is the missing read half - and it only ever reports facts that are written
 down, never a guess:
 
   * WHAT a feature is, and WHERE it is switched on, come VERBATIM from the
-    owner's own feature list (`features/features.json`, 137 rows). The list is
+    owner's own feature list (`features/features.json`, 138 rows). The list is
     turned into a shipped Python module by `tools/gen_feature_guide_catalogue.py`
     because features.json itself lives in this repository and is NOT copied to
     the backend folder the PC runs - a module cannot read a file that is not

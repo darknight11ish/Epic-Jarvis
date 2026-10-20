@@ -20267,7 +20267,7 @@ fixed phrases, but no chat path could EXPLAIN a feature: "how do I turn on the p
 coach?" was answered thinly by the model (never saying what the coach does or where it
 lives), and "is the prompt coach on right now?" was answered "I don't know its current
 state directly". The exact answers were already written down - `features/features.json`,
-the 137 rows both apps' Features pages draw - and nothing read them.
+the 138 rows both apps' Features pages draw - and nothing read them.
 
 **One read-only tool, `feature_guide`** (`jarvis_feature_guide.py`; the tool in
 `jarvis_agent.py`). Its one argument is `feature`, in the owner's words (or a group
@@ -20287,6 +20287,18 @@ repository and is NOT copied to the PC's backend folder, so the guide ships its 
 `jarvis_feature_catalogue.py`, written by `tools/gen_feature_guide_catalogue.py` from the
 same file. `backend/test_feature_guide.py` runs that tool's `--check`, so a changed list
 that was not regenerated fails a suite rather than drifting from what the apps show.
+
+**"Write like me" is a new row here (added 2026-10-20).** The list's 138th row says what
+it does, where it lives (Settings, How Jarvis talks), that adding your own writing
+samples needs no card and Forget asks "are you sure?" first, and the limit: names, dates,
+amounts, links and numbers are stripped to `[name]`, `[date]`, `[amount]` before a sample
+is kept, and using the style marks the turn private (`style_exemplars`), so it stays on
+this PC's own model and never goes to a cloud service. The fixed-phrase grammar also
+learned "how do I train/teach you to <feature>" (2026-10-20), answered with that
+feature's own facts; "how do I train my dog to sit" still falls to the model. The desktop
+training card (`jarvis-desktop/src/manner.js`, `settings.html`) and the phone's Settings
+screen are the **next UI slice**: this change adds the row, the generated catalogue and
+the two phrases, and neither app's UI changes in this PR.
 
 **Three fixed phrases, no model at all** (`jarvis_quick.py`, so they work with any model,
 a slow one, or none): **"what is <feature>"** (and "what does it do", "tell me about",
@@ -20320,7 +20332,7 @@ owner's decision of 2026-10-19/20); on an existing install the model tool is off
 inherited `config.toml`, if the settings file names no `[tools]` section) - the fixed
 phrases need no config at all.
 
-**Tests.** `backend/test_feature_guide.py`: all 137 rows found with facts equal to the
+**Tests.** `backend/test_feature_guide.py`: all 138 rows found with facts equal to the
 JSON; every switch has a state reader and the answers never claim a state they did not
 read; unknown/ambiguous honesty; the fixed phrases and their near misses; switching
 through the real setter with its real words; the tool's 300-token text, `auto`-tier
