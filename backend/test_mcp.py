@@ -22,6 +22,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import tokenize
 import traceback
@@ -125,7 +126,7 @@ def pins():
 #: The fake server's tools that do not say they are read-only: the tests
 #: that call them vouch for them, as the owner would with read_only = true.
 _UNCLAIMED = ("inject", "background_helper", "slow", "ask_sampling", "env_dump", "rich",
-              "huge")
+              "huge", "huge_no_newline")
 
 
 def tools(*names, **overrides):
@@ -533,6 +534,90 @@ def t_protocol_abuse():
     res = b.start("fake")
     check("a 2026-07-28-only server fails with a message that says why",
           not res["ok"] and "2026-07-28" in res["error"], res)
+    b.shutdown()
+
+
+def t_a_verbose_server_cannot_deadlock_on_stderr():
+    """The audit's headline MCP risk (Area 2B, first bullet).
+
+    `stderr=subprocess.PIPE` is only safe when something drains it. This fake
+    writes 512 KiB - eight times the 64 KiB tail the bridge keeps, and past any
+    OS pipe buffer - BEFORE it reads a single byte of stdin. A bridge with no
+    drain thread would block on that write in the child and never reach the
+    handshake, so start() would time out. A real child process and real pipes:
+    the deadlock cannot be faked away."""
+    flood = 512 * 1024
+    b = bridge("--stderr-flood", str(flood), tools=tools("echo"))
+    started = time.monotonic()
+    res = b.start("fake")
+    took = time.monotonic() - started
+    check("a server that floods 512 KiB of stderr still starts", res["ok"], res)
+    check("...promptly, not by deadlocking on a full stderr pipe", took < 8, took)
+    check("...with its own background stderr drain thread alive",
+          any(t.name == "mcp-fake-err" and t.is_alive() for t in threading.enumerate()),
+          [t.name for t in threading.enumerate()])
+    p = b.plan_call("mcp_fake__echo", {"text": "still answering"})
+    r = b.run(p, verdict=V(True, "ask", p.action, "approved", "f1"))
+    check("...and the session still answers after the flood",
+          r["ok"] and "still answering" in r.get("content", ""), r)
+    wait_for(lambda: b.stderr_tail("fake"), secs=3)
+    kept = b.stderr_tail("fake")
+    check("...the kept stderr tail is bounded at STDERR_TAIL_BYTES",
+          len(kept.encode("utf-8")) <= M.STDERR_TAIL_BYTES, len(kept))
+    check("...and the flood really reached it (tail is the last part, not empty)",
+          len(kept.encode("utf-8")) > 0 and flood > len(kept), len(kept))
+
+    # CONTROL: the same flood through the same pipes, but with NOBODY reading
+    # stderr. The child blocks on its first write, so it never answers
+    # initialize - which is exactly the failure the drain thread prevents.
+    control = subprocess.Popen([sys.executable, FAKE, "--stderr-flood", str(flood)],
+                               stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE)
+
+    def _answerless():
+        try:
+            control.stdin.write(json.dumps({
+                "jsonrpc": "2.0", "id": 1, "method": "initialize",
+                "params": {"protocolVersion": M.PROTOCOL_VERSION,
+                           "capabilities": {}, "clientInfo": {"name": "control"}},
+            }).encode() + b"\n")
+            control.stdin.flush()
+            control.stdout.readline()
+        except OSError:
+            return
+
+    reader = threading.Thread(target=_answerless, daemon=True)
+    reader.start()
+    reader.join(2.0)
+    check("CONTROL: with nobody draining stderr, the same flood never answers",
+          reader.is_alive())
+    control.kill()
+    control.wait(timeout=5)
+    b.shutdown()
+
+
+def t_a_runaway_line_with_no_newline_is_capped():
+    """The audit's second MCP risk (Area 2B, second bullet).
+
+    `readline(MAX_LINE_BYTES + 1)` bounds ONE message. A runaway server that
+    emits a huge line and never sends the newline that would end it must be
+    refused and stopped, not buffered until the backend runs out of memory."""
+    b = bridge(tools=tools("huge_no_newline"), max_line_bytes=64 * 1024)
+    b.start("fake")
+    p = b.plan_call("mcp_fake__huge_no_newline", {})
+    started = time.monotonic()
+    r = b.run(p, verdict=V(True, "ask", p.action, "approved", "n1"))
+    took = time.monotonic() - started
+    check("a line over the limit with NO newline is refused", not r["ok"], r)
+    check("...promptly, not by buffering it", took < 8, took)
+    st = b.status()["fake"]
+    check("...and the server is stopped, not left running", not st["running"], st)
+    check("...with the size limit named as the reason",
+          "larger than the limit" in (st.get("stopped_because") or ""), st)
+    p = b.plan_call("mcp_fake__huge_no_newline", {})
+    r = b.run(p, verdict=V(True, "ask", p.action, "approved", "n2"))
+    check("...and it is not restarted on its own",
+          not r["ok"] and "does not restart" in r["error"], r)
     b.shutdown()
 
 
@@ -1108,6 +1193,8 @@ if __name__ == "__main__":
                t_the_server_cannot_borrow_the_model,
                t_a_slow_tool_is_cancelled_and_never_retried,
                t_protocol_abuse,
+               t_a_verbose_server_cannot_deadlock_on_stderr,
+               t_a_runaway_line_with_no_newline_is_capped,
                t_the_whole_tree_dies,
                t_the_server_gets_only_what_it_was_given,
                t_a_card_when_added_and_again_when_changed,
