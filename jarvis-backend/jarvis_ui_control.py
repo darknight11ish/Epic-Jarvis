@@ -88,6 +88,33 @@ refused BEFORE it is touched. How FAST this is, and whether a given program
 exposes its selection through Windows UI Automation at all, is a measurement on
 the owner's PC, not a number promised here. Every part is injectable (`front`,
 `selection`, `never`, `scrubber`), so every refusal is testable with no desktop.
+
+THE DESKTOP HARD DENYLIST, PASSWORD TARGETS, AND ONE AUDIT ROW PER OUTCOME
+(2026-10-19, the prerequisites Gemini's review asked for before any live
+measurement). Three gaps are closed here:
+  * `DENY_PROCESSES`/`DENY_WINDOW_TITLES` are the desktop hard denylist:
+    password managers and OS credential prompts, system admin / registry /
+    task killers (cmd, PowerShell, Windows Terminal, Task Manager, Registry
+    Editor, MMC, MSConfig, gpedit) and the mesh/VPN admin programs. They are
+    checked in the default reader, `get_window_state()`, `plan()` and `run()` -
+    before a card can name one and before each step - and refused with one
+    plain sentence naming the app. The desktop counterpart of the phone's F17
+    hard denylist (`jarvis_app_control`).
+  * a password-masked control is never targetable: when a target is resolved
+    by name, automation id, control type, index or element token, a control -
+    or ANY ANCESTOR of one - with `IsPassword`/`name == _PASSWORD_MASK` is
+    refused immediately (`code` `password_control`). `plan()`, `run()` and
+    `deliver()` all fail closed this way, and a masked control's automation id
+    is not handed to the caller.
+  * `run()` writes ONE audit row per run and per step outcome through an
+    injectable `audit` callable (the real `jarvis_framework.audit_log` by
+    default when the backend has one):
+    `{"window": <app/window label>, "verb": <action>,
+    "outcome": <ok|stopped|refused>}` - never the typed text, never a key
+    payload, never the window's UI tree. The card stays the one place the exact
+    step is written down (the same privacy as
+    `jarvis_app_control.audit_detail`). A `type` step also focuses the control
+    before any keys and refuses one that is not an editable field.
 """
 
 from __future__ import annotations
@@ -162,7 +189,22 @@ _READ_DEPTH = 8
 def _default_read(window: str) -> list:
     """The real accessibility-tree read. Windows-only, imported lazily so
     this module loads fine on any platform and fails clearly, not with an
-    ImportError three frames down, when nobody injected a `read`."""
+    ImportError three frames down, when nobody injected a `read`.
+
+    A password control - and everything inside one - comes back MASKED: the
+    name replaced, the automation id dropped. That is the same rule `_flatten`
+    uses for get_window_state, and it is what lets plan()/run() notice a
+    password field at all (before 2026-10-19 this reader did not mark one, so
+    a plan could bind a step to it by its real name).
+
+    A window on the desktop hard denylist is refused HERE too, before the
+    `uiautomation` import: the ruling asked for the check in `read()` as well
+    as in get_window_state()/plan()/run(), so no direct caller can open one of
+    those programs.
+    """
+    denial = denied_process_refusal(window)
+    if denial:
+        raise ValueError(denial)
     try:
         import uiautomation as auto  # type: ignore
     except ImportError as exc:
@@ -176,20 +218,59 @@ def _default_read(window: str) -> list:
         return []
     out = []
 
-    def walk(parent, depth: int) -> None:
+    def is_password(ctrl) -> bool:
+        try:
+            return bool(ctrl.IsPassword)
+        except Exception:
+            return False
+
+    def walk(parent, depth: int, in_password: bool = False, level: int = 0) -> None:
         if depth <= 0:
             return
         for c in parent.GetChildren():
+            masked = in_password or is_password(c)
             out.append({
-                "name": c.Name,
-                "automation_id": getattr(c, "AutomationId", "") or "",
+                "name": _PASSWORD_MASK if masked else c.Name,
+                "automation_id": "" if masked else (getattr(c, "AutomationId", "") or ""),
                 "control_type": c.ControlTypeName,
                 "enabled": bool(c.IsEnabled),
+                "password": masked,
+                "masked": masked,
+                "level": level,
             })
-            walk(c, depth - 1)
+            walk(c, depth - 1, masked, level + 1)
 
     walk(top, _READ_DEPTH)
     return out
+
+
+#: Control types that can take typed text. `uiautomation` reports names like
+#: "EditControl"; the plain words also cover the spelling a fake reader uses.
+_TYPEABLE_WORDS = ("edit", "document", "combobox", "spinner", "text")
+
+
+def _is_typeable_type(control_type) -> bool:
+    text = str(control_type or "").lower()
+    return any(word in text for word in _TYPEABLE_WORDS)
+
+
+def _live_typeable(ctrl, auto) -> bool:
+    """Can this real control take typed text?
+
+    An Edit/Document-family control can; a control that offers ValuePattern is
+    treated as editable too. A Button, a Label or a menu item cannot - typing
+    into one sends the keys wherever focus happens to be, so the type step
+    refuses instead of guessing.
+    """
+    try:
+        if _is_typeable_type(ctrl.ControlTypeName):
+            return True
+    except Exception:
+        pass
+    try:
+        return ctrl.GetPattern(auto.PatternId.ValuePattern) is not None
+    except Exception:
+        return False
 
 
 def _default_act(step: Step) -> Optional[str]:
@@ -214,6 +295,20 @@ def _default_act(step: Step) -> Optional[str]:
     if step.action == "click":
         ctrl.Click()
     elif step.action == "type":
+        # Typing needs the control EDITABLE and FOCUSED. ACTION_FOCUS first:
+        # SendKeys goes to whatever has focus, so without this the text can
+        # land somewhere other than the control the owner approved. A control
+        # that is not editable refuses here, before any keys are sent.
+        if not _live_typeable(ctrl, auto):
+            raise RuntimeError(
+                f'"{step.control}" cannot be typed into - it is not an '
+                f'editable field, so no keys were sent')
+        try:
+            ctrl.SetFocus()
+        except Exception as exc:
+            raise RuntimeError(
+                f'"{step.control}" could not be focused for typing: '
+                f'{type(exc).__name__}: {exc}') from exc
         # Escaped: SendKeys PARSES its argument, so a `{` in the value would
         # start a key name. See escape_sendkeys - this is the pre-existing path
         # and it had the same hole as type_text's.
@@ -304,6 +399,87 @@ PATTERN_METHODS = {
 #: well, so a window of Jarvis's own cannot get in by wearing another title.
 JARVIS_PROCESSES = ("jarvis", "jarvis.exe", "jarvis-desktop",
                     "jarvis-desktop.exe", "jarvis-hud", "jarvis-hud.exe")
+
+#: DENY_PROCESSES / DENY_WINDOW_TITLES - the desktop HARD DENYLIST: programs
+#: Jarvis never drives, whatever a plan asks for. The desktop counterpart of
+#: the phone's F17 hard denylist (`jarvis_app_control`). A click or a keystroke
+#: inside one of these can reveal or change a secret, answer a sign-in or UAC
+#: prompt for the owner, or change the machine's own security settings - so the
+#: default reader, get_window_state(), plan() and run() all refuse one before a
+#: card can name it. Keyed by EXECUTABLE NAME (lowercased); the value is the
+#: label the refusal names.
+DENY_PROCESSES = {
+    # password managers and OS credential prompts
+    "1password.exe": "1Password",
+    "bitwarden.exe": "Bitwarden",
+    "keepass.exe": "KeePass",
+    "keepassxc.exe": "KeePassXC",
+    "dashlane.exe": "Dashlane",
+    "nordpass.exe": "NordPass",
+    "protonpass.exe": "Proton Pass",
+    "credentialuibroker.exe": "the Windows credential prompt",
+    "consent.exe": "the Windows UAC prompt",
+    "logonui.exe": "the Windows lock screen",
+    "winlogon.exe": "Windows sign-in",
+    "lsass.exe": "Windows' security accounts manager",
+    # system admin, registry and task killers
+    "regedit.exe": "Registry Editor",
+    "taskmgr.exe": "Task Manager",
+    "mmc.exe": "Microsoft Management Console",
+    "cmd.exe": "Command Prompt",
+    "powershell.exe": "PowerShell",
+    "pwsh.exe": "PowerShell",
+    "wt.exe": "Windows Terminal",
+    "msconfig.exe": "System Configuration",
+    "gpedit.msc": "Local Group Policy Editor",
+    "secpol.msc": "Local Security Policy",
+    # mesh / VPN admin
+    "tailscale-ipn.exe": "Tailscale",
+    "nordvpn.exe": "NordVPN",
+    # the rest of the password-manager families already seen on this PC
+    "lastpass.exe": "LastPass",
+    "enpass.exe": "Enpass",
+    "keeper.exe": "Keeper",
+}
+
+#: The same programs by WINDOW TITLE, for the callers that are handed a title
+#: and not a process (read(), plan() and run() take a window title). Word
+#: boundaries keep a window called "Bookkeeper" from matching "Keeper".
+DENY_WINDOW_TITLES = (
+    (r"\b1password\b", "1Password"),
+    (r"\bbitwarden\b", "Bitwarden"),
+    (r"\bkeepassxc\b", "KeePassXC"),
+    (r"\bkeepass\b", "KeePass"),
+    (r"\bdashlane\b", "Dashlane"),
+    (r"\bnordpass\b", "NordPass"),
+    (r"\bproton pass\b", "Proton Pass"),
+    (r"\blastpass\b", "LastPass"),
+    (r"\benpass\b", "Enpass"),
+    (r"\bkeeper\b", "Keeper"),
+    (r"\bwindows security\b", "Windows Security"),
+    (r"\buser account control\b", "the Windows UAC prompt"),
+    (r"\bcredential ui\b", "the Windows credential prompt"),
+    (r"\bcredential manager\b", "Windows Credential Manager"),
+    (r"\bregistry editor\b", "Registry Editor"),
+    (r"\btask manager\b", "Task Manager"),
+    (r"\bcomputer management\b", "Computer Management"),
+    (r"\bcommand prompt\b", "Command Prompt"),
+    (r"\bwindows powershell\b|\bpowershell\b", "PowerShell"),
+    (r"\bwindows terminal\b", "Windows Terminal"),
+    (r"\bsystem configuration\b", "System Configuration"),
+    (r"\bgroup policy\b", "Group Policy Editor"),
+    (r"\blocal security policy\b", "Local Security Policy"),
+    (r"\btailscale\b", "Tailscale"),
+    (r"\bnordvpn\b", "NordVPN"),
+)
+
+#: One plain refusal for a password-masked control, wherever it is addressed
+#: from: a name, an automation id, a control type, an index and an element
+#: token all end here.
+PASSWORD_REFUSAL = (
+    "Jarvis does not click or type in a password field: it is masked, so no "
+    "plan may target it by name, id or position. If something there needs "
+    "doing, do it yourself.")
 
 #: Never delivered, whatever the model asks for. These are not "risky": each is
 #: a lock screen, a session teardown, or a way to run arbitrary code, and there
@@ -420,6 +596,37 @@ def _uia_lib():
 #   Which top-level windows a process owns
 # --------------------------------------------------------------------------
 
+def _process_name(pid) -> str:
+    """The executable name behind a process id, lowercased - "" when Windows
+    cannot say.
+
+    Used only to fill a window descriptor's `process`, so the hard denylist can
+    recognise a program by WHAT IS RUNNING and not only by its title. Best
+    effort by design: the title check is the always-available path, this only
+    makes the process half real (the descriptor used to carry a bare pid, which
+    no name table could match).
+    """
+    try:
+        import ctypes
+        from ctypes import wintypes
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        # PROCESS_QUERY_LIMITED_INFORMATION: enough to read the name, nothing else.
+        handle = kernel32.OpenProcess(0x1000, False, int(pid))
+        if not handle:
+            return ""
+        try:
+            size = wintypes.DWORD(32768)
+            buf = ctypes.create_unicode_buffer(size.value)
+            if not kernel32.QueryFullProcessImageNameW(handle, 0, buf,
+                                                       ctypes.byref(size)):
+                return ""
+            return str(buf.value).replace("/", "\\").rsplit("\\", 1)[-1].lower()
+        finally:
+            kernel32.CloseHandle(handle)
+    except Exception:
+        return ""
+
+
 def _default_windows(pid) -> list:
     """Every top-level window owned by `pid`, as plain dicts, ALWAYS a list -
     two windows is the normal case for a real app (the main window and a
@@ -438,9 +645,15 @@ def _default_windows(pid) -> list:
         except Exception:
             bounds = {}
         try:
+            process_id = int(ctrl.ProcessId)
+        except Exception:
+            process_id = None
+        try:
             out.append({"window_id": int(ctrl.NativeWindowHandle), "title": ctrl.Name,
                         "class_name": getattr(ctrl, "ClassName", "") or "",
-                        "bounds": bounds, "process": getattr(ctrl, "ProcessId", None)})
+                        "bounds": bounds,
+                        "process": _process_name(process_id) if process_id is not None else "",
+                        "process_id": process_id})
         except Exception:
             return
 
@@ -470,6 +683,21 @@ def _default_windows(pid) -> list:
 #: What a password field - and everything inside one - is called instead of its
 #: real name, which is itself the secret in a field like "Current password".
 _PASSWORD_MASK = "(a password field)"
+
+
+def _is_masked(control) -> bool:
+    """A password control, however the reader spelled it.
+
+    `_flatten` and `_default_read` both set BOTH `masked` and `password`, and a
+    masked control's name is `_PASSWORD_MASK`; an injected `read` (which this
+    module has always supported) may know only one of those, so every refusal
+    below asks this one question instead of trusting a single field name.
+    """
+    if not control:
+        return False
+    return bool(control.get("masked")
+                or control.get("password")
+                or str(control.get("name") or "") == _PASSWORD_MASK)
 
 
 def _flatten(controls: list) -> list:
@@ -505,15 +733,19 @@ def _flatten(controls: list) -> list:
 
 def _control_summary(controls: list) -> list:
     """What the caller is told about a control: never a password's name or
-    value (masked by `_flatten`), and nothing a model cannot use."""
+    value (masked by `_flatten`), and nothing a model cannot use. A masked
+    control's automation id is withheld too - it is one of the three ways a
+    caller could otherwise aim at a password field."""
     out = []
     for i, c in enumerate(controls):
+        masked = _is_masked(c)
         entry = {"index": i, "name": c.get("name", ""),
-                 "automation_id": str(c.get("automation_id") or ""),
+                 "automation_id": "" if masked
+                 else str(c.get("automation_id") or ""),
                  "control_type": c.get("control_type", ""),
                  "enabled": bool(c.get("enabled", True)),
                  "patterns": list(c.get("patterns") or [])}
-        if c.get("masked"):
+        if masked:
             entry["masked"] = True
         out.append(entry)
     return out
@@ -600,6 +832,11 @@ def get_window_state(pid, window_id=None, mode: str = "ax", *, windows=None, tre
     refusal = jarvis_target_refusal(target)
     if refusal:
         return {"ok": False, "code": "own_window", "reason": refusal}
+    denial = denied_process_refusal(target.get("title", ""), target.get("process", ""))
+    if denial:
+        # The desktop hard denylist, by process where the descriptor names one
+        # (it does on this PC now) and by title otherwise.
+        return {"ok": False, "code": "denied_app", "reason": denial}
 
     reader = tree or _default_tree
     try:
@@ -1072,6 +1309,13 @@ def deliver(element_token: str, action: str, *, window_id=None, value=None,
     if refusal:
         return refusal
     index = int(token_index)
+    controls = _flatten(live.get("controls") or [])
+    if _masked_target(controls, index):
+        # The binder, by position / element token: a password field - or a
+        # control INSIDE one - is listed so the caller can see it is there,
+        # but it is never drivable. plan() and run() refuse the same targets
+        # when they are resolved by name or automation id.
+        return {"ok": False, "code": "password_control", "reason": PASSWORD_REFUSAL}
 
     if delivery_mode == "background":
         result, _ = _background_delivered(live, control, index, action, value,
@@ -1203,9 +1447,110 @@ def own_window_refusal(window: str) -> str:
             f"Jarvis needs doing, do it yourself.")
 
 
+def _denied_app_refusal(app: str) -> str:
+    """One plain sentence for a program on the desktop hard denylist, naming
+    the app - it is never a paragraph and never names a raw executable."""
+    return (f"Jarvis does not click or type in {app}, because it is on the "
+            f"desktop hard denylist of programs that hold passwords, sign-in "
+            f"and security controls, or the settings that change the machine "
+            f"itself - do that yourself.")
+
+
+def _process_label(process) -> str:
+    """The hard-denylist label for an executable name, or "".
+
+    Either the exact name or the same name without ".exe" is accepted, so a
+    caller that hands over "1password" and the process table's "1password.exe"
+    are the same program.
+    """
+    exe = str(process or "").strip().lower()
+    if not exe:
+        return ""
+    for candidate in (exe, exe[:-4] if exe.endswith(".exe") else exe + ".exe"):
+        label = DENY_PROCESSES.get(candidate)
+        if label:
+            return label
+    return ""
+
+
+def denied_process_refusal(name: str = "", process: str = "") -> str:
+    """The refusal for an app on the desktop hard denylist, or "" if allowed.
+
+    `process` is a window's executable name where the caller has one (the
+    strong signal); `name` is a window title, which is what read(), plan() and
+    run() are handed - both are matched case-insensitively and nothing here
+    reads the screen. The desktop counterpart of the phone's F17 hard denylist.
+    """
+    label = _process_label(process)
+    if label:
+        return _denied_app_refusal(label)
+    title = " ".join(str(name or "").split())
+    if title:
+        for pattern, app in DENY_WINDOW_TITLES:
+            if re.search(pattern, title, re.I):
+                return _denied_app_refusal(app)
+    return ""
+
+
 #: The words a live status line may use for a step (see run()).
 _STEP_WORD = {"click": "a click", "type": "typing", "select": "a selection",
               "read": "reading a value"}
+
+#: One audit value is short by construction: a window/app label is one capped
+#: line, never a dump of what the window contains.
+_AUDIT_WORD_LIMIT = 120
+
+#: The only outcomes a row may carry - the phone's own three words.
+AUDIT_OUTCOMES = ("ok", "stopped", "refused")
+
+
+def _audit_word(value) -> str:
+    return " ".join(str(value or "").split())[:_AUDIT_WORD_LIMIT]
+
+
+def audit_detail(window, verb: str, outcome: str) -> dict:
+    """The audit line's shape: window/app label + verb + outcome ONLY.
+
+    Identical privacy to `jarvis_app_control.audit_detail`: never the text a
+    step types (`Step.value`), never a key payload, never a window's UIA tree.
+    `window` is the app/window label this module was handed (plan()/run()
+    receive a window title and there is no process at that seam), capped to
+    one short line. This function is the single place the rows are built, and
+    the suite holds it to that.
+    """
+    return {"window": _audit_word(window),
+            "verb": str(verb or "")[:40],
+            "outcome": str(outcome or "")[:40]}
+
+
+def _audit(log, event: str, window, verb: str, outcome: str) -> None:
+    """Best effort, always: a log that cannot be written must never stop an
+    approved step, and a finished run must never be reported as failed
+    because of an audit line - the same reason every other caller wraps
+    jarvis_framework.audit_log in try/except."""
+    try:
+        log(event, audit_detail(window, verb, outcome))
+    except Exception:
+        pass
+
+
+def _audit_run(log, window, outcome: str) -> None:
+    _audit(log, "ui_control.run", window, "run", outcome)
+
+
+def _audit_step(log, step: Step, outcome: str) -> None:
+    _audit(log, "ui_control.step", step.window, step.action, outcome)
+
+
+def _default_audit(event: str, detail: dict) -> None:
+    """The machine's real audit log, when the backend has one. Imported
+    lazily, exactly like the real reader/actor, so this module still loads on
+    any platform and writes nothing when the framework is not there."""
+    try:
+        import jarvis_framework as fw
+        fw.audit_log(event, detail)
+    except Exception:
+        pass
 
 
 def _find(tree: list, name: str) -> Optional[dict]:
@@ -1213,6 +1558,81 @@ def _find(tree: list, name: str) -> Optional[dict]:
         if c.get("name") == name:
             return c
     return None
+
+
+def _find_index(tree: list, name: str) -> Optional[int]:
+    for i, c in enumerate(tree):
+        if c.get("name") == name:
+            return i
+    return None
+
+
+def _find_target(tree: list, request: dict):
+    """Resolve ONE requested target through the five identifiers the binder
+    accepts: name/control, automation id, control type, index, element token.
+
+    Returns (index, control) or (None, None). This is the single resolution
+    point plan() uses; every route ends at the same password/denylist checks,
+    so a target cannot slip in by being named a different way.
+    """
+    if not isinstance(request, dict):
+        return None, None
+    target = request.get("control") or request.get("name")
+    if target:
+        index = _find_index(tree, str(target))
+        return index, (tree[index] if index is not None else None)
+    wanted_id = request.get("automation_id")
+    if wanted_id:
+        for i, c in enumerate(tree):
+            if str(c.get("automation_id") or "") == str(wanted_id):
+                return i, c
+    wanted_type = request.get("control_type")
+    if wanted_type:
+        for i, c in enumerate(tree):
+            if str(c.get("control_type") or "").lower() == str(wanted_type).lower():
+                return i, c
+    index = request.get("index")
+    if isinstance(index, int) and 0 <= index < len(tree):
+        return index, tree[index]
+    token = request.get("element_token")
+    if token:
+        parts = str(token).split(":")
+        if parts and parts[-1].isdigit():
+            index = int(parts[-1])
+            if 0 <= index < len(tree):
+                return index, tree[index]
+    return None, None
+
+
+def _masked_target(controls: list, index) -> bool:
+    """Is the control at `index` - or any ANCESTOR of it - a password control?
+
+    The binder can resolve a target by name, automation id, control type,
+    index or element token; whichever route it took, the control it landed on
+    is re-checked here. A password box can hold a "Show password" button or the
+    revealed text itself, so a control INSIDE one is refused too. The flat
+    lists this module builds (`_flatten`, `_default_read`) are in reading order
+    and carry `level`, which is how an ancestor is found without keeping a
+    second tree.
+    """
+    if not isinstance(index, int) or index < 0 or index >= len(controls):
+        return False
+    if _is_masked(controls[index]):
+        return True
+    level = controls[index].get("level")
+    if not isinstance(level, int):
+        return False
+    deepest = level
+    for j in range(index - 1, -1, -1):
+        lvl = controls[j].get("level")
+        if not isinstance(lvl, int) or lvl >= deepest:
+            continue
+        if _is_masked(controls[j]):
+            return True
+        deepest = lvl
+        if deepest <= 0:
+            break
+    return False
 
 
 def plan(goal: str, window: str, requests: list,
@@ -1234,19 +1654,30 @@ def plan(goal: str, window: str, requests: list,
     if is_jarvis_window(window):
         # Before the tree is even read: nothing about the window is needed.
         raise ValueError(own_window_refusal(window))
+    denial = denied_process_refusal(window)
+    if denial:
+        # Same rule, same place: the hard denylist is decided from the title
+        # before anything is read, so no card can be raised naming one of
+        # these programs. run() checks again, for a Plan built another way.
+        raise ValueError(denial)
     getter = read or _default_read
     tree = getter(window) or []
     steps, unmatched = [], []
     for r in requests:
-        name = str(r.get("control", "")).strip()
         action = str(r.get("action", "")).strip()
-        found = _find(tree, name)
+        found_index, found = _find_target(tree, r)
+        if found is not None and _masked_target(tree, found_index):
+            # A password control - or any control INSIDE one - is never bound
+            # to a step, whichever identifier the request used to name it.
+            unmatched.append({**r, "code": "password_control",
+                              "reason": "a password field is never targeted"})
+            continue
         if not found or not found.get("enabled", True):
             unmatched.append({**r, "reason": "not found" if not found
                                else "found but disabled"})
             continue
         steps.append(Step(
-            window=window, control=name,
+            window=window, control=str(found.get("name") or ""),
             automation_id=str(found.get("automation_id") or ""),
             action=action, value=r.get("value"),
             why=str(r.get("why", "")),
@@ -1305,6 +1736,7 @@ def run(p: Plan, *, read: Optional[Callable[[str], list]] = None,
         act: Optional[Callable[[Step], None]] = None,
         announce: Optional[Callable[[str], None]] = None,
         checkpoint: Optional[Callable[[], Optional[str]]] = None,
+        audit: Optional[Callable[[str, dict], None]] = None,
         approved: bool = False) -> dict:
     """Execute an approved plan, one step at a time.
 
@@ -1336,13 +1768,33 @@ def run(p: Plan, *, read: Optional[Callable[[str], list]] = None,
     result - the steps not yet run stay reported, ready for one explicit
     "continue" decision to become a fresh, approved run() rather than
     resuming on their own.
+
+    `audit(event, detail)`, if given, is called ONCE per run and ONCE per step
+    outcome, with the shape built by `audit_detail`:
+    `{"window": <app/window label>, "verb": <action>, "outcome":
+    "ok"|"stopped"|"refused"}`. It never carries the text a step types, a key
+    payload or the window's UI tree - the same privacy as
+    `jarvis_app_control.audit_detail`, where the card is the one place the
+    exact step is written down. The default is the real
+    `jarvis_framework.audit_log` when the backend has one; a log that cannot be
+    written never stops a step or fails a finished run.
     """
     if not approved:
         return {"ok": False, "reason": "not approved; nothing was done",
                 "plan": p.as_dict()}
+    log = audit or _default_audit
     if is_jarvis_window(p.window) or any(is_jarvis_window(s.window) for s in p.steps):
         # plan() already refuses these; a Plan built any other way is too.
-        return {"ok": False, "reason": own_window_refusal(p.window),
+        _audit_run(log, p.window, "refused")
+        return {"ok": False, "code": "own_window", "reason": own_window_refusal(p.window),
+                "done": [], "not_run": [s.as_dict() for s in p.steps]}
+    denial = denied_process_refusal(p.window)
+    if denial:
+        # The desktop hard denylist, before any step of a Plan built another
+        # way - plan() already refused the same programs; each step's own
+        # window is re-checked again inside the loop below.
+        _audit_run(log, p.window, "refused")
+        return {"ok": False, "code": "denied_app", "reason": denial,
                 "done": [], "not_run": [s.as_dict() for s in p.steps]}
     getter = read or _default_read
     actor = act or _default_act
@@ -1351,6 +1803,17 @@ def run(p: Plan, *, read: Optional[Callable[[str], list]] = None,
 
     done = []
     for i, step in enumerate(p.steps, 1):
+        # The hard denylist is re-checked before EVERY step (the ruling asked
+        # for it here too, not only before the run), so a Plan assembled by
+        # another caller still cannot drive one of these programs.
+        step_denial = denied_process_refusal(step.window)
+        if step_denial:
+            remaining = p.steps[i - 1:]
+            _audit_step(log, step, "refused")
+            _audit_run(log, p.window, "refused")
+            return {"ok": False, "code": "denied_app", "reason": step_denial,
+                    "done": [s.as_dict() for s in done],
+                    "not_run": [s.as_dict() for s in remaining]}
         # The checkpoint comes FIRST, before the announcement. It used to
         # come second, and `announce` is wired to
         # `jarvis_events.set_activity("working", text)`, which is sticky -
@@ -1359,6 +1822,8 @@ def run(p: Plan, *, read: Optional[Callable[[str], list]] = None,
         signal = check()
         if signal in ("stop", "pause"):
             remaining = p.steps[i - 1:]
+            _audit_step(log, step, "stopped")
+            _audit_run(log, p.window, "stopped")
             result = {"ok": False,
                       "reason": ("stopped by request" if signal == "stop"
                                  else "paused by request - resuming needs a new decision"),
@@ -1376,7 +1841,22 @@ def run(p: Plan, *, read: Optional[Callable[[str], list]] = None,
         tell(f"Step {i}/{len(p.steps)}: {_STEP_WORD.get(step.action, 'a step')} "
              f"in another program's window")
         tree = getter(step.window) or []
-        current = _find(tree, step.control)
+        current_index = _find_index(tree, step.control)
+        current = tree[current_index] if current_index is not None else None
+        if current is not None and _masked_target(tree, current_index):
+            # The binder: whichever way the target was resolved (name here;
+            # automation id for a Step built by hand; an index or token in
+            # deliver()), a password field - or a control INSIDE one - is
+            # refused before anything is sent.
+            remaining = p.steps[i - 1:]
+            _audit_step(log, step, "refused")
+            _audit_run(log, p.window, "refused")
+            return {"ok": False, "code": "password_control",
+                    "reason": (f"step {i} (\"{step.control}\" in {step.window}) "
+                               "targets a password field - Jarvis never targets "
+                               "one, so the run stopped before it"),
+                    "done": [s.as_dict() for s in done],
+                    "not_run": [s.as_dict() for s in remaining]}
         same_control = (
             current is not None
             and current.get("enabled", True)
@@ -1384,6 +1864,8 @@ def run(p: Plan, *, read: Optional[Callable[[str], list]] = None,
         )
         if not same_control:
             remaining = p.steps[i - 1:]
+            _audit_step(log, step, "stopped")
+            _audit_run(log, p.window, "stopped")
             return {"ok": False,
                     "reason": (f"step {i} (\"{step.control}\" in "
                                f"{step.window}) no longer matches what was "
@@ -1394,6 +1876,8 @@ def run(p: Plan, *, read: Optional[Callable[[str], list]] = None,
             read_back = actor(step)
         except Exception as exc:
             remaining = p.steps[i - 1:]
+            _audit_step(log, step, "stopped")
+            _audit_run(log, p.window, "stopped")
             return {"ok": False,
                     "reason": f"step {i} failed: {type(exc).__name__}: {exc}",
                     "done": [s.as_dict() for s in done],
@@ -1404,6 +1888,7 @@ def run(p: Plan, *, read: Optional[Callable[[str], list]] = None,
             # Step, and describe()/as_dict() already render it.
             step.value = read_back
         done.append(step)
+        _audit_step(log, step, "ok")
     # One last read, so a Stop that arrived while the final step was
     # running is not simply thrown away. The plan really did finish - every
     # step ran, so `ok` stays True and nothing pretends otherwise - but the
@@ -1420,6 +1905,10 @@ def run(p: Plan, *, read: Optional[Callable[[str], list]] = None,
         tell(f"Done. (A {late} arrived too late to change anything.)")
     else:
         tell("Done.")
+    # The plan really did finish, so the run's own audit row says "ok" even
+    # when a stop arrived too late for it to change anything (that is in the
+    # result, not in the outcome vocabulary).
+    _audit_run(log, p.window, "ok")
     return result
 
 

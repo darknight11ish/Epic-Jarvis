@@ -128,10 +128,31 @@ The owner asked for this to be built, per the shape above. `backend/jarvis_ui_co
 now exists: `plan()`/`describe()`/`run()`, `uiautomation`-based, with `run()`
 re-verifying every target against the live accessibility tree right before
 acting on it and stopping rather than guessing the moment it does not match.
-`backend/test_ui_control.py` (28 checks) proves `plan()` sends no input,
+`backend/test_ui_control.py` (202 checks) proves `plan()` sends no input,
 `run()` refuses without `approved=True`, and a control that changes or
 vanishes mid-plan stops execution at exactly that step - all against
 injected fakes, never a real Windows desktop.
+
+**Three prerequisites are closed before any live measurement run** (2026-10-19,
+Gemini's review): **`DENY_PROCESSES`/`DENY_WINDOW_TITLES`**, the desktop
+counterpart of the phone's F17 hard denylist - password managers and OS
+credential prompts (`1password.exe`, `bitwarden.exe`, `keepass.exe`,
+`keepassxc.exe`, `dashlane.exe`, `nordpass.exe`, `protonpass.exe`,
+`credentialuibroker.exe`), system admin / registry / task killers
+(`regedit.exe`, `taskmgr.exe`, `mmc.exe`, `cmd.exe`, `powershell.exe`,
+`pwsh.exe`, `wt.exe`) and the mesh / VPN admin programs (`tailscale-ipn.exe`,
+`nordvpn.exe`) - checked in the default reader, `get_window_state()`, `plan()`
+before any card and `run()` before each step; a **password-masked target is
+never targetable** by name, automation id, control type, index or element
+token, including any control INSIDE a password subtree (`code`
+`password_control`); and `run()` writes **one audit row per run and per step
+outcome** - exactly `{"window": <app/window label>, "verb": <action>,
+"outcome": <ok|stopped|refused>}`, never the typed text, never a key payload
+and never the window's UIA tree, because the card is the only place the exact
+step is written down (the phone's `app_control.audit_detail` privacy). A `type`
+step focuses its control before any key and refuses a control that is not an
+editable field. None of this has been driven on the live desktop: the 8-row
+measurement runbook still has to be executed.
 
 **It is not reachable from the running app.** `jarvis_hud.py` is not in this
 repository, so the route that would call this module, queue its plan through

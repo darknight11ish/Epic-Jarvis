@@ -852,8 +852,17 @@ def t_sendkeys_text_is_typed_not_parsed():
     # lives in the real sender, so an injected `sender=` would bypass exactly
     # the code under test.
     typed = []
+    focused = []
 
     class FakeTarget:
+        # `_default_act`'s type step now FOCUSES an editable control first and
+        # refuses one that cannot take text, so the fake has to be an Edit.
+        ControlTypeName = "EditControl"
+
+        @staticmethod
+        def SetFocus():
+            focused.append(True)
+
         @staticmethod
         def SendKeys(payload):
             typed.append(payload)
@@ -892,7 +901,10 @@ def t_sendkeys_text_is_typed_not_parsed():
                               action="type", value="{Win}l"))
         check("the PRE-EXISTING _default_act type path escapes too",
               typed == ["{{}Win{}}l"], repr(typed))
+        check("... and it focuses the control before sending the keys",
+              focused == [True], repr(focused))
         typed.clear()
+        focused.clear()
 
         # CONTROL: ordinary text is handed through unchanged, so the escape
         # cannot be quietly mangling real work.
@@ -912,6 +924,523 @@ def t_sendkeys_text_is_typed_not_parsed():
     check("and no SendKeys call is left handing it raw text",
           "SendKeys(payload)" not in src and 'SendKeys(step.value or "")' not in src)
 
+
+# --------------------------------------------------------------------------
+#   The three prerequisites Gemini's review asked for before any live
+#   desktop measurement run (2026-10-19), plus its type-reliability pair
+# --------------------------------------------------------------------------
+
+def t_the_desktop_hard_denylist_is_refused_before_a_card():
+    """Gemini's ruling 1: DENY_PROCESSES / DENY_WINDOW_TITLES are the desktop
+    counterpart of the phone's F17 hard denylist. Password managers and OS
+    credential prompts, system admin / registry / task killers, and the mesh /
+    VPN admin programs are refused by the default reader, get_window_state(),
+    plan() BEFORE the tree is read (so no card can name one) and by run()
+    before each step. An ordinary window is still planned normally."""
+    title_cases = [
+        ("1Password", "1Password"),
+        ("Bitwarden", "Bitwarden"),
+        ("KeePassXC - vault.kdbx", "KeePassXC"),
+        ("KeePass - passwords.kdbx", "KeePass"),
+        ("Dashlane", "Dashlane"),
+        ("NordPass", "NordPass"),
+        ("Proton Pass", "Proton Pass"),
+        ("Windows Security", "Windows Security"),
+        ("User Account Control", "UAC"),
+        ("Registry Editor", "Registry Editor"),
+        ("Task Manager", "Task Manager"),
+        ("Computer Management", "Computer Management"),
+        ("Command Prompt", "Command Prompt"),
+        ("Windows PowerShell", "PowerShell"),
+        ("Windows Terminal", "Windows Terminal"),
+        ("System Configuration", "System Configuration"),
+        ("Local Group Policy Editor", "Group Policy"),
+        ("Tailscale", "Tailscale"),
+        ("NordVPN", "NordVPN"),
+    ]
+    read_calls, wrong = [], []
+
+    def read(window):
+        read_calls.append(window)
+        return tree(("OK", "btnOK", True))
+
+    with NoRealAction():
+        for title, label in title_cases:
+            try:
+                U.plan("do it", title, [{"control": "OK", "action": "click"}], read=read)
+            except ValueError as exc:
+                if ("desktop hard denylist" not in str(exc)
+                        or label.lower() not in str(exc).lower()):
+                    wrong.append((title, str(exc)))
+            else:
+                wrong.append((title, "NOT REFUSED"))
+    check("every denylisted window title is refused by plan()", wrong == [], wrong)
+    check("... the refusal names the app it refused", wrong == [], wrong)
+    check("... before the tree is read, so no card can ever name one",
+          read_calls == [], read_calls)
+
+    # The DEFAULT READER refuses one of these too, before it imports anything.
+    try:
+        U._default_read("Bitwarden")
+    except ValueError as exc:
+        reader_said = str(exc)
+    else:
+        reader_said = ""
+    check("the default reader refuses a denylisted window itself",
+          "desktop hard denylist" in reader_said and "Bitwarden" in reader_said,
+          reader_said)
+
+    process_cases = [
+        ("1password.exe", "1Password"),
+        ("bitwarden.exe", "Bitwarden"),
+        ("keepass.exe", "KeePass"),
+        ("keepassxc.exe", "KeePassXC"),
+        ("dashlane.exe", "Dashlane"),
+        ("nordpass.exe", "NordPass"),
+        ("protonpass.exe", "Proton Pass"),
+        ("credentialuibroker.exe", "credential prompt"),
+        ("consent.exe", "UAC prompt"),
+        ("logonui.exe", "lock screen"),
+        ("winlogon.exe", "sign-in"),
+        ("lsass.exe", "security accounts manager"),
+        ("regedit.exe", "Registry Editor"),
+        ("taskmgr.exe", "Task Manager"),
+        ("mmc.exe", "Management Console"),
+        ("cmd.exe", "Command Prompt"),
+        ("powershell.exe", "PowerShell"),
+        ("pwsh.exe", "PowerShell"),
+        ("wt.exe", "Windows Terminal"),
+        ("msconfig.exe", "System Configuration"),
+        ("gpedit.msc", "Group Policy"),
+        ("tailscale-ipn.exe", "Tailscale"),
+        ("nordvpn.exe", "NordVPN"),
+    ]
+    by_process, tree_reads = [], []
+
+    def tree_boom(pid, window_id):
+        tree_reads.append((pid, window_id))
+        return {"revision": "r1", "controls": []}
+
+    with NoRealAction():
+        for process, label in process_cases:
+            descriptor = {"window_id": 7, "title": "a harmless title",
+                          "class_name": "X", "bounds": {}, "process": process}
+            out = U.get_window_state(
+                4242, None, "ax",
+                windows=lambda _p, d=descriptor: [d], tree=tree_boom)
+            if (out.get("code") != "denied_app"
+                    or label.lower() not in str(out.get("reason", "")).lower()):
+                by_process.append((process, out))
+    check("a window descriptor's PROCESS name is refused before the tree is read",
+          by_process == [] and tree_reads == [], repr((by_process, tree_reads)))
+    check("the process table accepts the bare name as well as '.exe'",
+          "1Password" in U.denied_process_refusal(process="1password"), "")
+
+    # run() refuses a denied Plan before any step, and re-checks BEFORE EACH
+    # STEP, so a later step cannot sneak into a denied program.
+    acted = []
+    manual = U.Plan(goal="x", window="1Password",
+                    steps=[U.Step(window="1Password", control="OK",
+                                  automation_id="btnOK", action="click")])
+    with NoRealAction():
+        out = U.run(manual, read=lambda _w: tree(("OK", "btnOK", True)),
+                    act=lambda s: acted.append(s), approved=True)
+    check("run() refuses a denylisted plan, before any step",
+          acted == [] and out["ok"] is False and out.get("code") == "denied_app"
+          and "desktop hard denylist" in out["reason"], repr((out, acted)))
+
+    first = U.Step(window="Notepad", control="Send", automation_id="btnSend",
+                   action="click")
+    second = U.Step(window="Command Prompt", control="OK", automation_id="btnOK",
+                    action="click")
+    mixed = U.Plan(goal="x", window="Notepad", steps=[first, second])
+    seen = []
+    with NoRealAction():
+        out2 = U.run(mixed, read=lambda _w: tree(("Send", "btnSend", True)),
+                     act=lambda s: seen.append(s.control), approved=True)
+    check("a later step into a denied program is refused before that step",
+          seen == ["Send"] and out2["ok"] is False
+          and out2.get("code") == "denied_app", repr((out2, seen)))
+
+    # The two existing refusals are unchanged - a denylist must not replace them.
+    with NoRealAction():
+        try:
+            U.plan("x", "Jarvis HUD", [{"control": "OK", "action": "click"}], read=read)
+        except ValueError as exc:
+            own = str(exc)
+        else:
+            own = ""
+    check("the own-window refusal is unchanged and still comes first",
+          "own windows" in own, own)
+    check("the blocked key combinations are still refused, unchanged",
+          "win+l locks the PC" in (U.blocked_hotkey("win+l") or "")
+          and "alt+f4" in (U.blocked_hotkey("alt+f4") or ""),
+          (U.blocked_hotkey("win+l"), U.blocked_hotkey("alt+f4")))
+
+    with NoRealAction():
+        normal = U.plan("x", "Notepad",
+                        [{"control": "Send", "action": "click", "why": "x"}],
+                        read=lambda _w: tree(("Send", "btnSend", True)))
+    check("CONTROL: an ordinary window is still planned normally",
+          len(normal.steps) == 1, repr(normal.steps))
+
+
+def t_a_password_control_is_never_targeted_by_name_id_or_position():
+    """Gemini's ruling 2, measured on origin/main before this fix: a password
+    control COULD be aimed at by name (plan() bound it; the default reader did
+    not even mark it), by automation id (the Step carried the id) and by
+    position/element token (deliver() drove it, sending the typed value). All
+    three are refused now, and so is ANY control inside a password subtree."""
+    password = {"name": "Password", "automation_id": "txtPass",
+                "control_type": "Edit", "enabled": True, "password": True}
+
+    # 1) by NAME, through plan()'s binder (an injected reader that knows only
+    #    the `password` flag, the way another caller's reader might).
+    with NoRealAction():
+        p = U.plan("set the password", "Notepad",
+                   [{"control": "Password", "action": "set_value",
+                     "value": "hunter2", "why": "x"}],
+                   read=lambda _w: [dict(password), dict(SEND_BUTTON)])
+    check("plan() never binds a step to a password control by its real name",
+          p.steps == [], repr(p.steps))
+    check("... and the plan's unmatched list carries code password_control",
+          len(p.unmatched) == 1 and p.unmatched[0].get("code") == "password_control",
+          repr(p.unmatched))
+
+    # 1a) EVERY identifier the binder accepts is refused: name, automation id,
+    #     control type, index and element token all resolve to the same
+    #     password control, and all of them end in code password_control.
+    tree_with_password = [dict(password), dict(SEND_BUTTON)]
+    routes = [
+        {"control": "Password", "action": "set_value"},
+        {"automation_id": "txtPass", "action": "set_value"},
+        {"control_type": "Edit", "action": "set_value"},
+        {"index": 0, "action": "set_value"},
+        {"element_token": "r1:0", "action": "set_value"},
+    ]
+    unresolved = []
+    with NoRealAction():
+        for request in routes:
+            out = U.plan("set it", "Notepad",
+                         [{**request, "value": "hunter2", "why": "x"}],
+                         read=lambda _w: [dict(c) for c in tree_with_password])
+            if (len(out.unmatched) != 1
+                    or out.unmatched[0].get("code") != "password_control"):
+                unresolved.append((request, out.steps, out.unmatched))
+    check("the binder refuses a password target named by ANY of its identifiers",
+          unresolved == [], repr(unresolved))
+
+    # 1b) by NAME, on a control INSIDE a password subtree: the parent is the
+    #     password field and the child carries no flag of its own.
+    subtree = [
+        {"name": "Password", "automation_id": "txtPass", "control_type": "Edit",
+         "enabled": True, "password": True, "level": 0},
+        {"name": "Show password", "automation_id": "btnShow",
+         "control_type": "Button", "enabled": True, "level": 1},
+    ]
+    with NoRealAction():
+        nested = U.plan("show it", "Notepad",
+                        [{"control": "Show password", "action": "click", "why": "x"}],
+                        read=lambda _w: [dict(c) for c in subtree])
+    check("a control INSIDE a password subtree is refused by its ancestor",
+          nested.steps == []
+          and nested.unmatched[0].get("code") == "password_control",
+          repr(nested.unmatched))
+
+    # 2) by POSITION / element token, through get_window_state and deliver().
+    desk = _FakeDesk(controls=[
+        {"name": "Password", "automation_id": "txtPass", "control_type": "Edit",
+         "patterns": ["set_value"], "value": "hunter2", "password": True},
+        dict(SEND_BUTTON)])
+    nested_desk = _FakeDesk(controls=[
+        {"name": "Password", "automation_id": "txtPass", "control_type": "Edit",
+         "patterns": ["set_value"], "value": "hunter2", "password": True,
+         "children": [{"name": "Show password", "automation_id": "btnShow",
+                       "control_type": "Button", "patterns": ["invoke"]}]}])
+    with NoRealAction():
+        state = U.get_window_state(4242, 77, "som", windows=lambda _p: desk.windows,
+                                   tree=desk.tree, screen=desk.screen)
+        token = state["elements"][0]["element_token"]
+        refused = U.deliver(token, "set_value", window_id=77, value="hunter2",
+                            tree=desk.tree, pattern=desk.pattern)
+        sent_after_refusal = list(desk.patterns)
+        extra = U.deliver(state["elements"][1]["element_token"], "invoke",
+                          window_id=77, tree=desk.tree, pattern=desk.pattern)
+        nested_state = U.get_window_state(4242, 77, "som",
+                                          windows=lambda _p: nested_desk.windows,
+                                          tree=nested_desk.tree,
+                                          screen=nested_desk.screen)
+        child_token = nested_state["elements"][1]["element_token"]
+        nested_refused = U.deliver(child_token, "invoke", window_id=77,
+                                   tree=nested_desk.tree,
+                                   pattern=nested_desk.pattern)
+    check("deliver() refuses a password control by position/element token",
+          refused.get("code") == "password_control", repr(refused))
+    check("... and NOTHING at all was sent to it", sent_after_refusal == [],
+          repr(sent_after_refusal))
+    check("... nor to a control inside it (the 'show password' button)",
+          nested_refused.get("code") == "password_control", repr(nested_refused))
+    check("... a masked control's automation id is not handed out either",
+          state["elements"][0]["automation_id"] == ""
+          and state["elements"][0].get("masked") is True,
+          repr(state["elements"][0]))
+    check("CONTROL: the ordinary control beside it is still drivable",
+          extra.get("effect") == "confirmed", repr(extra))
+
+    # 3) by AUTOMATION ID: a Step built with the password field's id stops
+    #    run() before the actor is reached.
+    acted = []
+    manual = U.Plan(goal="x", window="Notepad",
+                    steps=[U.Step(window="Notepad", control="Password",
+                                  automation_id="txtPass", action="set_value",
+                                  value="hunter2")])
+    with NoRealAction():
+        out = U.run(manual, read=lambda _w: [dict(password)],
+                    act=lambda s: acted.append(s), approved=True)
+    check("run() refuses a step aimed at a password control, before acting",
+          acted == [] and out["ok"] is False
+          and out.get("code") == "password_control", repr((out, acted)))
+    check("... and says the target is a password field",
+          "password" in out["reason"].lower(), out["reason"])
+
+    # 3b) the same inside a password subtree, resolved by name in run().
+    nested_step = U.Step(window="Notepad", control="Show password",
+                         automation_id="btnShow", action="click")
+    nested_plan = U.Plan(goal="x", window="Notepad", steps=[nested_step])
+    nested_acted = []
+    with NoRealAction():
+        out_nested = U.run(nested_plan,
+                           read=lambda _w: [dict(c) for c in subtree],
+                           act=lambda s: nested_acted.append(s), approved=True)
+    check("run() refuses a target inside a password subtree by its ancestor",
+          nested_acted == [] and out_nested.get("code") == "password_control",
+          repr((out_nested, nested_acted)))
+
+    # 4) the DEFAULT reader marks the whole password subtree, so plan()/run()
+    #    can see a password field at all (before this fix it did not).
+    class _PwElement:
+        def __init__(self, name, password=False, children=None):
+            self.Name = name
+            self.AutomationId = name
+            self.ControlTypeName = "Edit"
+            self.IsEnabled = True
+            self.IsPassword = password
+            self._children = children or []
+
+        def GetChildren(self):
+            return self._children
+
+        def Exists(self, maxSearchSeconds=2):
+            return True
+
+    class _PwTop(_PwElement):
+        def __init__(self):
+            super().__init__("SomeWindow")
+            self._children = [_PwElement("Current password", password=True,
+                                         children=[_PwElement("Show password")]),
+                              _PwElement("Send")]
+
+    class _PwAuto:
+        @staticmethod
+        def WindowControl(searchDepth, Name):
+            return _PwTop()
+
+    real_module = sys.modules.get("uiautomation")
+    sys.modules["uiautomation"] = _PwAuto()
+    try:
+        read = U._default_read("SomeWindow")
+    finally:
+        if real_module is not None:
+            sys.modules["uiautomation"] = real_module
+        else:
+            del sys.modules["uiautomation"]
+    blob = repr(read)
+    check("the default reader masks a password field's real name and drops its id",
+          "Current password" not in blob and any(c.get("masked") for c in read)
+          and all(c["automation_id"] == "" for c in read if c.get("masked")), blob)
+    check("... including everything inside it (a 'show password' control)",
+          "Show password" not in blob, blob)
+
+
+def t_the_audit_lines_carry_no_typed_text_and_no_window_tree():
+    """Gemini's ruling 3: per-run and per-step audit rows of exactly
+    {"window": <app/window label>, "verb": <action>, "outcome":
+    "ok"|"stopped"|"refused"} - never typed text, never a key payload, never a
+    full UIA window tree. Same privacy as jarvis_app_control.audit_detail."""
+    rows, typed = [], "TOP-SECRET-TYPED-TEXT"
+    live = tree(("Subject", "txtSubject", True), ("Send", "btnSend", True))
+
+    def run_with_audit(plan, reader):
+        rows.clear()
+        with NoRealAction():
+            out = U.run(plan, read=reader, act=lambda s: None,
+                        audit=lambda event, detail: rows.append((event, detail)),
+                        approved=True)
+        return out
+
+    with NoRealAction():
+        p = U.plan("send", "W",
+                   [{"control": "Subject", "action": "type", "value": typed, "why": "x"},
+                    {"control": "Send", "action": "click", "why": "y"}],
+                   read=lambda _w: live)
+    out = run_with_audit(p, lambda _w: live)
+    check("CONTROL: the audit does not change what an approved plan does",
+          out["ok"] is True, repr(out))
+    check("ONE row per step outcome plus ONE for the run", len(rows) == 3, repr(rows))
+    check("the events are the fixed pair ui_control.step / ui_control.run",
+          [e for e, _ in rows] == ["ui_control.step", "ui_control.step",
+                                   "ui_control.run"], repr([e for e, _ in rows]))
+    check("every detail is exactly window/verb/outcome and nothing else",
+          all(set(d) == {"window", "verb", "outcome"} for _, d in rows), repr(rows))
+    check("the step rows name the verb that ran, in order",
+          [d["verb"] for _, d in rows][:2] == ["type", "click"], repr(rows))
+    check("... and their outcomes are the three-word vocabulary",
+          all(d["outcome"] in U.AUDIT_OUTCOMES for _, d in rows)
+          and [d["outcome"] for _, d in rows] == ["ok", "ok", "ok"], repr(rows))
+    check("the run row says verb 'run'", rows[-1][1]["verb"] == "run", repr(rows[-1]))
+    check("the typed text is NEVER in an audit row",
+          typed not in repr(rows), repr(rows))
+    check("the rows carry no UIA window tree and no control name",
+          "controls" not in repr(rows) and "Subject" not in repr(rows), repr(rows))
+
+    # A run that stops: the step that did not run gets one row, and the run's
+    # own row says "stopped"; the typed text is still absent.
+    seen = {"n": 0}
+
+    def read_stop(_w):
+        seen["n"] += 1
+        return live if seen["n"] == 1 else tree(("Subject", "txtSubject", True))
+
+    out2 = run_with_audit(p, read_stop)
+    check("CONTROL: the stopped run really stopped", out2["ok"] is False, repr(out2))
+    check("a stopped run gets one row per outcome, run row 'stopped'",
+          [d["outcome"] for _, d in rows] == ["ok", "stopped", "stopped"], repr(rows))
+    check("the typed text is never in the stopped run's rows either",
+          typed not in repr(rows), repr(rows))
+
+    # A REFUSED run (denylisted program) gets a run row of "refused" and no
+    # step rows - nothing ran.
+    denied = U.Plan(goal="x", window="Bitwarden",
+                    steps=[U.Step(window="Bitwarden", control="OK",
+                                  automation_id="btnOK", action="click")])
+    out3 = run_with_audit(denied, lambda _w: live)
+    check("a refused run audits exactly one row, outcome 'refused'",
+          len(rows) == 1 and rows[0][0] == "ui_control.run"
+          and rows[0][1]["outcome"] == "refused", repr(rows))
+
+    # A REFUSED password target audits the step and the run as "refused" too.
+    pw_password = {"name": "Password", "automation_id": "txtPass",
+                   "control_type": "Edit", "enabled": True, "password": True}
+    pw_plan = U.Plan(goal="x", window="Notepad",
+                     steps=[U.Step(window="Notepad", control="Password",
+                                   automation_id="txtPass", action="set_value",
+                                   value=typed)])
+    out4 = run_with_audit(pw_plan, lambda _w: [dict(pw_password)])
+    check("a password-refused step audits 'refused', and so does its run",
+          [d["outcome"] for _, d in rows] == ["refused", "refused"]
+          and typed not in repr(rows), repr(rows))
+
+    # Every value is one short line, never a dump.
+    check("a row is one short line per field, not a window dump",
+          all(len(str(v)) <= U._AUDIT_WORD_LIMIT
+              for _, d in rows for v in d.values()), repr(rows))
+
+    # A logger that fails must not fail a finished run - auditing is best effort.
+    with NoRealAction():
+        out5 = U.run(p, read=lambda _w: live, act=lambda s: None,
+                     audit=lambda event, detail: (_ for _ in ()).throw(
+                         RuntimeError("no log")), approved=True)
+    check("a logger that fails does not fail an approved run", out5["ok"] is True,
+          repr(out5))
+
+
+def t_a_type_step_focuses_first_and_refuses_a_non_editable_control():
+    """Gemini's type-reliability pair, at the REAL actor seam: ACTION_FOCUS
+    before any key is sent, and a refusal when the target is not actually an
+    editable field (a Button is not a text box, and SendKeys would type into
+    whatever happens to be focused)."""
+    calls = []
+
+    class Editable:
+        ControlTypeName = "EditControl"
+
+        def SetFocus(self):
+            calls.append("focus")
+
+        def SendKeys(self, payload):
+            calls.append(("keys", payload))
+
+    class NotEditable:
+        ControlTypeName = "ButtonControl"
+
+        def SetFocus(self):
+            calls.append("button-focus")
+
+        def SendKeys(self, payload):
+            calls.append(("button-keys", payload))
+
+    class Top:
+        @staticmethod
+        def Control(**kw):
+            return Editable() if kw.get("Name") == "Box" else NotEditable()
+
+    class Auto:
+        @staticmethod
+        def WindowControl(searchDepth, Name):
+            return Top()
+
+    real_module = sys.modules.get("uiautomation")
+    sys.modules["uiautomation"] = Auto()
+    try:
+        U._default_act(U.Step(window="Calc", control="Box", automation_id="",
+                              action="type", value="hi"))
+        check("a type step FOCUSES the control before sending any key",
+              calls == ["focus", ("keys", "hi")], repr(calls))
+        calls.clear()
+        try:
+            U._default_act(U.Step(window="Calc", control="Send",
+                                  automation_id="", action="type", value="hi"))
+        except RuntimeError as exc:
+            said = str(exc)
+        else:
+            said = ""
+        check("a control that is not editable is refused, before any key",
+              "not an editable field" in said and calls == [],
+              repr((said, calls)))
+    finally:
+        if real_module is not None:
+            sys.modules["uiautomation"] = real_module
+        else:
+            del sys.modules["uiautomation"]
+
+    # Through run(), the refusal is reported as that step failing, with the
+    # keys still unsent (the run stops there, the same as any failed step).
+    live = [{"name": "Send", "automation_id": "btnSend",
+             "control_type": "Button", "enabled": True}]
+    sys.modules["uiautomation"] = Auto()
+    try:
+        rows = []
+        with NoRealAction() as guard:
+            # NoRealAction patches the actor away; give the real actor back so
+            # this exercises _default_act itself against the fake uiautomation.
+            U._default_act = guard.real_act
+            p = U.plan("press it", "Calc",
+                       [{"control": "Send", "action": "type", "value": "hi",
+                         "why": "x"}],
+                       read=lambda _w: live)
+            out = U.run(p, read=lambda _w: live,
+                        audit=lambda event, detail: rows.append((event, detail)),
+                        approved=True)
+    finally:
+        if real_module is not None:
+            sys.modules["uiautomation"] = real_module
+        else:
+            del sys.modules["uiautomation"]
+    check("an untypeable step is reported as a failed step, run still honest",
+          out["ok"] is False and "not an editable field" in out["reason"],
+          repr(out))
+    check("... its audit row says the step stopped", rows[0][1]["outcome"] == "stopped",
+          repr(rows))
 
 if __name__ == "__main__":
     for fn in (t_planning_sends_no_input, t_unmatched_requests_do_not_become_steps,
@@ -938,7 +1467,11 @@ if __name__ == "__main__":
                t_foreground_delivery_is_gated_and_always_restores,
                t_the_combinations_that_are_never_sent,
                t_the_shell_patterns_that_are_never_typed,
-               t_sendkeys_text_is_typed_not_parsed):
+               t_sendkeys_text_is_typed_not_parsed,
+               t_the_desktop_hard_denylist_is_refused_before_a_card,
+               t_a_password_control_is_never_targeted_by_name_id_or_position,
+               t_the_audit_lines_carry_no_typed_text_and_no_window_tree,
+               t_a_type_step_focuses_first_and_refuses_a_non_editable_control):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
