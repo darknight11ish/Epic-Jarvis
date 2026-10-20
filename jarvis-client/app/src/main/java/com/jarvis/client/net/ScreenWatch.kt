@@ -81,6 +81,31 @@ object ScreenWatch {
     /** The link is fine: connected AND not stale. Anything else counts toward [LINK_LOST_MS]. */
     fun linkHealthy(connected: Boolean, stale: Boolean): Boolean = connected && !stale
 
+    /**
+     * Why a running session must END RIGHT NOW, or null when it may continue
+     * (2026-10-20 audit, Area 10B): a locked phone (`KeyguardManager
+     * .isKeyguardLocked`) or a screen that is off stops the capture at once,
+     * and so does reaching [MAX_MINUTES]. The service calls this on a short
+     * timer AND keeps the screen-off broadcast as the immediate path; the
+     * `timeUp` post is the third, redundant path. There is no "always on"
+     * state: every branch below ends the session.
+     *
+     * [startedAtMs] and [nowMs] are on the same monotonic clock; [maxMinutes]
+     * is clamped to 1..[MAX_MINUTES] exactly like [started] does.
+     */
+    fun endReason(
+        screenOn: Boolean,
+        keyguardLocked: Boolean,
+        startedAtMs: Long,
+        nowMs: Long,
+        maxMinutes: Int = MAX_MINUTES,
+    ): String? {
+        if (keyguardLocked || !screenOn) return ENDED_LOCK
+        val limit = maxMinutes.coerceIn(1, MAX_MINUTES) * 60_000L
+        if (nowMs - startedAtMs >= limit) return ENDED_TIME
+        return null
+    }
+
     // ---------------------------------------------------------------- state
 
     /** What the phone's sign and the Home plate show. */

@@ -225,9 +225,11 @@
              a SECOND entry in another app's Share sheet, text only. It is
              the same MainActivity (an alias, no new code path), which sees
              it by this name, holds the text on the Live screen as a
-             "Shared text" chip and starts Live once the app is unlocked.
-             The text is outside text like any shared item: sent only when
-             the owner taps Send, tagged "shared", never learned from.
+             "Shared text" chip and opens the Live screen. It does NOT start
+             Live by itself: a share is an untrusted Intent from another app,
+             and opening the microphone is the owner's own tap (2026-10-20
+             audit, Area 10C). The text is outside text like any shared item:
+             sent only when the owner taps Send, tagged "shared", never learned from.
              No permission: receiving a share needs none. -->
         <activity-alias
             android:name=".ShareToLive"

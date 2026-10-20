@@ -11039,13 +11039,27 @@ that fails an early one never has its text even read out):
 
 1. `JarvisRuntime.phoneNotificationsAllowed()` - the cached answer from
    61.1's switch. OFF: nothing else in this list runs.
-2. SMS check (61.3's second layer).
-3. The per-app allow list (61.3) - only a chosen app's notification survives.
-4. `data/NotificationRedactor.kt` - **applied to the title and the text
-   before anything is stored, always** (CLAUDE.md's "one-time codes hidden
-   before anything reaches the model" - applied here to storage itself,
-   stricter than literally asked, since a code that never reaches disk
-   cannot leak from a lost phone or a backup either).
+2. `NotificationGate.isSecret` - a notification Android itself marks
+   `VISIBILITY_SECRET` is never read or kept, whatever app posted it
+   (Android's "show sensitive content" answer; 2026-10-20 audit, Area 10A).
+3. SMS check (61.3's second layer). MMS arrives through the same default-SMS
+   app, so the same OS answer covers it.
+4. `NotificationGate.packageSkip` - a banking, brokerage or payment package
+   is refused whole even if it somehow reached the allow list (2026-10-20
+   audit, Area 10A; adding one was already refused by 61.3).
+5. The per-app allow list (61.3) - only a chosen app's notification survives.
+6. `NotificationGate.capture` / `data/NotificationRedactor.kt` - **applied to
+   the title and the text before anything is stored, always** (CLAUDE.md's
+   "one-time codes hidden before anything reaches the model" - applied here
+   to storage itself, stricter than literally asked, since a code that never
+   reaches disk cannot leak from a lost phone or a backup either). This is
+   ON THE PHONE, before anything could ever be transmitted to the PC.
+
+`data/NotificationGate.kt` is the pure decision for steps 2/4/6 (unit-tested
+in `NotificationGateTest.kt`): secret, SMS/MMS and banking refusal first, then
+a 4-8 digit contextual code masked in the returned words. The listener reads a
+notification's text only after the earlier checks passed, and the gate repeats
+the package checks on every posted notification as defence in depth.
 
 **The redaction heuristic, and its real limits** (unit-tested in
 `NotificationRedactorTest.kt`; the class's own doc has the full list):
@@ -11118,11 +11132,13 @@ owner's own tap.
 `backend/test_phone_notifications.py` (the switch: default off, the card,
 OFF is instant, the routes, the patch applies and reverses - the same
 shape `test_watch_notify.py` already proves). `jarvis-client`'s
-`NotificationRedactorTest.kt` and `NotificationAllowListTest.kt` (pure
-logic, no Android framework, no device needed) prove the redaction
-heuristic's documented behaviour and the banking/SMS refusal - Kotlin
-compilation itself is confirmed only once CI runs (no local Android build,
-`CLAUDE.md`, "How the Android apps get built").
+`NotificationRedactorTest.kt`, `NotificationAllowListTest.kt` and
+`NotificationGateTest.kt` (pure logic, no Android framework, no device needed)
+prove the redaction heuristic's documented behaviour, the banking/SMS refusal,
+the `VISIBILITY_SECRET` skip, and that a code is masked in the words the gate
+returns (so it cannot reach the PC). The Android compile itself is the CI
+job's; a real phone is still needed to prove the listener receives what
+Android says it does.
 
 ## 62. Looking at the screen: "Look at this" and "Watch with me" (added 2026-09-28; built 2026-09-29 on both apps, with the limits below)
 
@@ -11452,8 +11468,13 @@ refuses to look when pointed at a remote Jarvis.
   Android's own screen sharing (`MediaProjection`), **Android's question
   every time**, a foreground service of type `mediaProjection` with the
   notification "Jarvis is watching this phone - Only when you ask a question
-  - Stop ends it", ending after **30 minutes**, when the screen goes off,
-  when Android ends the sharing, on Stop, and on Stop everything. **Nothing
+  - Stop ends it", ending after **30 minutes**, when the screen goes off or
+  **the phone locks** (`KeyguardManager.isKeyguardLocked`, re-checked every
+  2 s while it runs - 2026-10-20 audit, Area 10B; the screen-off broadcast
+  stays the immediate path), when Android ends the sharing, on Stop, and on
+  Stop everything. The pure rule is `ScreenWatch.endReason`; `ScreenWatchLockTest.kt`
+  holds the locked/off/time-up/healthy cases and pins the service's wiring,
+  so there is no "always on" branch. **Nothing
   is streamed**: when the owner asks a question, ONE picture (long side at
   most 1,280 pixels, JPEG) is taken, checked (**every app that may be on
   screen** - so a private app in the other half of a split screen counts -

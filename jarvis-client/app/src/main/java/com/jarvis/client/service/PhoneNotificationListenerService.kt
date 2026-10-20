@@ -7,9 +7,8 @@ import android.service.notification.StatusBarNotification
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.data.CapturedNotification
 import com.jarvis.client.data.CapturedNotifications
-import com.jarvis.client.data.NotificationAllowList
 import com.jarvis.client.data.NotificationAllowListStore
-import com.jarvis.client.data.NotificationRedactor
+import com.jarvis.client.data.NotificationGate
 
 /**
  * The actual `NotificationListenerService` for "reading phone
@@ -20,23 +19,31 @@ import com.jarvis.client.data.NotificationRedactor
  * broad: once granted, this class is offered EVERY notification posted on
  * the phone, by every app, whether or not Jarvis's own switch is on.
  *
- * FOUR GATES, ALL CHECKED BEFORE A SINGLE BYTE IS STORED, in
+ * SIX GATES, ALL CHECKED BEFORE A SINGLE BYTE IS STORED, in
  * `onNotificationPosted`'s own order (cheapest first, so an app that fails
  * an earlier one never has its text even read out of the notification):
  *   1. [JarvisRuntime.phoneNotificationsAllowed] - the PC-decided master
  *      switch (off by default; ON needs one approval card). OFF: nothing
  *      below this line ever runs for that notification.
- *   2. [isSmsLike] - dropped outright even if [NotificationAllowListStore]
+ *   2. [NotificationGate.isSecret] - an Android "secret" notification
+ *      (`VISIBILITY_SECRET`) is never read or kept, whatever app posted it
+ *      (2026-10-20 audit, Area 10A).
+ *   3. SMS/Messages - dropped outright even if [NotificationAllowListStore]
  *      somehow held the package (it refuses to add one in the first place
  *      - this is defence in depth, not the primary gate). CLAUDE.md:
  *      "Never text messages (SMS)... even if the owner tries to add the
- *      Messages app".
- *   3. [NotificationAllowListStore] - only an app the owner has explicitly
+ *      Messages app". MMS arrives through the same default-SMS app, so the
+ *      same answer covers it.
+ *   4. A banking/brokerage/payment package - refused whole even if it somehow
+ *      reached the allow-list (2026-10-20 audit, Area 10A); adding one is
+ *      already refused by [NotificationAllowListStore].
+ *   5. [NotificationAllowListStore] - only an app the owner has explicitly
  *      added (empty by default) is kept at all; every other app's
  *      notification is dropped here, unread by anything past this line.
- *   4. [NotificationRedactor] - always applied to the title and the text,
- *      the very last step before [CapturedNotifications.add], blanking
- *      anything that looks like a one-time code.
+ *   6. [NotificationGate.capture] - the title and the text are redacted
+ *      TOGETHER (a 4-8 digit code with a trigger word in either field is
+ *      masked) as the very last step before [CapturedNotifications.add].
+ *      This is on-device, BEFORE anything could ever be sent to the PC.
  *
  * NEVER REPLIES, DISMISSES, OR ACTS ON A NOTIFICATION. This class does not
  * override `onNotificationRemoved` for any write purpose, holds no
@@ -56,15 +63,29 @@ class PhoneNotificationListenerService : NotificationListenerService() {
         if (!JarvisRuntime.phoneNotificationsAllowed()) return
         val pkg = notification.packageName ?: return
         if (pkg == packageName) return // never Jarvis's own notifications
-        if (isSmsLike(notification)) return
+        val posted = notification.notification ?: return
+        // Android itself marks a notification secret: never read, never kept.
+        if (NotificationGate.isSecret(posted.visibility)) return
+        val smsHolders = smsRoleHolders()
+        val category = appCategory(pkg)
+        when (NotificationGate.packageSkip(pkg, smsHolders, category)) {
+            NotificationGate.Skip.SMS -> return
+            NotificationGate.Skip.BANKING -> return
+            NotificationGate.Skip.SECRET, null -> Unit
+        }
         if (!allowList.contains(pkg)) return
 
-        val extras = notification.notification?.extras ?: return
+        val extras = posted.extras ?: return
         val rawTitle = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
         val rawText = bestText(extras)
         if (rawTitle.isBlank() && rawText.isBlank()) return
 
-        val (title, text) = NotificationRedactor.redactBoth(rawTitle, rawText)
+        val (title, text) = when (val verdict = NotificationGate.capture(
+            pkg, posted.visibility, rawTitle, rawText, smsHolders, category,
+        )) {
+            is NotificationGate.Verdict.SkipIt -> return
+            is NotificationGate.Verdict.Capture -> verdict.title to verdict.text
+        }
         val row = CapturedNotification(
             id = "${pkg}:${notification.key}:${notification.postTime}",
             packageName = pkg,
@@ -112,20 +133,10 @@ class PhoneNotificationListenerService : NotificationListenerService() {
         pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
     }.getOrDefault(pkg)
 
-    /**
-     * Defence in depth for CLAUDE.md's hard "never text messages (SMS)"
-     * rule, on top of [NotificationAllowListStore] refusing to add an
-     * SMS/Messages app in the first place: even a notification whose
-     * PACKAGE the owner somehow got onto the list (a future Android
-     * version, a bug, a role change after the app was added) is dropped
-     * here if Android itself marks it as a message from the phone's own
-     * default SMS app.
-     */
-    private fun isSmsLike(sbn: StatusBarNotification): Boolean {
-        val pkg = sbn.packageName ?: return false
-        val smsHolders = smsRoleHolders()
-        return NotificationAllowList.isSmsPackage(pkg, smsHolders)
-    }
+    /** The app's declared store category, or null when it cannot be read. */
+    private fun appCategory(pkg: String): Int? = runCatching {
+        packageManager.getApplicationInfo(pkg, 0).category
+    }.getOrNull()
 
     /** Same signal [NotificationAllowListStore] checks before adding a
      * package to the list in the first place - read again here so a
