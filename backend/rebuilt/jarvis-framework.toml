@@ -1923,3 +1923,12 @@ max_pause_ms = 1500
 # the gate's protected files are refused outright, before any card exists.
 [app_control]
 enabled = false
+# The PC's OWN allow-list (F17, the 2026-10-20 review). EMPTY by default, and an
+# empty list keeps today's rule: the phone's list is the permission, and the
+# card says "(allowed on phone)" so the owner can see where it came from. When
+# this list is non-empty, an app must be on BOTH lists - a run request can
+# never widen it. Whatever either list says, the hard denylist in
+# backend/jarvis_app_control.py still refuses Jarvis itself, Android's system
+# settings/permission/installer packages, well-known password managers and
+# banking/wallet/payment apps.
+allowed_packages = []
