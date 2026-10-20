@@ -21930,8 +21930,9 @@ has switched, any later failure rolls it back with the auto-tier
 preset. **Said plainly:** a card the owner DENIES leaves the started lane
 running - it starts no model and switches nothing. A `pending` preset refuses
 before anything happens, heavy-mode Coding refuses with "heavy mode needs the
-both-card lane, arriving later". The app buttons stay disabled until they wire
-the route.
+both-card lane, arriving later". Both apps call this route now: the desktop's
+focus-presets bridge sends it, and the Android preset screen reads and sends
+the same `apply_path` the GET advertises.
 
 Tests: `backend/test_presets.py`, `test_presets_lanes.py`,
 `test_presets_apply.py` (route shape, origin/token, old shape not served,
