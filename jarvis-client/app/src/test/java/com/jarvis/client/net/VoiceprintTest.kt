@@ -1,27 +1,33 @@
 package com.jarvis.client.net
 
 import kotlinx.serialization.json.Json
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
+import kotlinx.serialization.json.JsonObject
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
 
 /**
  * The pure half of "Write like me": the phone's parser and its wording.
  * Runs on a plain JVM (`./gradlew :app:testDebugUnitTest --tests '*VoiceprintTest*'`).
+ *
+ * JUnit4 is the app's test dependency (`junit:junit:4.13.2` in app/build.gradle.kts),
+ * and the other JVM tests in this folder import `org.junit.Test` / `org.junit.Assert.*`
+ * the same way. `parse()` returns a nullable View on purpose (an older PC has no
+ * page), so each test that needs the value binds it with `requireNotNull` once.
  */
 class VoiceprintTest {
-    private fun parse(json: String) = Voiceprint.parse(Json.parseToJsonElement(json) as kotlinx.serialization.json.JsonObject)
+    private fun parse(json: String): Voiceprint.View? =
+        Voiceprint.parse(Json.parseToJsonElement(json) as JsonObject)
 
     @Test
     fun a_page_is_rendered_from_the_pc_answer() {
-        val view = parse(
+        val view = requireNotNull(parse(
             """{"available":true,"enabled":true,"count":2,"scrubber":true,
                 "samples":[{"id":"vp1","text":"Hello [name]","kind":"sample"},
                            {"id":"vp2","text":"Second","kind":"edit"}]}"""
-        )
-        assertNotNull(view)
+        ))
         assertTrue(view.enabled)
         assertEquals(2, view.samples.size)
         assertEquals("vp1", view.samples[0].id)
@@ -35,15 +41,15 @@ class VoiceprintTest {
 
     @Test
     fun a_malformed_row_is_dropped() {
-        val view = parse("""{"available":true,"samples":[{"nope":1},{"id":"vp1","text":"x"}]}""")
-        assertNotNull(view)
+        val view = requireNotNull(parse(
+            """{"available":true,"samples":[{"nope":1},{"id":"vp1","text":"x"}]}"""
+        ))
         assertEquals(1, view.samples.size)
     }
 
     @Test
     fun the_switch_defaults_off() {
-        val view = parse("""{"available":true,"samples":[]}""")
-        assertNotNull(view)
+        val view = requireNotNull(parse("""{"available":true,"samples":[]}"""))
         assertEquals(false, view.enabled)
         assertEquals(Voiceprint.EMPTY, view.message)
     }
