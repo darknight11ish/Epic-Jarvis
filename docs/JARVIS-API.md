@@ -22554,9 +22554,10 @@ someone first starts jarvis (or can be filled out again) if they want jarvis to
 act a different way overall ... a series of questions with multiple choices ...
 jarvis sets the settings with a summary for the user at the end ... that the
 user can choose to accept afterwards".* The design is
-`.dsh-scratch/DESIGN-SETUP-QUESTIONNAIRE-2026-10-20.md`. **This is the backend
-half only** - the desktop page (S2) and the phone screens (S3) come next; **no
-app calls these routes yet**.
+`.dsh-scratch/DESIGN-SETUP-QUESTIONNAIRE-2026-10-20.md`. **The backend half and
+the app half are both built** (S2, added 2026-10-20, below): the desktop page
+and the phone's read-only card call these routes now, and nothing about the
+permission model changes.
 
 **It is a GUIDE, not a second settings system.** `backend/jarvis_setup.py`
 (shipped whole, twin in `jarvis-backend/`) holds 14 ordered questions and their
@@ -22682,6 +22683,57 @@ loosening rule or a reading-tool ON still refuses from the phone - and fails
 closed when the PC cannot tell where the request came from. `peer is None` is
 only the project's documented in-process convention, never how a routed
 request is treated.
+
+### The apps (S2, added 2026-10-20)
+
+**Desktop Settings → "First-time setup".** Three new files and one Rust command
+(`jarvis-desktop/src/setup-questionnaire.js`, `setup-bridge.js`,
+`setup-settings.js`, `src-tauri/src/setup_questionnaire.rs`). The card shows all
+fourteen questions in the PC's order, with the last accepted answers as the
+prefill; changing an answer asks `POST /api/setup/plan` and draws every change
+in the PC's own sentence with its effect - **Instant**, **Asks you on a card**
+or **Blocked** - plus everything the PC says would not change and why, and the
+preset answer labelled a recommendation only. **A plan writes nothing and
+raises no card**, so it is asked whenever the answers change. The one write is
+a two-press action: "Apply these changes", then "Yes, apply them now". Only the
+second press builds and sends `confirm: true`; loading the card, reconnecting
+the link and changing an answer never apply anything. Applying is held while
+the event stream is stale (rule 4). The card says how long one approval card
+may wait, and while it runs it says the PC works through the changes one at a
+time. An outcome the PC reports as `asked-no-answer` is drawn as **still
+waiting** - never as done, never as failed - and the last run's outcomes are
+drawn from `GET /api/setup` exactly as the PC saved them. The Rust command
+sends only the three bodies, refuses `apply` unless its `confirm` argument is
+exactly `true`, and puts `confirm` in no other body; the page itself names no
+route and no gate action, so nothing here invents an action or a tier.
+
+**Phone: the same questions, read-only.** `net/SetupQuestionnaire.kt` and
+`ui/screens/SetupQuestionnairePlate.kt`, on Settings. It reads
+`GET /api/setup`, prefills the last accepted answers and may ask the read-only
+plan on one button, drawing the same effects and the same "would not change"
+reasons. **It has no apply path at all and never posts `/api/setup/apply`**, and
+the card says the changes are made on the PC. That is a decision, not a missing
+screen: applying calls the existing setters one at a time and waits on each
+existing card (a pass can take minutes), and several of those changes are
+PC-only by rules that already exist - `jarvis_asks_first` refuses a loosening
+request from any device but the PC. A phone button would either fail halfway or
+sit behind cards it cannot answer. `tools/check_parity.py` classifies
+`/api/setup` and `/api/setup/plan` as `ported` and `/api/setup/apply` as
+`deliberate`; `docs/ARCHITECTURE.md` section 8 records it with the reason.
+
+**The questions are the PC's, in both apps.** Neither app hardcodes a question
+id, title or option. Both tests read the generated
+`backend/fixtures/setup_questions.json` (`tools/gen_setup_questions.py`, written
+from `backend/jarvis_setup.py`'s own `QUESTIONS`; the desktop suite runs
+`--check` and compares it to the live module), so a reworded question fails a
+test until the fixture is regenerated. The desktop suite is
+`jarvis-desktop/tests/setup-questionnaire.mjs` (the PC's real fourteen
+questions, the draft and "All"/"None", the read-only plan body, the one apply
+body, the stale-link gate, honest outcomes, the bridge's three calls, and
+source pins that no route or gate action is in the page and nothing applies on
+load); the Rust module carries its own body/timeout tests; the phone's is
+`SetupQuestionnaireTest.kt` (the same fixture, the prefill, the read-only plan
+and a pin that no apply path exists in the two phone files).
 
 `backend/test_setup.py` is the proof, with no network, no model, no
 microphone and no owner's PC: every question/option maps to a real setter;
