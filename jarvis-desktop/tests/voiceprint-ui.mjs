@@ -87,6 +87,39 @@ test("the page never uses innerHTML on PC text", () => {
   ok("text is placed with textContent", src.includes("textContent"));
 });
 
+// The mount needs a DOM, so these two wiring rules are pinned as text. Both
+// are bugs that type-check, pass every grant check, and fail at runtime:
+//
+//  * the Tauri command's argument is `on` (voiceprint.rs's own signature, the
+//    same word set_humor takes) - sending `enabled`, the HTTP body's field,
+//    is refused by Tauri with "missing required key on", so the toggle looks
+//    wired and does nothing;
+//  * a write must be held while the event stream is stale (rule 4); a read is
+//    never held.
+test("the switch sends the argument the Rust command really takes", () => {
+  const src = readFileSync(join(HERE, "..", "src", "voiceprint-settings.js"), "utf8");
+  const call = /boundedInvoke\(invoke,\s*"voiceprint_set_enabled",\s*\{([^}]*)\}/.exec(src);
+  ok("the switch invokes voiceprint_set_enabled", Boolean(call));
+  ok("it sends `on`", Boolean(call) && /\bon\s*:/.test(call[1]));
+  ok("it does not send `enabled` instead", Boolean(call) && !/\benabled\s*:/.test(call[1]));
+});
+
+test("a stale link holds the three writes, never the read", () => {
+  const src = readFileSync(join(HERE, "..", "src", "voiceprint-settings.js"), "utf8");
+  ok("the mount takes an isStale check", /isStale = \(\) => false/.test(src));
+  ok("the read is not behind the hold",
+    /boundedInvoke\(invoke, "voiceprint_status"\)/.test(src));
+  const guarded = (name) => {
+    const at = src.indexOf(`"${name}"`);
+    if (at < 0) return false;
+    // The handler's own `if (!live())` guard is the first thing it does.
+    return src.slice(Math.max(0, at - 400), at).includes("if (!live())");
+  };
+  ok("Keep this sample is held", guarded("voiceprint_add"));
+  ok("Forget this sample is held", guarded("voiceprint_forget"));
+  ok("the switch is held", guarded("voiceprint_set_enabled"));
+});
+
 let failed = 0;
 for (const [name, fn] of tests) {
   try {

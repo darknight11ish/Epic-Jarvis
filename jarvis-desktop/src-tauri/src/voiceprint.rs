@@ -15,11 +15,27 @@ use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
 use crate::commands;
+use crate::look;
 
 const LIST: &str = "/api/voiceprint";
 const SAMPLE: &str = "/api/voiceprint/sample";
 const FORGET: &str = "/api/voiceprint/forget";
 const ENABLED: &str = "/api/voiceprint/enabled";
+
+/// Writes are held while the link catches up (CLAUDE.md rule 4): the same
+/// sentence every other Settings write uses, and the page greys its controls
+/// with the same words. A READ is never held.
+const STALE_HELD: &str = "The connection to Jarvis is catching up, so nothing can be sent \
+     until it does.";
+
+/// Why one of the three writes may not be sent now, or `None` when it may.
+fn held(app: &AppHandle) -> Option<&'static str> {
+    if look::stale(app) {
+        Some(STALE_HELD)
+    } else {
+        None
+    }
+}
 
 /// One sample the owner taught. Text is already stripped by the PC.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -126,6 +142,9 @@ pub async fn voiceprint_status(app: AppHandle) -> Result<serde_json::Value, Stri
 
 #[tauri::command]
 pub async fn voiceprint_add(app: AppHandle, text: String, prompt: Option<String>) -> Result<serde_json::Value, String> {
+    if let Some(why) = held(&app) {
+        return Err(why.to_string());
+    }
     if let Some(problem) = sample_problem(&text) {
         return Err(problem);
     }
@@ -143,6 +162,9 @@ pub async fn voiceprint_add(app: AppHandle, text: String, prompt: Option<String>
 
 #[tauri::command]
 pub async fn voiceprint_forget(app: AppHandle, id: String, confirm: bool) -> Result<serde_json::Value, String> {
+    if let Some(why) = held(&app) {
+        return Err(why.to_string());
+    }
     if let Some(problem) = forget_problem(&id, confirm) {
         return Err(problem);
     }
@@ -159,8 +181,12 @@ pub async fn voiceprint_forget(app: AppHandle, id: String, confirm: bool) -> Res
 }
 
 /// The local-only ON/OFF switch: no card, no model, one small JSON file on the PC.
+/// Held while the link catches up, like the two writes above.
 #[tauri::command]
 pub async fn voiceprint_set_enabled(app: AppHandle, on: bool) -> Result<serde_json::Value, String> {
+    if let Some(why) = held(&app) {
+        return Err(why.to_string());
+    }
     let Some(client) = client() else { return Err("Could not build an HTTP client.".into()) };
     let url = format!("{}{ENABLED}", commands::jarvis_base(&app));
     let response = client

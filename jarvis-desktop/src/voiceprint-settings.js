@@ -13,6 +13,9 @@
  * - every invoke is bounded to 30 s and reports plain words on a timeout;
  * - every piece of text from the PC goes in with textContent, never innerHTML;
  * - Forget asks "are you sure?" first and sends `confirm: true` only after yes;
+ * - a READ is never held, but the switch, "Keep this sample" and "Forget this
+ *   sample" are held while the event stream is stale (the injected `isStale`;
+ *   rule 4), here and again in Rust;
  * - nothing is auto-applied: a change happens only when the owner presses it.
  *
  * @module voiceprint-settings
@@ -33,6 +36,10 @@ export const FORGET_LABEL = "Forget this sample";
 export const EMPTY = "No samples yet. Paste one above to begin.";
 export const BLOCKED =
   "Jarvis Desktop could not reach the PC's style engine. Nothing was changed.";
+/** The same words the rest of this card uses while the link catches up
+ *  (manner-settings.js / thinking-settings.js). A READ is never held; every
+ *  write here is (CLAUDE.md rule 4), in this file and in voiceprint.rs. */
+export const STALE = "Waiting for the link to catch up. Nothing can be sent until it does.";
 export const MAX_TEXT = 4000;
 export const TIMEOUT_MS = 30_000;
 
@@ -99,10 +106,15 @@ function node(doc, tag, className, text) {
 
 /**
  * Build the section into `root`. `invoke` is the Tauri bridge, `confirm` the
- * browser's question function; both are injected so this is testable and so
- * the wiring file only has to call this once with the real ones.
+ * browser's question function and `isStale` the event stream's own check -
+ * all injected so this is testable and so the wiring file only has to call
+ * this once with the real ones. A READ is never held; the switch, "Keep this
+ * sample" and "Forget this sample" are held while the link catches up
+ * (rule 4), here and again in Rust.
  */
-export function mount(root, { invoke, confirm, document: doc = globalThis.document } = {}) {
+export function mount(root, {
+  invoke, confirm, isStale = () => false, document: doc = globalThis.document,
+} = {}) {
   if (!root || !doc) return null;
   root.textContent = "";
   const status = node(doc, "p", "vp-status", "Reading your style...");
@@ -121,6 +133,26 @@ export function mount(root, { invoke, confirm, document: doc = globalThis.docume
   const list = node(doc, "div", "vp-list");
   const said = node(doc, "p", "vp-said", "");
 
+  const live = () => {
+    try { return !isStale(); } catch { return false; }
+  };
+  /** Grey the three writes while the link catches up. Typing stays possible:
+   *  only sending is held. Called after every draw and by the wiring file's
+   *  onLink, so a link that goes stale mid-read greys them without a reload. */
+  const syncLive = () => {
+    const on = live();
+    for (const control of [toggle, add]) {
+      control.disabled = !on;
+      control.title = on ? "" : STALE;
+    }
+    for (const button of list.querySelectorAll("button")) {
+      button.disabled = !on;
+      button.title = on ? "" : STALE;
+    }
+    if (!on) said.textContent = STALE;
+    else if (said.textContent === STALE) said.textContent = "";
+  };
+
   let samples = [];
   const refresh = async () => {
     try {
@@ -135,6 +167,7 @@ export function mount(root, { invoke, confirm, document: doc = globalThis.docume
         row.append(node(doc, "p", "", s.text));
         const forget = node(doc, "button", "btn small", FORGET_LABEL);
         forget.addEventListener("click", async () => {
+          if (!live()) { said.textContent = STALE; return; }
           if (typeof confirm === "function" && !confirm(forgetAsk(s))) return;
           try {
             await boundedInvoke(invoke, "voiceprint_forget", { id: s.id, confirm: true });
@@ -147,12 +180,16 @@ export function mount(root, { invoke, confirm, document: doc = globalThis.docume
       }
       status.textContent = view.message || `${view.count} sample(s) kept on this PC.`;
     } catch (e) { status.textContent = problemWords(e); }
+    syncLive();
   };
 
   toggle.addEventListener("change", async () => {
     const want = toggle.checked;
+    if (!live()) { toggle.checked = !want; said.textContent = STALE; return; }
     try {
-      await boundedInvoke(invoke, "voiceprint_set_enabled", { enabled: want });
+      // The Rust command's own argument is `on` (voiceprint.rs), the same name
+      // set_humor takes - not the HTTP body's `enabled`.
+      await boundedInvoke(invoke, "voiceprint_set_enabled", { on: want });
       said.textContent = want ? "Write like me is on." : "Write like me is off.";
     } catch (e) {
       toggle.checked = !want;
@@ -160,6 +197,7 @@ export function mount(root, { invoke, confirm, document: doc = globalThis.docume
     }
   });
   add.addEventListener("click", async () => {
+    if (!live()) { said.textContent = STALE; return; }
     const problem = sampleProblem(area.value);
     if (problem) { said.textContent = problem; return; }
     try {
@@ -173,5 +211,5 @@ export function mount(root, { invoke, confirm, document: doc = globalThis.docume
   root.append(node(doc, "h3", "", TITLE), node(doc, "p", "quiet", DETAIL),
               switchLine, detail, area, add, hint, status, said, list);
   refresh();
-  return { refresh, samples: () => samples };
+  return { refresh, samples: () => samples, syncLive };
 }
