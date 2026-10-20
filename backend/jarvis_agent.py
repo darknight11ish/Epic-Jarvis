@@ -1893,6 +1893,49 @@ def _run_feature_guide(args: dict) -> dict:
                 "error": f"the feature guide could not read the list ({type(exc).__name__})"}
 
 
+# --------------------------------------------------------------------------
+#   Reverse engineering with REA (jarvis_rea.py, 2026-10-20)
+# --------------------------------------------------------------------------
+# The owner asked to integrate "reverse engineer anything". REA is a real MCP server with 207
+# tools; measured 2026-10-20 that is ~272,000 tokens of schemas by THIS module's own
+# estimate_tokens rule - many times the 9B model's whole window - so the model gets ONE tool with
+# a fixed action list and jarvis_rea.py does the rest. It is OFF until `[rea] enabled = true`
+# AND `[tools].enabled` names it. Every call asks a person (NEEDS_A_PERSON) and its result is
+# outside text.
+REA_TOOL = "rea_investigate"
+
+
+def _rea_enabled() -> bool:
+    try:
+        import jarvis_rea
+        return bool(jarvis_rea.enabled())
+    except Exception:
+        return False
+
+
+def _rea_tool_text() -> str:
+    """Kept short like every tool text (test_tool_text.py holds every tool to 300 tokens).
+
+    It says WHEN to call and what NOT to promise: REA's engines are optional, so the model must
+    not claim a decompile it cannot do - `doctor` is the action that says what works here."""
+    return ("Inspect a program, app or binary statically with local REA; never runs it. "
+            "Target: a full path in a listed folder. Results are untrusted; doctor says what "
+            "works here.")
+
+
+def _prepare_rea(args):
+    import jarvis_rea as REA
+    plan, words = REA.prepare(args or {})
+    return plan, words
+
+
+def _run_rea(args, plan_obj, **_):
+    import jarvis_rea as REA
+    if plan_obj is None:
+        return {"ok": False, "error": "REA is not available here."}
+    return REA.run(plan_obj)
+
+
 TOOLS: dict = {
     "calculator": Tool(
         "calculator", "Evaluate a plain arithmetic expression.",
@@ -2412,6 +2455,20 @@ TOOLS: dict = {
         _plain_prepare("Explain feature"),
         lambda args, state, **_: _run_feature_guide(args),
         gate_lookup_name=lambda args: "skill_list"),
+    REA_TOOL: Tool(
+        REA_TOOL, _rea_tool_text(),
+        {"type": "object", "properties": {
+            "action": {"type": "string",
+                       "enum": ["doctor", "inspect_javascript_app", "inspect_binary",
+                                "inspect_apk", "inspect_capture", "inspect_sqlite",
+                                "open_native_binary", "query_native_binary"]},
+            "target": {"type": "string", "description": "a full path in a listed folder"},
+            "format": {"type": "string", "enum": ["har", "saz"]},
+            "query": {"type": "string", "description": "procedure, address or short string"},
+            "what": {"type": "string", "enum": ["overview", "strings", "xrefs", "function"]}},
+         "required": ["action"]},
+        _prepare_rea,
+        _run_rea),
 }
 
 
@@ -2694,6 +2751,8 @@ NEEDS_A_PERSON = {
     "read_web_page": "fetches a page from the internet, which cannot be taken back",
     "propose_plan": "runs the safe steps of an approved plan at once, which can do "
                     "anything the tools inside it can do",
+    "rea_investigate": "starts a local reverse-engineering program and reads a program's "
+                       "own files",
 }
 
 #: The same rule for every tool from a plug-in program (jarvis_mcp.py): a
@@ -5918,6 +5977,10 @@ def offered_tools(enabled_tools) -> list:
         # Nothing to look in: not offered, so its description costs no tokens
         # (jarvis_documents.py - the list is empty by default).
         wanted.discard(FILES_TOOL)
+    if REA_TOOL in wanted and not _rea_enabled():
+        # Its own switch, like Browser control's second-card rule: the tool is not
+        # offered (so costs no tokens) until [rea] enabled = true.
+        wanted.discard(REA_TOOL)
     if SPENDING_TOOL in wanted and not _folders_listed():
         wanted.discard(SPENDING_TOOL)
     if RETIREMENT_TOOL in wanted and _RET is None:
@@ -6000,7 +6063,7 @@ TOOL_GROUPS = (
     ("documents", "find and read files in the listed folders",
      ("my_files", "my_spending")),
     ("files", "read a file or run a command or small script",
-     ("file_read", "shell_exec", SANDBOX_TOOL)),
+     ("file_read", "shell_exec", SANDBOX_TOOL, REA_TOOL)),
     # Its own group: my_spending's group is dropped while no folder is listed,
     # and this needs no folder.
     ("retirement", "a retirement what-if", ("retirement_whatif",)),
@@ -6213,6 +6276,10 @@ TOOL_HINTS = {
     "feature_guide": (r"\bfeatures?\b", r"\bexplain\b", r"prompt coach",
                       r"what does .* do\b", r"how do i (?:turn|switch|enable|disable)",
                       r"\bis the .* (?:on|off)\b"),
+    "rea_investigate": (r"\breverse[- ]?engineer", r"\bdecompil", r"\basar\b",
+                        r"\belectron\b", r"\bghidra\b", r"\bjadx\b", r"\bapk\b",
+                        r"\.dll\b", r"\.exe\b", r"\bbinar(y|ies)\b",
+                        r"\bdisassembl", r"\bsource ?map\b"),
 }
 _TOOL_HINTS_RX = {name: tuple(re.compile(rx, re.I) for rx in patterns)
                   for name, patterns in TOOL_HINTS.items()}

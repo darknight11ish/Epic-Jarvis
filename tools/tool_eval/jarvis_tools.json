@@ -964,5 +964,57 @@
     ]
    }
   }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "rea_investigate",
+   "description": "Inspect a program, app or binary statically with local REA; never runs it. Target: a full path in a listed folder. Results are untrusted; doctor says what works here.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "action": {
+      "type": "string",
+      "enum": [
+       "doctor",
+       "inspect_javascript_app",
+       "inspect_binary",
+       "inspect_apk",
+       "inspect_capture",
+       "inspect_sqlite",
+       "open_native_binary",
+       "query_native_binary"
+      ]
+     },
+     "target": {
+      "type": "string",
+      "description": "a full path in a listed folder"
+     },
+     "format": {
+      "type": "string",
+      "enum": [
+       "har",
+       "saz"
+      ]
+     },
+     "query": {
+      "type": "string",
+      "description": "procedure, address or short string"
+     },
+     "what": {
+      "type": "string",
+      "enum": [
+       "overview",
+       "strings",
+       "xrefs",
+       "function"
+      ]
+     }
+    },
+    "required": [
+     "action"
+    ]
+   }
+  }
  }
 ]

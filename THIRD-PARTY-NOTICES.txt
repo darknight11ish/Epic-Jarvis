@@ -2614,3 +2614,15 @@ freely, subject to the following restrictions:
 2. Altered source versions must be plainly marked as such, and must not be
    misrepresented as being the original software.
 3. This notice may not be removed or altered from any source distribution.
+
+
+--- morluto/rea (npm rea-agents@6.7.0) ---
+
+Reverse-engineering tool used by backend/jarvis_rea.py as a SEPARATE local program over the
+Model Context Protocol (stdio only). It is installed once by the owner at the pinned version
+and is never redistributed with Jarvis; no source code from it is copied or modified here.
+Source: https://github.com/morluto/rea - npm: https://www.npmjs.com/package/rea-agents
+Version 6.7.0, MIT Licence, Copyright (c) 2026 morluto.
+Licence text: the MIT License text given above.
+The package bundles its own third-party notices (THIRD_PARTY_NOTICES.md and licenses/ inside
+the package); those apply to that program, not to Jarvis.

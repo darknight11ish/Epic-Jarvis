@@ -1932,3 +1932,22 @@ enabled = false
 # settings/permission/installer packages, well-known password managers and
 # banking/wallet/payment apps.
 allowed_packages = []
+
+# ------------------------------------------------------------------------
+# REVERSE ENGINEERING WITH REA (2026-10-20)
+# The owner asked to integrate "reverse engineer anything" (REA, the npm
+# package rea-agents, MIT). It is a separate local program that inspects a
+# file the owner names; it never runs the target. Its 207 tools are NOT given
+# to the model: backend/jarvis_rea.py exposes ONE tool, rea_investigate, with
+# a short fixed action list, and every call is ONE approval card.
+#
+# OFF by default, and a settings file with no [rea] table behaves exactly as
+# OFF. Two switches must both say yes before the model is even offered the
+# tool: this one, and `rea_investigate` in [tools].enabled below. Nothing is
+# downloaded by Jarvis: the owner installs the pinned version once, by hand -
+#   npm install --prefix "$env:USERPROFILE\.openjarvis\tools\rea" rea-agents@6.7.0
+# - and the tool's doctor action says what this PC can inspect (JavaScript/
+# Electron and binary layout need no extra engine; APK and native decompile
+# need JADX / Ghidra, which the owner supplies). See docs/JARVIS-API.md 147.
+[rea]
+enabled = false
