@@ -22359,6 +22359,12 @@ order (tightening and cosmetic changes first, then the carded ONs), and:
 A body that is not a JSON object, or `answers` that is not an object, is 400 in
 plain words. Every route is behind the same origin and token checks as every
 other write; the answers are the owner's own choices, never private data.
+**The apply route passes the request's own `peer`/`local` down to the existing
+setters** (read the same way `owner-check.patch`'s wrappers read them), so a
+loosening rule or a reading-tool ON still refuses from the phone - and fails
+closed when the PC cannot tell where the request came from. `peer is None` is
+only the project's documented in-process convention, never how a routed
+request is treated.
 
 `backend/test_setup.py` is the proof, with no network, no model, no
 microphone and no owner's PC: every question/option maps to a real setter;

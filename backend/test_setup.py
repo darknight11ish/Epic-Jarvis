@@ -100,8 +100,19 @@ class Recorder:
         return {"ok": self.ok, "waiting": self.waiting, "message": "called"}
 
 
+class _Conn:
+    """The socket a routed request arrived on, for the peer/local rule."""
+    def __init__(self, local=("127.0.0.1", 4719)):
+        self._local = local
+
+    def getsockname(self):
+        return self._local
+
+
 class FakeHandler:
     sent = None
+    client_address = ("127.0.0.1", 5555)
+    connection = _Conn()
 
     def __init__(self, path, body=b"{}", token=True):
         self.path, self.body, self.token = path, body, token
@@ -657,6 +668,38 @@ def t_no_gate_no_model_switch_no_network():
           strings)
 
 
+def t_the_apply_route_tells_the_setters_who_asked():
+    """PC-only changes must fail closed from the phone: the route has to hand
+    the existing setters the request's real peer/local, never the in-process
+    `None` convention (which jarvis_owner_check documents as "this PC")."""
+    seen = {}
+
+    def fake_apply(answers, confirm=False, **kw):
+        seen.update(kw)
+        return {"ok": True, "confirmed": True, "outcomes": [], "completed_at": 1.0}
+
+    class H(FakeHandler):
+        pass
+    S.install(H, origin_ok=lambda self: True, token_ok=lambda self: True,
+              read_body=lambda self: self.body)
+    old = S.apply
+    S.apply = fake_apply
+    try:
+        h = H("/api/setup/apply",
+              body=json.dumps({"answers": {"humour": "on"},
+                               "confirm": True}).encode())
+        h.client_address = ("100.64.0.9", 5555)      # the phone, over the mesh
+        h.connection = _Conn(("100.64.0.1", 4719))   # this PC's mesh address
+        h.do_POST()
+    finally:
+        S.apply = old
+    check("the apply route passes the request's own peer/local to apply()",
+          seen.get("peer") == "100.64.0.9"
+          and seen.get("local") == "100.64.0.1", seen)
+    check("...and the route still answered with apply's result",
+          FakeHandler.sent[0] == 200, FakeHandler.sent)
+
+
 if __name__ == "__main__":
     for fn in (t_every_question_and_option_is_well_formed,
                t_every_change_maps_to_a_real_setter,
@@ -675,6 +718,7 @@ if __name__ == "__main__":
                t_state_round_trips_and_prefills_a_rerun,
                t_the_saved_answers_never_hold_private_data,
                t_the_routes_are_wired_and_guarded,
+               t_the_apply_route_tells_the_setters_who_asked,
                t_no_gate_no_model_switch_no_network):
         print(f"\n--- {fn.__name__} ---")
         try:

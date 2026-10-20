@@ -1405,14 +1405,22 @@ def handle_post_plan(body) -> tuple:
     return (200 if out.get("ok") else 400), out
 
 
-def handle_post_apply(body) -> tuple:
+def handle_post_apply(body, *, peer=None, local=None) -> tuple:
     if not isinstance(body, dict):
         return 400, {"ok": False, "error": "send a JSON object"}
     answers = body.get("answers")
     if not isinstance(answers, dict):
         return 400, {"ok": False,
                      "error": 'send {"answers": {...}, "confirm": true}'}
-    out = apply(answers, confirm=body.get("confirm") is True)
+    # `peer`/`local` are the request's own addresses, read by install() the same
+    # way owner-check.patch's wrappers read them and passed all the way down to
+    # the existing setters. Loosening a rule and offering a reading tool are
+    # PC-only: jarvis_asks_first.request_tier/request_tool_enable refuse from
+    # another device and fail closed when they cannot tell. `peer is None` is
+    # the project's documented IN-PROCESS convention (a direct call, no network
+    # request) - never what a routed request should look like.
+    out = apply(answers, confirm=body.get("confirm") is True,
+                peer=peer, local=local)
     if not out.get("confirmed"):
         return 400, out
     return (200 if out.get("ok") else 500), out
@@ -1470,7 +1478,16 @@ def install(Handler, *, origin_ok, token_ok, read_body):
             if split == PLAN_PATH:
                 code, out = handle_post_plan(body)
             else:
-                code, out = handle_post_apply(body)
+                # The request's own addresses, read exactly as the asks-first
+                # and owner-check routes read them: the existing PC-only rules
+                # must see where this request really came from, not the
+                # in-process `None` convention (which says "this PC").
+                peer = (getattr(self, "client_address", None) or ("",))[0]
+                try:
+                    local = self.connection.getsockname()[0]
+                except Exception:
+                    local = None
+                code, out = handle_post_apply(body, peer=peer, local=local)
         except Exception as exc:
             code, out = 503, {"ok": False, "available": False,
                               "error": type(exc).__name__}
