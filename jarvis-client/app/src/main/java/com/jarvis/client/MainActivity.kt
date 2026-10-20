@@ -1849,7 +1849,12 @@ class MainActivity : FragmentActivity() {
             val text = liveSharedText.value ?: return@LaunchedEffect
             liveSharedHeld = Provenance.joinShared(liveSharedHeld, text)
             liveSharedText.value = null
-            if (!JarvisRuntime.liveOnHere()) startLiveRequested.value = "start"
+            // The 2026-10-20 Android audit (Area 10C): MainActivity is
+            // exported, and the ShareToLive alias is a public share target, so
+            // another app can send this share. It must NOT open the microphone
+            // by itself - that is a sensitive action from an untrusted Intent.
+            // It only opens the Live screen with the text held; the owner
+            // presses Start themselves, exactly like the OPEN_LIVE action.
             nav.go(Screen.LIVE)
         }
 

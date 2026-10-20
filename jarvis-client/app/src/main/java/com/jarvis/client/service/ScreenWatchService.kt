@@ -93,6 +93,33 @@ class ScreenWatchService : Service() {
     @Volatile private var running = false
     private val ended = AtomicBoolean(false)
 
+    /** When this session began, on the same monotonic clock as [ScreenWatch.clock]. */
+    private var startedAt = 0L
+
+    /**
+     * The short lock/time check (2026-10-20 audit, Area 10B). The screen-off
+     * broadcast is the immediate path; this also catches a phone that locks
+     * with the screen already on, and it enforces [ScreenWatch.MAX_MINUTES]
+     * even if the one-shot timer were missed. Every tick that finds a reason
+     * ENDS the session - there is no "always on" branch.
+     */
+    private val sessionCheck = object : Runnable {
+        override fun run() {
+            if (ended.get()) return
+            val reason = ScreenWatch.endReason(
+                screenOn = screenInteractive(),
+                keyguardLocked = keyguardLocked(),
+                startedAtMs = startedAt,
+                nowMs = ScreenWatch.clock(),
+            )
+            if (reason != null) {
+                end(reason)
+            } else {
+                main.postDelayed(this, SESSION_CHECK_MS)
+            }
+        }
+    }
+
     /** Watches the link to the PC while a session runs; cancelled when it ends. */
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -125,6 +152,7 @@ class ScreenWatchService : Service() {
             return START_NOT_STICKY
         }
         running = true
+        startedAt = ScreenWatch.clock()
         if (!begin(code, data)) {
             end(FAILED)
         }
@@ -193,6 +221,10 @@ class ScreenWatchService : Service() {
             this, screenOff, IntentFilter(Intent.ACTION_SCREEN_OFF), ContextCompat.RECEIVER_NOT_EXPORTED,
         )
         main.postDelayed(timeUp, ScreenWatch.MAX_MINUTES * 60_000L)
+        // Belt and braces beside the one-shot timer above: a locked phone, or
+        // a screen that went off without the broadcast being delivered, ends
+        // the session within a few seconds.
+        main.postDelayed(sessionCheck, SESSION_CHECK_MS)
         ScreenWatch.say = { JarvisRuntime.setNotice(it) }
         ScreenWatch.stopHook = { end(null) }
         ScreenWatch.grabber = { grab() }
@@ -295,11 +327,15 @@ class ScreenWatchService : Service() {
         return out
     }
 
-    private fun screenIsOn(): Boolean {
-        val power = getSystemService(PowerManager::class.java)
-        val keys = getSystemService(KeyguardManager::class.java)
-        return power?.isInteractive == true && keys?.isKeyguardLocked == false
-    }
+    private fun screenIsOn(): Boolean = screenInteractive() && !keyguardLocked()
+
+    /** The screen itself (the power state), independent of the keyguard. */
+    private fun screenInteractive(): Boolean =
+        getSystemService(PowerManager::class.java)?.isInteractive == true
+
+    /** Android's own answer to "is the phone locked right now?". */
+    private fun keyguardLocked(): Boolean =
+        getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == true
 
     /** The recent front-app events. Empty when Usage access is not given - and then nothing is looked at. */
     private fun usageEvents(): List<ScreenWatch.UsageEvent> {
@@ -330,6 +366,7 @@ class ScreenWatchService : Service() {
         running = false
         scope.cancel()
         main.removeCallbacks(timeUp)
+        main.removeCallbacks(sessionCheck)
         runCatching { unregisterReceiver(screenOff) }
         ScreenWatch.grabber = null
         ScreenWatch.stopHook = null
@@ -406,6 +443,9 @@ class ScreenWatchService : Service() {
 
         /** How far back the front-app log is read: long enough to have seen the app come forward. */
         private const val LOG_MS = 12L * 60L * 60L * 1000L
+
+        /** How often the running session re-checks the lock/time rule (Area 10B). */
+        private const val SESSION_CHECK_MS = 2_000L
 
         private const val NO_PICTURE = "Jarvis could not get a picture of the screen just now."
         private const val FAILED = "Android would not share the screen, so Jarvis is not watching."
