@@ -17,12 +17,23 @@ import {
   settingsView,
 } from "./focus-presets.js";
 import { applyPreset, readPresets } from "./focus-presets-bridge.js";
+import { currentLink, onLink } from "./jarvis-link.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
 
 function el(id) {
   return document.getElementById(id);
+}
+
+/** The same stale rule the command bar uses: a stale link never claims ready. */
+function linkStale() {
+  try {
+    const link = currentLink();
+    return Boolean(link && link.stale);
+  } catch {
+    return false;
+  }
 }
 
 const card = el("focus-presets");
@@ -89,10 +100,10 @@ if (card && list && apply && line) {
       current.textContent = CURRENT_WORDS;
       head.append(current);
     }
-    if (!item.ready) {
+    if (item.blockerWords) {
       const state = document.createElement("span");
       state.className = "preset-state";
-      state.textContent = item.statusWords;
+      state.textContent = item.blockerWords;
       head.append(state);
     }
     button.append(head);
@@ -170,7 +181,7 @@ if (card && list && apply && line) {
       apply.disabled = true;
       return;
     }
-    const view = settingsView(reading, selected, { busy, line: lineWords });
+    const view = settingsView(reading, selected, { stale: linkStale(), busy, line: lineWords });
     heading.textContent = view.heading;
     kicker.textContent = view.kicker;
     how.textContent = view.howTo;
@@ -222,7 +233,7 @@ if (card && list && apply && line) {
 
   async function useThisPreset() {
     if (busy || !reading || !reading.available) return;
-    const view = settingsView(reading, selected, { busy });
+    const view = settingsView(reading, selected, { stale: linkStale(), busy });
     if (view.action.disabled) return;
     busy = true;
     setLine("Asking the PC...");
@@ -240,6 +251,8 @@ if (card && list && apply && line) {
   }
 
   apply.addEventListener("click", useThisPreset);
+  // Stale is part of the reading, not a one-off at open: re-render when it changes.
+  onLink(() => render());
   if (IS_TAURI) load();
   else {
     reading = normaliseReading(
