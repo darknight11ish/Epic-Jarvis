@@ -770,6 +770,9 @@ permissions = [
   "allow-send-voice-training",
   "allow-cancel-voice-training",
   "allow-measure-voice",
+  # Resetting the live-adaptation counters (voice_training.rs): zeroes counters
+  # only, never changes the enrolled voice; no card, not held on a stale link.
+  "allow-reset-voice-adaptation",
   "allow-set-voice-setting",
   "allow-check-voice-with-someone-else",
   "allow-propose-voice-threshold",

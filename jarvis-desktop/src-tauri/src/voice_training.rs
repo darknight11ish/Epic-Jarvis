@@ -74,7 +74,7 @@ const VOICE_RATE: u32 = 24_000;
 const MAX_SAMPLE: Duration = Duration::from_secs(30);
 /// How long a recording is held if nothing sends or discards it.
 const HELD_FOR: Duration = Duration::from_secs(30 * 60);
-/// The most recordings held at once: three rounds of twelve, the guided
+/// The most recordings held at once: four rounds of twelve, the guided
 /// test's twenty and one voice fit.
 const MAX_HELD: usize = 64;
 /// Each guided-test request stays under the server's 80 s (and 20 clips).
@@ -179,7 +179,7 @@ pub struct SampleTaken {
     pub peak: f64,
 }
 
-/// A slot name the page may use: `voice`, `t<round 1-3>-<sentence 0-11>`,
+/// A slot name the page may use: `voice`, `t<round 1-4>-<sentence 0-11>`,
 /// `m<sentence 0-19>`, or `o<sentence 0-4>` (someone else's voice, for the
 /// "someone else" check). Anything else is refused, so a page cannot fill
 /// memory with names of its own.
@@ -566,8 +566,8 @@ pub async fn send_voice_training(
     legacy: bool,
     state: State<'_, SampleState>,
 ) -> Result<Value, String> {
-    if !(1..=3).contains(&round) {
-        return Err("There are three rounds, 1 to 3.".to_string());
+    if !(1..=4).contains(&round) {
+        return Err("There are four rounds, 1 to 4.".to_string());
     }
     if slots.len() > 12 || (slots.is_empty() && (legacy || !finish)) {
         return Err("Record the sentences first.".to_string());
@@ -663,12 +663,28 @@ pub(crate) fn combine_measures(parts: &[Value]) -> Value {
     out
 }
 
+/// The body for one measure request. `condition` is the PC's own condition id
+/// (the page reads it from the plan); it is repeated for every clip in the
+/// request, because the whole request is recorded in one place. Without it the
+/// backend files every clip under "close", which is the audit gap this closes.
+pub(crate) fn measure_body(clips: &[&String], condition: &str) -> Result<Value, String> {
+    let condition = condition.trim();
+    if condition.is_empty() || condition.chars().any(|c| c.is_control()) || condition.len() > 32 {
+        return Err("Choose where you are doing the test.".to_string());
+    }
+    let mut body = json!({ "mode": "measure", "mic": MIC_DESKTOP, "clips": clips });
+    body["conditions"] = json!(vec![condition; clips.len()]);
+    Ok(body)
+}
+
 /// The guided test (`mode: measure`): the owner's own sentences, each judged
-/// at both settings. No card, nothing changed, so never held.
+/// at both settings, under the condition the page read from the plan. No card,
+/// nothing changed, so never held.
 #[tauri::command]
 pub async fn measure_voice(
     app: AppHandle,
     slots: Vec<String>,
+    condition: String,
     state: State<'_, SampleState>,
 ) -> Result<Value, String> {
     if slots.is_empty() || slots.len() > 20 {
@@ -679,7 +695,7 @@ pub async fn measure_voice(
     let mut answers = Vec::new();
     for part in measure_parts(&seconds) {
         let clips: Vec<&String> = held[part].iter().map(|(c, _)| c).collect();
-        let body = json!({ "mode": "measure", "mic": MIC_DESKTOP, "clips": clips });
+        let body = measure_body(&clips, &condition)?;
         let (status, text) = post(&app, "/api/voice/enroll", &body, ENROLL_TIMEOUT).await?;
         let answer = enroll_answer(status, &text)?;
         if !is_2xx(&answer) || answer.get("ok").and_then(Value::as_bool) != Some(true) {
@@ -690,6 +706,22 @@ pub async fn measure_voice(
     drop(held);
     forget(&state, &slots);
     Ok(combine_measures(&answers))
+}
+
+/// The owner's visible reset of the live adaptation counters: POST
+/// `{"mode": "adapt-reset"}` to the existing `/api/voice/enroll` route. It only
+/// zeroes counters; it never changes the enrolled voice, so it is not held on a
+/// stale link and raises no card.
+#[tauri::command]
+pub async fn reset_voice_adaptation(app: AppHandle) -> Result<Value, String> {
+    let (status, text) = post(
+        &app,
+        "/api/voice/enroll",
+        &json!({ "mode": "adapt-reset" }),
+        ENROLL_TIMEOUT,
+    )
+    .await?;
+    enroll_answer(status, &text)
 }
 
 /// A setting and value the server knows, and whether choosing it LOOSENS
@@ -1807,6 +1839,27 @@ mod tests {
         ] {
             assert!(!calibrate_understood(&older), "{older}");
         }
+    }
+
+    #[test]
+    fn the_fourth_condition_round_is_accepted() {
+        // The PC's plan defines four conditions; the sender must accept round 4,
+        // not silently cap at three.
+        assert!((1..=4).contains(&4));
+        let clips = ["QQ==".to_string()];
+        let body = training_body(4, &clips, false, false, false);
+        assert_eq!(body["round"], 4);
+    }
+
+    #[test]
+    fn the_measure_body_carries_each_clips_condition() {
+        let clips = ["QQ==".to_string(), "Qg==".to_string()];
+        let refs: Vec<&String> = clips.iter().collect();
+        let body = measure_body(&refs, "table").expect("a real condition");
+        assert_eq!(body["mode"], "measure");
+        assert_eq!(body["conditions"], json!(["table", "table"]));
+        assert_eq!(body["conditions"].as_array().unwrap().len(), 2);
+        assert!(measure_body(&refs, " ").is_err());
     }
 
     #[test]

@@ -11,12 +11,9 @@
  *
  * The training screen shows the PC's own plan: four listening conditions,
  * twelve balanced read phrases and three free-speech prompts. This desktop
- * build can send rounds 1-3 (voice_training.rs), so the fourth condition is
- * drawn with its instruction and plainly marked "not wired in this desktop
- * build yet" - the page never claims it recorded it. The Live-additions
+ * build sends all four conditions (voice_training.rs). The Live-additions
  * count and the held-out FRR/FAR come from the PC's status and measure
- * answer; the backend's adapt-reset route exists but has no desktop command
- * yet, so that count is read-only here and says so.
+ * answer; adapt-reset is wired through the same Rust command.
  *
  * What changes anything goes one way only: making Jarvis stricter, going
  * back to the built-in voice, deleting a voice and turning the better voice
@@ -584,12 +581,23 @@ function paintAdaptation() {
   } else {
     for (const text of lines) nodes.push(line(text, "", "sc-line"));
     const row = node("div", "row");
-    // The backend's mode adapt-reset exists; this desktop build has no
-    // command for it yet, so the count is read-only here and says so.
-    const reset = button("Reset the count", () => {}, { disabled: true, id: "vt-adapt-reset" });
+    const statusEl = node("span", "status");
+    statusEl.id = "vt-adapt-status";
+    const reset = button("Reset the count", async () => {
+      reset.disabled = true;
+      say(statusEl, "Resetting…");
+      try {
+        await invoke("reset_voice_adaptation");
+        say(statusEl, "The count was reset on the PC.", "ok");
+        announce("The count was reset on the PC.", "polite");
+      } catch (error) {
+        say(statusEl, problemWords(error), "bad");
+        announce(problemWords(error), "assertive");
+      }
+      await reload();
+    }, { disabled: !VT.ADAPT_RESET_WIRED, id: "vt-adapt-reset" });
     reset.title = VT.ADAPT_RESET_NOTE;
-    reset.setAttribute("aria-disabled", "true");
-    row.append(reset);
+    row.append(reset, statusEl);
     nodes.push(row);
     nodes.push(line(VT.ADAPT_RESET_NOTE, "", "note"));
   }
@@ -789,7 +797,7 @@ async function changeSetting(setting, value, current) {
    How often Jarvis asks you to repeat, and the guided test
    ========================================================================== */
 
-const test = { view: "idle", lines: null, heldOut: [], tone: "" };
+const test = { view: "idle", lines: null, heldOut: [], tone: "", condition: "" };
 
 function paintRepeat() {
   const list = $("vt-repeat");
@@ -846,6 +854,27 @@ function paintTest() {
   nodes.push(line(VT.TEST_INTRO, "", "note"));
   const blocker = testBlocker();
   if (blocker) nodes.push(line(blocker, "warn"));
+  const plan = VT.planOf(status);
+  const conditions = plan && Array.isArray(plan.conditions) ? plan.conditions : [];
+  if (conditions.length) {
+    const pick = node("div", "row");
+    const label = node("label", "", "Where are you doing this test? ");
+    const select = node("select");
+    select.id = "vt-test-condition";
+    for (const c of conditions) {
+      const option = node("option", "", c.label || c.id);
+      option.value = c.id;
+      select.append(option);
+    }
+    if (!test.condition) test.condition = conditions[0].id;
+    select.value = test.condition;
+    select.addEventListener("change", () => {
+      test.condition = select.value;
+    });
+    label.append(select);
+    pick.append(label);
+    nodes.push(pick);
+  }
   const row = node("div", "row");
   row.append(button("Start the test", () => startTest(), { disabled: Boolean(blocker), id: "vt-test-start" }));
   nodes.push(row);
@@ -864,7 +893,9 @@ function startTest() {
     sendNote: "Nothing is saved and no card is raised.",
     cardSend: false,
     onSend: async (slots) => {
-      const answer = await invoke("measure_voice", { slots });
+      const condition = test.condition ||
+        ((VT.planOf(status) || { conditions: [] }).conditions[0] || {}).id || "close";
+      const answer = await invoke("measure_voice", { slots, condition });
       const reply = VT.measureReply(answer);
       if (reply.tone === "ok") {
         test.view = "result";

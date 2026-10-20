@@ -472,6 +472,7 @@ fn main() {
             "send_voice_training",
             "cancel_voice_training",
             "measure_voice",
+            "reset_voice_adaptation",
             "set_voice_setting",
             "check_voice_with_someone_else",
             "propose_voice_threshold",
