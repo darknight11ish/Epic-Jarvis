@@ -412,6 +412,42 @@ def t_addresses_and_caps():
     p = SEND.plan([ALEX], None, "Re: Hello", "Hi", reply_to_message_id="CAF1x@mail.gmail.com")
     check("a message id is kept in angle brackets", p.in_reply_to == "<CAF1x@mail.gmail.com>")
     check("... and the card shows it", "In reply to: <CAF1x@mail.gmail.com>" in SEND.describe(p))
+
+    # A line break in To, Cc, Subject or the reply id is REFUSED, never
+    # silently stripped into shape before the SMTP message is built. Each case
+    # is a mutation bite: the old code `.strip()`ped the value and accepted it,
+    # and the card could then show something other than what was sent.
+    line_break_cases = [
+        ("a trailing CR in To", ([ALEX + "\r"],), {}),
+        ("a leading LF in Cc", ([ALEX], ["sam@example.org\n"]), {}),
+        ("a trailing CRLF in the subject", ([ALEX], None, "Hello\r\n"), {}),
+        ("a leading LF in the subject", ([ALEX], None, "\nHello"), {}),
+        ("a Bcc header in To", ([ALEX + "\r\nBcc: spy@example.net"],), {}),
+        ("a Bcc header in Cc", ([ALEX], ["sam@example.org\r\nBcc: spy@example.net"]), {}),
+        ("a Bcc header in the subject", ([ALEX], None,
+                                          "Hello\r\nBcc: spy@example.net"), {}),
+        ("a trailing LF in the reply id", ([ALEX], None, "Re: Hi", "Hi"),
+         {"reply_to_message_id": "<a@b.example>\r\n"}),
+        ("a Bcc header in the reply id", ([ALEX], None, "Re: Hi", "Hi"),
+         {"reply_to_message_id": "<a@b.example>\r\nBcc: spy@example.net"}),
+    ]
+    for label, args, kwargs in line_break_cases:
+        p = SEND.plan(*args, **kwargs)
+        check(f"refused, not stripped, before any header: {label}",
+              not p.ready and "line break" in p.problem, p.problem)
+    check("the hostile value is never echoed back in the problem",
+          "spy@example.net" not in SEND.plan(
+              [ALEX + "\r\nBcc: spy@example.net"], None, "Hello", "Hi").problem)
+    hostile = SEND.plan([ALEX + "\r\nBcc: spy@example.net"], None, "Hello", "Hi")
+    with NoSockets() as ns:
+        out = SEND.run(hostile, approved=True)
+    check("a line-break address cannot become a header: the refused plan sends nothing",
+          out.get("ok") is False and not out.get("sent") and ns.tried == [], out)
+    good = SEND.message(SEND.plan([ALEX], [SAM], "Hello", "Hi"))
+    check("no Bcc header is ever built, and To/Cc are exactly the checked addresses",
+          "Bcc" not in good
+          and [str(v) for v in good.get_all("To")] == [ALEX]
+          and [str(v) for v in good.get_all("Cc")] == [SAM], good.as_string())
     check("the plan function takes no attachment",
           "attach" not in SEND.plan.__code__.co_varnames)
 

@@ -336,6 +336,13 @@ def plan(to=None, cc=None, subject: str = "", body: str = "",
     cc_list, why = _as_list(cc, "cc")
     if why:
         return refused(why)
+    if any("\r" in raw or "\n" in raw for raw in to_list + cc_list):
+        # A line break in an address is REFUSED, never silently stripped into
+        # shape: that is how a "\r\nBcc: someone" header injection is tried,
+        # and IMAP APPEND would carry it into the header just the same as SMTP.
+        # Nothing is saved, and the card never echoes the hostile string.
+        return refused("an address with a line break is not a plain email address: an "
+                       "email address is one line, so nothing is saved")
     to_list = [a.strip() for a in to_list]
     cc_list = [a.strip() for a in cc_list]
     bad = [a for a in to_list + cc_list if not valid_address(a)]
@@ -355,6 +362,12 @@ def plan(to=None, cc=None, subject: str = "", body: str = "",
 
     if not isinstance(subject, str):
         return refused("the subject must be text")
+    if "\r" in subject or "\n" in subject:
+        # Before `.strip()`: a line break at either end was silently removed
+        # and the subject accepted. A subject is one line; refuse it, so a
+        # hostile value is never reshaped into something that looks fine.
+        return refused("the subject holds a line break, which could add a header "
+                       "line; nothing is saved")
     subject = subject.strip()
     if len(subject) > MAX_SUBJECT_CHARS:
         return refused(f"the subject is {len(subject)} characters; at most "
@@ -381,7 +394,11 @@ def plan(to=None, cc=None, subject: str = "", body: str = "",
 
     in_reply_to = ""
     if reply_to_message_id not in (None, ""):
-        mid = str(reply_to_message_id).strip()
+        mid = str(reply_to_message_id)
+        if "\r" in mid or "\n" in mid:
+            return refused("reply_to_message_id holds a line break, so the reply "
+                           "headers cannot be built and nothing is saved")
+        mid = mid.strip()
         if not mid.startswith("<"):
             mid = f"<{mid}>"
         if len(mid) > MAX_MESSAGE_ID_CHARS or not _MESSAGE_ID_RE.match(mid):

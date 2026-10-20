@@ -5930,6 +5930,35 @@ there is no way to type it into either app.
   "Included: your Google Calendar (private link)." (the only place either
   app shows which calendar is read).
 
+### 22.9 Outside text in calendar events, and the caps (added 2026-10-20)
+
+Anyone on the internet can send the owner an invitation, and its words land in
+the calendar before the owner accepts it - so an event's `SUMMARY` and
+`LOCATION` are outside text, not the owner's own words. Before either is
+returned or used, `jarvis_calendar.py` strips the tricks a model can read but a
+person cannot, reusing the project's own helpers rather than a second table:
+`jarvis_agent.strip_chat_markers` removes chat-template delimiters (repeatedly,
+so one split by a Unicode tag character is caught too) and
+`jarvis_content_risk.normalise` folds and strips zero-width characters, bidi
+overrides, Unicode tag characters and other controls. The stripped words are
+then scanned with `jarvis_injection` (on the stripped text, so
+"ig<zero-width>nore previous instructions" is read the way a person reads it):
+the tool's result carries `"injection": [pattern names]` and one advisory
+`"warning"` sentence when it hits, and every read that returns events latches
+`jarvis_gate.latch_taint` with `why="calendar_read"` (`"tainted": true`), so a
+later turn cannot be offered a cloud lane. A read with no events latches
+nothing. `DESCRIPTION` is deliberately not read at all, so it can never reach
+a turn.
+
+The caps are unchanged and proven by `backend/test_calendar.py`: at most
+`10 * 1024 * 1024` bytes of one `.ics` body (`"incomplete": true` and a
+`"note"` past it; nothing beyond the cap is parsed), `_MAX_STEPS = 20_000`
+and `_EXPAND_BUDGET = 400_000` for recurrence expansion, and at most
+`_MAX_PER_EVENT = 400` occurrences of one event in the window. A
+`FREQ=SECONDLY;COUNT=1000000` rule is not worked out (kept once, at its first
+date, marked `rule_not_worked_out`), and `FREQ=DAILY;COUNT=1000000` from 1970
+stops inside the step budget - both measured under seconds, not reasoned about.
+
 ## 23. Web search (added 2026-09-25)
 
 The owner's decisions of 2026-09-25 (`CLAUDE.md`, "Web search with a choice
@@ -6509,6 +6538,19 @@ the PC (`backend/README.md`, "Sending email"): the account and password are
   without Windows Hello - the known limit in docs/ARCHITECTURE.md section 3,
   which the owner chose to close later. It applies to an email's card as to
   every other.
+
+### 26.6 A line break in a header is refused, never stripped (added 2026-10-20)
+
+`jarvis_email_send.plan()` refuses a `\r` or `\n` in ANY To or Cc address, in
+the subject, and in `reply_to_message_id` (which becomes the reply's
+`In-Reply-To` / `References` headers) - before `.strip()` could quietly remove a
+trailing one and accept the value. A value like
+`"alex@example.com\r\nBcc: spy@example.net"` therefore makes a plan with a
+`problem` and no card; there is nothing to approve and nothing to send, so the
+SMTP message is never built. Reading email (`jarvis_email.py`) builds no
+outbound header at all: it has no SMTP or IMAP APPEND path. Proved in
+`backend/test_email_send.py` (the header a good email carries is exactly the
+checked To, Cc and Subject, and no Bcc is ever built).
 
 ---
 
@@ -8441,6 +8483,17 @@ to configure for an account that can already read its mail.
 - A program already on the PC could approve a card with the pairing token,
   without Windows Hello - the known limit in `docs/ARCHITECTURE.md` section
   3, which applies to a draft's card as to every other.
+
+### 40.6 A line break in a header is refused, never stripped (added 2026-10-20)
+
+The same rule as sending (§26.6), applied before the IMAP APPEND:
+`jarvis_email_draft.plan()` refuses a `\r` or `\n` in any To or Cc address, in
+the subject, and in `reply_to_message_id` (the reply's `In-Reply-To` /
+`References` headers) - before `.strip()` could quietly remove a trailing one
+and accept the value. A value like `"alex@example.com\r\nBcc: spy@example.net"`
+makes a plan with a `problem` and no card, so nothing is appended and the
+message the server would have stored can never carry a header the card did not
+show. Proved in `backend/test_email_draft.py`.
 
 ## 41. "Things you can say" (added 2026-09-27)
 
@@ -16508,6 +16561,15 @@ card: it only puts back what the owner had ten minutes ago.
   no search in other languages' letters (plain ASCII only).
 - Jarvis has no inbox screen of its own, on purpose: nothing here lists the
   owner's email anywhere but on the card.
+
+### 95.8 A rebuilt folder is refused, not guessed at (added 2026-10-20)
+
+The plan records the mailbox's `UIDVALIDITY` alongside the message UIDs; apply
+re-reads it from the server and refuses before touching one email when it
+changed ("the mail server rebuilt that folder since the card was made, so its
+numbers no longer point at the same emails. Ask again."). Proved in
+`backend/test_inbox_tidy.py`: "the folder was rebuilt on the server: refused,
+nothing touched".
 
 ---
 
