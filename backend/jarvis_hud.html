@@ -1837,9 +1837,15 @@ function showTrace(trace){
 
 function renderTrail(){
   const el = $("trail");
+  // The chip's label is the owner's own question, echoed back by the PC. It is
+  // truncated FIRST and then escaped in full: escaping only `<` (what this did
+  // until the 2026-10-20 DOM-sink audit) leaves `&`, a quote and a `'` raw, and
+  // the next person to move this value into an attribute would be holding a
+  // live sink. apprEscape is this page's one escaper (defined by the approval
+  // card, above).
   el.innerHTML = S.traces.map((t, i) =>
     `<button class="trail-chip" data-i="${i}" aria-pressed="${t === S.activeTrace}">
-       ${t.q.replace(/</g,"&lt;").slice(0, 38)}
+       ${apprEscape(String(t.q).slice(0, 38))}
      </button>`).join("");
   el.querySelectorAll(".trail-chip").forEach(b =>
     b.addEventListener("click", () => showTrace(S.traces[+b.dataset.i])));
@@ -2198,8 +2204,14 @@ function renderLanes(){
   const all = [{id:"auto", label:"auto", tag:"routed"},
                {id:"local", label:S.defaultModel || "local model", tag:"ollama"}]
     .concat(S.lanes.map(l => ({id:l, label:l.replace("jarvis-",""), tag:"cloud"})));
+  // `l.id` is the server's own lane name (`S.lanes`, read from /api/status and
+  // the lanes table) or the two literals above. It sits inside a quoted
+  // attribute, so it is escaped like the visible label: a lane name carrying a
+  // quote would otherwise break out of data-lane and could add an attribute of
+  // its own (2026-10-20 DOM-sink audit). `dataset.lane` reads the decoded value
+  // back, so the comparison below still matches.
   $("lanes").innerHTML = all.map(l =>
-    `<button class="lane" data-lane="${l.id}" aria-pressed="${l.id===S.lane}">
+    `<button class="lane" data-lane="${apprEscape(l.id)}" aria-pressed="${l.id===S.lane}">
        <span>${apprEscape(l.label)}</span><span class="tag">${apprEscape(l.tag)}</span>
      </button>`).join("");
   $("lanes").querySelectorAll(".lane").forEach(b =>
