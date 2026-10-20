@@ -108,6 +108,19 @@ on this one (docs/JARVIS-API.md, "The stricter voice check", has the JSON):
         The guided "how often would I have to repeat myself?" test: the
         owner's own sentences, each judged at both settings. Scored and
         dropped; no card.
+    {"mode": "clear"}   (2026-10-19, the owner's "clear previous voice
+        training ... with an approval card ... in settings")
+        "Clear previous voice training": raises ONE card (change_own_config,
+        because the voice print decides who Jarvis obeys) and, only if it is
+        approved, deletes every saved voice file - the print for each
+        microphone, the "hey Jarvis" checks, the live-adaptation store, and
+        any half-written copy beside them (see the section further down for
+        the exact list and what it deliberately does not touch). The
+        recordings are not involved: they were dropped when the training was
+        decided, and this module has never written audio to disk. Denied, timed
+        out, refused, or any tier other than "ask": nothing is deleted. With
+        nothing saved it answers plainly and raises no card. One card at a
+        time, like every other mode on this route.
 
 Every held or staged clip is in this process's memory only, as before, and
 the training no longer happens at all without a voice-ID model: with only
@@ -674,7 +687,8 @@ def stage(body: bytes, *, gate: Optional[Callable] = None,
                 "talk_to_type", "wake_confirm", "voice_id_model"):
         # Tightening is allowed while a card waits; loosening checks itself.
         return stage_setting(doc, mode, gate=gate, tier_of=tier_of, spawn=spawn)
-    if mode not in ("enroll", "threshold", "train", "adapt-reset", "adapt_reset"):
+    if mode not in ("enroll", "threshold", "train", "adapt-reset", "adapt_reset",
+                    "clear"):
         return 400, {"error": f"unknown mode {mode[:20]!r}"}
     if mode == "train" and doc.get("cancel") is True:
         return cancel_session()
@@ -686,6 +700,10 @@ def stage(body: bytes, *, gate: Optional[Callable] = None,
                                    "approval - approve or deny that card first"),
                          "pending": True, "expires_in": left}
 
+    if mode == "clear":
+        # Clearing needs no voice-ID model - it only removes saved files - so
+        # it is handled before the ready() check the training modes use.
+        return stage_clear(gate=gate, tier_of=tier_of, spawn=spawn)
     if mode in ("adapt-reset", "adapt_reset"):
         return reset_adaptation(doc.get("condition"))
     if mode == "threshold":
@@ -773,6 +791,311 @@ def _start_card(mic: str, add: bool, rounds: dict, *, gate, tier_of, enroll, spa
                  "seconds": seconds, "rounds": len(rounds),
                  "message": ("Approve the card on your PC or phone to finish. "
                              "Nothing changes until you do.")}
+
+
+# --------------------------------------------------------------------------
+#   Clearing the saved voice training (2026-10-19): ONE card, then delete
+# --------------------------------------------------------------------------
+#
+# The owner asked for a way to clear previous voice training, with an approval
+# card, in Settings (2026-10-19). There is no new route and no new patch: this
+# is one more mode on the existing POST /api/voice/enroll, like calibrate and
+# the strictness settings before it.
+#
+# WHERE THE DELETION LIST COMES FROM. Every path is asked of the module that
+# owns it - jarvis_voice.lookup_order() for the per-microphone prints,
+# jarvis_wakeword's verifier order for the "hey Jarvis" checks, and
+# jarvis_voice_training.adapt_path() for the live-adaptation store. Nothing
+# here types a filename, so this can never delete a file those modules do not
+# name; a module that is missing or too old simply contributes nothing. Each
+# path's `.tmp` sibling is included too: jarvis_voice writes a voice file by
+# writing `<name>.tmp` and renaming it over the real one (its own
+# _atomic_write), so a crash in that moment leaves a half-written copy of a
+# biometric file - exactly what "clear" must not leave behind. (The
+# live-adaptation store writes its own temp names and cleans them up; it holds
+# counters, not a voice print, so its temp files are not globbed for.)
+#
+# WHAT IT DELIBERATELY DOES NOT TOUCH: the custom speaking voices
+# (jarvis_voices, voices/<id>/), the owner's chat history, the phone pairing
+# (devices/), the voice settings file (thresholds and strictness - settings,
+# not training), the synthetic self-test clips (self-test.wav,
+# timing-test.wav - made by the text-to-speech engine, not the owner's voice),
+# and the "someone else" comparison voices (jarvis_voice's cohort files -
+# other people's voices, not the owner's print). Nothing here is audio: the
+# training clips were dropped from memory when the training was decided.
+#
+# THE CARD is raised on this module's own thread exactly like the training
+# card (jarvis_gate.check, ACTION change_own_config, because the voice print
+# decides who Jarvis obeys), and NOTHING is deleted until a person approves.
+# Denied, timed out, refused, or a verdict at a tier other than "ask": every
+# file stays. While any card is waiting a second request is a 409 (the
+# existing one-at-a-time rule) - approving one card can never delete on the
+# strength of another. With nothing saved there is no card at all: the answer
+# says so plainly instead of asking permission to delete nothing.
+
+
+def _join_words(parts: list) -> str:
+    """["a", "b", "c"] -> "a, b and c" - the card is read by a person."""
+    if len(parts) <= 1:
+        return parts[0] if parts else ""
+    return ", ".join(parts[:-1]) + " and " + parts[-1]
+
+
+def _clear_targets() -> list:
+    """[(kind, path)] - every saved voice file a clear would delete.
+
+    `kind` is "print", "verifier" or "adaptation" for the file the module
+    names, and "copy" for its `.tmp` sibling (see the section comment); the
+    path is always the module owner's own. Never raises."""
+    found = []
+
+    def add(kind, p):
+        try:
+            p.name                         # only a filesystem path is kept
+        except Exception:
+            return
+        if any(p == q for _kind, q in found):
+            return
+        found.append((kind, p))
+
+    try:
+        import jarvis_voice
+        order = getattr(jarvis_voice, "lookup_order", None)
+        if callable(order):
+            prints = [p for _label, p in order("")]
+        else:
+            # A jarvis_voice.py from before per-microphone prints has only
+            # PROFILE_PATH; the two per-mic names are still the right paths to
+            # remove if they exist, and that module can read them.
+            base = getattr(jarvis_voice, "PROFILE_PATH", None)
+            prints = ([base, base.with_name("owner-phone.json"),
+                       base.with_name("owner-desktop.json")]
+                      if base is not None else [])
+        for p in prints:
+            add("print", p)
+    except Exception:
+        pass
+    try:
+        import jarvis_wakeword
+        order = getattr(jarvis_wakeword, "_verifier_order", None)
+        if callable(order):
+            verifiers = list(order(""))
+        else:
+            vp = getattr(jarvis_wakeword, "verifier_path", None)
+            verifiers = ([vp(n) for n in ("", "phone", "desktop")]
+                         if callable(vp) else [])
+        for p in verifiers:
+            add("verifier", p)
+    except Exception:
+        pass
+    try:
+        import jarvis_voice_training
+        adapt = getattr(jarvis_voice_training, "adapt_path", None)
+        if callable(adapt):
+            add("adaptation", adapt())
+    except Exception:
+        pass
+    out = []
+    for kind, p in found:
+        out.append((kind, p))
+        try:
+            out.append(("copy", p.with_name(p.name + ".tmp")))
+        except Exception:
+            pass
+    return out
+
+
+def describe_clear(kinds: dict) -> str:
+    """The clear card. Plain words: what goes, what stays, and what it costs.
+
+    `kinds` counts the files that are REALLY there ({"print": n, ...}), so the
+    card never offers to delete a kind of file this PC does not have. No path,
+    no audio, no transcript."""
+    prints = kinds.get("print", 0)
+    verifiers = kinds.get("verifier", 0)
+    adaptation = kinds.get("adaptation", 0)
+    files = sum(kinds.values())
+    if not files:
+        return ""
+    gone = []
+    if prints:
+        gone.append("the voice print for each microphone you trained"
+                    if prints > 1 else "the voice print from your training")
+    if verifiers:
+        gone.append('the "hey Jarvis" check built from those recordings')
+    if adaptation:
+        gone.append("the small notes it kept from learning your voice in Live")
+    if not gone:
+        # Only a half-written copy was left (no print, no verifier): the card
+        # still has to say something true about what it deletes.
+        gone.append("the last saved voice files")
+    return (
+        "Clear your saved voice training?\n\n"
+        f"This deletes {_join_words(gone)} on this PC "
+        f"({files} saved file{'s' if files != 1 else ''} in all). They are "
+        f"numbers and checks, not recordings - the recordings were already "
+        f"deleted when you trained.\n\n"
+        f"It does not delete your custom speaking voices, your chat history, "
+        f"or your phone pairing.\n\n"
+        f"Nothing is deleted until you say yes on this card.\n\n"
+        f"Jarvis will not recognise your voice after this: voice commands will "
+        f"be refused and Jarvis Live will not start until you train your voice "
+        f"again in Settings, Voice.\n\n"
+        f"If you did not just do this, say no.\n\n"
+        f"If you say no: nothing changes, and every saved file stays."
+    )
+
+
+def _delete_files(paths: list) -> tuple:
+    """(removed, failed) - each path unlinked; one already gone is done."""
+    removed, failed = [], []
+    for p in paths:
+        try:
+            p.unlink()
+            removed.append(p)
+        except FileNotFoundError:
+            continue
+        except OSError:
+            failed.append(p)
+    return removed, failed
+
+
+def stage_clear(*, gate: Callable, tier_of: Callable, spawn: Callable) -> tuple:
+    """{"mode": "clear"}: raise ONE card for clearing the saved voice
+    training. Deletes NOTHING - the card's own thread does that, after a
+    person says yes. With nothing saved it answers plainly, no card."""
+    global _PENDING
+    try:
+        targets = _clear_targets()
+    except Exception as exc:
+        return 500, {"ok": False, "error": ("could not look for the saved voice "
+                                            f"files ({type(exc).__name__})")}
+    kinds, existing = {}, []
+    for kind, p in targets:
+        try:
+            if not p.is_file():
+                continue
+        except OSError:
+            continue
+        existing.append(p)
+        kinds[kind] = kinds.get(kind, 0) + 1
+    if not existing:
+        return 200, {"ok": True, "cleared": False, "pending": False,
+                     "trained": False,
+                     "message": ("There is nothing to clear: no saved voice "
+                                 "training was found on this PC, so no voice "
+                                 "files are saved.")}
+    files = len(existing)
+    text = describe_clear(kinds)
+    try:
+        tier = tier_of(ACTION)
+    except Exception as exc:
+        tier = f"unreadable ({type(exc).__name__})"
+    if tier != "ask":
+        # Checked BEFORE a card is raised: a card that could not end in a
+        # person deciding should not be asked at all.
+        return 409, {"error": (f"{ACTION} is tier {tier!r} in "
+                               f"jarvis-framework.toml; clearing your voice "
+                               f"training needs a person to say yes, so it must "
+                               f"be 'ask'"), "pending": False}
+    pid = uuid.uuid4().hex
+    with _LOCK:
+        if _PENDING is not None:        # lost a race with another request
+            left = max(0, int(_left_s(_PENDING)))
+            return 409, {"error": ("a voice card is already waiting for "
+                                   "approval - approve or deny that one first"),
+                         "pending": True, "expires_in": left}
+        _PENDING = {"id": pid, "clips": [], "count": 0, "seconds": 0.0, "mic": "",
+                    "kind": "clear", "paths": existing, "files": files,
+                    "prints": kinds.get("print", 0),
+                    "verifiers": kinds.get("verifier", 0),
+                    "adaptation": kinds.get("adaptation", 0),
+                    "text": text, "since": time.time(),
+                    "since_m": time.monotonic(), "timeout": _timeout()}
+    _audit("voice.training.clear.staged",
+           {"files": files, "prints": kinds.get("print", 0),
+            "verifiers": kinds.get("verifier", 0),
+            "adaptation": kinds.get("adaptation", 0)})
+
+    def work():
+        try:
+            _decide_clear(pid, gate=gate)
+        except Exception:
+            _finish(pid, "failed", reason="unexpected error")
+
+    try:
+        spawn(work)
+    except Exception as exc:
+        _finish(pid, "failed", reason=f"could not start ({type(exc).__name__})")
+        return 500, {"error": "could not raise the approval card"}
+    with _LOCK:
+        waiting = _PENDING is not None and _PENDING["id"] == pid
+    return 202, {"ok": True, "pending": waiting, "files": files,
+                 "prints": kinds.get("print", 0),
+                 "verifiers": kinds.get("verifier", 0),
+                 "adaptation": kinds.get("adaptation", 0),
+                 "message": ("Approve the card on your PC or phone to clear it. "
+                             "Nothing is deleted until you do.")}
+
+
+def _decide_clear(pid: str, *, gate: Callable) -> dict:
+    """Raise the clear card for `pid`, wait for the answer, act on it.
+
+    Blocks - runs on its own thread (see stage_clear). Nothing is deleted
+    unless a person at tier "ask" approved, and then exactly the files that
+    were found when the card was raised."""
+    with _LOCK:
+        p = _PENDING if (_PENDING and _PENDING["id"] == pid) else None
+        if p is None:
+            return {"outcome": "gone"}
+        paths = list(p.get("paths") or [])
+        text = p.get("text", "")
+        detail = {"text": text,
+                  "what": "clear the saved voice training (the voice prints, the "
+                          "\"hey Jarvis\" checks and the live-adaptation notes)",
+                  "files": p.get("files", 0), "prints": p.get("prints", 0),
+                  "verifiers": p.get("verifiers", 0),
+                  "adaptation": p.get("adaptation", 0)}
+    try:
+        v = gate(ACTION, detail, text)
+    except Exception as exc:
+        return _finish(pid, "refused",
+                       reason=f"the approval gate failed ({type(exc).__name__})")
+    vtier = getattr(v, "tier", "unknown")
+    allowed = getattr(v, "allowed", False) is True
+    outcome = getattr(v, "outcome", None)
+    if outcome is None:
+        # A gate from before gate-outcome.patch: only allowed-on-ask can be
+        # read as a person saying yes.
+        outcome = "approved" if (allowed and vtier == "ask") else "refused"
+    rid = getattr(v, "request_id", None)
+    if vtier != "ask":
+        return _finish(pid, "refused", request_id=rid,
+                       reason=(f"the gate answered at tier {vtier!r}, which is "
+                               f"not a person saying yes"))
+    if not (allowed and outcome == "approved"):
+        if outcome in ("denied", "timed_out"):
+            return _finish(pid, outcome, request_id=rid)
+        return _finish(pid, "refused", request_id=rid,
+                       reason=str(getattr(v, "reason", "refused"))[:200])
+    removed, failed = _delete_files(paths)
+    if failed:
+        # A file something else is holding stays. Said plainly, and the outcome
+        # is "failed" rather than "cleared" - the status must not claim the
+        # voice is gone when a print may still be there.
+        _audit("voice.training.clear.failed",
+               {"files": len(failed), "removed": len(removed)})
+        return _finish(pid, "failed", request_id=rid, removed=len(removed),
+                       reason=(f"could not delete {len(failed)} of {len(paths)} "
+                               f"saved voice files - something is using them; "
+                               f"try again in a moment"))
+    _audit("voice.training.cleared",
+           {"files": len(removed), "prints": detail["prints"],
+            "verifiers": detail["verifiers"],
+            "adaptation": detail["adaptation"]})
+    return _finish(pid, "cleared", request_id=rid, removed=len(removed),
+                   prints=detail["prints"], verifiers=detail["verifiers"],
+                   adaptation=detail["adaptation"])
 
 
 # --------------------------------------------------------------------------
@@ -917,18 +1240,24 @@ def state() -> dict:
         # modes added 2026-09-24: `rounds` (mode train), `settings` (modes
         # strictness and privacy), `measure`.
         out = {"available": True, "pending": p is not None, "calibrate": True,
-               "rounds": True, "settings": True, "measure": True}
+               "rounds": True, "settings": True, "measure": True, "clear": True}
         if p is not None:
             out["clips"] = p.get("count", 0)
             out["kind"] = p.get("kind", "enroll")
             out["expires_in"] = max(0, int(_left_s(p)))
             if p.get("kind") == "setting":
                 out["setting"] = {"name": p.get("key"), "value": p.get("value")}
+            if p.get("kind") == "clear":
+                # How many saved files the waiting clear card would delete
+                # (never their paths: the status is a read, not a file list).
+                out["files"] = p.get("files", 0)
         if _LAST is not None:
             out["last"] = {k: _LAST[k] for k in ("outcome", "at", "samples", "reason",
                                                  "wake_check", "threshold", "mic",
                                                  "outliers", "added", "subprints",
-                                                 "setting", "value", "model")
+                                                 "setting", "value", "model",
+                                                 "removed", "prints", "verifiers",
+                                                 "adaptation")
                            if k in _LAST}
         out["session"] = _session_view(_SESSION)
         if _LAST_MEASURE is not None:

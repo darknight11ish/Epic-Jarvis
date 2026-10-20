@@ -2,6 +2,9 @@
 
     python3 test_voice_enroll.py
 
+Since 2026-10-19 the same route also CLEARS the saved training with ONE card
+({"mode": "clear"}), deleting nothing until that card is approved.
+
 No pytest, no network, no microphone. Clips are synthesised WAVs. The gate
 is a stand-in that answers the way jarvis_gate.check() does (a Verdict with
 allowed / tier / outcome / request_id); the enrolment is the REAL
@@ -32,6 +35,16 @@ What it proves:
      suggestion only when the owner's own clips all beat theirs.
  13. The threshold card: nothing changes until it is approved, and only
      for the microphone it names.
+ 14. Clearing the saved voice training (2026-10-19): ONE card of action
+     change_own_config, nothing deleted until it is approved, and denied /
+     timed out / refused / any tier but "ask" deletes nothing. The exact
+     deletion set (per-microphone prints, "hey Jarvis" verifiers, the
+     live-adaptation store and a half-written copy) and what it deliberately
+     leaves alone (custom speaking voices, chat history, phone pairing, voice
+     settings, synthetic self-test clips). One card at a time; a file that
+     cannot be deleted is NOT reported as cleared; with nothing saved no card
+     is raised; and afterwards the PC is really untrained - status,
+     find_profile and verify all say so - until the owner trains again.
 """
 import array
 import ast
@@ -838,6 +851,346 @@ def t_the_threshold_card():
         V.PROFILE_PATH = keep
 
 
+# --------------------------- 14. clearing the saved voice training --
+#
+# The owner asked for a way to clear previous voice training, with ONE approval
+# card, in Settings (2026-10-19). These checks prove: the card carries the exact
+# promise; nothing is deleted until it is approved; denied/timed out/refused
+# deletes nothing; the deletion set is exactly the saved voice files and not the
+# custom speaking voices, chat history, phone pairing, voice settings or the
+# synthetic self-test clips; one card at a time; a file that cannot be deleted
+# is not reported as cleared; and after a clear the PC really is untrained
+# (status, find_profile and verify all agree) until the owner trains again.
+
+def _clear_world(*, real=False):
+    """A temp home holding what a clear deletes, plus files it must not touch.
+
+    Returns (dir, adapt_dir, untouched, restore). `real=True` makes the three
+    prints with the REAL enrolment, so the before/after status and the voice
+    check are exercised; the lighter default writes stand-in files, which is
+    all the card and the deletion rules need.
+    """
+    d = Path(tempfile.mkdtemp(prefix="jarvis-clear-"))
+    adapt = d / "adapt"
+    adapt.mkdir()
+    keep_path = V.PROFILE_PATH
+    keep_adapt = os.environ.get("JARVIS_VOICE_TRAINING_DIR")
+    keep_fixture = os.environ.get("JARVIS_TEST_UNSEALED_FIXTURES")
+    os.environ["JARVIS_TEST_UNSEALED_FIXTURES"] = "1"
+    V.PROFILE_PATH = d / "owner.json"
+    os.environ["JARVIS_VOICE_TRAINING_DIR"] = str(adapt)
+    if real:
+        # Order matters: a phone enrolment replaces the old single print, so
+        # the general one is made last. This is the real per-mic layout.
+        for freq, mic in ((200, "phone"), (230, "desktop"), (170, "")):
+            V.enroll([_pcm(c) for c in _voice(freq)], embedder=V.Embedder(),
+                     mic=mic, sample_rate=16000)
+    else:
+        for name in ("owner.json", "owner-phone.json", "owner-desktop.json"):
+            (d / name).write_text("{}", encoding="utf-8")
+    for name in ("wake-verifier.json", "wake-verifier-phone.json",
+                 "wake-verifier-desktop.json"):
+        (d / name).write_text('{"version": 2}', encoding="utf-8")
+    (adapt / "voice-adapt.json").write_text('{"version": 1, "counts": {}}',
+                                            encoding="utf-8")
+    # jarvis_voice writes a voice file through `<name>.tmp` and renames it
+    # (its own _atomic_write): a crash between those two leaves a copy of a
+    # biometric file, and a clear must not leave it behind.
+    (d / "owner-phone.json.tmp").write_text("{}", encoding="utf-8")
+    untouched = {
+        "custom speaking voice": d / "voices" / "seb" / "clip.wav",
+        "chat history": d / "chat-history.db",
+        "phone pairing": d / "devices" / "owner-phone.json",
+        "voice settings": d / "voice-settings.json",
+        "synthetic self-test": d / "voice" / "self-test.wav",
+    }
+    for path in untouched.values():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("not the owner's voice", encoding="utf-8")
+
+    def restore():
+        V.PROFILE_PATH = keep_path
+        for var, old in (("JARVIS_VOICE_TRAINING_DIR", keep_adapt),
+                         ("JARVIS_TEST_UNSEALED_FIXTURES", keep_fixture)):
+            if old is None:
+                os.environ.pop(var, None)
+            else:
+                os.environ[var] = old
+
+    return d, adapt, untouched, restore
+
+
+def _clear_body(**extra):
+    return json.dumps({"mode": "clear", **extra}).encode()
+
+
+def _wait_done(seconds=10.0):
+    """Wait for the card's own thread to finish, then return the last outcome."""
+    for _ in range(int(seconds / 0.05)):
+        if not E.state()["pending"]:
+            break
+        threading.Event().wait(0.05)
+    return E.state()["last"]
+
+
+def t_clear_nothing_to_clear():
+    fresh()
+    keep_path = V.PROFILE_PATH
+    keep_adapt = os.environ.get("JARVIS_VOICE_TRAINING_DIR")
+    d = Path(tempfile.mkdtemp(prefix="jarvis-clear-none-"))
+    adapt = d / "adapt"
+    adapt.mkdir()
+    V.PROFILE_PATH = d / "owner.json"
+    os.environ["JARVIS_VOICE_TRAINING_DIR"] = str(adapt)
+    try:
+        gate = Gate(Verdict(True, outcome="approved"))
+        code, out = E.stage(_clear_body(), gate=gate, tier_of=ask, spawn=run_sync)
+        check("nothing trained: 200, said plainly, not a card",
+              code == 200 and out.get("cleared") is False and out.get("trained") is False,
+              (code, out))
+        check("nothing trained: it says there is nothing to clear",
+              "nothing to clear" in out.get("message", "").lower(), out)
+        check("nothing trained: NO card was raised", not gate.calls, gate.calls)
+        check("nothing trained: no file was made or deleted",
+              sorted(p.name for p in d.iterdir()) == ["adapt"], sorted(p.name for p in d.iterdir()))
+        check("nothing trained: nothing left pending", E._PENDING is None)
+        check("the status says this PC understands the clear mode",
+              E.state().get("clear") is True, E.state())
+        # A half-written copy of a voice file is still a biometric file: it is
+        # not "nothing", so it gets the card rather than being left behind.
+        (d / "owner.json.tmp").write_text("{}", encoding="utf-8")
+        gate = Gate(Verdict(False, outcome="denied"))
+        code, out = E.stage(_clear_body(), gate=gate, tier_of=ask, spawn=run_sync)
+        check("a lone half-written copy is still a card, not 'nothing to clear'",
+              code == 202 and gate.calls and out.get("files") == 1
+              and "last saved voice files" in gate.calls[0][2], (code, out))
+        check("...and denying it leaves the copy alone", (d / "owner.json.tmp").is_file())
+    finally:
+        V.PROFILE_PATH = keep_path
+        if keep_adapt is None:
+            os.environ.pop("JARVIS_VOICE_TRAINING_DIR", None)
+        else:
+            os.environ["JARVIS_VOICE_TRAINING_DIR"] = keep_adapt
+
+
+def t_clear_card_and_approval():
+    fresh()
+    d, adapt, untouched, restore = _clear_world(real=True)
+    try:
+        files = 8      # 3 prints + 3 verifiers + 1 adaptation store + 1 half-written copy
+        gate = HeldGate(Verdict(True, outcome="approved"))
+        with audited() as lines:
+            code, out = E.stage(_clear_body(), gate=gate, tier_of=ask)
+            check("a clear with saved files answers 202 and says a card is up",
+                  code == 202 and out.get("pending") is True, (code, out))
+            check("...and says how many saved files it will delete, by kind",
+                  out.get("files") == files and out.get("prints") == 3
+                  and out.get("verifiers") == 3 and out.get("adaptation") == 1, out)
+            check("the card was raised", gate.asked.wait(5))
+            st = E.state()
+            check("the status shows a clear card waiting, with its file count",
+                  st["pending"] is True and st["kind"] == "clear" and st.get("files") == files, st)
+            action, detail, prompt = gate.calls[0]
+            check("ONE card, action change_own_config", action == "change_own_config"
+                  and len(gate.calls) == 1, (action, len(gate.calls)))
+            check("the card says what is deleted (prints, the hey Jarvis check, Live notes)",
+                  "voice print" in prompt and '"hey Jarvis" check' in prompt
+                  and "learning your voice in Live" in prompt, prompt)
+            check("the card says what is NOT deleted",
+                  "custom speaking voices" in prompt and "chat history" in prompt
+                  and "phone pairing" in prompt, prompt)
+            check("the card says Jarvis will not recognise the voice until trained again",
+                  "will not recognise your voice" in prompt
+                  and "again in Settings, Voice" in prompt, prompt)
+            check("the card says nothing is deleted until it is approved",
+                  "Nothing is deleted until you say yes" in prompt, prompt)
+            check("the card says what refusing costs", "If you say no: nothing changes" in prompt,
+                  prompt)
+            check("the card carries no path and no audio - counts only",
+                  str(d) not in json.dumps(detail) and str(adapt) not in json.dumps(detail)
+                  and detail["files"] == files, detail)
+            check("no audio is held on the clear card", E._PENDING is not None
+                  and E._PENDING.get("clips") == [])
+            check("NOTHING is deleted while the card waits",
+                  (d / "owner.json").is_file() and (d / "owner-phone.json").is_file()
+                  and (d / "owner-desktop.json").is_file()
+                  and (d / "wake-verifier.json").is_file()
+                  and (adapt / "voice-adapt.json").is_file()
+                  and all(p.is_file() for p in untouched.values()),
+                  sorted(p.name for p in d.iterdir()))
+            g2 = Gate(Verdict(True, outcome="approved"))
+            code2, out2 = E.stage(_clear_body(), gate=g2, tier_of=ask, spawn=run_sync)
+            check("one at a time: a second clear while the card waits is 409",
+                  code2 == 409 and out2.get("pending") is True and not g2.calls, (code2, out2))
+            code3, out3 = E.stage(body(five()), gate=g2, tier_of=ask, enroll=Enrol(),
+                                  spawn=run_sync)
+            check("one at a time: a training while the clear card waits is also 409",
+                  code3 == 409, (code3, out3))
+            gate.release.set()
+            last = _wait_done()          # inside the audit capture: its lines come from the thread
+        check("approved: the card's own thread deleted every saved voice file",
+              not (d / "owner.json").exists() and not (d / "owner-phone.json").exists()
+              and not (d / "owner-desktop.json").exists()
+              and not (d / "wake-verifier.json").exists()
+              and not (d / "wake-verifier-phone.json").exists()
+              and not (d / "wake-verifier-desktop.json").exists()
+              and not (d / "owner-phone.json.tmp").exists()
+              and not (adapt / "voice-adapt.json").exists(),
+              sorted(p.name for p in d.iterdir()))
+        check("...and left the custom voices, chat history, phone pairing, settings and "
+              "self-test clips alone",
+              all(p.is_file() for p in untouched.values()), untouched)
+        check("the outcome is 'cleared' with the real count",
+              last["outcome"] == "cleared" and last["removed"] == files
+              and last["prints"] == 3 and last["verifiers"] == 3
+              and last["adaptation"] == 1, last)
+        check("the audit says staged, cleared, decided - counts only",
+              [e for e, _ in lines] == ["voice.training.clear.staged",
+                                        "voice.training.cleared",
+                                        "voice.training.decided"]
+              and all(len(x) < 200 for _, x in lines), lines)
+        # AFTER: the owner's voice really is untrained, and voice checks refuse.
+        vst = V.status()
+        check("after the clear, /api/voice/status's source says not enrolled",
+              vst["enrolled"] is False and vst["samples"] == 0, vst)
+        check("after the clear, every microphone's print is untrained",
+              all(not p["trained"] for p in vst["prints"].values()), vst["prints"])
+        import jarvis_wakeword as W
+        check("after the clear, the 'hey Jarvis' check is not trained",
+              W.verifier_status()["trained"] is False, W.verifier_status())
+        found, label = V.find_profile("")
+        check("after the clear, there is no print to check against", found is None,
+              (found, label))
+        verdict = V.verify(_pcm(wav(2.0, 180)), V.Embedder(), sample_rate=16000)
+        check("after the clear, a voice clip is refused and says to enrol first",
+              verdict.is_owner is False and "no enrolled voice profile" in verdict.reason,
+              verdict.reason)
+        import jarvis_voice_training as TRAIN
+        check("after the clear, the live-adaptation counters are empty",
+              TRAIN.read_state()["total"] == 0, TRAIN.read_state())
+        check("the next training is accepted again - the route is not left stuck",
+              E.stage(body(five()), gate=Gate(Verdict(False, outcome="denied")),
+                      tier_of=ask, enroll=Enrol(), spawn=run_sync)[0] == 202)
+    finally:
+        restore()
+
+
+def t_clear_other_answers_delete_nothing():
+    cases = [("denied", Verdict(False, outcome="denied"), "denied"),
+             ("timed out", Verdict(False, outcome="timed_out"), "timed_out"),
+             ("refused by the gate", Verdict(False, outcome="refused", reason="no queue"),
+              "refused"),
+             ("allowed at tier auto, nobody asked",
+              Verdict(True, tier="auto", outcome="auto"), "refused"),
+             ("allowed at tier notify, nobody asked",
+              Verdict(True, tier="notify", outcome="notify"), "refused"),
+             ("an old gate: allowed but no outcome, tier ask",
+              Verdict(True, outcome=None), "cleared"),
+             ("an old gate: not allowed, no outcome", Verdict(False, outcome=None),
+              "refused")]
+    for label, verdict, want in cases:
+        fresh()
+        d, adapt, _untouched, restore = _clear_world()
+        try:
+            with audited() as lines:
+                E.stage(_clear_body(), gate=Gate(verdict), tier_of=ask, spawn=run_sync)
+            last = E.state()["last"]
+            check(f"{label}: outcome {want}", last["outcome"] == want, last)
+            still = ((d / "owner.json").is_file() and (d / "wake-verifier.json").is_file()
+                     and (adapt / "voice-adapt.json").is_file())
+            if want == "cleared":
+                check(f"{label}: the files were deleted", not still)
+            else:
+                check(f"{label}: nothing is deleted", still)
+                check(f"{label}: no 'cleared' audit line",
+                      "voice.training.cleared" not in [e for e, _ in lines], lines)
+            check(f"{label}: nothing left pending", E._PENDING is None)
+        finally:
+            restore()
+
+    fresh()
+    d, adapt, _untouched, restore = _clear_world()
+
+    def boom(action, detail, prompt):
+        raise RuntimeError("queue locked")
+    try:
+        E.stage(_clear_body(), gate=boom, tier_of=ask, spawn=run_sync)
+        last = E.state()["last"]
+        check("a gate that raises refuses, and deletes nothing",
+              last["outcome"] == "refused" and (d / "owner.json").is_file(), last)
+        check("a gate that raises leaves nothing pending", E._PENDING is None)
+        gate = Gate(Verdict(True, tier="auto", outcome="auto"))
+        code, out = E.stage(_clear_body(), gate=gate, tier_of=lambda a: "auto",
+                            spawn=run_sync)
+        check("tier not 'ask': 409 BEFORE any card", code == 409 and not gate.calls,
+              (code, out))
+        check("tier not 'ask': it says what to change", "'ask'" in out.get("error", ""), out)
+        check("tier not 'ask': nothing is deleted", (d / "owner.json").is_file())
+    finally:
+        restore()
+
+
+def t_clear_a_file_that_cannot_be_deleted_is_said():
+    fresh()
+    d, adapt, _untouched, restore = _clear_world()
+    try:
+        gate = HeldGate(Verdict(True, outcome="approved"))
+        with audited() as lines:
+            E.stage(_clear_body(), gate=gate, tier_of=ask)
+            check("the card is up before the file is made undeletable", gate.asked.wait(5))
+            held = d / "wake-verifier-phone.json"
+            held.unlink()
+            held.mkdir()                       # unlink() now raises OSError, like Windows' "in use"
+            gate.release.set()
+            last = _wait_done()          # inside the audit capture: its lines come from the thread
+        check("a file that cannot be deleted is NOT reported as cleared",
+              last["outcome"] == "failed" and "could not delete" in last.get("reason", ""),
+              last)
+        check("...and the outcome says how much was really removed",
+              last.get("removed") == 7, last)
+        check("...and how many could not be", "1 of 8" in last.get("reason", ""), last)
+        check("...and the files that could be deleted are gone",
+              not (d / "owner.json").exists() and not (d / "wake-verifier.json").exists()
+              and not (adapt / "voice-adapt.json").exists())
+        check("...and it is audited as a failure, with counts only",
+              "voice.training.clear.failed" in [e for e, _ in lines]
+              and all(len(x) < 200 for _, x in lines), lines)
+        check("...and the reason names no path", str(held) not in json.dumps(last), last)
+    finally:
+        restore()
+
+
+def t_clear_mode_and_one_at_a_time():
+    fresh()
+    d, adapt, _untouched, restore = _clear_world()
+    try:
+        gate = HeldGate(Verdict(False, outcome="denied"))
+        code, _ = E.stage(body(five()), gate=gate, tier_of=ask, enroll=Enrol())
+        check("a training card is waiting", code == 202 and gate.asked.wait(5))
+        g2 = Gate(Verdict(True, outcome="approved"))
+        code2, out2 = E.stage(_clear_body(), gate=g2, tier_of=ask, spawn=run_sync)
+        check("a clear while a TRAINING card waits is 409, no second card",
+              code2 == 409 and not g2.calls and out2.get("expires_in", 0) > 0,
+              (code2, out2))
+        check("...and nothing was deleted", (d / "owner.json").is_file()
+              and (d / "wake-verifier.json").is_file())
+        gate.release.set()
+        _wait_done()
+        check("unknown modes are still refused - clear is one exact name",
+              E.stage(json.dumps({"mode": "wipe"}).encode())[0] == 400)
+        check("clear needs no clips at all: {\"mode\": \"clear\"} alone is a card",
+              E.stage(_clear_body(), gate=Gate(Verdict(False, outcome="denied")),
+                      tier_of=ask, spawn=run_sync)[0] == 202)
+        fresh()
+        gate = Gate(Verdict(False, outcome="denied"))
+        code, out = E.stage(json.dumps({"mode": "CLEAR"}).encode(), gate=gate,
+                            tier_of=ask, spawn=run_sync)
+        check("the mode name is read case-insensitively, like every other mode",
+              code == 202 and gate.calls and out.get("files") == 8, (code, out))
+    finally:
+        restore()
+
+
 def t_the_real_file():
     if missing("jarvis_hud.py"):
         return skip(explain())
@@ -865,7 +1218,10 @@ if __name__ == "__main__":
                t_every_other_answer_drops_the_clips, t_the_tier_must_be_ask, t_the_limits,
                t_one_at_a_time, t_nothing_logs_audio_or_tokens, t_the_real_enrolment_path,
                t_with_the_better_model, t_the_patch, t_one_print_per_microphone,
-               t_someone_else, t_the_threshold_card, t_the_real_file):
+               t_someone_else, t_the_threshold_card, t_clear_nothing_to_clear,
+               t_clear_card_and_approval, t_clear_other_answers_delete_nothing,
+               t_clear_a_file_that_cannot_be_deleted_is_said,
+               t_clear_mode_and_one_at_a_time, t_the_real_file):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

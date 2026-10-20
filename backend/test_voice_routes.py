@@ -390,6 +390,23 @@ def t_the_enroll_route_stages_and_never_enrols():
     check("enroll: ...and the exception's message is not in the reply",
           "account number" not in json.dumps(h.last[1]), repr(h.last[1]))
 
+    # The clear mode (2026-10-19) travels the SAME route and stage(): no new
+    # route, no new patch, and the body is handed over untouched.
+    E2 = SimpleNamespace(calls=[])
+
+    def stage_clear(raw):
+        E2.calls.append(raw)
+        return 202, {"ok": True, "pending": True, "files": 8}
+
+    E2.stage = stage_clear
+    h = run(b, route="/api/voice/enroll", body=b'{"mode": "clear"}',
+            modules={"jarvis_voice_enroll": E2})
+    check("enroll: the clear mode goes through the SAME route into stage() - no new route",
+          h.last == (202, {"ok": True, "pending": True, "files": 8}, {})
+          and E2.calls == [b'{"mode": "clear"}'], (repr(h.last), repr(E2.calls)))
+    check("enroll: ...and the patched stack has no /api/voice/clear route",
+          "/api/voice/clear" not in stack_text(), "a second clear route appeared")
+
 
 # ---------------------------------------------------------------------------
 # 4. /api/voice/moment - it speaks text the client already holds

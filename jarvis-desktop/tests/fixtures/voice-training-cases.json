@@ -772,6 +772,7 @@
           },
           "available": true,
           "calibrate": true,
+          "clear": true,
           "last": {
             "at": 1790000000.0,
             "outcome": "setting_changed",
@@ -1596,6 +1597,7 @@
           },
           "available": true,
           "calibrate": true,
+          "clear": true,
           "last": {
             "at": 1790000000.0,
             "outcome": "cancelled"
@@ -2418,6 +2420,7 @@
           },
           "available": true,
           "calibrate": true,
+          "clear": true,
           "limits": {
             "max_clips": 12,
             "max_seconds": 10.0,
@@ -3269,6 +3272,7 @@
           },
           "available": true,
           "calibrate": true,
+          "clear": true,
           "limits": {
             "max_clips": 12,
             "max_seconds": 10.0,
@@ -4087,6 +4091,7 @@
           },
           "available": true,
           "calibrate": true,
+          "clear": true,
           "limits": {
             "max_clips": 12,
             "max_seconds": 10.0,
@@ -4900,6 +4905,7 @@
           },
           "available": true,
           "calibrate": true,
+          "clear": true,
           "limits": {
             "max_clips": 12,
             "max_seconds": 10.0,
@@ -5732,6 +5738,7 @@
           },
           "available": true,
           "calibrate": true,
+          "clear": true,
           "limits": {
             "max_clips": 12,
             "max_seconds": 10.0,
@@ -6569,6 +6576,7 @@
           },
           "available": true,
           "calibrate": true,
+          "clear": true,
           "clips": 0,
           "expires_in": 170,
           "kind": "setting",
@@ -7399,6 +7407,7 @@
           },
           "available": true,
           "calibrate": true,
+          "clear": true,
           "limits": {
             "max_clips": 12,
             "max_seconds": 10.0,
@@ -8227,6 +8236,7 @@
           },
           "available": true,
           "calibrate": true,
+          "clear": true,
           "limits": {
             "max_clips": 12,
             "max_seconds": 10.0,
@@ -9055,6 +9065,7 @@
           },
           "available": true,
           "calibrate": true,
+          "clear": true,
           "last": {
             "at": 1790000000.0,
             "outcome": "setting_changed",
@@ -9888,6 +9899,7 @@
           },
           "available": true,
           "calibrate": true,
+          "clear": true,
           "last": {
             "added": true,
             "at": 1790000000.0,
@@ -10731,6 +10743,7 @@
           },
           "available": true,
           "calibrate": true,
+          "clear": true,
           "last": {
             "added": false,
             "at": 1790000000.0,
@@ -11574,6 +11587,7 @@
           },
           "available": true,
           "calibrate": true,
+          "clear": true,
           "last": {
             "at": 1790000000.0,
             "outcome": "denied"
@@ -12391,6 +12405,7 @@
           },
           "available": true,
           "calibrate": true,
+          "clear": true,
           "last": {
             "at": 1790000000.0,
             "outcome": "failed",
@@ -13240,6 +13255,7 @@
           },
           "available": true,
           "calibrate": true,
+          "clear": true,
           "clips": 36,
           "expires_in": 170,
           "kind": "enroll",
@@ -14066,6 +14082,7 @@
           },
           "available": true,
           "calibrate": true,
+          "clear": true,
           "last": {
             "at": 1790000000.0,
             "outcome": "setting_changed",

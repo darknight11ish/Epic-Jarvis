@@ -360,6 +360,7 @@
           },
           "available": true,
           "calibrate": true,
+          "clear": true,
           "limits": {
             "max_clips": 12,
             "max_seconds": 10.0,
@@ -1178,6 +1179,7 @@
           },
           "available": true,
           "calibrate": true,
+          "clear": true,
           "limits": {
             "max_clips": 12,
             "max_seconds": 10.0,
@@ -1996,6 +1998,7 @@
           },
           "available": true,
           "calibrate": true,
+          "clear": true,
           "limits": {
             "max_clips": 12,
             "max_seconds": 10.0,
@@ -2819,6 +2822,7 @@
           },
           "available": true,
           "calibrate": true,
+          "clear": true,
           "limits": {
             "max_clips": 12,
             "max_seconds": 10.0,
@@ -3647,6 +3651,7 @@
           },
           "available": true,
           "calibrate": true,
+          "clear": true,
           "limits": {
             "max_clips": 12,
             "max_seconds": 10.0,
@@ -4475,6 +4480,7 @@
           },
           "available": true,
           "calibrate": true,
+          "clear": true,
           "last": {
             "added": false,
             "at": 1790000000.0,
@@ -5309,6 +5315,7 @@
           },
           "available": true,
           "calibrate": true,
+          "clear": true,
           "limits": {
             "max_clips": 12,
             "max_seconds": 10.0,
@@ -6132,6 +6139,7 @@
           },
           "available": true,
           "calibrate": true,
+          "clear": true,
           "limits": {
             "max_clips": 12,
             "max_seconds": 10.0,
