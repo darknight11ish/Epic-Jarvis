@@ -179,13 +179,12 @@ object SetupQuestionnaire {
             ?: prim.contentOrNull.orEmpty().ifEmpty { "not set" }
     }
 
-    /** [path] with a 404/501 or "missing feature" answer is an older backend. */
-    fun missing(error: String?): Boolean {
-        val text = error.orEmpty()
-        return text.contains("404") || text.contains("501") ||
-            text.contains(MISSING, ignoreCase = true) ||
-            text.contains("missing this feature", ignoreCase = true)
-    }
+    /** A 404/501 answer is an older backend - the same rule [PromptCoach] and
+     *  [WebSearch] use. The route was added on 2026-10-20, so a PC from before
+     *  that day has no setup questionnaire. */
+    fun missing(error: ApiError): Boolean =
+        error == ApiError.NotFound || error == ApiError.NotAvailable ||
+            (error is ApiError.Server && error.code == 501)
 
     /** `GET /api/setup`, as the small reading this screen draws. */
     fun parse(body: JsonObject?): View? {

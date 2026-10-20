@@ -1,11 +1,11 @@
 package com.jarvis.client
 
+import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.SetupQuestionnaire
 import java.io.File
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -105,7 +105,7 @@ class SetupQuestionnaireTest {
         )
         assertTrue(view.available)
         assertEquals("setup.json in the Jarvis settings folder", view.storage)
-        assertEquals(300, view.cardWaitS)
+        assertEquals(300, view.cardWaitS ?: 0)
         assertNotNull(view.completedAt)
     }
 
@@ -324,9 +324,11 @@ class SetupQuestionnaireTest {
             "Each approval card can wait up to 1 minute for you before the questionnaire moves on.",
             SetupQuestionnaire.cardWaitWords(60),
         )
-        assertTrue(SetupQuestionnaire.missing("http 404"))
-        assertTrue(SetupQuestionnaire.missing(SetupQuestionnaire.MISSING))
-        assertFalse(SetupQuestionnaire.missing("bad or missing X-Jarvis-Token"))
+        assertTrue(SetupQuestionnaire.missing(ApiError.NotFound))
+        assertTrue(SetupQuestionnaire.missing(ApiError.NotAvailable))
+        assertTrue(SetupQuestionnaire.missing(ApiError.Server(501, "")))
+        assertFalse(SetupQuestionnaire.missing(ApiError.Server(400, "")))
+        assertFalse(SetupQuestionnaire.missing(ApiError.Malformed("bad or missing X-Jarvis-Token")))
     }
 
     @Test
