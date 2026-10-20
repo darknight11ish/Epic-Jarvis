@@ -107,6 +107,23 @@ https://github.com/openai/skills/tree/main/skills/.curated/pdf
   it carries no licence file; `grill-me`'s published copy is GPL-3.0, not the
   MIT it was believed to be, and a copyleft licence is the owner's decision.
 
+morluto/rea's `reverse-engineer-anything` skill (morluto/rea), MIT -
+https://github.com/morluto/rea/tree/main/skills/reverse-engineer-anything
+  One agent skill, rewritten for Jarvis as skills/reverse-engineer-anything/SKILL.md.
+  It is not shipped as it is: the upstream text drives REA's 207 tools directly and
+  teaches setup repair with npx. Jarvis's model calls one facade tool,
+  `rea_investigate`, and a person approves each call. What was KEPT is the routing
+  knowledge (which kind of target, the static reads, evidence-first discipline, and
+  keeping observations, inferences and unknowns apart). What was CHANGED: every
+  npx/CLI/setup instruction is gone, the tool names are Jarvis's own, the pinned
+  version and sha512 are recorded, and the four-point pre-install audit is written as
+  evidence for a person, not as a command for the model.
+  The upstream skill's six `references/` files are NOT shipped: they describe direct
+  MCP and CLI tools this facade never exposes, so shipping them would teach the model
+  a vocabulary it cannot call.
+  The package carries the MIT licence text (read from the extracted
+  rea-agents@6.7.0 tarball on 2026-10-20); its full text is in the MIT section below.
+
 "HEY JARVIS" - MODEL FILES AND LIBRARIES (not generated - keep when regenerating)
 ---------------------------------------------------------------------------
 openWakeWord pre-trained models, release v0.5.1 -

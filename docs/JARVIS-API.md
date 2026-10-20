@@ -22473,17 +22473,59 @@ session and refuses.
 **What this does not do.** No HTTP route, no patch, no new gate action or tier. No runtime capture
 (that needs its own switch and a card naming the exact program/URL), no evidence-bundle export
 (needs `jarvis_file_guardian` and a folder rule), no ADB anything (Jarvis's app-control path owns
-phone actions), and the upstream `SKILL.md` is not shipped - it is untrusted text and is a later
-slice. Nothing is measured here: the façade's refusals and wrapping are covered by
-`backend/test_rea.py`, while a real REA analysis is NOT-TESTABLE on CI (no engines, no pinned
-install) and is not claimed as tested.
+phone actions), and no new route, patch, tier or switch.
+
+**The vetted skill (Slice 2).** `skills/reverse-engineer-anything/SKILL.md` adapts
+the upstream skill for this façade. It names only Jarvis's own tool `rea_investigate`
+(`requires_tools`), says every call is one approval card and that the skill grants
+nothing, pins `rea-agents@6.7.0` with the tarball's sha512, records the four-point
+pre-install audit as evidence for the owner, and carries no shell, npx or install
+instruction. The upstream `references/` files are deliberately not shipped: they teach
+direct REA CLI/MCP tools this façade never exposes. The MIT credit is in the
+hand-written half of `THIRD-PARTY-NOTICES.txt`.
+
+**Readiness (`doctor`, read-only, no network).** `jarvis_rea.doctor()` answers with
+`ready: true|false` and one plain `why` sentence, plus these signals:
+
+| signal | field | meaning |
+|---|---|---|
+| Node | `node.ok`, `node.version` | 22.19+/24.11+/26+; Node 23 and 25 are refused |
+| package present | `installed` | a `rea-agents` package exists under `<user>\.openjarvis\tools\rea` |
+| pinned version | `version_pinned_ok` | exactly 6.7.0 (and MIT) |
+| recorded sha512 | `integrity.ok` | npm's local record compared with the pinned tarball: true, false, or null |
+| signatures | `signatures.checked` | always false here: npm signatures and SLSA provenance need the network |
+| Tier 1 static | `tier1_static_ready` | package + pin + supported Node |
+| Tier 2 Ghidra | `tier2_ghidra_ready` | `GHIDRA_INSTALL_DIR` and `JAVA_HOME` both set |
+| Tier 2 JADX | `tier2_jadx_ready` | `REA_JADX_MCP_JAR` or a `jadx` on PATH |
+
+Verified on the development PC, 2026-10-20: Node **v22.23.2**; no package
+(`~/.openjarvis/tools/rea` absent); `npm ls -g rea-agents` empty; no `[rea]` section in
+the live framework file. `doctor()` therefore reports `ready: false`,
+`why: "no rea-agents package under ..."`, and `integrity.ok: null`. A recorded sha512
+that differs from the pin makes `ready: false` with a plain sentence; a missing local
+lockfile leaves `integrity.ok: null` (unknown, not a pass) while the version check still
+applies. Signatures are never guessed: `signatures.why` says why they are unchecked.
+
+**No route in this slice.** There is no `GET /api/rea/doctor`. `jarvis_rea.py` has no
+`install()` and the HUD has no REA wiring, so adding a route would need a patch and a
+new place in the request gate - a later slice, not this one. When that wiring exists, a
+Settings readiness card reads the same payload directly from `doctor()`; the field names
+in the table above are its contract. Nothing here becomes a new gate action, tier,
+patch or switch.
+
+Nothing is measured by this change: the façade's refusals and wrapping are covered by
+`backend/test_rea.py`, while a real REA analysis is NOT-TESTABLE on CI (no engines, no
+pinned install) and is not claimed as tested.
 
 Tests: `backend/test_rea.py` - private targets refused before any start, the operation allowlist
 blocks every ADB/runtime/debug/export tool, the child environment carries no Jarvis secret, the
 taint latch is called, markers stripped and secrets scrubbed and injections flagged, the bounded
 output, the Node version range (22.19+/24.11+/26+, never 23/25), missing-engine refusals before
 the card, one compact tool in exactly one group selected by the tool diet, and off-by-default
-gating on both switches.
+gating on both switches. Slice 2 adds the doctor readiness states (not installed, pinned,
+wrong version, sha512 match/mismatch/unknown, no subprocess and no network inside `doctor`)
+and the skill-text checks (no npx, no package-manager install, no shell fence, pinned version
+and sha512, one-card/read-only wording).
 
 ## 149. Searchable recordings and videos: readable words kept on the PC, ON by the owner's decision (F5 S2, added 2026-10-19)
 

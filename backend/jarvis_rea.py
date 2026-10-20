@@ -910,30 +910,111 @@ def prepare(args) -> tuple:
     return plan, _card_words(action, plan["target"], plan["extra"])
 
 
-def doctor(*, env: Optional[dict] = None, node_version: Optional[str] = None,
-           install: Optional[dict] = None) -> dict:
-    """Read-only readiness: Node, the pinned install and which engines exist. Starts nothing.
+SIGNATURE_NOTE = ("npm signatures and SLSA provenance live in the npm registry. Checking them "
+                  "needs the network, and doctor never uses it, so signatures are reported as "
+                  "NOT CHECKED rather than guessed at. What is checked locally is the package's "
+                  "version and the sha512 npm recorded for it.")
 
-    It never runs `npx`, never downloads and never calls REA. That is deliberate: a check that
-    fetches code is the supply-chain hole this project refuses. The one REA-side identity check
-    happens when a real session starts (`_verify_identity`)."""
+BAD_INTEGRITY = ("The installed rea-agents package's recorded sha512 does not match the pinned "
+                 "tarball, so REA is not ready. Reinstall the pinned version only after the "
+                 "four-point audit passes. Nothing was started.")
+
+
+def package_integrity(folder: Optional[Path] = None) -> dict:
+    """The sha512 npm recorded for the installed package, compared with the pinned tarball.
+
+    This reads only local files: the prefix's `package-lock.json` and npm's hidden
+    `node_modules/.package-lock.json`. It never contacts the registry and never trusts
+    the package's own package.json for a hash. `ok` is True (match), False (mismatch,
+    which blocks readiness) or None (installed but no recorded hash to compare)."""
+    base = Path(folder) if folder is not None else install_dir()
+    root = _package_root(base)
+    out = {"expected": PINNED_INTEGRITY, "recorded": "", "ok": None, "source": "", "why": ""}
+    if root is None:
+        out["why"] = (f"no `{PACKAGE}` package is installed, so there is no recorded sha512 "
+                      f"to compare")
+        return out
+    for candidate in (base / "node_modules" / ".package-lock.json",
+                      base / "package-lock.json",
+                      root / "package-lock.json"):
+        if not candidate.is_file():
+            continue
+        try:
+            doc = json.loads(candidate.read_text(encoding="utf-8"))
+        except Exception:                                    # noqa: BLE001
+            continue
+        recorded = _lockfile_integrity(doc)
+        if not recorded:
+            continue
+        out["recorded"] = recorded
+        try:
+            out["source"] = candidate.relative_to(base).as_posix()
+        except ValueError:
+            out["source"] = str(candidate)
+        out["ok"] = recorded == PINNED_INTEGRITY
+        if not out["ok"]:
+            out["why"] = BAD_INTEGRITY
+        return out
+    out["why"] = ("npm left no lockfile here that records an integrity for rea-agents, so the "
+                  "sha512 cannot be compared on this PC")
+    return out
+
+
+def _lockfile_integrity(doc: dict) -> str:
+    """The `integrity` npm recorded for rea-agents in one lockfile, or ""."""
+    if not isinstance(doc, dict):
+        return ""
+    packages = doc.get("packages")
+    if isinstance(packages, dict):
+        for key in (f"node_modules/{PACKAGE}", PACKAGE):
+            entry = packages.get(key)
+            if isinstance(entry, dict) and entry.get("integrity"):
+                return str(entry["integrity"])
+    dependencies = doc.get("dependencies")
+    if isinstance(dependencies, dict):
+        entry = dependencies.get(PACKAGE)
+        if isinstance(entry, dict) and entry.get("integrity"):
+            return str(entry["integrity"])
+    return ""
+
+
+def doctor(*, env: Optional[dict] = None, node_version: Optional[str] = None,
+           install: Optional[dict] = None, integrity: Optional[dict] = None) -> dict:
+    """Read-only readiness: Node, the pinned install, its sha512 record and which engines
+    exist. Starts nothing and never uses the network.
+
+    The honest overall answer is `ready` plus one plain `why` sentence. It is False when
+    Node is missing/unsupported, when the pinned package is absent or at another version,
+    or when npm's locally recorded sha512 for it does not match the pinned tarball.
+    `signatures.checked` stays False on purpose: npm signatures and SLSA provenance live
+    in the registry, and checking them would mean the network, which this function never
+    uses. A real REA session's own identity check (`_verify_identity`) stays the final
+    runtime gate; nothing here installs, enables or starts REA."""
     source = os.environ if env is None else env
     version_text = node_version if node_version is not None else _run_node_version()[0]
     ok_node, version, node_why = check_node_version(version_text)
     if not version_text:
         node_why = NODE_MISSING
     info = install if isinstance(install, dict) else install_info()
+    integrity = dict(integrity) if isinstance(integrity, dict) else package_integrity()
+    integrity_ok = integrity.get("ok")
+    integrity_bad = integrity_ok is False
+    ready = bool(ok_node and info.get("ok") and not integrity_bad)
+    why = ""
+    if not ready:
+        why = (BAD_INTEGRITY if integrity_bad
+               else (node_why or info.get("why") or "REA is not ready on this PC"))
     actions = {}
     for action in ACTION_ORDER:
         if action == "doctor":
             continue
-        available, why = _action_available(action, env=source, node_version=version)
+        available, action_why = _action_available(action, env=source, node_version=version)
         if available and action == "inspect_sqlite" and not _node_supports_sqlite(version):
-            available, why = False, (f"needs Node 24.15+ or 26+; this PC has "
-                                     f"{version_text or 'no Node'}")
+            available, action_why = False, (f"needs Node 24.15+ or 26+; this PC has "
+                                           f"{version_text or 'no Node'}")
         if available and action == "query_native_binary" and not _STATE.get("open_target"):
-            available, why = False, "open a binary first"
-        actions[action] = {"available": bool(available), "why": why}
+            available, action_why = False, "open a binary first"
+        actions[action] = {"available": bool(available), "why": action_why}
     # The five fields the owner's audit ruled on (2026-10-20): reported by name, every time.
     installed = bool(info.get("root"))
     version_pinned_ok = bool(info.get("version") == PINNED_VERSION)
@@ -942,10 +1023,11 @@ def doctor(*, env: Optional[dict] = None, node_version: Optional[str] = None,
                               and _provider_available("JAVA_HOME", source))
     tier2_jadx_ready = bool(_provider_available("REA_JADX_MCP_JAR", source)
                             or shutil.which("jadx"))
-    ready = bool(ok_node and info.get("ok"))
     return {
+        "ready": ready,
         "ok": ready,
         "available": ready,
+        "why": why,
         "installed": installed,
         "version_pinned_ok": version_pinned_ok,
         "tier1_static_ready": tier1_static_ready,
@@ -953,9 +1035,10 @@ def doctor(*, env: Optional[dict] = None, node_version: Optional[str] = None,
         "tier2_jadx_ready": tier2_jadx_ready,
         "tool": TOOL,
         "enabled": enabled(),
-        "node": {"ok": bool(ok_node), "version": version_text or "",
-                 "why": node_why},
+        "node": {"ok": bool(ok_node), "version": version_text or "", "why": node_why},
         "install": info,
+        "integrity": integrity,
+        "signatures": {"checked": False, "why": SIGNATURE_NOTE},
         "install_line": INSTALL_HINT,
         "providers": {name: _provider_available(name, source)
                       for name in ("GHIDRA_INSTALL_DIR", "JAVA_HOME", "REA_JADX_MCP_JAR",
@@ -964,10 +1047,7 @@ def doctor(*, env: Optional[dict] = None, node_version: Optional[str] = None,
         "actions": actions,
         "pinned": {"package": PACKAGE, "version": PINNED_VERSION,
                    "integrity": PINNED_INTEGRITY, "mcp_tools": EXPECTED_MCP_TOOLS},
-        "why": ("" if ready else (node_why or info.get("why")
-                                  or "REA is not ready on this PC")),
     }
-
 
 def run(plan: dict) -> dict:
     """Execute one prepared plan (called only after the card). Never raises."""
