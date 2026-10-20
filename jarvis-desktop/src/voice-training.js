@@ -169,7 +169,135 @@ export function understands(status) {
     // conditions in `gate.training.training`. An older PC sends none of it,
     // and this page then says so instead of recording against a guess.
     plan: Boolean(planOf(status)),
+    // The PC understands `{"mode": "clear"}` (2026-10-19, the owner's "clear
+    // previous voice training"): one more mode on the existing enroll route.
+    // An older PC answers 400 "unknown mode"; this page then offers no button
+    // rather than sending a body it cannot read.
+    clear: yes(t.clear),
   };
+}
+
+/* ── Clearing the saved voice training (2026-10-19) ─────────────────── */
+
+/** The button's own words. */
+export const CLEAR_LABEL = "Clear previous voice training";
+
+/**
+ * What the card deletes, in the owner's words. `describe_clear()` in
+ * backend/jarvis_voice_enroll.py writes the card itself; this is the page's
+ * summary beside the button, and it names only what the card names.
+ */
+export const CLEAR_WHAT_IT_DOES =
+  "Deletes every saved voice print on your PC (one per microphone you trained), " +
+  "the \"hey Jarvis\" check built from those recordings, and the small notes it " +
+  "kept from learning your voice in Live. It does not delete your custom " +
+  "speaking voices, your chat history or your phone pairing. ONE card approves " +
+  "it: nothing is deleted until you say yes, and voice commands and Jarvis Live " +
+  "are refused until you train your voice again.";
+
+/** Said once the PC has cleared the training (the status's own outcome). */
+export const CLEARED_LINE =
+  "Your saved voice training is cleared. Train your voice again to use voice commands.";
+
+/** The one card's sentence for the button's own state line. */
+export function clearApproveLine(approveWhere) {
+  return `Approve the card ${approveWhere}. Nothing is deleted until you do.`;
+}
+
+/**
+ * Said when a voice card is already waiting: the clear button must not fire a
+ * second time (the PC answers 409 for a second request), and this page shows
+ * that waiting card in words instead.
+ */
+export function clearWaitingLine(status) {
+  const t = obj(obj(obj(status).gate).training);
+  if (t.pending !== true) return null;
+  if (String(t.kind || "") === "clear") {
+    return "A clear card is already waiting for your approval - approve or deny " +
+      "it first. Nothing is deleted until you do, and a second clear cannot be " +
+      "asked for while it waits.";
+  }
+  return "A voice card is already waiting for approval. Approve or deny that card " +
+    "first; no second voice card can be raised while it waits.";
+}
+
+/**
+ * What the PC answered to the clear request, in words for the page. Mirrors
+ * backend/jarvis_voice_enroll.stage_clear()'s own answers:
+ *  - 202 `pending: true` - ONE card is up, nothing deleted yet;
+ *  - 200 `ok: true, cleared: false` - nothing saved, no card raised;
+ *  - 409 `pending: true` - another voice card is already waiting;
+ *  - 409 `pending: false` - the tier is not `ask`, so no card was raised;
+ *  - anything else - a refusal's sentence, never a claim of success.
+ */
+export function clearReply(answer, approveWhere) {
+  const a = obj(answer);
+  const waiting = a.pending === true;
+  if (typeof a.error === "string" && a.error.trim()) {
+    return { text: sentence(a.error), tone: waiting ? "warn" : "bad", waiting };
+  }
+  if (waiting || Number(a.http) === 202) {
+    const said = typeof a.message === "string" && a.message.trim()
+      ? sentence(a.message)
+      : clearApproveLine(approveWhere);
+    return { text: said, tone: "ok", waiting: true };
+  }
+  if (a.ok === true && a.cleared === false) {
+    const said = typeof a.message === "string" && a.message.trim()
+      ? sentence(a.message)
+      : "There is nothing to clear: no saved voice training was found on this PC.";
+    return { text: said, tone: "note", waiting: false };
+  }
+  return {
+    text: "Your PC did not say whether it cleared anything.",
+    tone: "bad",
+    waiting: false,
+  };
+}
+
+/** A reason the PC gave, as a sentence fragment: ", because ..." or "". */
+function clearReason(reason) {
+  const said = String(reason || "").trim();
+  return said ? `: ${sentence(said)}` : ".";
+}
+
+/**
+ * How the clear ended, from the PC's status `last`, or null when the last
+ * outcome was not a clear. Shows what happened in the PC's own terms - a
+ * denied or timed-out card leaves every file where it was, and a failed
+ * delete is never reported as cleared.
+ */
+export function clearOutcomeLine(last) {
+  const l = obj(last);
+  const outcome = String(l.outcome || "");
+  if (outcome === "cleared") return { text: CLEARED_LINE, tone: "ok" };
+  if (outcome === "denied") {
+    return { text: "You said no, so every saved voice file stays and nothing changed.", tone: "warn" };
+  }
+  if (outcome === "timed_out") {
+    return { text: "Nobody answered the clear card in time, so every saved voice file stays.", tone: "warn" };
+  }
+  if (outcome === "refused") {
+    return { text: `Your PC refused the clear${clearReason(l.reason)}`, tone: "warn" };
+  }
+  if (outcome === "failed") {
+    return {
+      text: `The clear did not finish${clearReason(l.reason)} Nothing is reported as cleared while a saved file remains.`,
+      tone: "bad",
+    };
+  }
+  return null;
+}
+
+/**
+ * Whether this PC can clear, and has something saved to clear. Any saved print
+ * on any microphone counts: the card is deliberately global (one card clears
+ * every microphone's print), so a phone-trained print is offered here too.
+ */
+export function clearAvailable(status) {
+  if (!understands(status).clear) return false;
+  const prints = obj(obj(obj(status).gate).prints);
+  return Object.keys(prints).some((key) => obj(prints[key]).trained === true);
 }
 
 /** The strictness the PC reports: "very_strict", "balanced", or "" when not reported. */

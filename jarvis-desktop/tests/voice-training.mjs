@@ -52,7 +52,7 @@ const WHERE = "in the Jarvis bar, on the widget, or on your phone's Home screen"
 /** An older PC: today's status without the flags 2026-09-24 added. */
 const older = (st) => {
   const c = JSON.parse(JSON.stringify(st));
-  for (const k of ["rounds", "settings", "measure", "session", "round_asks", "training", "adaptation"]) {
+  for (const k of ["rounds", "settings", "measure", "session", "round_asks", "training", "adaptation", "clear"]) {
     delete c.gate.training[k];
   }
   delete c.gate.settings;
@@ -349,7 +349,10 @@ await check("\"Train more\" adds, and is offered only once this PC's microphone 
   const phoneOnly = await open(S.small_only);
   const buttons = await phoneOnly.evaluate(() => [...document.querySelectorAll("#vt-train button")].map((b) => b.innerText));
   await phoneOnly.close();
-  assert.deepEqual(buttons, ["Train my voice"]);
+  // The clear is offered here TOO: it is deliberately global, and this PC has
+  // a saved print on the PHONE, so "Clear previous voice training" can remove
+  // it from Settings on the PC as well as the phone.
+  assert.deepEqual(buttons, ["Train my voice", VT.CLEAR_LABEL]);
 });
 
 await check("a silent or short recording must be made again before going on", async () => {
@@ -1267,6 +1270,121 @@ await check("the guided test's 20 sentences are ONE list: the phone's is this on
     "the phone's guided test reads other sentences (jarvis-client voice/StrictVoice.kt)");
 });
 
+/* ── Clearing the saved voice training (2026-10-19) ─────────────────── */
+
+// REAL answers, from the route's own table (docs/JARVIS-API.md section 5;
+// backend/jarvis_voice_enroll.stage_clear()), not mocked counts: a waiting
+// card (202), "nothing to clear" (200), a card already up (409) and a tier
+// that cannot end in a person's yes (409). The page may only relay these.
+const CLEAR_PENDING = {
+  http: 202, ok: true, pending: true, files: 7, prints: 3, verifiers: 3, adaptation: 1,
+  message: "Approve the card on your PC or phone to clear it. Nothing is deleted until you do.",
+};
+const CLEAR_NOTHING = {
+  http: 200, ok: true, cleared: false, pending: false, trained: false,
+  message: "There is nothing to clear: no saved voice training was found on this PC, so no voice files are saved.",
+};
+const CLEAR_WAITING = {
+  http: 409, pending: true, expires_in: 170,
+  error: "a voice training is already waiting for approval - approve or deny that card first",
+};
+const CLEAR_TIER = {
+  http: 409, pending: false,
+  error: "change_own_config is tier 'auto' in jarvis-framework.toml; clearing your voice training needs a person to say yes, so it must be 'ask'",
+};
+
+await check("clear: the button is only on a PC that understands it and has something saved", async () => {
+  const page = await open(S.strong_ready, { vt: { clear: CLEAR_PENDING } });
+  const found = await page.evaluate(() => {
+    const b = document.getElementById("vt-clear");
+    return b ? { text: b.innerText, disabled: b.disabled } : null;
+  });
+  const words = await text(page, "vt-train");
+  await page.close();
+  assert.deepEqual(found, { text: VT.CLEAR_LABEL, disabled: false });
+  assert.match(words, /ONE card approves it/);
+  assert.match(words, /does not delete your custom speaking voices/);
+  assert.equal(VT.understands(S.strong_ready).clear, true);
+  // An older PC (no `clear` flag) offers no button at all, not a disabled one.
+  assert.equal(VT.understands(older(S.strong_ready)).clear, false);
+  const old = await open(older(S.strong_ready), { vt: { clear: CLEAR_PENDING } });
+  assert.equal(await old.evaluate(() => document.getElementById("vt-clear")), null);
+  await old.close();
+  // Nothing saved: no button (there is nothing to clear), and the pure map
+  // still says exactly what the route answers.
+  const untrained = JSON.parse(JSON.stringify(S.strong_ready));
+  for (const k of ["desktop", "phone", "general"]) if (untrained.gate.prints[k]) untrained.gate.prints[k].trained = false;
+  assert.equal(VT.clearAvailable(untrained), false);
+  const nothing = VT.clearReply(CLEAR_NOTHING, WHERE);
+  assert.equal(nothing.text, CLEAR_NOTHING.message);
+  assert.equal(nothing.tone, "note");
+  assert.equal(nothing.waiting, false);
+});
+
+await check("clear: ONE click asks the PC once, and a waiting card is never drawn as cleared", async () => {
+  const page = await open(S.strong_ready, { vt: { clear: CLEAR_PENDING } });
+  await page.click("#vt-clear");
+  await page.waitForTimeout(200);
+  const sent = await calls(page, "clear_voice_training");
+  const said = await page.evaluate(() => {
+    const status = document.getElementById("vt-clear-status");
+    const b = document.getElementById("vt-clear");
+    return { words: status ? status.innerText : "", disabled: b ? b.disabled : null };
+  });
+  await page.close();
+  assert.equal(sent.length, 1, "the button asks the PC exactly once");
+  assert.match(said.words, /Approve the card .*Nothing is deleted until you do\./);
+  assert.doesNotMatch(said.words, /cleared|were deleted|file stays/i,
+    "a waiting card must never be drawn as cleared or as anything already done");
+});
+
+await check("clear: a 409 says a card is already waiting, and no success is claimed", async () => {
+  const page = await open(S.strong_ready, { vt: { clear: CLEAR_WAITING } });
+  await page.click("#vt-clear");
+  await page.waitForTimeout(200);
+  const sent = await calls(page, "clear_voice_training");
+  const words = await page.evaluate(() => document.getElementById("vt-clear-status").innerText);
+  const trained = await page.evaluate(() => document.getElementById("vt-train").innerText);
+  await page.close();
+  assert.equal(sent.length, 1);
+  assert.match(words, /already waiting for approval/);
+  assert.doesNotMatch(words, /cleared|deleted|were removed/i);
+  assert.match(trained, /Train more/, "the trained state is still shown; nothing was claimed deleted");
+});
+
+await check("clear: nothing-to-clear says so, and deny/timeout/failure never read as success", async () => {
+  const page = await open(S.strong_ready, { vt: { clear: CLEAR_NOTHING } });
+  await page.click("#vt-clear");
+  await page.waitForTimeout(200);
+  const sent = await calls(page, "clear_voice_training");
+  const words = await page.evaluate(() => document.getElementById("vt-clear-status").innerText);
+  await page.close();
+  assert.equal(sent.length, 1);
+  assert.match(words, /^There is nothing to clear: .*so no voice files are saved\.$/);
+  assert.doesNotMatch(words, /cleared|a card was raised/i, "no card-looking success for nothing-to-clear");
+
+  // The outcome words, from the PC's status `last` - each tells the truth.
+  assert.equal(VT.clearOutcomeLine({ outcome: "cleared" }).text, VT.CLEARED_LINE);
+  assert.match(VT.clearOutcomeLine({ outcome: "denied" }).text, /^You said no, so every saved voice file stays/);
+  assert.match(VT.clearOutcomeLine({ outcome: "timed_out" }).text, /Nobody answered the clear card/);
+  assert.match(VT.clearOutcomeLine({ outcome: "failed", reason: "could not delete 1 of 7 saved voice files" }).text,
+    /did not finish: .*could not delete 1 of 7 saved voice files/i);
+  assert.match(VT.clearOutcomeLine({ outcome: "refused", reason: "the approval gate failed (RuntimeError)" }).text,
+    /^Your PC refused the clear/);
+  assert.equal(VT.clearOutcomeLine(null), null);
+  // A tier that is not `ask` is a refusal, never a card, and it says so.
+  const tier = VT.clearReply(CLEAR_TIER, WHERE);
+  assert.equal(tier.tone, "bad");
+  assert.equal(tier.waiting, false);
+  assert.match(tier.text, /needs a person to say yes/);
+  // A status with a card waiting names it, so a second request is not fired.
+  const pendingStatus = JSON.parse(JSON.stringify(S.strong_ready));
+  pendingStatus.gate.training.pending = true;
+  pendingStatus.gate.training.kind = "clear";
+  assert.match(VT.clearWaitingLine(pendingStatus), /A clear card is already waiting/);
+});
+
+
 /* ── The Rust ───────────────────────────────────────────────────────── */
 
 const fnBody = (src, sig) => {
@@ -1277,10 +1395,23 @@ const fnBody = (src, sig) => {
 };
 const RUST = read("src-tauri/src/voice_training.rs");
 const COMMANDS = ["start_voice_sample", "voice_sample_level", "stop_voice_sample", "cancel_voice_sample",
-  "discard_voice_samples", "send_voice_training", "cancel_voice_training", "measure_voice",
+  "discard_voice_samples", "send_voice_training", "cancel_voice_training", "clear_voice_training",
+  "measure_voice",
   "set_voice_setting", "check_voice_with_someone_else", "propose_voice_threshold",
   "get_custom_voices", "create_custom_voice", "set_active_voice",
   "delete_custom_voice", "set_better_voice"];
+
+await check("CONTROL (Rust): the clear is ONE card on the existing route, and is held on a stale link", async () => {
+  assert.match(fnBody(RUST, "pub async fn clear_voice_training("), /if stale\(&app\) \{\s*return Err\(HELD_STALE/);
+  assert.match(fnBody(RUST, "pub async fn clear_voice_training("), /post\(&app, "\/api\/voice\/enroll", &clear_body\(\), ENROLL_TIMEOUT\)/);
+  assert.match(fnBody(RUST, "pub async fn clear_voice_training("), /enroll_answer\(status, &text\)/);
+  assert.match(fnBody(RUST, "pub\(crate\) fn clear_body\("), /json!\(\{ "mode": "clear" \}\)/);
+  // The page asks through the one command; it never talks HTTP itself.
+  const panel = read("src/voice-panel.js");
+  assert.match(panel, /invoke\("clear_voice_training"\)/);
+  assert.doesNotMatch(panel, /\/api\/voice\/enroll/);
+  assert.match(panel, /VT\.clearOutcomeLine\(last\)/);
+});
 
 await check("CONTROL (Rust): what raises a card is held on a stale link, and nothing else", async () => {
   assert.match(fnBody(RUST, "pub async fn send_voice_training("), /if \(finish \|\| legacy\) && stale\(&app\) \{\s+return Err\(HELD_STALE/);

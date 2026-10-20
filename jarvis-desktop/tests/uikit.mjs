@@ -1259,6 +1259,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "discard_voice_samples":
           case "send_voice_training":
           case "cancel_voice_training":
+          case "clear_voice_training":
           case "measure_voice":
           case "set_voice_setting":
           case "check_voice_with_someone_else":
@@ -1300,6 +1301,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                 return JSON.parse(JSON.stringify(v.sends.length > 1 ? v.sends.shift() : v.sends[0]));
               case "cancel_voice_training":
                 return JSON.parse(JSON.stringify(v.cancel));
+              case "clear_voice_training":
+                return JSON.parse(JSON.stringify(v.clear || { ok: false, error: "not answered in this scenario" }));
               case "measure_voice":
                 return JSON.parse(JSON.stringify(v.measure));
               case "set_voice_setting":
@@ -3504,7 +3507,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   // the real answers open() fills in; a scenario names only what it changes.
   window.__vt = { calls: [], fails: {}, reads: 0, recording: null, level: 0.3,
                   take: { seconds: 2.6, peak: 0.42 }, takes: null, voicesUnavailable: false,
-                  ...(vt || {}) };
+                  clear: null, ...(vt || {}) };
   // Unset, what commands.rs makes of backend/rebuilt/jarvis_events.hello()
   // run with none of the owner's own modules (its Rust test pins the same).
   // Unset, lock.rs's defaults on a PC with Windows Hello set up, and the

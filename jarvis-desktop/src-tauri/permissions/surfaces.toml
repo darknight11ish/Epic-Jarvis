@@ -769,6 +769,11 @@ permissions = [
   "allow-discard-voice-samples",
   "allow-send-voice-training",
   "allow-cancel-voice-training",
+  # Clearing every saved voice file (voice_training.rs): ONE approval card
+  # (change_own_config, tier ask) and nothing is deleted until it is approved;
+  # a denied card or a timeout deletes nothing. Held while the event stream is
+  # stale - it is NOT immediate like the cancel above.
+  "allow-clear-voice-training",
   "allow-measure-voice",
   # Resetting the live-adaptation counters (voice_training.rs): zeroes counters
   # only, never changes the enrolled voice; no card, not held on a stale link.

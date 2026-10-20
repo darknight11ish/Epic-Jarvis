@@ -608,6 +608,34 @@ pub async fn cancel_voice_training(
     enroll_answer(status, &text)
 }
 
+/// The body for a clear: ONE more mode on the existing `/api/voice/enroll`
+/// route (`jarvis_voice_enroll` "clear previous voice training"), never a
+/// second route. Pure, so the JSON is tested without a running app.
+pub(crate) fn clear_body() -> Value {
+    json!({ "mode": "clear" })
+}
+
+/// Clears the saved voice training on this PC: the voice print for each
+/// microphone trained, the "hey Jarvis" check built from those recordings and
+/// the Live-adaptation notes. **ONE approval card** (`change_own_config`,
+/// tier `ask`) and NOTHING is deleted until it is approved; a denied card, a
+/// timeout, a refusal or any tier other than `ask` deletes nothing, and the
+/// PC answers "there is nothing to clear" without a card when nothing is
+/// saved. Held while the event stream is stale, like every other
+/// card-raising voice action - it is NOT immediate like the cancel above.
+///
+/// The answer is `enroll_answer`'s shape: the route's own JSON with `http`
+/// added, so the page can tell a waiting card (`http: 202`), "nothing to
+/// clear" (`http: 200`, `cleared: false`) and a refusal (409/400) apart.
+#[tauri::command]
+pub async fn clear_voice_training(app: AppHandle) -> Result<Value, String> {
+    if stale(&app) {
+        return Err(HELD_STALE.to_string());
+    }
+    let (status, text) = post(&app, "/api/voice/enroll", &clear_body(), ENROLL_TIMEOUT).await?;
+    enroll_answer(status, &text)
+}
+
 /// The guided test in requests the server takes: at most 20 clips and
 /// [`MEASURE_PART_SECONDS`] each, in order.
 pub(crate) fn measure_parts(seconds: &[f64]) -> Vec<Range<usize>> {
@@ -2015,6 +2043,18 @@ mod tests {
         );
         assert!(voice_setting("voice_id_model", "resnet293").is_err());
         assert!(voice_setting("wake_confirm", "on").is_err());
+    }
+
+    #[test]
+    fn the_clear_body_is_the_one_the_backend_reads() {
+        // `jarvis_voice_enroll.stage()` reads exactly this one field: a new
+        // route was never added, and this is what keeps the two ends honest.
+        assert_eq!(clear_body(), serde_json::json!({ "mode": "clear" }));
+        assert_eq!(
+            clear_body().as_object().map(|m| m.len()),
+            Some(1),
+            "the clear body carries nothing else - no paths, no mic, no clips"
+        );
     }
 
     #[test]

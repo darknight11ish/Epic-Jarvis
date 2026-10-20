@@ -3328,6 +3328,44 @@ object JarvisRuntime {
     }
 
     /**
+     * "Clear previous voice training" (2026-10-19): ONE more mode on the
+     * SAME `/api/voice/enroll` route. ONE `change_own_config` card, and
+     * nothing is deleted until it is approved; a 409 means another voice card
+     * is already waiting, and a 200 `cleared: false` means nothing was saved
+     * (no card). Blocked while the link is down or stale ([actionBlocker]),
+     * like every other card-raising voice action. This only asks: the phone
+     * never decides and never approves; the card is decided on the PC (or in
+     * this phone's own approvals list).
+     */
+    suspend fun clearVoiceTraining(): VoiceTraining.SendResult {
+        actionBlocker()?.let { return VoiceTraining.SendResult(false, it) }
+        return when (val result = api.clearVoiceTraining()) {
+            is ApiResult.Ok -> {
+                val reply = VoiceTraining.clearReply(result.value)
+                // The card should appear in this phone's approvals too.
+                if (reply.accepted) refreshPending()
+                // The PC records the outcome when its own wait for the card
+                // returns; re-read the status so the screen shows the real
+                // state (untrained, or unchanged on a denial) even if the
+                // event lands a moment late.
+                recheckVoiceAfterDecision()
+                reply
+            }
+            is ApiResult.Failed -> VoiceTraining.SendResult(
+                false,
+                when (result.error) {
+                    // No such route: a PC older than voice-enroll.patch.
+                    ApiError.NotFound ->
+                        "Your PC does not have voice training yet. Run the patch script on " +
+                            "the PC first (backend/README.md, \"Train my voice\")."
+                    ApiError.NotAvailable -> "Voice training is not installed on your PC yet."
+                    else -> describe(result.error)
+                },
+            )
+        }
+    }
+
+    /**
      * The "someone else" check: another person's clips, scored on the PC
      * against the owner's print and thrown away there. Changes nothing and
      * raises no card, so it is not gated on the link the way a write is -

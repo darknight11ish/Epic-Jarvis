@@ -471,6 +471,7 @@ fn main() {
             "discard_voice_samples",
             "send_voice_training",
             "cancel_voice_training",
+            "clear_voice_training",
             "measure_voice",
             "reset_voice_adaptation",
             "set_voice_setting",

@@ -3586,6 +3586,17 @@ class JarvisApi(
         postTraining(enrollRequestBody(clips, mic = mic))
 
     /**
+     * "Clear previous voice training" (2026-10-19): ONE more mode on the
+     * SAME route and the SAME answer mapper as [enrollVoice] - no new route.
+     * A 202 means a card was raised and nothing is deleted until it is
+     * approved; a 200 with `cleared: false` means nothing was saved (no card);
+     * a 409 means another voice card already waits. Those sentences are the
+     * PC's own and are shown as they are - this never reports "cleared".
+     */
+    suspend fun clearVoiceTraining(): ApiResult<VoiceTrainingReply> =
+        postTraining(com.jarvis.client.voice.VoiceTraining.CLEAR_BODY)
+
+    /**
      * Proposes a new bar for the owner's voice on [mic] - the PC raises an
      * approval card and changes nothing until it is approved. The same
      * route and answer shape as [enrollVoice].
