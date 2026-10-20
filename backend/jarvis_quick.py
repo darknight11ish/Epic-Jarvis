@@ -2987,6 +2987,12 @@ _FEATURE_HOWTO = re.compile(
     r"|where\s+(?:do|can)\s+i\s+(?:turn|switch)\s+(on|off)\s+"
     r"(?:the\s+|my\s+|a\s+|an\s+)?(.+)"
     r"|where\s+do\s+i\s+(enable|disable)\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+)")
+#: "how do I train/teach you to <x>" - a how-to about USING a feature, not
+#: switching it (added 2026-10-20 with the "Write like me" row: "how do I train
+#: you to write like me?" must answer with that feature's OWN facts). The
+#: answer is the feature's `where`/`asks`, so it is the explain intent.
+_FEATURE_TRAIN = re.compile(
+    r"how\s+(?:do|can|should)\s+i\s+(?:train|teach)\s+(?:you|jarvis)\s+to\s+(.+)")
 #: "is <thing> on?" - the exact job the field test found missing.
 _FEATURE_STATE = re.compile(
     r"is\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+?)\s+(?:turned\s+on|switched\s+on"
@@ -3181,6 +3187,11 @@ def _feature_guide(s: str, raw: str = "") -> Optional[Intent]:
     m = _FEATURES_GROUP.fullmatch(s)
     if m:
         return Intent("features_group", {"group": (m.group(1) or m.group(2) or "").strip()})
+    m = _FEATURE_TRAIN.fullmatch(s)
+    if m:
+        # "how do I train you to write like me?" - explain the feature named
+        # after "to", never a switch (it has no on/off of its own).
+        return _feature_explain_intent(s, raw, _feature_target(m.group(1)))
     m = _FEATURE_HOWTO.fullmatch(s)
     if m:
         g = m.groups()

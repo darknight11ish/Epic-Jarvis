@@ -1,9 +1,9 @@
 """GENERATED FILE - do not edit by hand.
 
-The owner's feature list, as data: 137 rows from features/features.json.
+The owner's feature list, as data: 138 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 0c025ea807dd9ad8fde0dc47ca1c774c931925b8703b5fb95a124c59776a2514); the apps' Features pages read their own
+`features/features.json` (sha256 8aaf1e6792b3d28138f85f3a0d044e9805c73b7335604bffe4fd06932f400abd); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "0c025ea807dd9ad8fde0dc47ca1c774c931925b8703b5fb95a124c59776a2514"
+SOURCE_SHA256 = "8aaf1e6792b3d28138f85f3a0d044e9805c73b7335604bffe4fd06932f400abd"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -130,6 +130,17 @@ FEATURES = (
         "limit": "Humour is off to start, and never appears on a card, an error or a serious topic.",
         "surface": "both",
         "covers": ["settings.manner", "how-it-talks"],
+    },
+    {
+        "id": "write-like-me",
+        "group": "Talking",
+        "title": "Write like me",
+        "what": "Teach Jarvis how you write - your sentence length, contractions, greetings, words you never use, and examples of your own messages and emails - so drafts sound like you instead of a chatbot.",
+        "where": "Settings, How Jarvis talks, Write like me - answer the short writing prompts, paste a sample of your own writing, or edit a draft Jarvis wrote.",
+        "asks": "No card to add your own writing samples on this PC. Forgetting a sample or learned rule asks 'are you sure?' first.",
+        "limit": "Names, dates, amounts, links and numbers are stripped out ([name], [date], [amount]) before a sample is kept. Using your writing style marks the turn private (style_exemplars), so it always runs on your own PC's model and never goes to a cloud service.",
+        "surface": "both",
+        "covers": [],
     },
     {
         "id": "interrupt",

@@ -11,7 +11,7 @@ current state directly". The feature list existed all along -
 no chat path read it.
 
 WHAT THIS PROVES
-  1. THE FACTS ARE THE LIST'S OWN. Every one of the 137 rows is found by its id,
+  1. THE FACTS ARE THE LIST'S OWN. Every one of the 138 rows is found by its id,
      and the answer's facts equal the JSON word for word (groups, what, where,
      asks, limit, surface, covers) - nothing is reworded into the facts, and
      the generated copy the PC carries is current (`tools/
@@ -170,7 +170,7 @@ def t_every_row_is_looked_up_and_its_facts_equal_the_json():
             bad.append((row["id"], "words lost limit", row["limit"][:40]))
         if not row.get("limit") and "gives no limit" not in out["words"]:
             bad.append((row["id"], "empty limit not said", ""))
-    check("every one of the 137 rows is found by id, with facts equal to the JSON",
+    check("every one of the 138 rows is found by id, with facts equal to the JSON",
           not bad, bad[:6])
     # A row whose words are not the list's is a reworded fact. Each answer is
     # assembled from the row the module's own `features()` returns; prove the
@@ -315,6 +315,14 @@ def t_the_fixed_phrases_answer_the_right_intent():
         "what does the prompt coach do": "feature_explain",
         "what is the clipboard time machine": "feature_explain",
         "what is a focus session": "feature_explain",
+        # "Write like me" (2026-10-20): the row's exact name, and the way the
+        # owner actually asks to be trained.
+        "what is write like me": "feature_explain",
+        "what is the write like me feature": "feature_explain",
+        "how do I train you to write like me?": "feature_explain",
+        "how do I train you to write like me": "feature_explain",
+        "how do I teach you to write like me": "feature_explain",
+        "is write like me on": "feature_state",
         "Jarvis, what is the turbo feature": "feature_unknown",
         "is the prompt coach on": "feature_state",
         "is the prompt coach on right now": "feature_state",
@@ -352,7 +360,10 @@ def t_the_fixed_phrases_do_not_swallow_other_questions():
              # CONTAINS a feature's word is not that feature's question.
              "what is a focus session in psychology",
              "how do I turn on dark mode in Chrome",
-             "where is my file manager", "is my oven on")
+             "where is my file manager", "is my oven on",
+             # "how do I train/teach you to ..." is a feature question, but
+             # training something else is not (2026-10-20).
+             "how do I train my dog to sit")
     for phrase in other:
         got = match(phrase)
         check(f"'{phrase}' is not answered as a feature",
