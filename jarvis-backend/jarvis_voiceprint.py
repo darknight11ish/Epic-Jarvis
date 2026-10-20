@@ -72,7 +72,7 @@ survives**.
     'Order 55123 arrived.'                 'Order [number] arrived.'
     'My postcode is CB1 2AB.'              'My postcode is [postcode].'
     'Ring the dentist on 01223 456789.'    'Ring the dentist on [number].'
-    "Priya's number is 07700 900123."      "Priya's number is [number]."
+    "Priya's number is 07700 900123."      "[name] number is [number]."
     'Account 44332211 with Barclays.'      'Account [number] with [name].'
     'Send it to 12 Oak Street, Cambridge.'  'Send it to [number] [name] [name], [name].'
 
@@ -93,14 +93,15 @@ digit survives" a property of the code rather than a hope, and
 `backend/test_voiceprint.py` asserts it for every row of the table and then for
 every line of this module's own docstring.
 
-ONE LIMIT, NAMED RATHER THAN LEFT TO BE DISCOVERED. The proper-noun walk keeps
-its inherited rule: it does not replace a capitalised word that OPENS a
-sentence, because the first word of a sentence is capitalised whether or not it
-is a name. So in "Priya's number is ..." the name survives - see that row
-above. Numbers are unaffected (the guarantee above covers every one), and the
-rule is deliberately unchanged: stripping the first word of every sentence
-would delete the beginnings of sentences from every exemplar, which is exactly
-the shape of the writing this feature exists to preserve.
+SENTENCE-OPENING NAMES (fixed 2026-10-20, Area 5 audit). The proper-noun walk
+used to skip every capitalised word that OPENS a sentence, so "Priya's number
+is ..." kept the name. Four rules now replace an opening name while leaving
+ordinary openers alone: a possessive whose base is not a grammar contraction
+("Priya's" -> "[name]"), a direct-address vocative such as "Sam," or "Hi Sam,"
+("[name],"), an honorific ("Dr. Patel" -> "[name]"), and a name repeated at the
+start of two sentences. Closed sets keep "It's ready.", "Thanks, I'll check."
+and the usual conversational openers intact, and the no-digit guarantee is
+unchanged.
 
 WHAT IT IS NOT
 
@@ -241,6 +242,21 @@ ok okay yes no thanks hi hello dear regards best cheers
 #: than buried in the function so a test can assert the order is what it says
 #: - the date-before-path bug was an ORDER bug, and order is the thing that
 #: must not silently change.
+#: Sentence-openers whose possessive form is grammar, not a person.
+_KEEP_CONTRACTIONS = frozenset({
+    "it", "that", "what", "there", "here", "let", "who", "how", "where", "when",
+    "why", "today", "tomorrow", "yesterday", "monday", "tuesday", "wednesday",
+    "thursday", "friday", "saturday", "sunday",
+})
+
+#: Openers that are not vocatives even when followed by a comma.
+_VOCATIVE_OPENERS = frozenset({
+    "hi", "hey", "hello", "dear", "thanks", "thank", "yes", "no", "sure", "well",
+    "ok", "okay", "first", "second", "third", "finally", "also", "however",
+    "meanwhile", "honestly", "frankly", "basically", "personally", "fortunately",
+    "unfortunately", "actually", "overall", "anyway", "besides", "still", "plus",
+})
+
 SUBSTITUTIONS = (
     (_URL, "[link]"),
     (_EMAIL, "[email]"),
@@ -290,6 +306,67 @@ def strip_entities(text: str) -> tuple:
     for rx, label in SUBSTITUTIONS:
         s = sub(rx, label, s)
 
+    # Area 5/Write-Like-Me audit (2026-10-20): names OPEN a sentence all the time,
+    # and the old rule skipped every sentence-opening token. Four conditions now
+    # replace one, while the closed sets keep "It's", "Thanks," and ordinary
+    # conversational openers intact.
+    first = r"(^|(?<=[.!?]\s)|\n)"
+
+    def possessive(m):
+        nonlocal n
+        if m.group(2).lower() in _KEEP_CONTRACTIONS:
+            return m.group(0)
+        n += 1
+        return m.group(1) + "[name]"
+
+    s = re.sub(first + r"([A-Z][a-z]{1,20})['\u2019]s\b", possessive, s)
+
+    def vocative(m):
+        nonlocal n
+        if m.group(3).lower() in _VOCATIVE_OPENERS:
+            return m.group(0)
+        n += 1
+        greeting = (m.group(2) or "")
+        return m.group(1) + greeting + "[name], "
+
+    s = re.sub(first + r"((?:Hi|Hey|Hello|Dear)[ ,]+)?([A-Z][a-z]{1,20}),\s",
+               vocative, s)
+
+    def honorific(m):
+        nonlocal n
+        n += 1
+        return m.group(1) + "[name]"
+
+    s = re.sub(first + r"((?:Dr|Mr|Mrs|Ms|Prof)\.\s+[A-Z][a-z]+(?: [A-Z][a-z]+)?)",
+               honorific, s)
+
+    # A name repeated at the start of two sentences is certainly a name, not a
+    # one-off opener; replace every such start before the mid-sentence check.
+    starts = re.findall(r"(?:^|(?<=[.!?]\s)|\n)([A-Z][a-z]{1,20})\b", s)
+    repeated_starts = {w for w in starts if starts.count(w) >= 2}
+
+    def repeated_start(m):
+        nonlocal n
+        if m.group(2) in repeated_starts:
+            n += 1
+            return m.group(1) + "[name]"
+        return m.group(0)
+
+    s = re.sub(r"(^|(?<=[.!?]\s)|\n)([A-Z][a-z]{1,20})\b", repeated_start, s)
+
+    # A capitalized word that also appears capitalized mid-sentence is a person
+    # (or a brand) the writing keeps naming; replace it where it opens a sentence.
+    mid_names = set(re.findall(r"(?<=[a-z0-9,;]\s)([A-Z][a-z]{1,20})\b", s))
+
+    def repeated(m):
+        nonlocal n
+        if m.group(2) in mid_names:
+            n += 1
+            return m.group(1) + "[name]"
+        return m.group(0)
+
+    s = re.sub(first + r"([A-Z][a-z]{1,20})\b", repeated, s)
+
     # Proper nouns last, so the patterns above have already taken their pieces.
     # A token that is already a placeholder ("[name]") is skipped.
     out, start = [], True
@@ -299,6 +376,7 @@ def strip_entities(text: str) -> tuple:
             continue
         bare = token.strip(".,;:!?()[]\"'")
         if (not start and bare and bare[0].isupper() and bare.lower() not in _COMMON
+                and not re.match(r"(?i)^i['\u2019]", bare)
                 and not bare.isupper() and "[" not in token):
             out.append(token.replace(bare, "[name]"))
             n += 1
@@ -497,6 +575,17 @@ _TOLERANCE = {
 }
 
 
+#: Tokens only the stripping step may produce. If one reaches a draft the model
+#: copied a placeholder the owner's real words never contained.
+_PLACEHOLDER_RX = re.compile(
+    r"\[(?:name|number|amount|date|link|email|path|handle|postcode|time)\]", re.I)
+
+
+def leaked_placeholders(text: str) -> list:
+    """The placeholder tokens in a draft, lowercased and unique. Never guesses."""
+    return sorted({m.group(0).lower() for m in _PLACEHOLDER_RX.finditer(str(text or ""))})
+
+
 def score_style_compliance(text: str, profile: Optional[dict] = None) -> dict:
     """How closely `text` reads like the voiceprint. 0 (nothing alike) to 1.
 
@@ -507,8 +596,10 @@ def score_style_compliance(text: str, profile: Optional[dict] = None) -> dict:
     something is.
     """
     profile = dict(profile or {})
+    leaked = leaked_placeholders(text)
     if not profile:
         return {"score": None, "close": [], "off": [],
+                "leaked_placeholder": bool(leaked), "leaked": leaked,
                 "note": "no voiceprint yet - write a few samples first"}
     mine = compute_voiceprint(text)
     close, off = [], []
@@ -522,9 +613,14 @@ def score_style_compliance(text: str, profile: Optional[dict] = None) -> dict:
         else:
             off.append({"measure": key, "voiceprint": want, "this_text": got})
     total = len(close) + len(off)
-    return {"score": round(len(close) / total, 3) if total else None,
-            "close": close, "off": off,
-            "measured": mine}
+    out = {"score": round(len(close) / total, 3) if total else None,
+           "close": close, "off": off, "measured": mine,
+           "leaked_placeholder": bool(leaked), "leaked": leaked}
+    if leaked:
+        # A draft that says "Hi [name]" is broken whatever else it reads like.
+        out["score"] = 0.0
+        out["off"] = off + [{"measure": "leaked_placeholder", "leaked": leaked}]
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -661,6 +757,16 @@ def _secret_in(text: str) -> bool:
 # --------------------------------------------------------------------------
 
 
+#: Chat-control markers no sample may carry into the store or a later prompt.
+_CONTROL_MARKERS = re.compile(
+    r"<\|(?:im_start|im_end|endoftext)\|>|</?tool_call>|</?think>", re.I)
+
+
+def strip_control_markers(text: str) -> str:
+    """SecAlign: control markers removed before a sample is stored. Pure."""
+    return _CONTROL_MARKERS.sub("", str(text or ""))
+
+
 def _new_id() -> str:
     # uuid4, like every other id in this backend, so a fixture built by driving
     # the real module is reproducible.
@@ -677,7 +783,7 @@ def add(kind: str, text: str, *, prompt: str = "") -> str:
     try:
         if kind not in KINDS:
             kind = KIND_SAMPLE
-        raw = str(text or "").strip()
+        raw = strip_control_markers(str(text or "")).strip()
         if not raw:
             _audit("voiceprint.withheld", {"kind": kind, "why": "empty"})
             return ""

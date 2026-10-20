@@ -20554,6 +20554,30 @@ cannot see it: it scans the two apps' own source, so a backend route no app
 calls is outside what it decides.
 ## 133. "Write Like Me": drafting in the owner's own voice (added 2026-10-15)
 
+**Slice 1 hardening (Area 5 / 2026-10-20).** The stripping step now replaces a
+name that OPENS a sentence too, by four rules: a possessive (`Priya's` -> `[name]`),
+a direct-address vocative (`Sam,` / `Hi Sam,` -> `[name],`), an honorific
+(`Dr. Patel` -> `[name]`), and a name repeated at the start of two sentences.
+Closed sets keep `It's ready.`, `Thanks, I'll check.` and ordinary conversational
+openers intact; the no-digit guarantee is unchanged. `score_style_compliance`
+now flags a draft that copied a stripping placeholder (`[name]`, `[number]`,
+`[amount]`, `[date]`, `[link]`, `[email]`, `[path]`, `[handle]`, `[postcode]`,
+`[time]`) as `leaked_placeholder: true` with score 0, and `add()` strips
+chat-control markers (`<|im_start|>`, `<|im_end|>`, `<|endoftext|>`,
+`<tool_call>`, `<think>`) before the scrubber and the store.
+
+**Scope note.** The plugin already mounts `GET /api/voiceprint` and three POSTs
+through `jarvis_voiceprint.install()` (origin + token); no new route or HUD
+patch is added here. The plugin does not mount `prompt_block` into a drafting
+prompt yet: the drafting prompt is assembled by the model turn loop, not by
+`jarvis_email_draft.py` or `jarvis_notes.py` (they save/search only), so that
+wiring needs the turn-loop seam and is recorded as BLOCKED in the integration
+report rather than guessed at. `voiceprint.db` is already in
+`jarvis_backup.SOURCE_DBS`; a global Forget hook is also BLOCKED (no safe
+per-database hook in `jarvis_forget_range.py`).
+
+
+
 `backend/jarvis_voiceprint.py`, and its drop-in folder
 `plugins/ready/voiceprint/`. Four routes, no patch, its own store.
 
