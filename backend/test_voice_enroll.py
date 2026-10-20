@@ -1213,6 +1213,40 @@ def t_the_real_file():
           and -1 < seg.find("_token_ok(self)") < (read_at if read_at != -1 else len(seg)))
 
 
+def t_a_clear_evicts_the_loaded_verifier_cache():
+    """#625 (2026-10-20): deleting the files is not enough for a running process.
+
+    jarvis_voice reads the owner's print from disk on every verify(), so that
+    half already refuses immediately. jarvis_wakeword keeps the last loaded
+    "hey Jarvis" verifier - a speaker model - in `_VER_CACHE`; a clear must
+    drop it as well, or the process that had loaded it keeps the old voice in
+    memory after the owner asked for it to be gone."""
+    fresh()
+    d, adapt, _untouched, restore = _clear_world()
+    try:
+        import jarvis_wakeword as W
+        # What a running listener would have loaded before the clear.
+        W._VER_CACHE[("old-verifier", 1, 1)] = object()
+        check("a verifier is loaded in memory before the clear", bool(W._VER_CACHE))
+        code, out = E.stage(_clear_body(), gate=Gate(Verdict(True, outcome="approved")),
+                            tier_of=ask, spawn=run_sync)
+        check("the approved clear says it cleared", code == 202
+              and (E.state().get("last") or {}).get("outcome") == "cleared",
+              (code, out, E.state().get("last")))
+        check("... and the in-memory verifier cache is EVICTED",
+              W._VER_CACHE == {}, W._VER_CACHE)
+        check("... so no verifier can be loaded from the deleted files",
+              W.load_verifier("") is None)
+        check("... and the module exposes the one door that does it",
+              callable(getattr(W, "forget_verifiers", None)))
+        verdict = V.verify(_pcm(wav(2.0, 180)), V.Embedder(), sample_rate=16000)
+        check("... the owner print is refused in the same process too",
+              verdict.is_owner is False and "no enrolled voice profile" in verdict.reason,
+              verdict.reason)
+    finally:
+        restore()
+
+
 if __name__ == "__main__":
     for fn in (t_staging_never_enrols, t_approve_enrols_and_drops_the_clips,
                t_every_other_answer_drops_the_clips, t_the_tier_must_be_ask, t_the_limits,
@@ -1221,7 +1255,8 @@ if __name__ == "__main__":
                t_someone_else, t_the_threshold_card, t_clear_nothing_to_clear,
                t_clear_card_and_approval, t_clear_other_answers_delete_nothing,
                t_clear_a_file_that_cannot_be_deleted_is_said,
-               t_clear_mode_and_one_at_a_time, t_the_real_file):
+               t_clear_mode_and_one_at_a_time, t_a_clear_evicts_the_loaded_verifier_cache,
+               t_the_real_file):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

@@ -397,6 +397,10 @@ def reload() -> None:
     with _LOCK:
         _models = _UNSET
     _STOP_CACHE.clear()
+    # Also forget loaded verifiers: reload() is "forget the models", and a
+    # clear/re-enrol deletes the files those verifiers were read from.
+    with _LOCK:
+        _VER_CACHE.clear()
 
 
 class Spotter:
@@ -705,6 +709,17 @@ class Verifier:
 
 
 _VER_CACHE: dict = {}
+
+
+def forget_verifiers() -> None:
+    """Drop every loaded "hey Jarvis" verifier (the 2026-10-20 #625 slice).
+
+    A verifier is a speaker model: after the owner clears or replaces their
+    voice training its file is deleted, and a process that already loaded it
+    must not keep using the old voice from memory. The next load() checks the
+    disk again, so after a clear it answers None (no verifier) at once."""
+    with _LOCK:
+        _VER_CACHE.clear()
 
 
 def _read_verifier(p: Path) -> Optional[Verifier]:

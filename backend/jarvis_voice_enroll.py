@@ -1243,6 +1243,18 @@ def _decide_clear(pid: str, *, gate: Callable) -> dict:
            {"files": len(removed), "prints": detail["prints"],
             "verifiers": detail["verifiers"],
             "adaptation": detail["adaptation"]})
+    # #625 (2026-10-20): the files are gone, so anything loaded from them must
+    # go too. jarvis_voice reads the owner's print from disk on every verify()
+    # (there is no cached embedding there), but jarvis_wakeword keeps the last
+    # loaded "hey Jarvis" verifier - a speaker model - in memory. Drop it, so
+    # this same process stops recognising the cleared voice without a restart.
+    try:
+        import jarvis_wakeword
+        forget = getattr(jarvis_wakeword, "forget_verifiers", None)
+        if callable(forget):
+            forget()
+    except Exception:
+        pass
     return _finish(pid, "cleared", request_id=rid, removed=len(removed),
                    prints=detail["prints"], verifiers=detail["verifiers"],
                    adaptation=detail["adaptation"])

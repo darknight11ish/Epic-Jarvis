@@ -341,12 +341,30 @@ def unseal_envelope(doc, *, what: str = "the file") -> bytes:
 
 
 def _atomic_write(path: Path, data: bytes) -> None:
+    """Write `data` beside `path`, make it durable, then swap it in.
+
+    The .tmp + os.replace shape is what makes a crash before the swap leave the
+    old file untouched; the flush + fsync is what makes a crash AFTER the swap
+    not leave a renamed-but-not-durable empty/partial file (the gap the 2026-
+    10-20 audit found). A failed replace deletes the temp copy rather than
+    leaving a second biometric file behind; the caller's exception is not
+    swallowed."""
     import os as _os
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_name(p.name + ".tmp")
-    tmp.write_bytes(data)
-    _os.replace(tmp, p)
+    try:
+        with open(tmp, "wb") as f:
+            f.write(data)
+            f.flush()
+            _os.fsync(f.fileno())
+        _os.replace(tmp, p)
+    except BaseException:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise
 
 
 def write_biometric_bytes(path, data: bytes) -> None:

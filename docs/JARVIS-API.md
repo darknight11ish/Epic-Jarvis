@@ -1262,6 +1262,31 @@ understands the mode. `jarvis_voice.verify()` then refuses every clip with
 owner trains their voice again (Settings, Voice). The next training is
 accepted normally.
 
+**The clear takes effect in the running process too (#625, verified
+2026-10-20).** `jarvis_voice.find_profile()`/`verify()` read the sealed print
+from disk on every check (there is no cached owner embedding in
+`jarvis_voice.py` or `jarvis_speech.py`), so they refuse in the same process as
+soon as the files are gone. `jarvis_wakeword.py` does keep the last loaded
+"hey Jarvis" verifier in memory; the approved clear calls
+`jarvis_wakeword.forget_verifiers()` after the unlink, so the running backend
+cannot keep recognising the cleared voice from a loaded model. Covered by
+`backend/test_voice_enroll.py` (`t_a_clear_evicts_the_loaded_verifier_cache`,
+which also checks `verify()` refuses before any restart) and the existing
+`t_clear_card_and_approval`.
+
+**Sealed at rest, and written atomically (audit D2/M2 + #600).** The owner's
+prints and wake verifiers are AES-256-GCM envelopes (key in Windows Credential
+Manager). A legacy plaintext file is read and re-sealed in place once, through
+`jarvis_voice._atomic_write`: the envelope is built BEFORE anything is written
+(so a missing key raises and the plaintext file is untouched), the bytes go to
+`<name>.tmp` and are flushed and `os.fsync`ed, then `os.replace` swaps it in.
+A failed write or replace re-raises and removes the temp copy; the old sealed
+file stays byte-identical and readable. The `.tmp` sibling is also in the clear
+list, because a crash between those steps can leave one behind. Covered by
+`backend/test_biometric_seal.py` (`t_the_atomic_write_fsyncs_the_temp_file_before_the_swap`,
+`t_an_interrupted_write_or_replace_leaves_the_old_file`,
+`t_a_legacy_migration_uses_the_durable_atomic_swap`).
+
 **`/api/voice/utterance`'s answer** carries both clients' names:
 `is_owner`/`available` (desktop, `voice.rs` `HeardRaw`) and `ok`/`owner`
 (phone, `Heard`), plus `mode`, `seconds` and `engine`. This assumes the
@@ -1273,6 +1298,22 @@ repository holds only as its published base
 **A client must not do speech-to-text.** That is a standing rule in
 `CLAUDE.md`, and it is why `utterance` posts a complete recorded clip rather
 than streaming: the phone's voice-print gate needs the whole clip to check it.
+
+**Jarvis's own voice is not the owner's (F3, landed 2026-10-20).** On open
+speakers - especially with a cloned custom voice - Jarvis's own answer can
+reach the microphone and be verified as the owner. So `say()` records when its
+sound should finish (the synthesised WAV's own length, plus a **250 ms
+acoustic tail**, per app when `mic` names one), exposed as
+`jarvis_speech.is_speaking(mic)`. While that window is open, `hear()` refuses
+the AUTOMATIC path - push-to-talk, "hey Jarvis" and Jarvis Live - with a plain
+"Jarvis is still speaking..." reason: no VAD-to-command, no wake window, no
+owner check, no transcription. The explicit stop answers are decided BEFORE
+that gate on purpose: `source=barge_in` (the 2 s barge-in detector's route)
+and the spoken `"stop"` word still stop Jarvis during playback, and a wake
+clip that was the stop word still answers `stop`. Tests:
+`backend/test_speech.py` (`SelfEchoGate`: playing refuses, the 250 ms tail
+still refuses, after it the clip is heard, one device does not silence the
+other, stop and barge-in still fire during playback).
 
 ---
 
