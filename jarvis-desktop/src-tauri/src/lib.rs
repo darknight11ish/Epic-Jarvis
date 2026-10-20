@@ -1358,6 +1358,7 @@ pub fn run() {
             voice_training::send_voice_training,
             voice_training::cancel_voice_training,
             voice_training::measure_voice,
+            voice_training::reset_voice_adaptation,
             voice_training::set_voice_setting,
             voice_training::check_voice_with_someone_else,
             voice_training::propose_voice_threshold,

@@ -16,6 +16,7 @@ The owner's choices: Fast runs qwen3:8b on the coding lane at 16k while the
 """
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -529,10 +530,34 @@ def install(Handler, *, origin_ok, token_ok, read_body):
 
 PRIORITIES = ("speed", "quality", "long_context", "vision")
 
+#: How long a card detection is reused. `jarvis_hardware.detect()` is not cheap
+#: (measured at ~10 s on the owner PC), and `GET /api/work` is read by both
+#: apps through request timeouts of ~20 s; calling it twice inside one contract
+#: build made the live endpoint take ~20.6 s and time the clients out. Cards do
+#: not appear or disappear between requests, so a short cache is honest; tests
+#: clear it when they need a fresh answer.
+DETECT_CACHE_SECONDS = 60.0
+_DETECT_CACHE = {"at": 0.0, "value": None}
+
+
+def _clear_detect_cache() -> None:
+    """Forget the cached card detection (tests and a hardware change)."""
+    _DETECT_CACHE["value"] = None
+
+
+def _cached_cards() -> dict:
+    """The last detection, copied so callers cannot mutate the cache."""
+    cached = _DETECT_CACHE["value"]
+    return {**cached, "cards": [dict(card) for card in cached["cards"]]}
+
 
 def _detected_cards() -> dict:
     """Every card this PC reports, from jarvis_hardware.detect() - never a
     hardcoded two-card table. Never raises; count 0 is said plainly."""
+    cached = _DETECT_CACHE["value"]
+    now = time.monotonic()
+    if cached is not None and now - _DETECT_CACHE["at"] < DETECT_CACHE_SECONDS:
+        return _cached_cards()
     try:
         import jarvis_hardware
         got = jarvis_hardware.detect() or {}
@@ -552,8 +577,11 @@ def _detected_cards() -> dict:
         cards.append({"index": i, "name": str(name),
                       "vram_gib": (round(float(vram), 1) if isinstance(vram, (int, float)) else None),
                       "uuid": uuid})
-    return {"count": len(cards), "cards": cards,
-            "source": "jarvis_hardware.detect()"}
+    result = {"count": len(cards), "cards": cards,
+              "source": "jarvis_hardware.detect()"}
+    _DETECT_CACHE["value"] = result
+    _DETECT_CACHE["at"] = time.monotonic()
+    return _cached_cards()
 
 
 def hardware_block() -> dict:

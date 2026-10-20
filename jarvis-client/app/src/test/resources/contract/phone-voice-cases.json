@@ -1490,6 +1490,7 @@
             "available": true,
             "calibrate": true,
             "clear": true,
+            "free_speech": true,
             "last": {
               "at": 1790000000.0,
               "outcome": "setting_changed",
@@ -2339,6 +2340,7 @@
             "available": true,
             "calibrate": true,
             "clear": true,
+            "free_speech": true,
             "last": {
               "at": 1790000000.0,
               "outcome": "cancelled"
@@ -3378,6 +3380,7 @@
             "available": true,
             "calibrate": true,
             "clear": true,
+            "free_speech": true,
             "last": {
               "at": 1790000000.0,
               "outcome": "failed",
@@ -4449,6 +4452,7 @@
             "available": true,
             "calibrate": true,
             "clear": true,
+            "free_speech": true,
             "last": {
               "at": 1790000000.0,
               "outcome": "setting_changed",
@@ -5500,6 +5504,7 @@
             "available": true,
             "calibrate": true,
             "clear": true,
+            "free_speech": true,
             "last": {
               "at": 1790000000.0,
               "outcome": "denied",
@@ -6531,6 +6536,7 @@
             "available": true,
             "calibrate": true,
             "clear": true,
+            "free_speech": true,
             "last": {
               "at": 1790000000.0,
               "outcome": "setting_changed",
@@ -7582,6 +7588,7 @@
             "available": true,
             "calibrate": true,
             "clear": true,
+            "free_speech": true,
             "last": {
               "at": 1790000000.0,
               "outcome": "setting_changed",
@@ -8633,6 +8640,7 @@
             "available": true,
             "calibrate": true,
             "clear": true,
+            "free_speech": true,
             "last": {
               "at": 1790000000.0,
               "outcome": "setting_changed",
@@ -9684,6 +9692,7 @@
             "available": true,
             "calibrate": true,
             "clear": true,
+            "free_speech": true,
             "last": {
               "at": 1790000000.0,
               "outcome": "setting_changed",
@@ -10735,6 +10744,7 @@
             "available": true,
             "calibrate": true,
             "clear": true,
+            "free_speech": true,
             "last": {
               "at": 1790000000.0,
               "outcome": "setting_changed",
@@ -11786,6 +11796,7 @@
             "available": true,
             "calibrate": true,
             "clear": true,
+            "free_speech": true,
             "last": {
               "at": 1790000000.0,
               "outcome": "denied",
@@ -12640,6 +12651,7 @@
             "available": true,
             "calibrate": true,
             "clear": true,
+            "free_speech": true,
             "last": {
               "at": 1790000000.0,
               "outcome": "denied",
@@ -13498,6 +13510,7 @@
             "available": true,
             "calibrate": true,
             "clear": true,
+            "free_speech": true,
             "last": {
               "added": true,
               "at": 1790000000.0,
@@ -14361,6 +14374,7 @@
             "available": true,
             "calibrate": true,
             "clear": true,
+            "free_speech": true,
             "limits": {
               "max_clips": 12,
               "max_seconds": 10.0,
@@ -15195,6 +15209,7 @@
             "available": true,
             "calibrate": true,
             "clear": true,
+            "free_speech": true,
             "limits": {
               "max_clips": 12,
               "max_seconds": 10.0,
@@ -16249,6 +16264,7 @@
             "available": true,
             "calibrate": true,
             "clear": true,
+            "free_speech": true,
             "last": {
               "at": 1790000000.0,
               "outcome": "setting_changed",
@@ -17300,6 +17316,7 @@
             "available": true,
             "calibrate": true,
             "clear": true,
+            "free_speech": true,
             "last": {
               "at": 1790000000.0,
               "outcome": "denied",
@@ -18351,6 +18368,7 @@
             "available": true,
             "calibrate": true,
             "clear": true,
+            "free_speech": true,
             "last": {
               "at": 1790000000.0,
               "outcome": "setting_changed",
@@ -19342,6 +19360,7 @@
             "available": true,
             "calibrate": true,
             "clear": true,
+            "free_speech": true,
             "last": {
               "at": 1790000000.0,
               "outcome": "setting_changed",
@@ -20198,6 +20217,7 @@
             "clear": true,
             "clips": 0,
             "expires_in": 170,
+            "free_speech": true,
             "kind": "setting",
             "last": {
               "added": true,
@@ -21081,6 +21101,7 @@
             "available": true,
             "calibrate": true,
             "clear": true,
+            "free_speech": true,
             "last": {
               "added": false,
               "at": 1790000000.0,
@@ -21931,6 +21952,7 @@
             "available": true,
             "calibrate": true,
             "clear": true,
+            "free_speech": true,
             "limits": {
               "max_clips": 12,
               "max_seconds": 10.0,
@@ -22774,6 +22796,7 @@
             "available": true,
             "calibrate": true,
             "clear": true,
+            "free_speech": true,
             "last": {
               "added": true,
               "at": 1790000000.0,
@@ -23638,6 +23661,7 @@
             "available": true,
             "calibrate": true,
             "clear": true,
+            "free_speech": true,
             "last": {
               "added": false,
               "at": 1790000000.0,
@@ -24701,6 +24725,7 @@
             "clear": true,
             "clips": 36,
             "expires_in": 170,
+            "free_speech": true,
             "kind": "enroll",
             "limits": {
               "max_clips": 12,
@@ -25545,6 +25570,7 @@
             "available": true,
             "calibrate": true,
             "clear": true,
+            "free_speech": true,
             "last": {
               "at": 1790000000.0,
               "outcome": "setting_changed",

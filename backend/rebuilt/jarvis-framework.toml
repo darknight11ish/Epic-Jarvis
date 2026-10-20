@@ -1892,3 +1892,27 @@ tool_limit = 6
 trust_window_s = 120
 trust_max_short_clips = 16
 max_pause_ms = 1500
+
+# ------------------------------------------------------------------------
+# APP CONTROL - the PC side of the phone's accessibility option (2026-10-19)
+# ------------------------------------------------------------------------
+# The owner asked for "fuller automation inside other apps" and then for the
+# accessibility service to be an OPTION in the Android app. The PC is the brain
+# and the gate; the phone is the hands (backend/jarvis_app_control.py). This
+# table is the ONE switch that decides whether the two routes
+# POST /api/app-control/run and /api/app-control/step do anything at all:
+#
+# OFF by default, and a settings file with no [app_control] table behaves
+# exactly as OFF - a missing section is never read as permission. Turning it on
+# is its own approval card and the app's own explicit choice, and it is the
+# NEXT slice: this backend half adds no way to switch it on, so every request
+# today is refused with "App control is switched off on this PC."
+#
+# Even switched on, the feature cannot act on its own: the owner's allow-list
+# is carried by the phone and an EMPTY list refuses everything, EVERY action is
+# ONE change_own_config approval card, and the phone receives one approved step
+# at a time with a fresh screen check before each. Password/credential fields,
+# money/banking apps, send/post/share steps, delete/move steps, 2FA fields and
+# the gate's protected files are refused outright, before any card exists.
+[app_control]
+enabled = false

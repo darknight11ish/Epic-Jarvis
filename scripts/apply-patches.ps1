@@ -1598,6 +1598,33 @@ $PATCHES = @(
     # on demand, switch, persist, rollback). Its install block is the chain's
     # last; plugin-loader.patch is re-anchored onto it and stays LAST of all.
     'presets.patch'
+    # app-control.patch (2026-10-19) - the backend half of the owner's "fuller
+    # automation inside other apps": the PC is the brain and the gate, the
+    # phone is the hands (the Android AccessibilityService and the app's screen
+    # are the NEXT slice; this patch ships on its own and does nothing until
+    # they arrive). TWO new POST routes in jarvis_hud.py, /api/app-control/run
+    # and /api/app-control/step, whose rules are entirely in the shipped
+    # jarvis_app_control.py: one allow-list, ONE plan of one atomic step, ONE
+    # change_own_config card, and the phone receives the approved step only
+    # after the card says yes - a changed screen stops the run.
+    #
+    # It adds NO install block, touches no gate file, adds no tier row and
+    # writes no other line of jarvis_hud.py. Its context is big-coder.patch's
+    # own last three printed lines plus the /api/memory/decide block that patch
+    # already anchors on, so it applies to real text rather than a materialised
+    # pre-image (_stack.py's RATCHET for jarvis_hud.py reads the same 56 after
+    # this patch, measured). It sits after presets.patch and immediately before
+    # plugin-loader.patch, which must stay LAST of all; because it adds nothing
+    # to the install chain the loader's own anchor (presets.patch's last two
+    # lines) is untouched.
+    #
+    # The feature is OFF by default: the framework template carries
+    # [app_control] enabled = false, a missing section reads as off, and this
+    # patch adds no way to switch it on. Nothing here approves anything by
+    # itself: the ONE card jarvis_gate.check() raises is the only yes, and
+    # every refusal (empty allow-list, unlisted app, password field, money,
+    # send/delete/2FA, a protected file, a changed screen) is a plain sentence.
+    'app-control.patch'
     'plugin-loader.patch'
 )
 
@@ -1702,6 +1729,7 @@ $SHIPPED = @(
     'jarvis_research.py'         # tool "github_search": is there already a library for this?
     'jarvis_ui_control.py'       # tool "control_computer": reading and clicking other windows
     'jarvis_android_control.py'  # tool "control_phone": the phone over adb
+    'jarvis_app_control.py'      # app-control.patch: the PC side of the phone's accessibility option - one allow-list, ONE plan of one atomic step, ONE change_own_config card, approved step only after the card; OFF by default ([app_control] enabled = false); the two routes answer "switched off" until the Android slice arrives
     'jarvis_browser_control.py'  # tool "browser_control": a real browser, via Playwright
     'jarvis_calendar.py'         # tool "calendar_read"
     'jarvis_email.py'            # tool "email_check"

@@ -1298,6 +1298,30 @@ room or at a different time of day**. The caps stay: up to 12 clips per round,
 min 3 clips, and a sub-print is never lowered to the loosest clip. Old stored
 condition names keep working (`far` -> `table`, `general` -> `close`).
 
+**Naming which free-speech prompt a clip answers (added 2026-10-19).** The
+training body takes an OPTIONAL `free_speech` list beside `clips`, one entry
+per clip - in `mode=measure` as well, so a guided test can say the same thing:
+`null` (or `""`) for a clip that reads one of the sentences, or the `id` of one
+of `training.free_speech` ("introduce", "day", "passage" today) for a clip
+that answers that prompt. A screen reads the ids from the same `plan` payload
+it already shows; the ids are not hard-coded in an app. The PC checks every
+name against `jarvis_voice_training.FREE_SPEECH` and answers **400 with a
+plain sentence** when an entry is not a name it knows, is not a string or
+null, or when the list does not line up with the clips; it never drops a label
+silently, because a phone that has just recorded an answer must not be told
+it counted when it did not. **A body without the field is exactly the old
+body.** No route, patch or gate action is added: it is the existing
+`POST /api/voice/enroll` and the same ONE `change_own_config` card at the end.
+The card's words still count clips and rounds only; its stored detail row and
+the audit trail gain the **per-prompt clip counts** (for example
+`{"day": 2}`), so the receipt says what was trained and nothing more. The
+sealed voice profile is unchanged - it holds vectors and scores, never a
+prompt name. Deny, a timeout, cancel and expiry drop the labels with the
+audio. The PC advertises the field as `gate.training.free_speech: true`; a PC
+from before it has no such flag AND would ignore the list, so a screen offers
+the plan's prompts only when the flag is `true`. The phone's free-speech step
+is a client slice of its own; this contract is what it will send.
+
 **Live adaptation (the owner's "train live" request).** After a Live
 verification that is a clean, HIGH-CONFIDENCE owner check - above the bar by a
 margin - one utterance may be added as a capped sub-print for its condition.
@@ -2860,6 +2884,7 @@ mode only when `gate.training` says the PC understands it:
 | `rounds: true` | `train` (rounds, `add`, `finish`, `cancel`) |
 | `settings: true` | `strictness`, `privacy`; and `memory`, `sensitive_memory`, `hands_free`, `hands_free_screen`, `hands_free_live` or `live_end` when `gate.settings` has it (an older PC answers that mode with 503) |
 | `measure: true` | `measure` |
+| `free_speech: true` | the optional `free_speech` list on `train`, the one-shot `{"clips"}` body, and `measure` (added 2026-10-19; §5.1 has the contract) |
 
 ### What changed for every app, even one that changes nothing
 
@@ -2976,15 +3001,22 @@ sends (both apps do).
            "strong_trained": bool,        the stronger model has a print of its own in it
            "strong_threshold": float}},   the owner's own bar for it (0 = the measured one)
 "training": {... as before ..., "rounds": true, "settings": true, "measure": true,
-             "session": null | {"mic", "add", "rounds": [{"round", "condition", "clips", "seconds"}],
+             "free_speech": true,           added 2026-10-19: this PC accepts the field (§5.1).
+                                            Missing from an older PC, which ignores the list.
+             "session": null | {"mic", "add", "rounds": [{"round", "condition", "clips", "seconds",
+                                                          "free_speech"?: {"<id>": n}}],
+                                            the inner free_speech is there only for a round
+                                            whose clips named a prompt
                                 "clips", "seconds", "expires_in"},
              "measure_last": {"at", "clips", "strong_model",
                               "very_strict": {"passed", "of", "too_short", "repeat_rate"},
-                              "balanced": {...}},              only after a guided test
+                              "balanced": {...},              only after a guided test
+                              "free_speech"?: {"<id>": n}},   only when the body named prompts
              "kind": "enroll" | "threshold" | "setting",       while a card waits
              "setting": {"name", "value"},                      while a setting card waits
              "last": {... as before ..., "outliers": [{"round", "clip"}], "added": bool,
-                      "subprints": ["close", ...], "setting", "value", "model"},
+                      "subprints": ["close", ...], "setting", "value", "model",
+                      "free_speech"?: {"<id>": n}},            only when the clips named prompts
              "limits": {... as before ..., "rounds": 4, "session_seconds": 900.0,
                         "measure_max_clips": 20},
              "round_asks": {"1": "normal, close to the microphone",
@@ -3009,20 +3041,28 @@ as it is.
 **Training in rounds** (`rounds: true`):
 
 ```
-{"mode": "train", "round": 1 | 2 | 3, "mic": "phone" | "desktop", "clips": [<base64 WAV>, ...],
- "add": false, "finish": false}
+{"mode": "train", "round": 1 | 2 | 3 | 4, "mic": "phone" | "desktop", "clips": [<base64 WAV>, ...],
+ "free_speech": [null | "<prompt id>", ...], "add": false, "finish": false}
 ```
+
+`free_speech` (added 2026-10-19) is optional; when it is there it has exactly
+one entry per clip: `null` or `""` for a clip that reads a sentence, or the id
+of a prompt in `gate.training.training.free_speech` for a clip that answers
+it. Omit it and every clip is a read sentence, exactly as before. The allowed
+names are the plan's own ids; §5.1 has the full contract (validation, the
+stored counts, why the voice profile is untouched). Only offer it when
+`gate.training.free_speech` is `true`.
 
 | answer | when |
 |---|---|
 | `200 {"ok": true, "pending": false, "held": <session>, "round": 1, "next_round": 2, "next_ask": "about two to three metres away, on a table", "message"}` | the round is held in memory; **no card, nothing changed** |
 | `202 {"ok": true, "pending": true, "clips": 30, "seconds": 104.0, "rounds": 3, "message"}` | `"finish": true` (with the last round's clips, or with no `clips` at all): ONE card for every held round |
-| `400` | a clip is wrong (as today, with `"round"`), `round` is not 1-4, or `finish` with nothing held |
+| `400` | a clip is wrong (as today, with `"round"`), `round` is not 1-4, a `free_speech` entry is not a prompt id, the list does not line up with the clips, or `finish` with nothing held |
 | `409 {"error", "session": <session>}` | another training (another mic, or `add` differs) is held - finish or cancel it |
 | `409 {"error", "pending": true, "expires_in"}` | a voice card is already waiting |
 
 - Each round is 3-12 clips and 80 s at most (the same limits as today).
-  Sending a round again replaces that round's clips.
+  Sending a round again replaces that round's clips and `free_speech` labels.
 - Held clips are dropped, all of them, on `{"mode": "train", "cancel":
   true}` (`200 {"ok": true, "cancelled": bool, "message"}`), on a denied or
   timed-out card, and 15 minutes (`limits.session_seconds`) after the last
@@ -3146,17 +3186,21 @@ Choosing `balanced` also puts private answers back on screen
 **The guided repeat test** (`measure: true`):
 
 ```
-{"mode": "measure", "mic": "phone", "clips": [up to 20 of the owner's own sentences]}
+{"mode": "measure", "mic": "phone", "clips": [up to 20 of the owner's own sentences],
+ "free_speech": [null | "<prompt id>", ...]}
 -> 200 {"ok": true, "clips": 20, "print": "phone", "strong_model": true,
         "very_strict": {"passed": 15, "too_short": 2, "of": 20, "repeat_rate": 0.25},
         "balanced":    {"passed": 19, "too_short": 0, "of": 20, "repeat_rate": 0.05},
         "per_clip": [{"seconds": 2.4, "very_strict": true, "balanced": true, "score": 0.71}, ...],
+        "free_speech": {"day": 2},                     only when the body named prompts
         "message": "Very strict let 15 of 20 through; balanced 19 of 20."}
 ```
 
 No card, nothing stored but the counts (`measure_last`), and not counted in
 `repeat`. 80 s in all per request, as for training; send two halves if the
-sentences are long, and add the counts up.
+sentences are long, and add the counts up. `free_speech` (added 2026-10-19) is
+optional and lines up with `clips` exactly as in `train` (§5.1); the answer
+then adds per-prompt clip counts and keeps nothing but those counts.
 
 **"Someone else"** (`calibrate`, unchanged request): the reply adds
 `"passed": [bool, ...]` (would each clip have been let in, with everything
@@ -21892,3 +21936,136 @@ the route.
 Tests: `backend/test_presets.py`, `test_presets_lanes.py`,
 `test_presets_apply.py` (route shape, origin/token, old shape not served,
 pending/heavy refusals, rollback), and `tools/gen_work_presets.py --check`.
+
+## 146. App control on the phone: one allow-list, ONE card, ONE atomic step (backend half, added 2026-10-19)
+
+The owner asked for "fuller automation inside other apps" and then for the
+accessibility service to be an **option** in the Android app (2026-10-19). The
+architecture that follows this project's rules is: **the PC is the brain and
+the gate; the phone is the hands.** The phone may never decide or approve
+anything - this PC-side module turns one request into ONE approval card and
+then hands back exactly the step that card listed, one at a time, re-checking
+the screen the phone shows it.
+
+**This is the backend half only.** The Android `AccessibilityService`, the
+allow-list Settings screen, the running banner and the one-tap Stop are the
+NEXT slice; **no app calls these routes yet**, and the feature is **OFF by
+default**. It is added by `backend/app-control.patch` (two POST routes in
+`jarvis_hud.py`) and the shipped module `backend/jarvis_app_control.py` (twin
+in `jarvis-backend/`); the patch sits after `presets.patch` and before
+`plugin-loader.patch`, which must stay last.
+
+**The switch.** `[app_control] enabled = false` in the framework template. A
+settings file with no `[app_control]` table reads as OFF - a missing section is
+never permission - and this slice adds no way to switch it on. While it is
+off, both routes answer `409 {"ok": false, "available": false, "error": "App
+control is switched off on this PC. It is off by default, and this build has
+no switch yet - nothing was changed."}`.
+
+### `POST /api/app-control/run` - start ONE carded action
+
+Same origin and token checks as every other write; body is one JSON object:
+
+```
+{"allowed": ["com.android.settings"],        the OWNER'S allow-list, from the phone's Settings
+ "app": "com.android.settings",              the app the ONE step is in; must be on the list
+ "app_name": "Settings",                     the label the card shows (falls back to the package)
+ "step": {"action": "tap",                   tap | swipe | type | back | home
+          "target": {"id": "com.android.settings:id/search", "text": "Search",
+                     "class": "android.widget.TextView", "bounds": [0,100,1080,200]},
+          "text": "only for type", "why": "open search"},
+ "snapshot": {"app": "com.android.settings", "title": "Settings",
+              "controls": [ ...the masked controls read just now... ]}}
+```
+
+Answers:
+
+| code | body | meaning |
+|---|---|---|
+| `202` | `{"ok": true, "run": "<id>", "status": "pending", "app": ..., "verb": ..., "message": "Approve the card ... Nothing runs until you do."}` | ONE `change_own_config` card is up. **Nothing has run.** |
+| `400` | `{"ok": false, "error": "..."}` | bad JSON/allow-list/step shape, a type step with no text (or over 200 characters) - a sentence, never a traceback |
+| `409` | `{"ok": false, "available": false, "error": ...}` | the feature is off; or an empty allow-list ("No apps are allowed yet..."); or the app is not on the list; or one of the refusals below; or another run is already waiting; or the framework tier is not `ask` |
+| `503` | `{"available": false, "error": "ImportError: ..."}` | `jarvis_app_control.py` is not in the backend folder |
+
+**The card** (action `change_own_config`, raised on the card's own thread; its
+`detail` carries the same text plus `app`, `app_name`, `verb` and a `what` line
+- never a snapshot):
+
+> Let Jarvis act in Settings on your phone?
+>
+> App: Settings (com.android.settings)
+> Step 1 of 1: tap "Search"
+> Why: open search
+>
+> This is ONE step, and one card approves it - nothing is touched until you say
+> yes. The phone checks the screen again just before it acts; a screen that
+> changed stops the run. Stop on the phone cancels it, and no second step runs
+> without a new plan and a new card.
+>
+> If you say no: nothing is touched, and nothing runs.
+
+A `type` step's line adds `- the exact text: "<the text>"` so the owner approves
+the exact words; that text is on the local card only, never in the audit log.
+
+**The allow-list is the owner's, and empty means nothing.** It lives on the
+phone (his Settings screen), is carried in every request, and this module only
+validates and enforces it: it never adds an app, never has a default, and
+refuses shapes that are not Android package names (at most 64 per request).
+`allowed: []` or a missing list refuses every request in words and raises no
+card.
+
+**Refused outright, before any card exists:** a password/credential field
+(target flagged `password`, or the label/target/why names one); a 2FA/one-time
+code field; an app or label that looks like a bank, payment or money app; a
+step that would send, post, share, message or email; a step that would delete,
+move, rename or uninstall; any action other than tap/swipe/type/back/home; a
+plan that names one of `jarvis_gate._PROTECTED`'s files; and any run while
+`jarvis_gate.taint_active()` is true (outside text may be steering the
+conversation - acting then is what the latch exists to stop).
+
+### `POST /api/app-control/step` - the phone asks for the ONE approved step
+
+```
+{"run": "<id>", "snapshot": {...}}     -> the ONE approved step, or a state
+{"run": "<id>", "stop": true}          -> stops at once (no card: stopping is the safe direction)
+{"run": "<id>", "result": "done"|"failed"}   after doing it
+```
+
+| answer | body | meaning |
+|---|---|---|
+| `202` | `{"ok": true, "status": "pending", "message": "..."}` | the card is not answered yet; **no step is handed over** |
+| `200` | `{"ok": true, "status": "step", "run": ..., "step": {"action", "target"?, "text"?}}` | exactly ONE step, taken from the approved plan - never from this request; it is handed out once |
+| `200` | `{"ok": false, "status": "stopped", "error": "The screen changed ..."}` | the fresh snapshot no longer matches: wrong app in front, the control gone, renamed, disabled, or now a password field - the run STOPS rather than guess |
+| `200` | `{"ok": false, "status": "denied"}` / `"timed_out"` / `"refused"` | the card was not approved: **nothing ran** |
+| `409` | `{"ok": false, "status": "delivered"}` | the step was sent; report `"result": "done"` or `"failed"` after it runs |
+| `409` | `{"ok": false, "status": "done"|"stopped"}` | that run is finished |
+| `400`/`404` | `{"ok": false, "error": "..."}` | bad body, or an unknown run id |
+
+**The run state machine:** `pending -> approved -> delivered -> done`, with
+`stopped` (changed screen, expired after 900 s, stopped by the owner, or taint
+latched), `denied`, `timed_out`, `refused` and `failed` as the ways a run ends.
+ONE run at a time: a second request while one waits is a `409` and raises no
+second card. The approved step is re-verified against the phone's fresh
+snapshot, and the sentence says which thing changed in plain words.
+
+**Audit:** `app_control.requested`, `.approved/.denied/.timed_out/.refused`,
+`.step`, `.done/.stopped` - each line carries the app package and the verb (and
+counts), **never the typed text, never the screen's words, never a snapshot**.
+The card (a local approvals row) is the only place the exact step is written
+down, so the owner can judge it; the audit trail cannot become the leak the
+gate's own `_redact` comment warns about.
+
+**What this does not do:** it never performs a step on the PC (there is no
+desktop input here); it never runs anything before the card says yes; it never
+lets the phone change the plan; it never switches itself on; and it sends
+nothing anywhere - the two routes are the owner's own private link, local model
+only, with no cloud service and no public tunnel.
+
+Tests: `backend/test_app_control.py` - off by default, empty allow-list refuses
+everything, unlisted app refuses, ONE card and nothing runs before approval,
+denied/timed-out/refused/wrong-tier runs nothing, the approved step is the
+plan's own, stop-on-change (wrong app / vanished / renamed / disabled / became
+a password field), every refused category before any card, Stop is immediate,
+one run at a time, the audit line is app+verb only while the card shows the
+typed text, and the patch's own pins (two routes, harness position, no
+install-block line, `_stack.py`'s RATCHET unchanged).

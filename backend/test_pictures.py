@@ -771,26 +771,21 @@ def t_the_api_document_has_the_section_and_it_matches_this_code():
 #: writes down that they meant to. That is the price of a check that bites, and
 #: it is why the failure message below spells out the difference instead of
 #: saying "the document changed".
-EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 146))   # 129 ..= 145 (145 is the preset GET route, added 2026-10-19)
+EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 147))   # 129 ..= 146 (146 is app control on the phone, added 2026-10-20)
 #: 137 is a REAL section, not a gap: `## 137. Starting the local model when
 #: it is not running`; 138 is `skills.lock` (PR #455). The tail reads
 #: 129 ..= 138 with no hole.
 #:
-#: THE FIVE SECTIONS ABOVE 138 ARE FIVE PR FAMILIES, merged in this order:
+#: EVERY SECTION ABOVE 138 IS ITS OWN PR FAMILY, merged in this order:
 #: 139 self-improve's diagnostic routes (PR #549); 140 the guardian's history
 #: and restore routes (#568/#569/#571); 141 the selection chip (#562); 142
 #: the data-and-maths sandbox's own switch (LM-1C, #583); 143 the person
-#: dossier click door (LM-4, this branch, the drop-in `/api/people/dossier`),
-#: landing last; 144 the media read slice (F5 S1, its own branch). The Lead owns that numbering plan. Sections 129 ..= 143
-#: are on main; this branch adds 144, so the released tail is 129 ..= 144 with
-#: no hole and no repeat.
+#: dossier click door (LM-4); 144 the media read slice (F5 S1); 145 the preset
+#: GET route (2026-10-19); 146 app control on the phone (2026-10-20, this
+#: branch). A section added above 138 gets its row here in the same commit.
 #:
 #: This list names the RELEASED tail, so a dropped section anywhere in it is
 #: caught, and a section above it is reported rather than silently accepted.
-#:
-#: Measured, not reasoned: on main `^## 139\.` .. `^## 143\.` each match once,
-#: and this branch's `^## 144\.` matches once, so the tail reads 129 ..= 144
-#: with no hole.
 
 
 def t_every_section_from_129_up_is_still_in_the_document():

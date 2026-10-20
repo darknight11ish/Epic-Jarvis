@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-reset-voice-adaptation"
+description = "Enables the reset_voice_adaptation command without any pre-configured scope."
+commands.allow = ["reset_voice_adaptation"]
+
+[[permission]]
+identifier = "deny-reset-voice-adaptation"
+description = "Denies the reset_voice_adaptation command without any pre-configured scope."
+commands.deny = ["reset_voice_adaptation"]

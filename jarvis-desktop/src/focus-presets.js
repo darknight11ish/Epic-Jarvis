@@ -53,6 +53,9 @@ export const BAD_ANSWER_WORDS =
 export const NO_PRESETS_WORDS = "The PC listed no presets.";
 export const NO_CHOICE_WORDS = "No preset chosen yet";
 export const BEING_PREPARED = "Being prepared";
+export const HEAVY_WORDS =
+  "This preset needs both cards at once as one pooled lane. Your PC refuses " +
+  "heavy mode until that lane support lands, so it cannot be used from here yet.";
 export const APPLY_WAITING =
   "The apply/lane patch is not on the PC yet. Until it lands, no preset can " +
   "be applied; nothing changes here.";
@@ -135,7 +138,11 @@ function presetStatus(row) {
       field(row, ["status", "state", "readiness"]),
     );
   const statusWords = field(row, ["status_words", "pending_words", "why", "note", "not_ready_words"]);
-  return { ready: !pending, statusWords: pending ? (statusWords || BEING_PREPARED) : "" };
+  // The PC's own cost sentence says what it is waiting for; keep it beside the
+  // local state word rather than replacing the PC's explanation.
+  const cost = field(row, ["cost", "cost_words", "costs"]);
+  const pendingWords = [statusWords || BEING_PREPARED, cost].filter(Boolean).join(". ");
+  return { ready: !pending, statusWords: pending ? pendingWords : "" };
 }
 
 function applySupport(row, applyWired = false) {
@@ -193,6 +200,17 @@ function normalisePreset(row, applyWired = false) {
     details: detailsOf(row),
     ready: status.ready,
     statusWords: status.statusWords,
+    heavyMode: row.heavy_mode === true,
+    heavyWords: field(row, ["heavy_words", "heavy_mode_words", "refusal_words"]) ||
+      field(row, ["worse", "worse_at", "worse_words"]) ||
+      field(row, ["cost", "cost_words", "costs"]) || HEAVY_WORDS,
+    blockerWords: status.ready
+      ? (row.heavy_mode === true
+        ? (field(row, ["heavy_words", "heavy_mode_words", "refusal_words"]) ||
+          field(row, ["worse", "worse_at", "worse_words"]) ||
+          field(row, ["cost", "cost_words", "costs"]) || HEAVY_WORDS)
+        : "")
+      : status.statusWords,
     applyReady: apply.ready,
     applyContractReady: apply.contractReady,
     applyRoute: apply.route,
@@ -400,6 +418,8 @@ export function presetView(preset, chosenId) {
     current: preset.id === chosenId,
     ready: preset.ready,
     statusWords: preset.statusWords,
+    heavyMode: Boolean(preset.heavyMode),
+    blockerWords: preset.blockerWords || "",
   };
 }
 
@@ -412,6 +432,7 @@ function applyState(reading, selectedId, { stale = false, busy = false } = {}) {
   if (!preset) return { ok: false, why: PICK_FIRST };
   if (preset.id === reading.chosenId) return { ok: false, why: ALREADY_CHOSEN };
   if (!preset.ready) return { ok: false, why: preset.statusWords || BEING_PREPARED };
+  if (preset.heavyMode) return { ok: false, why: preset.heavyWords || HEAVY_WORDS };
   if (!preset.applyReady) return { ok: false, why: preset.applyWhy || APPLY_WAITING };
   return { ok: true, why: "", id: preset.id };
 }
@@ -506,8 +527,18 @@ export function resultLine(raw) {
   if (raw.ok === false) {
     return field(raw, ["why", "error", "message", "detail"]) || REFUSED_WORDS;
   }
-  const said = field(raw, ["said", "message", "words", "answer", "detail"]);
+  const said = field(raw, ["said", "message", "words", "answer", "line", "detail"]);
   if (said) return said;
+  // A successful apply used to fall through to the waiting line: "nothing
+  // changes until you answer the card" is false once the card WAS answered.
+  if (raw.changed === true || (raw.ok === true && raw.pending !== true &&
+    raw.card !== true && raw.approval !== true && raw.asked !== true)) {
+    const preset = raw.preset && typeof raw.preset === "object"
+      ? raw.preset : null;
+    const title = preset ? field(preset, ["title", "name", "id"]) : field(raw, ["preset_title", "preset_name", "preset"]);
+    if (title) return `${title} is now the chosen preset.`;
+    return "The preset is now chosen.";
+  }
   if (raw.pending || raw.card || raw.approval || raw.asked) return ASKED_WORDS;
   return ASKED_WORDS;
 }

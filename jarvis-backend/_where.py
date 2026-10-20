@@ -411,6 +411,13 @@ SHIPPED = (
     "jarvis_card_summary.py",
     # the tools jarvis_agent.py offers
     "jarvis_research.py", "jarvis_ui_control.py", "jarvis_android_control.py",
+    # app-control.patch (2026-10-19): the PC side of the phone's accessibility
+    # option - one allow-list, ONE plan of one atomic step, ONE
+    # change_own_config card, and the phone gets the approved step only after
+    # the card says yes (a changed screen stops the run). OFF by default
+    # ([app_control] enabled = false); the Android service and screens are the
+    # next slice, and the routes just answer "switched off" until then.
+    "jarvis_app_control.py",
     "jarvis_browser_control.py", "jarvis_calendar.py", "jarvis_email.py",
     "jarvis_mail_mask.py",
     "jarvis_email_send.py",

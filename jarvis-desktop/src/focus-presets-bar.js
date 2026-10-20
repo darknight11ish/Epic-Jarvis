@@ -113,10 +113,10 @@ if (chip && picker && list && apply && line) {
       current.textContent = CURRENT_WORDS;
       head.append(current);
     }
-    if (!item.ready) {
+    if (item.blockerWords) {
       const state = document.createElement("span");
       state.className = "preset-state";
-      state.textContent = item.statusWords;
+      state.textContent = item.blockerWords;
       head.append(state);
     }
     button.append(head);

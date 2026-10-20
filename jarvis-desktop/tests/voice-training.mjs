@@ -111,34 +111,37 @@ await check("every real status reads as sentences, with no raw data", async () =
   }
 });
 
-await check("the PC's four conditions, twelve phrases and three prompts - three conditions recordable here", async () => {
+await check("the PC's four conditions, twelve phrases and three prompts - all four conditions recordable here", async () => {
   const plan = VT.trainingPlan(S.strong_ready);
   assert.equal(plan.legacy, false);
   assert.equal(plan.missing, false);
   assert.equal(plan.add, false);
   assert.equal(plan.total, 4);
-  assert.equal(plan.wiredTotal, 3);
+  assert.equal(plan.wiredTotal, 4);
   assert.deepEqual(plan.rounds.map((r) => r.round), [1, 2, 3, 4]);
-  assert.deepEqual(plan.rounds.map((r) => r.wired), [true, true, true, false]);
+  assert.deepEqual(plan.rounds.map((r) => r.wired), [true, true, true, true]);
   assert.deepEqual(plan.rounds.map((r) => r.items.length), [5, 5, 5, 4]);
   // Every balanced phrase and every free-speech prompt is used once in the
-  // three rounds this build can send; the fourth condition repeats phrases.
+  // first three rounds; the fourth condition repeats opening phrases for its
+  // own sub-print, so 16 read clips are sent for 15 distinct items.
   const wired = plan.rounds.filter((r) => r.wired).flatMap((r) => r.items);
-  assert.equal(wired.filter((i) => i.kind === "read").length, 12);
+  assert.equal(wired.filter((i) => i.kind === "read").length, 16);
   assert.equal(wired.filter((i) => i.kind === "free").length, 3);
+  assert.equal(new Set(wired.map((i) => i.id)).size, 15);
   assert.deepEqual(plan.rounds.map((r) => r.ask),
     [1, 2, 3, 4].map((n) => S.strong_ready.gate.training.round_asks[String(n)]));
   assert.deepEqual([...VT.READ_PHRASES], S.strong_ready.gate.training.training.read_phrases);
   assert.deepEqual([...VT.FREE_SPEECH], S.strong_ready.gate.training.training.free_speech);
   assert.equal(VT.roundLine(plan, 1), "Round 2 of 4: about two to three metres away, on a table.");
-  assert.match(VT.roundLine(plan, 3), /cannot record this one yet/);
-  assert.match(VT.planLine(plan), /^3 rounds on this PC, 15 recordings in all\./);
+  assert.equal(VT.roundLine(plan, 3), "Round 4 of 4: in another room, or at a different time of day.");
+  assert.equal(VT.planLine(plan), "4 rounds on this PC, 19 recordings in all. Each round takes about a minute.");
+  assert.deepEqual(VT.planLimitLines(plan), []);
 });
 
 await check("balanced sees the same four conditions; a PC without the new plan is not offered training", async () => {
   const plan = VT.trainingPlan(S.balanced);
   assert.deepEqual(plan.rounds.map((r) => r.round), [1, 2, 3, 4]);
-  assert.equal(plan.wiredTotal, 3);
+  assert.equal(plan.wiredTotal, 4);
   const old = VT.trainingPlan(older(S.strong_ready));
   assert.equal(old.missing, true);
   assert.deepEqual(old.rounds, []);
@@ -159,8 +162,11 @@ await check("the recordings left out are asked for again, topped up to three, an
   assert.equal(plan.rounds[0].items.length >= 3, true);
   assert.equal(plan.rounds[0].wired, true);
   assert.equal(VT.roundLine(plan, 0), "Round 2 again: about two to three metres away, on a table.");
-  // A left-out clip in the fourth condition cannot be redone from this build.
-  assert.deepEqual(VT.outlierPlan(S.strong_ready, [{ round: 4, clip: 1 }]).rounds, []);
+  // The fourth condition is wired now, so a left-out clip there can be redone.
+  const fourth = VT.outlierPlan(S.strong_ready, [{ round: 4, clip: 1 }]);
+  assert.deepEqual(fourth.rounds.map((r) => r.round), [4]);
+  assert.equal(fourth.rounds[0].items.length >= 3, true);
+  assert.equal(fourth.rounds[0].wired, true);
   // Most recordings unlike the rest: nothing saved, record again somewhere quieter.
   assert.match(VT.outlierLine(S.training_failed.gate.training.last), /^Most of those recordings did not sound like the same voice, so nothing was saved\./);
 });
@@ -279,15 +285,16 @@ await check("clip problems: silent, too short, too long", async () => {
 
 /* ── The page ───────────────────────────────────────────────────────── */
 
-await check("three recordable condition rounds, 15 recordings, finish only on the last - ONE card", async () => {
-  const page = await open(S.strong_ready, { vt: { sends: [A("round_held"), A("round_2_held"), A("round_finish")] } });
+await check("four recordable condition rounds, 19 recordings, finish only on the last - ONE card", async () => {
+  const page = await open(S.strong_ready, { vt: { sends: [A("round_held"), A("round_2_held"), A("round_2_held"), A("round_finish")] } });
   await click(page, "vt-train", "Train my voice");
   const intro = await text(page, "vt-train");
   assert.match(intro, /12 short phrases/);
   assert.match(intro, /3 prompts in your own words/);
-  assert.match(intro, /records the first 3 of the 4 conditions/);
-  assert.match(intro, /Another room or time/);
-  assert.match(intro, /cannot send it yet/);
+  assert.match(intro, /across 4 listening conditions/);
+  assert.match(intro, /Each round records 4 of the phrases/);
+  assert.match(intro, /The fourth condition repeats 4 phrases/);
+  assert.ok(!intro.includes("first 3 of the 4 conditions"), "no condition is unwired now");
   await click(page, "vt-train", "Start");
   assert.match(await text(page, "vt-train"),
     /Round 1 of 4: normal, close to the microphone\.\s+Sentence 1 of 4\s+The blue boat floats slowly over the cold deep water\./);
@@ -297,22 +304,25 @@ await check("three recordable condition rounds, 15 recordings, finish only on th
   for (const r of [2, 3]) {
     await click(page, "vt-train", `Start round ${r}`);
     await readAll(page, "vt-train", 5);
-    await click(page, "vt-train", r === 3 ? "Send to your PC" : `Send round ${r}`);
+    await click(page, "vt-train", `Send round ${r}`);
   }
+  await click(page, "vt-train", "Start round 4");
+  await readAll(page, "vt-train", 4);
+  await click(page, "vt-train", "Send to your PC");
   const sends = await calls(page, "send_voice_training");
   const starts = await calls(page, "start_voice_sample");
   const all = await text(page, "vt-train");
   const errors = page.__errors;
   await page.close();
   assert.deepEqual(sends.map((s) => [s.round, s.finish, s.add, s.legacy, s.slots.length]),
-    [[1, false, false, false, 5], [2, false, false, false, 5], [3, true, false, false, 5]]);
+    [[1, false, false, false, 5], [2, false, false, false, 5], [3, false, false, false, 5], [4, true, false, false, 4]]);
   assert.deepEqual(sends[1].slots, [...Array(5)].map((_, i) => `t2-${i}`));
-  assert.equal(starts.length, 15);
+  assert.equal(starts.length, 19);
   assert.match(all, new RegExp(`Sent\\. A card is waiting to finish it\\. Approve it ${WHERE}\\.`));
   noRaw(all);
   assert.deepEqual(errors, []);
-  // The fourth condition is shown in the plan and never sent.
-  assert.ok(!sends.some((s) => s.round === 4));
+  // Every condition the PC's plan lists is sent, including the fourth.
+  assert.ok(sends.some((s) => s.round === 4));
 });
 
 await check("a PC without the new plan is not offered training, and says exactly what is missing", async () => {
@@ -357,9 +367,9 @@ await check("a silent or short recording must be made again before going on", as
 });
 
 await check("on a stale link the round that raises the card is held, and says why; the rounds before it are not", async () => {
-  // The merged plan has four conditions; this desktop can record the first
-  // three. Rounds 1-2 are held on the PC in memory (no card), round 3 is the
-  // one that raises the card, so only round 3 is held on a stale link.
+  // The merged plan has four conditions and this desktop records all four.
+  // Rounds 1-3 are held on the PC in memory (no card), round 4 is the one that
+  // raises the card, so only round 4 is held on a stale link.
   const page = await open(S.balanced, { link: { stale: true } });
   await click(page, "vt-train", "Train my voice");
   await click(page, "vt-train", "Start");
@@ -368,11 +378,13 @@ await check("on a stale link the round that raises the card is held, and says wh
     [...document.querySelectorAll("#vt-train button")].find((b) => b.innerText === "Send round 1").disabled);
   assert.equal(round1, false, "a round that is only held in memory is not held back");
   await click(page, "vt-train", "Send round 1");
-  await click(page, "vt-train", "Start round 2");
-  await readAll(page, "vt-train", 5);
-  await click(page, "vt-train", "Send round 2");
-  await click(page, "vt-train", "Start round 3");
-  await readAll(page, "vt-train", 5);
+  for (const r of [2, 3]) {
+    await click(page, "vt-train", `Start round ${r}`);
+    await readAll(page, "vt-train", 5);
+    await click(page, "vt-train", `Send round ${r}`);
+  }
+  await click(page, "vt-train", "Start round 4");
+  await readAll(page, "vt-train", 4);
   const send = await page.evaluate(() =>
     [...document.querySelectorAll("#vt-train button")].find((b) => b.innerText === "Send to your PC").disabled);
   const words = await text(page, "vt-train");
@@ -1039,7 +1051,7 @@ await check("the guided test: 20 sentences, one request, the result and the held
   const words = await text(page, "vt-test");
   const held = await text(page, "vt-held");
   await page.close();
-  assert.deepEqual(sent, [{ slots: [...Array(20)].map((_, i) => `m${i}`) }]);
+  assert.deepEqual(sent, [{ slots: [...Array(20)].map((_, i) => `m${i}`), condition: "close" }]);
   assert.match(words, /Very strict let 15 of 20 through; balanced 17 of 20\./);
   assert.match(words, /would have asked you to repeat 5 of 20 sentences/);
   // The full answer's held-out report: the PC's own sentence, and why a
@@ -1059,21 +1071,28 @@ await check("the guided test: 20 sentences, one request, the result and the held
   assert.match(kept, /Close: not enough measured rows yet, so no number\./);
 });
 
-await check("Live additions: the PC's count and caps, the drift rule, re-anchoring, and an honest read-only reset", async () => {
+await check("Live additions: the PC's count and caps, the drift rule, re-anchoring, and a wired reset", async () => {
   const page = await open(S.strong_ready);
   const words = await text(page, "vt-adapt");
   const reset = await page.evaluate(() => {
     const b = document.getElementById("vt-adapt-reset");
     return { disabled: b.disabled, text: b.innerText };
   });
-  await page.close();
   assert.match(words, /No Live additions yet\./);
   assert.match(words, /Close: 0 of 4 Live additions\./);
   assert.match(words, /The cap is 4 for each condition and 12 in all\./);
   assert.match(words, /Not re-anchored yet\./);
   assert.match(words, /sounds too different from your enrolled voice is refused/);
-  assert.equal(reset.disabled, true, "the backend route exists, but this desktop build has no command for it");
-  assert.match(words, /not wired yet/);
+  assert.equal(reset.disabled, false, "the reset is wired through the desktop command");
+  assert.equal(reset.text, "Reset the count");
+  assert.match(words, /Reset the count: this zeroes the PC's Live-additions counters/);
+  // Clicking it asks the PC; the page reports whatever the PC answered.
+  await page.click("#vt-adapt-reset");
+  await page.waitForTimeout(200);
+  const resetCalls = await page.evaluate(() => (window.__calls || []).filter((c) => c[0] === "reset_voice_adaptation"));
+  const resetErrors = page.__errors;
+  await page.close();
+  assert.equal(resetCalls.length, 1, `the reset asks the PC exactly once (${resetErrors})`);
 
   // The PC's own counts, re-anchors and resets: shown as they came.
   const counted = JSON.parse(JSON.stringify(S.strong_ready));
@@ -1091,7 +1110,7 @@ await check("Live additions: the PC's count and caps, the drift rule, re-anchori
   assert.match(shownWords, /Close: 2 of 4 Live additions\./);
   assert.match(shownWords, /Re-anchored to your original enrollment 2 times, the last on /);
   assert.match(shownWords, /The count has been reset 1 time/);
-  assert.equal(shownReset, true);
+  assert.equal(shownReset, false);
   noRaw(shownWords);
 });
 
