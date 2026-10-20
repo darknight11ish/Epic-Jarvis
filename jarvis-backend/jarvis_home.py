@@ -158,7 +158,8 @@ _HEAVY_DOMAINS = frozenset({"lock", "alarm_control_panel", "cover", "valve", "si
 # plain `switch.garage_door` or `button.open_gate`. Whole words of the id
 # only ("door" in `switch.front_door`, not in `light.outdoor`).
 _HEAVY_WORDS = frozenset({"door", "doors", "gate", "gates", "garage", "lock", "locks",
-                          "alarm", "alarms", "security", "safe", "siren", "valve"})
+                          "alarm", "alarms", "security", "safe", "siren", "valve",
+                          "heater", "boiler", "oven"})
 
 # Never grouped with other devices, though not `heavy` on their own: a
 # camera (turning one off is a security matter), and the entities that run
@@ -379,6 +380,12 @@ class Plan:
     authenticated: bool = False
     reason_empty: str = ""
     digest: str = ""             # call_service: _digest of the requests planned
+    #: entity_id -> the device's own friendly name, when the caller knows it.
+    #: The no-card path checks it for lock/door/garage/... words as well as the
+    #: id, so "Porch Light Lock" cannot slip through on a plain switch. Home
+    #: Assistant's names are not readable without a state read, so an absent
+    #: name means "not checked here", not "cleared".
+    names: dict = field(default_factory=dict)
 
     def as_dict(self) -> dict:
         d = asdict(self)
@@ -435,8 +442,12 @@ def plan_states(entity_ids: list) -> Plan:
 
 
 def plan_service(domain: str, service: str, entity_id: str,
-                  data: Optional[dict] = None) -> Plan:
-    """Work out the one service call this would make. Opens no socket."""
+                  data: Optional[dict] = None, name: str = "") -> Plan:
+    """Work out the one service call this would make. Opens no socket.
+
+    `name` is the device's own Home Assistant friendly name, when the caller
+    knows it; it rides on the plan so the no-card path can refuse a switch
+    called "Porch Light Lock" even when its entity id says nothing."""
     domain = str(domain).strip()
     service = str(service).strip()
     entity_id = str(entity_id).strip()
@@ -516,9 +527,10 @@ def plan_service(domain: str, service: str, entity_id: str,
     # Without it a 200 from HA is the only evidence there is, and a 200 means
     # "I took the call", not "the light came on".
     queries = [query, _readback_query(base, entity_id)]
+    name = str(name or "").strip()
     return Plan(kind="call_service", queries=queries, heavy=heavy,
                 if_refused=if_refused, authenticated=authenticated(),
-                digest=_digest(queries))
+                digest=_digest(queries), names=({entity_id: name} if name else {}))
 
 
 def _unique(ids) -> list:
@@ -560,14 +572,18 @@ def group_problem(domain: str, service: str, entity_ids, data: Optional[dict] = 
 
 
 def plan_services(domain: str, service: str, entity_ids,
-                  data: Optional[dict] = None) -> Plan:
+                  data: Optional[dict] = None,
+                  names: Optional[dict] = None) -> Plan:
     """Work out the same service call on each of several named entities -
     one POST each, all on ONE card (MAX_GROUP at most; nothing in
     `_stands_alone` grouped). One entity is exactly plan_service. Opens no
     socket."""
     ids = _unique(entity_ids)
+    given = {str(k): str(v) for k, v in (names or {}).items()
+             if isinstance(k, str) and isinstance(v, str) and str(v).strip()}
     if len(ids) <= 1:
-        return plan_service(domain, service, ids[0] if ids else "", data)
+        one = ids[0] if ids else ""
+        return plan_service(domain, service, one, data, name=given.get(one, ""))
     domain = str(domain).strip()
     service = str(service).strip()
     if_refused = "nothing happens; every one of these devices is left exactly as it is"
@@ -605,16 +621,17 @@ def plan_services(domain: str, service: str, entity_ids,
                              why=f"call {domain}.{service} on {eid}",
                              entity_id=eid, body={**dict(data or {}), "entity_id": eid}))
         queries.append(_readback_query(base, eid))
+    kept_names = {eid: given[eid] for eid in ids if eid in given}
     return Plan(kind="call_service", queries=queries, heavy=False,
                 if_refused=if_refused, authenticated=authenticated(),
-                digest=_digest(queries))
+                digest=_digest(queries), names=kept_names)
 
 
 #: "Lights, plugs and fans without a card" (jarvis_asks_first.py, the
 #: owner's decision of 2026-09-26): the only domains, services and `data`
 #: keys such a change may use. A plug is Home Assistant's `switch` domain.
 EVERYDAY_DOMAINS = frozenset({"light", "switch", "fan"})
-EVERYDAY_SERVICES = frozenset({"turn_on", "turn_off", "toggle"})
+EVERYDAY_SERVICES = frozenset({"turn_on", "turn_off", "toggle", "set_percentage"})
 EVERYDAY_DATA = frozenset({"brightness", "brightness_pct", "brightness_step",
                            "brightness_step_pct", "color_name", "color_temp",
                            "color_temp_kelvin", "kelvin", "rgb_color", "hs_color", "xy_color",
@@ -628,12 +645,13 @@ def everyday_problem(p: Plan) -> str:
     without a card - else why not. When in doubt, it is not: the call then
     goes to the gate and its card, as before. Opens no socket.
 
-    Each request must: call light, switch or fan's own turn_on, turn_off or
-    toggle (not the `homeassistant` domain, which forwards to anything); on
-    an entity of that SAME domain; that is not heavy and does not stand
-    alone (a lock, alarm, door, gate, garage, cover, valve, camera, scene,
-    script, button - by domain or by a word in its id: "switch.garage_door"
-    is a door); with no `data` beyond a short list of brightness, colour and
+    Each request must: call light, switch or fan's own turn_on, turn_off,
+    toggle or set_percentage (not the `homeassistant` domain, which forwards
+    to anything); on an entity of that SAME domain; that is not heavy and
+    does not stand alone (a lock, alarm, door, gate, garage, cover, valve,
+    heater, boiler, oven, camera, scene, script, button - by domain, by a
+    word in its id, or by a word in its friendly name when the plan carries
+    one); with no `data` beyond a short list of brightness, colour and
     fan-speed keys."""
     if not isinstance(p, Plan) or p.kind != "call_service" or p.reason_empty or not p.queries:
         return "not a change Jarvis could check"
@@ -658,6 +676,11 @@ def everyday_problem(p: Plan) -> str:
             return "only on, off and toggle go without a card"
         if _stands_alone(domain, eid):
             return "a lock, alarm, door, cover or similar always gets a card of its own"
+        name = str((getattr(p, "names", {}) or {}).get(eid, "")).strip()
+        if name and any(w in _HEAVY_WORDS
+                        for w in re.findall(r"[a-z0-9]+", name.lower())):
+            return ("its name says it may be a lock, door, garage, alarm, valve, "
+                    "heater, boiler or oven, so it always gets a card of its own")
         body = q.body if isinstance(q.body, dict) else {}
         if body.get("entity_id") != eid or any(k not in EVERYDAY_DATA for k in body
                                                 if k != "entity_id"):

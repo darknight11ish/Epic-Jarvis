@@ -595,6 +595,93 @@ with with_env(url=None, token=None):
           == "not_set_up")
 
 
+# ── Area 5A audit (2026-10-20): the no-card path is DOMAIN- and NAME-gated ───
+
+def everyday(domain, service, ids, data=None, name="", names=None):
+    """(everyday_problem(plan), plan) with the pin already configured."""
+    ids = [ids] if isinstance(ids, str) else list(ids)
+    merged = dict(names or {})
+    if name:
+        merged[ids[0]] = name
+    with with_env(url="https://ha.example.lan:8123", token="x"):
+        p = H.plan_services(domain, service, ids, data, names=merged)
+        return H.everyday_problem(p), p
+
+
+why, p = everyday("light", "turn_on", ["light.kitchen"])
+check("light.kitchen is still fast - no card", why == "", why)
+check("... and the plan carries no invented name", p.names == {}, p.names)
+
+why, _p = everyday("switch", "turn_on", ["switch.porch"])
+check("a plain switch is still everyday", why == "", why)
+
+why, _p = everyday("switch", "turn_on", ["switch.porch"], name="Porch Light Lock")
+check("BITES: 'Porch Light Lock' is refused the no-card path by its NAME",
+      bool(why) and "name" in why, why)
+
+why, _p = everyday("switch", "turn_on", ["switch.porch_light_lock"])
+check("... and the same device is refused by its entity id", bool(why), why)
+
+why, _p = everyday("switch", "turn_on", ["switch.heater"])
+check("... heater/boiler/oven words are heavy too", bool(why), why)
+
+why, _p = everyday("switch", "turn_on", ["switch.boiler"])
+check("... boiler is heavy", bool(why), why)
+
+why, _p = everyday("switch", "turn_on", ["switch.oven"])
+check("... oven is heavy", bool(why), why)
+
+why, _p = everyday("fan", "set_percentage", ["fan.bedroom"], data={"percentage": 50})
+check("a fan set_percentage is still everyday (the audit's allowed service)", why == "", why)
+
+why, _p = everyday("light", "turn_on", ["light.kitchen", "light.hall"],
+                   names={"light.hall": "Hall Lock Light"})
+check("a heavy NAME on one device of several refuses the whole no-card plan",
+      bool(why) and "name" in why, why)
+
+for domain, service, eid in (
+        ("cover", "close_cover", "cover.garage"),
+        ("script", "turn_on", "script.good_night"),
+        ("scene", "turn_on", "scene.movie"),
+        ("automation", "turn_on", "automation.away"),
+        ("lock", "unlock", "lock.front_door"),
+        ("alarm_control_panel", "disarm", "alarm_control_panel.home"),
+        ("valve", "open_valve", "valve.water")):
+    why, _p = everyday(domain, service, [eid])
+    check(f"BITES: {domain}.* always keeps its own card ({service})", bool(why), why)
+
+why, _p = everyday("homeassistant", "turn_on", ["switch.porch"])
+check("BITES: homeassistant.* always keeps its card", bool(why), why)
+
+why, _p = everyday("switch", "turn_on", ["switch.porch"],
+                   data={"entity_id": "lock.front_door"})
+check("BITES: data cannot smuggle a second entity into the no-card check",
+      bool(why), why)
+
+with with_env(url="https://ha.example.lan:8123", token="x"):
+    p_light = H.plan_service("light", "turn_on", "light.kitchen")
+
+
+def accepted_but_unavailable(query):
+    return {} if query.method == "POST" else {"state": "unavailable"}
+
+
+dead = H.run(p_light, fetch=accepted_but_unavailable, approved=True)
+check("BITES: a light's accepted call + unavailable readback is NOT ok",
+      dead.get("ok") is False and dead.get("state_after") == "unavailable"
+      and dead.get("verified") is None, dead)
+check("... and the reason says the device did not respond",
+      "light.kitchen is unavailable" in str(dead.get("reason")), dead.get("reason"))
+
+
+def accepted_but_unknown(query):
+    return {} if query.method == "POST" else {"state": "unknown"}
+
+
+ghost = H.run(p_light, fetch=accepted_but_unknown, approved=True)
+check("BITES: 'unknown' is the same honest failure for a light",
+      ghost.get("ok") is False and ghost.get("state_after") == "unknown", ghost)
+
 print()
 if FAILED:
     print(f"{len(FAILED)} failed: {', '.join(FAILED)}")

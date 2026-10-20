@@ -7513,18 +7513,32 @@ exactly as before:
   tainted, the newest message was typed or said by the owner (not pasted,
   shared, from the clipboard, a picture's caption, or a voice this PC could
   not check), and the app sent no text of its own;
-- every request is `light`, `switch` or `fan`'s own `turn_on`, `turn_off` or
-  `toggle` (never the `homeassistant` domain, which forwards to anything), on
-  an entity of the same domain, with no `data` but brightness, colour and fan
-  speed keys;
-- none of them stands alone: a lock, alarm, cover, valve, siren, camera,
-  scene, script, automation or button, or an id with door, gate, garage,
-  lock, alarm, security, safe, siren or valve in it ("switch.garage_door" is
-  a door);
+- every request is `light`, `switch` or `fan`'s own `turn_on`, `turn_off`,
+  `toggle` or `set_percentage` (never the `homeassistant` domain, which
+  forwards to anything), on an entity of the same domain, with no `data` but
+  brightness, colour and fan speed keys;
+- none of them stands alone: a lock, alarm, cover, valve, siren, heater,
+  boiler, oven, camera, scene, script, automation or button, or an id **or a
+  friendly name** with door, gate, garage, lock, alarm, security, safe,
+  siren, valve, heater, boiler or oven in it ("switch.garage_door" is a door;
+  a `switch.porch` named "Porch Light Lock" is refused by its name too, and
+  a name known on the plan is checked for every device);
 - every device was named in the owner's newest message: each word of its id,
   after the domain and the device words (light, lamp, plug, fan...), is
   there ("light.kitchen" by "turn off the kitchen light"; "light.kitchen_
   ceiling" needs "ceiling" too; "all the lights" names none).
+
+**Audit hardening (Area 5A, 2026-10-20).** The guard is the domain first and
+the words second: only `light`/`switch`/`fan` entities may ever skip a card,
+whatever their name; `lock`, `cover`, `alarm_control_panel`, `valve`,
+`script`, `scene`, `automation` and `homeassistant` always keep their own
+per-device card. `switch.*` is also checked for the heavy words in its
+friendly name when the plan carries one, and the readback is what decides
+success: a service call Home Assistant accepted (200) whose paired
+`GET /api/states/<entity>` answers `unavailable` or `unknown` returns
+`ok: false` with the state it found. Tests: `backend/test_home_control.py`
+(`Porch Light Lock` name refusal, `light.kitchen` fast, every heavy domain
+refused, `set_percentage`, and the unavailable/unknown readback bites).
 
 Such a change is not an approval and raises nothing: the audit log records
 `asks_first.lights.no_card` with the devices and the service. `home_control`
@@ -12003,7 +12017,20 @@ owner can see on the PC. No captcha solving. (The 2026-09-28 wording "never
 hiding from the site's bot detection" was reversed by the owner on
 2026-09-29 - CLAUDE.md, "Stealth on for everything".)
 
-- **ONE card per chat** (gate action `support_chat`, tier `ask` only, a
+- **Area 5B audit (2026-10-20): verified, no code change needed.** Every
+outbound message goes through `jarvis_support.support_check` before it
+leaves: the approved details are masked as written, then the rest is checked
+for the module's private/saved-fact readers, secrets, card numbers, emails,
+phones and addresses, and any check that cannot run blocks (fail closed)
+(`jarvis_support.py`, `mask_listed`/`support_check`). Exports offer the
+SCRUBBED copy (`export_text(scrub=True)` masks every approved value and runs
+`jarvis_scrub.scrub_text`); when the scrubber is missing the scrubbed export
+is refused rather than handed over plain (`EXPORT_SCRUB_OFF`). The existing
+`backend/test_chatbot_privacy.py` covers both copies. The plain export stays
+the owner's own disclosed, unencrypted copy - only the details that same
+chat was allowed to give are in it.
+
+**ONE card per chat** (gate action `support_chat`, tier `ask` only, a
   risky approval: Windows Hello on the PC, a screen lock on the phone)
   lists the company and its help page, **that company's terms risk**, the
   goal, and **every detail Jarvis may give, word for word** - "Jarvis may
@@ -14396,6 +14423,20 @@ on a real launcher.
 ## 87. Chatbot conversations - Jarvis talks to an AI chatbot for you (core, routes, both apps' screens, and Gemini plus eight more website adapters built 2026-09-28)
 
 > **Renumbered in the audit integration merge (2026-09-28):** this section was §60 on the `claude/jarvis-ai-assistant-research-ff37vy` branch; §60 is already taken on main's side (the plan card). References that came with that branch were renumbered with it.
+
+**Area 5C audit (2026-10-20): verified, no code change needed.** The
+driver's context is rebuilt from the goal, its own notes and the transcript
+only - no memory, keep-in-mind facts, "Between us" facts, voiceprint, email,
+calendar, notes, files or chat history - and the request carries no tools
+(`jarvis_chatbot.py`, "THE CLEAN CONTEXT" and `context_text()`). Memory is
+read in exactly one place: the last check that makes sure a saved fact never
+goes into a web chat, and its result can only block. `backend/test_chatbot_privacy.py`
+mutates `context_text` to prepend a voiceprint sample and pinned/saved facts
+and proves both never reach the request or the chatbot; `test_chatbot_compare.py`
+proves each comparison member gets the same clean context. The chatbot route
+has no agent-turn conversation to be tainted by; every chatbot reply is
+marked outside text and the last check refuses private content before it is
+sent, so a tainted paste cannot ride out through this path.
 
 **Routed, on both apps' screens, with the Gemini website adapter - but not
 yet tried against the real gemini.google.com** (the owner's self-check in
