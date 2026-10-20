@@ -1039,6 +1039,18 @@ The GPL-licensed project named in the research report
 (.dsh-scratch/RESEARCH-APP-AUTOMATION-REPOS-2026-10-19.md, khimaros/mimic) was
 read as a design reference only and is not used.
 
+MORLUTO/REA - A SEPARATE LOCAL PROGRAM, NOT LINKED (not generated - keep when regenerating)
+=========================================================================================
+
+Reverse-engineering tool used by backend/jarvis_rea.py as a SEPARATE local program over the
+Model Context Protocol (stdio only). It is installed once by the owner at the pinned version
+and is never redistributed with Jarvis; no source code from it is copied or modified here.
+Source: https://github.com/morluto/rea - npm: https://www.npmjs.com/package/rea-agents
+Version 6.7.0, MIT Licence, Copyright (c) 2026 morluto.
+Its full MIT text is in the MIT section of the generated licence texts below.
+The package bundles its own third-party notices (THIRD_PARTY_NOTICES.md and licenses/ inside
+the package); those apply to that program, not to Jarvis.
+
 2. RUST LIBRARIES IN THE DESKTOP PROGRAM (generated)
 ====================================================
 

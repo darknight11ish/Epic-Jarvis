@@ -1113,6 +1113,10 @@ SHIPPED = (
     # jarvis_quick.py answer without a model, and the read-only feature_guide
     # tool lets the model reword the same facts.
     "jarvis_feature_guide.py", "jarvis_feature_catalogue.py",
+    # Reverse engineering (REA, 2026-10-20): ONE compact rea_investigate tool over a
+    # curated read-only action list, driven by the pinned LOCAL npm install over the
+    # existing MCP bridge. [rea] enabled = false by default; no route of its own.
+    "jarvis_rea.py",
 )
 
 

@@ -22250,6 +22250,7 @@ denied/timed-out/refused/wrong-tier runs nothing, the approved step is the
 plan's own, stop-on-change (wrong app / vanished / renamed / disabled / became
 a password field), every refused category before any card, Stop is immediate,
 one run at a time, the audit line is app+verb only while the card shows the
+
 typed text; the planning round (the local model pinned to the main lane's
 `qwen3.5:9b`, only masked and scrubbed labels inside the untrusted-data block,
 the owner's refused words and the hard denylist refused BEFORE the model, the
@@ -22375,3 +22376,79 @@ before the next (approved and denied), continues past a failed setting, saves
 only the answers, and round-trips them for prefill; the module imports no gate,
 no model lane and no network, and the three routes keep the origin/token order.
 
+typed text, and the patch's own pins (two routes, harness position, no
+install-block line, `_stack.py`'s RATCHET unchanged).
+
+## 148. Reverse engineering with REA: one tool, one allow-list, no route (added 2026-10-20)
+
+The owner asked for "reverse engineer anything" integration. The upstream is REA
+(`morluto/rea`, npm `rea-agents@6.7.0`, MIT) - a separate local program that inspects a file the
+owner names. It is **not** linked into Jarvis, no code is copied, and it is installed once by the
+owner at the pinned version. It ships **OFF**.
+
+**Why one tool and not 207.** REA's MCP server really serves **207 tools**. Measured from the
+real server on 2026-10-20: 723,936 bytes of input schemas and 92,270 bytes of descriptions -
+about **272,000 tokens** by `jarvis_agent.estimate_tokens`'s own rule, many times the 9B model's
+whole window. So `backend/jarvis_rea.py` exposes ONE tool, `rea_investigate`, with a fixed action
+list; the model never names a REA tool and never sees REA's schemas. The existing MCP bridge
+(`jarvis_mcp.py`) supplies the transport (a Windows Job Object, the stdio JSON-RPC reader, the
+caps) - this module does not write a second MCP client. The bridge's read-only-first rule would
+hide every REA tool anyway: only 2 of REA's 71 inspection-family tools claim `readOnlyHint`.
+
+**Two switches, both off by default.** `[rea] enabled = false` in the template, and the tool must
+also be named in `[tools].enabled`. With either missing the tool costs no tokens and is not
+offered. The owner installs the package once, by hand (Jarvis never runs `npx` and never
+downloads):
+
+    npm install --prefix "$env:USERPROFILE\.openjarvis\tools\rea" rea-agents@6.7.0 --ignore-scripts --no-audit --no-fund
+
+**The one tool.** Arguments: `action`, `target` (a full path inside "Folders Jarvis may look
+in"), and for the query action `query`/`what`; `format` for a saved capture. Actions:
+
+| action | what it does | engine needed |
+|---|---|---|
+| `doctor` | what this PC can inspect, and the pinned install's identity; reads only | none |
+| `inspect_javascript_app` | static Electron/JavaScript graph from a folder or `.asar` | none |
+| `inspect_binary` | sections, segments, symbols, metadata inputs of an exe/dll/so | none |
+| `inspect_capture` | a saved HAR or SAZ web capture | none |
+| `inspect_sqlite` | a SQLite database's schema | Node 24.15+/26+ |
+| `inspect_apk` | an APK's manifest, SDK, permissions, classes | JADX (`REA_JADX_MCP_JAR`) |
+| `open_native_binary` | open a binary in a read-only decompiler | Ghidra/IDA/Hopper/Kuna |
+| `query_native_binary` | `overview` / `strings` / `xrefs` / `function` on the open binary | as above |
+
+**Every call is ONE approval card.** `rea_investigate` is in `jarvis_agent.NEEDS_A_PERSON`, so a
+person's yes is required whatever the tier. `prepare()` validates the action, the target and the
+engine **before** the card, so a bad request never asks and never starts a program. The target
+must pass the existing `jarvis_documents.allowed_path()` folder rule **and** this module's own
+private-place refusal (`~/.openjarvis`, browser profiles, credential stores, `.ssh`/`.gnupg`,
+`Windows\System32\config`); a listed folder that contains those still cannot be inspected there.
+
+**Default-deny, not a denylist.** The model chooses an action, never a REA tool. The only REA
+operations this module can send are the eight above plus the read-only queries they use. ADB
+device mutators, runtime/browser/process capture, debugger sessions and evidence export are
+refused twice over (no action, and an explicit deny set in the module). The REA child receives
+`jarvis_child_env`'s allow-list plus only the provider paths the owner set - never `HUD_TOKEN`,
+`JARVIS_TOKEN` or any `*_KEY`.
+
+**What comes back.** Chat-template markers are stripped, prompt-injection patterns are flagged,
+secrets are scrubbed by `jarvis_scrub`, the text is cut to 6000 characters, and the result is
+labelled `untrusted`; the conversation is latched local with
+`jarvis_gate.latch_taint(why="rea_analysis")`. The module reports Evidence ids only when REA's own
+answer carries them. A runtime identity check (`binary_session`) confirms the running program is
+`rea-agents@6.7.0` with the 207-tool catalog this build was written against; a mismatch closes the
+session and refuses.
+
+**What this does not do.** No HTTP route, no patch, no new gate action or tier. No runtime capture
+(that needs its own switch and a card naming the exact program/URL), no evidence-bundle export
+(needs `jarvis_file_guardian` and a folder rule), no ADB anything (Jarvis's app-control path owns
+phone actions), and the upstream `SKILL.md` is not shipped - it is untrusted text and is a later
+slice. Nothing is measured here: the façade's refusals and wrapping are covered by
+`backend/test_rea.py`, while a real REA analysis is NOT-TESTABLE on CI (no engines, no pinned
+install) and is not claimed as tested.
+
+Tests: `backend/test_rea.py` - private targets refused before any start, the operation allowlist
+blocks every ADB/runtime/debug/export tool, the child environment carries no Jarvis secret, the
+taint latch is called, markers stripped and secrets scrubbed and injections flagged, the bounded
+output, the Node version range (22.19+/24.11+/26+, never 23/25), missing-engine refusals before
+the card, one compact tool in exactly one group selected by the tool diet, and off-by-default
+gating on both switches.
