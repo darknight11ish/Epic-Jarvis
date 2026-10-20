@@ -132,8 +132,16 @@ if (card && list && apply && line) {
   function renderHardware(view) {
     const hw = view.hardware;
     if (!hw || !hw.available) {
-      hardware.hidden = true;
       hardware.replaceChildren();
+      if (hw && hw.why) {
+        const note = document.createElement("p");
+        note.className = "note";
+        note.textContent = hw.why;
+        hardware.append(note);
+        hardware.hidden = false;
+      } else {
+        hardware.hidden = true;
+      }
       return;
     }
     hardware.replaceChildren();

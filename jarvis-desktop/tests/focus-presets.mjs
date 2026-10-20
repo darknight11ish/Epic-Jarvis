@@ -22,6 +22,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 import * as Focus from "../src/focus-presets.js";
+import { budgetFor } from "../src/invoke-budget.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = JSON.parse(
@@ -36,6 +37,14 @@ const check = async (what, fn) => {
 };
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
+const withoutApplyRoute = (value) => {
+  const other = clone(value);
+  for (const preset of other.presets) {
+    preset.apply = { ...(preset.apply || {}) };
+    delete preset.apply.apply_route;
+  }
+  return other;
+};
 const withApplyRoute = (value) => {
   const other = clone(value);
   for (const preset of other.presets) {
@@ -87,12 +96,27 @@ await check("a short answer cannot draw invented presets", async () => {
   }
 });
 
-await check("the contract publishes the apply route, but the app wiring keeps the action disabled", async () => {
+await check("the fixture route plus the wired bridge enables the one action", async () => {
   const read = Focus.normaliseReading(clone(FIXTURE));
-  assert.equal(Focus.APPLY_BRIDGE_WIRED, false, "the app-side apply wiring must ship OFF");
+  assert.equal(Focus.APPLY_BRIDGE_WIRED, true, "the app-side bridge is wired now");
   assert.equal(read.applyContractReady, true, "the fixture now publishes apply_route");
   assert.equal(read.applyRoute, "/api/work/apply");
-  assert.equal(read.applyReady, false, "the route alone must not enable the button");
+  assert.equal(read.applyReady, true);
+  assert.equal(read.applyAction, "Use this preset");
+  const view = Focus.pickerView(read, "fast");
+  assert.equal(view.available, true);
+  assert.equal(view.action.label, "Use this preset");
+  assert.equal(view.action.disabled, false);
+  assert.equal(view.action.why, "");
+});
+
+await check("a contract with no apply route keeps the one action disabled, with its waiting line", async () => {
+  const read = Focus.normaliseReading(withoutApplyRoute(FIXTURE));
+  const wiredButNoRoute = Focus.normaliseReading(withoutApplyRoute(FIXTURE), { applyWired: true });
+  assert.equal(wiredButNoRoute.applyReady, false);
+  assert.equal(read.applyReady, false);
+  assert.equal(read.applyContractReady, false);
+  assert.equal(read.applyRoute, "");
   assert.equal(read.applyAction, "Use this preset");
   const view = Focus.pickerView(read, "fast");
   assert.equal(view.available, true);
@@ -100,22 +124,11 @@ await check("the contract publishes the apply route, but the app wiring keeps th
   assert.equal(view.action.disabled, true);
   assert.equal(view.action.why, Focus.APPLY_WAITING);
 });
-
-await check("an older PC with no apply route is disabled for the same reason, and says so", async () => {
-  const old = clone(FIXTURE);
-  for (const preset of old.presets) delete preset.apply.apply_route;
-  const read = Focus.normaliseReading(old);
-  assert.equal(read.applyContractReady, false);
-  assert.equal(read.applyRoute, "");
-  assert.equal(read.applyReady, false);
-  const view = Focus.pickerView(read, "fast");
-  assert.equal(view.action.disabled, true);
-  assert.equal(view.action.why, Focus.APPLY_WAITING);
-});
-
-await check("a contract route alone is not enough: the app wiring decides the button", async () => {
+await check("both the contract route and the app wiring are required", async () => {
   const routed = withApplyRoute(FIXTURE);
-  const notWired = Focus.normaliseReading(routed);
+
+  // A backend ahead of the app: the route is there, the app is not wired.
+  const notWired = Focus.normaliseReading(routed, { applyWired: false });
   assert.equal(notWired.applyRoute, "/api/work/apply", "the contract route is kept, not hidden");
   assert.equal(notWired.applyContractReady, true);
   assert.equal(notWired.applyWired, false);
@@ -124,17 +137,15 @@ await check("a contract route alone is not enough: the app wiring decides the bu
   assert.equal(waiting.action.disabled, true);
   assert.equal(waiting.action.why, Focus.APPLY_WAITING);
 
-  const wired = Focus.normaliseReading(routed, { applyWired: true });
+  // Both present: the one action is finally ready.
+  const wired = Focus.normaliseReading(routed);
   assert.equal(wired.applyContractReady, true);
   assert.equal(wired.applyWired, true);
   assert.equal(wired.applyReady, true);
   assert.equal(Focus.pickerView(wired, "fast").action.disabled, false);
 
-  // ...and app wiring alone, with no contract route, must stay disabled too.
-  // The fixture NOW publishes apply_route, so strip it for this old-PC case.
-  const noRoute = clone(FIXTURE);
-  for (const preset of noRoute.presets) delete preset.apply.apply_route;
-  const noRouteButWired = Focus.normaliseReading(noRoute, { applyWired: true });
+  // App wiring alone, with no contract route, must stay disabled too.
+  const noRouteButWired = Focus.normaliseReading(withoutApplyRoute(FIXTURE));
   assert.equal(noRouteButWired.applyReady, false);
   assert.equal(Focus.pickerView(noRouteButWired, "fast").action.disabled, true);
   assert.equal(Focus.pickerView(noRouteButWired, "fast").action.why, Focus.APPLY_WAITING);
@@ -177,8 +188,9 @@ await check("the card lists every contract preset with its own words and details
 await check("an apply route plus app wiring enables the one action; the current preset stays inert", async () => {
   const other = withApplyRoute(FIXTURE);
   other.chosen = "coding";
-  const read = Focus.normaliseReading(other, { applyWired: true });
+  const read = Focus.normaliseReading(other);
   assert.equal(read.applyReady, true);
+  assert.equal(read.applyWired, true);
   assert.equal(read.applyRoute, "/api/work/apply");
   const current = Focus.pickerView(read, "coding");
   assert.equal(current.items.find((p) => p.id === "coding").current, true);
@@ -235,6 +247,42 @@ await check("the hardware block is read generically and shown in Settings", asyn
   assert.deepEqual(view.hardware.priorityChoices, other.hardware.questionnaire.priority_choices);
 });
 
+await check("the older direct hardware shape stays a compatibility fallback", async () => {
+  // PRIMARY is the fixture's {detected, questionnaire}; the old live route sent
+  // hardware as the detected object with a top-level questionnaire. Keep reading
+  // that fallback, but the live route itself is being aligned to the fixture.
+  const older = clone(FIXTURE);
+  older.hardware = {
+    count: 2,
+    cards: [
+      { index: 0, name: "RTX 2060", vram_gib: 12, uuid: "a" },
+      { index: 1, name: "RTX 2080 SUPER", vram_gib: 8, uuid: "b" },
+    ],
+    source: "jarvis_hardware.detect()",
+  };
+  older.questionnaire = FIXTURE.hardware.questionnaire;
+  older.chosen = "coding";
+  older.active_lane = { key: "coding", base_url: "http://127.0.0.1:11435" };
+  const read = Focus.normaliseReading(withApplyRoute(older));
+  assert.equal(read.available, true, "the presets themselves are still readable");
+  assert.equal(read.hardware.available, true);
+  assert.equal(read.hardware.count, 2);
+  assert.deepEqual(read.hardware.cards.map((c) => c.name), ["RTX 2060", "RTX 2080 SUPER"]);
+  assert.deepEqual(read.hardware.focusChoices, FIXTURE.hardware.questionnaire.focus_choices);
+  assert.equal(read.chosen.name, "Coding");
+  assert.equal(read.lane.label, "coding");
+  const view = Focus.settingsView(read, read.chosenId);
+  assert.equal(view.hardware.count, 2);
+});
+
+await check("a missing hardware block still says the contract needs updating", async () => {
+  const missing = clone(FIXTURE);
+  delete missing.hardware;
+  const read = Focus.normaliseReading(withApplyRoute(missing));
+  assert.equal(read.hardware.available, false);
+  assert.equal(read.hardware.why, Focus.CONTRACT_SHAPE_UPDATE);
+});
+
 await check("Settings draws the same list, the one-card explanation and the current mark", async () => {
   const other = withApplyRoute(FIXTURE);
   other.chosen = "general";
@@ -277,6 +325,30 @@ await check("a camelCase answer is read too, so the bridge may hand it on unchan
   assert.equal(read.chosen.name, "Beta");
   assert.equal(read.presets[0].description, "Second from the PC.");
   assert.equal(read.presets[0].details.find((d) => d.label === "Worse at").value, "nothing yet");
+});
+
+await check("the JavaScript bridge and the Rust commands name the same seam", async () => {
+  const read = (p) => readFileSync(join(HERE, "..", p), "utf8");
+  const bridge = read("src/focus-presets-bridge.js");
+  const rust = read("src-tauri/src/focus_presets.rs");
+  for (const command of ["get_focus_presets", "apply_focus_preset"]) {
+    assert.ok(bridge.includes(command), `the bridge does not name ${command}`);
+    assert.ok(rust.includes(command), `the Rust module does not expose ${command}`);
+  }
+  assert.ok(bridge.includes('"/api/work/apply"') || bridge.includes("/api/work/apply"),
+    "the bridge comment/route seam no longer names /api/work/apply");
+  assert.ok(rust.includes('FOCUS_PRESETS_APPLY_PATH: &str = "/api/work/apply"'),
+    "the Rust command does not post to /api/work/apply");
+  assert.ok(rust.includes('FOCUS_PRESETS_PATH: &str = "/api/work"'),
+    "the Rust command does not read /api/work");
+});
+
+await check("the bridged apply waits longer than the PC\'s approval gate", async () => {
+  // Rust waits 1200 s for the switch_model card; the JS budget must outlast it so
+  // the page does not say "not known" while a real, still-open card can still be
+  // answered. Keep the two numbers together.
+  assert.ok(budgetFor("apply_focus_preset", "action") >= 1_200_000,
+    "the apply bridge gives up before the PC's own approval gate");
 });
 
 await check("no preset id or name is hardcoded in the source", async () => {

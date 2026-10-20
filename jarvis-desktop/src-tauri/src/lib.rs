@@ -37,6 +37,7 @@ pub mod commands;
 pub mod crash_notes;
 pub mod devices;
 pub mod email_sending;
+pub mod focus_presets;
 pub mod folders;
 pub mod frame_feed;
 pub mod handoff;
@@ -1132,6 +1133,8 @@ pub fn run() {
             hardware::hardware_step,
             hardware::measure_hardware,
             hardware::get_pc_help,
+            focus_presets::get_focus_presets,
+            focus_presets::apply_focus_preset,
             selection::read_selection,
             tutorials::get_tutorials,
             tutorials::mark_tutorial,
