@@ -32,21 +32,28 @@ test("words are the feature's own", () => {
   ok("detail names the promise", DETAIL.includes("draft") && DETAIL.includes("chatbot"));
 });
 
+// The fixture is the answer `jarvis_voiceprint.handle_get("/api/voiceprint")`
+// really gives (measured 2026-10-20): samples/count at the top level, and the
+// switch, available and scrubber inside "status". A flat fixture is what let a
+// switch that always rendered OFF look tested.
 test("parseStatus keeps only what it can render", () => {
   const v = parseStatus({
-    available: true, enabled: true, count: 2, scrubber: true,
+    ok: true, count: 2,
+    status: { available: true, enabled: true, scrubber: true, samples: 2 },
     samples: [
       { id: "vp1", text: "Hello [name]", kind: "sample", prompt: "" },
       { id: "vp2", text: "Second", kind: "edit" },
       { nope: true },
     ],
   });
-  ok("enabled", v.enabled === true);
+  ok("enabled comes from the PC's own status block", v.enabled === true);
   ok("two valid rows survive", v.samples.length === 2, String(v.samples.length));
   ok("id and text are kept", v.samples[0].id === "vp1" && v.samples[0].text === "Hello [name]");
   ok("a malformed row is dropped, not rendered", !JSON.stringify(v).includes("nope"));
   ok("empty list says so", parseStatus({ samples: [] }).message === EMPTY);
   ok("the switch defaults OFF", parseStatus({}).enabled === false);
+  ok("available and scrubber default ON", parseStatus({}).available === true
+    && parseStatus({}).scrubber === true);
 });
 
 test("forget always asks first, with the sample's own first words", () => {

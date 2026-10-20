@@ -56,9 +56,18 @@ object Voiceprint {
     private fun JsonObject.flag(key: String): Boolean =
         (this[key] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull == true
 
-    /** `GET /api/voiceprint`, or null when this is not one (an older PC). */
+    /** `GET /api/voiceprint`, or null when this is not one (an older PC).
+     *
+     * The PC answers `{"ok", "samples": [...], "count", "voiceprint", "status":
+     * {"available", "enabled", "scrubber", ...}}` - measured against
+     * `jarvis_voiceprint.handle_get` on 2026-10-20, not assumed. The samples
+     * and the count are at the top level; the switch, `available` and
+     * `scrubber` are inside `status`. Reading the switch at the top level is
+     * not a type error, so it would have shipped silently as always OFF.
+     */
     fun parse(body: JsonObject): View? {
-        if ((body["available"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull == false) return null
+        val status = (body["status"] as? JsonObject) ?: body
+        if ((status["available"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull == false) return null
         val rows = (body["samples"] as? JsonArray) ?: JsonArray(emptyList())
         val samples = rows.mapNotNull { row ->
             val o = row as? JsonObject ?: return@mapNotNull null
@@ -68,11 +77,11 @@ object Voiceprint {
         val count = (body["count"] as? JsonPrimitive)?.takeIf { !it.isString }?.intOrNull ?: samples.size
         val message = if (samples.isEmpty()) EMPTY else oMessage(body)
         return View(
-            enabled = body.flag("enabled"),
+            enabled = status.flag("enabled"),
             samples = samples,
             count = count,
             message = message,
-            scrubber = body.flag("scrubber") || (body["scrubber"] as? JsonPrimitive) == null,
+            scrubber = status.flag("scrubber") || (status["scrubber"] as? JsonPrimitive) == null,
         )
     }
 

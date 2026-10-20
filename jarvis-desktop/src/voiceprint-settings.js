@@ -50,13 +50,21 @@ export function problemWords(error) {
   return said;
 }
 
-/** `GET /api/voiceprint` in the shape this page renders. Never throws. */
+/** `GET /api/voiceprint` in the shape this page renders. Never throws.
+ *
+ * The PC answers `{"ok", "samples": [...], "count", "voiceprint", "status":
+ * {"available", "enabled", "scrubber", ...}}` - measured against
+ * `jarvis_voiceprint.handle_get` on 2026-10-20, not assumed. The switch,
+ * `available` and `scrubber` live in `status`; the samples and their count are
+ * at the top level. Reading the switch at the top level is not a type error,
+ * so it would have shipped silently as a toggle that always renders OFF. */
 export function parseStatus(body) {
   const b = body && typeof body === "object" ? body : {};
+  const s = b.status && typeof b.status === "object" ? b.status : b;
   const rows = Array.isArray(b.samples) ? b.samples : [];
   return {
-    available: b.available !== false,
-    enabled: b.enabled === true,
+    available: s.available !== false,
+    enabled: s.enabled === true,
     samples: rows
       .filter((r) => r && typeof r === "object" && typeof r.id === "string")
       .map((r) => ({
@@ -66,7 +74,7 @@ export function parseStatus(body) {
         prompt: String(r.prompt || ""),
       })),
     count: Number.isFinite(b.count) ? b.count : rows.length,
-    scrubber: b.scrubber !== false,
+    scrubber: s.scrubber !== false,
     message: typeof b.message === "string" ? b.message : Object.keys(rows).length ? "" : EMPTY,
   };
 }

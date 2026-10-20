@@ -21,14 +21,19 @@ class VoiceprintTest {
     private fun parse(json: String): Voiceprint.View? =
         Voiceprint.parse(Json.parseToJsonElement(json) as JsonObject)
 
+    // Every fixture is the shape `jarvis_voiceprint.handle_get()` really
+    // answers (measured 2026-10-20): samples/count at the top level, the
+    // switch and its flags inside "status". A flat fixture would let a switch
+    // that always renders OFF pass.
     @Test
     fun a_page_is_rendered_from_the_pc_answer() {
         val view = requireNotNull(parse(
-            """{"available":true,"enabled":true,"count":2,"scrubber":true,
+            """{"ok":true,"count":2,
+                "status":{"available":true,"enabled":true,"scrubber":true,"samples":2},
                 "samples":[{"id":"vp1","text":"Hello [name]","kind":"sample"},
                            {"id":"vp2","text":"Second","kind":"edit"}]}"""
         ))
-        assertTrue(view.enabled)
+        assertTrue("the switch reads the PC's own status block", view.enabled)
         assertEquals(2, view.samples.size)
         assertEquals("vp1", view.samples[0].id)
         assertEquals("Hello [name]", view.samples[0].text)
@@ -36,20 +41,21 @@ class VoiceprintTest {
 
     @Test
     fun an_older_pc_is_null_not_an_empty_page() {
-        assertNull(parse("""{"available":false}"""))
+        assertNull(parse("""{"status":{"available":false}}"""))
     }
 
     @Test
     fun a_malformed_row_is_dropped() {
         val view = requireNotNull(parse(
-            """{"available":true,"samples":[{"nope":1},{"id":"vp1","text":"x"}]}"""
+            """{"status":{"available":true},
+                "samples":[{"nope":1},{"id":"vp1","text":"x"}]}"""
         ))
         assertEquals(1, view.samples.size)
     }
 
     @Test
     fun the_switch_defaults_off() {
-        val view = requireNotNull(parse("""{"available":true,"samples":[]}"""))
+        val view = requireNotNull(parse("""{"status":{"available":true},"samples":[]}"""))
         assertEquals(false, view.enabled)
         assertEquals(Voiceprint.EMPTY, view.message)
     }
