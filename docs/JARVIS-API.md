@@ -1378,7 +1378,7 @@ is the same check); session trust is unchanged.
 `StreamingVerify` is the same rule for a caller that feeds 16 kHz chunks
 while the owner is still speaking: the check starts as soon as a window of
 voice has arrived, so end of speech waits only for an answer that already
-exists. The desktop does not feed it that way yet (it sends whole clips to
+exists. **An early verdict belongs to one recording and is never carried to the next one** (Gemini's sign-off ruling 10.4, 2026-10-21): the single-shot path builds and joins/discards its `_EarlyVerify` inside its own `hear()` call and stores no audio or verdict at module or class level, and a `StreamingVerify` instance binds each check to that recording's token, clears its worker, buffer and token in `verdict()`'s `finally:`, and offers `abort()` for a recording abandoned before its verdict - so a second utterance (or an aborted first one) gets a fresh check. Regression tests: `t_streaming_verify_never_carries_a_verdict_to_the_next_utterance`, `t_an_aborted_recording_cannot_answer_the_next_one` and `t_each_hear_gets_its_own_early_verdict` in `backend/test_voice_parallel.py`. The desktop does not feed it that way yet (it sends whole clips to
 `/api/voice/utterance`), so **that half is not measured end to end** and the
 turning-point savings for a real spoken sentence remain NOT-MEASURED until
 the owner retrains and a Live sentence is measured before/after. Tests:

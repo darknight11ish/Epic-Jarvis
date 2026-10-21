@@ -2725,6 +2725,14 @@ class _EarlyVerify:
     The verify-first rule is untouched: this only makes a verdict; no words
     exist here, nothing is transcribed, and a caller must still run the
     transcription only for the audio it is allowed to use.
+
+    ONE INSTANCE IS ONE RECORDING (Gemini's ruling 10.4, 2026-10-21): the
+    window's samples and its verdict live only in this call's `_EarlyVerify`.
+    They are copied in, dropped after the answer (or in `discard()`), and no
+    module-level or class-level attribute ever holds them - so a second
+    `hear()` call, or one whose recording is abandoned while its worker runs,
+    cannot inherit the first recording's early verdict. Nothing here is cached
+    between calls.
     """
 
     def __init__(self, samples, sample_rate: int, mic: str = ""):
@@ -2775,6 +2783,13 @@ def _decide_owner(samples, sample_rate: int, mic: str, full_check):
     full clip is checked, exactly as today. A clear window answer is used;
     anything inside the band costs the full check (said plainly in `hear()`'s
     docstring: the window is a saving, not a different standard).
+
+    OWNERSHIP: the window and its verdict exist only inside this function's
+    own `_EarlyVerify` (created a few lines below, joined or discarded before
+    returning). There is no module or class cache for either, so one
+    recording's early answer can never be read by the next `hear()` call - the
+    next call builds a new worker over new audio (ruling 10.4, tested in
+    `backend/test_voice_parallel.py`).
     """
     window = _early_window(samples, sample_rate)
     early = None
@@ -2811,6 +2826,17 @@ class StreamingVerify:
     It produces NO words and keeps no audio after `verdict()`: it is the
     check half of a streaming `hear()`, and the transcription must still be
     run only for audio the rule allows and thrown away when the answer is no.
+
+    ONE UTTERANCE AT A TIME (ruling 10.4, 2026-10-21). Each recording gets its
+    own token: the early worker is started from a COPY of that utterance's
+    first window and is bound to the token in force when it started; a
+    verdict is only consumed while that same token is still the current one.
+    `verdict()` clears everything in a `finally:` - worker joined/discarded,
+    the voice buffer emptied, `started` false, token gone - so a caller may
+    reuse one instance for the next sentence (and gets a fresh check), and an
+    ABORTED recording (`abort()`, or simply never calling `verdict()`) cannot
+    leave a verdict or audio behind for the next one. The class holds nothing
+    at module level.
     """
 
     def __init__(self, sample_rate: int = 16000, mic: str = "", window=None):
@@ -2819,8 +2845,29 @@ class StreamingVerify:
         self.window = (_early_verify_window() if window is None else float(window))
         self._voiced = []
         self._early = None
+        self._token = None          # the recording this instance is on now
+        self._early_token = None    # the recording its worker was started for
         self.started = False
         self.last = {"verdict": None, "early": False, "ms": 0.0}
+
+    def reset(self) -> None:
+        """Drop this recording: join/forget its worker, empty the buffer.
+
+        Called in `verdict()`'s `finally:` and by `abort()`. Safe to call at
+        any point; the instance is immediately usable for the next recording.
+        """
+        early, self._early = self._early, None
+        if early is not None:
+            early.discard()
+        self._voiced = []
+        self._token = None
+        self._early_token = None
+        self.started = False
+        self.last = {"verdict": None, "early": False, "ms": 0.0}
+
+    def abort(self) -> None:
+        """The recording was abandoned (stop, hang-up): leave nothing behind."""
+        self.reset()
 
     @property
     def voiced_seconds(self) -> float:
@@ -2837,43 +2884,62 @@ class StreamingVerify:
             a.frombytes(raw)
         x = [v / 32768.0 for v in a]
         if x and _rms(x) >= EARLY_VERIFY_RMS:
+            if self._token is None:
+                # A new recording starts here: its check (when it starts) is
+                # bound to THIS token, and nothing from an earlier sentence is
+                # in the buffer (a finished or aborted one was cleared).
+                self._token = object()
             self._voiced.extend(x)
             need = int(self.window * self.sample_rate)
             if not self.started and self.window > 0 and need and len(self._voiced) >= need:
+                token = self._token
                 try:
                     self._early = _EarlyVerify(self._voiced[:need], self.sample_rate,
                                                self.mic)
                     self.started = True
                 except Exception:
                     self._early = None
+                else:
+                    self._early_token = token
         return {"seconds": round(self.voiced_seconds, 2),
                 "started": self.started, "verifying": self._early is not None}
 
     def verdict(self, samples=None, sample_rate: int = None, full_check=None):
-        """At end of speech: (verdict, model, used_early, ms). No words."""
+        """At end of speech: (verdict, model, used_early, ms). No words.
+
+        Everything this recording put in the instance is gone when this
+        returns (or raises): the worker is joined/discarded and the buffer and
+        token are cleared in a `finally:`. A second call without feeding again
+        therefore cannot answer from the first sentence.
+        """
         if full_check is None:
             def full_check(s, r):
                 return _owner_check(s, r, self.mic)
-        if self._early is not None:
-            try:
-                v, emb = self._early.join()
-                early_ms = self._early.ms
-            except Exception:
+        token = self._token
+        try:
+            if self._early is not None:
+                # Only an answer from THIS recording's worker is ever consumed.
+                if getattr(self, "_early_token", None) is token:
+                    try:
+                        v, emb = self._early.join()
+                        early_ms = self._early.ms
+                    except Exception:
+                        v, emb, early_ms = None, None, 0.0
+                    if v is not None and _early_decides(v):
+                        self.last = {"verdict": v, "early": True, "ms": early_ms}
+                        return v, emb, True, early_ms
                 self._early.discard()
-                v, emb, early_ms = None, None, 0.0
-            if v is not None and _early_decides(v):
-                self.last = {"verdict": v, "early": True, "ms": early_ms}
-                self._voiced = []
-                return v, emb, True, early_ms
-            self._early.discard()
-        t = time.monotonic()
-        audio = samples if samples is not None else list(self._voiced)
-        rate = int(sample_rate or self.sample_rate)
-        v, emb = full_check(audio, rate)
-        ms = (time.monotonic() - t) * 1000.0
-        self.last = {"verdict": v, "early": False, "ms": round(ms, 1)}
-        self._voiced = []
-        return v, emb, False, ms
+            t = time.monotonic()
+            audio = samples if samples is not None else list(self._voiced)
+            rate = int(sample_rate or self.sample_rate)
+            v, emb = full_check(audio, rate)
+            ms = (time.monotonic() - t) * 1000.0
+            self.last = {"verdict": v, "early": False, "ms": round(ms, 1)}
+            return v, emb, False, ms
+        finally:
+            # Ruling 10.4: no audio, no verdict and no worker outlives the
+            # recording, however the call above ended.
+            self.reset()
 
 
 def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",

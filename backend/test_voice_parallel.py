@@ -571,6 +571,101 @@ def t_streaming_verify_answers_before_end_of_speech():
           f"{wait * 1000:.1f} ms - mechanism only, NOT hardware latency")
 
 
+# ---------------------------------------------------------------------------
+#   6. Ruling 10.4: an early verdict belongs to ONE recording, never the next
+# ---------------------------------------------------------------------------
+
+
+def _voiced_pcm(seconds: float = 1.28) -> bytes:
+    """Voiced 16 kHz mono int16 PCM: 0.1 amplitude, 512-sample chunks."""
+    chunk = b"\x66\x06" * 512
+    want = int(seconds * 16000) * 2
+    return chunk * (want // len(chunk) + 1)
+
+
+def _feed_until_started(streaming, seconds: float = 1.28):
+    data = _voiced_pcm(seconds)
+    state = {}
+    for i in range(0, len(data), 1024):
+        state = streaming.feed(data[i:i + 1024])
+        if state["started"]:
+            break
+    return state
+
+
+def t_streaming_verify_never_carries_a_verdict_to_the_next_utterance():
+    """One instance, two sentences: the second must start its OWN window
+    check and answer from it, never from the first sentence's verdict."""
+    script = [{"owner": True, "score": 0.97, "seconds": 0.02},    # sentence 1
+              {"owner": False, "score": 0.05, "seconds": 0.02}]   # sentence 2
+    with World(owner=True, verify_script=script) as w:
+        sv = S.StreamingVerify(16000, mic="desktop", window=1.2)
+        st1 = _feed_until_started(sv)
+        check("the first utterance started a window check", st1["started"], st1)
+        time.sleep(0.05)
+        v1, _e1, early1, _ms1 = sv.verdict(samples=[0.1] * 40000)
+        first_counts = list(w.sample_counts)
+        st2 = _feed_until_started(sv)
+        check("a second utterance on the SAME instance starts a fresh check",
+              st2["started"], st2)
+        time.sleep(0.05)
+        v2, _e2, early2, _ms2 = sv.verdict(samples=[0.1] * 40000)
+        all_counts = list(w.sample_counts)
+    check("sentence 1: the owner's window decided", v1.is_owner and early1 is True, v1)
+    check("...on one window of audio, not the whole clip",
+          first_counts and 18000 <= first_counts[0] <= 19500, first_counts)
+    check("the second sentence's answer came from a NEW check",
+          len(all_counts) == len(first_counts) + 1, (first_counts, all_counts))
+    check("...and it is ITS refusal, not the first sentence's pass",
+          (not v2.is_owner) and early2 is True, v2)
+    print("  TEST-MODE numbers: two sentences, one StreamingVerify instance, "
+          f"{len(all_counts)} window checks (2 expected) - no inherited verdict")
+
+
+def t_an_aborted_recording_cannot_answer_the_next_one():
+    """A recording abandoned before its verdict (stop/hang-up) leaves no audio
+    and no answer behind, and the full-clip fallback of the next recording
+    sees only the next recording's samples."""
+    script = [{"owner": True, "score": 0.97, "seconds": 0.02},    # abandoned check
+              {"owner": False, "score": 0.52, "seconds": 0.02},   # sentence 2: borderline
+              {"owner": False, "score": 0.97, "seconds": 0.02}]   # full clip: still a stranger
+    with World(owner=True, verify_script=script) as w:
+        sv = S.StreamingVerify(16000, mic="desktop", window=1.2)
+        _feed_until_started(sv)
+        time.sleep(0.05)
+        sv.abort()
+        check("abort() keeps no audio and no worker from the abandoned recording",
+              sv.voiced_seconds == 0.0 and not sv.started
+              and not [t for t in threading.enumerate()
+                       if t.name == VERIFY_WORKER and t.is_alive()],
+              (sv.voiced_seconds, sv.started))
+        _feed_until_started(sv)
+        time.sleep(0.05)
+        v, _e, early, _ms = sv.verdict()        # its own buffer; no caller samples
+    check("the abandoned recording's 'owner' verdict never comes back",
+          (not v.is_owner) and early is False, (v, early))
+    check("...the fallback full check got the SECOND recording only (1.2 s, not 2.4 s)",
+          w.sample_counts and 18000 <= w.sample_counts[-1] <= 19500, w.sample_counts)
+    print("  TEST-MODE numbers: aborted recording then a stranger - "
+          f"full-clip fallback saw {w.sample_counts[-1]} samples (one window)")
+
+
+def t_each_hear_gets_its_own_early_verdict():
+    """The single-shot path builds a new window worker per call; nothing is
+    cached between utterances, so the second call cannot inherit the first's."""
+    script = [{"owner": True, "score": 0.97},
+              {"owner": False, "score": 0.05}]
+    with World(owner=True, verify_script=script) as w:
+        first = _hear(w, source="push_to_talk", mic="desktop")
+        second = _hear(w, source="push_to_talk", mic="desktop")
+        counts = list(w.sample_counts)
+    check("each hear() asked the check on its own fresh window",
+          counts == [19200, 19200], counts)
+    check("the first recording passes", first.is_owner and first.text, first)
+    check("the second is refused on ITS verdict, not the first's",
+          (not second.is_owner) and second.text == "", second)
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn) and fn.__module__ == "__main__":

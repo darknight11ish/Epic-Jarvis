@@ -2786,6 +2786,13 @@ refusal still **costs that transcription**, so the app cannot be fingerprinted
 by how fast it refused. The owner's "verified before the words are used"
 wording still holds; what changed is how much audio the verdict needed. The
 check-only path of a Live voice pause gets the window too (same check).
+**Ruling 10.4 (Gemini's sign-off, same day): an early verdict is bound to one
+recording.** The single-shot path builds and purges its window worker inside
+each `hear()` call and keeps no audio or verdict at module/class level; a
+`StreamingVerify` instance ties its check to the current recording, clears
+worker, buffer and token in `verdict()`'s `finally:`, and `abort()` covers a
+recording abandoned before an answer - so no utterance can inherit the
+previous one's early verdict. Three regression tests cover reuse and abort.
 
 **2. Smart Turn gets a raw-PCM, in-process path whose features follow the
 audio in.** `predict_pcm()`/`TurnStream` take raw 16 kHz mono int16 PCM with
