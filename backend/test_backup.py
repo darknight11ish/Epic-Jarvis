@@ -2533,6 +2533,209 @@ def t_a_snapshot_closes_both_connections_even_when_the_target_cannot_open():
     check("and still closes its source connection", len(closed) == 1, closed)
 
 
+# ============================ 8. restore safety (ruling 8.1, 2026-10-20)
+
+
+def _restore_once(conf, backups, out, *, safety_fn=None, apply_fn=None):
+    """Runs one approved restore through the real route and returns its record.
+
+    Collects the audit events for the duration, so a check can prove what the
+    AUDIT says, not only what the reply says."""
+    events = []
+
+    def collector(event, detail):
+        events.append((event, detail))
+
+    real_audit = B._audit
+    B._audit = collector
+    try:
+        B.request_restore({"name": out["name"], "code": out["recovery_code"]}, here=True,
+                          gate=approve, tier_of=tier_ask, spawn=sync_spawn,
+                          armed=lambda: True, safety_fn=safety_fn, apply_fn=apply_fn)
+    finally:
+        B._audit = real_audit
+    return B.take_restore_result() or {}, events
+
+
+def _safety_record(backups, name, *, size=None, code="AAAAA-BBBBB-CCCCC-DDDDD"):
+    return {"name": name, "at": time.time(), "recovery_code": code,
+            "size": size if size is not None else
+            ((backups / name).stat().st_size if (backups / name).is_file() else 0)}
+
+
+def t_restore_fails_closed_without_a_verifiable_safety_backup():
+    """Ruling 8.1: a restore NEVER overwrites a live file unless the safety
+    backup is provably on disk and whole. Missing, empty, not-a-backup, and
+    unreadable files all refuse; nothing is written; the audit says
+    ``safety_unverified``; the owner keeps a receipt saying nothing changed."""
+    conf, backups = fresh_conf()
+    _plant(conf)
+    B._save_settings({"folder": str(backups)})
+    out = B.backup_now(str(backups))              # what we will try to restore
+    _change(conf)                                 # the state a restore replaces
+    before = _snapshot_state(conf)
+
+    # the file exists but is empty
+    (backups / "empty.jbak").write_bytes(b"")
+    # b"..." is longer than MIN_FILE_BYTES but starts with the wrong magic
+    (backups / "garbage.jbak").write_bytes(b"NOT a Jarvis backup" * 40)
+    # our own magic and header, but the ciphertext's tag is corrupted: shape
+    # passes `check_file`, decryption does NOT
+    blob = bytearray((backups / out["name"]).read_bytes())
+    blob[-1] ^= 0xFF
+    (backups / "corrupt.jbak").write_bytes(bytes(blob))
+
+    cases = {
+        "missing": (b"jarvis-backup-nope.jbak", None),
+        "empty (0 bytes)": (b"empty.jbak", None),
+        "not a backup at all": (b"garbage.jbak", None),
+        "will not open with its own code": (b"corrupt.jbak", None),
+    }
+    for label, (filename, _unused) in cases.items():
+        name = filename.decode()
+        applied = []
+        safety = _safety_record(backups, name,
+                                size=(backups / name).stat().st_size
+                                if (backups / name).is_file() else 0)
+        res, events = _restore_once(conf, backups, out, safety_fn=lambda s=safety: s,
+                                    apply_fn=lambda z: applied.append(1))
+        check(f"safety backup {label}: the restore is refused and NOTHING is applied",
+              res.get("outcome") == "failed" and applied == [], (res, applied))
+        check(f"... {label}: the owner is told the safety backup could not be made first",
+              "safety backup could not be made" in res.get("message", "")
+              and "not changed" in res.get("message", ""), res.get("message"))
+        check(f"... {label}: the record carries reason safety_unverified",
+              res.get("reason") == B.SAFETY_UNVERIFIED, res)
+        check(f"... {label}: the AUDIT record carries reason safety_unverified",
+              any(e == "backup.restore.card" and d.get("reason") == B.SAFETY_UNVERIFIED
+                  for e, d in events), events)
+        check(f"... {label}: the live files are byte-for-byte as they were",
+              _snapshot_state(conf) == before, _snapshot_state(conf))
+        check(f"... {label}: no partial/temp file is left behind",
+              _leftovers(conf) == [], _leftovers(conf))
+        durable = B.last_restore_path()
+        check(f"... {label}: the refusal is PERSISTED for the owner to read",
+              durable.is_file()
+              and json.loads(durable.read_text(encoding="utf-8")).get("reason")
+              == B.SAFETY_UNVERIFIED, durable)
+        check(f"... {label}: the recovery code never reached the persisted record",
+              out["recovery_code"] not in durable.read_text(encoding="utf-8"))
+        B.dismiss_restore_result()
+
+    # the same file, but the record claims a size that does not match: refused
+    safety = _safety_record(backups, out["name"], size=(backups / out["name"]).stat().st_size + 1,
+                            code=out["recovery_code"])
+    applied = []
+    res, events = _restore_once(conf, backups, out, safety_fn=lambda: safety,
+                                apply_fn=lambda z: applied.append(1))
+    check("a safety backup whose size does not match what was written is refused",
+          res.get("outcome") == "failed" and applied == []
+          and res.get("reason") == B.SAFETY_UNVERIFIED, (res, applied))
+    check("... and the live files are still byte-identical", _snapshot_state(conf) == before)
+
+
+def t_a_restore_lists_every_exact_file_it_replaced():
+    """Ruling 8.1 part 3: the audit and the receipt name the exact restored
+    database/settings/notes files, not "1 database"."""
+    conf, backups = fresh_conf()
+    _plant(conf)
+    B._save_settings({"folder": str(backups)})
+    out = B.backup_now(str(backups))
+    _change(conf)
+    res, events = _restore_once(conf, backups, out)
+    restored = res.get("restored") or {}
+    check("the restore succeeded", res.get("outcome") == "restored", res)
+    check("the receipt names the exact database file", restored.get("databases") == ["memory.db"],
+          restored)
+    check("the receipt names every settings file",
+          restored.get("settings_files") == ["a.json"], restored)
+    check("the receipt names every note file", restored.get("notes_files") == ["x.txt"],
+          restored)
+    applied_audit = [d.get("applied", {}) for e, d in events if e == "backup.restored"]
+    check("the audit record lists the same exact names",
+          bool(applied_audit)
+          and applied_audit[0].get("restored", {}).get("databases") == ["memory.db"]
+          and applied_audit[0].get("restored", {}).get("notes_files") == ["x.txt"],
+          applied_audit)
+    check("... and the old counts are still in the audit's applied dict (both readers work)",
+          bool(applied_audit) and applied_audit[0].get("databases") == 1
+          and applied_audit[0].get("settings_files") == 1, applied_audit)
+    durable = json.loads(B.last_restore_path().read_text(encoding="utf-8"))
+    check("the PERSISTED receipt names them too (so a restart cannot lose them)",
+          durable.get("restored", {}).get("databases") == ["memory.db"]
+          and durable.get("restored", {}).get("notes_files") == ["x.txt"], durable)
+    safety = res.get("safety_backup") or {}
+    check("... and the recovery code is NOT in the persisted receipt",
+          safety.get("recovery_code")
+          and safety["recovery_code"] not in B.last_restore_path().read_text(encoding="utf-8")
+          and "recovery_code" not in (durable.get("safety_backup") or {}))
+    check("... with a hint saying where the code was shown instead",
+          isinstance(durable.get("recovery_code_hint"), str)
+          and "NOT stored on disk" in durable["recovery_code_hint"], durable)
+
+
+def t_last_restore_survives_reads_a_restart_and_is_dismissed():
+    """Ruling 8.1 part 2: the last restore's outcome is PERSISTED. Reads do not
+    consume it, a restart keeps it, and only an explicit dismiss clears it.
+    The one-time recovery code rule is unchanged: it is in memory only, shown
+    exactly once, and never on disk."""
+    conf, backups = fresh_conf()
+    check("with no restore yet, the record is empty", B.take_restore_result() is None)
+    _plant(conf)
+    B._save_settings({"folder": str(backups)})
+    out = B.backup_now(str(backups))
+    _change(conf)
+    res, _events = _restore_once(conf, backups, out)
+    safety = res.get("safety_backup") or {}
+    check("the restore recorded its outcome", res.get("outcome") == "restored", res)
+    check("the first read has the one-time recovery code", bool(safety.get("recovery_code")))
+    code = safety.get("recovery_code")
+
+    second = B.take_restore_result() or {}
+    check("a second read still has the record - it is not consumed",
+          second.get("outcome") == "restored" and second.get("restored", {}).get("databases")
+          == ["memory.db"], second)
+    check("... but NOT the code: the one-time rule is unchanged",
+          "recovery_code" not in (second.get("safety_backup") or {}), second)
+
+    phone = B.view(here=False)
+    phone_restore = phone.get("last_restore") or {}
+    check("a phone's GET /api/backup shows the outcome, with no code",
+          phone_restore.get("outcome") == "restored"
+          and "recovery_code" not in (phone_restore.get("safety_backup") or {})
+          and code not in json.dumps(phone_restore), phone_restore)
+    check("... and reading it did not swallow the record for the PC either",
+          (B.view(here=True).get("last_restore") or {}).get("outcome") == "restored")
+
+    # a process-simulated restart: memory is gone, the file is not
+    with B._R_LOCK:
+        B._R_STATE["last"].clear()
+    restarted = B.take_restore_result() or {}
+    check("after a simulated restart the record is still readable",
+          restarted.get("outcome") == "restored"
+          and restarted.get("restored", {}).get("databases") == ["memory.db"]
+          and restarted.get("restored", {}).get("notes_files") == ["x.txt"], restarted)
+    check("... and no code comes back: it was never on disk",
+          "recovery_code" not in (restarted.get("safety_backup") or {})
+          and (safety.get("recovery_code") or "no-code")
+          not in json.dumps(restarted))
+
+    code_, body = B.handle_post(B.DISMISS_ROUTE, {}, peer="127.0.0.1", local="127.0.0.1")
+    check("dismiss is one 200 that says it cleared a record",
+          code_ == 200 and body.get("dismissed") is True, (code_, body))
+    check("after dismiss the record is gone from memory and from the PC's GET",
+          B.take_restore_result() is None
+          and (B.view(here=True).get("last_restore") is None))
+    check("... and from the phone's GET too", B.view(here=False).get("last_restore") is None)
+    check("... and the file itself is gone", not B.last_restore_path().exists())
+    code_, body = B.handle_post(B.DISMISS_ROUTE, {}, peer="100.64.0.9",
+                                local="100.64.0.1")
+    check("a second dismiss from another paired device is still a 200 with nothing to clear",
+          code_ == 200 and body.get("dismissed") is False, (code_, body))
+    check("with the record dismissed, a fresh restore records its own again",
+          B.take_restore_result() is None and code_ == 200)
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):
