@@ -96,6 +96,26 @@ def do_POST(self):
 '''
 
 
+# The two 2026-10-14 HUD fixes' ANCHORS are in every fixture, without the
+# fixes themselves: the same shape the real live HUD has. The literal deltas
+# are only planned when the caller asks for them (plan_deltas(literals=True)),
+# which main() does.
+MINI_HUD += (
+    "\n\n" + R.STATUS_CACHE_ANCHOR + "\n\n"
+    "def _relay():\n"
+    "    if True:\n"
+    "        if True:\n"
+    "            if True:\n"
+    "                if True:\n"
+    + "\n".join(R._delta_lines(R.REASONING_OLD_FILE)) + "\n"
+    "                    except (BrokenPipeError, ConnectionResetError, TimeoutError, socket.timeout):\n"
+    "                        return\n\n"
+    "def main():\n"
+    "    print('hud')\n"
+    + R.STATUS_START_ANCHOR + "\n"
+)
+
+
 def make_live(root: Path, *, with_deltas=False, app_control_section=False) -> Path:
     live = root / "live"
     live.mkdir(parents=True, exist_ok=True)
@@ -791,12 +811,96 @@ def t_a_fake_traces_delta_uses_the_anchored_mechanism_without_writing():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def t_the_two_2026_10_14_hud_fixes_are_literal_deltas():
+    """DELTA_TABLE carries the two fixes no .patch owns (status cache, reasoning
+    fallback). Mutation bite: with the old patch-only planner nothing is staged
+    and this fails."""
+    root = tmpdir()
+    try:
+        live = make_live(root)
+        deltas, staged, refusals = R.plan_deltas(live, [], show=fake_show,
+                                                 literals=True)
+        by = {d.patch: d.status for d in deltas}
+        check("both 2026-10-14 fixes are planned as literal inserts",
+              refusals == [] and by.get("hud-status-cache.patch") == "insert"
+              and by.get("hud-status-poll-start.patch") == "insert"
+              and by.get("hud-reasoning-fallback.patch") == "insert",
+              (deltas, refusals))
+        text = staged.get("jarvis_hud.py", "")
+        check("the status cache block is inserted before # Brain graph",
+              "# /api/status answers from HERE" in text
+              and text.index("# /api/status answers from HERE")
+              < text.index("# Brain graph") and "_status_poller_daemon" in text, text[:200])
+        check("the poller is started from main()",
+              "\n    _status_start_poller()" in text)
+        check("the reasoning wrapper replaces the old relay",
+              "CloudAnswer" in text
+              and "\n".join(R._delta_lines(R.REASONING_OLD_FILE)) not in text)
+        check("the staged HUD still compiles", R.rehearse(staged) == [], R.rehearse(staged))
+        backup = R.Backup(live, stamp="hud-fix")
+        R.apply_deltas(staged, live, backup)
+        again, staged2, refusals2 = R.plan_deltas(live, [], show=fake_show,
+                                                  literals=True)
+        statuses = {d.patch: d.status for d in again}
+        check("a second plan sees both fixes ALREADY_PRESENT",
+              refusals2 == [] and staged2 == {}
+              and statuses.get("hud-status-cache.patch") == "already"
+              and statuses.get("hud-reasoning-fallback.patch") == "already",
+              (again, staged2, refusals2))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_a_literal_delta_refuses_a_bad_anchor_or_absent_old_block():
+    """The literal entries refuse to guess: a missing anchor, a missing old
+    block, and a probe that is already there (ALREADY_PRESENT, no write)."""
+    root = tmpdir()
+    try:
+        live = make_live(root)
+        table = {"fake-literal.patch": {"jarvis_hud.py": {
+            "probes": ("THIS_PROBE_IS_NOT_HERE",),
+            "anchor": "AN ANCHOR THAT IS NOT IN THE FILE",
+            "lines": ("# literal block",),
+        }}}
+        deltas, staged, refusals = R.plan_deltas(live, [], show=fake_show,
+                                                 table=table, literals=True)
+        check("a literal delta with a missing anchor is refused before staging",
+              deltas == [] and staged == {}
+              and any("appears 0 time" in r for r in refusals), (deltas, staged, refusals))
+
+        table2 = {"fake-literal.patch": {"jarvis_hud.py": {
+            "probes": ("THIS_PROBE_IS_NOT_HERE",),
+            "replace": "A BLOCK THAT IS NOT IN THIS FILE",
+            "lines": ("# replacement block",),
+        }}}
+        _d2, staged2, refusals2 = R.plan_deltas(live, [], show=fake_show,
+                                                table=table2, literals=True)
+        check("... and one whose old block is absent is refused too",
+              staged2 == {} and any("old block appears 0 time" in r for r in refusals2),
+              (staged2, refusals2))
+
+        table3 = {"fake-literal.patch": {"jarvis_hud.py": {
+            "probes": ('"/api/memory/decide"',),
+            "anchor": R.APP_CONTROL_ANCHOR,
+            "lines": ("# already there",),
+        }}}
+        d3, staged3, refusals3 = R.plan_deltas(live, [], show=fake_show,
+                                               table=table3, literals=True)
+        check("a literal delta whose probes are present is ALREADY_PRESENT and writes nothing",
+              [x.status for x in d3] == ["already"] and staged3 == {} and refusals3 == [],
+              (d3, staged3, refusals3))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def main():
     for fn in (t_the_lists_parse_from_apply_patches,
                t_the_list_parser_refuses_rather_than_reading_nothing,
                t_a_patch_parses_into_per_file_added_lines,
                t_presence_is_decided_from_distinctive_lines,
                t_insertion_uses_its_anchor_and_refuses_a_bad_one,
+               t_the_two_2026_10_14_hud_fixes_are_literal_deltas,
+               t_a_literal_delta_refuses_a_bad_anchor_or_absent_old_block,
                t_deltas_are_planned_and_refused_hermetically,
                t_an_unknown_delta_is_refused_before_writing,
                t_rehearsal_stops_a_broken_staged_file,

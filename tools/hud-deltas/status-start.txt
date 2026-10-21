@@ -1,0 +1,3 @@
+    # DEF-002: warm the /api/status cache, then keep it warm. Started here, in
+    # main(), rather than at import time - see _status_start_poller's docstring.
+    _status_start_poller()

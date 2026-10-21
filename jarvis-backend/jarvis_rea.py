@@ -1018,7 +1018,7 @@ def doctor(*, env: Optional[dict] = None, node_version: Optional[str] = None,
     # The five fields the owner's audit ruled on (2026-10-20): reported by name, every time.
     installed = bool(info.get("root"))
     version_pinned_ok = bool(info.get("version") == PINNED_VERSION)
-    tier1_static_ready = bool(installed and version_pinned_ok and ok_node)
+    tier1_static_ready = bool(ready)
     tier2_ghidra_ready = bool(_provider_available("GHIDRA_INSTALL_DIR", source)
                               and _provider_available("JAVA_HOME", source))
     tier2_jadx_ready = bool(_provider_available("REA_JADX_MCP_JAR", source)

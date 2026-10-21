@@ -957,6 +957,23 @@ def render() -> str:
     # interpreter the list is empty already - so the committed fixture cannot
     # change, and test_voice_contract.py now checks this property.
     S._flow("_reset_for_tests")
+    # AND NEITHER MAY IT INHERIT THE SELF-ECHO WINDOW (2026-10-20). The F3
+    # guard added to jarvis_speech holds REAL TIME, not audio time:
+    # `_SPEAKING_UNTIL[""]` is a monotonic deadline set by the last say(), and
+    # hear() refuses a clip as possible self-echo while it is open. The training
+    # producer ends by speaking through its stand-in voice, so it leaves about
+    # two seconds of that window behind; this producer then runs in the SAME
+    # process (the suite renders all three producers in one interpreter, and
+    # `_fresh_runs_at` does too). Whether the window had closed when the first
+    # hear() case below ran depended on how fast the machine was: measured on
+    # CI, a 42 s run got "phone-voice-cases.json is out of date" with
+    # 1,185,604 B (5a67d454...) where the committed file is 1,229,087 B
+    # (25ecb43e...), while the same tree on a 78 s runner matched. NOTHING in
+    # the fixture may depend on how long ago something spoke, so clear it -
+    # guarded, because the shipped backend may predate F3.
+    _reset_speaking = getattr(S, "_reset_speaking_for_tests", None)
+    if _reset_speaking is not None:
+        _reset_speaking()
     s_status, s_answers = strict_cases()
     v_status, v_answers = voices_cases()
     body = {

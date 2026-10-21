@@ -678,6 +678,75 @@ def test_the_route_installs():
     check("install sets the armed marker", getattr(H.do_POST, "_jarvis_docker", False) is True)
 
 
+def test_a_real_http_post_body_is_decoded_before_request():
+    """jarvis_hud._read_body hands handlers raw BYTES. Before 2026-10-20 this
+    module passed them straight in, so isinstance(body, dict) was False and
+    every real HTTP start/stop arrived as {} (audit Part I, catch 1)."""
+    fresh(present=doc_for(SPEC))
+    real = D.request
+    calls = []
+
+    def spy(body, **kw):
+        calls.append(body)
+        return 200, {"ok": True, "reply": body}
+
+    class H:
+        path = D.PATH_SERVICE
+
+        def do_GET(self):
+            pass
+
+        def do_POST(self):
+            pass
+
+        def _send(self, code, body):
+            self.sent = (code, body)
+            return code
+
+    D.request = spy
+    try:
+        D.install(H, origin_ok=lambda self: True, token_ok=lambda self: True,
+                  read_body=lambda self:
+                  b'{"service": "searxng", "action": "stop"}')
+        h = H()
+        h.do_POST()
+    finally:
+        D.request = real
+    check("a real bytes body is decoded and reaches request()",
+          calls == [{"service": "searxng", "action": "stop"}], calls)
+    check("... and the service's own answer comes back instead of a refusal",
+          h.sent[0] == 200 and h.sent[1]["reply"]["action"] == "stop", h.sent)
+
+    fresh(present=doc_for(SPEC))
+    calls.clear()
+
+    class H2:
+        path = D.PATH_SERVICE
+
+        def do_GET(self):
+            pass
+
+        def do_POST(self):
+            pass
+
+        def _send(self, code, body):
+            self.sent = (code, body)
+            return code
+
+    D.request = spy
+    try:
+        D.install(H2, origin_ok=lambda self: True, token_ok=lambda self: True,
+                  read_body=lambda self: b'[]')
+        h2 = H2()
+        h2.do_POST()
+    finally:
+        D.request = real
+    check("a JSON body that is not an object is refused with 400",
+          h2.sent[0] == 400 and h2.sent[1].get("error") == "send a JSON object",
+          h2.sent)
+    check("... and request() was never handed it", calls == [], calls)
+
+
 def test_install_refuses_cross_origin():
     fresh(present=doc_for(SPEC))
 

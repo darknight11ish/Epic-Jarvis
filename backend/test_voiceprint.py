@@ -302,8 +302,55 @@ def t_a_secret_is_never_stored():
                                  {"before": "draft", "after": "my password is hunter2"})
         check("an edit holding a secret is refused too",
               code == 400 and out.get("error") == "secret", f"{code} {out}")
+        direct_before = V.count()
+        check("add() ITSELF refuses a secret, not only the route",
+              V.add(V.KIND_SAMPLE, "my password is hunter2 by the way") == "")
+        check("... and a direct call wrote nothing", V.count() == direct_before)
     finally:
         V._secret_in = real
+
+
+def t_exemplars_reads_the_owners_own_samples():
+    """2026-10-20 audit Part I, catch 2A: exemplars() never queried
+    voiceprint.db, so every calibration sample and edited draft the owner saved
+    was invisible to prompt_block()."""
+    class Empty:
+        def search(self, q, k=8, **kw):
+            return []
+
+    sid = V.add(V.KIND_SAMPLE,
+                "I will send the budget tomorrow morning as agreed.")
+    check("the sample was stored in voiceprint.db", bool(sid), repr(sid))
+    out = V.exemplars("budget tomorrow", store=Empty())
+    check("exemplars() finds the owner's stored sample with NO memory store",
+          any("budget" in e.text for e in out),
+          [e.text[:60] for e in out])
+    check("... and the returned text has been entity-stripped",
+          all(not any(ch.isdigit() for ch in e.text) for e in out),
+          [e.text[:60] for e in out])
+
+
+def t_a_remote_device_cannot_add_or_forget():
+    """2026-10-20 audit Part I, catch 2C: mutating POSTs must be this PC only."""
+    class Remote(FakeHandler):
+        client_address = ("100.101.102.103", 5555)
+
+        class connection:                     # noqa: N801 - handler attribute
+            @staticmethod
+            def getsockname():
+                # A DIFFERENT address from the caller's: the PC's own LAN
+                # address, so only the peer can look like a phone on the mesh.
+                return ("192.168.1.10", 4719)
+
+    before = V.count()
+    V.install(Remote, origin_ok=lambda h: True, token_ok=lambda h: True,
+              read_body=lambda h: b'{"text": "A sample a phone tried to add."}')
+    h = Remote()
+    h.path = V.SAMPLE_PATH
+    h.do_POST()
+    check("a mutating POST from another device is refused",
+          h.sent[0] == 403, getattr(h, "sent", None))
+    check("... and nothing was written", V.count() == before)
 
 
 def t_a_sample_is_learned_and_listed():
@@ -455,6 +502,12 @@ class FakeHandler:
     """The two verbs `install()` wraps, with `_send` recording the reply."""
     path = "/"
     body = {}
+    client_address = ("127.0.0.1", 5555)
+
+    class connection:                         # noqa: N801 - handler attribute
+        @staticmethod
+        def getsockname():
+            return ("127.0.0.1", 4719)
 
     def do_GET(self):
         return "orig-get"
@@ -591,6 +644,8 @@ if __name__ == "__main__":
                t_no_rules_header_without_exemplars,
                t_the_scrub_guard_fails_closed,
                t_a_secret_is_never_stored,
+               t_exemplars_reads_the_owners_own_samples,
+               t_a_remote_device_cannot_add_or_forget,
                t_a_sample_is_learned_and_listed,
                t_forget_asks_first,
                t_forget_asks_first_over_the_route,
