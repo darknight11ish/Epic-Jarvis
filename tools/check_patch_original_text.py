@@ -166,7 +166,11 @@ PIN = {
     # whole patch is `git apply`ed forwards and reversed out of the published
     # gate byte-for-byte by backend/test_gate_touches.py, and
     # backend/test_approval_guards.py proves the behaviour against that copy.
-    "gate-touches.patch":                      (8, 93),   # position 137
+    # 2026-10-21 (F-680-2, long-detail dedupe): the target_digest column adds
+    # one hunk in `_init`'s migration block and six lines of the owner's own
+    # `check()` around the INSERT; raised here with the reason, the one case
+    # the rule above allows.
+    "gate-touches.patch":                      (9, 99),   # position 137
     "presets.patch":                           (4, 27),   # position 146 - presets.patch
     # (2026-10-18, the preset model selector): the active-lane helper and the
     # four chat call sites are the owner's original HUD text. Measured, not

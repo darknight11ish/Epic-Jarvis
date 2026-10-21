@@ -1,0 +1,36 @@
+def _pending_card_id(c: sqlite3.Connection, action: str, detail: Any,
+                     prompt: str) -> Optional[str]:
+    """The id of the pending card this request is IDENTICAL to, else None.
+
+    Only `state='pending'` rows count: a card that was approved, denied or
+    expired is an ANSWER, and answering the same question twice is the
+    owner's business, not an optimisation.
+
+    The comparison is the row's `target_digest` FIRST. That digest was computed
+    over the WHOLE request at insert time, so a detail longer than the 4000
+    characters the `detail` column keeps still dedupes (2026-10-21 pre-merge
+    audit, F-680-2: re-hashing the stored text made two identical long requests
+    stack two cards). A row written before the column existed has NULL there;
+    its stored `detail` is parsed and compared once, as it always was, and a row
+    whose detail no longer parses is skipped rather than guessed at - the
+    failure direction is a second card, never a wrong merge between two
+    different requests.
+    """
+    want = _pending_target(action, detail, prompt)
+    rows = c.execute(
+        "SELECT id, detail, prompt, target_digest FROM approvals"
+        " WHERE state='pending' AND action=? ORDER BY created", (action,)).fetchall()
+    for row in rows:
+        stored_digest = row["target_digest"]
+        if stored_digest:
+            if stored_digest == want:
+                return row["id"]
+            continue
+        stored = row["detail"]
+        try:
+            got = json.loads(stored) if stored else {}
+        except (TypeError, ValueError):
+            continue
+        if _pending_target(action, got, row["prompt"] or "") == want:
+            return row["id"]
+    return None

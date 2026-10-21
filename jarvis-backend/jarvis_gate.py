@@ -139,6 +139,17 @@ def _init() -> None:
                 c.execute("ALTER TABLE approvals ADD COLUMN raised TEXT")
             except sqlite3.OperationalError:
                 pass                          # already there
+            # What approving this card would DO, as a digest computed from the
+            # WHOLE request at insert time (2026-10-21 pre-merge audit, F-680-2).
+            # The `detail` column keeps only its first 4000 characters, so a
+            # long request's digest cannot be re-derived from the row; without
+            # this column two identical long requests stacked two cards. Rows
+            # written before it existed have NULL here and keep the old
+            # parse-the-detail comparison (see _pending_card_id).
+            try:
+                c.execute("ALTER TABLE approvals ADD COLUMN target_digest TEXT")
+            except sqlite3.OperationalError:
+                pass                          # already there
         _inited = True
 
 
@@ -1525,16 +1536,28 @@ def _pending_card_id(c: sqlite3.Connection, action: str, detail: Any,
 
     Only `state='pending'` rows count: a card that was approved, denied or
     expired is an ANSWER, and answering the same question twice is the
-    owner's business, not an optimisation. A stored `detail` that no longer
-    parses (the row keeps at most 4000 characters, so a long one was cut on
-    the way in) is skipped rather than guessed at - the failure direction is
-    a second card, never a wrong merge between two different requests.
+    owner's business, not an optimisation.
+
+    The comparison is the row's `target_digest` FIRST. That digest was computed
+    over the WHOLE request at insert time, so a detail longer than the 4000
+    characters the `detail` column keeps still dedupes (2026-10-21 pre-merge
+    audit, F-680-2: re-hashing the stored text made two identical long requests
+    stack two cards). A row written before the column existed has NULL there;
+    its stored `detail` is parsed and compared once, as it always was, and a row
+    whose detail no longer parses is skipped rather than guessed at - the
+    failure direction is a second card, never a wrong merge between two
+    different requests.
     """
     want = _pending_target(action, detail, prompt)
     rows = c.execute(
-        "SELECT id, detail, prompt FROM approvals"
+        "SELECT id, detail, prompt, target_digest FROM approvals"
         " WHERE state='pending' AND action=? ORDER BY created", (action,)).fetchall()
     for row in rows:
+        stored_digest = row["target_digest"]
+        if stored_digest:
+            if stored_digest == want:
+                return row["id"]
+            continue
         stored = row["detail"]
         try:
             got = json.loads(stored) if stored else {}
@@ -1706,12 +1729,17 @@ def check(action: str,
                 reused = rid is not None
                 if not reused:
                     rid = uuid.uuid4().hex[:12]
+                    # The digest covers the WHOLE request, including detail
+                    # past the 4000 characters the row keeps (F-680-2).
+                    target_digest = _pending_target(action, detail, prompt)
                     c.execute(
-                        "INSERT INTO approvals (id,action,tier,detail,prompt,state,created,raised)"
-                        " VALUES (?,?,?,?,?,'pending',?,?)",
+                        "INSERT INTO approvals (id,action,tier,detail,prompt,state,"
+                        "created,raised,target_digest)"
+                        " VALUES (?,?,?,?,?,'pending',?,?,?)",
                         (rid, action, tier, json.dumps(detail)[:4000],
                          (prompt or "")[:2000], now,
-                         json.dumps(raised)[:1000] if raised else None))
+                         json.dumps(raised)[:1000] if raised else None,
+                         target_digest))
                 c.execute("COMMIT")
             except Exception:
                 c.execute("ROLLBACK")

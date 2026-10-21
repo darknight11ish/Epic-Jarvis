@@ -1,0 +1,7 @@
+                    rid = uuid.uuid4().hex[:12]
+                    c.execute(
+                        "INSERT INTO approvals (id,action,tier,detail,prompt,state,created,raised)"
+                        " VALUES (?,?,?,?,?,'pending',?,?)",
+                        (rid, action, tier, json.dumps(detail)[:4000],
+                         (prompt or "")[:2000], now,
+                         json.dumps(raised)[:1000] if raised else None))

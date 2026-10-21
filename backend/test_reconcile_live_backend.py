@@ -1031,7 +1031,7 @@ def t_a_literal_delta_refuses_a_bad_anchor_or_absent_old_block():
 #   review ruling 8.2's guard change: literal deltas for jarvis_gate.py
 # --------------------------------------------------------------------------
 
-#: A minimal COMPILABLE "live" gate carrying the OLD blocks the four deltas
+#: A minimal COMPILABLE "live" gate carrying the OLD blocks the literal deltas
 #: replace, in the same order and nesting they have in the real file. The rest
 #: of a live gate is not needed to prove the plan; `py_compile` is.
 MINI_GATE = (
@@ -1040,6 +1040,14 @@ MINI_GATE = (
     "import json\n"
     "import os\n"
     "import re\n"
+    "\n"
+    # The digest fix's migration old block lives at 12 spaces inside `_init`;
+    # two nested `if True:` lines give it that depth and still compile.
+    "def _init():\n"
+    "    if True:\n"
+    "        if True:\n"
+    + "\n".join(R._delta_lines(R.GATE_DIGEST_INIT_OLD_FILE)) + "\n"
+    "\n"
     "\n"
     "def pending():\n"
     "    rows = []\n"
@@ -1066,6 +1074,12 @@ MINI_GATE = (
 #: tests; the guard blocks are the whole subject here.
 GATE_GUARDS_TABLE = {name: entry for name, entry in R.DELTA_TABLE.items()
                      if name.startswith("gate-guards-")}
+
+#: The guard entries AND the digest fix's entries, in `DELTA_TABLE` order - the
+#: digest old blocks are the POST-guard staged text, so the combined table is
+#: what a real deploy plans and what these tests must drive.
+GATE_LITERAL_TABLE = {name: entry for name, entry in R.DELTA_TABLE.items()
+                      if name.startswith(("gate-guards-", "gate-digest-"))}
 
 
 def make_gate_live(root: Path) -> Path:
@@ -1118,17 +1132,32 @@ def t_the_gate_guards_are_carried_as_literal_deltas():
         # The NEW blocks are the PUBLISHED base gate's own text, and the OLD
         # blocks are in none of it - the claim that this change is #680 carried
         # to the live file, rather than a second hand-written copy.
+        #
+        # Since F-680-2 the published gate ALSO carries three digest deltas that
+        # rewrite part of the helpers and dedup blocks, so reverse those three
+        # first: what remains must be the exact post-#688 text the guard blocks
+        # were extracted from.
         published = (REPO / "jarvis-backend" / "jarvis_gate.py").read_text(encoding="utf-8")
+        pre_digest = published
+        for new_attr, old_attr in (
+                ("GATE_DIGEST_INIT_NEW_FILE", "GATE_DIGEST_INIT_OLD_FILE"),
+                ("GATE_DIGEST_PENDING_NEW_FILE", "GATE_DIGEST_PENDING_OLD_FILE"),
+                ("GATE_DIGEST_INSERT_NEW_FILE", "GATE_DIGEST_INSERT_OLD_FILE")):
+            new_block = "\n".join(R._delta_lines(getattr(R, new_attr)))
+            old_block = "\n".join(R._delta_lines(getattr(R, old_attr)))
+            check(f"reversing the digest delta {getattr(R, new_attr)} leaves the "
+                  f"pre-digest gate", new_block in pre_digest, getattr(R, new_attr))
+            pre_digest = pre_digest.replace(new_block, old_block, 1)
         for name in (R.GATE_GUARDS_IMPORT_NEW_FILE, R.GATE_GUARDS_HELPERS_NEW_FILE,
                      R.GATE_GUARDS_DEDUP_NEW_FILE, R.GATE_GUARDS_REPLACES_NEW_FILE):
             block = "\n".join(R._delta_lines(name))
             check(f"the published base gate holds the NEW block {name}",
-                  block in published, name)
+                  block in pre_digest, name)
         # Only the dedup block is wholly absent from the published gate: the old
         # import block is a PREFIX of the new one and the old "notice" line is
         # the first line of the new replaces block, so both legitimately appear.
         old_dedup = "\n".join(R._delta_lines(R.GATE_GUARDS_DEDUP_OLD_FILE))
-        check("... and not the OLD dedup block", old_dedup not in published)
+        check("... and not the OLD dedup block", old_dedup not in pre_digest)
 
         backup = R.Backup(live, stamp="gate-guards")
         R.apply_deltas(staged, live, backup)
@@ -1217,12 +1246,167 @@ def t_the_real_live_gate_gets_the_guards_read_only():
           after == before)
 
 
+# --------------------------------------------------------------------------
+#   F-680-2 (2026-10-21 pre-merge audit): the long-detail digest fix is
+#   carried to the live jarvis_gate.py as THREE literal deltas over the
+#   POST-guard text the four guard entries above leave behind.
+# --------------------------------------------------------------------------
+
+DIGEST_DELTAS = ("gate-digest-init.patch", "gate-digest-pending.patch",
+                 "gate-digest-insert.patch")
+DIGEST_NEW_FILES = ("GATE_DIGEST_INIT_NEW_FILE", "GATE_DIGEST_PENDING_NEW_FILE",
+                    "GATE_DIGEST_INSERT_NEW_FILE")
+
+
+def _post_guard_live(root: Path) -> Path:
+    """A temp live folder with the four guard deltas already applied."""
+    live = make_gate_live(root)
+    _deltas, staged, refusals = R.plan_deltas(live, [], show=fake_show,
+                                              table=GATE_GUARDS_TABLE, literals=True)
+    if refusals:
+        raise AssertionError(f"guard fixture did not plan: {refusals}")
+    R.apply_deltas(staged, live, R.Backup(live, stamp="post-guard"))
+    return live
+
+
+def t_the_digest_fix_is_carried_as_literal_deltas():
+    """F-680-2 reaches the live PC as THREE literal deltas.
+
+    The old blocks are the post-guard gate text, which exists only after the
+    four `gate-guards-*` entries have been applied to the staged file - that is
+    why these entries sit after them in `DELTA_TABLE`. The new blocks are the
+    published base gate's own text, so this is the same fix carried to the live
+    file, not a second hand-written copy."""
+    root = tmpdir()
+    try:
+        live = make_gate_live(root)
+        deltas, staged, refusals = R.plan_deltas(live, [], show=fake_show,
+                                                 table=GATE_LITERAL_TABLE, literals=True)
+        dig = sorted((d.patch, d.status) for d in deltas
+                     if d.patch.startswith("gate-digest-"))
+        check("all three digest deltas are planned as literal inserts, no refusal",
+              refusals == [] and dig == sorted((p, "insert") for p in DIGEST_DELTAS),
+              (dig, refusals))
+        text = staged.get("jarvis_gate.py", "")
+        check("... the staged live gate has the digest column, its migration, "
+              "the stored-digest comparison and the widened INSERT",
+              "ADD COLUMN target_digest TEXT" in text
+              and '"SELECT id, detail, prompt, target_digest FROM approvals"' in text
+              and "if stored_digest:" in text
+              and "created,raised,target_digest)" in text, text[-400:])
+        old_pending = "\n".join(R._delta_lines(R.GATE_DIGEST_PENDING_OLD_FILE))
+        old_insert = "\n".join(R._delta_lines(R.GATE_DIGEST_INSERT_OLD_FILE))
+        check("... and the old stored-detail compare and INSERT are gone",
+              old_pending not in text and old_insert not in text)
+        check("... and the staged gate still compiles", R.rehearse(staged) == [],
+              R.rehearse(staged))
+
+        published = (REPO / "jarvis-backend" / "jarvis_gate.py").read_text(encoding="utf-8")
+        for attr in DIGEST_NEW_FILES:
+            block = "\n".join(R._delta_lines(getattr(R, attr)))
+            check(f"the published base gate holds the NEW digest block "
+                  f"{getattr(R, attr)}", block in published, attr)
+        check("... and it does not still hold the OLD compare/INSERT",
+              old_pending not in published and old_insert not in published)
+
+        backup = R.Backup(live, stamp="digest")
+        R.apply_deltas(staged, live, backup)
+        again, staged2, refusals2 = R.plan_deltas(live, [], show=fake_show,
+                                                  table=GATE_LITERAL_TABLE,
+                                                  literals=True)
+        statuses = {d.patch: d.status for d in again
+                    if d.patch.startswith("gate-digest-")}
+        check("a second plan sees all three digest deltas ALREADY_PRESENT",
+              refusals2 == [] and staged2 == {} and len(statuses) == 3
+              and all(s == "already" for s in statuses.values()),
+              (statuses, refusals2))
+        check("idempotent: a second apply writes nothing",
+              R.apply_deltas(staged2, live, backup) == [])
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_a_half_applied_digest_change_is_refused():
+    """A post-guard gate missing one digest region is refused, not guessed."""
+    root = tmpdir()
+    try:
+        live = _post_guard_live(root)
+        gate = (live / "jarvis_gate.py").read_text(encoding="utf-8")
+        old_init = "\n".join(R._delta_lines(R.GATE_DIGEST_INIT_OLD_FILE))
+        check("(set-up) the post-guard live gate holds the init old block once",
+              gate.count(old_init) == 1, gate.count(old_init))
+        write(live / "jarvis_gate.py", gate.replace(old_init, "", 1))
+        _deltas, staged, refusals = R.plan_deltas(live, [], show=fake_show,
+                                                  table=GATE_LITERAL_TABLE,
+                                                  literals=True)
+        check("a gate missing the digest migration block is REFUSED, never deployed",
+              staged == {} and any(
+                  "gate-digest-init.patch" in r and "old block appears" in r
+                  for r in refusals), refusals)
+        check("... and the refusal says how many times it found the old block",
+              any("expected exactly 1" in r for r in refusals), refusals)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_a_duplicated_digest_old_block_is_refused():
+    """Two copies of a digest old block is ambiguous: refuse, do not guess."""
+    root = tmpdir()
+    try:
+        live = _post_guard_live(root)
+        gate = (live / "jarvis_gate.py").read_text(encoding="utf-8")
+        dup = "\n".join(R._delta_lines(R.GATE_DIGEST_PENDING_OLD_FILE))
+        check("(set-up) the post-guard live gate holds the pending old block once",
+              gate.count(dup) == 1, gate.count(dup))
+        write(live / "jarvis_gate.py", gate.replace(dup, dup + "\n" + dup, 1))
+        _deltas, staged, refusals = R.plan_deltas(live, [], show=fake_show,
+                                                  table=GATE_LITERAL_TABLE,
+                                                  literals=True)
+        check("a duplicated digest old block is refused, and nothing is staged",
+              staged == {} and any("gate-digest-pending.patch" in r
+                                   and "expected exactly 1" in r for r in refusals),
+              refusals)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_the_real_live_gate_gets_the_digest_read_only():
+    """Against the OWNER's real live folder, READ-ONLY, when reachable.
+
+    CI has no live folder, so it SKIPS there (a skip is not a pass). At the
+    desk this answers: does a plain dry run plan EXACTLY the three digest
+    inserts with no refusal, and leave the live file byte-identical?"""
+    live = Path(os.environ.get("JARVIS_LIVE_BACKEND", ""))
+    if not live.is_dir() or not (live / "jarvis_gate.py").is_file():
+        print("skip  no live backend folder here (JARVIS_LIVE_BACKEND unset or "
+              "missing) - the real-PC dry run is the desk check, not CI's")
+        return
+    gate_path = live / "jarvis_gate.py"
+    before = gate_path.read_bytes()
+    _shipped, patches = R.read_patch_lists(REPO)
+    deltas, _staged, refusals = R.plan_deltas(live, patches, literals=True)
+    after = gate_path.read_bytes()
+    ids = [d for d in deltas if d.patch.startswith("gate-digest-")]
+    check("the real live gate plans all three digest deltas", len(ids) == 3,
+          [(d.patch, d.status) for d in ids])
+    check("... as inserts, or all already after the deploy",
+          all(d.status in ("insert", "already") for d in ids),
+          [(d.patch, d.status) for d in ids])
+    check("... with no refusal at all", refusals == [], refusals[:4])
+    check("... and the real live file was not written (read-only dry run)",
+          after == before)
+
+
 def main():
     for fn in (t_the_lists_parse_from_apply_patches,
                t_the_gate_guards_are_carried_as_literal_deltas,
                t_a_half_applied_gate_is_refused_not_guessed,
                t_a_duplicated_old_block_is_refused,
                t_the_real_live_gate_gets_the_guards_read_only,
+               t_the_digest_fix_is_carried_as_literal_deltas,
+               t_a_half_applied_digest_change_is_refused,
+               t_a_duplicated_digest_old_block_is_refused,
+               t_the_real_live_gate_gets_the_digest_read_only,
                t_the_list_parser_refuses_rather_than_reading_nothing,
                t_a_patch_parses_into_per_file_added_lines,
                t_presence_is_decided_from_distinctive_lines,
