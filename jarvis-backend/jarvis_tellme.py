@@ -95,7 +95,11 @@ back at the home network after the check already passed once.
     reads - by plain code, never the model - every price in whole cents,
     every version/release tag, a three-state stock state and the hash of the
     clean words, and `diff_watch_snapshot` says what changed ("The price is
-    now 199.99 (it was 249.99)."). When the two looks differ only in the
+    now 199.99 (it was 249.99)."). Since 2026-10-21 it reads the price and
+    availability a shop marks for MACHINES first - schema.org JSON-LD and
+    OpenGraph/meta tags, the markup `price_of()` already used for price
+    watches - because a discount or an "OutOfStock" is often only there, and
+    the visible price is not counted a second time when it says the same. When the two looks differ only in the
     stripped noise the answer is the `[SILENT]` watermark (`PAGE_SILENT`)
     and nothing is notified; a failed fetch is stale, keeps the old
     snapshot and its `last_good_at`, and never alerts. A real change is
@@ -218,7 +222,8 @@ number), the device's last state (a short word), when it last looked and
 how that went (a fixed sentence), and when it last matched. No sender, no
 subject, no email text, ever. A page watch keeps in the same `last_state`
 column a small JSON snapshot (Pillar 26): the SHA-256 of the page's
-noise-stripped words, every price in whole cents (integers), every version
+noise-stripped words, every price in whole cents (integers; machine-marked
+ones first, then the visible ones not already counted), every version
 tag, one of three stock states, the plain words for the last real change and
 when the last good look was - never the page's words, never a quote, and
 nothing from it is sent to the AI model.
@@ -1392,15 +1397,19 @@ class _PageRedirect(urllib.request.HTTPRedirectHandler):
 #: could match on every look. A fingerprint in the old form is re-recorded
 #: once, silently, rather than compared (see _look_page).
 #:
-#: "t2:" is what a look keeps now (Pillar 26, 2026-10-17; Blueprint C of
-#: Volume III): a JSON snapshot of the signals `extract_watch_signals` reads -
-#: the hash of the noise-stripped words, every price in whole cents, every
-#: version tag, a three-state stock state - plus the last real change's plain
-#: words and the last good look's time (see the Pillar 26 section below).
-#: Both older kinds are still recognised so an upgraded PC re-records once,
-#: silently.
+#: "t3:" is what a look keeps now (Pillar 26, 2026-10-17; Blueprint C of
+#: Volume III; t3 on 2026-10-21 when the snapshot learned to read the price
+#: and stock a page marks for MACHINES): a JSON snapshot of the signals
+#: `extract_watch_signals` reads - the hash of the noise-stripped words,
+#: every price in whole cents (machine-marked first), every version tag, a
+#: three-state stock state - plus the last real change's plain words and the
+#: last good look's time (see the Pillar 26 section below). Both older kinds
+#: are still recognised so an upgraded PC re-records once, silently - and
+#: that is exactly why the kind changed: a JSON-LD price the old reader could
+#: not see must not ring the owner as a "price change" on the first look
+#: after the upgrade; the look records a new baseline instead.
 PAGE_PRINT = "t1:"
-PAGE_STATE = "t2:"
+PAGE_STATE = "t3:"
 #: The watermark rule: `diff_watch_snapshot` returns this instead of words
 #: when the page differs only in dynamic noise, so a look cannot ring for it.
 PAGE_SILENT = "[SILENT]"
@@ -1681,6 +1690,238 @@ def _default_price_fetch(url: str) -> Optional[float]:
     return price_of(body, content_type)
 
 
+# --------------------------------------------------------------------------
+#   Fetch hygiene for the price radar (Slice 1, 2026-10-21): an address
+#   canonicaliser, a coherent browser-header builder and a jittered
+#   scheduling helper. Zero dependencies, no state, deterministic. They are
+#   exported for the radar's own fetch/schedule path (Slice 2) and are not
+#   wired into the existing watch path - see each docstring for why.
+# --------------------------------------------------------------------------
+
+#: Query parameters that only say WHERE a click came from. Removed by
+#: `canonicalize_watch_url`; product-identifying ones (id, sku, model, pid,
+#: variant, ...) are never touched.
+_TRACKING_QUERY_EXACT = frozenset({
+    "gclid", "fbclid", "msclkid", "mc_eid", "_ga", "ref", "tag",
+    "ascsubtag", "psc",
+})
+_TRACKING_QUERY_PREFIXES = ("utm_", "ref_", "pf_rd_", "pd_rd_")
+
+
+def canonicalize_watch_url(url: str) -> str:
+    """The same product page with click-tracking taken out.
+
+    Removes utm_*, gclid, fbclid, msclkid, mc_eid, _ga, ref, ref_*, tag,
+    ascsubtag, psc, pf_rd_* and pd_rd_* from the QUERY only: the scheme, host
+    and path stay exactly as given, the fragment is kept, and every other
+    parameter - including the ones that identify the product (id, sku, model,
+    pid, variant) - stays in its original order. Idempotent. An empty value,
+    or one with no scheme and host, is returned unchanged: there is no
+    address to canonicalise.
+
+    NOT wired into the stored watch addresses yet, on purpose: a watch made
+    before this existed must not silently change its address. Slice 2
+    canonicalises at the moment a watch is created."""
+    text = str(url or "").strip()
+    if not text:
+        return ""
+    import urllib.parse as up
+    try:
+        parts = up.urlsplit(text)
+    except ValueError:
+        return text
+    if not parts.scheme or not parts.netloc:
+        return text
+    kept = []
+    dropped = False
+    for key, value in up.parse_qsl(parts.query, keep_blank_values=True):
+        lower = key.lower()
+        if lower in _TRACKING_QUERY_EXACT or any(
+                lower.startswith(prefix) for prefix in _TRACKING_QUERY_PREFIXES):
+            dropped = True
+            continue
+        kept.append((key, value))
+    if not dropped:
+        return text
+    query = up.urlencode(kept, doseq=True, safe="*,:;@/?")
+    return up.urlunsplit((parts.scheme, parts.netloc, parts.path, query,
+                          parts.fragment))
+
+
+#: Browser header profiles for the radar's future fetcher (Slice 2). Each
+#: profile is ONE real browser and every header in it agrees with that
+#: browser's own User-Agent: a client-hint platform matches the UA (Windows
+#: Chrome/Edge say "Windows", the macOS ones "macOS", the Android one
+#: "Android"), the mobile hint matches the UA, Sec-Fetch-* describe the same
+#: kind of request, and Accept-Language is one a real browser sends. Firefox,
+#: Safari and iOS browsers send NO Sec-CH-UA at all, and those profiles have
+#: none - that is the coherent shape, not a gap.
+_HEADER_PROFILES = (
+    {  # 0: Windows Chrome
+        "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                       "(KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"),
+        "Accept": ("text/html,application/xhtml+xml,application/xml;q=0.9,"
+                   "image/avif,image/webp,*/*;q=0.8"),
+        "Accept-Language": "en-US,en;q=0.9",
+        "Sec-CH-UA": ('"Chromium";v="141", "Google Chrome";v="141", '
+                      '"Not?A_Brand";v="24"'),
+        "Sec-CH-UA-Mobile": "?0",
+        "Sec-CH-UA-Platform": '"Windows"',
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Upgrade-Insecure-Requests": "1",
+    },
+    {  # 1: Windows Edge
+        "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                       "(KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36 Edg/141.0.0.0"),
+        "Accept": ("text/html,application/xhtml+xml,application/xml;q=0.9,"
+                   "image/avif,image/webp,*/*;q=0.8"),
+        "Accept-Language": "en-US,en;q=0.9",
+        "Sec-CH-UA": ('"Chromium";v="141", "Microsoft Edge";v="141", '
+                      '"Not?A_Brand";v="24"'),
+        "Sec-CH-UA-Mobile": "?0",
+        "Sec-CH-UA-Platform": '"Windows"',
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Upgrade-Insecure-Requests": "1",
+    },
+    {  # 2: macOS Safari (no client hints)
+        "User-Agent": ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                       "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"),
+        "Accept": ("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"),
+        "Accept-Language": "en-US,en;q=0.9",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Upgrade-Insecure-Requests": "1",
+    },
+    {  # 3: macOS Chrome
+        "User-Agent": ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                       "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 "
+                       "Safari/537.36"),
+        "Accept": ("text/html,application/xhtml+xml,application/xml;q=0.9,"
+                   "image/avif,image/webp,*/*;q=0.8"),
+        "Accept-Language": "en-US,en;q=0.9",
+        "Sec-CH-UA": ('"Chromium";v="141", "Google Chrome";v="141", '
+                      '"Not?A_Brand";v="24"'),
+        "Sec-CH-UA-Mobile": "?0",
+        "Sec-CH-UA-Platform": '"macOS"',
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Upgrade-Insecure-Requests": "1",
+    },
+    {  # 4: Windows Firefox (no client hints)
+        "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) "
+                       "Gecko/20100101 Firefox/131.0"),
+        "Accept": ("text/html,application/xhtml+xml,application/xml;q=0.9,"
+                   "image/avif,image/webp,*/*;q=0.8"),
+        "Accept-Language": "en-US,en;q=0.5",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Upgrade-Insecure-Requests": "1",
+    },
+    {  # 5: iOS Safari (no client hints)
+        "User-Agent": ("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) "
+                       "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 "
+                       "Mobile/15E148 Safari/604.1"),
+        "Accept": ("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"),
+        "Accept-Language": "en-US,en;q=0.9",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Upgrade-Insecure-Requests": "1",
+    },
+    {  # 6: Android Chrome
+        "User-Agent": ("Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 "
+                       "(KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36"),
+        "Accept": ("text/html,application/xhtml+xml,application/xml;q=0.9,"
+                   "image/avif,image/webp,*/*;q=0.8"),
+        "Accept-Language": "en-US,en;q=0.9",
+        "Sec-CH-UA": ('"Chromium";v="141", "Google Chrome";v="141", '
+                      '"Not?A_Brand";v="24"'),
+        "Sec-CH-UA-Mobile": "?1",
+        "Sec-CH-UA-Platform": '"Android"',
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Upgrade-Insecure-Requests": "1",
+    },
+)
+#: Headers this builder must NEVER emit: they would carry the owner's
+#: cookies, or revalidate a page they hold cached (a first look has neither).
+_NEVER_SENT = ("Cookie", "If-None-Match", "If-Modified-Since")
+#: The one referrer a price comparison may send: a search result, never the
+#: owner's own page or a previous private page.
+_REFERER_MODES = {"": "", "search_comparison": "https://www.google.com/"}
+
+
+def build_decoupled_headers(persona_index=None, referer_mode: str = "") -> dict:
+    """A browser-coherent header set for ONE outbound page GET (Slice 2 uses
+    it; the existing fetchers keep this project's own Jarvis identity on
+    purpose, so no second builder is in use anywhere yet).
+
+    `persona_index` picks a profile deterministically (None = 0; any int is
+    taken modulo the number of profiles, so callers can pass a stable job id).
+    `referer_mode` is "" (no Referer) or "search_comparison" (a Google search
+    result). NEVER sends Cookie, If-None-Match or If-Modified-Since - by
+    construction, and filtered again in case a future profile ever carries
+    one. Each profile's Sec-CH-UA platform and mobile hint match its own
+    User-Agent."""
+    if persona_index is None or isinstance(persona_index, bool):
+        index = 0
+    else:
+        try:
+            index = int(persona_index) % len(_HEADER_PROFILES)
+        except (TypeError, ValueError):
+            index = 0
+    headers = dict(_HEADER_PROFILES[index])
+    for name in _NEVER_SENT:
+        headers.pop(name, None)
+    mode = str(referer_mode or "")
+    referer = _REFERER_MODES.get(mode, "")
+    if referer:
+        headers["Referer"] = referer
+    return headers
+
+
+#: The radar never looks more often than this, whatever the base interval.
+POLL_MIN_SECONDS = 300
+#: How much a look may drift from its base interval, either way.
+POLL_JITTER = 0.30
+
+
+def next_poll_timestamp(base_interval_s, rng=None, now=None) -> float:
+    """When the next look is due: `now` plus a jittered interval.
+
+    The interval is `base_interval_s` changed by up to +/-30%, never below
+    `POLL_MIN_SECONDS` (300 s). `rng` may be a `random.Random` (or anything
+    with `.uniform(a, b)`) for a DETERMINISTIC sequence - the same rng state
+    and the same `now` give the same timestamp; None uses the module's
+    random source. `now` defaults to the current time. Exported for the
+    radar's own scheduler (Slice 2): the existing page watch's cadence is
+    chosen once when the watch is made, so nothing here is wired into it."""
+    try:
+        base = float(base_interval_s)
+    except (TypeError, ValueError):
+        base = float(POLL_MIN_SECONDS)
+    if not base > 0:
+        base = float(POLL_MIN_SECONDS)
+    import random as _random
+    source = rng if rng is not None and hasattr(rng, "uniform") else _random
+    factor = 1.0 + float(source.uniform(-POLL_JITTER, POLL_JITTER))
+    interval = max(float(POLL_MIN_SECONDS), base * factor)
+    moment = time.time() if now is None else float(now)
+    return round(moment + interval, 3)
+
+
 #: What a price watch keeps: "p1:" and the price it last read.
 PRICE_PRINT = "p1:"
 
@@ -1747,10 +1988,12 @@ def _look_price(job_id: str, watch: dict, st: dict, deps: Deps, sched) -> tuple:
 # gate's conversation taint (why="page_watch"), because outside text was read.
 
 PAGE_SILENT = "[SILENT]"
-#: The page-state kinds a look keeps. "t2:" is the current JSON snapshot;
-#: "t1:" and the raw kind are what older Jarvis versions kept - those can
-#: only be compared for equality and are re-recorded once, silently.
-PAGE_STATE = "t2:"
+#: The page-state kinds a look keeps. "t3:" is the current JSON snapshot (it
+#: gained the machine-marked price/stock signals on 2026-10-21, so a t2
+#: snapshot is re-recorded once, silently); "t2:", "t1:" and the raw kind
+#: are what older Jarvis versions kept - those can only be compared for
+#: equality and are re-recorded once, silently.
+PAGE_STATE = "t3:"
 #: The chat/tool marker families a page could use to pretend to be a turn
 #: ("SecAlign markers"): removed before anything is compared, so a page
 #: cannot smuggle a role or tool marker into what the watch keeps or says.
@@ -1882,31 +2125,231 @@ def strip_page_noise(html_or_text: str) -> str:
     return " ".join(text.split())
 
 
+# --------------------------------------------------------------------------
+#   Machine-marked prices and stock (2026-10-21): the page-watch snapshot
+#   reads the price and availability a shop marks for machines FIRST - the
+#   schema.org JSON-LD blocks `price_of()` already used, and the
+#   OpenGraph/meta tags beside them - then the prices SHOWN in the visible
+#   words. A discount or an "OutOfStock" is often only in that markup, so the
+#   page watch missed changes the price watch could see. Plain code, integer
+#   cents, deterministic; a machine price already counted is never counted
+#   again from the visible words.
+# --------------------------------------------------------------------------
+
+#: schema.org availability, normalised to its last path segment and lower
+#: case, mapped to the three states a snapshot keeps. PreOrder/BackOrder map
+#: to "unknown" on purpose: the page does not say it is in stock, and "out of
+#: stock" would be a claim it did not make.
+_LD_AVAILABILITY = {
+    "instock": "in_stock",
+    "in_stock": "in_stock",
+    "onlineonly": "in_stock",
+    "limitedavailability": "in_stock",
+    "outofstock": "out_of_stock",
+    "out_of_stock": "out_of_stock",
+    "soldout": "out_of_stock",
+    "sold_out": "out_of_stock",
+    "discontinued": "out_of_stock",
+    "preorder": "unknown",
+    "pre_order": "unknown",
+    "backorder": "unknown",
+    "back_order": "unknown",
+}
+#: The @type names whose node carries a price and/or an availability. A page
+#: may write the bare name or the full schema.org address - both match.
+_LD_SIGNAL_TYPES = frozenset({"product", "offer", "aggregateoffer", "flight",
+                              "productgroup"})
+#: Keys a JSON-LD document nests those nodes under (schema.org's own shape).
+_LD_SIGNAL_KEYS = ("offers", "@graph", "mainEntity", "itemOffered",
+                   "priceSpecification", "hasVariant")
+_LD_MAX_DEPTH = 8
+_LD_MAX_NODES = 4000
+#: The currency signs/words allowed around a price, the same set
+#: `parse_number` accepts.
+_CURRENCY_EDGES = re.compile(
+    r"^(?:[£$€]|us\$|usd|gbp|eur)\s*|\s*(?:[£$€]|usd|gbp|eur)$", re.IGNORECASE)
+
+
+def _short_type(value) -> str:
+    """"https://schema.org/Product" and "Product" both become "product"."""
+    return str(value or "").strip().rstrip("/").rsplit("/", 1)[-1].lower()
+
+
+def _ld_availability(value) -> str:
+    """One schema.org availability -> the snapshot's vocabulary, or ""."""
+    return _LD_AVAILABILITY.get(_short_type(value), "")
+
+
+def _decimal_words(value) -> Optional[object]:
+    """A price as people and pages write it, as an exact Decimal: "25",
+    "1,299.99", "1.299,99", "24,99", "£ 1 299". The same shapes
+    `parse_number` accepts, but WITHOUT turning the number into a float."""
+    from decimal import Decimal, InvalidOperation
+    text = _CURRENCY_EDGES.sub("", str(value or "").strip())
+    text = text.replace("\u00a0", " ").replace("\u202f", " ").strip()
+    if not re.fullmatch(r"\d[\d ,.']*", text) or len(text) > 20:
+        return None
+    text = text.replace(" ", "").replace("'", "")
+    last_dot, last_comma = text.rfind("."), text.rfind(",")
+    if last_dot >= 0 and last_comma >= 0:
+        dec = "." if last_dot > last_comma else ","
+        thou = "," if dec == "." else "."
+        text = text.replace(thou, "").replace(dec, ".")
+    elif last_comma >= 0:
+        # "24,99" is a decimal comma; "1,299" and "1,299,000" are thousands.
+        if len(text) - last_comma - 1 == 2 and text.count(",") == 1:
+            text = text.replace(",", ".")
+        else:
+            text = text.replace(",", "")
+    elif text.count(".") > 1:
+        text = text.replace(".", "")
+    elif last_dot >= 0 and len(text) - last_dot - 1 == 3 and not text.startswith("0"):
+        # "1.299" on a European page is a thousand, not one and a bit.
+        text = text.replace(".", "")
+    try:
+        return Decimal(text)
+    except InvalidOperation:
+        return None
+
+
+def _cents_from_price(value) -> Optional[int]:
+    """A machine-marked price as INTEGER whole cents, read with `Decimal`
+    from the thing the page actually wrote: "$1,249.99" and the JSON number
+    1249.99 both become 124999, never a float artefact. More than two
+    decimals rounds half-up to cents (deterministic); a price that is not a
+    positive number under PRICE_MAX is None."""
+    from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        if isinstance(value, Decimal):
+            amount = value
+        elif isinstance(value, int):
+            amount = Decimal(value)
+        elif isinstance(value, float):
+            # The JSON block is parsed with parse_float=Decimal; this arm is
+            # for a caller that already turned it into a float.
+            amount = Decimal(repr(value))
+        else:
+            amount = _decimal_words(value)
+            if amount is None:
+                return None
+    except (InvalidOperation, ValueError):
+        return None
+    if not amount.is_finite() or amount <= 0:
+        return None
+    try:
+        cents = (amount * 100).quantize(Decimal(1), rounding=ROUND_HALF_UP)
+    except InvalidOperation:
+        return None
+    if cents <= 0 or cents > PRICE_MAX * 100:
+        return None
+    return int(cents)
+
+
+def _ld_watch_signal_nodes(node, depth, prices, stock, seen) -> None:
+    """Walk one parsed JSON-LD document in ITS order, collecting integer cents
+    and availability states from the nodes that carry them. Bounded in depth
+    and node count; malformed shapes are simply skipped."""
+    if depth > _LD_MAX_DEPTH or len(seen) >= _LD_MAX_NODES:
+        return
+    if isinstance(node, list):
+        for item in node[:100]:
+            _ld_watch_signal_nodes(item, depth + 1, prices, stock, seen)
+        return
+    if not isinstance(node, dict):
+        return
+    seen.append(1)
+    types = node.get("@type")
+    types = types if isinstance(types, list) else [types]
+    if any(_short_type(t) in _LD_SIGNAL_TYPES for t in types):
+        for key in ("price", "lowPrice"):
+            if key in node:
+                cents = _cents_from_price(node.get(key))
+                if cents is not None and cents not in prices:
+                    prices.append(cents)
+        # Only a DEFINITE state overrides the visible words. PreOrder and
+        # BackOrder map to "unknown" and are left to the visible words: the
+        # page did not say in/out of stock, and an unknown must not hide a
+        # definite visible answer.
+        state = _ld_availability(node.get("availability"))
+        if state in ("in_stock", "out_of_stock") and state not in stock:
+            stock.append(state)
+    for key in _LD_SIGNAL_KEYS:
+        if key in node:
+            _ld_watch_signal_nodes(node[key], depth + 1, prices, stock, seen)
+
+
+def _machine_watch_signals(text: str) -> tuple:
+    """(prices_cents, stock_states) a page marks for MACHINES, in document
+    order: every JSON-LD block first (schema.org Product/Offer/AggregateOffer/
+    Flight), then the OpenGraph/meta price tags. JSON numbers are parsed with
+    `Decimal` from their own decimal text so cents are exact, and one
+    malformed block never hides the others."""
+    from decimal import Decimal
+    prices, stock = [], []
+    raw = str(text or "")
+    for m in _LD_JSON.finditer(raw):
+        block = m.group(1).strip()
+        if block.startswith("<!--"):
+            block = block[4:].lstrip()
+        if block.endswith("-->"):
+            block = block[:-3].rstrip()
+        if not block:
+            continue
+        try:
+            doc = json.loads(block, parse_float=Decimal)
+        except ValueError:
+            continue
+        _ld_watch_signal_nodes(doc, 0, prices, stock, [])
+    for m in _META.finditer(raw):
+        tag = m.group(0)
+        name = (_attr(tag, "itemprop") or _attr(tag, "property")
+                or _attr(tag, "name")).lower()
+        if name not in _META_PRICE:
+            continue
+        cents = _cents_from_price(_attr(tag, "content"))
+        if cents is not None and cents not in prices:
+            prices.append(cents)
+    return prices, stock
+
+
 def extract_watch_signals(text: str) -> dict:
     """The structured signals a page shows, read by plain code - never a
     model, and never a float price:
-      * "prices_cents": every currency amount as an INTEGER whole-cent value
-        ("$199.99" is 19999), in the order a reader meets them;
+      * "prices_cents": the page's prices as INTEGER whole-cent values in a
+        deterministic order - the machine-marked ones first (schema.org
+        JSON-LD Product/Offer/AggregateOffer/Flight and OpenGraph/meta tags,
+        read with `Decimal` so "$1,249.99" is exactly 124999), then each
+        price SHOWN in the visible words that the markup did not already give,
+        in the order a reader meets them. The same amount is never counted
+        twice;
       * "versions": every version/release tag, its prefix dropped ("v1.2.3"
         is "1.2.3"), first-seen order, no repeats;
-      * "stock_state": "in_stock", "out_of_stock" or "unknown";
+      * "stock_state": "in_stock", "out_of_stock" or "unknown" - a state the
+        page marks for machines (schema.org availability) wins, else the
+        visible words say it;
       * "clean_sha256": the SHA-256 hex digest of the noise-stripped words,
-        case folded - what "the page's text changed" means."""
+        case folded - what "the page's text changed" means. The machine
+        markup is not page words, so adding or changing it does not move it."""
     import hashlib
+    machine_prices, machine_stock = _machine_watch_signals(str(text or ""))
     clean = strip_page_noise(str(text or ""))
-    prices = []
+    prices = list(machine_prices)
     for m in _SHOWN_PRICE.finditer(clean):
         value = parse_number(m.group("a") or m.group("b") or "")
         if value is not None and 0 < value <= PRICE_MAX:
             cents = int(round(float(value) * 100))
-            if cents > 0:
+            if cents > 0 and cents not in machine_prices:
                 prices.append(cents)
     versions = []
     for m in _VERSION.finditer(clean):
         version = m.group(1)
         if version not in versions:
             versions.append(version)
-    if _OUT_OF_STOCK.search(clean):
+    if machine_stock:
+        stock = machine_stock[0]
+    elif _OUT_OF_STOCK.search(clean):
         stock = "out_of_stock"
     elif _IN_STOCK.search(clean):
         stock = "in_stock"
