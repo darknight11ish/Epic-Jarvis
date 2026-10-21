@@ -24,9 +24,10 @@ THE OWNER'S STATE IS LEFT ALONE. The suites run real code that writes -
 the audit log, approval queues, switch files - so each run gets a temporary
 config folder, audit log and HOME, deleted afterwards (private_state below).
 `OPENJARVIS_HOME` and `JARVIS_HOME` are the folder most modules treat as "the
-owner's" (databases, inboxes, receipts, the guardian store); pointing them at
-a throwaway folder is what keeps a suite that forgot its own `_TMP` from
-reading or writing the owner's real data during a patcher run. The one way to
+owner's" (databases, inboxes, receipts, the guardian store) and
+`JARVIS_LOG_DIR` is what jarvis_framework.log_dir() obeys for the audit log;
+pointing them at a throwaway folder is what keeps a suite that forgot its own
+`_TMP` from reading or writing the owner's real data during a patcher run. The one way to
 ask for the real home is `JARVIS_TESTS_USE_REAL_HOME=1`, and it is never the
 default. apply-patches.ps1 asks for the same variables with
 `--state-env DIR`; whatever that prints is what its test loop sets, and the
@@ -211,6 +212,35 @@ HOME_ENVS = ("OPENJARVIS_HOME", "JARVIS_HOME")
 #: (his databases, his inbox): `JARVIS_TESTS_USE_REAL_HOME=1`. Never the
 #: default, and a run that sets it SAYS SO in its header.
 REAL_HOME_ENV = "JARVIS_TESTS_USE_REAL_HOME"
+#: Where the suites' audit log goes: the variable jarvis_framework.log_dir()
+#: honours over both the config's `[logging].log_directory` and CONFIG_DIR/logs
+#: (2026-10-20). It is not covered by the config-folder move: the config shipped
+#: beside the modules sets log_directory = "~/.openjarvis/logs/", so a suite that
+#: only redirects its config folder (or its approvals DB) appended synthetic
+#: events to the OWNER's real log. Every suite gets a per-run temporary folder
+#: through this variable; the logging-machinery suites are exempt below.
+LOG_DIR_ENV = "JARVIS_LOG_DIR"
+#: The suites that test the audit-log machinery ITSELF, or read audit lines back
+#: from a log folder they choose. They set up and read their own log directory
+#: (by patching load_framework, or by testing this runner's isolation), so the
+#: runner leaves JARVIS_LOG_DIR out of their environment - otherwise they would
+#: be reading a directory nobody set up. Each of them ALSO clears the variable
+#: itself, because apply-patches.ps1 runs every suite directly with the
+#: variables `--state-env` printed, which include JARVIS_LOG_DIR and cannot be
+#: varied per suite. A new suite that reads audit lines back from its own folder
+#: joins this list, the same way it would join NEEDS_OWNER when it needs a file
+#: from the owner's PC; the full sweep is what catches an omission.
+LOG_MACHINERY_SUITES = {
+    "test_log_retention.py": "tests prune_logs()/log_dir() against a folder it builds",
+    "test_rebuilt.py": "tests audit_log()/log_dir() by patching load_framework",
+    "test_suite_state.py": "tests this runner's own state isolation; its CONTROL "
+                           "runs are unisolated on purpose",
+    # Discovered by the first full sweep after the switch was added (2026-10-20):
+    # these two read the audit lines back from a log folder they choose
+    # themselves, so the override made them look in the wrong place.
+    "test_skill_discovery.py": "reads audit lines back from a log folder it chooses",
+    "test_memory_erase.py": "reads audit lines back from a log folder it chooses",
+}
 #: The model loaders must be OFFLINE in every suite's environment (2026-10-18).
 #: test_attention_phrases.py says "no model, no network" in its own header, but
 #: importing the memory store taught fastembed to fetch its 5 model files for a
@@ -400,6 +430,17 @@ def private_state(env: dict, backend: Path, where: Path) -> dict:
     JARVIS_FRAMEWORK_TOML itself (test_rebuilt, test_router_private_terms)
     still reads the file it chose.
 
+    THE LOG GETS ITS OWN SWITCH AS WELL (2026-10-20, night audit). The config
+    copy is one path to the audit log; a suite that does not go through it - one
+    that reads another config, or is run directly with only some variables set -
+    still honoured log_directory = "~/.openjarvis/logs/" and appended synthetic
+    events to the owner's REAL log (191 gate.asked, 180 backup.restore.card, 420
+    media_index.deleted, measured 22:00-23:22). So this function now also sets
+    JARVIS_LOG_DIR, which jarvis_framework.log_dir() honours over the config and
+    over CONFIG_DIR/logs, to `<state>/logs` - the same folder the config copy
+    names, through a switch that does not depend on which config a suite reads.
+    `suite_env()` removes it for the suites that test the logging itself.
+
     AND THE CONFIG FOLDER IS NOT THE HOME. `OPENJARVIS_HOME` is checked
     BEFORE that rule, by the modules that keep the owner's own data
     (jarvis_receipts, jarvis_file_guardian, jarvis_chat_log, ...), and a
@@ -438,6 +479,7 @@ def private_state(env: dict, backend: Path, where: Path) -> dict:
     logs = where / "logs"
     cfg.mkdir(parents=True, exist_ok=True)
     logs.mkdir(parents=True, exist_ok=True)
+    out[LOG_DIR_ENV] = str(logs)
     found = _config_the_suites_would_read(env, backend)
     out["OPENJARVIS_CONFIG_DIR"] = str(cfg)
     out["JARVIS_CONFIG_DIR"] = str(cfg)
@@ -455,6 +497,25 @@ def private_state(env: dict, backend: Path, where: Path) -> dict:
         copy.write_text(_with_log_directory(found.read_text(encoding="utf-8"), logs),
                         encoding="utf-8")
         out["JARVIS_FRAMEWORK_TOML"] = str(copy)
+    return out
+
+
+def suite_env(name: str, env: dict) -> dict:
+    """`env` for ONE suite, with the audit-log isolation removed for the suites
+    that test the logging machinery itself.
+
+    `private_state()` gives the whole run one temporary log folder through
+    JARVIS_LOG_DIR. That is right for every suite except the ones in
+    LOG_MACHINERY_SUITES: they choose their own log directory and would then be
+    reading one nobody set up (test_log_retention patches load_framework; the
+    runner would override the patch). They also clear the variable at import, so
+    the patcher's direct loop behaves the same way; this is the runner's own
+    half of that one rule. A suite not in the set gets the dict unchanged, so
+    the common path allocates nothing."""
+    if name not in LOG_MACHINERY_SUITES:
+        return env
+    out = dict(env)
+    out.pop(LOG_DIR_ENV, None)
     return out
 
 
@@ -848,6 +909,7 @@ def _suite_job(s: Path, backend: Path, env: dict) -> dict:
                 "echo": [], "tail": []}
     t0 = time.time()
     why = ""
+    env = suite_env(s.name, env)
     try:
         # errors="replace" and an explicit utf-8 decode: the child is run
         # with PYTHONIOENCODING=utf-8 (see private_state), so decoding its
@@ -1042,11 +1104,18 @@ def state_env(where: str) -> int:
     runs each suite as its own process, so without it in this list the suites
     it runs would still be on the console's code page and still crash on a
     non-ASCII suite name (see private_state). A variable already set to this
-    value is not printed, which is fine - the script's own copy is the same."""
+    value is not printed, which is fine - the script's own copy is the same.
+
+    JARVIS_LOG_DIR is printed too, since 2026-10-20: the patcher's own loop runs
+    suites directly, and that alone gave them the config's
+    log_directory = "~/.openjarvis/logs/" - the owner's REAL audit log. The
+    logging-machinery suites (LOG_MACHINERY_SUITES) clear it themselves, because
+    this list cannot vary per suite."""
     backend = Path(os.environ.get("JARVIS_BACKEND") or HERE).resolve()
     env = private_state(dict(os.environ), backend, Path(where))
     for k in ("OPENJARVIS_CONFIG_DIR", "JARVIS_CONFIG_DIR", "JARVIS_FRAMEWORK_TOML",
-              "OPENJARVIS_HOME", "JARVIS_HOME", "PYTHONIOENCODING", *OFFLINE_ENVS):
+              "OPENJARVIS_HOME", "JARVIS_HOME", "PYTHONIOENCODING", LOG_DIR_ENV,
+              *OFFLINE_ENVS):
         if env.get(k) and env.get(k) != os.environ.get(k):
             print(f"{k}={env[k]}")
     return 0

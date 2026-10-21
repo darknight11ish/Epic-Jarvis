@@ -2709,6 +2709,27 @@ newer ones, like `jarvis_second_card.py` and `jarvis_big_model.py` — ships
 as a file, not a patch, because there is nothing on the owner's machine to
 patch. `apply-patches.ps1` copies them in.
 
+**A local test run writes nothing into the owner's home folder - the audit log
+included (2026-10-20).** `backend/run_suites.py` gives every run a throwaway
+config folder, HOME and audit log, and `apply-patches.ps1` gets the same
+variables from `--state-env`. The audit log needed its own switch:
+`jarvis_framework.audit_log` obeys `[logging].log_directory`, and the config
+shipped beside the modules names `~/.openjarvis/logs/`, so moving only the
+config folder still pointed the log at the OWNER's real file. That is not a
+theory: measured over 22:00-23:22 on 2026-10-20, local suite runs appended 191
+`gate.asked`, 93 `gate.denied`, 180 `backup.restore.card`, 420
+`media_index.deleted` and more to the owner's real audit log while approvals.db
+and every live file were untouched - synthetic events in the forensic record.
+So `jarvis_framework.log_dir()` now honours `JARVIS_LOG_DIR` over both the
+config and `CONFIG_DIR/logs`, the runner sets it to a per-run temporary folder
+for every suite, and the suites that test the logging machinery itself, or read
+audit lines back from a log folder they choose (`LOG_MACHINERY_SUITES` in
+`backend/run_suites.py`: `test_log_retention.py`, `test_rebuilt.py`,
+`test_suite_state.py`, `test_skill_discovery.py`, `test_memory_erase.py`), are
+the explicit, documented opt-out.
+`backend/test_log_isolation.py` reproduces the hazard in a throwaway HOME and
+proves the fix, the precedence, the default and the runner's own behaviour.
+
 ---
 
 ## 10. Things that do not exist

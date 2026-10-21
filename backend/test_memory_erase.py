@@ -47,6 +47,12 @@ sys.path.insert(0, str(HERE))
 #: computes CONFIG_DIR once, at import.
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-erase-"))
 os.environ["OPENJARVIS_CONFIG_DIR"] = str(_TMP / "cfg")
+# This suite chooses the log directory it reads back (_CFG's log_directory
+# below), so it is one of the logging-machinery suites: the runner's
+# JARVIS_LOG_DIR isolation is cleared here and left out for it by
+# run_suites.LOG_MACHINERY_SUITES. Without this, the override would point the
+# audit lines somewhere this suite never looks.
+os.environ.pop("JARVIS_LOG_DIR", None)
 
 from _where import REPO, require_shipped  # noqa: E402
 

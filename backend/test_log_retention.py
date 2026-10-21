@@ -47,6 +47,13 @@ from pathlib import Path
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-logret-"))
 # Before anything imports jarvis_framework: CONFIG_DIR is read once, at import.
 os.environ["OPENJARVIS_CONFIG_DIR"] = str(_TMP / "config")
+# This suite tests the audit-log machinery ITSELF: it decides which directory to
+# read and write (by patching the framework's logging section). The runner's
+# test isolation therefore leaves JARVIS_LOG_DIR out for it (run_suites'
+# LOG_MACHINERY_SUITES) - and this clears it here too, because
+# apply-patches.ps1 runs every suite directly with the variables `--state-env`
+# printed, which include it.
+os.environ.pop("JARVIS_LOG_DIR", None)
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))

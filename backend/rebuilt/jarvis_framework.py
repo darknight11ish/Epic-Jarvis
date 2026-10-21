@@ -22,7 +22,10 @@ this module must provide is:
     action_tier(name)  which tier an action falls in
     audit_log(e, d)    one JSON line on disk
     CONFIG_DIR         where state lives
-    LOG_DIR            where the log lives
+    LOG_DIR            where the log lives - log_dir() lets the config's
+                       [logging].log_directory, or JARVIS_LOG_DIR, move it
+                       (the latter is how a test run keeps out of the owner's
+                       real log; see log_dir() and backend/run_suites.py)
 
 Nothing else is referenced by anything. Where the original did more, that more
 is not reconstructible and is not here. Anything below that could not be
@@ -83,12 +86,19 @@ def _config_dir() -> Path:
 CONFIG_DIR: Path = _config_dir()
 
 #: Where the audit log is written. `[logging].log_directory` in the config can
-#: override it per call; this is the fallback, and two call sites read it
-#: directly as `Path(fw.LOG_DIR)`.
+#: override it per call, and JARVIS_LOG_DIR (LOG_DIR_ENV) overrides both - that
+#: last one is for test isolation; see log_dir(). Two call sites read this
+#: constant directly as `Path(fw.LOG_DIR)`.
 LOG_DIR: Path = CONFIG_DIR / "logs"
 
 #: The name of the config file, looked for in several places below.
 CONFIG_NAME = "jarvis-framework.toml"
+
+#: The environment variable that moves the audit log for one process - test
+#: isolation, read fresh by log_dir() so it also works with a config that names
+#: the owner's real folder. See log_dir(); run_suites.py sets it for every
+#: suite, and the logging-machinery suites clear it.
+LOG_DIR_ENV = "JARVIS_LOG_DIR"
 
 
 def _explicit() -> Optional[Path]:
@@ -441,7 +451,23 @@ def log_dir() -> Path:
     log_directory to a temp folder - if this were captured at import time,
     that patch would do nothing and every test run would write into the real
     ~/.openjarvis/logs.
+
+    THE TEST OVERRIDE, AND WHY IT EXISTS. `JARVIS_LOG_DIR`, when set and not
+    empty, wins over BOTH the config's `[logging].log_directory` and
+    CONFIG_DIR/logs. Moving the config folder alone is not enough: the config
+    shipped beside these modules sets log_directory = "~/.openjarvis/logs/",
+    which a temporary config folder does not move, and on 2026-10-20 local
+    test suites appended synthetic events (191 gate.asked, 180
+    backup.restore.card, 420 media_index.deleted ...) to the OWNER's real
+    audit log while only their approvals DB was redirected. The environment
+    override is read fresh each call, like the config, so it applies to the
+    whole process without a restart. `backend/run_suites.py` sets it for every
+    suite; the suites that test this machinery themselves clear it, because
+    they choose their own log directory.
     """
+    override = os.environ.get(LOG_DIR_ENV)
+    if override:
+        return Path(os.path.expanduser(override))
     cfg = section("logging")
     raw = cfg.get("log_directory")
     if raw:

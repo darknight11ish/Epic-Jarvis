@@ -8,6 +8,13 @@ fake events in the owner's REAL audit log per run, among the real ones.
 run_suites.py (and apply-patches.ps1's step 6, through `run_suites.py
 --state-env`) now gives each run a temporary config folder and audit log.
 
+Since 2026-10-20 the audit log is moved by `JARVIS_LOG_DIR` as well, because
+moving the config folder alone did not move it (the config beside the modules
+names ~/.openjarvis/logs/). This suite is one of the three that test the
+logging machinery, so it clears that variable and the runner leaves it out for
+it (`run_suites.LOG_MACHINERY_SUITES`): the CONTROL runs below must be
+unisolated on purpose. `test_log_isolation.py` proves the new variable.
+
 Each case below runs a suite with HOME (and USERPROFILE, which is Windows'
 "~") pointed at an empty folder, and looks in it afterwards. The CONTROL
 runs the same suite the old way, to prove it does write there - otherwise
@@ -23,6 +30,12 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+# This suite tests the runner's OWN state isolation, including the CONTROL runs
+# that are deliberately unisolated to prove a leak exists. The runner therefore
+# leaves JARVIS_LOG_DIR out for it (run_suites' LOG_MACHINERY_SUITES) - and this
+# clears it here too, because apply-patches.ps1 runs every suite directly with
+# the variables `--state-env` printed, which include it.
+os.environ.pop("JARVIS_LOG_DIR", None)
 import run_suites as R  # noqa: E402
 
 try:
@@ -58,7 +71,7 @@ def skip(why):
 def _env(home: Path, **extra) -> dict:
     env = dict(os.environ, HOME=str(home), USERPROFILE=str(home), PYTHONDONTWRITEBYTECODE="1")
     for k in ("OPENJARVIS_CONFIG_DIR", "JARVIS_CONFIG_DIR", "JARVIS_FRAMEWORK_TOML",
-              "JARVIS_BACKEND"):
+              "JARVIS_BACKEND", "JARVIS_LOG_DIR"):
         env.pop(k, None)
     env.update(extra)
     return env
