@@ -521,6 +521,191 @@ def t_a_preview_answers_with_a_plan():
     check("a preview of nothing says so rather than raising", out["ok"] is False, out)
 
 
+# ── the ROUTES themselves: preview is a DRY RUN (2026-10-20 field bug) ─────
+#
+# THE BUG THIS PINS. install()'s do_POST used to call
+#
+#     request_import(body if route == PATHS[1] else body)
+#
+# whose two branches are the same expression, so POST /api/notion/preview (the
+# documented dry run) ran the IMPORT first: it raised a real
+# import_notion_export approval card, wrote a real folder into the vault, and
+# only then overwrote the answer with preview(). Measured on the owner's PC:
+# two preview calls raised two cards (both approved) and imported twice; the
+# second preview then refused with "there is already a folder called ...".
+#
+# The checks below therefore drive the INSTALLED HANDLER, not preview()/
+# request_import() directly - the functions were always right; the wiring was
+# not. The gate is a stand-in that records what it was asked and that would
+# ANSWER YES, so the buggy wiring gets past the card and really writes: that is
+# what makes (a) and (b) bite. A gate that raised would abort the buggy import
+# before it wrote anything and the checks would pass on the broken code.
+
+class _FakeWFile:
+    def __init__(self):
+        self.buf = b""
+
+    def write(self, data):
+        self.buf += data
+
+
+class RouteStand:
+    """A stand-in for the core's Handler and its three callbacks - the shape
+    jarvis_plugins.py calls install() with, and a real response to read."""
+
+    def __init__(self, origin=True, token=True):
+        self.calls, self.status, self.payload = [], None, None
+        self.origin, self.token = origin, token
+        core = self
+
+        class Handler:
+            def __init__(self, path="/", body=b"{}"):
+                self.path, self.body = path, body
+                self.wfile = _FakeWFile()
+
+            def do_GET(self):
+                core.calls.append(("GET", self.path))
+
+            def do_POST(self):
+                core.calls.append(("POST", self.path))
+
+            def send_response(self, code):
+                core.status = code
+
+            def send_header(self, *args):
+                pass
+
+            def end_headers(self):
+                pass
+
+        self.Handler = Handler
+
+    def origin_ok(self, req):
+        return self.origin
+
+    def token_ok(self, req):
+        return self.token
+
+    def read_body(self, req):
+        return req.body
+
+    def post(self, path, body):
+        req = self.Handler(path, json.dumps(body).encode("utf-8"))
+        req.do_POST()
+        raw = req.wfile.buf.decode("utf-8") or "{}"
+        self.payload = json.loads(raw)
+        return self.status, self.payload
+
+
+def _route_stand():
+    N._reset_for_tests()
+    stand = RouteStand()
+    line = N.install(stand.Handler, origin_ok=stand.origin_ok,
+                     token_ok=stand.token_ok, read_body=stand.read_body)
+    check("(set-up) install() arms the two routes", isinstance(line, str)
+          and "Notion" in line, line)
+    return stand
+
+
+def _vault_listing() -> list:
+    return sorted(p.relative_to(VAULT).as_posix() for p in VAULT.rglob("*"))
+
+
+class _Approved:
+    allowed = True
+    outcome = "approved"
+
+
+def _record_yes(asked):
+    def gate(action, detail, prompt):
+        asked.append((action, detail, prompt))
+        return _Approved()
+    return gate
+
+
+def t_the_preview_route_is_a_dry_run():
+    """(a) preview raises NO card, and (b) writes NOTHING into the vault."""
+    src = fresh()
+    write(src, f"Meeting Notes {A32}.md", "# Meeting Notes\n\nA body.\n")
+    stand = _route_stand()
+    planned = N.plan_import(str(src), str(VAULT))      # what it WOULD make
+    asked = []
+    real_gate = N._gate
+    N._gate = _record_yes(asked)
+    before = _vault_listing()
+    try:
+        code, out = stand.post(N.PATHS[0], {"source": str(src), "vault": str(VAULT)})
+        after = _vault_listing()
+    finally:
+        N._gate = real_gate
+    check("(a) POST /api/notion/preview raises NO approval card",
+          asked == [], asked)
+    check("(b) ... and writes NOTHING into the vault (listing before == after)",
+          before == after, {"before": before, "after": after})
+    check("(b) ... and the folder it planned to create is not there",
+          not (VAULT / planned.name).exists(), planned.name)
+    check("the preview still answers 200 with the plan and its plain words",
+          code == 200 and out.get("ok") is True
+          and (out.get("plan") or {}).get("notes") == 1
+          and "note" in str(out.get("said") or ""), (code, out))
+    check("the answer is the PREVIEW's, not an import result",
+          "folder" not in out and "receipt_id" not in out, out)
+
+
+def t_the_import_route_still_asks_one_card_and_imports():
+    """(c) the import route: exactly ONE card, and the import runs after the yes."""
+    src = fresh()
+    write(src, f"Meeting Notes {A32}.md", "# Meeting Notes\n\nA body.\n")
+    stand = _route_stand()
+    planned = N.plan_import(str(src), str(VAULT))
+    asked = []
+    real_gate = N._gate
+    N._gate = _record_yes(asked)
+    try:
+        code, out = stand.post(N.PATHS[1], {"source": str(src), "vault": str(VAULT)})
+    finally:
+        N._gate = real_gate
+    check("the import route asks the gate exactly ONCE", len(asked) == 1,
+          [a[0] for a in asked])
+    check("... about importing a Notion export",
+          bool(asked) and asked[0][0] == N.GATE_ACTION, asked[:1])
+    check("... and the card names the folder it will create",
+          bool(asked) and (asked[0][1] or {}).get("folder") == planned.name,
+          asked[:1])
+    check("with the yes it really imported", code == 200 and out.get("ok") is True
+          and (VAULT / planned.name / "Meeting Notes.md").is_file(), out)
+    check("nothing of its staging folder is left in the vault",
+          not [p for p in VAULT.rglob("*") if p.name.startswith(".jarvis")],
+          _vault_listing())
+
+
+def t_the_preview_route_refuses_a_collision_without_importing():
+    """(d) a colliding preview refuses in words and touches nothing."""
+    src = fresh()
+    write(src, f"Meeting Notes {A32}.md", "# Meeting Notes\n\nA body.\n")
+    planned = N.plan_import(str(src), str(VAULT))
+    already = VAULT / planned.name
+    already.mkdir()
+    (already / "existing.md").write_text("kept, not overwritten", encoding="utf-8")
+    stand = _route_stand()
+    asked = []
+    real_gate = N._gate
+    N._gate = _record_yes(asked)
+    before = _vault_listing()
+    try:
+        code, out = stand.post(N.PATHS[0], {"source": str(src), "vault": str(VAULT)})
+        after = _vault_listing()
+    finally:
+        N._gate = real_gate
+    told = f"{out.get('said') or ''} {((out.get('plan') or {}).get('refused') or '')}"
+    check("preview says plainly that the folder is already there",
+          out.get("ok") is False and "already a folder" in told, told[:300])
+    check("... and asks for NO card", asked == [], asked)
+    check("... and writes nothing (the existing file is untouched)",
+          before == after and (already / "existing.md").read_text(encoding="utf-8")
+          == "kept, not overwritten", {"before": before, "after": after})
+
+
 # ── what it must never do ───────────────────────────────────────────────────
 
 def t_it_does_not_name_jarvis_memory():
@@ -572,6 +757,9 @@ def main():
              t_the_run_needs_a_persons_yes,
              t_the_route_asks_the_gate_and_a_no_brings_nothing_in,
              t_a_preview_answers_with_a_plan,
+             t_the_preview_route_is_a_dry_run,
+             t_the_import_route_still_asks_one_card_and_imports,
+             t_the_preview_route_refuses_a_collision_without_importing,
              t_it_does_not_name_jarvis_memory,
              t_the_settings_folder_is_the_one_variable_every_module_reads,
              t_it_opens_no_socket_and_runs_no_program)
