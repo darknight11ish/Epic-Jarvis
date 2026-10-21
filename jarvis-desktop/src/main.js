@@ -4553,6 +4553,13 @@ async function stopPushToTalk() {
   inhaleReactor();
   try {
     const heard = await invokeStrict("stop_voice_capture");
+    if (heard.silent) {
+      // The PC's own microphone-recovery sentence (voice.rs, backend
+      // MIC_SILENT_WORDS): the DEVICE is deaf, not the owner's voice. Shown
+      // before the voice-check wording below, which would blame the owner.
+      announce(heard.reason || "Microphone is returning silence - check the mute switch or Windows input device.", "assertive");
+      return;
+    }
     if (!heard.available) {
       announce(heard.reason || "Speech recognition is not available here.", "assertive");
       return;

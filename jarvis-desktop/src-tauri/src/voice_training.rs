@@ -264,6 +264,7 @@ pub fn start_voice_sample(
     let (stop_tx, stop_rx) = mpsc::channel();
     let join = spawn_capture_thread(
         Arc::clone(&samples),
+        None,
         ready_tx,
         stop_rx,
         |_samples, _spec, stop_rx| {
@@ -271,12 +272,17 @@ pub fn start_voice_sample(
         },
     );
     match wait_for_ready(ready_rx, stop_tx.clone()) {
-        Ok(spec) => {
+        Ok(report) => {
+            if report.silent {
+                let _ = stop_tx.send(());
+                let _ = join.join();
+                return Err(crate::voice::MIC_SILENT_WORDS.to_string());
+            }
             *guard = Some(ActiveSample {
                 slot,
                 stop_tx,
                 samples,
-                spec,
+                spec: report.spec,
                 join,
             });
             Ok(())

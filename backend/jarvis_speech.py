@@ -341,6 +341,42 @@ MIC_ATTEMPTS_KEPT = 3
 _mic_lock = threading.Lock()
 _mic_attempts: list = []        # [{"at": epoch, "peak_rms": 0.0..1.0, "device": str}]
 
+#: The one sentence the owner reads when a recording came back as EXACT digital
+#: silence - the microphone is deaf, not the room quiet. The desktop's own
+#: microphone recovery (`jarvis-desktop/src-tauri/src/voice.rs`,
+#: `MIC_SILENT_WORDS`) says the same words, so the Bar and this reply cannot
+#: word one failure two ways.
+MIC_SILENT_WORDS = ("Microphone is returning silence - check the mute switch "
+                    "or Windows input device.")
+#: How much of a clip is inspected for the deaf-microphone state: the same
+#: 400 ms window voice.rs probes when a recording STARTS.
+MIC_PROBE_SECONDS = 0.4
+
+
+def digital_zero_prefix(samples, sample_rate, seconds: float = MIC_PROBE_SECONDS) -> bool:
+    """True only when the first `seconds` of this clip are EXACT digital zeros.
+
+    This is Pillar 28's state, not a quiet room: even a -90 dBFS room is one or
+    two counts on a 16-bit scale, and ANY nonzero sample means the device is not
+    deaf. An empty or unreadable head is not proof of anything, so it is False.
+    """
+    try:
+        need = int(float(sample_rate or 0) * float(seconds))
+    except (TypeError, ValueError):
+        return False
+    if need <= 0:
+        return False
+    try:
+        head = samples[:need]
+        if head is None or len(head) == 0:
+            return False
+        for value in head:
+            if float(value) != 0.0:
+                return False
+        return True
+    except (TypeError, ValueError):
+        return False
+
 
 def _mic_device_words(mic: str) -> str:
     """The input device's name, from the one thing the backend is told."""
@@ -2087,6 +2123,12 @@ class Heard:
     #: and was refused before any voice check - "say a little more".
     too_short: bool = False
     min_seconds: float = 0.0
+    #: The first 400 ms of this clip were EXACT digital zeros: the microphone
+    #: is deaf (voice.rs re-opens the device ONCE at the START of a recording
+    #: when it sees this then). `reason` carries MIC_SILENT_WORDS; a client
+    #: shows it and records nothing. Additive: an older client ignores it, and
+    #: an older PC never sends it.
+    silent: bool = False
     #: source=wake_word only (2026-09-27): the owner's "hey Jarvis" clip,
     #: but another microphone's copy of the same words (within
     #: SAME_WAKE_SECONDS) was already acted on. No words, `wake_heard`
@@ -2602,14 +2644,25 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
     seconds = round(len(samples) / float(sample_rate or 16000), 2)
     wake = source == SOURCE_WAKE_WORD
 
+
     # 2. Is there any speech at all? Silero VAD, when installed. A cough, a
     #    door, the fan: refused here, before anything else looks at it.
     t = time.monotonic()
     span = _speech_span(samples, sample_rate)
     steps["vad"] = (time.monotonic() - t) * 1000.0
     if span is None:
+        # A clip whose first 400 ms are EXACT digital zeros came from a deaf
+        # microphone, not a quiet room: say that, instead of the misleading
+        # "no speech in that recording" - and PC help's digital_zero_mic
+        # section (Pillar 28) keeps counting the attempt either way. The
+        # desktop retries the device once at the START of a recording
+        # (voice.rs); this catches a device that went deaf mid-session, and any
+        # client whose capture does not probe.
+        silent_mic = digital_zero_prefix(samples, sample_rate)
         return Heard(False, source=source, seconds=seconds,
-                     reason="no speech in that recording")
+                     reason=MIC_SILENT_WORDS if silent_mic
+                     else "no speech in that recording",
+                     silent=silent_mic)
     if span != "skip":
         samples = samples[span[0]:span[1]]
     # How much was said: the VAD's span, or (no VAD installed) the whole

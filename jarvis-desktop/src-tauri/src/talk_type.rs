@@ -19,10 +19,18 @@
 //! ## One press, start to finish
 //!
 //! 1. The key goes down (`Alt+Shift+T` unless the owner changed it). The
-//!    window in front is remembered. Before the microphone opens: the event
-//!    stream must be live (rule 4), App lock must not be locked, Jarvis must
-//!    be on THIS PC (the audio never leaves it), nothing else may hold the
-//!    microphone, and the PC must say the switch is on.
+//!    window in front is remembered. The synchronous gates are asked FIRST:
+//!    the event stream must be live (rule 4), App lock must not be locked,
+//!    Jarvis must be on THIS PC (the audio never leaves it), and nothing else
+//!    may hold the microphone. Then the microphone opens AT ONCE, and the
+//!    PC is asked whether the switch is on while it is already listening:
+//!    the words spoken during that request are kept in a bounded 300 ms
+//!    pre-roll ring (`voice.rs` `Preroll`, Handy's pattern), so the first
+//!    consonant is not clipped. If the PC says the switch is off, that ring
+//!    is dropped with the stream - nothing is checked, transcribed, typed or
+//!    kept. An exact-digital-silence microphone (the state some PCs are left
+//!    in after sleep) is re-opened ONCE by `voice.rs`; if it is still silent
+//!    the owner is told in one sentence and nothing is recorded.
 //! 2. The microphone records into memory. The tray icon (and the floating
 //!    face, when it is shown) says "listening". Let go after a HOLD and it
 //!    stops; a quick TAP keeps it listening until the key is pressed again.
@@ -77,8 +85,30 @@ pub fn listening() -> bool {
 struct Capture {
     stop_tx: mpsc::Sender<()>,
     samples: Arc<Mutex<Vec<i16>>>,
+    /// The bounded 300 ms pre-roll (`voice.rs`) captured between the key going
+    /// down and the owner's gates passing. Handed to the front of the clip
+    /// once, by `begin()`, and empty from then on.
+    preroll: Arc<Mutex<crate::voice::Preroll>>,
     spec: hound::WavSpec,
     join: JoinHandle<()>,
+}
+
+impl Capture {
+    /// The gates passed: the pre-roll (never more than 300 ms) becomes the
+    /// front of the clip, and the ring is emptied. Called exactly once.
+    fn begin(&self) {
+        let prefix = self
+            .preroll
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take();
+        let mut buf = self
+            .samples
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        buf.clear();
+        buf.extend_from_slice(&prefix);
+    }
 }
 
 #[derive(Default)]
@@ -346,26 +376,14 @@ async fn switch_on(app: &AppHandle) -> Result<(), String> {
 }
 
 async fn start(app: AppHandle, gen: u64) {
-    let checked = match may_act(&app).and_then(|()| mic_free(&app)) {
-        Err(why) => Err(why.to_string()),
-        Ok(()) => switch_on(&app).await,
-    };
-    if let Err(why) = checked {
+    // The synchronous gates first: nothing opens a microphone while the link
+    // is stale, the app is locked, Jarvis is not on this PC, or another
+    // feature holds the device.
+    if let Err(why) = may_act(&app).and_then(|()| mic_free(&app)) {
         end_if(&app, gen);
         if app.state::<TalkTypeState>().current(gen) {
-            tell(&app, &why);
+            tell(&app, why);
         }
-        return;
-    }
-    // Stopped (Stop everything) while the PC was asked: the microphone is
-    // not opened at all.
-    if !app.state::<TalkTypeState>().current(gen) {
-        return;
-    }
-    // Asked again right before opening: the round trip above was an await.
-    if let Err(why) = mic_free(&app) {
-        end_if(&app, gen);
-        tell(&app, why);
         return;
     }
 
@@ -386,6 +404,37 @@ async fn start(app: AppHandle, gen: u64) {
             return;
         }
     };
+
+    // Stopped (Stop everything) while the microphone was opening: close it,
+    // keep nothing.
+    if !app.state::<TalkTypeState>().current(gen) {
+        let _ = capture.stop_tx.send(());
+        return;
+    }
+
+    // The PC's own answer, asked while the microphone is already holding the
+    // pre-roll: is talk-to-type on? If not, nothing in that ring is ever
+    // checked, transcribed, typed or kept - it is dropped with the stream.
+    if let Err(why) = switch_on(&app).await {
+        let _ = capture.stop_tx.send(());
+        end_if(&app, gen);
+        if app.state::<TalkTypeState>().current(gen) {
+            tell(&app, &why);
+        }
+        return;
+    }
+
+    // Asked again right before starting: that await was a round trip, and
+    // another window may have taken the microphone in it.
+    if let Err(why) = mic_free(&app) {
+        let _ = capture.stop_tx.send(());
+        end_if(&app, gen);
+        tell(&app, why);
+        return;
+    }
+
+    // The gates passed: the pre-roll becomes the front of the clip.
+    capture.begin();
 
     let state = app.state::<TalkTypeState>();
     let mut phase = state.phase();
@@ -430,10 +479,13 @@ async fn start(app: AppHandle, gen: u64) {
 /// device), so it runs on a blocking thread.
 fn open_microphone(app: AppHandle, gen: u64) -> Result<Capture, String> {
     let samples: Arc<Mutex<Vec<i16>>> = Arc::new(Mutex::new(Vec::new()));
+    let preroll: Arc<Mutex<crate::voice::Preroll>> =
+        Arc::new(Mutex::new(crate::voice::Preroll::default()));
     let (ready_tx, ready_rx) = mpsc::channel();
     let (stop_tx, stop_rx) = mpsc::channel();
     let join = crate::voice::spawn_capture_thread(
         Arc::clone(&samples),
+        Some(Arc::clone(&preroll)),
         ready_tx,
         stop_rx,
         move |_samples, _spec, stop_rx| {
@@ -452,12 +504,23 @@ fn open_microphone(app: AppHandle, gen: u64) -> Result<Capture, String> {
         },
     );
     match crate::voice::wait_for_ready(ready_rx, stop_tx.clone()) {
-        Ok(spec) => Ok(Capture {
-            stop_tx,
-            samples,
-            spec,
-            join,
-        }),
+        Ok(report) => {
+            if report.silent {
+                // Exact digital silence even after the one re-open in
+                // voice.rs: record nothing, close the microphone, and let the
+                // one notification say what to check.
+                let _ = stop_tx.send(());
+                let _ = join.join();
+                return Err(crate::voice::MIC_SILENT_WORDS.to_string());
+            }
+            Ok(Capture {
+                stop_tx,
+                samples,
+                preroll,
+                spec: report.spec,
+                join,
+            })
+        }
         Err(why) => {
             let _ = join.join();
             Err(why)
@@ -509,6 +572,7 @@ async fn finish(app: &AppHandle, gen: u64, capture: Capture, target: isize) -> R
         samples,
         spec,
         join,
+        preroll: _,
     } = capture;
     let _ = stop_tx.send(());
     let _ = tauri::async_runtime::spawn_blocking(move || join.join()).await;

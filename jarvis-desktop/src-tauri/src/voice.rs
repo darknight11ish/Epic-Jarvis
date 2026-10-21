@@ -131,6 +131,7 @@
 //! route's `body.get("enabled")`), but worth checking against the real file
 //! before trusting it blind.
 
+use std::collections::VecDeque;
 use std::io::Cursor;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
@@ -166,24 +167,226 @@ pub(crate) const TALK_TYPE_HAS_MIC: &str =
 /// back from the capture thread before giving up and reporting the
 /// microphone as unreachable, rather than returning success for a stream
 /// that never actually opened.
-const STREAM_READY_TIMEOUT: Duration = Duration::from_secs(3);
+/// The sentence the owner reads when the microphone is returning EXACT
+/// digital silence even after one re-open: the mute switch, the Windows input
+/// device, or the state some devices are left in after sleep. Kept word for
+/// word beside the PC's own copy (`backend/jarvis_speech.py`,
+/// `MIC_SILENT_WORDS`) so both ends say the same thing.
+pub(crate) const MIC_SILENT_WORDS: &str =
+    "Microphone is returning silence - check the mute switch or Windows input device.";
+/// How many seconds `wait_for_ready` gives the capture thread: opening the
+/// device, the zero probe (at most `2 x ZERO_PROBE`), and a possible single
+/// re-open after exact digital silence.
+const STREAM_READY_TIMEOUT: Duration = Duration::from_secs(6);
+/// How much of a just-opened recording is inspected for exact digital zeros
+/// before the microphone is called deaf. Long enough for the first callbacks on
+/// every device this app has run on, short enough that the sentence above is on
+/// screen before the owner has said much.
+const ZERO_PROBE: Duration = Duration::from_millis(400);
+/// ... and how long the probe waits for those samples before deciding it cannot
+/// tell. A device that has delivered nothing is never called silent.
+const ZERO_PROBE_WAIT: Duration = Duration::from_millis(1500);
+/// The pre-roll kept in front of a recording whose gates run AFTER the
+/// microphone opens (talk-to-type, `talk_type.rs`): the last 300 ms before the
+/// recording officially starts. Handy's pattern: bounded, in memory only, and
+/// dropped with the clip.
+pub(crate) const PREROLL: Duration = Duration::from_millis(300);
 
 // ---------------------------------------------------------------------------
 // Shared: opening the microphone
 // ---------------------------------------------------------------------------
 
-/// Builds and starts an input stream on the CURRENT thread, appending every
-/// sample it produces (converted to i16) into `samples`. Returns once the
-/// stream is confirmed playing. The returned `cpal::Stream` must be kept
-/// alive by the caller for capture to continue - dropping it stops the
-/// microphone.
+/// What one probe of a just-opened microphone decided.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ZeroStep {
+    /// Real (if quiet) audio: carry on.
+    Ready,
+    /// Every sample so far is exactly 0.0: re-open the device ONCE.
+    Reopen,
+    /// Still every sample exactly 0 after the one re-open: say so, never loop.
+    Silent,
+}
+
+/// The SINGLE-retry rule, pure so it can be tested without a device: one
+/// re-open, then an honest answer. `attempt` is 1 for the first open. A
+/// quiet-but-not-zero room never reaches this with `silent = true`, because
+/// [`digital_zero`] demands exact zeros.
+pub(crate) fn zero_step(attempt: u8, silent: bool) -> ZeroStep {
+    if !silent {
+        ZeroStep::Ready
+    } else if attempt <= 1 {
+        ZeroStep::Reopen
+    } else {
+        ZeroStep::Silent
+    }
+}
+
+/// True only for EXACT digital zeros - the deaf-microphone state Pillar 28
+/// detects (`jarvis_speech.voice_attempts_status`). A quiet room has a tiny
+/// nonzero noise floor (even -90 dBFS is one or two counts), so it is not this
+/// and is never "recovered" from. An empty clip is not proof of anything and is
+/// not called zero.
+pub(crate) fn digital_zero(samples: &[i16]) -> bool {
+    !samples.is_empty() && samples.iter().all(|&s| s == 0)
+}
+
+/// Samples in `d` of this device's audio, at its own rate and channel count.
+fn samples_in(spec: &hound::WavSpec, d: Duration) -> usize {
+    let per_ms = (spec.sample_rate as u128 * spec.channels as u128) / 1000;
+    (per_ms * d.as_millis()).max(1) as usize
+}
+
+/// How many samples make up [`ZERO_PROBE`] of this device's audio.
+fn probe_len(spec: &hound::WavSpec) -> usize {
+    samples_in(spec, ZERO_PROBE)
+}
+
+/// The last [`PREROLL`] of audio, kept ONLY while a capture is waiting for the
+/// owner's own gates to pass (talk-to-type asks the PC whether the switch is on
+/// before recording officially starts). [`Preroll::take`] hands it to the front
+/// of the clip and empties it; the buffer is bounded to the device's own
+/// 300 ms, and nothing here is ever written to disk.
+#[derive(Default)]
+pub(crate) struct Preroll {
+    buf: VecDeque<i16>,
+    cap: usize,
+}
+
+impl Preroll {
+    /// Set the bound from the device's own format - before the stream starts.
+    pub(crate) fn set_capacity(&mut self, spec: &hound::WavSpec) {
+        self.cap = samples_in(spec, PREROLL);
+        self.trim();
+    }
+
+    pub(crate) fn push(&mut self, data: &[i16]) {
+        self.buf.extend(data.iter().copied());
+        self.trim();
+    }
+
+    fn trim(&mut self) {
+        if self.cap == 0 {
+            self.buf.clear();
+            return;
+        }
+        while self.buf.len() > self.cap {
+            self.buf.pop_front();
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn len(&self) -> usize {
+        self.buf.len()
+    }
+
+    pub(crate) fn clear(&mut self) {
+        self.buf.clear();
+    }
+
+    /// The pre-roll, oldest first, and the ring is empty afterwards.
+    pub(crate) fn take(&mut self) -> Vec<i16> {
+        self.buf.drain(..).collect()
+    }
+}
+
+/// Where one capture callback puts its audio: the recording buffer, and - when
+/// the caller asked for one - the bounded pre-roll ring that will prefix it.
+#[derive(Clone)]
+struct CaptureSink {
+    samples: Arc<Mutex<Vec<i16>>>,
+    preroll: Option<Arc<Mutex<Preroll>>>,
+}
+
+impl CaptureSink {
+    fn new(samples: Arc<Mutex<Vec<i16>>>, preroll: Option<Arc<Mutex<Preroll>>>) -> Self {
+        Self { samples, preroll }
+    }
+
+    fn push(&self, data: &[i16]) {
+        {
+            let mut buf = self
+                .samples
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            buf.extend_from_slice(data);
+        }
+        if let Some(ring) = &self.preroll {
+            ring.lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .push(data);
+        }
+    }
+}
+
+/// What `spawn_capture_thread` reports once the microphone is really open.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct OpenReport {
+    pub spec: hound::WavSpec,
+    /// Every sample of the first [`ZERO_PROBE`] was exactly 0.0, even after the
+    /// one re-open: the device is deaf and the caller must say so.
+    pub silent: bool,
+}
+
+/// Opens the default microphone and starts it, with ONE automatic re-open if
+/// the first [`ZERO_PROBE`] is exact digital silence (the state some devices are
+/// left in after sleep - Pillar 28's finding, which `jarvis_pc_help.
+/// _digital_zero_mic` already REPORTS after three silent attempts; this
+/// RECOVERS from it at the next recording instead of waiting for the doctor).
+/// Never more than one retry, and a quiet-but-not-zero room is never touched:
+/// only exact zeros.
+///
+/// The returned `silent` says the re-open did not help, so the caller can show
+/// [`MIC_SILENT_WORDS`]; the stream is still open in that case, so the caller
+/// decides whether to keep it (a listener may want to carry on and warn) or to
+/// stop it before returning.
 ///
 /// Not `async` and not `Send` in what it returns: `cpal::Stream` cannot
 /// cross a thread boundary, which is the whole reason every caller of this
 /// runs it on a dedicated `std::thread` rather than the async runtime.
 fn open_input_stream(
     samples: Arc<Mutex<Vec<i16>>>,
-) -> Result<(hound::WavSpec, cpal::Stream), String> {
+    preroll: Option<Arc<Mutex<Preroll>>>,
+) -> Result<(hound::WavSpec, cpal::Stream, bool), String> {
+    let mut attempt: u8 = 0;
+    loop {
+        attempt += 1;
+        let sink = CaptureSink::new(Arc::clone(&samples), preroll.as_ref().map(Arc::clone));
+        let (spec, stream) = open_input_stream_once(sink)?;
+        // The pre-roll bound comes from the device's own format, before a
+        // single sample arrives.
+        if let Some(ring) = &preroll {
+            ring.lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .set_capacity(&spec);
+        }
+        stream
+            .play()
+            .map_err(|e| format!("could not start the microphone: {e}"))?;
+        let silent = probe_for_digital_zero(&samples, &spec);
+        match zero_step(attempt, silent) {
+            ZeroStep::Ready => return Ok((spec, stream, false)),
+            ZeroStep::Reopen => {
+                // The one retry: let go of the device, keep nothing from it,
+                // and open it again. Only exact zeros are dropped here.
+                drop(stream);
+                samples
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .clear();
+                if let Some(ring) = &preroll {
+                    ring.lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner())
+                        .clear();
+                }
+            }
+            ZeroStep::Silent => return Ok((spec, stream, true)),
+        }
+    }
+}
+
+/// Builds the input stream WITHOUT starting it: the format is settled here so
+/// [`open_input_stream`] can size the pre-roll before audio arrives.
+fn open_input_stream_once(sink: CaptureSink) -> Result<(hound::WavSpec, cpal::Stream), String> {
     let host = cpal::default_host();
     let device = host
         .default_input_device()
@@ -220,53 +423,74 @@ fn open_input_stream(
     // nothing. The buffer holds PCM samples, not an invariant a panic can
     // corrupt into something unsafe to read, so carrying on with it is right.
     let stream_result = match sample_format {
-        cpal::SampleFormat::I16 => device.build_input_stream(
-            &stream_config,
-            move |data: &[i16], _: &cpal::InputCallbackInfo| {
-                let mut buf = samples
-                    .lock()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner());
-                buf.extend_from_slice(data);
-            },
-            err_fn,
-            None,
-        ),
-        cpal::SampleFormat::U16 => device.build_input_stream(
-            &stream_config,
-            move |data: &[u16], _: &cpal::InputCallbackInfo| {
-                let mut buf = samples
-                    .lock()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner());
-                // u16 PCM is centred on 32768, not 0 - shift before
-                // narrowing, the same conversion `cpal::Sample`'s own
-                // i16 impl documents.
-                buf.extend(data.iter().map(|&s| (s as i32 - 32_768) as i16));
-            },
-            err_fn,
-            None,
-        ),
-        cpal::SampleFormat::F32 => device.build_input_stream(
-            &stream_config,
-            move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                let mut buf = samples
-                    .lock()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner());
-                buf.extend(
-                    data.iter()
-                        .map(|&s| (s.clamp(-1.0, 1.0) * i16::MAX as f32) as i16),
-                );
-            },
-            err_fn,
-            None,
-        ),
+        cpal::SampleFormat::I16 => {
+            let sink = sink.clone();
+            device.build_input_stream(
+                &stream_config,
+                move |data: &[i16], _: &cpal::InputCallbackInfo| sink.push(data),
+                err_fn,
+                None,
+            )
+        }
+        cpal::SampleFormat::U16 => {
+            let sink = sink.clone();
+            device.build_input_stream(
+                &stream_config,
+                move |data: &[u16], _: &cpal::InputCallbackInfo| {
+                    // u16 PCM is centred on 32768, not 0 - shift before
+                    // narrowing, the same conversion `cpal::Sample`'s own
+                    // i16 impl documents.
+                    let converted: Vec<i16> =
+                        data.iter().map(|&s| (s as i32 - 32_768) as i16).collect();
+                    sink.push(&converted);
+                },
+                err_fn,
+                None,
+            )
+        }
+        cpal::SampleFormat::F32 => {
+            let sink = sink.clone();
+            device.build_input_stream(
+                &stream_config,
+                move |data: &[f32], _: &cpal::InputCallbackInfo| {
+                    let converted: Vec<i16> = data
+                        .iter()
+                        .map(|&s| (s.clamp(-1.0, 1.0) * i16::MAX as f32) as i16)
+                        .collect();
+                    sink.push(&converted);
+                },
+                err_fn,
+                None,
+            )
+        }
         // Guarded above - every other variant already returned.
         _ => unreachable!("sample_format was checked to be I16, U16 or F32 above"),
     };
     let stream = stream_result.map_err(|e| format!("could not open the microphone: {e}"))?;
-    stream
-        .play()
-        .map_err(|e| format!("could not start the microphone: {e}"))?;
     Ok((spec, stream))
+}
+
+/// Watches the first [`ZERO_PROBE`] of a just-started recording for exact
+/// digital zeros. Waits at most [`ZERO_PROBE_WAIT`]; a device that has delivered
+/// nothing is NOT called deaf (returning `false`), because "no samples yet" is
+/// not "silence".
+fn probe_for_digital_zero(samples: &Arc<Mutex<Vec<i16>>>, spec: &hound::WavSpec) -> bool {
+    let need = probe_len(spec);
+    let deadline = Instant::now() + ZERO_PROBE_WAIT;
+    loop {
+        {
+            let buf = samples
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if buf.len() >= need {
+                return digital_zero(&buf[..need]);
+            }
+        }
+        if Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
 }
 
 /// Spawns the dedicated thread every capture mode needs: opens the
@@ -278,30 +502,33 @@ fn open_input_stream(
 /// drops, releasing the microphone.
 pub(crate) fn spawn_capture_thread(
     samples: Arc<Mutex<Vec<i16>>>,
-    ready_tx: mpsc::Sender<Result<hound::WavSpec, String>>,
+    preroll: Option<Arc<Mutex<Preroll>>>,
+    ready_tx: mpsc::Sender<Result<OpenReport, String>>,
     stop_rx: mpsc::Receiver<()>,
     body: impl FnOnce(&Arc<Mutex<Vec<i16>>>, hound::WavSpec, &mpsc::Receiver<()>) + Send + 'static,
 ) -> JoinHandle<()> {
-    std::thread::spawn(move || match open_input_stream(Arc::clone(&samples)) {
-        Ok((spec, stream)) => {
-            if ready_tx.send(Ok(spec)).is_err() {
-                return; // the caller already gave up waiting
+    std::thread::spawn(
+        move || match open_input_stream(Arc::clone(&samples), preroll) {
+            Ok((spec, stream, silent)) => {
+                if ready_tx.send(Ok(OpenReport { spec, silent })).is_err() {
+                    return; // the caller already gave up waiting
+                }
+                body(&samples, spec, &stop_rx);
+                drop(stream); // explicit: this is the line that stops the mic
             }
-            body(&samples, spec, &stop_rx);
-            drop(stream); // explicit: this is the line that stops the mic
-        }
-        Err(reason) => {
-            let _ = ready_tx.send(Err(reason));
-        }
-    })
+            Err(reason) => {
+                let _ = ready_tx.send(Err(reason));
+            }
+        },
+    )
 }
 
 pub(crate) fn wait_for_ready(
-    ready_rx: mpsc::Receiver<Result<hound::WavSpec, String>>,
+    ready_rx: mpsc::Receiver<Result<OpenReport, String>>,
     stop_tx_on_timeout: mpsc::Sender<()>,
-) -> Result<hound::WavSpec, String> {
+) -> Result<OpenReport, String> {
     match ready_rx.recv_timeout(STREAM_READY_TIMEOUT) {
-        Ok(Ok(spec)) => Ok(spec),
+        Ok(Ok(report)) => Ok(report),
         Ok(Err(reason)) => Err(reason),
         Err(_) => {
             // The thread is still doing *something* - drop the stop sender so
@@ -350,6 +577,12 @@ struct HeardRaw {
     /// clip was too short to be sure it was the owner, and `reason` says so.
     #[serde(default)]
     too_short: bool,
+    /// The clip's first 400 ms were EXACT digital zeros: the microphone is
+    /// deaf, not the room quiet, and `reason` is the sentence to show
+    /// (backend `MIC_SILENT_WORDS`, word for word). Missing (an older PC) is
+    /// read as `false`.
+    #[serde(default)]
+    silent: bool,
     /// May an answer drawn from email, the calendar, notes or memory be READ
     /// ALOUD for this request? Missing (an older PC) is read as `false`.
     #[serde(default)]
@@ -434,6 +667,10 @@ pub struct HeardReply {
     /// Too short to check; `reason` says how much more to say. Not "that
     /// did not sound like you".
     pub too_short: bool,
+    /// The microphone is returning exact digital silence, not the room being
+    /// quiet; `reason` says what to check. Shown before any voice-check
+    /// wording, which would blame the owner's voice for a hardware failure.
+    pub silent: bool,
     /// The server says a private answer may be read aloud for this
     /// request; `false` when it did not say (private-speech.js).
     pub private_aloud: bool,
@@ -475,6 +712,7 @@ impl HeardReply {
             awake_seconds: 0.0,
             stop: false,
             too_short: false,
+            silent: false,
             private_aloud: false,
             question_private: false,
             memory_aloud: false,
@@ -506,6 +744,7 @@ impl From<HeardRaw> for HeardReply {
             awake_seconds: raw.awake_seconds,
             stop: raw.stop,
             too_short: raw.too_short,
+            silent: raw.silent,
             private_aloud: raw.private_aloud,
             question_private: raw.question_private,
             memory_aloud: raw.memory_aloud,
@@ -892,6 +1131,7 @@ pub fn start_voice_capture(
 
     let join = spawn_capture_thread(
         Arc::clone(&samples),
+        None,
         ready_tx,
         stop_rx,
         move |samples, _spec, stop_rx| {
@@ -921,11 +1161,19 @@ pub fn start_voice_capture(
     );
 
     match wait_for_ready(ready_rx, stop_tx.clone()) {
-        Ok(spec) => {
+        Ok(report) => {
+            if report.silent {
+                // Exact digital silence even after the one re-open. Say so
+                // (the Bar shows it) and close the microphone; never record a
+                // clip known to be deaf.
+                let _ = stop_tx.send(());
+                let _ = join.join();
+                return Err(MIC_SILENT_WORDS.to_string());
+            }
             *guard = Some(ActiveCapture {
                 stop_tx,
                 samples,
-                spec,
+                spec: report.spec,
                 join,
             });
             Ok(())
@@ -1789,8 +2037,12 @@ fn continue_without_echo_cancelling(
         "[voice] the echo-cancelled microphone stopped ({why}); carrying on with the ordinary one"
     ));
     let samples: Arc<Mutex<Vec<i16>>> = Arc::new(Mutex::new(Vec::new()));
-    match open_input_stream(Arc::clone(&samples)) {
-        Ok((spec, stream)) => {
+    match open_input_stream(Arc::clone(&samples), None) {
+        Ok((_spec, stream, silent)) if silent => {
+            drop(stream);
+            stop_listening_because(app, MIC_SILENT_WORDS.to_string());
+        }
+        Ok((spec, stream, _silent)) => {
             let _ = app.emit(
                 VOICE_LISTENING,
                 ListenInfo {
@@ -1969,6 +2221,7 @@ fn open_listener(
     let app = app.clone();
     let join = spawn_capture_thread(
         Arc::clone(&samples),
+        None,
         ready_tx,
         stop_rx,
         move |samples, spec, stop_rx| {
@@ -1977,7 +2230,12 @@ fn open_listener(
     );
 
     match wait_for_ready(ready_rx, stop_tx.clone()) {
-        Ok(_spec) => {
+        Ok(report) => {
+            if report.silent {
+                let _ = stop_tx.send(());
+                let _ = join.join();
+                return Err(MIC_SILENT_WORDS.to_string());
+            }
             *guard = Some(AutoListenHandle { stop_tx, join });
             Ok(ListenInfo {
                 echo_cancelling: false,
@@ -3071,5 +3329,91 @@ mod face_voice_tests {
         assert_eq!(back["track"], "100:AAAA");
         let clock = serde_json::to_value(clock()).expect("serialises");
         assert!(clock.get("track").is_none(), "a clock carries no track");
+    }
+}
+
+#[cfg(test)]
+mod mic_recovery_tests {
+    use super::*;
+
+    fn spec(rate: u32, channels: u16) -> hound::WavSpec {
+        hound::WavSpec {
+            channels,
+            sample_rate: rate,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        }
+    }
+
+    #[test]
+    fn only_exact_digital_zeros_are_deaf_silence() {
+        assert!(digital_zero(&[0, 0, 0, 0]));
+        // A quiet room is NOT this: even -90 dBFS is one count on a 16-bit
+        // scale, and one count anywhere means the device is not deaf.
+        assert!(!digital_zero(&[0, 0, 1, 0]));
+        assert!(
+            !digital_zero(&[0, -1, 0]),
+            "a -90 dBFS sample is not silence"
+        );
+        // Nothing captured yet proves nothing.
+        assert!(!digital_zero(&[]));
+    }
+
+    #[test]
+    fn the_reopen_is_attempted_once_and_never_looped() {
+        // A mock device: each entry answers "was this attempt all zeros?".
+        fn opens_until_answer(silent_on_open: &[bool]) -> (u8, ZeroStep) {
+            let mut attempts = 0u8;
+            loop {
+                attempts += 1;
+                let silent = silent_on_open
+                    .get((attempts - 1) as usize)
+                    .copied()
+                    .unwrap_or(true);
+                match zero_step(attempts, silent) {
+                    ZeroStep::Reopen => continue,
+                    answer => return (attempts, answer),
+                }
+            }
+        }
+        // Deaf, then real audio: exactly TWO opens, then it works.
+        assert_eq!(opens_until_answer(&[true, false]), (2, ZeroStep::Ready));
+        // Deaf every time: exactly two opens, then the honest sentence - the
+        // one-retry rule, never a loop.
+        assert_eq!(
+            opens_until_answer(&[true, true, true]),
+            (2, ZeroStep::Silent)
+        );
+        // Healthy first time: one open.
+        assert_eq!(opens_until_answer(&[false]), (1, ZeroStep::Ready));
+    }
+
+    #[test]
+    fn the_preroll_is_bounded_to_300_ms_and_hands_over_exactly_once() {
+        let s = spec(16_000, 1);
+        // 300 ms at 16 kHz mono is 4,800 samples.
+        assert_eq!(samples_in(&s, PREROLL), 4_800);
+        let mut ring = Preroll::default();
+        assert!(ring.take().is_empty(), "the ring starts empty");
+        ring.set_capacity(&s);
+        // More than 300 ms arrives while the owner's gates are being asked:
+        // only the LAST 300 ms is kept.
+        ring.push(&vec![1i16; 7_000]);
+        assert_eq!(ring.len(), 4_800);
+        // The clip: the ring in front of what is recorded next, exactly.
+        let mut clip = ring.take();
+        assert_eq!(ring.len(), 0, "the ring is empty after the hand-over");
+        clip.extend_from_slice(&[7i16; 5]);
+        assert_eq!(clip.len(), 4_805);
+        assert_eq!(&clip[4_795..], &[1, 1, 1, 1, 1, 7, 7, 7, 7, 7]);
+        // A second take hands over nothing - never the same audio twice.
+        assert!(ring.take().is_empty());
+    }
+
+    #[test]
+    fn preroll_and_probe_lengths_follow_the_device_not_a_constant() {
+        let stereo48 = spec(48_000, 2);
+        assert_eq!(samples_in(&stereo48, PREROLL), 28_800); // 300 ms x 48000 x 2
+        assert_eq!(samples_in(&spec(16_000, 1), ZERO_PROBE), 6_400); // 400 ms
     }
 }
