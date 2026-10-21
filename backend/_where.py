@@ -1010,6 +1010,22 @@ SHIPPED = (
     # this project's audits look for. Standard library only, and no patch:
     # plugins/ready/notion-obsidian calls its install().
     "jarvis_notion_obsidian.py",
+    # A read-only plan for an Obsidian vault (2026-10-20, the owner's
+    # "Full Part II now"): the Phase-2 organizer whose DEFAULT is the
+    # least destructive scheme, mocs_only - no file moves, only tags
+    # merged without erasing the owner's, an up: [[_MOC - Topic]] link
+    # per note, _MOC - <Topic>.md hubs and 00 - Vault Home.md. The plan
+    # is a genuine dry run (reads the vault, writes nothing anywhere,
+    # raises no card, calls no model, embeds nothing), the switch is
+    # OFF by default behind [vault_organizer] enabled = false, and the
+    # routes are PC-only. topic_folders and para preview their moves;
+    # the writer (ONE card + guardian snapshots + one-click Undo) is
+    # the follow-up slice and is NOT claimed here. It reuses
+    # jarvis_notes for the vault resolution and the inside-the-vault
+    # rule, and jarvis_documents/jarvis_file_guardian are untouched.
+    # Standard library only, and no patch: plugins/ready/vault-organizer
+    # calls its install().
+    "jarvis_vault_organizer.py",
     # Two-stage context compaction (2026-10-16, the owner's "have Jarvis keep
     # the thread"). Phase 1: a cleared older tool result becomes a small exact
     # stub - the tool, what it was aimed at, an outcome that says

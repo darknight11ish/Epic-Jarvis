@@ -277,6 +277,18 @@ NOTE_NOTE = "After Jarvis has read outside text in a chat, a note still waits fo
 #: note writes already do with NOTE_NOTE). NOTE_READ and NOTE_NOTE above were
 #: written for the reads and the note writes that were on the list first, and
 #: say the wrong thing on a file read, a Logseq page or the power mode.
+#: A row's own note for an action that is NOT one of the switchable (LOOSE)
+#: writes above and is not in MUST_ASK: the default is NOTE_FILE, which speaks
+#: only about "no app switch". The organizer needs the other three promises
+#: said too - the vault it touches, ONE card, and Undo.
+NOTE_EXTRA = {
+    "organize_obsidian_vault": (
+        "It changes only notes inside the vault the owner named, under ONE card "
+        "for the whole batch; nothing is deleted, and ONE Undo puts the vault "
+        "back. There is no app switch for it - going looser is a hand edit of "
+        "the settings file."),
+}
+
 NOTE_ROW = {
     "read_files_readonly": ("Reading happens on this PC and writes nothing back. A chat that "
                             "read a file counts as having read outside text, so a later web "
@@ -488,7 +500,16 @@ GROUPS = (
                             # itself, so "Always asks" would be a claim the code does not
                             # keep. No switch either, so the honest note is NOTE_FILE -
                             # loosening this one is a hand edit, not an app setting.
-                            "import_notion_export"]),
+                            # The Phase-2 Obsidian vault organizer
+                            # (jarvis_vault_organizer.py, 2026-10-20): its writer
+                            # changes the owner's own notes and folder shape under ONE
+                            # card for the whole batch, after a read-only plan the owner
+                            # saw. Like the converter's row it sits with the writes to
+                            # the vault, its tier is the file's own "ask" line, and it
+                            # is NOT in MUST_ASK for the same reason (the module calls
+                            # jarvis_gate.check and does not refuse a looser tier
+                            # itself). The plan route raises NO card at all.
+                            "import_notion_export", "organize_obsidian_vault"]),
     ("Timers and reminders", ["fixed:timers", "fixed:repeats", "fixed:goals",
                               "referee_tick", "schedule_repeat"]),
     ("Your smart home", ["fixed:lights", "home_control"]),
@@ -873,7 +894,7 @@ def _row(action: str, *, here: bool) -> dict:
         if row.get("lockdown"):
             row["note"] += " " + LOCKDOWN_ROW_NOTE
         return row
-    row["note"] = NOTE_FILE
+    row["note"] = NOTE_EXTRA.get(action) or NOTE_FILE
     if row.get("lockdown"):
         row["note"] += " " + LOCKDOWN_ROW_NOTE
     return row

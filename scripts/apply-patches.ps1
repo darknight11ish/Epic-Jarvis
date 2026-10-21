@@ -1994,6 +1994,21 @@ $SHIPPED = @(
 'jarvis_self_improve.py'     # Diagnosis with citations; drafts a diff, applies nothing
     # --- A Notion export into an Obsidian vault (2026-10-16) ---
     'jarvis_notion_obsidian.py'  # An exported Notion workspace, tidied into an Obsidian vault: Notion's ids come off the file and folder names (collisions decided the same way every time), page properties become YAML frontmatter with notion_id kept so a second import is idempotent, each exported CSV database is merged into its rows' notes and gets an index note of [[wikilinks]] and a .base, HTML becomes Markdown (callouts, toggles, checklists, fenced code with its language, pipe tables), its relative links are rewritten through the cleaned-name map, and pictures and documents move into the vault's attachments folder. Plan -> describe -> gate -> run: one atomic move, and one reversible entry in jarvis_receipts so Undo takes the import back off. It writes only inside the vault it was pointed at, never in ~/.openjarvis. No new extractor: it imports jarvis_documents.safe_parts/.protected/.ImportRefused, the guards that already refuse zip-slip and cap a Notion zip. No patch - plugins/ready/notion-obsidian calls its install() - and standard library only
+# --- A read-only plan for an Obsidian vault (2026-10-20, the owner's
+# "Full Part II now"). Phase-2 organizer, DEFAULT scheme mocs_only: no file
+# moves, only tags merged without erasing the owner's own, one
+# up: [[_MOC - Topic]] link per note, _MOC - <Topic>.md hubs and
+# 00 - Vault Home.md. The plan is a genuine dry run - reads the vault,
+# writes nothing anywhere, raises no card, calls no model, embeds
+# nothing, and its determinism/read-only/caps are checked. The switch is
+# OFF by default behind [vault_organizer] enabled = false in the template
+# and turning it on is ONE change_own_config card; the routes are PC-only.
+# topic_folders and para preview their moves; the writer (ONE card +
+# guardian snapshots + one-click Undo) is the follow-up slice and is NOT
+# claimed here. Reuses jarvis_notes for vault resolution and the
+# inside-the-vault rule. Standard library only, no patch -
+# plugins/ready/vault-organizer calls install().
+'jarvis_vault_organizer.py'
 # --- Two-stage context compaction (2026-10-16, the owner's "keep the thread").
 # A cleared older tool result becomes a small exact stub (tool, target, an
 # outcome that reads denied_by_owner when the gate refused it, up to three

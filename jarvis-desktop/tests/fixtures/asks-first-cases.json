@@ -240,6 +240,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Bring your Notion export into your vault"
+      },
+      {
+       "action": "organize_obsidian_vault",
+       "fixed": false,
+       "id": "organize_obsidian_vault",
+       "note": "It changes only notes inside the vault the owner named, under ONE card for the whole batch; nothing is deleted, and ONE Undo puts the vault back. There is no app switch for it - going looser is a hand edit of the settings file.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Organize your Obsidian vault with tags and Maps of Content"
       }
      ],
      "title": "Writing your notes"
@@ -1496,6 +1505,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Bring your Notion export into your vault"
+      },
+      {
+       "action": "organize_obsidian_vault",
+       "fixed": false,
+       "id": "organize_obsidian_vault",
+       "note": "It changes only notes inside the vault the owner named, under ONE card for the whole batch; nothing is deleted, and ONE Undo puts the vault back. There is no app switch for it - going looser is a hand edit of the settings file.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Organize your Obsidian vault with tags and Maps of Content"
       }
      ],
      "title": "Writing your notes"
@@ -2749,6 +2767,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Bring your Notion export into your vault"
+      },
+      {
+       "action": "organize_obsidian_vault",
+       "fixed": false,
+       "id": "organize_obsidian_vault",
+       "note": "It changes only notes inside the vault the owner named, under ONE card for the whole batch; nothing is deleted, and ONE Undo puts the vault back. There is no app switch for it - going looser is a hand edit of the settings file.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Organize your Obsidian vault with tags and Maps of Content"
       }
      ],
      "title": "Writing your notes"
@@ -3995,6 +4022,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Bring your Notion export into your vault"
+      },
+      {
+       "action": "organize_obsidian_vault",
+       "fixed": false,
+       "id": "organize_obsidian_vault",
+       "note": "It changes only notes inside the vault the owner named, under ONE card for the whole batch; nothing is deleted, and ONE Undo puts the vault back. There is no app switch for it - going looser is a hand edit of the settings file.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Organize your Obsidian vault with tags and Maps of Content"
       }
      ],
      "title": "Writing your notes"
@@ -5241,6 +5277,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Bring your Notion export into your vault"
+      },
+      {
+       "action": "organize_obsidian_vault",
+       "fixed": false,
+       "id": "organize_obsidian_vault",
+       "note": "It changes only notes inside the vault the owner named, under ONE card for the whole batch; nothing is deleted, and ONE Undo puts the vault back. There is no app switch for it - going looser is a hand edit of the settings file.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Organize your Obsidian vault with tags and Maps of Content"
       }
      ],
      "title": "Writing your notes"
@@ -6499,6 +6544,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Bring your Notion export into your vault"
+      },
+      {
+       "action": "organize_obsidian_vault",
+       "fixed": false,
+       "id": "organize_obsidian_vault",
+       "note": "It changes only notes inside the vault the owner named, under ONE card for the whole batch; nothing is deleted, and ONE Undo puts the vault back. There is no app switch for it - going looser is a hand edit of the settings file.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Organize your Obsidian vault with tags and Maps of Content"
       }
      ],
      "title": "Writing your notes"
@@ -7752,6 +7806,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Bring your Notion export into your vault"
+      },
+      {
+       "action": "organize_obsidian_vault",
+       "fixed": false,
+       "id": "organize_obsidian_vault",
+       "note": "It changes only notes inside the vault the owner named, under ONE card for the whole batch; nothing is deleted, and ONE Undo puts the vault back. There is no app switch for it - going looser is a hand edit of the settings file.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Organize your Obsidian vault with tags and Maps of Content"
       }
      ],
      "title": "Writing your notes"
