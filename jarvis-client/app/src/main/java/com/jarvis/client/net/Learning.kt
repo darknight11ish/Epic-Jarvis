@@ -5,6 +5,8 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.longOrNull
 
 /*
  * The phone's half of the 2026-09-23 learning work - the pure rules only,
@@ -439,6 +441,42 @@ object MemoryAsOf {
         val note = (body["note"] as? JsonPrimitive)?.takeIf { it.isString }?.content
             ?.trim()?.takeIf { it.isNotEmpty() }
         return Answer(facts, note)
+    }
+
+    /**
+     * One fact as the AS-OF read sends it, WITH its id and its saved time.
+     *
+     * [Fact] above is the as-of plate's own row and deliberately drops the id.
+     * The phone's Galaxy (A1, 2026-10-21) needs the id to count how many of a
+     * name's facts were active on a date and to show the retired ones apart, so
+     * this second reader keeps it. Same response, same drop rules, one more
+     * field: an erased fact keeps its id and its flag and no words, and
+     * `current` is the backend's verdict AS OF THAT MOMENT (absent on an older
+     * backend). Null when there is no `facts` list at all.
+     */
+    data class RawFact(
+        val id: Long,
+        val text: String,
+        val trueThen: Boolean?,
+        val erasedAt: Double? = null,
+        val created: Double? = null,
+    )
+
+    fun parseRows(body: JsonObject): List<RawFact>? {
+        val list = body["facts"] as? JsonArray ?: return null
+        val out = ArrayList<RawFact>(list.size)
+        for (el in list) {
+            val f = el as? JsonObject ?: continue
+            val id = (f["id"] as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull
+            if (id == null || id <= 0L) continue
+            val current = (f["current"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
+            val created = (f["created"] as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull
+            val erased = MemoryErase.erasedAt(f)
+            val text = (f["text"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()
+            if (erased == null && text.isNullOrEmpty()) continue
+            out.add(RawFact(id, if (erased != null) "" else text!!, current, erased, created))
+        }
+        return out
     }
 
     /** The tag beside one fact, or null when the desktop did not say. */

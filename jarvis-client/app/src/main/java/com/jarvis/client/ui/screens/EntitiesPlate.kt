@@ -2,11 +2,15 @@ package com.jarvis.client.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -16,10 +20,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.Entities
+import com.jarvis.client.net.MemoryAsOf
+import com.jarvis.client.net.MemoryDates
 import com.jarvis.client.net.MemoryUsed
 import com.jarvis.client.net.PeopleDossier
 import com.jarvis.client.ui.parts.Gap
@@ -29,9 +37,12 @@ import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Rule
 import com.jarvis.client.ui.parts.Section
+import com.jarvis.client.ui.parts.TextInput
 import com.jarvis.client.ui.parts.liveStatus
 import com.jarvis.client.ui.theme.LocalChrome
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.ZoneId
 
 /**
  * "People and things" on Brain ([Entities], the owner's decision of
@@ -80,6 +91,7 @@ import kotlinx.coroutines.launch
  * with [HiddenSection] until Show is confirmed, and because the panel is part
  * of this composable, its words go with it.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun PeopleAndThingsSection(
     privateHidden: Boolean,
@@ -96,6 +108,22 @@ internal fun PeopleAndThingsSection(
     var missing by remember { mutableStateOf(false) }
     var readError by remember { mutableStateOf<String?>(null) }
     var openId by remember { mutableStateOf<String?>(null) }
+    // A1 (2026-10-21): the kind chips, the search box and the as-of chips.
+    // Every one of them is a VIEW of the one list this plate already reads: the
+    // chip and the search filter in memory, and the as-of chips narrow each
+    // name's own fact ids to the ones the PC says were active on that date. No
+    // route is added, nothing is written, and there is still no canvas.
+    var kind by remember { mutableStateOf(Entities.ALL) }
+    var search by remember { mutableStateOf("") }
+    var asOfEpoch by remember { mutableStateOf<Long?>(null) }
+    var asOfLabel by remember { mutableStateOf("") }
+    var asOfWhich by remember { mutableStateOf("") }
+    var asOfFacts by remember { mutableStateOf<List<MemoryAsOf.RawFact>?>(null) }
+    var asOfBusy by remember { mutableStateOf(false) }
+    var asOfError by remember { mutableStateOf<String?>(null) }
+    var dateOpen by remember { mutableStateOf(false) }
+    var dateText by remember { mutableStateOf("") }
+    var dateBad by remember { mutableStateOf(false) }
 
     LaunchedEffect(reads) {
         when (val r = JarvisRuntime.memoryEntities()) {
@@ -118,47 +146,229 @@ internal fun PeopleAndThingsSection(
         }
     }
 
+    // One read of the as-of facts per chip, thrown away when another date is
+    // picked - the same one-shot read the Memory screen's as-of plate already
+    // uses ([JarvisRuntime.memoryAsOf]). It is a READ: nothing is written, and
+    // the plate never sees it until the owner picks a past chip.
+    LaunchedEffect(asOfEpoch, reads) {
+        val epoch = asOfEpoch
+        if (epoch == null) {
+            asOfFacts = null
+            asOfBusy = false
+            asOfError = null
+            return@LaunchedEffect
+        }
+        asOfBusy = true
+        asOfError = null
+        when (val r = JarvisRuntime.memoryAsOf(epoch)) {
+            is ApiResult.Ok -> {
+                val rows = MemoryAsOf.parseRows(r.value)
+                if (rows == null) {
+                    asOfError = "The PC's answer for that date did not carry the facts."
+                } else {
+                    asOfFacts = rows
+                }
+            }
+            is ApiResult.Failed -> asOfError = JarvisRuntime.noticeFor(r.error)
+        }
+        asOfBusy = false
+    }
+
+    fun pickAsOf(epoch: Long?, which: String) {
+        asOfEpoch = epoch
+        asOfWhich = which
+        asOfLabel = if (epoch == null) "" else
+            (Entities.dateText(epoch.toDouble()) ?: "")
+        asOfError = null
+        if (epoch == null) asOfFacts = null
+    }
+
     Section(Entities.TITLE, trailing = { Quiet("Refresh", onClick = { reads += 1 }) }) {
         Plate {
             Text(Entities.UNDER, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
             Gap(6)
-            val shown = entities
+            TextInput(search, { search = it }, placeholder = Entities.SEARCH)
+            Gap(2)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Entities.filterLabels(entities.orEmpty()).forEach { label ->
+                    val on = kind == label
+                    Quiet(
+                        (if (on) "• " else "") + label,
+                        color = if (on) chrome.textHi else chrome.textMid,
+                        modifier = Modifier.semantics {
+                            contentDescription = "Kind filter: $label" + if (on) ", chosen" else ""
+                        },
+                        onClick = { kind = label },
+                    )
+                }
+            }
+            Gap(2)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                AsOfChip(Entities.NOW, asOfWhich == "", { pickAsOf(null, "") })
+                AsOfChip(Entities.WEEK, asOfWhich == Entities.WEEK, {
+                    pickAsOf(System.currentTimeMillis() / 1000L - 7L * 86_400L, Entities.WEEK)
+                })
+                AsOfChip(Entities.MONTH, asOfWhich == Entities.MONTH, {
+                    pickAsOf(System.currentTimeMillis() / 1000L - 30L * 86_400L, Entities.MONTH)
+                })
+                AsOfChip(Entities.PICK_DATE, asOfWhich == Entities.PICK_DATE, {
+                    dateText = asOfLabel
+                    dateBad = false
+                    dateOpen = true
+                })
+            }
+            val asOfDate = asOfLabel
+            if (asOfEpoch != null && asOfDate.isNotEmpty()) {
+                Gap(2)
+                Text(Entities.asOfLine(asOfDate), style = MaterialTheme.typography.labelSmall,
+                    color = chrome.textLo)
+            }
+            if (asOfBusy) {
+                Gap(2)
+                Text(Entities.AS_OF_READING, style = MaterialTheme.typography.labelSmall,
+                    color = chrome.textLo, modifier = Modifier.liveStatus())
+            }
+            asOfError?.let {
+                Gap(2)
+                Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.warnInk)
+            }
+            Gap(6)
+            val all = entities
             val err = readError
-            val open = shown?.firstOrNull { it.id == openId }
-            // Built once for the whole screen, not once per name: the
-            // connections of every name are read off this same map.
-            val perFact = remember(shown) { Entities.namesPerFact(shown.orEmpty()) }
+            val asOf = asOfEpoch != null
+            val facts = asOfFacts
+            val open = all?.firstOrNull { it.id == openId }
+            // The chip and the search narrow the list; the as-of chips narrow
+            // each name's OWN fact ids to the ones active then (the PC's
+            // `current` as of that moment), so the grouped counts below are the
+            // counts on that date. `shown` is exactly what the list draws.
+            val shown = if (asOf) {
+                if (facts == null) emptyList() else Entities.asOfEntities(all.orEmpty(), facts)
+            } else {
+                Entities.visible(all.orEmpty(), kind, search)
+            }
+            val perFact = remember(all) { Entities.namesPerFact(all.orEmpty()) }
+            val asOfPerFact = remember(shown, asOf) {
+                if (asOf) Entities.namesPerFact(shown) else perFact
+            }
+            val shares = remember(shown, asOf) {
+                if (asOf) emptyMap<String, Int>() else Entities.sharedPartners(shown)
+            }
             when {
                 missing -> Text(Entities.MISSING, style = MaterialTheme.typography.bodySmall,
                     color = chrome.textMid)
-                shown == null -> Text(
+                all == null -> Text(
                     if (err != null) "Couldn't read the list: $err" else "Reading…",
                     style = MaterialTheme.typography.bodySmall,
                     color = if (err != null) chrome.warnInk else chrome.textLo,
                 )
                 open != null -> {
                     Quiet(Entities.BACK, color = chrome.textMid, onClick = { openId = null })
-                    EntityFacts(open, shown, perFact)
+                    if (asOf) {
+                        val asOfOpen = shown.firstOrNull { it.id == open.id }
+                        if (asOfOpen == null) {
+                            Text(Entities.asOfNone(asOfDate), style = MaterialTheme.typography.bodySmall,
+                                color = chrome.textMid)
+                        } else {
+                            EntityFacts(
+                                entity = asOfOpen,
+                                all = shown,
+                                perFact = asOfPerFact,
+                                asOfRows = Entities.asOfRows(open, facts.orEmpty()),
+                                asOfDate = asOfDate,
+                            )
+                        }
+                    } else {
+                        EntityFacts(open, shown, perFact)
+                    }
                 }
                 else -> {
-                    if (err != null) {
+                    if (err != null && !asOf) {
                         Text("Couldn't read it again: $err", style = MaterialTheme.typography.labelSmall,
                             color = chrome.warnInk)
                     }
-                    if (shown.isEmpty()) {
+                    if (shown.isEmpty() && all.isEmpty()) {
                         Text(Entities.EMPTY, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+                    } else if (shown.isEmpty()) {
+                        Text(
+                            if (asOf) Entities.asOfNone(asOfDate) else Entities.NO_MATCH,
+                            style = MaterialTheme.typography.bodySmall, color = chrome.textMid,
+                        )
                     }
                     Entities.groups(shown).forEach { group ->
                         Gap(10)
                         Kicker(group.title)
                         group.entities.forEach { e ->
-                            Quiet(Entities.rowLine(e), color = chrome.textHi, onClick = { openId = e.id })
+                            Quiet(
+                                if (asOf) Entities.asOfRowLine(e, asOfDate) else Entities.rowLine(e),
+                                color = chrome.textHi,
+                                onClick = { openId = e.id },
+                            )
+                            if (!asOf) {
+                                Entities.sharesLine(shares[e.id] ?: 0)?.let {
+                                    Text(it, style = MaterialTheme.typography.labelSmall,
+                                        color = chrome.textLo)
+                                }
+                            }
                         }
                     }
                 }
             }
         }
     }
+
+    if (dateOpen) {
+        AlertDialog(
+            onDismissRequest = { dateOpen = false },
+            title = { Text(Entities.PICK_DATE) },
+            text = {
+                Column {
+                    TextInput(dateText, { dateText = it; dateBad = false },
+                        placeholder = Entities.DATE_HINT)
+                    if (dateBad) {
+                        Gap(4)
+                        Text(Entities.DATE_BAD, style = MaterialTheme.typography.labelSmall,
+                            color = chrome.warnInk)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val epoch = MemoryDates.knownAt(dateText, ZoneId.systemDefault(), LocalDate.now())
+                    if (epoch == null) {
+                        dateBad = true
+                    } else {
+                        pickAsOf(epoch, Entities.PICK_DATE)
+                        dateOpen = false
+                    }
+                }) { Text(Entities.USE_DATE) }
+            },
+            dismissButton = {
+                TextButton(onClick = { dateOpen = false }) { Text(Entities.CANCEL) }
+            },
+        )
+    }
+}
+
+/** One as-of chip: a Quiet with the same "• " and TalkBack "chosen" rule the
+ * kind chips and History's tag chips use. Read-only: it asks for a date. */
+@Composable
+private fun AsOfChip(label: String, on: Boolean, onClick: () -> Unit) {
+    val chrome = LocalChrome.current
+    Quiet(
+        (if (on) "• " else "") + label,
+        color = if (on) chrome.textHi else chrome.textMid,
+        modifier = Modifier.semantics {
+            contentDescription = "Facts as of: $label" + if (on) ", chosen" else ""
+        },
+        onClick = onClick,
+    )
 }
 
 /**
@@ -179,11 +389,21 @@ private fun EntityFacts(
     entity: Entities.Entity,
     all: List<Entities.Entity>,
     perFact: Map<Long, Int>,
+    /** A1: when the list is showing a past date, the facts that were active
+     * then come from the as-of read already in hand (no second route), and the
+     * retired ones are drawn muted under [Entities.RETIRED]. Null is "now",
+     * where the existing paged [MemoryUsed] read is used exactly as before. */
+    asOfRows: Entities.AsOfRows? = null,
+    asOfDate: String? = null,
 ) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
-    var rows by remember(entity.id) { mutableStateOf<List<Entities.Row>>(emptyList()) }
-    var consumed by remember(entity.id) { mutableIntStateOf(0) }
+    var rows by remember(entity.id, asOfRows) {
+        mutableStateOf(asOfRows?.active ?: emptyList())
+    }
+    var consumed by remember(entity.id, asOfRows) {
+        mutableIntStateOf(asOfRows?.active?.size ?: 0)
+    }
     var hiddenByTopic by remember(entity.id) { mutableIntStateOf(0) }
     var loading by remember(entity.id) { mutableStateOf(false) }
     var failed by remember(entity.id) { mutableStateOf<String?>(null) }
@@ -219,8 +439,8 @@ private fun EntityFacts(
         }
     }
 
-    LaunchedEffect(entity.id, attempt) {
-        if (consumed == 0) loadNext()
+    LaunchedEffect(entity.id, attempt, asOfRows) {
+        if (asOfRows == null && consumed == 0) loadNext()
     }
 
     Gap(6)
@@ -309,6 +529,23 @@ private fun EntityFacts(
                 if (row.pinned) Pill(Entities.PINNED)
                 if (row.forgotten) Pill(Entities.FORGOTTEN)
             }
+        }
+    }
+    val retiredRows = asOfRows?.retired.orEmpty()
+    if (retiredRows.isNotEmpty()) {
+        Gap(10)
+        Kicker(Entities.RETIRED)
+        if (!asOfDate.isNullOrEmpty()) {
+            Text(Entities.asOfLine(asOfDate), style = MaterialTheme.typography.labelSmall,
+                color = chrome.textLo)
+        }
+        retiredRows.forEach { row ->
+            Gap(6)
+            Text(
+                if (row.erased) Entities.ERASED else row.text,
+                style = MaterialTheme.typography.bodyMedium,
+                color = chrome.textLo,
+            )
         }
     }
     Entities.topicsHiddenLine(hiddenByTopic)?.let {
