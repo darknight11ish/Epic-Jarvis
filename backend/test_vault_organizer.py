@@ -465,16 +465,18 @@ def t_topic_folders_previews_safe_moves():
     check("... and each move names a note that really exists now",
           all(m["from_path"] in on_disk for m in moves),
           [m["from_path"] for m in moves])
-    check("... and nothing from the vault is left out of the plan entirely",
-          {n for n in on_disk if n.endswith(".md")}
+    db_files = {"Projects/Launch.md", "Projects/_Database - Projects.md"}
+    check("... and every STANDALONE note is in the plan (database rows are not)",
+          ({n for n in on_disk if n.endswith(".md")} - db_files)
           == {m["from_path"] for m in moves}, (on_disk, moves))
     by_from = {m["from_path"]: m["to_path"] for m in moves}
-    check("a database's child page goes under Databases/<Name>/",
-          str(by_from.get("Projects/Launch.md", "")).startswith(
-              "Databases/Projects/"), by_from)
-    check("... and the database index note goes there too",
-          str(by_from.get("Projects/_Database - Projects.md", "")).startswith(
-              "Databases/Projects/"), by_from)
+    check("Ruling 8.4: a database's child page is NOT moved by topic_folders",
+          "Projects/Launch.md" not in by_from
+          and not any(d.startswith("Databases/") for d in by_from.values()), by_from)
+    check("Ruling 8.4: ... and the database index note is NOT moved either",
+          "Projects/_Database - Projects.md" not in by_from, by_from)
+    check("Ruling 8.4: ... while standalone pages still move",
+          "Work/Alpha.md" in by_from and "Gardening/Gnomes.md" in by_from, by_from)
     check("the moving plan is read-only as well", tree(VAULT) == before)
 
 
@@ -1191,20 +1193,65 @@ def t_an_existing_moc_is_snapshotted_then_undone_exactly():
           tree(VAULT) == before, tree(VAULT))
 
 
-def t_a_database_child_page_lands_under_databases():
+def t_a_database_child_stays_beside_its_hub_under_both_schemes():
+    """Ruling 8.4: moving schemes move STANDALONE pages only.
+
+    The Notion converter writes the hub `_Database - <Name>.md` and its
+    `.base` in the folder its child rows are in, and the `.base` filter
+    (`file.inFolder(...)`) names that folder. Moving the rows would leave the
+    database view pointing at an empty folder with no warning - so a
+    `database:` child and the hub never move, and only standalone pages do.
+    """
     fresh()
     write("Projects/_Database - Projects.md", "# Projects\n\nThe database.\n")
+    write("Projects/Projects.base",
+          'filters:\n  and:\n    - file.inFolder("Projects")\n')
     write("Projects/Launch.md",
           "---\ndatabase: Projects\n---\n# Launch\n\nThe launch plan.\n")
+    write("Notes/Standalone.md", "# Standalone\n\nA page of its own.\n")
+    base_before = (VAULT / "Projects" / "Projects.base").read_bytes()
+    before = tree(VAULT)
+    for scheme in ("topic_folders", "para"):
+        out = plan(scheme=scheme)
+        by_from = {m["from_path"]: m["to_path"] for m in out["moves_preview"]}
+        check(f"Ruling 8.4 {scheme}: the database child is NOT moved",
+              "Projects/Launch.md" not in by_from, by_from)
+        check(f"Ruling 8.4 {scheme}: ... the hub is NOT moved",
+              "Projects/_Database - Projects.md" not in by_from, by_from)
+        check(f"Ruling 8.4 {scheme}: ... no destination is a Databases/ folder",
+              not any(d.startswith("Databases/") for d in by_from.values()), by_from)
+        check(f"Ruling 8.4 {scheme}: ... the standalone page DOES move",
+              "Notes/Standalone.md" in by_from, by_from)
+        check(f"Ruling 8.4 {scheme}: the plan counts only the standalone move",
+              out["summary"]["notes_moved"] == 1
+              and out["summary"]["databases_indexed"] == 1, out["summary"])
+        check(f"Ruling 8.4 {scheme}: the preview is still read-only",
+              tree(VAULT) == before, tree(VAULT))
+    # Apply topic_folders for real: the rows, hub and .base stay; the page moves.
     out = plan(scheme="topic_folders")
     res = V.apply_plan(out["plan_id"], out["digest"], gate=Gate(),
                        tier_of=lambda a: "ask")
-    check("(set-up) the batch applied", res.get("ok") is True, res)
-    check("a database's child page is filed under Databases/<Name>/",
-          (VAULT / "Databases" / "Projects" / "Launch.md").is_file(),
+    check("(set-up) the moving batch applied", res.get("ok") is True, res)
+    check("Ruling 8.4: the database child stayed at its original path",
+          (VAULT / "Projects/Launch.md").is_file(),
           sorted(p.relative_to(VAULT).as_posix() for p in VAULT.rglob("*.md")))
-    check("... and the database index note too",
-          (VAULT / "Databases" / "Projects" / "_Database - Projects.md").is_file())
+    check("Ruling 8.4: ... and so did the hub",
+          (VAULT / "Projects/_Database - Projects.md").is_file())
+    check("Ruling 8.4: ... and the .base is byte-identical, so its filter "
+          "still names the folder the rows are in",
+          (VAULT / "Projects/Projects.base").read_bytes() == base_before
+          and 'file.inFolder("Projects")' in base_before.decode("utf-8"))
+    moved_page = [p for p in VAULT.rglob("Standalone.md")
+                  if p.parent.relative_to(VAULT).as_posix() != "Notes"]
+    check("Ruling 8.4: ... while the standalone page really moved",
+          bool(moved_page) and not (VAULT / "Notes/Standalone.md").exists(),
+          sorted(p.relative_to(VAULT).as_posix() for p in VAULT.rglob("*.md")))
+    check("Ruling 8.4: ... and no Databases/ folder was created",
+          not (VAULT / "Databases").exists(),
+          sorted(p.name for p in VAULT.iterdir()))
+    undo = R.undo(res["receipt_id"])
+    check("Ruling 8.4: ONE Undo restores the exact tree (rows, hub, .base and page)",
+          undo.get("ok") is True and tree(VAULT) == before, undo)
 
 
 # --------------------------------------------------------------------------
@@ -1261,7 +1308,7 @@ def main() -> int:
                t_the_organize_route_works_end_to_end_through_install,
                t_the_status_route_reports_the_writer,
                t_an_existing_moc_is_snapshotted_then_undone_exactly,
-               t_a_database_child_page_lands_under_databases):
+               t_a_database_child_stays_beside_its_hub_under_both_schemes):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

@@ -132,7 +132,10 @@ MAX_PREVIEW_MOVES = 2000
 TOPIC_BUCKETS = ("01 - Projects & Active", "02 - Areas & Topics",
                  "03 - Reference & Notes", "04 - Daily & Journal", "99 - Archive")
 PARA_BUCKETS = ("1 - Projects", "2 - Areas", "3 - Resources", "4 - Archives")
-DATABASE_BUCKET = "Databases"
+#: RULING 8.4 (2026-10-21): there is deliberately NO database bucket. A
+#: database's child rows and its `_Database - <Name>.md` hub stay in the folder
+#: they are in - beside the hub's `.base`, whose `file.inFolder(...)` filter
+#: names that folder - and only STANDALONE pages move under a moving scheme.
 ARCHIVE_STUBS_DIR = "99 - Archive/Empty Stubs"
 
 #: The one-card switch (jarvis_media_index.py's shape): the EXISTING
@@ -959,7 +962,16 @@ def _find_duplicates(plan: Plan) -> None:
 def _assign_paths(plan: Plan) -> None:
     """The new path for every note under a moving scheme. `mocs_only` assigns
     none (old == new, no file moves). Deterministic collision handling: two
-    notes never get one new path; the second gets " (2)"."""
+    notes never get one new path; the second gets " (2)".
+
+    RULING 8.4 (2026-10-21, accepted from the combined overnight rulings): the
+    database rows do NOT move. A note whose frontmatter carries `database:` and
+    the `_Database - <Name>.md` hub it belongs to stay exactly where they are,
+    because the hub's `.base` filter (`file.inFolder(...)`) names the folder
+    they are already in - moving the rows would leave that filter pointing at
+    an empty folder and break the database view with no warning. Only
+    STANDALONE pages are moved by `topic_folders`/`para`; the rows still get
+    their tags and up: link in place, exactly as `mocs_only` does."""
     notes = [n for n in plan.notes if n.kind in ("note", "database")]
     if plan.scheme == "mocs_only":
         for note in notes:
@@ -969,15 +981,15 @@ def _assign_paths(plan: Plan) -> None:
     for note in sorted(notes, key=lambda n: n.rel):
         title = _clean_title(note.title) + ".md"
         database = str(note.frontmatter.get("database") or "").strip()
+        if note.kind == "database" or database:
+            # Ruling 8.4: in place, beside the hub and its .base. No move row,
+            # no path collision, and the tag/up: enrichment above still ran.
+            note.new_rel = note.rel
+            continue
         if plan.scheme == "topic_folders":
-            if note.kind == "database":
-                dest = f"{DATABASE_BUCKET}/{note.topic}/{title}"
-            elif database:
-                dest = f"{DATABASE_BUCKET}/{_clean_title(database)}/{title}"
-            else:
-                bucket = ("01 - Projects & Active" if note.tasks
-                          else "02 - Areas & Topics")
-                dest = f"{bucket}/{note.topic}/{title}"
+            bucket = ("01 - Projects & Active" if note.tasks
+                      else "02 - Areas & Topics")
+            dest = f"{bucket}/{note.topic}/{title}"
         else:                                            # para
             status = str(note.frontmatter.get("status") or "").lower()
             if note.tasks or note.frontmatter.get("project") or status in (

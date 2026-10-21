@@ -23442,6 +23442,16 @@ manifest; the receipt stores no absolute path (the receipt scrubber would
 redact it), only the plan id. A write that fails part-way is reported
 honestly as **partial**, with the receipt and copy it already saved.
 
+**Database rows stay where they are (Ruling 8.4, accepted 2026-10-21).** Under
+the two moving schemes the organizer moves **only standalone pages**. A note
+whose frontmatter carries `database:` and the `_Database - <Name>.md` hub it
+belongs to are left **exactly where they are**, beside the hub's `.base` -
+whose `file.inFolder(...)` filter names that folder - so the database view
+keeps resolving instead of silently pointing at an empty folder. Those rows
+still get their `tags` and `up:` enrichment in place, exactly as `mocs_only`
+does; only the move is skipped. The default scheme is still `mocs_only`, which
+moves nothing at all.
+
 **Routes (all PC-only, token-guarded, and OFF by default).**
 
 * `POST /api/vault/organize-plan` - body `{"vault": "<path>", "scheme":
@@ -23516,7 +23526,7 @@ plan scan could read inside its caps, and one batch stops at 2,000 existing
 files so one receipt stays readable. None of this has been run against the
 owner's real Notion vault yet - that is the runbook above.
 
-**Checked by** `backend/test_vault_organizer.py` (170 checks, runs anywhere):
+**Checked by** `backend/test_vault_organizer.py` (187 checks, runs anywhere):
 the plan is byte-for-byte read-only on a real vault, the tag merge never erases
 an owner tag, duplicates/stubs are listed not deleted, both moving schemes
 preview only inside the vault, an empty vault is a clean no-op, planning writes
@@ -23536,6 +23546,11 @@ undoable, taint is latched by the writer and not the plan, the writer writes no
 memory row, the routes are PC-only and flag-gated, and an existing MOC is
 snapshotted and put back exactly. Two writer revert-checks were measured too: a
 stale-check removed made four checks fail; skipped snapshots made three fail.
+Ruling 8.4 adds its own bites: under BOTH moving schemes a database's child and
+its hub stay at their original paths (no `Databases/` destination exists), a
+standalone page still moves, the `.base` is byte-identical so its filter still
+names the rows' folder, the plan count is the standalone moves only, and ONE
+Undo restores the exact tree.
 ## 152. Bringing a Notion export into an Obsidian vault: `/api/notion/preview` and `/api/notion/import` (backend only, added 2026-10-16, audit fixes 2026-10-21)
 
 Notion can export a whole workspace as Markdown & CSV or as HTML, and what it
@@ -23650,10 +23665,10 @@ itself is imported from `jarvis_documents`, not copied.
   title: Notion's CSV carries no row-to-page id, and guessing which page is
   which would be worse than an honest duplicate link.
 * The hub note and `.base` live in the export's folder beside the child pages.
-  The Phase-2 organizer that will move database children into
-  `Databases/<Name>/` must regenerate the `.base` filter (it names the current
-  path) and treat the hub note as generated; that contract is not implemented
-  yet.
+  **Ruling 8.4 (2026-10-21) settled the organizer's side:** it moves only
+  standalone pages, so a database's rows and its hub stay in the folder the
+  `.base` filter names, the filter keeps resolving, and the organizer never
+  moves or edits the hub or the `.base`. See section 151.
 * Neither app is wired yet (see `docs/ARCHITECTURE.md` §8): the desktop file
   picker for this is not built, the phone has no view of the PC's folders, and
   the approval card is raised by the backend route itself.
