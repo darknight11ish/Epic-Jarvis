@@ -243,7 +243,7 @@ LOG_MACHINERY_SUITES = {
 }
 #: The model loaders must be OFFLINE in every suite's environment (2026-10-18).
 #: test_attention_phrases.py says "no model, no network" in its own header, but
-#: importing the memory store taught fastembed to fetch its 5 model files for a
+#: importing the memory store taught the old memory library to fetch its 5 model files for a
 #: cold cache, and under the patcher the suite sat for 900 s. A suite cannot be
 #: fixed from here, but a stray download can be made to FAIL AT ONCE instead of
 #: hanging: huggingface_hub (and the transformers/datasets libraries) honour
