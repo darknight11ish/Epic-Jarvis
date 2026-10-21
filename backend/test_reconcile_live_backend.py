@@ -29,16 +29,19 @@ real PC:
      probes pass.
 
 NOTHING HERE TOUCHES THE REAL LIVE FOLDER. Every path is under a temporary directory; the
-only real repository file read is `scripts/apply-patches.ps1` and the two patches the
-deploy uses, for the parser tests (read-only).
+only real repository files read are `scripts/apply-patches.ps1`, the two patches the
+deploy uses and the published base HUD `jarvis-backend/jarvis_hud.py` (the literal
+route delta's bytes are compared with it), for the parser/extraction tests (read-only).
 """
 from __future__ import annotations
 
+import ast
 import json
 import os
 import shutil
 import sys
 import tempfile
+import textwrap
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -96,12 +99,19 @@ def do_POST(self):
 '''
 
 
-# The two 2026-10-14 HUD fixes' ANCHORS are in every fixture, without the
-# fixes themselves: the same shape the real live HUD has. The literal deltas
-# are only planned when the caller asks for them (plan_deltas(literals=True)),
-# which main() does.
+# The literal HUD deltas' fixture pieces are in every fixture, without the
+# fixes themselves: the same shape the real live HUD has (the pre-cache
+# `/api/status` route probes upstream inline, the old reasoning relay, and the
+# anchors the cache/start blocks go in front of). The literal deltas are only
+# planned when the caller asks for them (plan_deltas(literals=True)), which
+# main() does.
 MINI_HUD += (
-    "\n\n" + R.STATUS_CACHE_ANCHOR + "\n\n"
+    "\n\n"
+    "def do_GET(self):\n"
+    "    path = \"\"\n"
+    "    if True:\n"
+    + "\n".join(R._delta_lines(R.STATUS_ROUTE_OLD_FILE)) + "\n\n"
+    + R.STATUS_CACHE_ANCHOR + "\n\n"
     "def _relay():\n"
     "    if True:\n"
     "        if True:\n"
@@ -814,7 +824,8 @@ def t_a_fake_traces_delta_uses_the_anchored_mechanism_without_writing():
 def t_the_two_2026_10_14_hud_fixes_are_literal_deltas():
     """DELTA_TABLE carries the two fixes no .patch owns (status cache, reasoning
     fallback). Mutation bite: with the old patch-only planner nothing is staged
-    and this fails."""
+    and this fails. The third literal delta (DEF-002's route) is proved by
+    `t_the_api_status_route_delta_replaces_the_inline_route` below."""
     root = tmpdir()
     try:
         live = make_live(root)
@@ -847,6 +858,123 @@ def t_the_two_2026_10_14_hud_fixes_are_literal_deltas():
               and statuses.get("hud-status-cache.patch") == "already"
               and statuses.get("hud-reasoning-fallback.patch") == "already",
               (again, staged2, refusals2))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+#: The ten keys `/api/status` answers with, before and after the route rewrite.
+STATUS_PAYLOAD_KEYS = ('"routing"', '"jarvis_injects_memory"', '"budget"',
+                       '"jarvis"', '"ollama"', '"proxy"', '"models"', '"lanes"',
+                       '"default_model"', '"tools"')
+
+
+def _status_route_ast(source: str) -> str:
+    """`ast.dump` of the one `if path == "/api/status":` statement in `source`, or "".
+
+    STRUCTURAL, never textual: comments and reformatting cannot change it, and a
+    docstring is an `ast.Constant` rather than a statement. This is the shape the
+    no-source-pins rule asks for when two copies of a route must be compared."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return ""
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.If):
+            continue
+        test = node.test
+        if (isinstance(test, ast.Compare) and isinstance(test.left, ast.Name)
+                and test.left.id == "path" and len(test.comparators) == 1
+                and isinstance(test.comparators[0], ast.Constant)
+                and test.comparators[0].value == "/api/status"):
+            return ast.dump(node, include_attributes=False)
+    return ""
+
+
+def t_the_api_status_route_delta_replaces_the_inline_route():
+    """DEF-002's route half (2026-10-20): the live `/api/status` route is the
+    pre-cache one that probes upstream inline (measured 3094/3117 ms plain,
+    3084/3097 ms with `?force=1`), so the base's cached route must REPLACE it.
+    Bite: with no DELTA_TABLE entry the plan stages nothing and (a) fails; with
+    the old block present twice the deploy must refuse, not guess."""
+    root = tmpdir()
+    try:
+        old = "\n".join(R._delta_lines(R.STATUS_ROUTE_OLD_FILE))
+        new = "\n".join(R._delta_lines(R.STATUS_ROUTE_NEW_FILE))
+        # `.get` so a missing DELTA_TABLE entry FAILS (a) loudly instead of
+        # raising KeyError: the bite must read as "not planned", not as a crash.
+        table = {"hud-status-route.patch": R.DELTA_TABLE.get("hud-status-route.patch") or {}}
+        base_source = (REPO / "jarvis-backend" / "jarvis_hud.py").read_text(encoding="utf-8")
+        check("the NEW block is structurally the base HUD's own /api/status route",
+              _status_route_ast(textwrap.dedent(new)) != ""
+              and _status_route_ast(textwrap.dedent(new)) == _status_route_ast(base_source))
+        check("the OLD block is the live inline-probing route (no cache, no force)",
+              'jarvis_up = _reachable(f"{JARVIS_URL}/health")' in old
+              and '_reachable(f"{OLLAMA_URL}/api/tags")' in old
+              and '_reachable(f"{PROXY_URL}/health")' in old
+              and "_STATUS_CACHE" not in old and "force" not in old)
+        check("old and new are different routes, so the delta is really needed",
+              old != new)
+        check("the NEW block reads the cache and handles ?force=1",
+              "from urllib.parse import parse_qs, urlparse" in new
+              and "if force or not _STATUS_CACHE:" in new
+              and "with _STATUS_LOCK:" in new
+              and "upstream = dict(_STATUS_CACHE)" in new)
+        check("old and new keep the same ten payload keys",
+              all(k in old and k in new for k in STATUS_PAYLOAD_KEYS)
+              and len(STATUS_PAYLOAD_KEYS) == 10)
+
+        live = make_live(root)
+        check("the fixture carries the OLD route block exactly once",
+              MINI_HUD.count(old) == 1, MINI_HUD.count(old))
+
+        # (a) the plan stages the replacement.
+        deltas, staged, refusals = R.plan_deltas(live, [], show=fake_show,
+                                                 table=table, literals=True)
+        check("(a) the status-route delta is planned as a literal REPLACE",
+              refusals == [] and [(d.patch, d.status) for d in deltas]
+              == [("hud-status-route.patch", "insert")], (deltas, refusals))
+        text = staged.get("jarvis_hud.py", "")
+        check("(a) the staged HUD carries the NEW cached route", new in text, text[:200])
+        check("(a) ... and none of the OLD inline route is left",
+              old not in text
+              and 'jarvis_up = _reachable(f"{JARVIS_URL}/health")' not in text)
+        check("(a) ... and the staged HUD still compiles",
+              R.rehearse(staged) == [], R.rehearse(staged))
+
+        # (b) after apply the temp live file holds exactly the staged text - the
+        # new route and none of the old inline probes, both proved on `text`.
+        # Byte equality is the write contract; no source-text pin on a module.
+        backup = R.Backup(live, stamp="status-route")
+        written = R.apply_deltas(staged, live, backup)
+        check("(b) the apply wrote exactly the staged text (new route, old probes gone)",
+              written == ["jarvis_hud.py"] and backup.saved == ["jarvis_hud.py"]
+              and (live / "jarvis_hud.py").read_bytes() == text.encode("utf-8"),
+              (written, backup.saved))
+
+        # (c) a second plan says already present and stages nothing.
+        again, staged2, refusals2 = R.plan_deltas(live, [], show=fake_show,
+                                                  table=table, literals=True)
+        check("(c) a second plan says ALREADY_PRESENT (idempotent)",
+              refusals2 == [] and staged2 == {}
+              and [(d.patch, d.status) for d in again]
+              == [("hud-status-route.patch", "already")], (again, staged2, refusals2))
+
+        # (d) the old block twice is refused, never guessed at.
+        write(live / "jarvis_hud.py", MINI_HUD + "\n\n" + old + "\n")
+        _d3, staged3, refusals3 = R.plan_deltas(live, [], show=fake_show,
+                                                table=table, literals=True)
+        check("(d) a live file where the old route block appears twice is REFUSED",
+              staged3 == {} and any("hud-status-route.patch" in r
+                                    and "appears 2 time" in r for r in refusals3),
+              (staged3, refusals3))
+
+        # (e) an already-cached route never stages the delta.
+        write(live / "jarvis_hud.py", MINI_HUD.replace(old, new))
+        _d4, staged4, refusals4 = R.plan_deltas(live, [], show=fake_show,
+                                                table=table, literals=True)
+        check("(e) a live route that is already cached is never staged",
+              refusals4 == [] and staged4 == {}
+              and [d.status for d in _d4] == ["already"], (_d4, staged4, refusals4))
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -900,6 +1028,7 @@ def main():
                t_presence_is_decided_from_distinctive_lines,
                t_insertion_uses_its_anchor_and_refuses_a_bad_one,
                t_the_two_2026_10_14_hud_fixes_are_literal_deltas,
+               t_the_api_status_route_delta_replaces_the_inline_route,
                t_a_literal_delta_refuses_a_bad_anchor_or_absent_old_block,
                t_deltas_are_planned_and_refused_hermetically,
                t_an_unknown_delta_is_refused_before_writing,
