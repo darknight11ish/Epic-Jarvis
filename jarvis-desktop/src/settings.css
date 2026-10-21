@@ -491,6 +491,21 @@ input:focus-visible, textarea:focus-visible {
   border: 1px solid var(--border-strong);
 }
 
+/* A layout row's glyph rather than a theme swatch (hud-window-settings.js,
+   the HUD layout picker of 2026-10-20): the same 26x18 box in the row's
+   second grid column, so the labels line up with the theme rows above it.
+   The glyph is text, not an image: the page's CSP is img-src 'self' data:,
+   and a font glyph needs neither. */
+.swatch.layout-swatch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--text-muted);
+  background: linear-gradient(135deg, var(--surface-2), var(--surface-1));
+}
+
 .swatch[data-swatch="deep-space"] {
   background: linear-gradient(90deg, var(--swatch-reactor-ground) 60%, var(--swatch-reactor-ink) 60%);
 }

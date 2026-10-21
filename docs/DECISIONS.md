@@ -2698,3 +2698,55 @@ Built in `backend/jarvis_speech.py` (mirrored to `jarvis-backend/`), proven by
 the new `backend/test_voice_parallel.py` and the updated
 `test_live.py`/`test_talk_type.py`/`test_speech.py`; written up in
 `docs/JARVIS-API.md` section 5.
+
+## 2026-10-20 - three HUD looks, chosen in Settings and from the HUD's own header
+
+Asked by the owner on 2026-10-20, in his own words: *"i would also like to
+choose from 3 different UIs for the jarvis HUD in the settings. i want them
+looking cutting edge while still being intuitive and effective"*. The design
+brief is `deepseek_jarvis_hud_3_ui_modes_and_bar_redesign_work_order.md` PART
+III+IV (the bar half of that brief is a separate slice and not this one).
+
+**Decided:**
+* **Three layouts, one page.** Command Cockpit (the default), Studio
+  Split-Workspace and Ambient Voice Core live inside the one
+  `jarvis_hud.html`, switched by `document.body.dataset.hudLayout`. No second
+  or third HTML file: the page is shipped as a byte-for-byte copy in three
+  places (`jarvis-desktop/src`, `backend/`, `jarvis-backend/`), and three files
+  would triple that and let the copies drift. Every DOM id the page and its
+  tests already use stays in the document in every mode - the layouts are
+  CSS Grid/Flexbox, order and visibility only.
+* **Built only from what the HUD really has.** The HUD has two views (Talk
+  and the Galaxy map), the approval cards, and the telemetry/memory readouts.
+  Nothing invents a Today, Memory or Vault screen: the Cockpit's left rail
+  keeps the real Talk and Galaxy navigation, and its Bento inspector is the
+  real waiting-cards count, the real second-brain counts and the real last-turn
+  numbers. The Studio stage's tabs show the real Galaxy view, the real
+  approval cards, the real memory readouts and the real telemetry - never a
+  copy of them. The Ambient pills carry the same facts the rails carry.
+* **Choosable in two places, kept like the theme.** The picker is in Settings
+  -> "The big HUD window" (this computer only) and as a pill in the HUD's own
+  header. It is cosmetic, like the theme: **no approval card**, no Rust
+  command, no backend route - a per-computer `localStorage` key
+  (`jarvis.hud.layout`), the same mechanism and the same file as the "Open the
+  Jarvis bar" button switch beside it. The HUD obeys a change made in Settings
+  at once through the shared `storage` event, and the in-HUD picker writes the
+  same key back. The phone has no HUD window, so it has no row for this; its
+  own look is its themes, unchanged (`docs/ARCHITECTURE.md` §8).
+* **The bar is not this slice.** The Jarvis bar's own redesign (the same work
+  order's PART II: `index.html`, `main.js`, `style.css`, `uikit.mjs`) belongs
+  to a different slice and is not touched here.
+
+What the owner can see: the HUD opens as Command Cockpit; the header pill and
+the Settings card switch it instantly between the three; the choice is
+remembered on that computer. What was **not** tested here: how the three look
+on his real screen (a colour and spacing judgement needs the window on his
+monitor) - said as NOT-TESTABLE in the pull request, while Playwright proves
+each mode switches, persists, keeps every id and works (send, tabs, drawer,
+badge, tiles).
+
+Built in `jarvis-desktop/src/jarvis_hud.html` (copied byte-identically to
+`backend/` and `jarvis-backend/`), `hud-window.js` and
+`hud-window-settings.js`, the "The big HUD window" card in
+`jarvis-desktop/src/settings.html`, and proven by `tests/hud.mjs` and
+`tests/hud-window.mjs`.

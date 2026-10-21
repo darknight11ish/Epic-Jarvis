@@ -31,7 +31,13 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, extname, join, normalize } from "node:path";
 import * as K from "./uikit.mjs";
-import { OPEN_BAR_KEY } from "../src/hud-window.js";
+import {
+  OPEN_BAR_KEY,
+  HUD_LAYOUT_KEY,
+  HUD_LAYOUTS,
+  readHudLayout,
+  saveHudLayout,
+} from "../src/hud-window.js";
 // The bar's own rule for what may be read aloud, which the HUD's spoken-reply
 // gate now holds itself to route by route (the check further down).
 import { usedSensitiveFact } from "../src/private-speech.js";
@@ -606,10 +612,14 @@ await check("the reactor is faces.html in display mode, and it draws", async () 
   // Fed by this page, not asking the shell: the HUD window has no app
   // read command, so asking would only be refused (capabilities/hud.json).
   assert.match(url, /[?&]feed=parent(&|$)/, url);
-  assert.ok(px.w >= 232, `canvas backing store ${px.w}px - blurrier than the 232px box it fills`);
+  // 220, not the page's old 232: the Cockpit layout (the default since
+  // 2026-10-20) gives the idle core 220px. What this check is for is
+  // unchanged - the canvas is rendered at the box's own size (not blurrier),
+  // and the face really draws in it.
+  assert.ok(px.w >= 220, `canvas backing store ${px.w}px - blurrier than the 220px box it fills`);
   assert.ok(px.lit > 150, `only ${px.lit} of 9216 sampled pixels lit - the face is not drawing`);
-  assert.equal(Math.round(box.width), 232);
-  assert.equal(Math.round(box.height), 232);
+  assert.equal(Math.round(box.width), 220);
+  assert.equal(Math.round(box.height), 220);
   assert.deepEqual(problems, [], "a CSP refusal or a page error in the HUD or its face");
 });
 
@@ -1405,6 +1415,366 @@ for (const r of FIXTURE.route_headers) {
       "gold is for an answer that left this PC, and only that");
   });
 }
+
+/* ── The three HUD layouts (the owner's request of 2026-10-20) ───────────── *
+ *  The work order's PART III+IV: one page, three UIs, switched by
+ *  document.body.dataset.hudLayout and kept in localStorage under the key
+ *  src/hud-window.js exports, so the Settings card and the page cannot read
+ *  different keys. These checks drive the REAL page: the mode switch, the
+ *  picker, the ids every layout must keep, and each layout's own behaviour.
+ *  Nothing here judges how it LOOKS (that needs the owner's screen and is
+ *  said as NOT-TESTABLE in the pull request); it judges that each mode is
+ *  reachable, persistent, complete and working.
+ * ------------------------------------------------------------------------ */
+
+/** Every id a layout must keep in the document, in whatever mode is showing:
+ *  the ids the page's own script and this suite already depend on. If a mode
+ *  ever deletes one to make room, this fails instead of a layout quietly
+ *  costing the window a control. */
+const KEPT_IDS = [
+  "shell", "brand-sub", "lanes", "led-ollama", "led-proxy", "rail-systems",
+  "stage-title", "chip-model", "chip-state", "rail-toggle", "reactor",
+  "reactor-state", "log", "input", "mic", "send", "brain", "galaxy", "gsearch",
+  "g-reset", "g-spin", "inspector", "insp-close", "insp-ask", "approvals",
+  "banner", "model-warn", "rail-right", "r-model", "r-latency", "r-tokens",
+  "r-gate", "r-complexity", "r-meter", "r-why", "tools-used", "r-facts",
+  "r-docs", "r-ents", "r-tools", "r-mem", "r-rpm", "r-rpd", "r-stt", "r-tts",
+  "r-level", "hud-layout-picker", "stage-tabs", "history-toggle", "core-expand",
+  "rail-quickbar", "lane-compact", "appr-badge", "ambient-status", "studio-dock",
+];
+
+const pickLayout = (page, name) => page.evaluate((n) => {
+  document.querySelector(`[data-hud-layout-choice="${n}"]`).click();
+}, name);
+
+const layoutOf = (page) => page.evaluate(() => document.body.dataset.hudLayout);
+
+await check("the HUD opens in the Cockpit layout, and the picker says so", async () => {
+  const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  const state = await page.evaluate(() => ({
+    layout: document.body.dataset.hudLayout,
+    pressed: [...document.querySelectorAll("[data-hud-layout-choice]")]
+      .filter((b) => b.getAttribute("aria-pressed") === "true")
+      .map((b) => b.dataset.hudLayoutChoice),
+    stored: (() => { try { return localStorage.getItem("jarvis.hud.layout"); } catch (e) { return "unreadable"; } })(),
+  }));
+  const pickerShown = await page.locator("#hud-layout-picker").isVisible();
+  await page.close();
+  assert.equal(state.layout, "cockpit", "the default layout is not Cockpit");
+  assert.deepEqual(state.pressed, ["cockpit"], "the picker does not show Cockpit as chosen");
+  assert.equal(state.stored, null, "a fresh window must have stored no layout choice");
+  assert.equal(pickerShown, true, "the layout picker is not drawn in the header");
+  assert.deepEqual(problems, []);
+});
+
+await check("the picker switches all three layouts, and the choice is remembered", async () => {
+  const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  const seen = [];
+  for (const name of HUD_LAYOUTS) {
+    await pickLayout(page, name);
+    await page.waitForTimeout(120);
+    seen.push(await layoutOf(page));
+  }
+  const stored = await page.evaluate((key) => localStorage.getItem(key), HUD_LAYOUT_KEY);
+  // A fresh load wears the stored layout, not the default.
+  await page.reload();
+  await page.waitForTimeout(900);
+  const afterReload = await layoutOf(page);
+  // ...and an unknown stored value falls back to Cockpit rather than an
+  // attribute no stylesheet has a rule for.
+  await page.evaluate((key) => localStorage.setItem(key, "not-a-layout"), HUD_LAYOUT_KEY);
+  await page.reload();
+  await page.waitForTimeout(900);
+  const afterBogus = await layoutOf(page);
+  await page.close();
+  assert.deepEqual(seen, HUD_LAYOUTS, `the picker did not switch: ${JSON.stringify(seen)}`);
+  assert.equal(stored, "ambient", "the last choice was not saved under hud-window.js's key");
+  assert.equal(afterReload, "ambient", "a reload did not keep the chosen layout");
+  assert.equal(afterBogus, "cockpit", "an unknown stored value did not fall back to Cockpit");
+  assert.deepEqual(problems, []);
+});
+
+await check("a layout change made in Settings reaches an open HUD at once", async () => {
+  // The road the owner's Settings picker uses: the key in this origin's
+  // localStorage, and the `storage` event the page listens for (the same one
+  // the "Open the Jarvis bar" switch already uses). The key comes from
+  // src/hud-window.js, not a hand-typed string, so the two cannot drift.
+  const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  const start = await layoutOf(page);
+  await page.evaluate((key) => localStorage.setItem(key, "studio"), HUD_LAYOUT_KEY);
+  await page.evaluate((key) => window.dispatchEvent(new StorageEvent("storage", { key })), HUD_LAYOUT_KEY);
+  await page.waitForTimeout(150);
+  const mid = await layoutOf(page);
+  await page.evaluate((key) => localStorage.setItem(key, "bogus"), HUD_LAYOUT_KEY);
+  await page.evaluate((key) => window.dispatchEvent(new StorageEvent("storage", { key })), HUD_LAYOUT_KEY);
+  await page.waitForTimeout(150);
+  const afterBogus = await layoutOf(page);
+  // An unrelated key must change nothing.
+  await page.evaluate((key) => localStorage.setItem("jarvis.somethingElse", "1"), OPEN_BAR_KEY);
+  await page.evaluate((key) => window.dispatchEvent(new StorageEvent("storage", { key })), OPEN_BAR_KEY);
+  await page.waitForTimeout(120);
+  const afterUnrelated = await layoutOf(page);
+  await page.close();
+  assert.equal(start, "cockpit");
+  assert.equal(mid, "studio", "a change made where Settings writes it did not reach the page");
+  assert.equal(afterBogus, "cockpit", "a bogus stored value did not fall back");
+  assert.equal(afterUnrelated, "cockpit", "an unrelated storage key moved the layout");
+  assert.deepEqual(problems, []);
+});
+
+await check("every layout keeps every id, and the picker is reachable in all three", async () => {
+  const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  const report = [];
+  for (const name of HUD_LAYOUTS) {
+    await pickLayout(page, name);
+    await page.waitForTimeout(200);
+    report.push(await page.evaluate((ids) => ({
+      layout: document.body.dataset.hudLayout,
+      missing: ids.filter((id) => !document.getElementById(id)),
+      pickerShown: (() => {
+        const b = document.getElementById("hud-layout-picker").getBoundingClientRect();
+        return b.width > 0 && b.height > 0;
+      })(),
+    }), KEPT_IDS));
+  }
+  await page.close();
+  for (const r of report) {
+    assert.deepEqual(r.missing, [], `${r.layout}: removed ${JSON.stringify(r.missing)}`);
+    assert.equal(r.pickerShown, true, `${r.layout}: the layout picker is not reachable`);
+  }
+  assert.deepEqual(problems, []);
+});
+
+await check("Cockpit: the Bento inspector mirrors the cards and the turn", async () => {
+  const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  // No cards: a calm count, and the six telemetry rows stay out of the way
+  // until a turn has actually run.
+  const calm = await page.evaluate(() => ({
+    words: document.getElementById("waiting-words").textContent.trim(),
+    badgeHidden: document.getElementById("waiting-badge").hidden,
+    emptyShown: getComputedStyle(document.getElementById("telemetry-empty")).display !== "none",
+    modelShown: getComputedStyle(document.getElementById("r-model").parentElement).display !== "none",
+  }));
+  // One waiting card, one that cannot be undone: the count and the warning
+  // follow the cards the page itself drew (this check appends one, as
+  // apprPoll would, so no backend stub is needed).
+  await page.evaluate(() => {
+    const box = document.getElementById("approvals");
+    box.hidden = false;
+    const card = document.createElement("div");
+    card.className = "appr";
+    const risk = document.createElement("div");
+    risk.className = "risk";
+    risk.textContent = "No undo \u00b7 leaves this machine";
+    card.append(risk);
+    box.append(card);
+  });
+  await page.waitForTimeout(200);
+  const withCard = await page.evaluate(() => ({
+    words: document.getElementById("waiting-words").textContent.trim(),
+    badgeHidden: document.getElementById("waiting-badge").hidden,
+    hasCards: document.getElementById("rail-waiting").classList.contains("has-cards"),
+  }));
+  // A turn ran: the telemetry replaces "No turns yet this session" with the
+  // rows (the page fills these itself on a turn; this sets the same text).
+  await page.evaluate(() => { document.getElementById("r-latency").textContent = "125 ms"; });
+  await page.waitForTimeout(200);
+  const afterTurn = await page.evaluate(() => ({
+    hasTurn: document.getElementById("rail-telemetry").hasAttribute("data-has-turn"),
+    emptyShown: getComputedStyle(document.getElementById("telemetry-empty")).display !== "none",
+    modelShown: getComputedStyle(document.getElementById("r-model").parentElement).display !== "none",
+  }));
+  await page.close();
+  assert.equal(calm.words, "No cards waiting");
+  assert.equal(calm.badgeHidden, true);
+  assert.equal(calm.emptyShown, true, "no 'No turns yet this session' line before any turn");
+  assert.equal(calm.modelShown, false, "the dash rows show before any turn in Cockpit");
+  assert.equal(withCard.words, "1 card waiting for your approval");
+  assert.equal(withCard.badgeHidden, false, "a card that cannot be undone drew no warning");
+  assert.equal(withCard.hasCards, true);
+  assert.equal(afterTurn.hasTurn, true, "a turn did not mark the telemetry as having one");
+  assert.equal(afterTurn.emptyShown, false, "the empty line stayed after a turn");
+  assert.equal(afterTurn.modelShown, true, "the telemetry rows stayed hidden after a turn");
+  assert.deepEqual(problems, []);
+});
+
+await check("Cockpit: the second-brain tiles open the Galaxy map", async () => {
+  const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  const tiles = await page.evaluate(() => {
+    const ids = ["r-facts", "r-docs", "r-ents", "r-tools"];
+    return ids.map((id) => {
+      const tile = document.getElementById(id).parentElement;
+      return {
+        id,
+        role: tile.getAttribute("role"),
+        tabIndex: tile.tabIndex,
+        clickable: tile.classList.contains("bento-tile-link"),
+      };
+    });
+  });
+  await page.click("#r-facts");
+  await page.waitForTimeout(200);
+  const view = await page.evaluate(() => ({ view: S.view, brainOn: document.getElementById("brain").classList.contains("on") }));
+  await page.close();
+  for (const t of tiles) {
+    assert.equal(t.clickable, true, `${t.id}'s tile is not marked clickable`);
+    assert.equal(t.role, "button", `${t.id}'s tile is not a button to a screen reader`);
+    assert.equal(t.tabIndex, 0, `${t.id}'s tile is not reachable by keyboard`);
+  }
+  assert.equal(view.view, "brain", "clicking a second-brain tile did not open the Galaxy map");
+  assert.equal(view.brainOn, true);
+  assert.deepEqual(problems, []);
+});
+
+await check("Studio: conversation and the Galaxy map are side by side, and the tabs drive the stage", async () => {
+  const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  await pickLayout(page, "studio");
+  await page.waitForTimeout(250);
+  const split = await page.evaluate(() => {
+    const shown = (id) => getComputedStyle(document.getElementById(id)).display !== "none";
+    const talkBox = document.getElementById("talk").getBoundingClientRect();
+    const brainBox = document.getElementById("brain").getBoundingClientRect();
+    return {
+      talk: shown("talk"), brain: shown("brain"),
+      sideBySide: brainBox.left >= talkBox.right - 2,
+      tabsShown: shown("stage-tabs"),
+      dockShown: shown("studio-dock"),
+      railHidden: getComputedStyle(document.getElementById("rail-right")).display === "none",
+      laneSelectShown: shown("lane-compact"),
+      titleHidden: getComputedStyle(document.getElementById("stage-title")).display === "none",
+    };
+  });
+  // The dock's Memory icon chooses the same tab the stage's own bar does.
+  await page.click('#studio-dock [data-hud-tab-choice="memory"]');
+  await page.waitForTimeout(250);
+  const memoryTab = await page.evaluate(() => ({
+    tab: document.body.dataset.hudTab,
+    railShown: getComputedStyle(document.getElementById("rail-right")).display !== "none",
+    memoryShown: getComputedStyle(document.getElementById("rail-memory")).display !== "none",
+    telemetryShown: getComputedStyle(document.getElementById("rail-telemetry")).display !== "none",
+    brainShown: getComputedStyle(document.getElementById("brain")).display !== "none",
+    synced: [...document.querySelectorAll('[data-hud-tab-choice="memory"]')]
+      .every((b) => b.getAttribute("aria-selected") === "true"),
+  }));
+  // The compact brain dropdown lists the SAME lanes, and choosing one clicks
+  // the page's own lane button.
+  const lanes = await page.evaluate(() => {
+    const select = document.getElementById("lane-compact");
+    const buttons = [...document.querySelectorAll("#lanes .lane")];
+    const before = buttons.filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.lane);
+    const want = select.options[select.options.length - 1].value;
+    select.value = want;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    const after = [...document.querySelectorAll("#lanes .lane")]
+      .filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.lane);
+    return { options: select.options.length, buttons: buttons.length, before, after, want };
+  });
+  await page.close();
+  assert.equal(split.talk, true, "Studio hides the conversation");
+  assert.equal(split.brain, true, "Studio's Galaxy stage is not showing");
+  assert.equal(split.sideBySide, true, "the conversation and the stage are stacked, not side by side");
+  assert.equal(split.tabsShown, true, "the Inspector Stage tabs are not drawn");
+  assert.equal(split.dockShown, true, "the Studio icon dock is not drawn");
+  assert.equal(split.railHidden, true, "the full telemetry rail is drawn in the split view");
+  assert.equal(split.laneSelectShown, true, "Studio has no compact brain dropdown");
+  assert.equal(split.titleHidden, true, "the stage title takes the Studio header's room");
+  assert.equal(memoryTab.tab, "memory");
+  assert.equal(memoryTab.railShown, true, "the Memory tab did not open a stage panel");
+  assert.equal(memoryTab.memoryShown, true, "the Memory panel does not show the memory readouts");
+  assert.equal(memoryTab.telemetryShown, false, "the Memory panel also shows the telemetry");
+  assert.equal(memoryTab.brainShown, false, "the Galaxy map stayed up behind the Memory panel");
+  assert.equal(memoryTab.synced, true, "the dock and the stage tab bar disagree about the chosen tab");
+  assert.equal(lanes.options, lanes.buttons, "the brain dropdown and the lane buttons disagree in count");
+  assert.notDeepEqual(lanes.after, lanes.before, "choosing a lane in the dropdown changed nothing");
+  assert.deepEqual(lanes.after, [lanes.want], "the dropdown chose a lane the page does not use");
+  assert.deepEqual(problems, []);
+});
+
+await check("Ambient: no sidebars, a 320px core, the latest exchange and a centred composer", async () => {
+  const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  await pickLayout(page, "ambient");
+  await page.waitForTimeout(300);
+  await send(page, "first exchange");
+  await send(page, "second exchange");
+  await page.waitForTimeout(300);
+  const shape = await page.evaluate(() => {
+    const box = document.getElementById("reactor").getBoundingClientRect();
+    const shellBox = document.getElementById("shell").getBoundingClientRect();
+    const stageBar = getComputedStyle(document.querySelector(".stage-bar"));
+    const shown = (id) => getComputedStyle(document.getElementById(id)).display !== "none";
+    const rows = [...document.querySelectorAll("#log .msg")];
+    const visibleRows = rows.filter((el) => getComputedStyle(el).display !== "none");
+    const composer = document.querySelector(".composer").getBoundingClientRect();
+    return {
+      leftRail: getComputedStyle(document.querySelector(".rail.left")).display,
+      // The drawer is off the right-hand edge until its toggle opens it:
+      // measured as "not on screen", not as display:none, because a slid
+      // panel must keep its box to slide.
+      rightRailOffScreen: document.getElementById("rail-right").getBoundingClientRect().left >= window.innerWidth - 1,
+      coreWidth: Math.round(box.width),
+      barPosition: stageBar.position,
+      statusShown: shown("ambient-status"),
+      historyShown: shown("history-toggle"),
+      rows: rows.length,
+      visibleRows: visibleRows.length,
+      composerCentred: Math.abs((composer.left + composer.right) / 2 - (shellBox.left + shellBox.right) / 2) < 8,
+      linksHold: !!document.getElementById("log"),
+    };
+  });
+  await page.click("#history-toggle");
+  await page.waitForTimeout(200);
+  const opened = await page.evaluate(() => ({
+    full: document.getElementById("log").classList.contains("full"),
+    visibleRows: [...document.querySelectorAll("#log .msg")]
+      .filter((el) => getComputedStyle(el).display !== "none").length,
+    label: document.getElementById("history-toggle").textContent,
+    pressed: document.getElementById("history-toggle").getAttribute("aria-pressed"),
+  }));
+  await page.close();
+  assert.equal(shape.leftRail, "none", "Ambient still draws the navigation rail");
+  assert.equal(shape.rightRailOffScreen, true, "Ambient draws the telemetry rail over the core");
+  assert.equal(shape.coreWidth, 320, "the Ambient core is not 320px");
+  assert.equal(shape.barPosition, "fixed", "the top-right pill is not floating");
+  assert.equal(shape.statusShown, true, "the top-left status pill is missing");
+  assert.equal(shape.historyShown, true, "the history drawer toggle is missing");
+  assert.ok(shape.rows >= 3, "the exchanges did not reach the log");
+  assert.equal(shape.visibleRows, 1, "Ambient showed the whole transcript instead of the latest exchange");
+  assert.equal(shape.composerCentred, true, "the composer is not centred");
+  assert.equal(opened.full, true, "the history toggle did not open the transcript");
+  assert.equal(opened.visibleRows, shape.rows, "the opened drawer still hides messages");
+  assert.equal(opened.pressed, "true");
+  assert.match(opened.label, /Hide full history/);
+  assert.deepEqual(problems, []);
+});
+
+await check("the footer Jarvis-bar pill is there with the shell, and gone in a plain browser", async () => {
+  const shelled = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  const withShell = await shelled.page.evaluate(() => {
+    const pill = document.getElementById("rail-quickbar");
+    return {
+      present: Boolean(pill),
+      hidden: pill ? pill.hidden : true,
+      ready: pill ? pill.hasAttribute("data-ready") : false,
+      shown: pill ? pill.getBoundingClientRect().width > 0 : false,
+    };
+  });
+  await shelled.page.close();
+  const plain = await openHud(browser, { jarvis: false, ollama: true, proxy: false, noShell: true });
+  const withoutShell = await plain.page.evaluate(() => {
+    const pill = document.getElementById("rail-quickbar");
+    return {
+      ready: pill ? pill.hasAttribute("data-ready") : false,
+      shown: pill ? pill.getBoundingClientRect().width > 0 : false,
+    };
+  });
+  await plain.page.close();
+  assert.equal(withShell.present, true, "the footer pill is not in the page at all");
+  assert.equal(withShell.hidden, false, "the footer pill is hidden though the shell is there");
+  assert.equal(withShell.ready, true);
+  assert.equal(withShell.shown, true, "the footer pill is not drawn in the Cockpit rail");
+  assert.equal(withoutShell.ready, false, "a plain browser drew a Jarvis-bar pill with no bar to open");
+  assert.equal(withoutShell.shown, false);
+});
 
 await browser.close();
 if (fails.length) {

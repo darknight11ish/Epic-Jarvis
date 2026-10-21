@@ -31,6 +31,24 @@
   } catch (e) {
     /* private mode, cleared site data - the default theme is correct */
   }
+  /* The HUD's layout, also before first paint (2026-10-20): the same read of
+     this window origin's localStorage the theme above makes, so the window
+     does not paint Cockpit and then jump into Studio. It goes on <html> here
+     because <body> does not exist yet; the layout script at the end of the
+     page puts the same value on document.body.dataset.hudLayout (the DOM
+     contract the pickers and tests read) and keeps the two in step.
+     The key is hud-window.js's HUD_LAYOUT_KEY; the page cannot import that
+     module (the Python backend serves it as one file), so it is spelled
+     again here - tests/hud.mjs drives the real page with the module's own
+     key, so a rename on either side fails there. */
+  try {
+    var jarvisHudLayout = localStorage.getItem("jarvis.hud.layout");
+    document.documentElement.setAttribute("data-hud-layout",
+      ["cockpit", "studio", "ambient"].indexOf(jarvisHudLayout) >= 0
+        ? jarvisHudLayout : "cockpit");
+  } catch (e) {
+    document.documentElement.setAttribute("data-hud-layout", "cockpit");
+  }
 </script>
 <link rel="stylesheet" href="theme.css">
 
@@ -552,26 +570,462 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
 .init button{ border-radius:7px; padding:6px 13px; font-weight:600; cursor:pointer; border:1px solid var(--border-strong);
   background:transparent; color:var(--text); }
 .init button.yes{ background:rgb(var(--info-rgb) / .18); border-color:var(--info); color:var(--text); }
+
+/* ====================================================================== *
+ *  2026-10-20 - THE HUD'S THREE LAYOUTS (the owner's request; the work
+ *  order's PART III+IV). Everything below is layout and paint ONLY:
+ *
+ *   * switched by `html[data-hud-layout="cockpit" | "studio" | "ambient"]`;
+ *   * the SAME DOM nodes and ids in every mode - nothing is deleted, built
+ *     twice or moved between parents, so every control the page's tests
+ *     reach for is in the document whichever layout is showing;
+ *   * every colour is a theme.css token through this page's own aliases
+ *     (--void/--plate/--plate-2/--line/--line-hot/--ice/--gold/--dim/
+ *     --dimmer/--crit and the raw tokens). NO flat grey: every panel is a
+ *     gradient or a translucent wash, like the rules above it;
+ *   * animations obey the `prefers-reduced-motion` rule already at the
+ *     bottom of this stylesheet (loops stop; short fades stay).
+ *
+ *  Cockpit is the default and the one closest to the page as it was; the
+ *  page also renders correctly with no attribute at all (an older shell).
+ * ====================================================================== */
+
+/* ---- atoms the layouts share ---------------------------------------- */
+.layout-picker{
+  display:flex; gap:2px; padding:2px; border:1px solid var(--line);
+  border-radius:4px; background:var(--plate-2); flex-shrink:0;
+}
+.layout-choice{
+  display:flex; align-items:center; gap:5px; padding:4px 8px; border-radius:3px;
+  font-family:var(--f-mono); font-size:10.5px; letter-spacing:.06em; color:var(--dim);
+  transition:color .15s, background .15s;
+}
+.layout-choice:hover{color:var(--text); background:rgb(var(--accent-rgb) / .08);}
+.layout-choice[aria-pressed="true"]{
+  color:var(--ice); background:rgb(var(--accent-rgb) / .14);
+  box-shadow:inset 0 0 0 1px rgb(var(--accent-rgb) / .28);
+}
+.lc-glyph{font-size:12px; line-height:1;}
+
+.appr-badge{display:none; border-color:var(--warn); color:var(--warn);}
+.appr-badge[hidden]{display:none !important;}
+
+.ambient-view{
+  display:none; padding:5px 10px; border:1px solid var(--line); border-radius:3px;
+  font-family:var(--f-mono); font-size:10.5px; letter-spacing:.08em; color:var(--dim);
+  text-transform:uppercase; transition:color .15s, border-color .15s;
+}
+.ambient-view:hover{color:var(--text); border-color:var(--line-hot);}
+.ambient-view[aria-pressed="true"]{border-color:var(--ice); color:var(--ice);}
+
+.lane-compact{
+  display:none; max-width:190px; background:var(--plate-2); border:1px solid var(--line);
+  border-radius:3px; padding:5px 8px; color:var(--text);
+  font-family:var(--f-mono); font-size:11px;
+}
+.lane-compact:focus{outline:none; border-color:var(--line-hot);}
+
+#stage-tabs{display:none;}
+.stage-tab{
+  padding:8px 13px; font-family:var(--f-mono); font-size:11px; letter-spacing:.07em;
+  color:var(--dim); border-bottom:2px solid transparent; text-transform:uppercase;
+}
+.stage-tab:hover{color:var(--text);}
+.stage-tab[aria-selected="true"]{color:var(--ice); border-bottom-color:var(--ice);}
+
+.studio-dock{display:none;}
+
+.core-expand{display:none;}
+.history-bar{display:none;}
+#ambient-status{display:none;}
+
+.reactor-rings{display:none; position:absolute; inset:0; pointer-events:none; z-index:0;}
+.reactor-rings i{
+  position:absolute; left:50%; top:50%; border-radius:50%;
+  transform:translate(-50%,-50%);
+  border:1px solid rgb(var(--accent-rgb) / .16);
+}
+.reactor-rings i:nth-child(1){width:calc(100% + 26px); height:calc(100% + 26px);}
+.reactor-rings i:nth-child(2){
+  width:calc(100% + 78px); height:calc(100% + 78px);
+  border-color:rgb(var(--accent-rgb) / .10); border-style:dashed;
+}
+.reactor-rings i:nth-child(3){
+  width:calc(100% + 146px); height:calc(100% + 146px);
+  border-color:rgb(var(--accent-rgb) / .06);
+}
+
+.rail-foot{margin-top:auto; padding:12px 10px;}
+.quickbar-pill{
+  display:none; align-items:center; gap:8px; width:100%; padding:9px 11px;
+  border:1px solid var(--line); border-radius:4px; background:var(--plate-2);
+  font-family:var(--f-hud); font-size:11.5px; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--dim); transition:border-color .15s, color .15s;
+}
+.quickbar-pill[data-ready]{display:flex;}
+.quickbar-pill:hover{border-color:var(--gold); color:var(--gold);}
+.quickbar-pill[hidden]{display:none !important;}
+
+.bento-empty{
+  display:none; margin:2px 0 4px; font-family:var(--f-mono); font-size:11px;
+  color:var(--text-faint);
+}
+.bento-waiting{display:none;}
+.waiting-line{
+  display:flex; align-items:baseline; gap:8px; margin:9px 0 0;
+  font-size:13px; color:var(--text); line-height:1.4;
+}
+.wait-check{color:var(--ok); font-weight:700;}
+.bento-waiting.has-cards .wait-check{color:var(--warn);}
+.wait-badge{
+  display:inline-block; margin-top:8px; padding:3px 8px; border-radius:2px;
+  border:1px solid rgb(var(--bad-rgb) / .55); color:var(--bad-text);
+  font-family:var(--f-mono); font-size:10px; letter-spacing:.05em;
+}
+.wait-badge[hidden]{display:none !important;}
+.waiting-open{display:none; margin-top:10px;}
+.bento-waiting.has-cards .waiting-open{display:inline-block;}
+
+/* ---- COCKPIT (default) ---------------------------------------------- *
+ *  Left: a 220px navigation and brain-switcher rail. Centre: the core
+ *  (large while the conversation is short, docked to a small header once
+ *  it grows) over the conversation and composer. Right: a 260px Bento
+ *  inspector - waiting cards, the second brain's tiles, last-turn
+ *  telemetry - each a card in its own right.
+ * --------------------------------------------------------------------- */
+html[data-hud-layout="cockpit"] #shell{grid-template-columns:220px minmax(0,1fr) 260px;}
+html[data-hud-layout="cockpit"] #rail-right{padding:12px 10px 18px; gap:10px; overflow-y:auto;}
+html[data-hud-layout="cockpit"] #rail-right .rail-section{
+  border:1px solid var(--line); border-bottom:1px solid var(--line); border-radius:8px;
+  padding:12px 12px 13px;
+  background:
+    linear-gradient(165deg, rgb(var(--accent-rgb) / .05), transparent 58%),
+    linear-gradient(180deg, var(--plate-2), var(--plate));
+  box-shadow:0 8px 22px rgb(var(--shade-rgb) / .22);
+}
+html[data-hud-layout="cockpit"] .bento-waiting{display:flex; flex-direction:column;}
+html[data-hud-layout="cockpit"] #rail-telemetry:not([data-has-turn]) .readout,
+html[data-hud-layout="cockpit"] #rail-telemetry:not([data-has-turn]) .meter{
+  display:none;
+}
+html[data-hud-layout="cockpit"] #rail-telemetry:not([data-has-turn]) .bento-empty{display:block;}
+html[data-hud-layout="cockpit"] #rail-telemetry[data-has-turn] .bento-empty{display:none;}
+html[data-hud-layout="cockpit"] .bento-brain{
+  display:grid; grid-template-columns:1fr 1fr; gap:7px; align-items:stretch;
+}
+html[data-hud-layout="cockpit"] .bento-brain .hud-label{grid-column:1 / -1;}
+html[data-hud-layout="cockpit"] .bento-brain .readout{
+  flex-direction:column; align-items:flex-start; gap:3px; padding:9px 10px;
+  border:1px solid var(--line); border-radius:6px;
+  background:linear-gradient(160deg, rgb(var(--accent-rgb) / .07), rgb(var(--accent-rgb) / .01));
+  transition:border-color .15s, background .15s;
+}
+html[data-hud-layout="cockpit"] .bento-brain .readout.bento-tile-link{cursor:pointer;}
+html[data-hud-layout="cockpit"] .bento-brain .readout.bento-tile-link:hover,
+html[data-hud-layout="cockpit"] .bento-brain .readout.bento-tile-link:focus-visible{
+  border-color:var(--line-hot); background:rgb(var(--accent-rgb) / .12);
+}
+html[data-hud-layout="cockpit"] .bento-brain .readout:last-child{
+  grid-column:1 / -1; cursor:default;
+}
+html[data-hud-layout="cockpit"] .bento-brain .readout .v{font-size:18px; color:var(--ice);}
+html[data-hud-layout="cockpit"] .bento-brain .readout:last-child .v{font-size:13px;}
+html[data-hud-layout="cockpit"] .lanes{
+  flex-direction:row; flex-wrap:wrap; gap:4px; margin-top:8px;
+}
+html[data-hud-layout="cockpit"] .lane{
+  flex:1 1 auto; justify-content:center; gap:5px; padding:5px 7px;
+  border-radius:2px; font-size:10px;
+}
+html[data-hud-layout="cockpit"] .lane .tag{display:none;}
+html[data-hud-layout="cockpit"] #reactor{width:220px; height:220px;}
+html[data-hud-layout="cockpit"] .core-expand{
+  /* Beside the core, not at the far edge of a full-width wrap: the wrap is
+     the whole stage row, so a right:0 button floated far from what it
+     expands. Half the stage plus the core's own half, then a gap. */
+  display:inline-flex; position:absolute; left:calc(50% + 118px); bottom:10px;
+  font-size:10px; padding:4px 8px;
+}
+html[data-hud-layout="cockpit"] #shell[data-core="pinned"] #reactor{width:96px; height:96px;}
+html[data-hud-layout="cockpit"] #shell[data-core="pinned"] .reactor-wrap{
+  flex-direction:row; justify-content:flex-start; gap:16px; padding:6px 22px 4px;
+}
+html[data-hud-layout="cockpit"] #shell[data-core="pinned"] .reactor-state{
+  position:static; transform:none; font-size:9px;
+}
+html[data-hud-layout="cockpit"] #shell[data-core="pinned"] .core-expand{
+  position:static; margin-left:auto;
+}
+html[data-hud-layout="cockpit"] #rail-quickbar .qp-glyph{color:var(--gold);}
+
+/* ---- STUDIO --------------------------------------------------------- *
+ *  A 60px icon dock; the conversation on the left; on the right a 45%
+ *  Inspector Stage. The stage's Galaxy tab shows the REAL #brain view
+ *  beside the conversation (both views live at once - nothing duplicated,
+ *  setView's own .on class is simply overridden here); its other three
+ *  tabs show panels this page already has, as an overlay on the same
+ *  column: telemetry/systems, the memory readouts, and the waiting cards.
+ * --------------------------------------------------------------------- */
+html[data-hud-layout="studio"] #shell{grid-template-columns:60px minmax(0,1fr) 0;}
+html[data-hud-layout="studio"] .rail.left{border-right:1px solid var(--line);}
+html[data-hud-layout="studio"] .rail.left .brand{padding:14px 0 10px; text-align:center;}
+html[data-hud-layout="studio"] .rail.left .brand h1{font-size:0; letter-spacing:0;}
+html[data-hud-layout="studio"] .rail.left .brand h1::before{
+  content:"\25C8"; font-size:16px; letter-spacing:0; color:var(--ice);
+  text-shadow:0 0 16px rgb(var(--accent-rgb) / .45);
+}
+html[data-hud-layout="studio"] .rail.left .brand .sub{display:none;}
+html[data-hud-layout="studio"] .rail-nav{display:none;}
+html[data-hud-layout="studio"] .studio-dock{
+  display:flex; flex-direction:column; align-items:center; gap:6px; padding:10px 0;
+}
+html[data-hud-layout="studio"] .dock-btn{
+  width:42px; height:38px; display:flex; align-items:center; justify-content:center;
+  border:1px solid transparent; border-radius:5px; color:var(--dim); font-size:16px;
+  transition:color .15s, border-color .15s, background .15s;
+}
+html[data-hud-layout="studio"] .dock-btn:hover{
+  color:var(--text); background:rgb(var(--accent-rgb) / .07);
+}
+html[data-hud-layout="studio"] .dock-btn[aria-pressed="true"]{
+  color:var(--ice); border-color:rgb(var(--accent-rgb) / .3);
+  background:rgb(var(--accent-rgb) / .12);
+}
+html[data-hud-layout="studio"] .rail-left .rail-lanes,
+html[data-hud-layout="studio"] .rail-lanes,
+html[data-hud-layout="studio"] .rail-systems{display:none;}
+html[data-hud-layout="studio"] .rail-foot{padding:8px 6px 12px;}
+html[data-hud-layout="studio"] .quickbar-pill{justify-content:center; padding:9px 0;}
+html[data-hud-layout="studio"] .quickbar-pill .qp-label{display:none;}
+html[data-hud-layout="studio"] .rail.right{display:none;}
+html[data-hud-layout="studio"] #stage{
+  display:grid; min-height:0;
+  grid-template-columns:minmax(0,1fr) 45%;
+  grid-template-rows:auto auto auto auto auto auto minmax(0,1fr);
+}
+html[data-hud-layout="studio"] #stage > .stage-bar{
+  grid-column:1 / -1; grid-row:1; padding:10px 16px; min-height:0;
+}
+html[data-hud-layout="studio"] #stage-title{display:none;}
+html[data-hud-layout="studio"] #stage-tabs{
+  display:flex; grid-column:1 / -1; grid-row:2;
+  gap:2px; padding:0 16px; border-bottom:1px solid var(--line);
+}
+html[data-hud-layout="studio"] #approvals{
+  grid-column:1 / -1; grid-row:3; margin:10px 16px 0;
+}
+html[data-hud-layout="studio"] #initiative{
+  grid-column:1 / -1; grid-row:4; margin:10px 16px 0;
+}
+html[data-hud-layout="studio"] #banner{grid-column:1 / -1; grid-row:5;}
+html[data-hud-layout="studio"] #model-warn{grid-column:1 / -1; grid-row:6;}
+html[data-hud-layout="studio"] #ambient-status{display:none;}
+html[data-hud-layout="studio"] #talk{
+  display:flex; grid-column:1; grid-row:7; min-width:0; min-height:0;
+}
+html[data-hud-layout="studio"] #brain{
+  display:none; grid-column:2; grid-row:7; min-width:0; min-height:0;
+}
+html[data-hud-layout="studio"][data-hud-tab="galaxy"] #brain{display:flex;}
+html[data-hud-layout="studio"] .reactor-wrap{
+  flex-direction:row; justify-content:flex-start; gap:14px; padding:10px 18px 4px;
+}
+html[data-hud-layout="studio"] #reactor{width:48px; height:48px;}
+html[data-hud-layout="studio"] .reactor-state{
+  position:static; transform:none; font-size:9px;
+}
+html[data-hud-layout="studio"] .lane-compact{display:block;}
+html[data-hud-layout="studio"] .rail-toggle{display:none;}
+html[data-hud-layout="studio"] .appr-badge:not([hidden]){display:inline-flex;}
+html[data-hud-layout="studio"] #rail-right{
+  display:none; position:fixed; top:0; right:0; bottom:0; width:45%; z-index:30;
+  overflow-y:auto; padding:18px 14px;
+  border-left:1px solid var(--line-hot);
+  background:linear-gradient(180deg, var(--plate), var(--void));
+  box-shadow:-18px 0 44px rgb(var(--shade-rgb) / .5);
+}
+html[data-hud-layout="studio"][data-hud-tab="telemetry"] #rail-right,
+html[data-hud-layout="studio"][data-hud-tab="memory"] #rail-right,
+html[data-hud-layout="studio"][data-hud-tab="today"] #rail-right{display:flex; flex-direction:column;}
+html[data-hud-layout="studio"][data-hud-tab="telemetry"] #rail-right .rail-section,
+html[data-hud-layout="studio"][data-hud-tab="memory"] #rail-right .rail-section,
+html[data-hud-layout="studio"][data-hud-tab="today"] #rail-right .rail-section{
+  display:none;
+}
+/* Two ids (#rail-right then the section) so these beat the "hide every
+   section in this panel" rule above on specificity, whichever way round they
+   are read; the section is what shows, the panel itself stays flex. */
+html[data-hud-layout="studio"][data-hud-tab="telemetry"] #rail-right #rail-telemetry,
+html[data-hud-layout="studio"][data-hud-tab="telemetry"] #rail-right #rail-tools,
+html[data-hud-layout="studio"][data-hud-tab="telemetry"] #rail-right #rail-voice,
+html[data-hud-layout="studio"][data-hud-tab="telemetry"] #rail-right #rail-budget,
+html[data-hud-layout="studio"][data-hud-tab="memory"] #rail-right #rail-memory,
+html[data-hud-layout="studio"][data-hud-tab="today"] #rail-right #rail-waiting{
+  display:block;
+}
+html[data-hud-layout="studio"] .bento-waiting{display:flex; flex-direction:column;}
+
+/* ---- AMBIENT -------------------------------------------------------- *
+ *  No sidebars. Two floating glass pills carry what a rail would have
+ *  said: top-left the status, model and latency; top-right the view
+ *  switches, the live approval badge, the layout picker, the settings
+ *  gear and the telemetry drawer. The core takes the centre at 320px with
+ *  layered orbital rings, the latest exchange sits beneath it as a glass
+ *  card, and the composer floats centred underneath. The approval cards
+ *  themselves STAY, full size, at the top of the stage: a card never
+ *  hides because of a layout.
+ * --------------------------------------------------------------------- */
+html[data-hud-layout="ambient"] #shell{grid-template-columns:minmax(0,1fr);}
+html[data-hud-layout="ambient"] .rail.left{display:none;}
+html[data-hud-layout="ambient"] .rail.right{
+  position:fixed; right:0; top:0; bottom:0; width:300px; z-index:40;
+  transform:translateX(100%); transition:transform .22s ease;
+  border-left:1px solid var(--line-hot);
+  box-shadow:-18px 0 44px rgb(var(--shade-rgb) / .55);
+}
+html[data-hud-layout="ambient"] .rail.right.open{transform:none;}
+html[data-hud-layout="ambient"] .rail-toggle{display:flex;}
+html[data-hud-layout="ambient"] .stage-bar{
+  position:fixed; top:14px; right:16px; z-index:25;
+  width:auto; min-height:0; padding:8px 12px; gap:8px;
+  border:1px solid rgb(var(--accent-rgb) / .22); border-radius:999px;
+  background:linear-gradient(180deg, rgb(var(--surface-2) / .86), rgb(var(--surface-1) / .74));
+  backdrop-filter:blur(16px);
+  box-shadow:0 12px 32px rgb(var(--shade-rgb) / .38);
+}
+html[data-hud-layout="ambient"] .stage-bar h2,
+html[data-hud-layout="ambient"] #chip-model,
+html[data-hud-layout="ambient"] #chip-state,
+html[data-hud-layout="ambient"] .lane-compact{display:none;}
+html[data-hud-layout="ambient"] .ambient-view{display:inline-flex;}
+html[data-hud-layout="ambient"] .appr-badge:not([hidden]){display:inline-flex;}
+html[data-hud-layout="ambient"] #ambient-status{
+  display:block; position:fixed; top:14px; left:16px; z-index:25;
+  padding:10px 16px; border:1px solid rgb(var(--accent-rgb) / .22); border-radius:12px;
+  background:linear-gradient(180deg, rgb(var(--surface-2) / .86), rgb(var(--surface-1) / .72));
+  backdrop-filter:blur(16px);
+  box-shadow:0 12px 32px rgb(var(--shade-rgb) / .38);
+}
+.as-brand{
+  font-family:var(--f-hud); font-size:12px; font-weight:700; letter-spacing:.32em;
+  color:var(--ice); text-shadow:0 0 16px rgb(var(--accent-rgb) / .4);
+}
+.as-line{
+  display:flex; align-items:center; gap:7px; margin-top:5px;
+  font-family:var(--f-mono); font-size:10.5px; color:var(--dim);
+}
+.as-dot{
+  width:6px; height:6px; border-radius:50%; background:var(--ok);
+  box-shadow:0 0 9px var(--ok); flex-shrink:0;
+}
+.as-sep{color:var(--text-faint);}
+html[data-hud-layout="ambient"] #stage{align-items:center;}
+html[data-hud-layout="ambient"] #approvals{
+  width:min(720px, 94%); margin:76px auto 0;
+}
+html[data-hud-layout="ambient"] #initiative{width:min(720px, 94%); margin:0 auto;}
+html[data-hud-layout="ambient"] #banner,
+html[data-hud-layout="ambient"] #model-warn{
+  width:min(720px, 94%); margin:76px auto 0; border-radius:10px;
+}
+html[data-hud-layout="ambient"] #talk{align-items:center; position:relative;}
+html[data-hud-layout="ambient"] .reactor-wrap{
+  margin-top:58px; padding:0; flex-shrink:0;
+}
+html[data-hud-layout="ambient"] #reactor{width:320px; height:320px;}
+html[data-hud-layout="ambient"] .reactor-rings{display:block;}
+html[data-hud-layout="ambient"] .reactor-state{bottom:-8px; letter-spacing:.34em;}
+html[data-hud-layout="ambient"] .core-expand{display:none;}
+html[data-hud-layout="ambient"] #log{
+  flex:0 1 auto; max-height:30vh; width:100%; align-items:center;
+  padding:18px 22px 4px;
+}
+html[data-hud-layout="ambient"] #log .msg{max-width:680px; width:100%;}
+html[data-hud-layout="ambient"] #log:not(.full) .msg:not(:last-child){display:none;}
+html[data-hud-layout="ambient"] #log.full{max-height:48vh;}
+html[data-hud-layout="ambient"] .history-bar{
+  display:flex; justify-content:center; padding:4px 0 10px; flex-shrink:0;
+}
+html[data-hud-layout="ambient"] .history-toggle{display:inline-flex;}
+html[data-hud-layout="ambient"] .composer{
+  width:min(680px, 92%); margin:0 auto 18px; padding:10px 12px;
+  border:1px solid var(--line-hot); border-radius:14px;
+  background:linear-gradient(180deg, rgb(var(--surface-2) / .9), rgb(var(--surface-1) / .8));
+  backdrop-filter:blur(14px);
+  box-shadow:0 16px 36px rgb(var(--shade-rgb) / .4);
+}
+
+/* ---- narrower windows ---------------------------------------------- *
+ *  The three layouts assume the HUD's own window (it opens as a large
+ *  panel). These keep them usable rather than merely valid when the owner
+ *  drags it smaller: the second column folds away and the drawer takes
+ *  over, exactly as the base stylesheet already does below 1080px.
+ * --------------------------------------------------------------------- */
+@media (max-width:1180px){
+  .lc-name{display:none;}
+}
+@media (max-width:1080px){
+  html[data-hud-layout="cockpit"] #shell{grid-template-columns:188px minmax(0,1fr);}
+  html[data-hud-layout="cockpit"] .bento-brain{grid-template-columns:1fr 1fr;}
+  html[data-hud-layout="studio"] #stage{grid-template-columns:minmax(0,1fr);}
+  html[data-hud-layout="studio"] #brain{display:none !important;}
+  html[data-hud-layout="studio"][data-hud-tab="galaxy"] #rail-right{display:none;}
+  html[data-hud-layout="ambient"] #reactor{width:240px; height:240px;}
+  html[data-hud-layout="ambient"] #log{max-height:26vh;}
+}
+@media (max-width:760px){
+  html[data-hud-layout="cockpit"] #reactor{width:150px; height:150px;}
+  html[data-hud-layout="cockpit"] .core-expand{left:calc(50% + 84px);}
+  html[data-hud-layout="cockpit"] #shell[data-core="pinned"] #reactor{width:88px; height:88px;}
+  html[data-hud-layout="studio"] #shell{grid-template-columns:52px minmax(0,1fr);}
+  html[data-hud-layout="ambient"] .stage-bar{max-width:calc(100vw - 32px); flex-wrap:wrap; border-radius:16px;}
+  html[data-hud-layout="ambient"] #ambient-status{max-width:calc(100vw - 32px);}
+  html[data-hud-layout="ambient"] #reactor{width:190px; height:190px;}
+}
 </style>
+
+<!-- ==================================================================== *
+ *  THE HUD'S LAYOUT, BEFORE FIRST PAINT (2026-10-20)
+ *
+ *  The owner asked for a choice of three UIs for this window (the work
+ *  order's PART III+IV). All three are THIS page, switched by
+ *  `document.body.dataset.hudLayout`; the value is read synchronously, here,
+ *  for the same reason the theme is read in the head: a first paint in
+ *  Cockpit followed by a jump into Studio would be a flash the owner sees.
+ *
+ *  Where it is kept: this window origin's localStorage, under the key
+ *  src/hud-window.js spells as HUD_LAYOUT_KEY (this page cannot import that
+ *  module - it is served by the Python backend as well as bundled in the
+ *  shell - so the key and the three ids are spelled again here, exactly as
+ *  hud_bootstrap.js spells OPEN_BAR_KEY; tests/hud.mjs proves the two agree
+ *  by driving the real page, and it is the same mechanism the "Open the
+ *  Jarvis bar" switch already uses). Cosmetic: no approval card, changes at
+ *  once, and it changes nothing about what Jarvis does.
+ *
+ *  NOTHING is removed for any layout: every id below is in the document in
+ *  all three modes; the layouts are CSS Grid/Flexbox, order and visibility
+ *  only (the page's own tests query those ids).
+ * ==================================================================== -->
+<body data-hud-layout="cockpit">
 
 <div id="shell">
 
   <!-- ============ LEFT RAIL ============ -->
   <aside class="rail left">
-    <div class="brand">
+    <div class="brand rail-brand">
       <h1>J.A.R.V.I.S.</h1>
       <div class="sub" id="brand-sub">local · standing by</div>
     </div>
 
-    <div class="modes" role="tablist" aria-label="View">
-      <button class="mode" role="tab" aria-selected="true" data-view="talk">
+    <div class="modes rail-nav" id="rail-nav" role="tablist" aria-label="View">
+      <button class="mode" role="tab" aria-selected="true" data-view="talk" title="Talk">
         <svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
           <path d="M12 3a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z"/>
           <path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>
         </svg>
         Talk
       </button>
-      <button class="mode" role="tab" aria-selected="false" data-view="brain">
+      <button class="mode" role="tab" aria-selected="false" data-view="brain" title="Brain (Galaxy map)">
         <svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
           <circle cx="6" cy="7" r="2.2"/><circle cx="18" cy="9" r="2.2"/>
           <circle cx="9" cy="18" r="2.2"/><circle cx="12" cy="11" r="1.6"/>
@@ -581,17 +1035,58 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
       </button>
     </div>
 
-    <div class="rail-section hide-sm">
+    <!-- Studio layout's icon dock. The same four sections the stage's tab bar
+         offers (the layout script keeps both in step: one set of tabs, two
+         places to reach them), plus the Jarvis bar. Hidden in the other two
+         layouts by CSS; nothing here replaces a view - each button chooses
+         what the inspector stage shows. -->
+    <nav class="studio-dock" id="studio-dock" aria-label="HUD sections">
+      <button type="button" class="dock-btn" data-hud-tab-choice="galaxy" title="Galaxy map" aria-pressed="false">
+        <span aria-hidden="true">&#10022;</span>
+      </button>
+      <button type="button" class="dock-btn" data-hud-tab-choice="telemetry" title="Telemetry and systems" aria-pressed="false">
+        <span aria-hidden="true">&#9637;</span>
+      </button>
+      <button type="button" class="dock-btn" data-hud-tab-choice="memory" title="Memory and the second brain" aria-pressed="false">
+        <span aria-hidden="true">&#9672;</span>
+      </button>
+      <button type="button" class="dock-btn" data-hud-tab-choice="today" title="Approvals waiting for you" aria-pressed="false">
+        <span aria-hidden="true">&#10003;</span>
+      </button>
+      <button type="button" class="dock-btn" id="dock-quickbar" title="Jarvis bar" hidden>
+        <span aria-hidden="true">&#9889;</span>
+      </button>
+    </nav>
+
+    <div class="rail-section hide-sm rail-lanes" id="rail-lanes">
       <div class="hud-label">Brain in use</div>
+      <!-- Every lane this PC has, built by renderLanes() from /api/status.
+           The compact segmented look in the Cockpit layout is CSS only: the
+           SAME buttons (and the same data-lane hooks) stay here in every
+           mode, which is what the page's own tests read. -->
       <div class="lanes" id="lanes"></div>
     </div>
 
-    <div class="rail-section hide-sm">
+    <div class="rail-section hide-sm rail-systems" id="rail-systems">
       <div class="hud-label">Systems</div>
       <div class="leds">
         <div class="led" id="led-ollama"><span class="dot"></span><span class="name">ollama</span><span class="val">—</span></div>
         <div class="led" id="led-proxy"><span class="dot"></span><span class="name">proxy</span><span class="val">—</span></div>
+        <!-- The HUD's own link, which this page is told about live by the shell
+             (`jarvis-lane`, S.linkUp): an honest third light with no guessing. -->
+        <div class="led" id="led-link"><span class="dot"></span><span class="name">hud link</span><span class="val">—</span></div>
       </div>
+    </div>
+
+    <!-- The footer "Jarvis bar" pill. It calls the SAME thing the button the
+         shell injects beside the chat box calls (hud_bootstrap.js's
+         `window.__jarvisOpenBar`: hud_open_bar / hide_quickbar), and stays
+         hidden when there is no shell to open a bar (a plain browser). -->
+    <div class="rail-foot">
+      <button class="quickbar-pill" id="rail-quickbar" type="button" hidden>
+        <span class="qp-glyph" aria-hidden="true">&#9889;</span>
+        <span class="qp-label">Jarvis bar</span>
+      </button>
     </div>
   </aside>
 
@@ -618,25 +1113,100 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
       <span id="model-warn-host" hidden></span>
     </div>
 
+    <!-- Ambient layout: the top-left floating glass pill. Same facts the rail
+         already shows (the brand line, the model chip, the last latency), just
+         mirrored here by the layout script so the corners can carry them when
+         the rails are gone. Hidden in the other two layouts by CSS. -->
+    <div id="ambient-status" aria-hidden="true">
+      <div class="as-brand">J.A.R.V.I.S.</div>
+      <div class="as-line">
+        <span class="as-dot"></span>
+        <span id="as-model">local</span>
+        <span class="as-sep">·</span>
+        <span id="as-latency">&mdash;</span>
+      </div>
+    </div>
+
     <div class="stage-bar">
       <h2 id="stage-title">Conversation</h2>
       <span class="spacer"></span>
+      <!-- Ambient layout: the two views as compact switches in the top-right
+           pill (the rail that normally holds them is folded away). -->
+      <button class="ambient-view" id="ambient-view-talk" type="button" aria-pressed="true">Talk</button>
+      <button class="ambient-view" id="ambient-view-brain" type="button" aria-pressed="false">Galaxy</button>
+      <!-- Live approval count. The cards themselves stay in #approvals, where
+           they already are; this is a badge, kept in step by the layout
+           script from the cards' own count. -->
+      <span class="chip appr-badge" id="appr-badge" hidden>0 waiting</span>
       <span class="chip" id="chip-model">local</span>
       <span class="chip" id="chip-state">standing by</span>
+      <!-- Studio layout: the compact brain dropdown. Its options are built
+           from the SAME #lanes buttons renderLanes() draws (a selection
+           clicks that button), so there is one list of lanes, not two. -->
+      <select class="lane-compact" id="lane-compact" aria-label="Brain in use" title="Brain in use"></select>
+      <!-- The in-HUD layout picker. Three buttons rather than a menu: one
+           click switches, and the current one is pressed - the same
+           localStorage key the Settings card writes. -->
+      <div class="layout-picker" id="hud-layout-picker" role="group" aria-label="HUD layout">
+        <button type="button" class="layout-choice" data-hud-layout-choice="cockpit" aria-pressed="true"
+                title="Command Cockpit - three columns: navigation, conversation, Bento inspector">
+          <span class="lc-glyph" aria-hidden="true">&#8862;</span><span class="lc-name">Cockpit</span>
+        </button>
+        <button type="button" class="layout-choice" data-hud-layout-choice="studio" aria-pressed="false"
+                title="Studio Split-Workspace - conversation on the left, the Galaxy or telemetry stage on the right">
+          <span class="lc-glyph" aria-hidden="true">&#9707;</span><span class="lc-name">Studio</span>
+        </button>
+        <button type="button" class="layout-choice" data-hud-layout-choice="ambient" aria-pressed="false"
+                title="Ambient Voice Core - one large core, floating pills, centred conversation">
+          <span class="lc-glyph" aria-hidden="true">&#9678;</span><span class="lc-name">Ambient</span>
+        </button>
+      </div>
       <button class="ghost rail-toggle" id="rail-toggle">Telemetry</button>
+    </div>
+
+    <!-- Studio layout only: the Inspector Stage's tabs. They choose what the
+         right-hand column shows, from things this page ALREADY has: the
+         Galaxy map (#brain), the approval cards (#approvals + #initiative),
+         the memory readouts (#r-facts/#r-docs/#r-ents), and the telemetry
+         rail (#r-model/#r-latency/...). Nothing is duplicated. -->
+    <div id="stage-tabs" role="tablist" aria-label="Inspector stage">
+      <button type="button" class="stage-tab" data-hud-tab-choice="galaxy" role="tab" aria-selected="true">Galaxy</button>
+      <button type="button" class="stage-tab" data-hud-tab-choice="today" role="tab" aria-selected="false">Approvals</button>
+      <button type="button" class="stage-tab" data-hud-tab-choice="memory" role="tab" aria-selected="false">Memory</button>
+      <button type="button" class="stage-tab" data-hud-tab-choice="telemetry" role="tab" aria-selected="false">Telemetry</button>
     </div>
 
     <!-- ---- TALK ---- -->
     <section class="view on" id="talk">
       <div class="reactor-wrap">
+        <!-- Layered orbital rings behind the face, drawn with CSS only (no
+             canvas, no image): the Ambient layout's centrepiece, and a soft
+             halo in the other two. Decorative: aria-hidden, and still under
+             `prefers-reduced-motion`'s loop-stop rule. -->
+        <div class="reactor-rings" aria-hidden="true"><i></i><i></i><i></i></div>
         <!-- Jarvis's face: the same kit renderer the Widget shows, in
              display mode, driven by this page's own state. No src here -
              the script sets it once it knows which face the owner chose. -->
         <iframe id="reactor" title="Jarvis" tabindex="-1" aria-hidden="true"></iframe>
         <div class="reactor-state" id="reactor-state">standing by</div>
+        <!-- Cockpit layout: the core sits large while the conversation is
+             short, and docks to a small header core once it grows. This
+             button puts it back / docks it again, and remembers nothing (a
+             session's own preference, not a setting). -->
+        <button class="ghost core-expand" id="core-expand" type="button"
+                aria-pressed="false" aria-controls="reactor"
+                title="Show the small core so more of the conversation fits">Expand core</button>
       </div>
 
       <div id="log" role="log" aria-live="polite"></div>
+
+      <!-- Ambient layout: the log shows the latest exchange as a card, and
+           this opens the whole transcript. In the other layouts it stays
+           hidden (the transcript is already on screen). -->
+      <div class="history-bar">
+        <button class="ghost history-toggle" id="history-toggle" type="button"
+                aria-pressed="false" aria-controls="log">Show full history</button>
+      </div>
 
       <div class="composer">
         <textarea id="input" rows="1" placeholder="Speak, or type here…"
@@ -693,8 +1263,28 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
 
   <!-- ============ RIGHT RAIL ============ -->
   <aside class="rail right" id="rail-right">
-    <div class="rail-section">
-      <div class="hud-label">Last exchange</div>
+    <!-- Cockpit layout's Bento inspector, first card: the approval queue's
+         live count. The cards THEMSELVES stay in #approvals on the stage,
+         where they already were and where the page's own tests read them;
+         this is the at-a-glance count, and a warning when a waiting card is
+         one that cannot be undone. The buttons in the layout script keep it
+         in step with the cards. -->
+    <div class="rail-section bento-waiting" id="rail-waiting">
+      <div class="hud-label">Waiting for you</div>
+      <p class="waiting-line">
+        <span class="wait-check" aria-hidden="true">&#10003;</span>
+        <span id="waiting-words">No cards waiting</span>
+      </p>
+      <span class="wait-badge" id="waiting-badge" hidden>Irreversible - read it first</span>
+      <button class="ghost waiting-open" id="waiting-open" type="button">Show the cards</button>
+    </div>
+
+    <div class="rail-section bento-telemetry" id="rail-telemetry">
+      <div class="hud-label">Last turn telemetry</div>
+      <!-- Cockpit layout hides the six dash rows until a turn has actually
+           run, and says this instead. The rows are always in the document:
+           the page's tests read them, and a later turn fills them. -->
+      <p class="bento-empty" id="telemetry-empty">No turns yet this session</p>
       <div class="readout"><span class="k">answered by</span><span class="v gold" id="r-model">—</span></div>
       <div class="readout"><span class="k">latency</span><span class="v" id="r-latency">—</span></div>
       <div class="readout"><span class="k">tokens</span><span class="v" id="r-tokens">—</span></div>
@@ -705,13 +1295,18 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
       <div style="font-size:12px;color:var(--dim);line-height:1.4" id="r-why">—</div>
     </div>
 
-    <div class="rail-section">
+    <div class="rail-section bento-tools" id="rail-tools">
       <div class="hud-label">Abilities used</div>
       <div id="tools-used"></div>
     </div>
 
-    <div class="rail-section">
-      <div class="hud-label">Memory</div>
+    <!-- "Second brain": the SAME five readouts as before, laid out as a 2x2
+         grid of tiles in the Cockpit layout by CSS alone. The four tiles are
+         clickable (the layout script makes each one a button that opens the
+         Galaxy map, where that memory actually lives) without being replaced:
+         the ids below are unchanged, so every test that reads them still does. -->
+    <div class="rail-section bento-brain" id="rail-memory">
+      <div class="hud-label">Second brain &amp; vault</div>
       <div class="readout"><span class="k">facts</span><span class="v" id="r-facts">—</span></div>
       <div class="readout"><span class="k">documents</span><span class="v" id="r-docs">—</span></div>
       <div class="readout"><span class="k">entities</span><span class="v" id="r-ents">—</span></div>
@@ -719,14 +1314,14 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
       <div class="readout"><span class="k">recalled</span><span class="v ice" id="r-mem">—</span></div>
     </div>
 
-    <div class="rail-section">
+    <div class="rail-section bento-budget" id="rail-budget">
       <div class="hud-label">Free-tier budget</div>
       <div class="readout"><span class="k">this minute</span><span class="v" id="r-rpm">—</span></div>
       <div class="readout"><span class="k">today</span><span class="v" id="r-rpd">—</span></div>
       <div class="meter"><i id="r-rpdbar"></i></div>
     </div>
 
-    <div class="rail-section">
+    <div class="rail-section bento-voice" id="rail-voice">
       <div class="hud-label">Voice</div>
       <div class="readout"><span class="k">listening</span><span class="v" id="r-stt">—</span></div>
       <div class="readout"><span class="k">speaking</span><span class="v" id="r-tts">—</span></div>
@@ -2813,6 +3408,456 @@ const onPower = (e) => { const d = e.detail || {}; reactor.setPower(d.power, d.s
 window.addEventListener("jarvis-power", onPower);
 if (window.__jarvisPower) onPower({ detail: window.__jarvisPower });
 subscribe();
+
+/* ====================================================================== *
+ *  THE HUD'S THREE LAYOUTS - the behaviour half (2026-10-20)
+ *
+ *  The layout itself is CSS (html[data-hud-layout=...]); this script only
+ *  keeps the page's own facts in step with the extra places a layout shows
+ *  them, and it owns the pieces a stylesheet cannot:
+ *
+ *   * the picker in the stage bar (and the Settings picker's own key) -
+ *     save the choice, apply it, and follow a change made in Settings while
+ *     this window is open (the shared `storage` event, exactly the road the
+ *     "Open the Jarvis bar" button already follows);
+ *   * the Studio layout's Inspector Stage tabs (Galaxy / Approvals / Memory
+ *     / Telemetry) - one selected tab, mirrored on the stage's tab bar and
+ *     the dock's icons, remembered for the session in `body[data-hud-tab]`;
+ *   * the Cockpit's live pieces: the waiting-cards count (from the cards
+ *     the page already drew in #approvals), the last-turn telemetry's
+ *     "no turns yet" state, the second-brain tiles' click-through to the
+ *     Galaxy map, the compact core docking when the conversation grows, and
+ *     the footer "Jarvis bar" pill;
+ *   * the Ambient layout's mirrored status pill and the history drawer;
+ *   * the Studio dock's brain dropdown, built from the SAME #lanes buttons
+ *     renderLanes() already drew (choosing an option clicks that button -
+ *     one list of lanes, never two).
+ *
+ *  It reads the DOM, never rebuilds it: every id, listener and element the
+ *  page's own script owns is untouched, and this file adds no HTML sinks
+ *  (textContent only - the content it shows is already in the page).
+ *
+ *  What this CANNOT be tested at a desk: how it LOOKS. Playwright proves the
+ *  document, the visibility and the computed layout at one window size; the
+ *  colours on a real WebView2, on the owner's two monitors, are not tested
+ *  here - NOT-TESTABLE, said plainly in the pull request.
+ * ====================================================================== */
+(function () {
+  "use strict";
+
+  /* The key `src/hud-window.js` exports as HUD_LAYOUT_KEY. This page cannot
+   * import that module (the Python backend serves it as one file, with no
+   * module graph), so the key and the three ids are spelled again here - the
+   * same duplication hud_bootstrap.js makes for OPEN_BAR_KEY, and tests/hud.mjs
+   * proves the two agree by driving the real page with the module's own
+   * values. */
+  var LAYOUT_KEY = "jarvis.hud.layout";
+  var LAYOUTS = ["cockpit", "studio", "ambient"];
+  var TABS = ["galaxy", "today", "memory", "telemetry"];
+  var body = document.body;
+  var $ = function (id) { return document.getElementById(id); };
+
+  function normalLayout(name) {
+    return LAYOUTS.indexOf(name) >= 0 ? name : LAYOUTS[0];
+  }
+  function readLayout() {
+    try { return normalLayout(localStorage.getItem(LAYOUT_KEY)); }
+    catch (e) { return LAYOUTS[0]; }
+  }
+  function saveLayout(name) {
+    try { localStorage.setItem(LAYOUT_KEY, normalLayout(name)); return true; }
+    catch (e) { return false; }
+  }
+  function normalTab(name) {
+    return TABS.indexOf(name) >= 0 ? name : TABS[0];
+  }
+
+  /* ── the picker ─────────────────────────────────────────────────────── */
+
+  var choices = [].slice.call(document.querySelectorAll("[data-hud-layout-choice]"));
+
+  function paintPicker() {
+    var now = normalLayout(body.dataset.hudLayout);
+    choices.forEach(function (b) {
+      b.setAttribute("aria-pressed", String(b.dataset.hudLayoutChoice === now));
+    });
+  }
+
+  function applyLayout(name, persist) {
+    var id = normalLayout(name);
+    // <body> is the contract (document.body.dataset.hudLayout); <html> is
+    // put in step too because the pre-paint read set it there and the
+    // stylesheet keys every layout rule off it - so there is one value the
+    // two can never disagree about.
+    body.dataset.hudLayout = id;
+    document.documentElement.setAttribute("data-hud-layout", id);
+    if (persist) saveLayout(id);
+    paintPicker();
+    if (id === "studio" && TABS.indexOf(body.dataset.hudTab) < 0) setTab("galaxy");
+    if (id !== "ambient") setHistory(false);
+    if (id === "studio") refreshTab();
+    paintCore();
+    paintAmbient();
+  }
+
+  choices.forEach(function (b) {
+    b.addEventListener("click", function () { applyLayout(b.dataset.hudLayoutChoice, true); });
+  });
+
+  /* A change made in Settings while this window is open is obeyed at once
+   * (this computer's windows share the HUD origin's localStorage, and a write
+   * in one fires `storage` in the others - the same road hud_bootstrap.js's
+   * open-bar switch follows). A cleared store reads as the default. */
+  window.addEventListener("storage", function (e) {
+    if (e && e.key && e.key !== LAYOUT_KEY) return;
+    applyLayout(readLayout(), false);
+  });
+
+  /* ── the Studio Inspector Stage tabs ────────────────────────────────── */
+
+  var tabs = [].slice.call(document.querySelectorAll("[data-hud-tab-choice]"));
+
+  function paintTabs() {
+    var now = normalTab(body.dataset.hudTab);
+    tabs.forEach(function (b) {
+      var chosen = b.dataset.hudTabChoice === now;
+      b.setAttribute("aria-selected", String(chosen));
+      b.setAttribute("aria-pressed", String(chosen));
+    });
+  }
+
+  function resizeGalaxy() {
+    /* The Galaxy canvas is measured when it is drawn; showing it beside the
+     * conversation (Studio, Galaxy tab) is a size change it cannot see, so
+     * ask it to re-measure. `galaxy` is the page's own top-level binding;
+     * if an older page does not have it, nothing happens. */
+    try {
+      if (typeof galaxy !== "undefined" && galaxy && typeof galaxy.resize === "function") {
+        galaxy.resize();
+      }
+    } catch (e) {}
+  }
+
+  function refreshTab() {
+    paintTabs();
+    if (body.dataset.hudLayout === "studio" && body.dataset.hudTab === "galaxy") {
+      window.requestAnimationFrame(resizeGalaxy);
+    }
+  }
+
+  function setTab(name) {
+    body.dataset.hudTab = normalTab(name);
+    // <html> carries the same value: the pre-paint read put the LAYOUT there
+    // and the stylesheet keys both off it, so the tab must be visible to CSS
+    // as well as to the DOM contract on <body>.
+    document.documentElement.setAttribute("data-hud-tab", body.dataset.hudTab);
+    refreshTab();
+  }
+
+  tabs.forEach(function (b) {
+    b.addEventListener("click", function () { setTab(b.dataset.hudTabChoice); });
+  });
+
+  /* ── the Cockpit's live pieces ──────────────────────────────────────── */
+
+  var shell = $("shell");
+  var log = $("log");
+  var approvals = $("approvals");
+  var telemetry = $("rail-telemetry");
+
+  function messageCount() {
+    return log ? log.querySelectorAll(".msg").length : 0;
+  }
+
+  /* The core: large while the conversation is short, docked to a small
+   * header once it has grown (or once the owner docked it with the toggle).
+   * `data-core` is the one datum; the CSS does the rest. */
+  function paintCore() {
+    if (!shell || !log) return;
+    var expanded = shell.dataset.core === "expanded";
+    // "The chat has grown" means the OWNER has sent something: the boot's own greetings and "your brain map is empty" system lines are not a conversation, and counting them docked the core before anyone spoke.
+    var grown = !!log.querySelector(".msg.user");
+    shell.dataset.core = expanded ? "expanded" : (grown ? "pinned" : "idle");
+    var btn = $("core-expand");
+    if (btn) {
+      btn.setAttribute("aria-pressed", String(expanded));
+      btn.textContent = expanded ? "Dock core" : "Expand core";
+      btn.title = expanded
+        ? "Dock the core again so more of the conversation fits"
+        : "Show the whole core again";
+    }
+  }
+
+  var coreBtn = $("core-expand");
+  if (coreBtn) {
+    coreBtn.addEventListener("click", function () {
+      shell.dataset.core = shell.dataset.core === "expanded" ? "" : "expanded";
+      paintCore();
+    });
+  }
+
+  /* The waiting-cards count. The cards themselves are the page's own, drawn
+   * by apprPoll() into #approvals; this only counts what is really there and
+   * looks for the two things that make one worth a second look: a rush
+   * warning (`raised`) or a card the risk line calls impossible to undo.
+   * Nothing here is stored or sent - it is a mirror of the page's own DOM. */
+  function paintWaiting() {
+    if (!approvals) return;
+    var cards = approvals.querySelectorAll(".appr");
+    var n = cards.length;
+    var destructive = false;
+    for (var i = 0; i < cards.length; i += 1) {
+      var card = cards[i];
+      var risk = card.querySelector(".risk");
+      var words = risk ? String(risk.textContent || "") : "";
+      if (card.querySelector(".raised") || /No undo|Hard to undo/i.test(words)) {
+        destructive = true;
+        break;
+      }
+    }
+    var box = $("rail-waiting");
+    var line = $("waiting-words");
+    var badge = $("waiting-badge");
+    var chip = $("appr-badge");
+    if (box) box.classList.toggle("has-cards", n > 0);
+    if (line) {
+      line.textContent = n === 0
+        ? "No cards waiting"
+        : (n === 1 ? "1 card waiting for your approval"
+                   : n + " cards waiting for your approval");
+    }
+    if (badge) badge.hidden = !(n > 0 && destructive);
+    if (chip) {
+      chip.hidden = n === 0;
+      chip.textContent = n + " waiting";
+    }
+  }
+
+  var waitingOpen = $("waiting-open");
+  if (waitingOpen) {
+    waitingOpen.addEventListener("click", function () {
+      setTab("today");
+      if (approvals) {
+        approvals.scrollIntoView({ block: "nearest" });
+        var first = approvals.querySelector("button");
+        if (first) first.focus();
+      }
+    });
+  }
+
+  /* The last-turn telemetry: "No turns yet this session" until a turn has
+   * actually been answered. The page fills #r-model / #r-latency when one is;
+   * their own text is the signal, so there is nothing new to keep in step. */
+  function paintTelemetry() {
+    if (!telemetry) return;
+    var model = $("r-model");
+    var latency = $("r-latency");
+    var says = function (el) {
+      var t = el ? String(el.textContent || "").trim() : "";
+      return t !== "" && t !== "\u2014";
+    };
+    var had = says(model) || says(latency);
+    if (had) telemetry.setAttribute("data-has-turn", "");
+    else telemetry.removeAttribute("data-has-turn");
+  }
+
+  /* The second brain's four tiles: clicking one opens the Galaxy map, where
+   * that memory already lives. Keyboard-reachable (role + tabindex + the
+   * two activation keys), and the fifth readout is left as plain text. */
+  function makeTiles() {
+    ["r-facts", "r-docs", "r-ents", "r-tools"].forEach(function (id) {
+      var value = $(id);
+      var tile = value ? value.parentElement : null;
+      if (!tile || tile.dataset.tileReady) return;
+      tile.dataset.tileReady = "1";
+      tile.classList.add("bento-tile-link");
+      tile.setAttribute("role", "button");
+      tile.tabIndex = 0;
+      tile.title = "Open the Galaxy map";
+      var open = function () { try { setView("brain"); } catch (e) {} };
+      tile.addEventListener("click", open);
+      tile.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") {
+          e.preventDefault();
+          open();
+        }
+      });
+    });
+  }
+
+  /* The footer "Jarvis bar" pill, and the Studio dock's own bar icon: the
+   * same two commands the shell's injected button uses (hud_open_bar /
+   * hide_quickbar), through the function hud_bootstrap.js publishes. With no
+   * shell (the page served in a plain browser) there is no bar to open, so
+   * both stay hidden. */
+  function openTheBar() {
+    if (typeof window.__jarvisOpenBar === "function") window.__jarvisOpenBar();
+  }
+
+  function paintQuickbar() {
+    // Readiness is the BUTTON the shell injects beside the chat box, not
+    // `__jarvisOpenBar`: the bootstrap defines that function whether or not
+    // there is a shell (a plain browser has it too, and calling it does
+    // nothing). The button is only drawn when the shell is there.
+    var ready = Boolean(document.getElementById("hud-open-bar"))
+      && typeof window.__jarvisOpenBar === "function";
+    var pill = $("rail-quickbar");
+    var dock = $("dock-quickbar");
+    if (pill) {
+      pill.hidden = !ready;
+      if (ready) pill.setAttribute("data-ready", "");
+      else pill.removeAttribute("data-ready");
+    }
+    if (dock) dock.hidden = !ready;
+  }
+
+  var quickbarPill = $("rail-quickbar");
+  if (quickbarPill) quickbarPill.addEventListener("click", openTheBar);
+  var dockQuickbar = $("dock-quickbar");
+  if (dockQuickbar) dockQuickbar.addEventListener("click", openTheBar);
+
+  /* ── the Ambient layout's own two pieces ────────────────────────────── */
+
+  /* The top-left glass pill shows the facts the rails would have carried:
+   * the model in use and the last turn's latency. Both are the page's own
+   * elements - mirrored, never a second source. */
+  function paintAmbient() {
+    var model = $("as-model");
+    var latency = $("as-latency");
+    var chip = $("chip-model");
+    var rLatency = $("r-latency");
+    if (model) model.textContent = (chip && chip.textContent.trim()) || "local";
+    if (latency) latency.textContent = (rLatency && rLatency.textContent.trim()) || "\u2014";
+  }
+
+  /* The history drawer: the log shows the latest exchange only, unless the
+   * owner opens the whole transcript. A class on #log - no removal, so the
+   * full transcript is one click away and nothing is lost. */
+  function setHistory(open) {
+    if (!log) return;
+    log.classList.toggle("full", Boolean(open));
+    var btn = $("history-toggle");
+    if (!btn) return;
+    var n = messageCount();
+    btn.setAttribute("aria-pressed", String(Boolean(open)));
+    btn.textContent = open ? "Hide full history" : ("Show full history (" + n + ")");
+  }
+
+  var historyBtn = $("history-toggle");
+  if (historyBtn) {
+    historyBtn.addEventListener("click", function () { setHistory(!log.classList.contains("full")); });
+  }
+
+  /* ── the Studio dock's brain dropdown ───────────────────────────────── *
+   *  Built from the SAME .lane buttons renderLanes() draws: choosing an
+   *  option clicks that button, so the page's own handler changes the lane
+   *  and repaints #lanes - there is one list of lanes, never a copy. */
+  var laneSelect = $("lane-compact");
+  if (laneSelect) {
+    laneSelect.addEventListener("change", function () {
+      var buttons = document.querySelectorAll("#lanes .lane");
+      for (var i = 0; i < buttons.length; i += 1) {
+        if (buttons[i].dataset.lane === laneSelect.value) { buttons[i].click(); break; }
+      }
+      paintLaneSelect();
+    });
+  }
+
+  function paintLaneSelect() {
+    if (!laneSelect) return;
+    var lanes = $("lanes");
+    if (!lanes) return;
+    var buttons = [].slice.call(lanes.querySelectorAll(".lane"));
+    var current = null;
+    buttons.forEach(function (b) {
+      if (b.getAttribute("aria-pressed") === "true") current = b;
+    });
+    if (laneSelect.options.length !== buttons.length) {
+      laneSelect.textContent = "";
+      buttons.forEach(function (b) {
+        var option = document.createElement("option");
+        option.value = b.dataset.lane;
+        var label = b.querySelector("span");
+        option.textContent = label ? label.textContent : b.dataset.lane;
+        laneSelect.append(option);
+      });
+    }
+    if (current && laneSelect.value !== current.dataset.lane) {
+      laneSelect.value = current.dataset.lane;
+    }
+  }
+
+  /* ── keeping the mirrors in step ────────────────────────────────────── *
+   *  One observer per source, watching the page's own elements. The page
+   *  writes those nodes itself (status, turn routes, approval cards), so
+   *  nothing here guesses or fetches anything.
+   * -------------------------------------------------------------------- */
+  function watch(node, options, run) {
+    if (!node || typeof MutationObserver !== "function") return;
+    var pending = null;
+    var observer = new MutationObserver(function () {
+      if (pending) return;
+      pending = window.requestAnimationFrame(function () {
+        pending = null;
+        run();
+      });
+    });
+    observer.observe(node, options);
+  }
+
+  watch(approvals, { childList: true, subtree: true, characterData: true }, paintWaiting);
+  watch(log, { childList: true, subtree: true, characterData: true }, function () {
+    paintCore();
+    setHistory(log.classList.contains("full"));
+  });
+  watch($("r-model"), { childList: true, characterData: true, subtree: true }, function () {
+    paintTelemetry();
+    paintAmbient();
+  });
+  watch($("r-latency"), { childList: true, characterData: true, subtree: true }, function () {
+    paintTelemetry();
+    paintAmbient();
+  });
+  watch($("chip-model"), { childList: true, characterData: true, subtree: true }, paintAmbient);
+  watch($("lanes"), { childList: true, subtree: true, attributes: true }, paintLaneSelect);
+
+  /* The Ambient view switches are the page's own setView, with their own
+   * pressed state (the rail's .mode buttons still work in the other two
+   * layouts, and setView keeps every reader of S.view in step). */
+  function paintAmbientViews() {
+    var talk = $("ambient-view-talk");
+    var brain = $("ambient-view-brain");
+    var v = (typeof S !== "undefined" && S && S.view) || "talk";
+    if (talk) talk.setAttribute("aria-pressed", String(v === "talk"));
+    if (brain) brain.setAttribute("aria-pressed", String(v === "brain"));
+  }
+  ["talk", "brain"].forEach(function (v) {
+    var btn = $("ambient-view-" + v);
+    if (!btn) return;
+    btn.addEventListener("click", function () {
+      try { setView(v); } catch (e) {}
+      paintAmbientViews();
+    });
+  });
+  document.querySelectorAll(".mode").forEach(function (b) {
+    b.addEventListener("click", function () { window.setTimeout(paintAmbientViews, 0); });
+  });
+
+  /* ── first paint, and the retry for the shell's own function ────────── */
+  applyLayout(readLayout(), false);
+  makeTiles();
+  paintWaiting();
+  paintTelemetry();
+  paintAmbientViews();
+  paintQuickbar();
+  paintLaneSelect();
+  setHistory(false);
+  paintCore();
+  /* hud_bootstrap.js is injected before this page's own scripts, so
+   * __jarvisOpenBar is normally already defined; the retry covers a page
+   * opened by something that injects the shell late. */
+  window.setTimeout(paintQuickbar, 600);
+})();
 </script>
 <!-- The one shared rule: what a not-running model is called, and the DOM
      half that draws it (`lane-warning.js`, held to these words by
@@ -2825,3 +3870,4 @@ subscribe();
 import { paintLaneWarning } from "./lane-warning.js";
 window.paintLaneWarning = paintLaneWarning;
 </script>
+
