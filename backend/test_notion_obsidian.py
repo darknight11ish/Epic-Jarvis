@@ -27,6 +27,10 @@ sys.path.insert(0, str(HERE))
 from _where import require_shipped  # noqa: E402
 require_shipped("jarvis_notion_obsidian.py", "jarvis_documents.py")
 import jarvis_notion_obsidian as N  # noqa: E402
+try:                                   # for the Ruling 8.6 checks below
+    import yaml
+except Exception:                      # noqa: BLE001
+    yaml = None  # type: ignore
 
 FAILED, PASSED, SKIPPED = [], [], []
 
@@ -1284,6 +1288,145 @@ def t_it_opens_no_socket_and_runs_no_program():
         check(f"the module does not use {bad}", bad not in text)
 
 
+# ── Ruling 8.6: multi-line CSV cells must produce VALID YAML ───────────────
+#
+# RISK-1 in the 2026-10-21 converter audit: a Notion database cell is a CSV
+# field, and Shift+Enter puts a real newline inside one. The serializer
+# quoted such a value but escaped only a backslash and a quote, so the
+# newline went into the frontmatter RAW - and a raw line break inside a
+# double-quoted scalar makes the note's YAML unreadable by any parser
+# (Obsidian included), which loses EVERY property on that note, not just the
+# multi-line one. Ruling 8.6 (accepted): normalize \r\n/\r -> \n and
+# JSON-quote an ambiguous scalar, which escapes the newline as \n and is a
+# valid YAML 1.2 scalar.
+
+def _yaml_doc(block: str):
+    """The first YAML document of a `yaml_block` string (`--- ... ---`)."""
+    body = block.split("---", 2)[1]
+    return yaml.safe_load(body)
+
+
+def t_a_multiline_cell_is_valid_yaml_and_round_trips():
+    if yaml is None:
+        skip("pyyaml is not installed here, so the Ruling 8.6 multi-line check "
+             "did not run")
+        return
+    want = "First line\nSecond line"
+    front = N.frontmatter_of("Ship it", A32, {"Notes": want})
+    block = N.yaml_block(front)
+    try:
+        parsed = _yaml_doc(block)
+        parse_error = ""
+    except Exception as exc:                              # noqa: BLE001
+        parsed, parse_error = None, f"{type(exc).__name__}: {exc}"
+    check("Ruling 8.6: a multi-line cell still produces parseable YAML",
+          isinstance(parsed, dict), parse_error + "\n" + block)
+    if isinstance(parsed, dict):
+        check("Ruling 8.6: ... and it round-trips to the EXACT original text",
+              parsed.get("notes") == want, {"got": parsed.get("notes"), "want": want})
+        check("Ruling 8.6: ... with no raw newline inside the scalar's line",
+              "First line\nSecond line" not in block, block)
+    # A Windows export: \r\n is normalized, so the same note hashes the same
+    # everywhere and YAML never sees a bare carriage return.
+    front2 = N.frontmatter_of("Ship it", A32,
+                              {"Notes": "First line\r\nSecond line"})
+    block2 = N.yaml_block(front2)
+    try:
+        parsed2 = _yaml_doc(block2)
+    except Exception as exc:                              # noqa: BLE001
+        parsed2 = None
+        check("Ruling 8.6: a \\r\\n cell is normalized and parseable", False,
+              f"{type(exc).__name__}: {exc}\n{block2}")
+    if parsed2 is not None:
+        check("Ruling 8.6: a \\r\\n cell is normalized and parseable",
+              parsed2.get("notes") == "First line\nSecond line",
+              {"got": parsed2.get("notes")})
+
+
+def t_ambiguous_values_are_quoted_and_safe():
+    if yaml is None:
+        skip("pyyaml is not installed here, so the Ruling 8.6 YAML-safety "
+             "checks did not run")
+        return
+    cases = (
+        ("a colon", "note: half done"),
+        ("a hash", "#hashtag"),
+        ("a leading bracket", "[draft] text"),
+        ("a leading dash", "- leading dash"),
+        ("a leading question mark", "? not sure"),
+        ("a leading star", "*important*"),
+        ("a quote at the start", '"quoted start"'),
+        ("a tab inside", "before\tafter"),
+        ("a YAML boolean word", "yes"),
+        ("an upper-case boolean word", "True"),
+    )
+    for label, value in cases:
+        front = N.frontmatter_of("Row", A32, {"Value": value})
+        block = N.yaml_block(front)
+        try:
+            parsed = _yaml_doc(block)
+            got = parsed.get("value") if isinstance(parsed, dict) else None
+        except Exception as exc:                          # noqa: BLE001
+            got = f"<parse failed: {type(exc).__name__}>"
+        check(f"Ruling 8.6 {label} value is quoted and reads back as the string",
+              got == value, {"value": value, "got": got, "block": block})
+
+
+def t_plain_values_are_unchanged_byte_for_byte():
+    check("Ruling 8.6 a plain word is unchanged",
+          N._yaml_scalar("Meeting Notes") == "Meeting Notes")
+    check("Ruling 8.6 a plain number stays a bare number",
+          N._yaml_scalar("42") == "42")
+    check("Ruling 8.6 an empty value is still an empty string",
+          N._yaml_scalar("") == '""')
+    front = {"notion_id": A32, "title": "Meeting Notes",
+             "created": "2026-10-14T15:04:00", "tags": ["work", "urgent"],
+             "owner": "Sam"}
+    block = N.yaml_block(front)
+    want = ("---\n"
+            f"notion_id: {A32}\n"
+            "title: Meeting Notes\n"
+            'created: "2026-10-14T15:04:00"\n'
+            "tags:\n  - work\n  - urgent\n"
+            "owner: Sam\n"
+            "---")
+    check("Ruling 8.6 a simple frontmatter block is byte-for-byte what it was",
+          block == want, {"got": block, "want": want})
+
+
+def t_a_full_export_with_a_multiline_cell_imports_cleanly():
+    if yaml is None:
+        skip("pyyaml is not installed here, so the synthetic-export check did "
+             "not run")
+        return
+    src = fresh()
+    # One real database row whose Notes cell holds a Shift+Enter newline. The
+    # CSV quotes the field, exactly as Notion exports it.
+    write(src, f"Tasks {A32}_all.csv",
+          'Name,Notes,Status\n'
+          'Ship it,"First line\nSecond line",Done\n')
+    write(src, f"Ship it {B32}.md", "# Ship it\n\nDo the thing.\n")
+    p = N.plan_import(str(src), str(VAULT), today="2026-01-01")
+    check("(set-up) the export with a multi-line cell plans", p.rows == 1, p.rows)
+    out = N.run_import(p, approved=True, record=False)
+    check("(set-up) the import lands", out.get("ok") is True, out)
+    note = (VAULT / EXPORT / "Ship it.md").read_text(encoding="utf-8")
+    check("Ruling 8.6: the multi-line cell reached the frontmatter",
+          "First line" in note and "Second line" in note, note)
+    block = note.split("---", 2)[1]
+    try:
+        parsed = yaml.safe_load(block)
+        got = parsed.get("notes") if isinstance(parsed, dict) else None
+    except Exception as exc:                              # noqa: BLE001
+        parsed, got = None, f"<parse failed: {type(exc).__name__}>"
+    check("Ruling 8.6: the imported note's frontmatter is parseable YAML",
+          isinstance(parsed, dict), note[:800])
+    check("Ruling 8.6: ... and its multi-line value round-trips exactly",
+          got == "First line\nSecond line", {"got": got, "block": block})
+    check("Ruling 8.6: ... and the status column is still there",
+          isinstance(parsed, dict) and parsed.get("status") == "Done", block)
+
+
 def main():
     tests = (t_notions_ids_come_off_names,
              t_what_windows_and_obsidian_forbid_is_replaced,
@@ -1326,7 +1469,11 @@ def main():
              t_both_routes_are_pc_only,
              t_it_does_not_name_jarvis_memory,
              t_the_settings_folder_is_the_one_variable_every_module_reads,
-             t_it_opens_no_socket_and_runs_no_program)
+             t_it_opens_no_socket_and_runs_no_program,
+             t_a_multiline_cell_is_valid_yaml_and_round_trips,
+             t_ambiguous_values_are_quoted_and_safe,
+             t_plain_values_are_unchanged_byte_for_byte,
+             t_a_full_export_with_a_multiline_cell_imports_cleanly)
     for fn in tests:
         print(f"\n--- {fn.__name__} ---")
         try:

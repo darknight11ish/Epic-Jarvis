@@ -537,16 +537,50 @@ def extract(source: str, dest: str) -> dict:
 #   3. Properties -> YAML frontmatter
 # --------------------------------------------------------------------------
 
+#: The characters that make a plain YAML scalar ambiguous or invalid, anywhere
+#: in the value: a colon, a comment hash, a flow indicator, a quote and the
+#: punctuation YAML gives meaning to.
+_YAML_AMBIGUOUS = re.compile(r'[:#\[\]{},"&*?|<>=!%@`\'"]')
+#: YAML words that are NOT a plain string: quoted so the value stays the word
+#: the owner's cell said. Lower-case true/false/null are handled above as the
+#: bare values the converter has always written for them.
+_YAML_WORDS = ("true", "false", "null", "~", "yes", "no", "on", "off", "y", "n")
+
+
 def _yaml_scalar(value: str) -> str:
-    text = str(value).strip()
+    """One frontmatter value, as a scalar that ALWAYS parses back as itself.
+
+    RULING 8.6 (2026-10-21, accepted from the converter audit's RISK-1): a
+    Notion database cell is a CSV field, and Shift+Enter puts a REAL newline
+    inside one. The old version quoted such a value but escaped only a
+    backslash and a quote, so the newline went in raw - and one raw line break
+    inside a double-quoted scalar makes the note's whole YAML unreadable
+    (Obsidian included), losing every property on the note rather than the one
+    cell. So: line endings are normalized (CRLF and CR become LF, which also
+    keeps a note's hash the same on every OS), and any value that is not a
+    plain, unambiguous string is written with `json.dumps(..., ensure_ascii=
+    False)` - a single-line double-quoted YAML 1.2 scalar, with newlines and
+    tabs escaped as \\n and \\t.
+
+    Simple values are UNCHANGED, byte for byte (the suite pins a whole simple
+    frontmatter block): a plain word stays bare, a number stays bare, empty is
+    "", and a value that merely needed quoting gets the same `"..."` it did
+    before. Keys and ordering are untouched - this function is only ever
+    given a value.
+    """
+    text = str(value).replace("\r\n", "\n").replace("\r", "\n").strip()
     if text == "":
         return '""'
     if re.fullmatch(r"-?\d+(\.\d+)?", text) or re.fullmatch(r"true|false|null", text):
         return text
-    needs = (text != text.strip() or re.search(r'[:#\[\]{}",&*?|<>=!%@`\'"]', text)
-             or text.lower() in ("yes", "no", "on", "off", "y", "n"))
-    text = text.replace("\\", "\\\\").replace('"', '\\"')
-    return f'"{text}"' if needs else text
+    needs = (bool(_YAML_AMBIGUOUS.search(text))
+             or "\n" in text
+             or any(ord(ch) < 0x20 for ch in text)
+             or text[:1] in "-?[]{}&*|>'\""
+             or text.lower() in _YAML_WORDS)
+    if not needs:
+        return text
+    return json.dumps(text, ensure_ascii=False)
 
 
 def yaml_block(front: dict) -> str:

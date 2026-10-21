@@ -23612,6 +23612,19 @@ Each exported CSV database gets:
   an unresolved `[[wikilink]]` and is counted, never dropped;
 * a `.base` beside it, whose filter is `file.inFolder("<export folder>/<database folder>")`.
 
+**Every frontmatter value parses back as itself (Ruling 8.6, accepted
+2026-10-21).** A database cell is a CSV field, and Notion's Shift+Enter puts a
+real newline inside one. The converter normalizes line endings (CRLF and CR
+become LF, so the same note hashes the same on every OS) and writes any
+ambiguous value - one with a newline, a colon, a comment hash, a leading flow
+or structure indicator, a tab, or a YAML word such as `yes`/`True`/`~` - as a
+single-line JSON double-quoted scalar. The newline is escaped, so Obsidian's
+YAML parser (or any YAML 1.2 parser) reads the exact original text; before
+this ruling one raw newline made the note's whole frontmatter unreadable and
+lost **every** property on that note, not just the multi-line cell. Simple
+values are byte-for-byte unchanged (a plain word bare, a number bare, a value
+that needed quoting gets the same quotes).
+
 Two CSV exports of one database (`X.csv` and `X_all.csv`) are ONE database:
 their rows are merged, `_all`'s non-empty values win, rows only one file holds
 are all kept, and two rows with one title in one file stay **two rows** (rows
@@ -23670,7 +23683,12 @@ other (both file orders and the case-only variant), case-only database names
 never sharing a file, HTML/Markdown same-title pages both surviving, the
 plan/gate/one-card/receipt/undo shape, one card for an import and none for a
 preview, the installed handler's PC-only 403 on both routes with no path in the
-answer, and the run path keeping a refusal's plain sentence.
+
+answer, the run path keeping a refusal's plain sentence, and Ruling 8.6's YAML
+safety: a multi-line cell and a CRLF cell round-trip exactly through PyYAML (a
+full synthetic export's imported note included), colon/hash/leading-bracket/
+leading-dash/quote/tab/boolean-word values read back as the strings they were,
+and a simple frontmatter block is byte-for-byte what it was.
 
 
 ## 153. Asking Jarvis Live to read the screen or the highlighted text (backend only, added 2026-10-21)
