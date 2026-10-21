@@ -1707,6 +1707,7 @@ $SHIPPED = @(
     'jarvis_stopword.py'         # the "stop" word's numbers: jarvis_wakeword.spot_stop, to interrupt Jarvis while it talks
     'jarvis_local_http.py'       # HTTP to this PC's own services (Ollama, Joplin, the second card) never through a proxy
     'jarvis_child_env.py'        # what the second Ollama and colibri inherit: an allowlist, so no token or key goes with them
+    'jarvis_price_sources.py'    # price radar F2: local SearXNG price mentions + dual-persona steering probe (no route yet)
     'jarvis_voices.py'           # voices.patch: custom voices (ZipVoice on the processor); jarvis_speech.say() asks it first
     'jarvis_f5_worker.py'        # the better voice (F5-TTS) as its own program on the second card; jarvis_voices.py starts it
     'jarvis_kokoro.py'           # which Kokoro voice pack is installed (v0.19 or v1.0), its voices BY NAME, the pinned v1.0 download; jarvis_voices.py imports it, no patch. Upgrade: backend\README.md "Upgrade the voice pack to Kokoro v1.0"
@@ -2109,6 +2110,7 @@ $SHIPPED = @(
     'jarvis_voice_ui.py'
 'jarvis_barge_in.py'       # Voice Slice F phase-1 prototype: no live import,
 # [voice] aec_barge_in = false, nothing wired (docs/DESIGN-VOICE-BARGE-IN.md)
+'jarvis_price_radar.py'       # F1 price/flight radar (read-only, off; docs/DESIGN-PRICE-RADAR.md)
 )
 
 # The settings file. Installed only where none exists; never overwritten.

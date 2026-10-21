@@ -356,6 +356,10 @@ SHIPPED = (
     "jarvis_big_model.py",
     "jarvis_turn.py", "jarvis_wakebank.py", "jarvis_stopword.py",
     "jarvis_local_http.py", "jarvis_child_env.py",
+    # the price radar's source readers (2026-10-21, F2 scaffold): local
+    # SearXNG price mentions + the dual-persona steering probe. No route yet;
+    # jarvis_price_radar.py installs it (lazily, switch on) as its F2 sources.
+    "jarvis_price_sources.py",
     "jarvis_voices.py", "jarvis_f5_worker.py",
     # which Kokoro voice pack is installed, its voices by name, the pinned
     # v1.0 download: jarvis_voices.py imports it (no patch)
@@ -1155,6 +1159,10 @@ SHIPPED = (
     # prototype only - docs/DESIGN-VOICE-BARGE-IN.md, [voice] aec_barge_in = false,
     # no live module imports it and nothing wires it yet.
     "jarvis_barge_in.py",
+    # The price/flight radar, F1 (owner-approved 2026-10-21): a read-only
+    # flight engine + price history. [price_radar] enabled = false; no route,
+    # no app surface, no booking path - docs/DESIGN-PRICE-RADAR.md.
+    "jarvis_price_radar.py",
 )
 
 

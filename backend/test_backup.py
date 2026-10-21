@@ -614,19 +614,21 @@ def t_the_newly_covered_databases_and_named_files_really_go_in():
     # exclusion; anything else is a name somebody forgot. This is the check
     # that fails if `SOURCE_DBS` loses an entry.
     #
-    # 16, not the 14 this branch first counted: this branch adds knowledge.db and
+    # 17, not the 14 this branch first counted: this branch adds knowledge.db and
     # traces.db (14 -> 16 at the time), and main then added receipts.db (#432,
     # the action receipts and their Undo snapshots) and voiceprint.db (#436,
-    # "Write Like Me"). 6 exclusions since 2026-10-16, when the derived search
-    # index (documents-index.db) joined the five.
+    # "Write Like Me"); (2026-10-21) price-radar.db, the flight price history
+    # (jarvis_price_radar.py), joined because a fare observed yesterday cannot
+    # be re-fetched. 7 exclusions since 2026-10-16, when the derived search
+    # index (documents-index.db) joined the six.
     # Both numbers are asserted rather than derived, on purpose - the point is
     # that adding a database is a decision somebody has to make here as well as
     # in the module, and this is the line that asks.
     check("every covered database is in SOURCE_DBS or in NOT_BACKED_UP",
           not ({n for n in B.SOURCE_DBS} & {n for n in B.NOT_BACKED_UP}),
           "a database is in both lists")
-    check("the databases of the owner's install, split 16 + 7, are all accounted for",
-          len(B.SOURCE_DBS) == 16 and len(B.NOT_BACKED_UP) == 7,
+    check("the databases of the owner's install, split 17 + 7, are all accounted for",
+          len(B.SOURCE_DBS) == 17 and len(B.NOT_BACKED_UP) == 7,
           f"{len(B.SOURCE_DBS)} backed up, {len(B.NOT_BACKED_UP)} excluded")
 
 
