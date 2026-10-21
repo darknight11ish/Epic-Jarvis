@@ -1142,6 +1142,15 @@ SHIPPED = (
     # curated read-only action list, driven by the pinned LOCAL npm install over the
     # existing MCP bridge. [rea] enabled = false by default; no route of its own.
     "jarvis_rea.py",
+    # What a spoken Jarvis Live question may READ off this PC (2026-10-21,
+    # task-39, the audit's V7): "what's on my screen?" and "read this
+    # selection" are routed through the EXISTING primitives - jarvis_screen's
+    # "Look at this" and jarvis_ui_control.read_selection() - as OUTSIDE TEXT
+    # in that one request, and nowhere else. NO new capture code, permission,
+    # gate row, tool or switch; a phone Live session reads nothing (the screen
+    # is this PC's). Actions that change things stay on the existing
+    # control_computer tool and its ONE physical-tap approval card.
+    "jarvis_voice_ui.py",
 )
 
 

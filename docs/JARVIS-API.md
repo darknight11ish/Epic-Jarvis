@@ -23671,3 +23671,87 @@ never sharing a file, HTML/Markdown same-title pages both surviving, the
 plan/gate/one-card/receipt/undo shape, one card for an import and none for a
 preview, the installed handler's PC-only 403 on both routes with no path in the
 answer, and the run path keeping a refusal's plain sentence.
+
+
+## 153. Asking Jarvis Live to read the screen or the highlighted text (backend only, added 2026-10-21)
+
+**What it is.** In **Jarvis Live** (a back-and-forth spoken conversation,
+`jarvis_live.py`) a question may now ask Jarvis to **read what is already on
+this PC's screen**, or **the text the owner has highlighted**, and answer from
+it. It is the READ half of the audit finding **V7** ("voice bridge to the UI
+modules") and it is deliberately tiny: the two reads are the **existing**
+primitives, called unchanged, and nothing new is granted.
+
+**The two asks, and the exact words that count.**
+
+* *"What's on my screen?"* / *"read my screen"* / *"look at my screen"* /
+  *"summarise what's on my screen"* -> ONE look through
+  `jarvis_screen.py`'s own **"Look at this"** path (`ENGINE.look_at_this`):
+  the same pause rules decide first (a password box, a program on the
+  owner's "Never look at" list, a private window, Jarvis's own windows, the
+  lock screen or a UAC prompt), the picture is dropped as soon as its words
+  are read, nothing is kept, and the words arrive labelled **OUTSIDE TEXT**
+  exactly as a "Look at this" turn's do.
+* *"Read this selection"* / *"read what I selected"* / *"what did I
+  highlight?"* / *"summarise what I selected"* -> the same
+  `jarvis_ui_control.read_selection()` that `GET /api/selection` (section 141,
+  Pillar 24-B) serves the bar: the same refusals (no selection, an excluded
+  program, the window changed while reading, a scrubbed secret), the same
+  `MAX_SELECTION_CHARS`, and the words are handed on as OUTSIDE TEXT of their
+  own. This bridge adds the label and a second, smaller ceiling
+  (`MAX_VOICE_SELECTION_CHARS`).
+
+The matching is **narrow on purpose**: a question must actually ask to read
+the screen or the selection. "The cinema screen was huge" and "I selected the
+blue paint" are ordinary questions and are answered as before - no look, no
+read. The words go into **that one request** and nowhere else.
+
+**What it never does.** It never clicks, types, presses a key, or raises a
+card - a read is not an approval, and the bridge does not ask the gate. It adds
+**no tool to the model's tool list** (typed chat is untouched and has no
+screen-query tool), no route, no `[autonomy.tiers]` line, no switch and no new
+capture code. Nothing it reads is written to a file, the audit log,
+chat history or memory: the words exist only in the request the model is about
+to answer, and the turn is recorded as a read of the existing `read_screen`
+(so a note write or a web search afterwards asks first, as after any read).
+
+**Actions that change things are NOT part of this bridge, and keep their one
+card.** "Click Export" / "press Search" still goes through the existing
+`control_computer` tool (opt-in via `[tools].enabled`, as before): it plans
+from the accessibility tree (a read), raises its **ONE existing
+`jarvis_ui_control_run` approval card**, and runs only after a **physical
+tap/click**. Jarvis Live already **pauses while a card waits**, so a spoken
+"yes" is not even heard; a voice command can only RAISE the card, never answer
+it. No safe navigation (scroll/back/home) was added: `jarvis_ui_control`
+treats those as plan steps under the same card, and there is no card-free
+primitive to reuse, so inventing one would have been a new permission.
+
+**One-sided on purpose: the phone.** The reads are for **this PC's** screen.
+A Live session started on the **phone** asking either question gets a fixed
+line ("Reading this PC's screen or highlighted text is for the PC's own Live
+session") and **nothing is read** - `docs/ARCHITECTURE.md` section 8 records
+why. If the backend cannot tell which device the session is on, it reads
+nothing (fail closed).
+
+**Checked by** `backend/test_voice_ui.py` (57 checks, runs anywhere, no
+desktop and no screen needed): the intent words are narrow (ordinary
+sentences are not hijacked); each read returns the expected shaped answer from
+a **stubbed** existing primitive and adds OUTSIDE TEXT as a part of the
+owner's own message while their words stay separate; a paused look passes the
+screen module's own fixed words; a phone or unknown session reads nothing; a
+missing/raising primitive answers plainly; a long selection is cut and says
+so; chat-template markers in a selection are stripped; a read never asks the
+gate and latches the turn private once with a plain reason; a read writes no
+file and leaks no word into any file; typed chat has no screen-query tool; and
+the carded path still raises exactly ONE existing card and runs nothing before
+a person answers (then runs once). Two revert-checks were measured while
+building it: removing the phone guard made 3 checks fail; broadening the
+intent match made 2 fail.
+
+**Honest limits.** The real Windows look and the real UIA selection read are
+**NOT-TESTABLE here** (no desktop in CI; the seams and the tool contract are
+what the suite drives) - a real Live sentence must be owner-tested before this
+row can be called a PASS. There is no visual "what is on screen" description
+beyond the words the screen reader already returns; the phone keeps no
+screen-read parity by decision; and the bridge needs the Live turn's session
+to be known (a session whose device cannot be read is refused, never guessed).
