@@ -262,7 +262,9 @@ backend/jarvis_voicebank.py - generated numbers, not audio
 ONNX Runtime 1.22.0 (Microsoft), MIT - https://github.com/microsoft/onnxruntime
   The Android library runs the models on the phone
   (com.microsoft.onnxruntime:onnxruntime-android, from Maven Central); the
-  PC uses the Python package (pip install onnxruntime).
+  PC uses the Python package (pip install onnxruntime), which also runs the
+  memory search's meaning model and re-ranker directly
+  (backend/rebuilt/jarvis_memory.py, 2026-10-21).
 
 sherpa-onnx (k2-fsa), Apache-2.0 - https://github.com/k2-fsa/sherpa-onnx
   The PC's speech-to-text, spoken replies and Silero VAD. The model files
@@ -393,8 +395,10 @@ Memory ideas 1 and 4 (2026-09-26, docs/MEMORY-RESEARCH-2026-09-26.md). No
   Hindsight (vectorize-io), MIT - https://github.com/vectorize-io/hindsight :
   re-ranking the top recalled facts with a small local cross-encoder
   (backend/rebuilt/jarvis_memory.py, "The re-ranker"). The model itself,
-  Xenova/ms-marco-MiniLM-L-6-v2 (Apache-2.0), is downloaded on the PC by
-  fastembed (Apache-2.0) the first time it is needed; it is not
+  Xenova/ms-marco-MiniLM-L-6-v2 (Apache-2.0), is downloaded on the PC the
+  first time it is needed by the direct ONNX Runtime path in
+  backend/rebuilt/jarvis_memory.py, which uses onnxruntime (MIT), tokenizers
+  (Apache-2.0) and huggingface-hub (Apache-2.0) directly; it is not
   redistributed with Jarvis.
   Graphiti (above), Apache-2.0: "older news never replaces newer news" -
   graphiti_core/utils/maintenance/edge_operations.py's ordering of a new
@@ -1029,11 +1033,29 @@ THE MEMORY MODEL (not generated - keep when regenerating)
 BAAI/bge-small-en-v1.5 (Beijing Academy of Artificial Intelligence) -
 https://huggingface.co/BAAI/bge-small-en-v1.5
   The small model that turns saved facts into numbers so Jarvis can find
-  them by meaning (backend/rebuilt/jarvis_memory.py, through the fastembed
-  library, Apache-2.0, which downloads it onto the PC on first use). Not
+  them by meaning (backend/rebuilt/jarvis_memory.py, through ONNX Runtime
+  directly - onnxruntime, MIT, with tokenizers and huggingface-hub, both
+  Apache-2.0 - which downloads it onto the PC on first use). Not
   shipped in either app. Licence: MIT, as its model card states - recorded
   from memory, NOT re-checked here (huggingface.co is blocked from where
   this was written).
+
+tokenizers (Hugging Face), Apache-2.0 -
+https://github.com/huggingface/tokenizers
+  Splits the text the memory search looks at into the tokens the meaning
+  model and the re-ranker read, used directly by
+  backend/rebuilt/jarvis_memory.py (2026-10-21; it used to arrive as
+  fastembed's own dependency and is now named in backend/requirements.txt).
+  Not shipped here; pip installs it on the PC. The full Apache-2.0 text is
+  given below, under LICENCE TEXTS.
+
+huggingface-hub (Hugging Face), Apache-2.0 -
+https://github.com/huggingface/huggingface_hub
+  Fetches the meaning model and the re-ranker from Hugging Face the first
+  time each is needed, used directly by backend/rebuilt/jarvis_memory.py
+  (2026-10-21; also named in backend/requirements.txt now). Not shipped
+  here; pip installs it on the PC. The full Apache-2.0 text is given below,
+  under LICENCE TEXTS.
 
 MEMORY SELF-TEST DATA (not generated - keep when regenerating)
 ---------------------------------------------------------------------------

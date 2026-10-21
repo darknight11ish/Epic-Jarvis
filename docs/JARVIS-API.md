@@ -7791,10 +7791,10 @@ What changed on the PC, and nothing else:
 
 1. **The re-ranker.** Chat recall re-orders the top 20 facts search found
    with a small cross-encoder on the processor
-   (`Xenova/ms-marco-MiniLM-L-6-v2` through fastembed, Apache-2.0, about
-   80 MB, downloaded once like the meaning model) before the first 5 go to
-   the model. The same facts, a better order: none added, none that would
-   have been among the 20 dropped, `JARVIS_MEMORY_K` and both floors
+   (`Xenova/ms-marco-MiniLM-L-6-v2` on ONNX Runtime directly, Apache-2.0,
+   about 80 MB, downloaded once like the meaning model) before the first 5
+   go to the model. The same facts, a better order: none added, none that
+   would have been among the 20 dropped, `JARVIS_MEMORY_K` and both floors
    unchanged. **Off by default** (2026-09-26: kept only once the PC's memory
    self-test shows it helps); `JARVIS_MEMORY_RERANK=1` turns it on. While it
    is off, `status()["reranker"]` is `{"state": "off", "why": "off by default
@@ -7807,9 +7807,11 @@ What changed on the PC, and nothing else:
    (`memory.rerank_off`) and in `status()`. Pool size:
    `JARVIS_MEMORY_RERANK_POOL` (20). Which re-ranker:
    `JARVIS_MEMORY_RERANK_MODEL` (since 2026-09-28, "Model tryouts"; unset =
-   the one above; a name this fastembed does not list is refused, never
-   loaded). The meaning model likewise: `JARVIS_MEMORY_EMBED_MODEL` (unset =
-   `BAAI/bge-small-en-v1.5`, unchanged); a change of model, even to one with
+   the one above; a name this build's list of re-rankers does not have is
+   refused in plain words, never loaded). The meaning model likewise:
+   `JARVIS_MEMORY_EMBED_MODEL` (unset = `BAAI/bge-small-en-v1.5`, unchanged;
+   a name this build's list of meaning models does not have is refused in
+   plain words and the default is kept); a change of model, even to one with
    vectors of the same length, makes the store embed every fact again, never
    a mix. Both are for `tools/model_tryout/memory_tryout.py`'s runs until the
    owner sets them for real.
@@ -7930,7 +7932,9 @@ apps must read, or setting.** What an app can notice:
   that asks WHO may get up to two extra facts saying who the person in the
   top fact is. `GET /api/memory/status` is unchanged.
 - **The two memory models** are kept in `<config folder>/models`
-  (`FASTEMBED_CACHE_PATH` wins when set), not the system temp folder.
+  (`FASTEMBED_CACHE_PATH` wins when set - the name is kept from when
+  fastembed owned the folder, so a PC that already set it keeps working),
+  not the system temp folder.
 
 ## 35. Folders Jarvis may look in: PDFs, Word files and a Notion export (added 2026-09-26)
 

@@ -868,7 +868,8 @@ On Windows they go to ETW, and only reach Microsoft if a trace session is
 collecting and the owner's Windows diagnostic-data setting allows it.
 Jarvis switches them off before any model loads, wherever the backend loads
 onnxruntime itself: `jarvis_wakeword.py`, `jarvis_turn.py`, and
-`jarvis_memory.quiet_onnxruntime()` before fastembed
+`jarvis_memory.quiet_onnxruntime()` before the memory search loads its own
+meaning model or re-ranker on ONNX Runtime directly
 (`backend/test_ort_quiet.py`). **Known limit:** sherpa-onnx (speech-to-text,
 Kokoro, the voice check) carries its own copy of ONNX Runtime with no switch
 Jarvis can reach. For that copy, Windows' own setting (Settings → Privacy &
@@ -1204,8 +1205,8 @@ migration plus a full re-embed, and `vec0` is a virtual table most extensions
 cannot touch. Cost it honestly or design around it.
 
 **The distance floor is inert on first boot.** It sits behind
-`self.embedder.semantic`, and until fastembed finishes downloading the
-embedder is `HashEmbedder` with `semantic=False`. Until 2026-09-24, on day
+`self.embedder.semantic`, and until the meaning model finishes downloading
+the embedder is `HashEmbedder` with `semantic=False`. Until 2026-09-24, on day
 one the tail *was* padded to `k` on any shared content word ("what is my dog
 called?" got the cat, on "called"). The word list now has its own floor:
 a hit must match `JARVIS_MEMORY_MIN_WORD_SHARE` (default 0.1) of the
@@ -1380,9 +1381,9 @@ fact_repeats  fact_id, said_at, how ("typed" | "voice")   "said again" - NO WORD
 - **The re-ranker** (idea 1). Chat recall only (`jarvis_past.recall` ->
   `search(rerank=True)`): the top 20 facts that pass every filter are
   re-ordered by a small cross-encoder on the processor
-  (`Xenova/ms-marco-MiniLM-L-6-v2` through fastembed, Apache-2.0, English
-  only) before the first `k` go to the model. It only re-orders - no fact
-  added, `k` and both floors unchanged - and never touches `find_one()`,
+  (`Xenova/ms-marco-MiniLM-L-6-v2` on ONNX Runtime directly, Apache-2.0,
+  English only) before the first `k` go to the model. It only re-orders - no
+  fact added, `k` and both floors unchanged - and never touches `find_one()`,
   corrections or anything that writes. **Off by default** (2026-09-26: a
   memory change is kept only once the PC's self-test shows it helps);
   `JARVIS_MEMORY_RERANK=1` turns it on, and `eval_memory.py` measures it
@@ -1462,8 +1463,10 @@ added, each measured by the self-test before it was kept:
 - **"Said again" after Erase is a day, not a moment** (I12): an erased
   fact's said-again times are rounded down to the day, the count kept.
 - **Both memory models live in Jarvis's own folder** (B17,
-  `~/.openjarvis/models`, or `FASTEMBED_CACHE_PATH`), not the temp folder a
-  disk clean-up empties.
+  `~/.openjarvis/models`; the `FASTEMBED_CACHE_PATH` setting still wins when
+  set, its name kept from when fastembed owned the folder so a PC that
+  already set it keeps working), not the temp folder a disk clean-up
+  empties.
 
 **Smarter memory dates, "Where did I put ...?" and the overnight tidy**
 (the owner's choice of 2026-09-28, docs/RESEARCH-AUDIT-2026-09-28.md
