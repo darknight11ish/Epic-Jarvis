@@ -955,6 +955,25 @@ html[data-hud-layout="ambient"] .composer{
   box-shadow:0 16px 36px rgb(var(--shade-rgb) / .4);
 }
 
+/* ---- fit guards (field fix, 2026-10-21) ------------------------------ *
+ *  The HUD must fit ANY window it is given. The installed app restored its
+ *  window at 815x691 (below the declared 960x640 minimum - window_memory.rs
+ *  now clamps that back up), and the app's own Text-size / Ctrl+= zoom
+ *  shrinks the CSS viewport without changing the window, so the page can be
+ *  laid out much narrower than the window looks. Two rules carry the small
+ *  widths:
+ *   - the stage header WRAPS instead of pushing its right-hand controls (the
+ *     layout picker, the rail toggle) past the window edge;
+ *   - below 720px the Cockpit's own column rule is re-stated as one column,
+ *     because `html[data-hud-layout="cockpit"] #shell` would otherwise beat
+ *     the base stylesheet's narrow-window single-column rule on specificity.
+ *  Nothing is hidden or removed: every control keeps its id and its place in
+ *  the tab order, and below 1080px the right rail is the drawer the base
+ *  stylesheet already provides, opened by the rail toggle.
+ * --------------------------------------------------------------------- */
+.stage-bar{flex-wrap:wrap; row-gap:6px;}
+.stage-bar > *{min-width:0;}
+#stage, #shell{min-width:0;}
 /* ---- narrower windows ---------------------------------------------- *
  *  The three layouts assume the HUD's own window (it opens as a large
  *  panel). These keep them usable rather than merely valid when the owner
@@ -982,6 +1001,23 @@ html[data-hud-layout="ambient"] .composer{
   html[data-hud-layout="ambient"] #ambient-status{max-width:calc(100vw - 32px);}
   html[data-hud-layout="ambient"] #reactor{width:190px; height:190px;}
 }
+/* The <=720 rules go LAST: the layout blocks above (`narrower windows`, whose
+   <=1080 rule sets the Cockpit's two columns) are just as specific, so the
+   single-column rule only wins by coming after them. */
+@media (max-width:720px){
+  html[data-hud-layout="cockpit"] #shell{grid-template-columns:minmax(0,1fr);}
+  html[data-hud-layout="cockpit"] #stage-title{display:none;}
+  /* The expand toggle is positioned beside the core at full width; in a
+     single column at this size that puts it past the right edge, so it flows
+     under the core instead. Same control, same id, still visible. */
+  html[data-hud-layout="cockpit"] .core-expand{
+    position:static; left:auto; right:auto; margin:6px auto 0;
+  }
+  .stage-bar{padding:8px 12px; gap:8px;}
+  .layout-picker{flex-wrap:wrap; max-width:100%;}
+  html[data-hud-layout="studio"] .stage-tab{padding-left:8px; padding-right:8px;}
+}
+
 </style>
 
 <!-- ==================================================================== *
@@ -2793,7 +2829,27 @@ $("insp-ask").addEventListener("click", () => {
   $("input").value = `Tell me about "${n.label}" and how it relates to what I'm building.`;
   $("input").focus();
 });
-$("rail-toggle").addEventListener("click", () => $("rail-right").classList.toggle("open"));
+/* The right-rail drawer, for windows too narrow for the third column (the
+ * base stylesheet shows the toggle below 1080px). The opened drawer sits over
+ * the right-hand end of the stage header, i.e. over the toggle itself, so the
+ * keyboard must be able to shut it: Escape closes it and returns focus to the
+ * toggle (field fix, 2026-10-21 - the drawer had no way to close but clicking
+ * the button it covers). `aria-expanded` says which state it is in. */
+(function railDrawer(){
+  const toggle = document.getElementById("rail-toggle");
+  const rail = document.getElementById("rail-right");
+  if(!toggle || !rail) return;
+  const paint = () => toggle.setAttribute("aria-expanded",
+    rail.classList.contains("open") ? "true" : "false");
+  toggle.addEventListener("click", () => { rail.classList.toggle("open"); paint(); });
+  window.addEventListener("keydown", (event) => {
+    if(event.key !== "Escape" || !rail.classList.contains("open")) return;
+    rail.classList.remove("open");
+    paint();
+    toggle.focus();
+  });
+  paint();
+})();
 
 function renderLanes(){
   const all = [{id:"auto", label:"auto", tag:"routed"},
@@ -2972,7 +3028,8 @@ async function paintHost(){
   hostWarn();
 }
 
-/* Draws the standing model line, and the host's own line under it.
+/* Draws the ONE standing status row under the title: the model truth and the
+ * shell's live link truth, once each (see "ONE status row" below).
  *
  * The brand is only written once the page actually knows: `S.ollama` is null
  * until a read lands, and NULL means "the PC has not said", which is not a
@@ -3000,10 +3057,14 @@ function hostWarn(){
   const modelUp = S.ollama !== false;
   const box = document.getElementById("input");
   if(box && String(box.value || "").trim()) return;
+  // Nothing is known yet and the link has not gone down: leave the page's own
+  // starting line alone. Writing the fallback here would read as a verdict the
+  // page has not been given (the boot read is still in flight), and the shell's
+  // recheckBrand would then find a fallback standing when nothing is wrong.
+  if(S.ollama === null && linkStatus.up !== false) return;
   if(modelUp && isBrandFallback()) return;
-  sub.textContent = S.ollama === true ? "online · local first"
-    : S.ollama === false ? "online · model not running"
-    : "demo · not connected";
+  sub.textContent = brandWords();
+  sub.title = brandTitle();
 }
 
 /** Whether #brand-sub still holds the page's own fallback, which the shell's
@@ -3013,6 +3074,66 @@ function isBrandFallback(){
   const sub = document.getElementById("brand-sub");
   return !!sub && /^\s*demo\b/i.test(sub.textContent || "");
 }
+
+/* ONE status row (field fix, 2026-10-21).
+ *
+ * The installed app showed "ONLINE · LOCAL FIRST" with "LINKED · LOCAL FIRST"
+ * directly under it: the same truth twice, because #brand-sub was this page's
+ * boot-time model line and the shell's injected bootstrap drew the live link
+ * on a line of its own beneath it. There is one row now, and it says both
+ * truths once each, e.g. "online · local first · linked". The shell pushes the
+ * link words on every change (`jarvis-link-status`, from hud_bootstrap.js) and
+ * only falls back to injecting its own line when the page in front of it is an
+ * older copy that sets no `data-hud-link-row` - the live page is copied to the
+ * backend separately from the app, so the two versions can meet.
+ *
+ * `up` is the shell's live verdict (null until it has said); `short` is the
+ * word to add after the model line ("linked", "reconnecting"); `words` is the
+ * full link phrase, used alone when the link is down - without a link nothing
+ * about the model is known any more, so the link word replaces the model claim
+ * rather than sitting beside it. Nothing here is invented: the model half is
+ * /api/status's own `ollama`, the link half is the shell's own stream. */
+let linkStatus = { up: null, words: "", short: "", tone: "" };
+function brandWords(){
+  if(linkStatus.up === false) return linkStatus.words || "offline · no link";
+  if(linkStatus.up === true && S.ollama !== null && linkStatus.short){
+    // COMPACT ON PURPOSE. The rail gives this row 191px at its widest and
+    // 159px at 960x640; "online · local first · linked" measures 204px, so it
+    // wrapped into two lines - which is the duplicate the owner's field test
+    // reported, just inside one element. The compact form says both truths
+    // once and fits on one line everywhere; the full sentence, "local first"
+    // included, is the row's tooltip (brandTitle) and the Systems card.
+    return (S.ollama === false ? "no model" : "online") + " · " + linkStatus.short;
+  }
+  return S.ollama === true ? "online · local first"
+    : S.ollama === false ? "online · model not running"
+    : "demo · not connected";
+}
+function brandTitle(){
+  if(linkStatus.up === false) return linkStatus.words || "";
+  if(linkStatus.up === true && S.ollama !== null && linkStatus.short){
+    return (S.ollama === false ? "no model running on the PC" : "online · local first")
+      + " · " + linkStatus.short;
+  }
+  return "";
+}
+window.addEventListener("jarvis-link-status", (event) => {
+  const detail = (event && event.detail) || {};
+  linkStatus = {
+    up: detail.up === true ? true : detail.up === false ? false : null,
+    words: String(detail.words || ""),
+    short: String(detail.short || ""),
+    tone: String(detail.tone || ""),
+  };
+  hostWarn();
+});
+// Tell hud_bootstrap.js this page composes the one row itself, and drop a
+// fallback line the bootstrap may have drawn before this script ran.
+document.documentElement.setAttribute("data-hud-link-row", "1");
+(function dropInjectedLinkLine(){
+  const old = document.getElementById("jarvis-link-line");
+  if(old && old.parentNode) old.parentNode.removeChild(old);
+})();
 
 /* The shell's own verdict, pushed on every change and on its beat
  * (`hud_bootstrap.js` `recheckBrand`): the PC answering again after a spell

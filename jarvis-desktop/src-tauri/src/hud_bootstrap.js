@@ -231,33 +231,76 @@
   }
 
   /* What the link is doing, in the words every other window uses
-   * (jarvis-link.js linkWords). The page's own #brand-sub is written once,
-   * at boot, from an Ollama probe, and then never changes - so the HUD said
-   * "online" for as long as it was open, whatever the stream did. The page
-   * is vendored and not ours to edit, and its boot() may write #brand-sub
-   * after this runs, so the link gets its own line directly under it rather
-   * than fighting over that one: the Ollama hint stays, and this is live. */
+   * (jarvis-link.js linkWords).
+   *
+   * ONE ROW, since 2026-10-21 (field fix). The page's #brand-sub used to be
+   * written once at boot from an Ollama probe, so this bootstrap kept its own
+   * line under it - and the installed app showed "ONLINE · LOCAL FIRST" above
+   * "LINKED · LOCAL FIRST": the same truth twice in two near-identical rows.
+   * The page now says both truths in its one brand row. It marks that with
+   * `data-hud-link-row` on <html> from its own script (which runs before the
+   * DOMContentLoaded paint below), and this pushes the link words to it on
+   * every change; the page composes "online · local first · linked" or, when
+   * the link is down, the link words alone (without a link nothing about the
+   * model is known any more).
+   *
+   * A line is still drawn by this bootstrap when the page in front of it has
+   * no such marker: the live page is copied to the backend separately from
+   * the app, so a new shell can meet an older page. Nothing is lost in that
+   * pairing; it just has the old two-row look. */
   var lastLink = null;
 
-  function linkLine(link) {
-    var l = link || {};
-    if (!l.connected) {
-      if (!l.error) return "connecting…";
-      var first = String(l.error).trim().split(/[.!?]\s/)[0];
-      return "offline · " + first;
+  /** The link's truth: `words` for the fallback line, `short` for the page's
+   *  one row suffix, and a tone both use. `up` is the shell's own verdict;
+   *  `null` means no link push has arrived yet, which is "we have not been
+   *  told", not "disconnected" - the page must not put it where a model
+   *  verdict goes. */
+  function linkWords(link) {
+    var l = link;
+    if (!l) {
+      return { up: null, words: "connecting…", short: "", tone: "bad" };
     }
-    if (l.stale !== false) return "stale — reconnecting";
-    return "linked · local first";
+    if (!l.connected) {
+      if (!l.error) {
+        return { up: false, words: "connecting…", short: "connecting", tone: "bad" };
+      }
+      var first = String(l.error).trim().split(/[.!?]\s/)[0];
+      return { up: false, words: "offline · " + first, short: "no link", tone: "bad" };
+    }
+    if (l.stale !== false) {
+      return { up: true, words: "stale — reconnecting", short: "reconnecting", tone: "warn" };
+    }
+    return { up: true, words: "linked", short: "linked", tone: "ok" };
+  }
+
+  /** Whether the page in front of this bootstrap composes the one status row
+   *  itself (jarvis_hud.html sets `data-hud-link-row` from its own script). */
+  function pageShowsLinkRow() {
+    return document.documentElement.getAttribute("data-hud-link-row") === "1";
   }
 
   function paintLink() {
     var link = lastLink;
     var root = document.documentElement;
     if (root) {
-      // Kept for the stylesheet (hud-link.css): the link line's colour.
+      // Kept for the stylesheet (hud-link.css): the stale state's colour.
       // Approve and Deny are removed here whatever the link does (section 5).
       if (linkStale) root.classList.add("jarvis-stale");
       else root.classList.remove("jarvis-stale");
+    }
+    var words = linkWords(link);
+    if (pageShowsLinkRow()) {
+      // The page owns the one row. A line injected before its script ran (a
+      // first link push can arrive before the page finishes parsing) is
+      // removed here, so the duplicate cannot win the race.
+      var stale = document.getElementById("jarvis-link-line");
+      if (stale && stale.parentNode) stale.parentNode.removeChild(stale);
+      try {
+        window.dispatchEvent(new CustomEvent("jarvis-link-status", { detail: words }));
+      } catch (err) {
+        console.error("[jarvis] link status failed", err);
+      }
+      return;
     }
     var sub = document.getElementById("brand-sub");
     if (!sub || !sub.parentNode) return;
@@ -269,8 +312,8 @@
       line.setAttribute("role", "status");
       sub.parentNode.insertBefore(line, sub.nextSibling);
     }
-    line.textContent = linkLine(link);
-    line.setAttribute("data-tone", !link || !link.connected ? "bad" : linkStale ? "warn" : "ok");
+    line.textContent = words.words;
+    line.setAttribute("data-tone", words.tone);
   }
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", paintLink, { once: true });
