@@ -174,6 +174,7 @@ from __future__ import annotations
 
 import io
 import json
+import math
 import os
 import re
 import threading
@@ -2587,6 +2588,294 @@ class _EarlyStt:
         self._error = None
 
 
+# --------------------------------------------------------------------------
+#   The early window: the owner check, started while speech is still arriving
+#   (2026-10-21, the genuinely new half of the audit's V1-Path A)
+# --------------------------------------------------------------------------
+
+#: How much of the owner's voice the early check gets. The audit's argument
+#: (and the reason a speaker model works at all): one clean second of speech
+#: carries nearly all of the speaker information a full clip does, and the
+#: check costs a fraction of what it costs on eight seconds. 0 disables the
+#: path completely - everything then behaves exactly as it did before this
+#: change, which is what `[voice] early_verify_window = 0` is for.
+EARLY_VERIFY_SECONDS = 1.2
+#: A score this far past the bar decides on the window alone. Inside the
+#: band the FULL clip is checked at the end, exactly as before - the honest
+#: extra cost of asking a shorter question.
+EARLY_VERIFY_MARGIN = 0.06
+#: Shorter than this is not a speaker check; the window is not tried at all.
+EARLY_VERIFY_MIN_SECONDS = 0.6
+#: What counts as voiced while the audio is streaming in (RMS of a 10 ms
+#: frame). Deliberately low: the VAD has already said there is speech.
+EARLY_VERIFY_RMS = 0.01
+
+
+def _early_verify_window() -> float:
+    """How many seconds of voice the early check gets, 0 when it is off."""
+    try:
+        got = float(_cfg("early_verify_window", EARLY_VERIFY_SECONDS))
+    except (TypeError, ValueError):
+        got = EARLY_VERIFY_SECONDS
+    if not math.isfinite(got) or got <= 0:
+        return 0.0
+    return min(3.0, max(EARLY_VERIFY_MIN_SECONDS, got))
+
+
+def _early_verify_margin() -> float:
+    try:
+        got = float(_cfg("early_verify_margin", EARLY_VERIFY_MARGIN))
+    except (TypeError, ValueError):
+        return EARLY_VERIFY_MARGIN
+    if not math.isfinite(got):
+        return EARLY_VERIFY_MARGIN
+    return min(0.25, max(0.0, got))
+
+
+def _rms(samples) -> float:
+    if not len(samples):
+        return 0.0
+    total = 0.0
+    for v in samples:
+        f = float(v)
+        total += f * f
+    return math.sqrt(total / len(samples))
+
+
+def _early_window(samples, sample_rate: int):
+    """The first `window` seconds of VOICE in a clip, or None.
+
+    For the single-shot path (`hear()` has the whole clip already): skip any
+    leading quiet frames, then take the window. The clip `hear()` sees has
+    already been trimmed to the VAD's speech span, so this is usually a very
+    short skip; it exists so the check is on voice and not on the pad.
+    """
+    window = _early_verify_window()
+    rate = float(sample_rate or 16000)
+    need = int(EARLY_VERIFY_MIN_SECONDS * rate)
+    if window <= 0 or len(samples) < need:
+        return None
+    hop = max(1, int(0.01 * rate))
+    start = 0
+    for i in range(0, len(samples), hop):
+        if _rms(samples[i:i + hop]) >= EARLY_VERIFY_RMS:
+            start = i
+            break
+    else:
+        return None
+    out = samples[start:start + int(window * rate)]
+    return out if len(out) >= need else None
+
+
+def _owner_check(samples, sample_rate: int, mic: str = ""):
+    """The existing owner check on whatever audio it is given: (verdict, model).
+
+    The single place the call is written, so the windowed check, the full
+    check and the streaming check cannot drift apart. `jarvis_voice.verify`
+    may be older than this file (see `_takes_rate`), hence the two conditionals.
+    """
+    try:
+        emb = jarvis_voice.EcapaEmbedder()
+    except Exception:
+        emb = jarvis_voice.Embedder()
+    kw = {}
+    if _takes_rate(jarvis_voice.verify):
+        kw["sample_rate"] = sample_rate
+    if mic and _takes(jarvis_voice.verify, "mic"):
+        kw["mic"] = mic
+    return jarvis_voice.verify(samples, emb, **kw), emb
+
+
+def _early_decides(verdict) -> str:
+    """"owner" / "other" when a window's score decides on its own, else "".
+
+    DECIDES ONLY OUTSIDE THE BAND: a score at least `margin` past the bar one
+    way, or at least `margin` below it the other. Inside it the answer could
+    go either way on a full clip, so the full clip is checked at the end,
+    exactly as before. Not the owner's voice is decided too: a window that is
+    clearly someone else's does not get a second chance at the end, which is
+    the same answer the full check gives and keeps the refusal honest.
+    """
+    if verdict is None:
+        return ""
+    margin = _early_verify_margin()
+    try:
+        score = float(getattr(verdict, "score", 0.0) or 0.0)
+        threshold = float(getattr(verdict, "threshold", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        return ""
+    if not math.isfinite(score) or not math.isfinite(threshold) or threshold <= 0:
+        return ""
+    if bool(getattr(verdict, "is_owner", False)) and score >= threshold + margin:
+        return "owner"
+    if not bool(getattr(verdict, "is_owner", False)) and score <= threshold - margin:
+        return "other"
+    return ""
+
+
+class _EarlyVerify:
+    """The owner check, started on the first window while audio keeps coming.
+
+    `hear()` cannot use this one (its clip is already complete when it is
+    called) - it uses `_decide_owner` below on the clip's first window. A
+    STREAMING caller (the shape `StreamingAsr` documents) feeds chunks and
+    starts this as soon as there is a window of voice, so the answer is
+    already there when the owner stops speaking.
+
+    The verify-first rule is untouched: this only makes a verdict; no words
+    exist here, nothing is transcribed, and a caller must still run the
+    transcription only for the audio it is allowed to use.
+    """
+
+    def __init__(self, samples, sample_rate: int, mic: str = ""):
+        self._samples = samples
+        self._rate = int(sample_rate or 16000)
+        self._mic = mic
+        self.verdict = None
+        self.embedder = None
+        self.ms = 0.0
+        self._error = None
+        self._thread = threading.Thread(target=self._work,
+                                        name="jarvis-verify-beside-check",
+                                        daemon=False)
+        self._thread.start()
+
+    def _work(self) -> None:
+        t0 = time.monotonic()
+        try:
+            self.verdict, self.embedder = _owner_check(self._samples, self._rate,
+                                                       self._mic)
+        except BaseException as exc:      # noqa: BLE001 - join() re-raises it
+            self._error = exc
+        finally:
+            self.ms = round((time.monotonic() - t0) * 1000.0, 1)
+            # The window's audio goes as soon as the answer exists.
+            self._samples = None
+
+    def join(self):
+        """Wait for the window's verdict: (verdict, model), or raise."""
+        self._thread.join()
+        if self._error is not None:
+            raise self._error
+        return self.verdict, self.embedder
+
+    def discard(self) -> None:
+        """Not used: wait (no thread outlives the call), then drop it."""
+        self._thread.join()
+        self.verdict = None
+        self.embedder = None
+        self._error = None
+
+
+def _decide_owner(samples, sample_rate: int, mic: str, full_check):
+    """(verdict, model, used_early, ms) - window first, full clip when borderline.
+
+    `full_check()` is `hear()`'s own closure, so the fallback is byte-for-byte
+    the call that was there before. A worker that fails is not a refusal: the
+    full clip is checked, exactly as today. A clear window answer is used;
+    anything inside the band costs the full check (said plainly in `hear()`'s
+    docstring: the window is a saving, not a different standard).
+    """
+    window = _early_window(samples, sample_rate)
+    early = None
+    if window is not None:
+        try:
+            early = _EarlyVerify(window, sample_rate, mic)
+        except Exception:
+            early = None
+    if early is not None:
+        try:
+            verdict, embedder = early.join()
+            early_ms = early.ms
+        except Exception:
+            early.discard()
+            verdict, embedder, early_ms = None, None, 0.0
+        if verdict is not None and _early_decides(verdict):
+            return verdict, embedder, True, early_ms
+        early.discard()
+    t = time.monotonic()
+    verdict, embedder = full_check()
+    return verdict, embedder, False, (time.monotonic() - t) * 1000.0
+
+
+class StreamingVerify:
+    """The early window for a caller that gets audio in chunks.
+
+    The shape `StreamingAsr` documents and the desktop listener already has
+    internally: 16-bit PCM chunks arrive while the owner speaks. Feed them;
+    once `window` seconds of voice have arrived the EXISTING owner check is
+    started on that window on the beside-check worker. At end of speech
+    `verdict()` answers at once when the window was decisive, and checks the
+    full clip exactly as today when it was not (`_early_decides`).
+
+    It produces NO words and keeps no audio after `verdict()`: it is the
+    check half of a streaming `hear()`, and the transcription must still be
+    run only for audio the rule allows and thrown away when the answer is no.
+    """
+
+    def __init__(self, sample_rate: int = 16000, mic: str = "", window=None):
+        self.sample_rate = int(sample_rate or 16000)
+        self.mic = str(mic or "")
+        self.window = (_early_verify_window() if window is None else float(window))
+        self._voiced = []
+        self._early = None
+        self.started = False
+        self.last = {"verdict": None, "early": False, "ms": 0.0}
+
+    @property
+    def voiced_seconds(self) -> float:
+        return len(self._voiced) / float(self.sample_rate)
+
+    def feed(self, pcm: bytes, *, silence_s: float = 0.0) -> dict:
+        """Append one 16 kHz mono int16 chunk; start the check on the window."""
+        import array
+        raw = bytes(pcm or b"")
+        if len(raw) % 2:
+            raw = raw[:-1]
+        a = array.array("h")
+        if raw:
+            a.frombytes(raw)
+        x = [v / 32768.0 for v in a]
+        if x and _rms(x) >= EARLY_VERIFY_RMS:
+            self._voiced.extend(x)
+            need = int(self.window * self.sample_rate)
+            if not self.started and self.window > 0 and need and len(self._voiced) >= need:
+                try:
+                    self._early = _EarlyVerify(self._voiced[:need], self.sample_rate,
+                                               self.mic)
+                    self.started = True
+                except Exception:
+                    self._early = None
+        return {"seconds": round(self.voiced_seconds, 2),
+                "started": self.started, "verifying": self._early is not None}
+
+    def verdict(self, samples=None, sample_rate: int = None, full_check=None):
+        """At end of speech: (verdict, model, used_early, ms). No words."""
+        if full_check is None:
+            def full_check(s, r):
+                return _owner_check(s, r, self.mic)
+        if self._early is not None:
+            try:
+                v, emb = self._early.join()
+                early_ms = self._early.ms
+            except Exception:
+                self._early.discard()
+                v, emb, early_ms = None, None, 0.0
+            if v is not None and _early_decides(v):
+                self.last = {"verdict": v, "early": True, "ms": early_ms}
+                self._voiced = []
+                return v, emb, True, early_ms
+            self._early.discard()
+        t = time.monotonic()
+        audio = samples if samples is not None else list(self._voiced)
+        rate = int(sample_rate or self.sample_rate)
+        v, emb = full_check(audio, rate)
+        ms = (time.monotonic() - t) * 1000.0
+        self.last = {"verdict": v, "early": False, "ms": round(ms, 1)}
+        self._voiced = []
+        return v, emb, False, ms
+
+
 def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
          waited_ms=None) -> Heard:
     """One complete WAV utterance in. Never USES a transcript before the
@@ -2852,14 +3141,16 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
         return Heard(False, source=source, seconds=seconds, too_short=True,
                      min_seconds=need, reason=_too_short_reason(spoken, need), **extra)
 
-    # 4 + 5. The owner check and the words BESIDE it (2026-10-20, Opt 3.1).
-    #        Only when there is an engine to run: with none, `hear()` still
-    #        answers its own "no speech-to-text installed" after the check and
-    #        nothing is started. The check-only path of a Live voice pause is
-    #        left exactly as it was (checked, and only a passing clip turned
-    #        into words) - it exists to spend as little as possible on a clip
-    #        that may not be the owner. If a thread cannot be started, the
-    #        words are made after the check, exactly as before.
+    # 4 + 5. The owner check and the words BESIDE it (2026-10-20, Opt 3.1),
+    #        with the check itself started on the clip's FIRST window
+    #        (2026-10-21, V1-Path A). Only when there is an engine to run:
+    #        with none, `hear()` still answers its own "no speech-to-text
+    #        installed" after the check and nothing is started. The check-only
+    #        path of a Live voice pause is left exactly as it was (checked,
+    #        and only a passing clip turned into words) - it exists to spend
+    #        as little as possible on a clip that may not be the owner. If a
+    #        thread cannot be started, the words are made after the check,
+    #        exactly as before, and the full clip is checked exactly as before.
     early = None
     if not check_only and _stt_engine() is not None:
         try:
@@ -2870,10 +3161,11 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
     if live_trust == "trusted_short":
         verdict, embedder = _SessionTrusted(), None
         steps["owner_check"] = 0.0
+        steps["owner_check_early"] = 0.0
     else:
-        t = time.monotonic()
         try:
-            verdict, embedder = check_owner()
+            verdict, embedder, used_early, check_ms = _decide_owner(
+                samples, sample_rate, mic, check_owner)
         except Exception as exc:
             # The clip never became a word the request could use: drop what
             # the worker made (and wait for it) before answering as before.
@@ -2890,7 +3182,10 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
                                      "this clip and its trust is off (" + type(exc).__name__ + ")"),
                              live_say=jarvis_live.SAY_RECHECK, **_live_fields(mic))
             raise
-        steps["owner_check"] = (time.monotonic() - t) * 1000.0
+        steps["owner_check"] = check_ms
+        #: 1.0 = the first-window check answered; 0.0 = the full clip did.
+        #: In the delay numbers only, so the table says which question ran.
+        steps["owner_check_early"] = 1.0 if used_early else 0.0
     # What this clip is trusted as. A Live clip asks as "live" when the owner
     # pressed Start, or like "hey Jarvis" when Live was started by voice
     # (jarvis_live.trust_source - one switch there decides).

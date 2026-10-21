@@ -23,6 +23,17 @@ No network, no microphone. What it proves:
   7. status() carries `turn` with the owner's switch and the pause rule.
   8. With the real model and Kokoro: complete sentences read as finished
      and hesitant fragments ("..., um,") mostly do not.
+  9. THE FAST PATH (2026-10-21, the audit's V3): raw 16 kHz int16 PCM in
+     process - no WAV, no base64, no HTTP - and the log-mel features built
+     incrementally as 32 ms chunks arrive (`MelStream`, `TurnStream`), served
+     from cached per-frame FFTs at end of turn. The reference `features()`
+     stays the standard: every incremental case is compared to it inside a
+     stated tolerance (1e-2 absolute on the (x+4)/4 picture, which is the
+     reference's own float32 normalisation rounding seen through the log of
+     quiet mel bands), and the work counters prove the end-of-turn pass is a
+     handful of frames instead of 801. Measured numbers printed by this file
+     are TEST-MODE numbers (stdlib numpy on this desktop, stand-in session);
+     no real-model latency is claimed here.
 """
 import array
 import ast
@@ -300,10 +311,153 @@ def t_real_model():
           sum(p < 0.5 for p in frag) >= 3, frag)
 
 
+# ------------------------------------------------- 9. the raw-PCM fast path --
+
+def _raw(x) -> bytes:
+    """The golden float samples as the desktop listener holds them: int16 PCM."""
+    return (np.asarray(x, dtype=np.float32) * 32768.0).astype("<i2").tobytes()
+
+
+class MeanSession:
+    """A stand-in whose answer DEPENDS on the picture it is given, so two
+    feature paths that differ cannot produce the same number by accident."""
+
+    def run(self, _, feeds):
+        x = next(iter(feeds.values()))
+        return [np.array([[float(np.mean(x))]], dtype=np.float32)]
+
+
+def t_raw_pcm_path_matches_the_wav_path():
+    """The same sound, WAV body vs raw PCM body and vs the in-process call:
+    one answer. No WAV header is parsed on the raw path."""
+    x = signal_pcm()
+    with mock.patch.object(T, "_load", return_value=(MeanSession(), "input_features")):
+        code_w, wav_out = T.handle(wav(x))
+        code_r, raw_out = T.handle(_raw(x))
+        in_proc = T.predict_pcm(_raw(x))
+        ref = T.predict(x, 16000)
+    check("a WAV body is still taken (old clients keep working)",
+          code_w == 200 and wav_out["format"] == "wav", (code_w, wav_out))
+    check("raw int16 PCM is taken too, and says so",
+          code_r == 200 and raw_out["format"] == "pcm16", (code_r, raw_out))
+    diff = abs(float(wav_out["probability"]) - float(raw_out["probability"]))
+    check(f"raw PCM and WAV give the same answer (difference {diff:.2e})",
+          diff <= 1e-3, (wav_out, raw_out))
+    check("...and the in-process call agrees with the reference predict()",
+          in_proc.ran and abs(in_proc.probability - ref.probability) <= 1e-3,
+          (in_proc, ref))
+
+
+def t_raw_pcm_bad_input_is_refused_plainly():
+    code, out = T.handle(b"\x01\x02\x03")          # half a sample
+    check("half a 16-bit sample: 400, naming no input",
+          code == 400 and "\x01" not in json.dumps(out), (code, out))
+    code, out = T.handle(b"\x00" * 40)                # 2.5 ms
+    check("too short to be a turn: 400", code == 400, (code, out))
+    code, out = T.handle(b'{"body": "not audio"}')
+    check("a JSON body is refused as audio, quoting nothing",
+          code == 400 and "body" not in json.dumps(out), (code, out))
+    code, out = T.handle(b"\x00\x00" * (16000 * 31))  # 31 s of raw
+    check("raw PCM longer than 30 s: 400", code == 400, (code, out))
+
+
+def t_incremental_mel_matches_the_reference():
+    """`MelStream.features()` against `features(last_window(...))`, at every
+    length that changes the window shape (short, one window, past 8 s)."""
+    rng = np.random.default_rng(11)
+    worst = 0.0
+    for secs in (0.3, 1.2, 2.5, 8.0, 9.0):
+        n = int(16000 * secs)
+        t_ = np.arange(n) / 16000.0
+        x = (0.4 * np.sin(2 * np.pi * 180.0 * t_)
+             + 0.05 * rng.standard_normal(n)).astype(np.float32)
+        ref = T.features(T.last_window(x)).astype(np.float64)
+        stream = T.MelStream()
+        stream.feed(_raw(x))
+        got = stream.features().astype(np.float64)
+        md = float(np.max(np.abs(ref - got)))
+        worst = max(worst, md)
+        check(f"incremental mel, {secs}s of audio: max difference {md:.1e} <= 1e-2",
+              md <= 1e-2 and got.shape == ref.shape, md)
+    print(f"  TEST-MODE number: worst incremental-vs-reference difference {worst:.2e}")
+
+
+def t_end_of_turn_features_come_from_the_cache():
+    """A 32 ms chunk stream (512-sample VAD chunks): every real frame was
+    FFT'd while the audio was arriving, so the end-of-turn pass is a few
+    frames, not 801."""
+    x = signal_pcm()
+    pcm = _raw(x)
+    stream = T.MelStream()
+    for i in range(0, len(pcm), 1024):                # 512 samples = 32 ms
+        stream.feed(pcm[i:i + 1024])
+    ref = T.features(T.last_window(x)).astype(np.float64)
+    before = stream.frames_computed
+    got = stream.features().astype(np.float64)
+    at_end = stream.frames_computed - before
+    md = float(np.max(np.abs(ref - got)))
+    print(f"  TEST-MODE numbers: frames FFT'd while speaking {before}, "
+          f"at end of turn {at_end} (reference: 801), reused {stream.frames_reused}")
+    check("the end-of-turn pass computes at most 8 frames (was 801)",
+          0 <= at_end <= 8, at_end)
+    check("...and still matches the reference (<= 1e-2)",
+          md <= 1e-2, md)
+    check("...with the real frames served from the cache, not recomputed",
+          stream.frames_reused >= 200, stream.frames_reused)
+
+
+def t_repeated_probes_cost_far_less_than_recomputing():
+    """A caller that asks as the audio grows (hop-aligned, so the same class
+    is reused) pays far less than one full feature pass per probe."""
+    x = signal_pcm()
+    pcm = _raw(x)
+    stream = T.MelStream()
+    probes = 0
+    for i in range(0, len(pcm), 320):                 # 160 samples = one hop
+        stream.feed(pcm[i:i + 320])
+        if i and i % 3200 == 0:
+            stream.features()
+            probes += 1
+    got = stream.features().astype(np.float64)
+    ref = T.features(T.last_window(x)).astype(np.float64)
+    naive = (probes + 1) * 801
+    print(f"  TEST-MODE numbers: {probes + 1} probes, frames FFT'd in total "
+          f"{stream.frames_computed}, reused {stream.frames_reused} "
+          f"(one full pass per probe would be {naive})")
+    check("repeated probing FFT'd fewer than a third of the one-pass-per-probe cost",
+          stream.frames_computed < naive / 3, (stream.frames_computed, naive))
+    check("...and the last picture is still the reference (<= 1e-2)",
+          float(np.max(np.abs(ref - got))) <= 1e-2, None)
+
+
+def t_a_streamed_turn_is_the_same_answer():
+    """`TurnStream` fed 32 ms chunks gives the same answer, from the same
+    cached session, as `predict()` on the whole clip - and reports its work."""
+    x = signal_pcm()
+    pcm = _raw(x)
+    with mock.patch.object(T, "_load", return_value=(MeanSession(), "input_features")):
+        stream = T.TurnStream()
+        for i in range(0, len(pcm), 1024):
+            stream.feed(pcm[i:i + 1024])
+        got = stream.predict()
+        ref = T.predict(x, 16000)
+    check("the streamed turn ran", got.ran, got)
+    check("streamed and reference answers agree (<= 1e-3)",
+          abs(got.probability - ref.probability) <= 1e-3, (got, ref))
+    check("...and the stream says what it cost (frames computed / reused)",
+          isinstance(stream.last.get("frames_computed"), int)
+          and isinstance(stream.last.get("frames_reused"), int)
+          and stream.last["frames_computed"] <= 8, stream.last)
+
+
 if __name__ == "__main__":
     for fn in (t_features_are_pipecats, t_the_window, t_predict, t_handle,
                t_nothing_is_written_or_logged, t_the_patch, t_status_carries_turn,
-               t_real_model):
+               t_raw_pcm_path_matches_the_wav_path, t_raw_pcm_bad_input_is_refused_plainly,
+               t_incremental_mel_matches_the_reference,
+               t_end_of_turn_features_come_from_the_cache,
+               t_repeated_probes_cost_far_less_than_recomputing,
+               t_a_streamed_turn_is_the_same_answer, t_real_model):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

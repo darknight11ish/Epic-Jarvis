@@ -1023,7 +1023,13 @@ def t_too_short_clips():
         check("a voice-check ERROR fails closed: refused, trust off, and the words "
               "made beside the failed check are discarded",
               not h["ok"] and h["available"] is False and "trust is off" in h["reason"]
-              and sorted(sp.calls) == ["owner_check", "stt"] and not h["text"],
+              # Since 2026-10-21 the check is asked on the clip's first window
+              # first; when THAT raises, the full clip is checked exactly as
+              # before - so a dead verifier is asked twice before the refusal,
+              # never once and then trusted. The words made beside it are still
+              # discarded, which is the part that must not move.
+              and sorted(sp.calls) == ["owner_check", "owner_check", "stt"]
+              and not h["text"],
               (h, sp.calls))
         check("status exposes the trust state honestly (numbers/fixed words only)",
               set(("active", "last_verified_at", "short_clips_since", "window_s",
