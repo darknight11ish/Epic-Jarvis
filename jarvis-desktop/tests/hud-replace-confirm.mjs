@@ -182,6 +182,25 @@ check("(e) the HUD click wiring cannot send an approve before the rule says so",
     "arming a card does not clear the previous card's label");
 });
 
+check("(g) the bootstrap's own floor holds the owner-approved actions", () => {
+  // The injected bootstrap cannot import the page's list, so it carries the
+  // same floor: the PC's field may ADD an action, the list may only ever ADD
+  // a second press (never subtract one). Without it, an older live page/PC
+  // during a partial deploy would one-click a `delete_file`.
+  for (const action of [
+    "restore_backup", "register_approval_key", "memory_forget_range",
+    "delete_file", "delete_joplin_note", "delete_logseq_page",
+    "edit_joplin_note", "edit_logseq_page", "modify_own_code",
+    "app_merge_change",
+  ]) {
+    assert.match(BOOTSTRAP, new RegExp(`"${action}"`), action);
+  }
+  assert.match(BOOTSTRAP, /HUD_REPLACE_ACTIONS\.indexOf\(action\) >= 0/,
+    "the bootstrap does not consult its own floor");
+  assert.doesNotMatch(BOOTSTRAP, /"send_email"/,
+    "an ordinary action leaked into the bootstrap floor");
+});
+
 check("(f) the page's own two-press is still there for the browser case", () => {
   // The desktop HUD is the bootstrap's; the page's copy stays for a browser
   // tab with no bootstrap injected, and both must exist (one rule, two owners).

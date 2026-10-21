@@ -35,11 +35,27 @@ object ReplaceConfirm {
     /** The Approve button's words between the two presses. */
     const val CONFIRM_LABEL = "Confirm replace"
 
-    /** The fallback for a PC too old to send `replaces` - real action names. */
+    /**
+     * The client-side FLOOR for the actions whose card replaces data. The PC's
+     * `replaces` field can ADD an action; this list can never SUBTRACT one, so
+     * an explicit `false` on a listed action - or no field at all, an older PC
+     * during a partial deploy - still takes the second press.
+     *
+     * The owner extended the guard on 2026-10-21 ("Extend the two-press guard
+     * to them") to the other irreversible data-changing actions the pre-merge
+     * audit named; the backend's `_REPLACES_ACTIONS` is the same set.
+     */
     private val FALLBACK_ACTIONS = setOf(
         "restore_backup",
         "register_approval_key",
         "memory_forget_range",
+        "delete_file",
+        "delete_joplin_note",
+        "delete_logseq_page",
+        "edit_joplin_note",
+        "edit_logseq_page",
+        "modify_own_code",
+        "app_merge_change",
     )
 
     /**

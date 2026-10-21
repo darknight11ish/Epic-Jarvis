@@ -23348,13 +23348,28 @@ answered card is an answer.
 ### State-replacing cards: the `replaces` field
 
 Every waiting row now carries **`replaces`** (a JSON boolean, always present):
-`true` for the cards that replace or delete what is already there -
-`restore_backup`, `register_approval_key`, `memory_forget_range`, and the "clear
-the saved voice training" card (raised as `change_own_config`, like the
-voice-settings cards beside it, and marked by
-`backend/jarvis_voice_enroll.py`'s own detail). The set is
+`true` for the cards that replace or delete what is already there. The set is
 `jarvis_gate.replaces_for(action, detail)`; the marker is data on the detail,
-never prose. Both apps and the HUD draw a plain **"REPLACES CURRENT DATA"**
+never prose. It covers, in the gate's own `_RISK` table where every one is
+reversible `"no"` or `"hard"`:
+
+| action | what approving it does to data already on the PC |
+|---|---|
+| `restore_backup` | puts memory, chats, notes and the unlocking key back in time |
+| `register_approval_key` | lets a phone approve risky actions from then on |
+| `memory_forget_range` | retires facts and deletes chats in a time range |
+| `delete_file` / `delete_joplin_note` / `delete_logseq_page` | the file or note is gone; there is no undo from here |
+| `edit_joplin_note` / `edit_logseq_page` | the previous text is replaced in place and is gone unless the owner versions that vault/graph |
+| `modify_own_code` | the running program's source is changed; a backup is the only way back |
+| `app_merge_change` | writes the change shown on the card into the app's own files |
+
+The first three are review ruling 8.2's own list; the rest were **added on the
+owner's explicit instruction (2026-10-21: "Extend the two-press guard to
+them")** after the pre-merge audit named the other irreversible data-changing
+actions. The voice-training clear is not an action name in the table: it is
+raised as the shared `change_own_config` and marked by
+`backend/jarvis_voice_enroll.py`'s own detail, and the marker path is kept
+exactly for cards like it. Both apps and the HUD draw a plain **"REPLACES CURRENT DATA"**
 heading on those cards and require a **second, explicit confirmation** before
 the approve is sent: the desktop bar and the HUD page change the button from
 "Approve" to "Confirm replace" after the first press and send only on the
@@ -23363,6 +23378,17 @@ typed "approve" does not answer them (`quickActionable`), and the desktop
 widget's clamped strip redirects them to the bar. The phone cannot send the
 confirmation with a single tap. Ordinary cards are untouched: the field is
 `false`, the heading is not drawn and Approve is one press as before.
+
+**Only an explicit `false` is one click, and the client list is a floor.** A
+row with NO `replaces` field (an older PC during a partial deploy), a row that
+is missing from a successful `/api/pending` read, or a failed read is UNKNOWN,
+and both apps, the HUD page and the HUD bootstrap take the second press for it
+with their own honest words ("I could not check what this will replace.").
+The clients also carry the ten action names above as a FAIL-SAFE FLOOR: the
+PC's field may ADD an action, but a spoofed or explicit `false` field can never
+SUBTRACT the second press from one of them. The fake "Cancel": a single press
+sends NOTHING and only arms, so answering "Cancel" or walking away decides
+nothing; the gate's own timeout still refuses an unanswered card.
 
 **The HUD window's own injected bootstrap implements the same rule.** Inside
 the desktop HUD the vendored page's `onclick` never runs - the bootstrap

@@ -1,5 +1,5 @@
 diff --git a/jarvis_gate.py b/jarvis_gate.py
-index 2afade5..446e2ea 100644
+index 2afade5..1dba21b 100644
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
 @@ -31,6 +31,7 @@ this module cannot do its job it refuses rather than waving things through.
@@ -150,7 +150,7 @@ index 2afade5..446e2ea 100644
      for b in blobs:
          if not b:
              continue
-@@ -1355,6 +1487,98 @@ def filter_tool_result(name: str, content: Any) -> Any:
+@@ -1355,6 +1487,128 @@ def filter_tool_result(name: str, content: Any) -> Any:
      return out.get("text", content)
  
  
@@ -214,14 +214,44 @@ index 2afade5..446e2ea 100644
 +
 +#: Actions whose approval REPLACES or deletes data already on this PC. The
 +#: apps draw a plain "REPLACES CURRENT DATA" heading on these cards and ask a
-+#: second, explicit time before the approval is sent (guard 2 of the same
-+#: ruling). This table is the one place the backend knows it; it travels to
-+#: both apps as the `replaces` field on every waiting card (`pending()` below).
++#: second, explicit time before the approval is sent (guard 2 of review ruling
++#: 8.2). This table is the one place the backend knows it; it travels to both
++#: apps as the `replaces` field on every waiting card (`pending()` below).
++#:
++#: THE SET WAS EXTENDED ON THE OWNER'S OWN INSTRUCTION (2026-10-21: "Extend the
++#: two-press guard to them"), after the pre-merge audit named the other
++#: irreversible DATA-CHANGING actions. Every one of them is reversible "no" or
++#: "hard" in `_RISK` above; the reason each is here is what approving it does
++#: to data that is already on the PC:
++#:   * restore_backup - memory, chats, notes and the unlocking key go back in time
++#:   * register_approval_key - a phone may approve risky actions from then on
++#:   * memory_forget_range - retires facts and deletes chats in a time range
++#:   * delete_file / delete_joplin_note / delete_logseq_page - the file or note
++#:     is gone; there is no undo from here
++#:   * edit_joplin_note / edit_logseq_page - the previous text is replaced in
++#:     place and is gone unless the owner versions that vault or graph
++#:   * modify_own_code - the running program's source is changed; a backup is
++#:     the only way back
++#:   * app_merge_change - writes the change shown on the card into the app's
++#:     own files, exactly as shown
++#: An ORDINARY action is not here: one click stays one click for it. A card
++#: whose module sets `{"replaces": true}` in its own `detail` is marked by that
++#: data instead (the voice-training clear uses the shared `change_own_config`
++#: action and marks itself), so no action name is duplicated for it.
 +_REPLACES_ACTIONS = frozenset({
 +    "restore_backup",          # jarvis_backup.py: memory, chats, notes and the
 +                               # key that unlocks them all go back in time
 +    "register_approval_key",   # jarvis_devices.py: a phone may approve from then on
 +    "memory_forget_range",     # jarvis_forget_range.py: facts retired, chats deleted
++    "delete_file",             # the file is gone; not recoverable from here
++    "delete_joplin_note",      # the note is gone; not recoverable from here
++    "delete_logseq_page",      # the page is gone; not recoverable from here
++    "edit_joplin_note",        # previous text replaced in place; versioning is
++                               # the owner's, not this app's
++    "edit_logseq_page",        # same, for a Logseq graph page
++    "modify_own_code",         # the running program's source changes; a backup
++                               # is the only way back
++    "app_merge_change",        # writes the shown change into the app's own files
 +})
 +
 +
@@ -249,7 +279,7 @@ index 2afade5..446e2ea 100644
  def check(action: str,
            detail: Optional[dict] = None,
            prompt: str = "",
-@@ -1377,7 +1601,12 @@ def check(action: str,
+@@ -1377,7 +1631,12 @@ def check(action: str,
                         outcome="refused")
  
      # The one rule above the tier table: nothing gets to edit the tier table.
@@ -263,7 +293,7 @@ index 2afade5..446e2ea 100644
      if hit:
          _audit("gate.refused_protected", {"action": action, "file": hit})
          return Verdict(False, "never", action,
-@@ -1426,22 +1655,55 @@ def check(action: str,
+@@ -1426,22 +1685,55 @@ def check(action: str,
                         outcome="notify")
  
      # ---- "ask", and anything unrecognised, waits for a human ----
@@ -325,7 +355,7 @@ index 2afade5..446e2ea 100644
      _audit("gate.asked", {"id": rid, "action": action, "tier": tier, "detail": detail})
      # An unclassified action is safe (it became "ask") but opaque: you cannot
      # improve the pattern table without knowing what phrasing missed. Recording
-@@ -1599,9 +1861,16 @@ def gate_tool(name: str, params: Any) -> Optional[str]:
+@@ -1599,9 +1891,16 @@ def gate_tool(name: str, params: Any) -> Optional[str]:
      that mattered. Called from inside execute(), it sees every call.
      """
      action, _ = action_for_tool(name, params)
@@ -345,7 +375,7 @@ index 2afade5..446e2ea 100644
      if v.allowed:
          return None
      if v.timed_out:
-@@ -1633,29 +1902,74 @@ def gate_tool(name: str, params: Any) -> Optional[str]:
+@@ -1633,29 +1932,74 @@ def gate_tool(name: str, params: Any) -> Optional[str]:
  # some public questions answered by the local model; the alternative cost is
  # personal material reaching a cloud lane.
  
@@ -425,7 +455,7 @@ index 2afade5..446e2ea 100644
      try:
          _init()
          with closing(_connect()) as c:
-@@ -1666,6 +1980,9 @@ def taint_active() -> bool:
+@@ -1666,6 +2010,9 @@ def taint_active() -> bool:
  
  
  def clear_taint() -> bool:
@@ -435,7 +465,7 @@ index 2afade5..446e2ea 100644
      try:
          _init()
          with closing(_connect()) as c:
-@@ -1764,6 +2081,11 @@ def pending() -> list[dict]:
+@@ -1764,6 +2111,11 @@ def pending() -> list[dict]:
          # desktop cannot word the same warning two different ways - and so
          # there is one place to audit what a notification may contain.
          d["notice"] = notice_for(d)

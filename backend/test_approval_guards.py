@@ -476,18 +476,38 @@ def t_an_APPROVED_card_is_never_reused_either():
 
 # ============================================== guard 2: cards that REPLACE
 
-def t_state_replacing_actions_are_marked():
-    """The four cards the ruling names carry the flag; ordinary ones do not.
+#: Every action the owner extended the two-press guard to (2026-10-21: "Extend
+#: the two-press guard to them"), plus the three from review ruling 8.2. The
+#: names are the ones the CODE uses in this gate's `_RISK` table, resolved
+#: against the modules that raise the cards - the audit's wording and the
+#: real action names do not all match, and a guard keyed on a name no module
+#: sends would never fire.
+EXTENDED_REPLACES = (
+    "restore_backup", "register_approval_key", "memory_forget_range",
+    "delete_file", "delete_joplin_note", "delete_logseq_page",
+    "edit_joplin_note", "edit_logseq_page", "modify_own_code",
+    "app_merge_change",
+)
 
-    The names are the ones the CODE uses, resolved against the modules that
-    raise them - the review's `backup_restore` / `clear_voice_training` /
-    `forget_range` are not all the real action names, and a guard keyed on a
-    name no module sends would never fire.
+
+def t_state_replacing_actions_are_marked():
+    """The owner's extended set carries the flag; ordinary ones do not.
+
+    Every name below is `reversible "no"` or `"hard"` in the gate's own
+    `_RISK` table (the two reasons the owner gave for wanting the second
+    press), and the fake-Cancel risk is answered by the rule itself: pressing
+    once sends NOTHING, so a cancelled/abandoned card cannot have decided
+    anything (`test_approval_guards`'s dedup and gate tests hold the sending
+    path; this one holds the marking).
     """
-    for action in ("restore_backup", "register_approval_key",
-                   "memory_forget_range"):
-        check(f"`{action}` is marked as replacing what is there",
+    for action in EXTENDED_REPLACES:
+        check(f"`{action}` is marked as replacing/removing what is there",
               G.replaces_for(action, {"text": "card"}) is True, action)
+    check("the marked set is exactly the owner-approved actions - no action "
+          "name twice, none forgotten",
+          set(G._REPLACES_ACTIONS) == set(EXTENDED_REPLACES)
+          and len(G._REPLACES_ACTIONS) == len(set(EXTENDED_REPLACES)),
+          sorted(G._REPLACES_ACTIONS))
     check("a `change_own_config` card is ordinary unless it marks itself",
           G.replaces_for("change_own_config", {"what": "turn on a voice"}) is False,
           "change_own_config")
@@ -497,8 +517,10 @@ def t_state_replacing_actions_are_marked():
                          {"text": "This REPLACES CURRENT DATA, honestly"}) is False)
     check("a card whose own module marks it does replace",
           G.replaces_for("change_own_config", {"replaces": True}) is True)
-    check("an ordinary action is never marked",
-          G.replaces_for("send_email", {"to": "x@example.com"}) is False)
+    for ordinary in ("send_email", "read_web_page", "switch_model",
+                     "tidy_inbox", "draft_email"):
+        check(f"an ordinary action (`{ordinary}`) is never marked",
+              G.replaces_for(ordinary, {"to": "x@example.com"}) is False, ordinary)
     check("a missing action/None is not marked",
           G.replaces_for("", None) is False)
 
@@ -555,13 +577,14 @@ def _seed(action, detail, card_id, prompt="card"):
 def t_pending_rows_carry_the_flag_to_both_apps():
     """The wire shape both apps read: `replaces` on EVERY waiting row."""
     _reset()
-    _seed("restore_backup", {"text": "Restore from backup?"}, "seed-restore")
+    for index, action in enumerate(EXTENDED_REPLACES):
+        _seed(action, {"text": "a card for " + action}, "seed-" + str(index))
     _seed("send_email", {"to": "x@example.com"}, "seed-email")
     _seed("change_own_config", {"replaces": True, "text": "Clear?"}, "seed-voice")
     rows = {r["id"]: r for r in G.pending()}
-    check("the restore card reaches both apps marked",
-          rows.get("seed-restore", {}).get("replaces") is True,
-          repr(rows.get("seed-restore", {}).get("replaces")))
+    for index, action in enumerate(EXTENDED_REPLACES):
+        got = rows.get("seed-" + str(index), {}).get("replaces")
+        check(f"`{action}` reaches both apps marked", got is True, repr(got))
     check("... the voice-training clear card does too",
           rows.get("seed-voice", {}).get("replaces") is True,
           repr(rows.get("seed-voice", {}).get("replaces")))
@@ -570,8 +593,8 @@ def t_pending_rows_carry_the_flag_to_both_apps():
           rows.get("seed-email", {}).get("replaces") is False,
           repr(rows.get("seed-email", {}).get("replaces")))
     check("... the flag is a JSON boolean, the shape both apps serialise",
-          isinstance(rows.get("seed-restore", {}).get("replaces"), bool),
-          repr(type(rows.get("seed-restore", {}).get("replaces"))))
+          isinstance(rows.get("seed-0", {}).get("replaces"), bool),
+          repr(type(rows.get("seed-0", {}).get("replaces"))))
 
 
 def t_the_replaces_guard_is_what_marks_the_cards():

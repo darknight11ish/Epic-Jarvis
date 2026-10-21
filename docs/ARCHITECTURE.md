@@ -789,6 +789,19 @@ places between screens. Presentation only - no approval logic changed.
      "ordinary" is how this guard would re-open during its own deploy window.
      The pure rule is executed in `hud-replace-confirm.mjs`; the click wiring in
      the running window is executed by the Playwright case in `hud.mjs`.
+     **THE SET WAS EXTENDED ON THE OWNER'S OWN INSTRUCTION (2026-10-21:
+     "Extend the two-press guard to them")** to the other irreversible
+     data-changing actions the pre-merge audit named: `delete_file`,
+     `delete_joplin_note`, `delete_logseq_page`, `edit_joplin_note`,
+     `edit_logseq_page`, `modify_own_code`, `app_merge_change` - every one is
+     reversible "no" or "hard" in the gate's `_RISK` table. The desktop, page,
+     HUD bootstrap and phone each carry the same ten-name FAIL-SAFE FLOOR: the
+     PC's `replaces` field may ADD an action but a spoofed/`false` field can
+     never SUBTRACT the second press, and an unknown card takes it. A single
+     press only ARMS and sends nothing, so a cancelled card decides nothing.
+     The backend table is `jarvis-backend/jarvis_gate.py`'s `_REPLACES_ACTIONS`
+     (carried by `backend/gate-touches.patch`); this PR's own deploy-delta
+     follow-up carries the extended table to the live PC.
 
 ---
 

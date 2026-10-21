@@ -39,12 +39,38 @@ class ReplaceConfirmTest {
     @Test
     fun `the REAL action names are the fallback for an older PC`() {
         // Each one is the name the module that raises the card actually sends -
-        // not the review's own wording, which had three of the four wrong.
-        assertTrue(ReplaceConfirm.applies(item("restore_backup")))
-        assertTrue(ReplaceConfirm.applies(item("register_approval_key")))
-        assertTrue(ReplaceConfirm.applies(item("memory_forget_range")))
+        // not the review's own wording, which had three of the four wrong. The
+        // owner extended the guard on 2026-10-21 to the other irreversible
+        // data-changing actions; the phone floor holds the same ten names the
+        // backend marks.
+        for (action in listOf(
+            "restore_backup", "register_approval_key", "memory_forget_range",
+            "delete_file", "delete_joplin_note", "delete_logseq_page",
+            "edit_joplin_note", "edit_logseq_page", "modify_own_code",
+            "app_merge_change",
+        )) {
+            assertTrue("$action must take the second press first", ReplaceConfirm.applies(item(action)))
+        }
         assertFalse(ReplaceConfirm.applies(item("backup_restore")))
         assertFalse(ReplaceConfirm.applies(item("forget_range")))
+    }
+
+    @Test
+    fun `a SPOOFED or absent field cannot subtract the phone's second press`() {
+        // The PC's field may ADD an action; the phone floor may never remove
+        // one - an explicit false or a missing field on a listed action still
+        // requires the second press (the approve button only arms).
+        for (action in listOf(
+            "restore_backup", "register_approval_key", "memory_forget_range",
+            "delete_file", "delete_joplin_note", "delete_logseq_page",
+            "edit_joplin_note", "edit_logseq_page", "modify_own_code",
+            "app_merge_change",
+        )) {
+            assertTrue("$action with explicit false", ReplaceConfirm.applies(item(action)))
+            assertTrue("$action with no field", ReplaceConfirm.applies(item(action)))
+        }
+        assertFalse(ReplaceConfirm.applies(item("send_email")))
+        assertFalse(ReplaceConfirm.applies(item("read_web_page")))
     }
 
     @Test

@@ -180,6 +180,12 @@ KNOWN_BREAKS = {
     # - are the second jump, and #504's HUD fix is the third. A branch was fixed
     # or removed? Then fix or delete its entry - the shift is not a reason for
     # any of them to stay.
+    # Re-anchored 2026-10-21 for the tree that merged #689 (HUD field fixes):
+    # its anchors are 3532/3533/3540/3541/3542, and this branch's owner-
+    # approved extension of the two-press guard widens the page's
+    # REPLACE_ACTIONS floor by three lines above these branches, putting the
+    # same five at 3535/3536/3543/3544/3545 (the checker's own report).
+    # Same five recorded breaks, nothing new.
     # Re-anchored again 2026-10-21 on the tree that MERGED #682 (three selectable
     # HUD layouts): that PR moved these branches to 3365/3366/3373/3374/3375, and
     # #680's own +46 lines above them moved the same five to
@@ -191,31 +197,31 @@ KNOWN_BREAKS = {
     # tooltip, and the drawer's Escape path), so the five now read at
     # 3532/3533/3540/3541/3542 - the handler itself is untouched; only its
     # position moved.
-    ("1 a read that can never arrive", "jarvis_hud.html", 3532, "message", "hello"):
+    ("1 a read that can never arrive", "jarvis_hud.html", 3535, "message", "hello"):
         _KnownBreak(
             "the file is vendored byte for byte from the owner's backend folder, so a "
             "branch and a listener cannot be added here",
             "the backend's own copy of jarvis_hud.html: register a listener per kind "
             "the page reads - es.addEventListener(\"hello\", ...) - where that page lives"),
-    ("1 a read that can never arrive", "jarvis_hud.html", 3533, "message", "approval"):
+    ("1 a read that can never arrive", "jarvis_hud.html", 3536, "message", "approval"):
         _KnownBreak(
             "the file is vendored byte for byte from the owner's backend folder, so a "
             "branch and a listener cannot be added here",
             "the backend's own copy of jarvis_hud.html: register a listener per kind "
             "the page reads - es.addEventListener(\"approval\", ...) - where that page lives"),
-    ("1 a read that can never arrive", "jarvis_hud.html", 3540, "message", "proposal"):
+    ("1 a read that can never arrive", "jarvis_hud.html", 3543, "message", "proposal"):
         _KnownBreak(
             "the file is vendored byte for byte from the owner's backend folder, so a "
             "branch and a listener cannot be added here",
             "the backend's own copy of jarvis_hud.html: register a listener per kind "
             "the page reads - es.addEventListener(\"proposal\", ...) - where that page lives"),
-    ("1 a read that can never arrive", "jarvis_hud.html", 3541, "message", "finding"):
+    ("1 a read that can never arrive", "jarvis_hud.html", 3544, "message", "finding"):
         _KnownBreak(
             "the file is vendored byte for byte from the owner's backend folder, so a "
             "branch and a listener cannot be added here",
             "the backend's own copy of jarvis_hud.html: register a listener per kind "
             "the page reads - es.addEventListener(\"finding\", ...) - where that page lives"),
-    ("1 a read that can never arrive", "jarvis_hud.html", 3542, "message", "activity"):
+    ("1 a read that can never arrive", "jarvis_hud.html", 3545, "message", "activity"):
         _KnownBreak(
             "the file is vendored byte for byte from the owner's backend folder, so a "
             "branch and a listener cannot be added here",

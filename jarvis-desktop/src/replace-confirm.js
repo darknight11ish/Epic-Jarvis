@@ -41,11 +41,33 @@ export const REPLACES_WARNING = "REPLACES CURRENT DATA";
 export const REPLACES_NOTE =
   "Approving this replaces what is there now. Press Approve again to confirm.";
 
-/** The fallback for a PC too old to send `replaces` (see the module comment). */
+/**
+ * The client-side FLOOR for the actions whose card replaces or deletes data
+ * already on the PC.
+ *
+ * The PC's own `replaces` field is the authority and can ADD an action; this
+ * list can never be used to SUBTRACT one. A row that says `replaces: false`
+ * for an action in this list still takes the second press, and so does a row
+ * with no field at all (an older PC during a partial deploy) - the failure
+ * direction is always the extra press, never the silent one.
+ *
+ * The owner extended the guard on 2026-10-21 ("Extend the two-press guard to
+ * them") to the other irreversible data-changing actions the pre-merge audit
+ * named; the backend's `_REPLACES_ACTIONS` is the same set, and
+ * `jarvis-backend/jarvis_gate.py`'s `_RISK` table says why each one is
+ * state-changing (`no` or `hard` reversibility, local reach).
+ */
 const FALLBACK_ACTIONS = new Set([
   "restore_backup",
   "register_approval_key",
   "memory_forget_range",
+  "delete_file",
+  "delete_joplin_note",
+  "delete_logseq_page",
+  "edit_joplin_note",
+  "edit_logseq_page",
+  "modify_own_code",
+  "app_merge_change",
 ]);
 
 /**
