@@ -23187,3 +23187,84 @@ warning, a damaged stored row is stripped AGAIN on the way out, and the
 `my_files` chat result's JSON never carries a raw marker while the private-lane
 latch still fires on a result carrying words. The feature list's own row was
 updated in all three copies.
+
+
+## 150. The Obsidian vault organizer: a read-only plan, then (later) ONE card (backend half added 2026-10-20)
+
+**What it is.** A batch tidy-up planner for an Obsidian vault on this PC. It
+reads the vault's notes and answers what a tidy-up **would** do, so the owner
+can look before anything changes. The DEFAULT scheme is the safest one,
+`mocs_only`, which moves **no file**: it merges `tags` into each note's YAML
+frontmatter (never erasing the owner's own), adds an
+`up: "[[_MOC - <Topic>]]"` link, and would create `_MOC - <Topic>.md` hub notes
+plus one `00 - Vault Home.md`. The two moving schemes, `topic_folders` and
+`para`, are previewed by the same plan; they exist behind the explicit
+`scheme` parameter for a later run. The module is
+`backend/jarvis_vault_organizer.py` and its docstring is the contract.
+
+**THIS SLICE IS THE PLAN HALF, AND IT IS READ-ONLY.** `POST
+/api/vault/organize-plan` opens notes for reading only and writes nothing
+anywhere - not in the vault, not in the settings folder, not in `memory.db` -
+raises no approval card, calls no model and embeds nothing. The clustering is
+pure Python and deterministic: folder, database membership and a TF-IDF over
+headings/tags, with ties broken by name, so the same vault twice gives the same
+`plan_id`, `digest` and every preview line. `JARVIS_NO_EMBED=1` changes nothing
+because nothing here embeds.
+
+**The writer is NOT built in this slice, and that is said plainly.** `POST
+/api/vault/organize` does not exist; the follow-up slice adds it: ONE
+`organize_obsidian_vault` approval card for the whole batch, a
+`jarvis_file_guardian.snapshot_before_write()` snapshot for every file it
+touches, atomic writes, and ONE `jarvis_receipts.py` batch receipt whose Undo
+puts the whole vault back. Nothing here claims that. This route returns `404`.
+
+**Routes (all PC-only, token-guarded, and OFF by default).**
+
+* `POST /api/vault/organize-plan` - body `{"vault": "<path>", "scheme":
+  "mocs_only"|"topic_folders"|"para", "max_clusters": N,
+  "archive_empty_stubs": false}`. The vault is optional: it defaults to
+  `[notes.obsidian] vault_directory` / `JARVIS_OBSIDIAN_VAULT` through the
+  existing `jarvis_notes.obsidian_vault()`, and an unusable vault is refused
+  with the notes module's own words. Answers `ok`, `plan_id`, `digest`,
+  `scheme`, `summary` (notes_scanned / notes_moved / notes_tagged /
+  mocs_to_create / databases_indexed / links_rewritten / duplicates_found /
+  empty_stubs_found), `moves_preview`, `mocs_preview`, `home_preview`,
+  `tag_plan`, `duplicates_and_stubs`, `partial`, `warnings` and `said`. A plan
+  that hits the file/byte/time caps says it is **partial** rather than hanging.
+  Duplicates and zero-word stubs are **listed, never deleted**.
+* `GET /api/vault/organizer` - the switch, its action and tier, the default
+  scheme and the schemes that exist.
+* `POST /api/vault/organizer/enabled` - body `{"enabled": true|false}`. **OFF
+  is immediate** (200, withdraws a waiting card); **ON is ONE
+  `change_own_config` card at tier ask** (202 `waiting`), and a denied,
+  timed-out, refused or unraisable card changes nothing. Turning it off needs
+  no card.
+
+**Ship state, said plainly.** The shipped template has
+`[vault_organizer] enabled = false` (`backend/rebuilt/jarvis-framework.toml`):
+the feature is OFF until the owner turns it on with the card above. The plan
+route answers `{"ok": false, "enabled": false, "why": ...}` while it is off.
+Every route is refused for a caller that is not this PC (`403 not_this_pc`):
+the plan reads a vault of the owner's own writing, and no phone control for it
+exists or is planned.
+
+**Safety limits.** Every note is resolved and must stay inside the vault
+(`jarvis_notes._inside`, the notes search's own rule); symlinks and paths that
+resolve outside are refused and named in `warnings`. The work is bounded:
+`MAX_FILES`, `MAX_FILE_BYTES`, `MAX_SECONDS` and `MAX_CLUSTERS`, with a file
+over the byte ceiling skipped (not read) and reported. No note text is stored
+anywhere: `jarvis_memory` is not imported by this module, and the only note
+wording a plan returns is the one-line preview snippet it renders for a MOC,
+passed through the project's own scrubbers (`jarvis_scrub.scrub_text`,
+`jarvis_agent.strip_chat_markers`) when they are present.
+
+**Checked by** `backend/test_vault_organizer.py` (83 checks, runs anywhere):
+the plan is byte-for-byte read-only on a real vault, the tag merge never erases
+an owner tag, duplicates/stubs are listed not deleted, both moving schemes
+preview only inside the vault, an empty vault is a clean no-op, planning writes
+nothing to `memory.db`, two plans of one vault are byte-identical, the caps
+report `partial`, symlink escape is refused, the switch is off by default and
+is ONE card, the plan route is PC-only and flag-gated, and `install()` wraps
+the routes. Two revert-checks were measured while building it: one cache write
+in the planner made four read-only checks fail; a clock in the digest made the
+determinism check fail.
