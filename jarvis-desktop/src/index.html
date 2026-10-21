@@ -91,7 +91,26 @@
           ></textarea>
         </div>
 
+        <!-- The primary action's keycap, on the input row where the action
+             is. It is a HINT only - Enter in the textarea is still the one
+             submit path (main.js's keydown handler), so nothing here is a new
+             control and the bar's submit behaviour cannot drift. The accent
+             edge is what makes it unmistakably the primary action. -->
+        <kbd class="hint" id="submit-hint" title="Send (Enter)" aria-hidden="true">↵</kbd>
+
         <div class="bar-meta">
+          <!-- ── Zone 1: the model pill ──────────────────────────────────
+               Today the preset chip and the route badge are two separate
+               pills; they answer one question ("what am I talking to?") and
+               are rendered as one compact compound control here. Both
+               underlying nodes stay exactly as they were and keep their own
+               behaviour: #preset-chip is still the button that opens the
+               preset picker (focus-presets-bar.js looks it up by id), and
+               #route is still the read-only badge main.js fills in. The
+               hairline between the halves is drawn only while the preset
+               half is really there - the chip stays `hidden` until the PC
+               names a preset, and this bar never asserts one before that. -->
+          <div class="model-pill" role="group" aria-label="Model and preset">
           <!-- Focus presets (focus-presets-bar.js, focus-presets.js): the
                PC's own name for the preset it is set to. Clicking it opens the
                list the PC sent; selecting a row only selects it, and the one
@@ -111,6 +130,9 @@
             <span id="preset-chip-label">Focus presets</span>
           </button>
 
+          <!-- The hairline between the two halves of the compound pill. -->
+          <span class="model-pill-sep" aria-hidden="true"></span>
+
           <!-- The model name starts EMPTY. It used to start at "qwen3:8b",
                which is a guess about someone else's machine: the badge asserted
                a specific model before the server had ever named one, and stayed
@@ -122,6 +144,18 @@
             <span class="route-sep" id="route-sep" aria-hidden="true" hidden>/</span>
             <span class="route-model" id="route-model" hidden></span>
           </span>
+          </div>
+
+          <!-- ── Zone 2: the modes ──────────────────────────────────────
+               Every primary mode is an icon PLUS a one-word label, so none of
+               them is a mystery glyph. The ids, aria-pressed semantics and
+               handlers are unchanged - only the visible word and the pill
+               shape are new. There is deliberately no "Screen" chip: "Look at
+               this" is a KEY (look.rs; docs/SCREEN-DESIGN.md; the comment at
+               the top of this block), because pressing a button in this bar
+               would put Jarvis's own window in front of what it was asked to
+               look at. Watch with me is the button this bar has always had. -->
+          <div class="mode-strip" role="group" aria-label="Modes">
 
           <!-- Two listening modes, one button. Push-to-talk (the default):
                hold to record, release to send. Automatic: toggled on with
@@ -135,7 +169,7 @@
                unlike the disabled Web Speech API path this replaces. -->
           <button
             id="mic"
-            class="icon-button"
+            class="icon-button mode-chip"
             type="button"
             aria-pressed="false"
             title="Hold to talk to Jarvis"
@@ -148,6 +182,7 @@
                 d="M4 7.25a.75.75 0 0 0-1.5 0 5.5 5.5 0 0 0 4.75 5.451V14.5H6a.75.75 0 0 0 0 1.5h4a.75.75 0 0 0 0-1.5H8.75v-1.799A5.5 5.5 0 0 0 13.5 7.25a.75.75 0 0 0-1.5 0 4 4 0 0 1-8 0Z"
               />
             </svg>
+            <span class="chip-label" aria-hidden="true">Voice</span>
             <!-- The button's name. main.js setAutoListening rewrites it, so a
                  screen reader is not told to hold a button that no longer
                  responds to being held. -->
@@ -161,9 +196,10 @@
                against a real microphone. -->
           <button
             id="voice-auto"
-            class="icon-button"
+            class="icon-button mode-chip"
             type="button"
             aria-pressed="false"
+            aria-label="Listen for &quot;hey Jarvis&quot;"
             title='Listen for "hey Jarvis" instead of holding the mic button'
           >
             <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
@@ -171,6 +207,7 @@
                 d="M2 8a6 6 0 1 1 12 0A6 6 0 0 1 2 8Zm6-4.25A4.25 4.25 0 1 0 8 12.25 4.25 4.25 0 0 0 8 3.75ZM8 6.5A1.5 1.5 0 1 1 8 9.5 1.5 1.5 0 0 1 8 6.5Z"
               />
             </svg>
+            <span class="chip-label" aria-hidden="true">Auto</span>
             <span class="sr-only">Toggle listening for "hey Jarvis"</span>
           </button>
 
@@ -182,7 +219,7 @@
                red), one name and aria-pressed for on/off. -->
           <button
             id="jarvis-live-toggle"
-            class="icon-button live-toggle"
+            class="icon-button live-toggle mode-chip"
             type="button"
             aria-pressed="false"
             aria-label="Jarvis Live"
@@ -191,7 +228,7 @@
             <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
               <path d="M3 6.5a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 3 6.5Zm2.5-2a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-1.5 0v-5.5a.75.75 0 0 1 .75-.75ZM8 2.5a.75.75 0 0 1 .75.75v9.5a.75.75 0 0 1-1.5 0v-9.5A.75.75 0 0 1 8 2.5Zm2.5 2a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-1.5 0v-5.5a.75.75 0 0 1 .75-.75ZM13 6.5a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 13 6.5Z" />
             </svg>
-            <span class="live-toggle-label" aria-hidden="true">Live</span>
+            <span class="live-toggle-label chip-label" aria-hidden="true">Live</span>
           </button>
 
           <!-- Watch with me (look.rs, look-rules.js; docs/SCREEN-DESIGN.md): a
@@ -201,7 +238,7 @@
                put Jarvis's own window in front of what it was to look at. -->
           <button
             id="watch-toggle"
-            class="icon-button live-toggle"
+            class="icon-button live-toggle mode-chip"
             type="button"
             aria-pressed="false"
             aria-label="Watch with me"
@@ -210,7 +247,7 @@
             <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
               <path d="M8 3.5c-3.2 0-5.5 2.6-6.3 4.1a.8.8 0 0 0 0 .8c.8 1.5 3.1 4.1 6.3 4.1s5.5-2.6 6.3-4.1a.8.8 0 0 0 0-.8C13.5 6.1 11.2 3.5 8 3.5Zm0 1.5a3 3 0 1 1 0 6 3 3 0 0 1 0-6Zm0 1.4a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2Z" />
             </svg>
-            <span class="live-toggle-label" aria-hidden="true">Watch</span>
+            <span class="live-toggle-label chip-label" aria-hidden="true">Watch</span>
           </button>
 
           <!-- Temporary chat (the owner's decision, 2026-09-25): while it is
@@ -219,7 +256,7 @@
                conversation. answer-memory.js. -->
           <button
             id="temporary"
-            class="icon-button"
+            class="icon-button mode-chip"
             type="button"
             aria-pressed="false"
             title="Start a temporary chat: Jarvis won't use or learn from your memory, and it isn't kept"
@@ -229,8 +266,18 @@
               <circle cx="6.1" cy="6.8" r="0.9" />
               <circle cx="9.9" cy="6.8" r="0.9" />
             </svg>
+            <span class="chip-label" aria-hidden="true">Temp</span>
             <span class="sr-only">Temporary chat</span>
           </button>
+          </div>
+
+          <!-- ── Zone 3: the window utilities ───────────────────────────
+               Secondary window controls, grouped and separated from the
+               modes by a hairline. Each keeps the id, title and screen-reader
+               name it already had; the one keyboard shortcut the bar already
+               documents (Esc hides the bar, the same command #hide-bar calls)
+               is shown as a badge beside the close. -->
+          <div class="utility-cluster" role="group" aria-label="Window controls">
 
           <!-- The bar opens compact (owner, 2026-10-19). "Things you can say"
                is a help panel, not the empty bar's permanent furniture; this
@@ -242,6 +289,7 @@
             type="button"
             aria-expanded="false"
             aria-controls="primer"
+            aria-label="What can I say?"
             title="What can I say?"
           >
             <span class="sayable-mark" aria-hidden="true">?</span>
@@ -253,6 +301,7 @@
             class="icon-button"
             type="button"
             aria-pressed="false"
+            aria-label="Pin window"
             title="Keep Jarvis open when it loses focus"
           >
             <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
@@ -275,6 +324,7 @@
             id="open-settings"
             class="icon-button"
             type="button"
+            aria-label="Jarvis settings"
             title="Jarvis settings"
           >
             <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
@@ -296,6 +346,7 @@
             id="hide-bar"
             class="icon-button"
             type="button"
+            aria-label="Hide the Jarvis bar"
             title="Hide the Jarvis bar (Esc)"
           >
             <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
@@ -303,8 +354,9 @@
             </svg>
             <span class="sr-only">Hide the Jarvis bar</span>
           </button>
-
-          <kbd class="hint" id="submit-hint">↵</kbd>
+          <!-- The bar's one documented shortcut, shown where it acts. -->
+          <kbd class="key-badge" aria-hidden="true">Esc</kbd>
+          </div>
         </div>
       </div>
 
