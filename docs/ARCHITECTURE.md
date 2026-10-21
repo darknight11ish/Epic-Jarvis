@@ -2747,6 +2747,25 @@ Android's `AcousticEchoCanceler` in voice-call mode, so there is no phone gap
 to close in this slice. Design, synthetic proof and the measurement plan:
 `docs/DESIGN-VOICE-BARGE-IN.md`. Real open-speaker barge-in is NOT-MEASURED
 until the owner's hardware.
+**The flight price radar is backend-only and OFF, and it is NOT a booking
+tool** (2026-10-21; the owner approved the full anti-surveillance price/flight
+stack; slice F1). `backend/jarvis_price_radar.py` builds Google Flights' public
+`tfs` query in pure Python, reads the public search page's inline payload,
+and keeps a SQLite price history with last-known-good/stale semantics and an
+outside-text diff behind `[price_radar] enabled = false`. It is read-only: no
+cart, no seat hold, no checkout, no booking/PNR path, no cookies, no login, no
+redirects, one host, one GET, one attempt (a 403/429 is recorded stale and
+never retried), at least 300 s between checks with jitter. It adds **no app
+surface at all** - no route, no card, no Settings row in either app - so
+nothing here is on one app and missing from the other. The multi-source
+product pages are F2's own module (`jarvis_price_sources.py`: local SearXNG
+price mentions + the dual-persona steering probe); F1 installs its source
+objects lazily from `enabled()` (`install_f2()`, nothing imported while the
+switch is off), and F2 delegates to F1's disclosure constants so each
+approved sentence exists once. Proxy exits (F3) are a later, separate slice.
+Design, the disclosure wording and what is NOT measured (the endpoint
+is unofficial and no live request is made in the suite):
+`docs/DESIGN-PRICE-RADAR.md`.
 
 ## 9. Where the backend lives
 

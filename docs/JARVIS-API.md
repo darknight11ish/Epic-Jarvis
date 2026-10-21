@@ -23827,7 +23827,6 @@ full synthetic export's imported note included), colon/hash/leading-bracket/
 leading-dash/quote/tab/boolean-word values read back as the strings they were,
 and a simple frontmatter block is byte-for-byte what it was.
 
-
 ## 153. Asking Jarvis Live to read the screen or the highlighted text (backend only, added 2026-10-21)
 
 **What it is.** In **Jarvis Live** (a back-and-forth spoken conversation,
@@ -23910,3 +23909,137 @@ row can be called a PASS. There is no visual "what is on screen" description
 beyond the words the screen reader already returns; the phone keeps no
 screen-read parity by decision; and the bridge needs the Live turn's session
 to be known (a session whose device cannot be read is refused, never guessed).
+
+to be known (a session whose device cannot be read is refused, never guessed).
+
+## 154. Spoken-command normaliser and the speaking-speed reflex (Voice Slice A, added 2026-10-21)
+
+The owner approved the whole Live & Voice program on 2026-10-21. This is its
+**Slice A**, as revised by `.dsh-scratch/FOR-GEMINI-OVERNIGHT-WAVE-2026-10-21.md`
+section 10.4 (the audit document that proposed it had a two-day-stale
+baseline: three of its headline optimisations had already shipped, and its
+verification battery used direct `test_*.py` runs, which are now banned -
+section 10.1-10.3 there). Slice A is the part that is pure, dependency-free
+and fully testable on text alone: one normaliser in `jarvis_quick.py` plus a
+deterministic voice reflex that is **a router into an action that already
+existed with its own permission model**. No new subsystem, no new route, no
+new approval card, no GPU work, no privacy change.
+`backend/test_voice_reflex.py` is the suite.
+
+### 154.1 `normalize_spoken_command` - and what it actually fixed
+
+`jarvis_quick.py` runs it before the grammar (inside `_match`, where
+`normalise` used to be called). It does `normalise`'s own tidying, then:
+
+1. **Polite lead-ins `normalise` did not strip.** `normalise` already strips
+   "hey jarvis", "jarvis", "please", "can/could/would you". Measured gaps it
+   did not: "would you mind ...", "can you kindly ...", "would you be so kind
+   as to ...", "i would like you to ...", "i was wondering if you could ...",
+   "do you think you could ...", "any chance you could ...", "could you
+   possibly ...", "would it be possible to ...", "kindly ...". After a lead is
+   stripped, a first-word **gerund** is put back to the verb the grammar uses
+   ("would you mind **setting** a timer" -> "**set** a timer"), for a short
+   fixed list of verbs the fast path already acts on.
+2. **Number words in the three whole-sentence grammars that demanded digits.**
+   Everything else the audit proposed rewriting was measured first and found
+   to ALREADY work (`parse_duration` reads number words inside a length of
+   time), so it is deliberately not rewritten - the audit's own "always hit
+   the fast path" premise was stale for those:
+
+   | Spoken form | Before this change | After |
+   |---|---|---|
+   | "watch **five** more minutes" | model answered | `screen_more`, 5 minutes |
+   | "watch for **ten** more minutes" | model answered | `screen_more`, 10 minutes |
+   | "speak up **three** times a day" | model answered | `settings_budget`, 3/day |
+   | "the brief arrives at **eight**" | model answered | `settings_budget`, hour 8 |
+   | "the brief arrives at **eight** in the morning" | model answered | `settings_budget`, hour 8 |
+   | "the brief at **eight** pm" | model answered | `settings_budget`, hour 20 |
+   | "set a timer for **two** minutes" | already worked | unchanged (no rewrite) |
+   | "set a timer for **fifteen** minutes" | already worked | unchanged (no rewrite) |
+   | "set a timer for **a couple of** minutes" | already worked | unchanged (no rewrite) |
+   | "set a timer for **half an hour**" / "**an hour and a half**" | already worked | unchanged (no rewrite) |
+
+   **The safe number rule, stated once:** a number word (one..ninety nine)
+   becomes digits ONLY when it is (a) followed by a length-of-time word,
+   directly or after "more"; (b) followed by "time(s) a/per day"; or (c)
+   directly after "at" and ending the sentence or followed by am/pm / "in the
+   morning|afternoon|evening" / "at night". Everything else is left alone:
+   "one of the files", "show me the one with the error", "call me three
+   times", "twenty five" on its own and the duration forms in the table's
+   bottom rows all come out byte-for-byte unchanged.
+   **It only decides a MATCH.** The model is still asked the owner's ORIGINAL
+   words whenever nothing matches, so a rewrite can never change the question
+   put to the AI. The function is idempotent (the suite runs it twice on every
+   sentence it uses).
+
+### 154.2 "Speak faster / slower / normally" (a reflex, not a new action)
+
+"speak faster", "speak slower", "speak more slowly", "speak normally",
+"speak at normal speed", "talk faster" and "would you mind speaking slower"
+now answer without the model. They call the SAME
+`jarvis_voices.set_speed({"speed": ...})` that `POST /api/voice/voices/speed`
+calls: the existing speaking-speed setting, **no card either way** (the voices
+module's own words: it "trusts nothing more, shows nothing more and sends
+nothing anywhere"), saved in `voices/state.json`, audited `voices.speed`. The
+answer is the voice module's OWN sentence (`SPEED_SAID`), so both apps show
+the same words they already show for that setting - no app work, no new
+route. The suite spies the call (exactly one, exactly that body) and proves
+the setting really changed.
+
+### 154.3 The selection and screen reads are #691's - and this fast path leaves them alone
+
+The revised slice also named "read this selection" / "what's on my screen" /
+"summarise what I selected". They are NOT in this file, and that is
+deliberate: **PR #691** (merged 2026-10-21, the audit's V7 read half) shipped
+them for a Live turn through the SAME primitives - `jarvis_screen.py`'s own
+"Look at this" for the screen and `jarvis_ui_control.read_selection()` for the
+selection - as OUTSIDE TEXT the model answers from (`jarvis_voice_ui.py`).
+`/api/chat` runs this fast path BEFORE the Live turn, so a 0-ms matcher here
+would intercept those phrases even inside Live, answer with raw text, and the
+#691 path would never run. So the slice **dropped its own read reflex when
+#691 merged**, and `backend/test_voice_reflex.py` holds this file to NOT
+matching all sixteen phrases #691 claims, and holds #691's own matchers to
+still claiming them. No capability is lost: in Live, #691 answers them (with
+the model); elsewhere the model answers them, and the no-model read the bar
+already has is `GET /api/selection` (section 141).
+
+### 154.4 What was NOT built, and why (said plainly)
+
+Each command below would need a NEW subsystem or a new app-side channel, so
+none was added - a handler that cannot do the thing would be a lie in code
+form. `backend/test_voice_reflex.py` holds every one of them to still being
+chat (except where noted, where the pre-existing generic path already
+answers):
+
+| Command | Why it is not built | Evidence |
+|---|---|---|
+| "switch to cockpit/studio/ambient [mode/layout]" | The HUD layout is a DESKTOP LOCAL STORAGE setting; the backend cannot write a webview's storage, and no settings-write or route-field for it exists | `jarvis-desktop/src/hud-window.js:120` (`HUD_LAYOUT_KEY = "jarvis.hud.layout"`), `:179` (`storage.setItem`); `git grep hud_layout -- '*.py'` finds nothing; the `X-Jarvis-Route` whitelist in `jarvis-desktop/src-tauri/src/commands.rs` has no such key |
+| "pin/unpin the bar" | Pinning is a Tauri window command, not a backend setting | `jarvis-desktop/src/main.js:5437` (`invoke("set_quickbar_pinned")`); the bar's open state is `jarvis.hud.openBar` in local storage (`jarvis-desktop/src/hud-window.js:41`, `:74`); no Python route or setting for it |
+| "open galaxy" / "open today" | No honest navigation channel: `open_place` is a Jarvis Settings SECTION id, and `open_brain` is handled by the apps only for `history`, `topics` and `forget-range`; there is no `galaxy`/`today` place to name, and adding one needs BOTH apps | `jarvis-desktop/src/main.js` `openBrainFromRoute`; `jarvis-desktop/src/main.js:1755` (`open_place`); `jarvis-client` `ui/OpenPlace.kt` maps menu ids, not route places. These two phrases keep whatever the PRE-EXISTING "open a program" path does - unchanged - which does not open the HUD |
+| "mute / unmute / mute for N minutes" | Live's mute is the app's microphone control; there is no timed mute and no TTS-output mute. A muted microphone cannot HEAR "unmute", so a voice unmute is impossible by construction | `jarvis_live.py:1053` (`LiveSession.mute`, driven by the app's Mute button/`/api/voice/live` body); no timer for it anywhere |
+| "repeat that" | Nothing stores the last spoken reply for replay, and no route field asks a client to say it again | no `last_reply`/replay path in `backend/*.py`; the route whitelist has no key for it |
+| "scroll down/up", "go back", "go home" | `jarvis_ui_control` acts only through an APPROVED carded plan (`plan`/`run`); there is no standalone non-carded navigation primitive, and adding one would be a new screen action without a card - forbidden | `jarvis_ui_control.py` "ONE WINDOW AT A TIME, AND PROOF THAT AN ACTION LANDED"; the phone's `scroll` is `jarvis_app_control`'s swipe on the PHONE's screen, a different device |
+
+### 154.5 Tests, cards, and both apps
+
+`backend/test_voice_reflex.py` (108 checks in a tree with #691; the three
+#691-matcher checks SKIP - never pass - when that module is absent, and the
+suite counts its skips on their own line): the measured number gaps above; the
+polite lead-ins and their gerund forms; the duration forms that already
+worked, held unchanged; the safe number rule and its "stays chat" cases ("one
+of the files", "call me three times", "twenty five"); idempotence on every
+sentence; a measured **< 5 ms in the test** bound for every new form (the only
+speed claim made here - the turn's end-to-end speed is owner-only to measure
+and is not claimed); the speed reflex's real state change and the voices
+module's own words; the sixteen #691 read phrases NOT matching this fast path
+(and #691's matchers still claiming them); every command in 154.4 NOT being a
+new intent; and the plain missing-module sentence. Against the pre-fix module
+the same suite is **50 passed, 31 failed**, so every claim above bites.
+
+**Approval cards are unchanged: they are decided by a physical tap, never by
+voice.** The reflex never consults `jarvis_gate` (the suite spies it and
+proves it is never called): there is nothing to approve in a cosmetic speed
+change. Both apps get all of this through the SAME chat pipeline with **no app
+change** (a quick answer is already rendered by both), so
+`tools/check_parity.py` is unaffected and there is no
+`docs/ARCHITECTURE.md` section 8 one-sidedness to record from this slice.

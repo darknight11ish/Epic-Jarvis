@@ -2019,3 +2019,34 @@ enabled = true
 # half-written writer that touches the owner's notes.
 [vault_organizer]
 enabled = false
+
+# ------------------------------------------------------------------------
+# THE PRICE / FLIGHT RADAR - F1 (owner-approved 2026-10-21)
+#
+# READ-ONLY and OFF by default. It checks public flight prices by reading
+# Google Flights' public search page; that endpoint is UNOFFICIAL (not a
+# published API) and can change or break without notice. It is a price
+# radar, NEVER a booking tool: there is no cart, no seat hold, no checkout
+# and no booking/PNR path anywhere in it.
+#
+# Hard rules that do not change with this switch: no cookies, saved logins
+# or tracking tags are ever sent; standard browser headers only, so repeated
+# checks are not linked together; it never follows a redirect; the only host
+# it may ask is the public Google Flights page; a site challenge (403/429)
+# is recorded as stale and NEVER retried; checks are at least 300 s apart
+# with +/-30% jitter; no proxy is used in F1.
+#
+# The owner's disclosure, shown on the switch and on every result:
+# "Checks public product and flight prices without sending cookies, saved
+# logins, or tracking tags, using standard browser headers so repeated checks
+# aren't linked together. It only reads public prices and never logs in,
+# holds seats, or starts a checkout."
+# Per result: "Checked as a new visitor (no cookies or account used)."
+#
+# Turning it on is one change_own_config approval card; turning it off is
+# immediate. No checks run while it is off.
+[price_radar]
+enabled = false
+# The local SearXNG address the F2 item sources ask (127.0.0.1:8888 is the
+# docker-compose host mapping; the container's own port is 8080).
+searxng_url = "http://127.0.0.1:8888"

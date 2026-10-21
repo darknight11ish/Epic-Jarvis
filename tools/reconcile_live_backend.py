@@ -178,6 +178,21 @@ GATE_GUARDS_DEDUP_NEW_FILE = "gate-guards-dedup-new.txt"
 GATE_GUARDS_REPLACES_OLD_FILE = "gate-guards-replaces-old.txt"
 GATE_GUARDS_REPLACES_NEW_FILE = "gate-guards-replaces-new.txt"
 
+#: F-680-2 (2026-10-21 pre-merge audit): the long-detail dedupe fix, carried to
+#: the live `jarvis_gate.py` as three more literal deltas. Their OLD blocks are
+#: the POST-#688 gate - what the four guard deltas above leave in the staged
+#: text - so these entries are ordered after theirs in `DELTA_TABLE` and see
+#: the same staged copy. Extracted from the published base gate before and
+#: after this fix; together they reconstruct the published file byte for byte
+#: (`backend/test_reconcile_live_backend.py` proves it, and a real-live dry run
+#: plans exactly these inserts with no refusal).
+GATE_DIGEST_INIT_OLD_FILE = "gate-digest-init-old.txt"
+GATE_DIGEST_INIT_NEW_FILE = "gate-digest-init-new.txt"
+GATE_DIGEST_PENDING_OLD_FILE = "gate-digest-pending-old.txt"
+GATE_DIGEST_PENDING_NEW_FILE = "gate-digest-pending-new.txt"
+GATE_DIGEST_INSERT_OLD_FILE = "gate-digest-insert-old.txt"
+GATE_DIGEST_INSERT_NEW_FILE = "gate-digest-insert-new.txt"
+
 #: The line the two guard helpers are inserted in front of. `check()` is
 #: defined once in `jarvis_gate.py`; the tool refuses if that is not true in
 #: the live file.
@@ -278,6 +293,35 @@ DELTA_TABLE = {
             "probes": ('d["replaces"] = replaces_for(',),
             "file": GATE_GUARDS_REPLACES_NEW_FILE,
             "replace_file": GATE_GUARDS_REPLACES_OLD_FILE,
+        },
+    },
+    # F-680-2 (2026-10-21 pre-merge audit): the long-detail dedupe fix as THREE
+    # literal deltas over the POST-#688 gate the four guard entries above leave
+    # behind. Order matters: the old blocks exist only after those entries have
+    # been applied to the staged text, so these sit after them in this dict.
+    # EACH carries post-image probes, so a second deploy sees them as ALREADY
+    # and a half-applied gate is refused (old block not exactly once), never
+    # guessed at.
+    "gate-digest-init.patch": {
+        "jarvis_gate.py": {
+            "probes": ("ADD COLUMN target_digest TEXT",),
+            "file": GATE_DIGEST_INIT_NEW_FILE,
+            "replace_file": GATE_DIGEST_INIT_OLD_FILE,
+        },
+    },
+    "gate-digest-pending.patch": {
+        "jarvis_gate.py": {
+            "probes": ('"SELECT id, detail, prompt, target_digest FROM approvals"',
+                       "if stored_digest:"),
+            "file": GATE_DIGEST_PENDING_NEW_FILE,
+            "replace_file": GATE_DIGEST_PENDING_OLD_FILE,
+        },
+    },
+    "gate-digest-insert.patch": {
+        "jarvis_gate.py": {
+            "probes": ("created,raised,target_digest)",),
+            "file": GATE_DIGEST_INSERT_NEW_FILE,
+            "replace_file": GATE_DIGEST_INSERT_OLD_FILE,
         },
     },
 }

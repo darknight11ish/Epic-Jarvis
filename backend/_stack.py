@@ -399,7 +399,15 @@ RATCHET = {
     #: and was raised with them, and test_gate_touches.py applies the whole
     #: patch forwards and reverses it out of the published gate byte-for-byte.
     #: A ratchet: it may still only go down.
-    "jarvis_gate.py": 31,
+    #: RAISED 2026-10-21, 31 -> 32, for #700 (F-680-2, the long-detail digest
+    #: fix): it adds a NINTH added hunk on the owner's ORIGINAL gate - the
+    #: `_init` migration's `ALTER TABLE approvals ADD COLUMN target_digest
+    #: TEXT` (with its guarded try/except), which no earlier patch in this walk
+    #: writes - so the walk materialises 32 and `gate-touches.patch` reads 9 in
+    #: `by_patch`. It is an added hunk, not drift, and the same change raised
+    #: `tools/check_patch_original_text.py`'s pin to 9 hunks / 99 lines.
+    #: A ratchet: it may still only go down.
+    "jarvis_gate.py": 32,
     "jarvis_extract.py": 9,
     "jarvis_models.py": 5,
     "jarvis_skills.py": 2,

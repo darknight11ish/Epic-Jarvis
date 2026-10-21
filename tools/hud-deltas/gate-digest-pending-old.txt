@@ -1,0 +1,24 @@
+def _pending_card_id(c: sqlite3.Connection, action: str, detail: Any,
+                     prompt: str) -> Optional[str]:
+    """The id of the pending card this request is IDENTICAL to, else None.
+
+    Only `state='pending'` rows count: a card that was approved, denied or
+    expired is an ANSWER, and answering the same question twice is the
+    owner's business, not an optimisation. A stored `detail` that no longer
+    parses (the row keeps at most 4000 characters, so a long one was cut on
+    the way in) is skipped rather than guessed at - the failure direction is
+    a second card, never a wrong merge between two different requests.
+    """
+    want = _pending_target(action, detail, prompt)
+    rows = c.execute(
+        "SELECT id, detail, prompt FROM approvals"
+        " WHERE state='pending' AND action=? ORDER BY created", (action,)).fetchall()
+    for row in rows:
+        stored = row["detail"]
+        try:
+            got = json.loads(stored) if stored else {}
+        except (TypeError, ValueError):
+            continue
+        if _pending_target(action, got, row["prompt"] or "") == want:
+            return row["id"]
+    return None
