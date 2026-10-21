@@ -385,6 +385,264 @@ def t_the_dedup_guard_is_the_thing_that_merges_them():
           G._pending_card_id is real, repr(G._pending_card_id))
 
 
+
+# ------------------------------------------------- long details and the digest
+#
+# THE HOLE THIS CLOSES (2026-10-21 pre-merge audit, F-680-2). An approvals row
+# kept only the first 4000 characters of `json.dumps(detail)`, and the dedupe
+# re-hashed that STORED text. A request whose detail is longer than 4000
+# characters (an email body, a path list) was therefore never recognised as
+# identical: two cards stacked, and approving the stack ran the action twice -
+# guard 1's own incident for that input. The row now carries the target digest
+# computed from the WHOLE request at insert time, and the dedupe compares that
+# first; a row from before the column has NULL there and keeps the old, parse-
+# based comparison (a second card when it cannot be read, never a wrong merge).
+
+
+def _long_detail(fill="x", n=6000):
+    return {"to": "long@example.com", "subject": "A long one", "body": fill * n}
+
+
+def _json_length(detail):
+    return len(json.dumps(detail))
+
+
+def _deny_all(action):
+    for r in _pending(action):
+        G.decide(r["id"], False, by="suite")
+
+
+def t_an_identical_long_detail_raises_ONE_card():
+    """F-680-2: a >4000-character detail still dedupes; one card, one id."""
+    _reset()
+    action = "send_email"
+    detail = _long_detail()
+    check("(set-up) the probe's detail really is longer than the stored 4000",
+          _json_length(detail) > 4000, _json_length(detail))
+    box = {}
+    a = _in_thread(action, dict(detail), "Send the long one?", box, "a")
+    row = _wait_for_row(action)
+    check("the first long request raised a card", row is not None,
+          repr([r["id"] for r in _pending(action)]))
+    if row is None:
+        a.join(2)
+        _deny_all(action)
+        return
+    b = _in_thread(action, dict(detail), "Send the long one?", box, "b")
+    end = time.time() + 4
+    verdict_b = None
+    while time.time() < end and verdict_b is None:
+        verdict_b = box.get("b")
+        time.sleep(0.02)
+    rows = _pending(action)
+    check("two identical >4000-character requests leave ONE pending card",
+          len(rows) == 1, f"rows={[r['id'] for r in rows]}")
+    check("... and the second request names that waiting card, not a new one",
+          verdict_b is not None
+          and getattr(verdict_b, "request_id", None) == rows[0]["id"],
+          repr(getattr(verdict_b, "request_id", None)))
+    _deny_all(action)
+    a.join(5)
+    b.join(5)
+
+
+def t_two_DIFFERENT_long_details_are_two_cards():
+    """A different long body is a DIFFERENT action target: two cards."""
+    _reset()
+    action = "send_email"
+    first, second = _long_detail("x"), _long_detail("y")
+    box = {}
+    a = _in_thread(action, dict(first), "Send the long one?", box, "a")
+    row_a = _wait_for_row(action)
+    b = _in_thread(action, dict(second), "Send the long one?", box, "b")
+    row_b = None
+    end = time.time() + 4
+    while time.time() < end and row_b is None:
+        rows = _pending(action)
+        if len(rows) >= 2:
+            other = [r for r in rows if r["id"] != (row_a or {}).get("id")]
+            row_b = other[0] if other else None
+            break
+        time.sleep(0.02)
+    check("two DIFFERENT >4000-character details are two cards, never merged",
+          row_a is not None and row_b is not None and row_a["id"] != row_b["id"],
+          repr([r["id"] for r in _pending(action)]))
+    _deny_all(action)
+    a.join(5)
+    b.join(5)
+
+
+def t_the_3999_vs_4000_boundary_is_safe():
+    """Both sides of the stored-text cut dedupe with themselves."""
+    _reset()
+    action = "send_email"
+    base = {"to": "edge@example.com", "subject": "Boundary", "body": ""}
+    found = {}
+    body = ""
+    while len(body) <= 5000 and len(found) < 2:
+        detail = dict(base)
+        detail["body"] = body
+        n = _json_length(detail)
+        if n in (3999, 4000) and n not in found:
+            found[n] = detail
+        body += "x"
+    check("(set-up) one probe detail is 3999 characters and one is 4000",
+          set(found) == {3999, 4000}, sorted(found))
+    for label in (3999, 4000):
+        if label not in found:
+            continue
+        _reset()
+        detail = found[label]
+        box = {}
+        a = _in_thread(action, dict(detail), "Send?", box, "a")
+        row = _wait_for_row(action)
+        b = _in_thread(action, dict(detail), "Send?", box, "b")
+        time.sleep(0.35)
+        rows = _pending(action)
+        check(f"... the same detail at {label} characters leaves ONE card",
+              row is not None and len(rows) == 1,
+              f"rows={[r['id'] for r in rows]}")
+        _deny_all(action)
+        a.join(5)
+        b.join(5)
+
+
+def t_concurrent_identical_long_requests_share_one_card():
+    """The check-then-insert transaction still holds for a long target."""
+    _reset()
+    action = "send_email"
+    detail = _long_detail()
+    barrier = threading.Barrier(4)
+    box = {}
+    threads = [_in_thread(action, dict(detail), "Send the long one?", box,
+                          f"t{i}", barrier) for i in range(4)]
+    row = _wait_for_row(action, deadline=5.0)
+    time.sleep(0.4)
+    rows = _pending(action)
+    check("four identical long requests at once leave ONE pending card",
+          len(rows) == 1, f"rows={[r['id'] for r in rows]}")
+    _deny_all(action)
+    for t in threads:
+        t.join(6)
+    ids = {getattr(box.get(f"t{i}"), "request_id", None) for i in range(4)}
+    check("... and all four name that one card",
+          len(ids) == 1 and bool(rows) and ids == {rows[0]["id"]},
+          f"ids={ids} row={rows[0]['id'] if rows else None}")
+
+
+def t_an_old_row_without_a_digest_is_merged_only_by_its_parseable_detail():
+    """Old rows (NULL digest) fall back to the old comparison, never guessed."""
+    _reset()
+    action = "send_email"
+    short = {"to": "old@example.com"}
+    with closing(G._connect()) as c:
+        c.execute("BEGIN IMMEDIATE")
+        c.execute(
+            "INSERT INTO approvals (id,action,tier,detail,prompt,state,created,"
+            "raised,target_digest) VALUES (?,?,?,?,?,'pending',?,?,NULL)",
+            ("oldshort", action, "ask", json.dumps(short), "Send it?",
+             time.time() - 1, None))
+        long_raw = json.dumps({"to": "old@example.com", "body": "z" * 6000})
+        c.execute(
+            "INSERT INTO approvals (id,action,tier,detail,prompt,state,created,"
+            "raised,target_digest) VALUES (?,?,?,?,?,'pending',?,?,NULL)",
+            ("oldlong", action, "ask", long_raw[:4000], "Send it?",
+             time.time() - 1, None))
+        c.execute("COMMIT")
+    with closing(G._connect()) as c:
+        c.execute("BEGIN IMMEDIATE")
+        got = G._pending_card_id(c, action, dict(short), "Send it?")
+        c.execute("COMMIT")
+    check("an OLD row with a parseable detail still dedupes (NULL-digest fallback)",
+          got == "oldshort", repr(got))
+    box = {}
+    a = _in_thread(action, {"to": "old@example.com", "body": "z" * 6000},
+                   "Send it?", box, "a")
+    end = time.time() + 4
+    fresh = None
+    while time.time() < end and fresh is None:
+        rows = [r for r in _pending(action) if r["id"] not in ("oldshort", "oldlong")]
+        if rows:
+            fresh = rows[0]
+        time.sleep(0.02)
+    check("... and an UNREADABLE old row is skipped: the long request gets its "
+          "own card (a second card, never a wrong merge)",
+          fresh is not None, repr([r["id"] for r in _pending(action)]))
+    _deny_all(action)
+    a.join(5)
+
+
+def t_the_digest_column_migrates_idempotently_and_keeps_old_rows():
+    """The schema change is forward-only: an old DB gains the column, twice."""
+    _reset()
+    real_path, real_inited = G.DB_PATH, G._inited
+    tmp = Path(tempfile.mkdtemp(prefix="jarvis-gate-migrate-"))
+    old_db = tmp / "approvals.db"
+    try:
+        import sqlite3
+        c = sqlite3.connect(str(old_db))
+        c.execute("""CREATE TABLE approvals (
+            id TEXT PRIMARY KEY, action TEXT NOT NULL, tier TEXT NOT NULL,
+            detail TEXT, prompt TEXT, state TEXT NOT NULL, created REAL NOT NULL,
+            decided REAL, decided_by TEXT)""")
+        c.execute(
+            "INSERT INTO approvals (id,action,tier,detail,prompt,state,created)"
+            " VALUES ('oldrow','send_email','ask',?, 'Send it?','pending',?)",
+            (json.dumps({"to": "x@example.com"}), time.time()))
+        c.commit()
+        c.close()
+        G.DB_PATH = old_db
+        G._inited = False
+        G._init()
+        with closing(G._connect()) as c:
+            cols = [r[1] for r in c.execute("PRAGMA table_info(approvals)")]
+            rows = c.execute("SELECT COUNT(*) FROM approvals").fetchone()[0]
+        check("the migration adds target_digest to an old database",
+              "target_digest" in cols, cols)
+        check("... and keeps the rows that were already there", rows == 1, rows)
+        G._init()                                    # idempotent second init
+        with closing(G._connect()) as c:
+            c.execute("BEGIN IMMEDIATE")
+            got = G._pending_card_id(c, "send_email", {"to": "x@example.com"},
+                                     "Send it?")
+            c.execute("COMMIT")
+        check("... and the migrated old row still dedupes through its detail",
+              got == "oldrow", repr(got))
+    finally:
+        G.DB_PATH, G._inited = real_path, real_inited
+        G._init()
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def t_the_long_detail_guard_is_the_thing_that_merges_them():
+    """BITE: with the lookup removed, two long identical cards stack."""
+    _reset()
+    action = "send_email"
+    detail = _long_detail()
+    real = G._pending_card_id
+    box = {}
+    try:
+        G._pending_card_id = lambda c, a, d, p: None    # the lookup, gone
+        a = _in_thread(action, dict(detail), "Send?", box, "a")
+        _wait_for_row(action)
+        b = _in_thread(action, dict(detail), "Send?", box, "b")
+        end = time.time() + 4
+        rows = []
+        while time.time() < end:
+            rows = _pending(action)
+            if len(rows) >= 2:
+                break
+            time.sleep(0.02)
+        check("without the lookup, the long-detail requests stack two cards "
+              "(so this suite can fail when the fix is reverted)",
+              len(rows) >= 2, f"rows={[r['id'] for r in rows]}")
+    finally:
+        G._pending_card_id = real
+        _deny_all(action)
+        a.join(5)
+        b.join(5)
+
+
 def t_requests_differing_only_in_their_target_are_never_merged():
     """A different vault path, source file or byte count is a DIFFERENT card.
 

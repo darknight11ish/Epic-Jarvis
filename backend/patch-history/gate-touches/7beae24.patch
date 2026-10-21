@@ -1,0 +1,479 @@
+diff --git a/jarvis_gate.py b/jarvis_gate.py
+index 2afade5..1dba21b 100644
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -31,6 +31,7 @@ this module cannot do its job it refuses rather than waving things through.
+ 
+ from __future__ import annotations
+ 
++import hashlib
+ import json
+ import os
+ import re
+@@ -953,8 +954,139 @@ _PROTECTED = (
+ )
+ _PROTECTED_RE = re.compile("|".join(re.escape(x) for x in _PROTECTED), re.I)
+ 
++#: Every caller in this project hands the gate the model's own tool arguments
++#: as a JSON object: OpenJarvis's confirm prompt quotes the tool call, and
++#: jarvis_agent's own `_gate_prompt` writes `tool <name> {json}`. Greedy so a
++#: nested object is taken whole rather than cut at its first inner brace;
++#: whether a match really is JSON is decided by json.loads below, never by
++#: this pattern.
++_JSON_OBJECT_RE = re.compile(r"\{.*\}", re.S)
++
++#: The prompts this project uses for a TOOL CALL, matched from their first
++#: character to their last. OpenJarvis's confirm callback quotes the call
++#: (`Allow execution of tool '<name>' with args {json}?`); jarvis_agent writes
++#: `tool <name> {json}` for a tool and `plan step <name> {json}` for one step
++#: of a plan. Matching END TO END is what keeps this safe: a card's own text
++#: is a paragraph, never one of these lines, so no wording of a card can reach
++#: the rule (the failure _PROSE_KEYS' note records). The closing brace is NOT
++#: required, because a caller outside this project can still cut the arguments
++#: short; the cut is read at the end of _target_blobs below. (This project's own
++#: callers hand the whole arguments over since DEF-012, 2026-10-18.)
++_TOOL_CALL_PROMPTS = (
++    re.compile(r"\s*tool\s+[A-Za-z0-9_\-\.]+\s+(?P<args>\{.*)\s*\Z", re.S),
++    re.compile(r"\s*plan\s+step\s+[A-Za-z0-9_\-\.]+\s+(?P<args>\{.*)\s*\Z", re.S),
++    re.compile(r"\s*Allow execution of tool '[A-Za-z0-9_\-\.]+' with args "
++               r"(?P<args>\{.*)\s*\Z", re.S),
++)
++
++#: The keys in `detail` that hold the CARD'S OWN TEXT rather than a parameter.
++#: Every module that raises a card builds `{"text": <the card>, ...}` - it is
++#: what the apps show a person (`jarvis_backup`, `jarvis_asks_first`,
++#: `jarvis_schedule`, `jarvis_mcp`, `jarvis_note_capture`, and jarvis_agent's
++#: own `{"text": plan_text}`) - and "prompt" is the same thing for the modules
++#: that hand the card back under that name. A name in one of these is prose,
++#: never a target, so it is dropped before the search.
++#:
++#: THIS IS THE WHOLE FIX, so it is stated rather than inferred: a card that
++#: merely NAMES a protected file must be raisable, because the alternative -
++#: scanning the words a card uses - refused 45 of the owner's cards
++#: (2026-10-03..2026-10-10) before anybody was asked, with no card and no
++#: Windows Hello for any of them. A key that is NOT in this tuple is treated
++#: as a parameter and IS searched, so a new argument added to `detail`
++#: tomorrow is covered by default: what has to be argued for is prose, not
++#: protection.
++_PROSE_KEYS = ("text", "prompt", "card")
++
++
++def _target_blobs(action: str, detail: Any, prompt: str) -> tuple:
++    """The blobs the PROTECTED rule may read - the action's TARGET, not its card.
++
++    WHICH QUESTION THIS ANSWERS. The rule above the tier table exists so that
++    nothing an action the gate approves can rewrite the POLICY or the GATE:
++    "if the policy and the gate are writable by an action the gate itself
++    approves, there is no gate - just a longer path to the off switch". That
++    is a question about what the action would TOUCH - its target - and not
++    about the words printed on its card.
++
++    WHAT ARRIVES IN EACH ARGUMENT (measured across every caller, 2026-10-10):
++
++      `detail`  the action's own parameters. Every route that raises a card
++                builds it - {"what": ..., "path": ..., "settings": ..., "to":
++                ...} - and it is the same dict `_redact` describes as "the
++                recipient of the email, the path of the file, the body of the
++                shell command". Its values are searched, EXCEPT the keys in
++                _PROSE_KEYS, which hold the card's own text.
++
++      `prompt`  EITHER a tool call - OpenJarvis's confirm callback, whose
++                prompt is `Allow execution of tool '<name>' with args {json}?`,
++                and jarvis_agent's own `tool <name> {json}` (whole since
++                DEF-003; jarvis_mcp's `call` whole since DEF-012) - OR the card's text.
++                The route callers (jarvis_backup, jarvis_asks_first,
++                jarvis_mcp, jarvis_task_control and the rest) hand the gate the
++                card text as the prompt, because that is what a person reads.
++
++    So the prompt counts ONLY where it carries arguments: the JSON object
++    inside it is taken, and the prose around it is not. A prompt with no JSON
++    in it is prose, and prose is not a target. Nothing the model writes stops
++    being read - a model's arguments reach the gate as JSON on every path
++    (OpenJarvis quotes the tool call, jarvis_agent writes
++    `tool <name> {json}`, and a route card's arguments are in `detail`) - and
++    no wording of a card can reach this rule at all. A tool call whose
++    arguments were cut short is still read, from the raw text of the call
++    line: `_TOOL_CALL_PROMPTS` says why that cannot reach a card's words.
++
++    Returns the strings to search.
++    """
++    blobs = []
++    try:
++        if isinstance(detail, dict):
++            searchable = {k: v for k, v in detail.items()
++                          if str(k).lower() not in _PROSE_KEYS}
++        else:
++            searchable = detail
++        blobs.append(json.dumps(searchable, default=str))
++    except Exception:
++        blobs.append(str(detail))
++    # The action NAME too: the two terminal actions jarvis_agent makes for
++    # itself are the tool's own name (`unclassified_tool:file_write`), and a
++    # name is chosen by the tool's author, never by the model.
++    blobs.append(str(action or ""))
++    for m in _JSON_OBJECT_RE.findall(prompt or ""):
++        try:
++            json.loads(m)
++        except Exception:
++            continue                      # braces in prose, not arguments
++        blobs.append(m)
++    # A CUT TOOL CALL STILL CARRIES ITS ARGUMENTS. A caller outside this
++    # project can still hand the gate a line cut at 1500 characters (this
++    # project's own callers stopped cutting in DEF-012, 2026-10-18), and a JSON
++    # object cut in half does not parse, so the loop just above dropped exactly
++    # the arguments this rule exists to read: measured 2026-10-11, arguments
++    # 3453 characters long with a write to the gate's own file at character 62
++    # left `['{}', 'run_shell_on_host']`, and the action was offered as an
++    # ordinary card a person could approve. (jarvis_agent's lines cut the same
++    # way until DEF-003.) What the action would TOUCH does not change because
++    # the line recording it is too short to hold it, so the raw argument text
++    # of a prompt that IS a tool-call line, end to end, is read as it stands.
++    # This can only ever ADD text to the search - nothing that was refused
++    # before can become allowed - and the match is anchored at both ends, so a
++    # card's own words still cannot reach this rule at all.
++    for pat in _TOOL_CALL_PROMPTS:
++        m = pat.match(prompt or "")
++        if m:
++            blobs.append(m.group("args"))
++            break
++    return tuple(blobs)
++
+ 
+ def _touches_protected(*blobs) -> Optional[str]:
++    """The first protected name in these blobs, or None.
++
++    Callers pass TARGET material (_target_blobs above), never free prose: a
++    name found here refuses the action outright, at tier "never" and before
++    any card is raised, so a false positive is a card nobody can ever be
++    shown - the failure mode _target_blobs' own docstring records.
++    """
+     for b in blobs:
+         if not b:
+             continue
+@@ -1355,6 +1487,128 @@ def filter_tool_result(name: str, content: Any) -> Any:
+     return out.get("text", content)
+ 
+ 
++# --------------------------------------------------------------------------
++#   One card per identical request, and the cards that REPLACE what is there
++#
++#   Both guards come from the owner's own incident (2026-10-20): a single
++#   "approve all" click approved three backup restores, two imports and a
++#   device-key registration, because repeated clicks had STACKED identical
++#   cards and muscle memory walked the queue. Ruling 8.2 of the review the
++#   owner accepted asks for two MECHANICAL guards, and this is the backend
++#   half of both. Nothing here decides anything: no card is answered, no card
++#   is suppressed, and a card already decided is never reused.
++# --------------------------------------------------------------------------
++
++def _pending_target(action: str, detail: Any, prompt: str) -> str:
++    """A stable digest of every input that changes what approving would DO.
++
++    `action` plus the action's own parameters (its `detail`), canonicalised so
++    key order and whitespace cannot make one request look like two. The CARD'S
++    TEXT is not an input to the action: it is added only when the card carries
++    no parameters at all, where the prompt is the only recorded difference
++    between two requests and leaving it out could merge two different ones.
++    """
++    try:
++        target = json.dumps(detail or {}, sort_keys=True, separators=(",", ":"),
++                            default=str)
++    except Exception:
++        target = repr(detail)
++    if target in ("{}", "null", '""', "[]"):
++        target += "\x00" + str(prompt or "")
++    return hashlib.sha256((action + "\x00" + target).encode(
++        "utf-8", "replace")).hexdigest()
++
++
++def _pending_card_id(c: sqlite3.Connection, action: str, detail: Any,
++                     prompt: str) -> Optional[str]:
++    """The id of the pending card this request is IDENTICAL to, else None.
++
++    Only `state='pending'` rows count: a card that was approved, denied or
++    expired is an ANSWER, and answering the same question twice is the
++    owner's business, not an optimisation. A stored `detail` that no longer
++    parses (the row keeps at most 4000 characters, so a long one was cut on
++    the way in) is skipped rather than guessed at - the failure direction is
++    a second card, never a wrong merge between two different requests.
++    """
++    want = _pending_target(action, detail, prompt)
++    rows = c.execute(
++        "SELECT id, detail, prompt FROM approvals"
++        " WHERE state='pending' AND action=? ORDER BY created", (action,)).fetchall()
++    for row in rows:
++        stored = row["detail"]
++        try:
++            got = json.loads(stored) if stored else {}
++        except (TypeError, ValueError):
++            continue
++        if _pending_target(action, got, row["prompt"] or "") == want:
++            return row["id"]
++    return None
++
++
++#: Actions whose approval REPLACES or deletes data already on this PC. The
++#: apps draw a plain "REPLACES CURRENT DATA" heading on these cards and ask a
++#: second, explicit time before the approval is sent (guard 2 of review ruling
++#: 8.2). This table is the one place the backend knows it; it travels to both
++#: apps as the `replaces` field on every waiting card (`pending()` below).
++#:
++#: THE SET WAS EXTENDED ON THE OWNER'S OWN INSTRUCTION (2026-10-21: "Extend the
++#: two-press guard to them"), after the pre-merge audit named the other
++#: irreversible DATA-CHANGING actions. Every one of them is reversible "no" or
++#: "hard" in `_RISK` above; the reason each is here is what approving it does
++#: to data that is already on the PC:
++#:   * restore_backup - memory, chats, notes and the unlocking key go back in time
++#:   * register_approval_key - a phone may approve risky actions from then on
++#:   * memory_forget_range - retires facts and deletes chats in a time range
++#:   * delete_file / delete_joplin_note / delete_logseq_page - the file or note
++#:     is gone; there is no undo from here
++#:   * edit_joplin_note / edit_logseq_page - the previous text is replaced in
++#:     place and is gone unless the owner versions that vault or graph
++#:   * modify_own_code - the running program's source is changed; a backup is
++#:     the only way back
++#:   * app_merge_change - writes the change shown on the card into the app's
++#:     own files, exactly as shown
++#: An ORDINARY action is not here: one click stays one click for it. A card
++#: whose module sets `{"replaces": true}` in its own `detail` is marked by that
++#: data instead (the voice-training clear uses the shared `change_own_config`
++#: action and marks itself), so no action name is duplicated for it.
++_REPLACES_ACTIONS = frozenset({
++    "restore_backup",          # jarvis_backup.py: memory, chats, notes and the
++                               # key that unlocks them all go back in time
++    "register_approval_key",   # jarvis_devices.py: a phone may approve from then on
++    "memory_forget_range",     # jarvis_forget_range.py: facts retired, chats deleted
++    "delete_file",             # the file is gone; not recoverable from here
++    "delete_joplin_note",      # the note is gone; not recoverable from here
++    "delete_logseq_page",      # the page is gone; not recoverable from here
++    "edit_joplin_note",        # previous text replaced in place; versioning is
++                               # the owner's, not this app's
++    "edit_logseq_page",        # same, for a Logseq graph page
++    "modify_own_code",         # the running program's source changes; a backup
++                               # is the only way back
++    "app_merge_change",        # writes the shown change into the app's own files
++})
++
++
++def replaces_for(action: str, detail: Any = None) -> bool:
++    """True when approving this card replaces or deletes what is already there.
++
++    Two ways a card earns it: its action is in `_REPLACES_ACTIONS`, or the
++    module that raised it marked its own detail (`{"replaces": true}`). The
++    marker is DATA, not card prose - it is how a card sharing a generic action
++    name with ordinary cards is told apart (the voice-training clear is a
++    `change_own_config` card, like the voice settings beside it). The prompt
++    is never read: it is text a model or outside writer can influence.
++    """
++    if str(action or "") in _REPLACES_ACTIONS:
++        return True
++    d = detail
++    if isinstance(d, str):
++        try:
++            d = json.loads(d)
++        except (TypeError, ValueError):
++            return False
++    return isinstance(d, dict) and d.get("replaces") is True
++
++
+ def check(action: str,
+           detail: Optional[dict] = None,
+           prompt: str = "",
+@@ -1377,7 +1631,12 @@ def check(action: str,
+                        outcome="refused")
+ 
+     # The one rule above the tier table: nothing gets to edit the tier table.
+-    hit = _touches_protected(prompt, detail)
++    # It reads the action's TARGET - the arguments, the path or key it would
++    # write, the model's own tool call - and never the prose on the card,
++    # which is what _target_blobs decides between. A card that merely NAMES a
++    # protected file is raised like any other card; an action whose target IS
++    # one is still refused here, at "never", before any card exists.
++    hit = _touches_protected(*_target_blobs(action, detail, prompt))
+     if hit:
+         _audit("gate.refused_protected", {"action": action, "file": hit})
+         return Verdict(False, "never", action,
+@@ -1426,22 +1685,55 @@ def check(action: str,
+                        outcome="notify")
+ 
+     # ---- "ask", and anything unrecognised, waits for a human ----
++    #
++    # ONE CARD PER IDENTICAL REQUEST is guard 1 of the blind-approval ruling
++    # (review ruling 8.2, 2026-10-20). Two requests that raise the same
++    # restore three times used to queue three cards - the owner then approved
++    # the stack once and three restores ran. A request identical to a card
++    # that is STILL PENDING reuses that card's id: one card, one decision,
++    # nothing auto-approved and nothing suppressed. The SELECT and the INSERT
++    # are one BEGIN IMMEDIATE transaction, so two processes raising the same
++    # thing at the same moment cannot both miss and both insert.
++    reused = False
+     try:
+         _init()
+-        rid = uuid.uuid4().hex[:12]
++        rid = None
+         now = time.time()
+         with closing(_connect()) as c:
+-            c.execute(
+-                "INSERT INTO approvals (id,action,tier,detail,prompt,state,created,raised)"
+-                " VALUES (?,?,?,?,?,'pending',?,?)",
+-                (rid, action, tier, json.dumps(detail)[:4000], (prompt or "")[:2000], now,
+-                 json.dumps(raised)[:1000] if raised else None))
++            c.execute("BEGIN IMMEDIATE")
++            try:
++                rid = _pending_card_id(c, action, detail, prompt)
++                reused = rid is not None
++                if not reused:
++                    rid = uuid.uuid4().hex[:12]
++                    c.execute(
++                        "INSERT INTO approvals (id,action,tier,detail,prompt,state,created,raised)"
++                        " VALUES (?,?,?,?,?,'pending',?,?)",
++                        (rid, action, tier, json.dumps(detail)[:4000],
++                         (prompt or "")[:2000], now,
++                         json.dumps(raised)[:1000] if raised else None))
++                c.execute("COMMIT")
++            except Exception:
++                c.execute("ROLLBACK")
++                raise
+     except Exception as exc:
+         _audit("gate.queue_unavailable", {"action": action, "error": str(exc)})
+         return Verdict(False, tier, action,
+                        f"approval queue unavailable, so the action is refused ({exc})",
+                        outcome="refused")
+ 
++    if reused:
++        # The card this request is identical to is already on screen. Answer
++        # THIS caller now, naming it, and run nothing for the duplicate: one
++        # card is one action, and approving the stack once must not run three
++        # restores. Deliberately not auto-approved either - the person still
++        # decides the card; this request simply has nothing new to ask.
++        _audit("gate.pending_reused", {"id": rid, "action": action, "tier": tier})
++        return Verdict(False, tier, action,
++                       "the same request is already waiting for you (card "
++                       f"{rid}), so it was not asked twice; approve or deny that "
++                       "card and it happens once", rid, outcome="refused")
++
+     _audit("gate.asked", {"id": rid, "action": action, "tier": tier, "detail": detail})
+     # An unclassified action is safe (it became "ask") but opaque: you cannot
+     # improve the pattern table without knowing what phrasing missed. Recording
+@@ -1599,9 +1891,16 @@ def gate_tool(name: str, params: Any) -> Optional[str]:
+     that mattered. Called from inside execute(), it sees every call.
+     """
+     action, _ = action_for_tool(name, params)
+-    detail = {"tool": name, "args": (params if isinstance(params, str)
+-                                     else json.dumps(params, default=str))[:1500]}
+-    v = check(action, detail, prompt=f"tool {name} {detail['args']}")
++    # THE WHOLE ARGUMENTS REACH THE SCAN; the stored copy stays bounded
++    # (DEF-012, 2026-10-18). This used to cut the prompt at 1,500 characters,
++    # so a protected target past that point was never scanned and the action
++    # came back as an ordinary card. The gate's own check() still writes at
++    # most 2,000 characters of the line on the approvals row, so what is
++    # RECORDED does not grow without limit - only what is READ.
++    raw_args = (params if isinstance(params, str)
++                else json.dumps(params, default=str))
++    detail = {"tool": name, "args": raw_args[:1500]}
++    v = check(action, detail, prompt=f"tool {name} {raw_args}")
+     if v.allowed:
+         return None
+     if v.timed_out:
+@@ -1633,29 +1932,74 @@ def gate_tool(name: str, params: Any) -> Optional[str]:
+ # some public questions answered by the local model; the alternative cost is
+ # personal material reaching a cloud lane.
+ 
++#: The process-local copy of the latch (security audit 2026-10-18, I6). The
++#: database row is the latch; this is what keeps a private read from becoming
++#: a cloud lane when the row cannot be WRITTEN - the old code returned False
++#: from that except, i.e. created no latch at all. taint_active() already
++#: fails closed when the row cannot be READ; this makes latch_taint() fail
++#: closed too. In memory only: a restart loses it, and the next private read
++#: sets it again.
++_TAINT_FALLBACK_UNTIL = 0.0
++_TAINT_FALLBACK_WHY = ""
++
++
++def _latch_in_memory(seconds: float, why: str) -> None:
++    """Keep the latch in this process, never shorter than one already held."""
++    global _TAINT_FALLBACK_UNTIL, _TAINT_FALLBACK_WHY
++    try:
++        until = time.time() + max(0.0, float(seconds))
++    except Exception:
++        until = time.time() + 30.0 * 60.0
++    if until > _TAINT_FALLBACK_UNTIL:
++        _TAINT_FALLBACK_UNTIL = until
++        _TAINT_FALLBACK_WHY = str(why or "")[:200]
++
++
++def _memory_taint_active() -> bool:
++    return _TAINT_FALLBACK_UNTIL > time.time()
++
++
+ def latch_taint(minutes: Optional[float] = None, why: str = "") -> bool:
+     if minutes is None:
+-        minutes = float(_cfg("notes.joplin", "taint_latch_minutes", 30) or 30)
++        try:
++            minutes = float(_cfg("notes.joplin", "taint_latch_minutes", 30) or 30)
++        except Exception:
++            minutes = 30.0
++    try:
++        seconds = max(0.0, float(minutes)) * 60.0
++    except Exception:
++        seconds = 30.0 * 60.0
+     try:
+         _init()
+-        until = time.time() + max(0.0, float(minutes)) * 60.0
++        until = time.time() + seconds
+         with closing(_connect()) as c:
+             row = c.execute("SELECT until FROM taint WHERE key='conversation'").fetchone()
+             if row and row["until"] > until:
++                _latch_in_memory(row["until"] - time.time(), why)
+                 return True                   # never shorten an existing latch
+             c.execute("INSERT INTO taint (key, until, why) VALUES ('conversation',?,?) "
+                       "ON CONFLICT(key) DO UPDATE SET until=excluded.until, why=excluded.why",
+                       (until, why[:200]))
+-        _audit("gate.taint_latched", {"minutes": minutes, "why": why})
++        try:
++            _audit("gate.taint_latched", {"minutes": minutes, "why": why})
++        except Exception:
++            pass
+         return True
+     except Exception:
+-        return False
++        # FAIL CLOSED (I6): a latch that could not be written still latches, in
++        # this process. The old `return False` was a fail-open: the read that
++        # set it was not private any more for anything reading the latch.
++        _latch_in_memory(seconds, why)
++        return True
+ 
+ 
+ def taint_active() -> bool:
+     """True while the latch holds. A failure to read it returns True, because
+     the safe answer to "is this conversation private?" when you cannot tell is
+-    yes."""
++    yes. A latch this process could not write (latch_taint's fallback) also
++    counts (security audit 2026-10-18, I6)."""
++    if _memory_taint_active():
++        return True
+     try:
+         _init()
+         with closing(_connect()) as c:
+@@ -1666,6 +2010,9 @@ def taint_active() -> bool:
+ 
+ 
+ def clear_taint() -> bool:
++    global _TAINT_FALLBACK_UNTIL, _TAINT_FALLBACK_WHY
++    _TAINT_FALLBACK_UNTIL = 0.0
++    _TAINT_FALLBACK_WHY = ""
+     try:
+         _init()
+         with closing(_connect()) as c:
+@@ -1764,6 +2111,11 @@ def pending() -> list[dict]:
+         # desktop cannot word the same warning two different ways - and so
+         # there is one place to audit what a notification may contain.
+         d["notice"] = notice_for(d)
++        # Guard 2 (review ruling 8.2): whether approving this card
++        # REPLACES or deletes what is already on the PC. Both apps draw
++        # the warning heading and ask a second, explicit confirmation
++        # for these; every other card is unchanged.
++        d["replaces"] = replaces_for(d.get("action", ""), d.get("detail"))
+         # approval-expiry.patch: how many seconds this card has left before
+         # check() stops waiting and refuses it. check() waits APPROVAL_TIMEOUT
+         # from just after the row is written, so `created` plus that is the

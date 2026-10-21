@@ -1,0 +1,7 @@
+            # Why an item was queued at a higher tier than the table says.
+            # Added after the fact, so tolerate a database from before it
+            # existed rather than refusing to start against one.
+            try:
+                c.execute("ALTER TABLE approvals ADD COLUMN raised TEXT")
+            except sqlite3.OperationalError:
+                pass                          # already there

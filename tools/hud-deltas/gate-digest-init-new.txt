@@ -1,0 +1,18 @@
+            # Why an item was queued at a higher tier than the table says.
+            # Added after the fact, so tolerate a database from before it
+            # existed rather than refusing to start against one.
+            try:
+                c.execute("ALTER TABLE approvals ADD COLUMN raised TEXT")
+            except sqlite3.OperationalError:
+                pass                          # already there
+            # What approving this card would DO, as a digest computed from the
+            # WHOLE request at insert time (2026-10-21 pre-merge audit, F-680-2).
+            # The `detail` column keeps only its first 4000 characters, so a
+            # long request's digest cannot be re-derived from the row; without
+            # this column two identical long requests stacked two cards. Rows
+            # written before it existed have NULL here and keep the old
+            # parse-the-detail comparison (see _pending_card_id).
+            try:
+                c.execute("ALTER TABLE approvals ADD COLUMN target_digest TEXT")
+            except sqlite3.OperationalError:
+                pass                          # already there
