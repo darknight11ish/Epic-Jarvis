@@ -289,6 +289,157 @@ object Entities {
     /** One connection's row: "Priya, 4 shared facts". */
     fun connectionLine(c: Connection): String = c.entity.name + ", " + sharedWords(c.shared)
 
+    // ------------------------------------------- the phone's list tools ---
+    // A1 (2026-10-21): kind filter chips, a search over names, the
+    // shared-facts count on a row, and the as-of chips. Phone-only words, for
+    // the same reason TITLE, UNDER and WITH above are: the shared fixture holds
+    // the words BOTH apps say, and the desktop's map draws no chips.
+
+    const val ALL = "All"
+    const val SEARCH = "Search names"
+    const val AS_OF = "Facts as of"
+    const val NOW = "Now"
+    const val WEEK = "7d"
+    const val MONTH = "30d"
+    const val PICK_DATE = "Pick date…"
+    const val DATE_HINT = "YYYY-MM-DD"
+    const val DATE_BAD = "Use a real date, on or before today, like 2026-10-21."
+    const val NO_MATCH = "No names match that search."
+    const val AS_OF_NONE = "No active facts on {date}."
+    const val AS_OF_ROW = "{name}, {n} on {date}"
+    const val RETIRED = "No longer true then"
+    const val SHARES = "Shares facts with {n} names"
+    const val SHARES_ONE = "Shares facts with 1 name"
+    const val AS_OF_READING = "Reading the facts for that date..."
+    const val USE_DATE = "Use this date"
+    const val CANCEL = "Cancel"
+
+    /** The chips under the search box: All, then each known kind, then Other
+     * only when the list really holds a name whose kind is unknown. */
+    fun filterLabels(entities: List<Entity>): List<String> {
+        val known = GROUPS.map { it.first }
+        return listOf(ALL) + known +
+            (if (entities.any { it.kind == null || it.kind !in KNOWN_KINDS }) listOf(OTHER) else emptyList())
+    }
+
+    private val KNOWN_KINDS: Set<String> = GROUPS.flatMap { it.second }.toSet()
+
+    private fun kindsOf(label: String): Set<String>? = when (label) {
+        ALL, "" -> null
+        OTHER -> null
+        else -> GROUPS.firstOrNull { it.first == label }?.second
+    }
+
+    /**
+     * The names a chip and a search leave on screen: the same list, filtered by
+     * kind (the chip) and by name (the search, case-insensitive, and only the
+     * NAME - never the facts' words). A blank chip and a blank search means
+     * every entity, so the untouched list is what it was before A1.
+     */
+    fun visible(entities: List<Entity>, kind: String, query: String): List<Entity> {
+        val q = query.trim()
+        val wanted = kindsOf(kind)
+        val other = kind == OTHER
+        return entities.filter { e ->
+            val kindOk = when {
+                wanted != null -> e.kind != null && e.kind in wanted
+                other -> e.kind == null || e.kind !in KNOWN_KINDS
+                else -> true
+            }
+            kindOk && (q.isEmpty() || e.name.contains(q, ignoreCase = true))
+        }
+    }
+
+    /**
+     * How many OTHER names each name shares at least one fact with, by entity
+     * id - the same rule [connections] uses (a fact naming more than
+     * [MAX_NAMES_PER_FACT] names is a list, not an edge), computed once for the
+     * whole list instead of once per row. A row's second line says "Shares facts
+     * with 2 names"; zero draws nothing.
+     */
+    fun sharedPartners(entities: List<Entity>): Map<String, Int> {
+        val perFact = namesPerFact(entities)
+        val namesByFact = HashMap<Long, MutableList<String>>()
+        for (e in entities) for (f in e.factIds) {
+            if ((perFact[f] ?: 0) > MAX_NAMES_PER_FACT) continue
+            namesByFact.getOrPut(f) { ArrayList() }.add(e.id)
+        }
+        val out = HashMap<String, Int>(entities.size)
+        for (e in entities) {
+            val partners = HashSet<String>()
+            for (f in e.factIds) namesByFact[f]?.forEach { id -> if (id != e.id) partners.add(id) }
+            out[e.id] = partners.size
+        }
+        return out
+    }
+
+    /** "Shares facts with 2 names" / the singular; null for zero (no dead line). */
+    fun sharesLine(n: Int): String? = when {
+        n <= 0 -> null
+        n == 1 -> SHARES_ONE
+        else -> SHARES.replace("{n}", n.toString())
+    }
+
+    // ------------------------------------------------------------- as of ---
+
+    /** "Facts as of 12 Oct 2026" for the chip row's own heading. */
+    fun asOfLine(date: String): String = "$AS_OF $date"
+
+    /** "Priya, 2 on 12 Oct 2026" - a row's count as of a date. */
+    fun asOfRowLine(e: Entity, date: String): String =
+        AS_OF_ROW.replace("{name}", e.name)
+            .replace("{n}", factCount(e.count))
+            .replace("{date}", date)
+
+    /** The plain line when no name had an active fact on that date. */
+    fun asOfNone(date: String): String = AS_OF_NONE.replace("{date}", date)
+
+    /**
+     * The SAME list, with each name's fact ids narrowed to the facts the PC says
+     * were active on that date (`current = true` as of that moment). This is the
+     * client-side filter the A1 slice promises: no second entity route, no new
+     * server query, and a name with no active fact on the date drops out. A
+     * retired fact (`current = false`) is not counted here; [asOfRows] shows it
+     * muted when the name is opened.
+     */
+    fun asOfEntities(entities: List<Entity>, facts: List<MemoryAsOf.RawFact>): List<Entity> {
+        val active = facts.asSequence().filter { it.trueThen == true }.map { it.id }.toHashSet()
+        if (active.isEmpty()) return emptyList()
+        return entities.mapNotNull { e ->
+            val ids = e.factIds.filter { it in active }
+            if (ids.isEmpty()) null else e.copy(factIds = ids)
+        }
+    }
+
+    /** What one name's as-of facts came to: the ones that were true then, and
+     * the retired ones (drawn muted under [RETIRED]), in the PC's newest-first
+     * order from the name's own fact ids. */
+    data class AsOfRows(val active: List<Row>, val retired: List<Row>)
+
+    fun asOfRows(
+        entity: Entity,
+        facts: List<MemoryAsOf.RawFact>,
+        zone: ZoneId = ZoneId.systemDefault(),
+    ): AsOfRows {
+        val byId = facts.associateBy { it.id }
+        val active = ArrayList<Row>()
+        val retired = ArrayList<Row>()
+        for (id in entity.factIds) {
+            val f = byId[id] ?: continue
+            val erased = f.erasedAt != null
+            val row = Row(
+                id = id,
+                text = if (erased) "" else f.text,
+                erased = erased,
+                forgotten = false,
+                pinned = false,
+                saved = dateText(f.created, zone),
+            )
+            if (f.trueThen == false) retired.add(row) else active.add(row)
+        }
+        return AsOfRows(active, retired)
+    }
+
     // ------------------------------------------------------------ facts ----
 
     /** The next page of ids to read: after the [shown] already consumed, at most [size]. */
