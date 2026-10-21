@@ -1460,6 +1460,55 @@ Desktop Settings -> Voice now reads the payload above directly
   rows" until a later slice measures other voices per condition; no number
   and no threshold is invented on the page.
 
+### 5.2 Microphone recovery, one re-open and the 300 ms pre-roll
+(added 2026-10-21)
+
+Slice D of the Live & Voice program. **Detection already existed** and is not
+rebuilt: Pillar 28's `jarvis_pc_help._digital_zero_mic` reads
+`jarvis_speech.voice_attempts_status()` and adds one "Check now" warning when
+the last three voice attempts were ALL exactly 0.0 peak RMS. This slice
+RECOVERS at the next recording instead of waiting for the doctor, and says so
+in words rather than a log line.
+
+* **One re-open, exact digital zeros only.** When a recording starts,
+  `voice.rs` inspects its first 400 ms. If every sample is **exactly 0.0** -
+  not a quiet room, which always carries a tiny nonzero floor (even -90 dBFS
+  is one or two counts) - it lets go of the input device, keeps nothing from
+  it, and opens the default device **once** more. If that attempt is also all
+  zeros, the recording is refused with the honest sentence
+  "Microphone is returning silence - check the mute switch or Windows input
+  device." (`voice.rs` `MIC_SILENT_WORDS`, the Bar shows it). There is no
+  second retry and no loop; a device that returned no samples at all is never
+  called deaf.
+* **At the end of a clip too.** A record whose first 400 ms are exact zeros
+  and whose VAD finds no speech answers `silent: true` plus that same sentence
+  (and `ok: false`), instead of the misleading "no speech in that recording".
+  The attempt is still counted for Pillar 28, so PC help keeps reporting a
+  device that has not recovered. `silent` is additive - an older client
+  ignores it, and an older PC never sends it.
+* **The 300 ms pre-roll (Handy's pattern).** Talk-to-type (`Alt+Shift+T`,
+  §72) opens the microphone the moment the key goes down - before the PC is
+  asked whether the switch is on - and holds what arrives meanwhile in a
+  bounded 300 ms ring. When the answer is yes, that ring becomes the FRONT of
+  the clip, so the first consonant spoken as the key is pressed is not
+  clipped; when the answer is no, the ring is dropped with the stream and
+  nothing is checked, transcribed, typed or kept. The ring never holds more
+  than 300 ms, is emptied when handed over, and is never written to disk.
+  Push-to-talk records from the press, so it needs no prefix; "hey Jarvis"
+  already carried the same 300 ms (`voice.rs` `VAD_PREROLL`) and was not
+  rebuilt.
+* **Not changed.** The event names and their shape, the WAV/utterance
+  contract (one additive field), the voice-check order and every refusal, and
+  the `/api/voice/status` fields. Tests:
+  `backend/test_voice_mic_recovery.py` (the sentence shared with the desktop,
+  the exact-zeros-only detector, a silence clip never reaching STT, a quiet
+  room keeping the old wording, Pillar 28's counters unchanged) and `cargo
+  test` (`voice::mic_recovery_tests`: detector, the one-reopen rule with a
+  mocked device, and the ring's bound, hand-over and clearing). **Real
+  microphone behaviour - an actual after-sleep deaf device, and whether the
+  pre-roll is audible - is owner-tested:** this repository has no microphone,
+  so that row is NOT-TESTABLE here, never a PASS.
+
 ## 6. Memory, the Brain, models, attention, appearance, status
 
 ### The desktop's read allowlist
@@ -3013,6 +3062,13 @@ mode only when `gate.training` says the PC understands it:
                             `hands_free_screen: screen_aloud`. No voice-check condition of its own
                             (a screen answer is read aloud like a web search's). Missing (an older
                             PC) = false.
+"silent": bool              (2026-10-21, §5.2) the first 400 ms of the clip were EXACT digital
+                            zeros: the microphone is deaf, not the room quiet. `reason` carries
+                            MIC_SILENT_WORDS ("Microphone is returning silence - check the mute
+                            switch or Windows input device."), no words are returned and `ok` is
+                            false. The desktop also re-opens the device ONCE at the START of a
+                            recording when it sees this then. Additive: an older client ignores
+                            it.
 ```
 
 **Hands-free (2026-09-24).** With `hands_free: button_only`, a clip whose

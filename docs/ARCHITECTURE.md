@@ -2323,6 +2323,18 @@ with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
 
+**The microphone recovery is the desktop's, on purpose** (2026-10-21;
+JARVIS-API §5.2, Slice D of the Live & Voice program). Only the desktop opens
+THIS PC's input device (`jarvis-desktop/src-tauri/src/voice.rs`), so only it
+can re-open that device when the first 400 ms of a recording are exact digital
+zeros, and only it can hold a bounded 300 ms pre-roll in front of a
+talk-to-type clip. The phone's equivalent is the phone's own capture: it
+uploads a complete clip, and the PC's `hear()` still says the same sentence
+(`silent: true`) for a clip whose opening is exact zeros, so a deaf phone
+microphone is described in the same words. Nothing is added to the phone's
+screens, no route changes, and `tools/check_parity.py` has nothing new to
+classify.
+
 **Not on the phone yet, and that is the scope of this slice rather than a
 **Not on the phone yet, and that is the scope of this slice rather than a
 one-sided decision** (2026-10-19; extended by S3, 2026-10-20): **searchable
