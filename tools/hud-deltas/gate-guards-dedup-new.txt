@@ -1,0 +1,51 @@
+    # ---- "ask", and anything unrecognised, waits for a human ----
+    #
+    # ONE CARD PER IDENTICAL REQUEST is guard 1 of the blind-approval ruling
+    # (review ruling 8.2, 2026-10-20). Two requests that raise the same
+    # restore three times used to queue three cards - the owner then approved
+    # the stack once and three restores ran. A request identical to a card
+    # that is STILL PENDING reuses that card's id: one card, one decision,
+    # nothing auto-approved and nothing suppressed. The SELECT and the INSERT
+    # are one BEGIN IMMEDIATE transaction, so two processes raising the same
+    # thing at the same moment cannot both miss and both insert.
+    reused = False
+    try:
+        _init()
+        rid = None
+        now = time.time()
+        with closing(_connect()) as c:
+            c.execute("BEGIN IMMEDIATE")
+            try:
+                rid = _pending_card_id(c, action, detail, prompt)
+                reused = rid is not None
+                if not reused:
+                    rid = uuid.uuid4().hex[:12]
+                    c.execute(
+                        "INSERT INTO approvals (id,action,tier,detail,prompt,state,created,raised)"
+                        " VALUES (?,?,?,?,?,'pending',?,?)",
+                        (rid, action, tier, json.dumps(detail)[:4000],
+                         (prompt or "")[:2000], now,
+                         json.dumps(raised)[:1000] if raised else None))
+                c.execute("COMMIT")
+            except Exception:
+                c.execute("ROLLBACK")
+                raise
+    except Exception as exc:
+        _audit("gate.queue_unavailable", {"action": action, "error": str(exc)})
+        return Verdict(False, tier, action,
+                       f"approval queue unavailable, so the action is refused ({exc})",
+                       outcome="refused")
+
+    if reused:
+        # The card this request is identical to is already on screen. Answer
+        # THIS caller now, naming it, and run nothing for the duplicate: one
+        # card is one action, and approving the stack once must not run three
+        # restores. Deliberately not auto-approved either - the person still
+        # decides the card; this request simply has nothing new to ask.
+        _audit("gate.pending_reused", {"id": rid, "action": action, "tier": tier})
+        return Verdict(False, tier, action,
+                       "the same request is already waiting for you (card "
+                       f"{rid}), so it was not asked twice; approve or deny that "
+                       "card and it happens once", rid, outcome="refused")
+
+    _audit("gate.asked", {"id": rid, "action": action, "tier": tier, "detail": detail})
