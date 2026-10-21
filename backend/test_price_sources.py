@@ -629,10 +629,21 @@ def t_ruling_103_poll_floor_and_owned_scheduler():
           P.POLL_MIN_SECONDS)
     check("the jitter is the +/-30% the contract fixes",
           abs(P.POLL_JITTER - 0.30) < 1e-9, P.POLL_JITTER)
-    check("without Slice 1's scheduler, no cadence is invented (None)",
-          P.next_poll_seconds(600) is None, P.next_poll_seconds(600))
+    # Slice 1 (#702) is merged on main now, so
+    # `jarvis_tellme.next_poll_timestamp` really is in every tree. The honest
+    # "no scheduler in this install" branch still deserves a check, so the
+    # attribute is removed for this one assertion and put straight back.
     had = hasattr(T, "next_poll_timestamp")
     real = getattr(T, "next_poll_timestamp", None)
+    if had:
+        del T.next_poll_timestamp
+    try:
+        absent = P.next_poll_seconds(600)
+    finally:
+        if had:
+            T.next_poll_timestamp = real
+    check("without Slice 1's scheduler, no cadence is invented (None)",
+          absent is None, absent)
     seen = []
 
     def fake(base, rng=None, now=None):
