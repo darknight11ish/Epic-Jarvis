@@ -62,6 +62,7 @@ end-to-end is `jarvis_backup.py`'s exclusion decision.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import traceback
@@ -1107,6 +1108,15 @@ def t_no_double_write_and_the_view_is_the_plain_one():
         MI.reconcile(read=fake)
         check("a second run does not re-read an unchanged recording",
               len(fake.calls) == 1, fake.calls)
+        # Opt 5.2 of the 2026-10-20 work order: (size, mtime_ns) is the whole
+        # rule - nothing is hashed - so a moved mtime MUST bring the file back
+        # into the work queue. The other half of the fast skip, pinned.
+        rec = root / "a.wav" / "memo.wav"
+        stat = rec.stat()
+        os.utime(rec, ns=(stat.st_atime_ns, stat.st_mtime_ns + 250_000_000))
+        MI.reconcile(read=fake)
+        check("...but a recording whose (mtime_ns) moved IS read again",
+              len(fake.calls) == 2, fake.calls)
         MI.set_enabled(False)
         check("index_file refuses when the switch is off",
               MI.index_file(str(root / "a.wav"), read=fake).get("off") is True)

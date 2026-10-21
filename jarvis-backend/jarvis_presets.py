@@ -16,6 +16,9 @@ The owner's choices: Fast runs qwen3:8b on the coding lane at 16k while the
 """
 from __future__ import annotations
 
+import os
+import sys
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Optional
@@ -522,6 +525,11 @@ def install(Handler, *, origin_ok, token_ok, read_body):
         return self._send(code, out)
 
     Handler.do_POST = do_POST
+    # Warm the card detection while the HUD finishes starting, so the first
+    # GET /api/work does not pay the ~10 s `nvidia-smi` + lane-probe cost. The
+    # request path never does it again once a snapshot exists (see above).
+    if _warm_on_startup():
+        _refresh_detect_cache_async()
     return "presets    ready"
 
 # --------------------------------------------------------------------------
@@ -537,27 +545,48 @@ PRIORITIES = ("speed", "quality", "long_context", "vision")
 #: not appear or disappear between requests, so a short cache is honest; tests
 #: clear it when they need a fresh answer.
 DETECT_CACHE_SECONDS = 60.0
-_DETECT_CACHE = {"at": 0.0, "value": None}
+
+#: How long a FIRST call may wait for a detection that is already in flight.
+#: The startup warm-up (below) runs off the request path; if the very first
+#: request arrives while it is still running, waiting for that one detection is
+#: better than starting a second `nvidia-smi`. Bounded so a wedged detector
+#: cannot hold a request for ever - past it the call detects for itself.
+DETECT_COLD_WAIT_SECONDS = 30.0
+
+#: The cached snapshot: "at" is the monotonic time it was stored, "value" the
+#: contract dict, "in_flight" that a background refresh is running. ONE lock
+#: guards all three (the detection itself runs outside it).
+_DETECT_CACHE = {"at": 0.0, "value": None, "in_flight": False}
+_DETECT_LOCK = threading.Lock()
+#: Set once a snapshot has been stored, so a first call can wait for a
+#: detection already in flight instead of starting a second one.
+_DETECT_STORED = threading.Event()
+
+
+def _copy_detection(value: Optional[dict]) -> dict:
+    """The snapshot, copied so callers cannot mutate the cache. None reads as
+    the no-cards answer, never as an exception."""
+    if value is None:
+        return {"count": 0, "cards": [], "source": "jarvis_hardware.detect()"}
+    return {**value, "cards": [dict(card) for card in value["cards"]]}
 
 
 def _clear_detect_cache() -> None:
-    """Forget the cached card detection (tests and a hardware change)."""
-    _DETECT_CACHE["value"] = None
+    """Forget the cached card detection (tests and a hardware change).
+
+    The next read detects SYNCHRONOUSLY: clearing means "I need a fresh answer
+    now". Only the ordinary TTL expiry has a stale answer to serve, and only
+    that path refreshes in the background.
+    """
+    with _DETECT_LOCK:
+        _DETECT_CACHE["value"] = None
+        _DETECT_CACHE["at"] = 0.0
+    _DETECT_STORED.clear()
 
 
-def _cached_cards() -> dict:
-    """The last detection, copied so callers cannot mutate the cache."""
-    cached = _DETECT_CACHE["value"]
-    return {**cached, "cards": [dict(card) for card in cached["cards"]]}
-
-
-def _detected_cards() -> dict:
-    """Every card this PC reports, from jarvis_hardware.detect() - never a
-    hardcoded two-card table. Never raises; count 0 is said plainly."""
-    cached = _DETECT_CACHE["value"]
-    now = time.monotonic()
-    if cached is not None and now - _DETECT_CACHE["at"] < DETECT_CACHE_SECONDS:
-        return _cached_cards()
+def _detect_cards() -> dict:
+    """Run `jarvis_hardware.detect()` and shape the result. The slow part;
+    touches no cache state. Never raises; count 0 is said plainly."""
     try:
         import jarvis_hardware
         got = jarvis_hardware.detect() or {}
@@ -577,11 +606,95 @@ def _detected_cards() -> dict:
         cards.append({"index": i, "name": str(name),
                       "vram_gib": (round(float(vram), 1) if isinstance(vram, (int, float)) else None),
                       "uuid": uuid})
-    result = {"count": len(cards), "cards": cards,
-              "source": "jarvis_hardware.detect()"}
-    _DETECT_CACHE["value"] = result
-    _DETECT_CACHE["at"] = time.monotonic()
-    return _cached_cards()
+    return {"count": len(cards), "cards": cards,
+            "source": "jarvis_hardware.detect()"}
+
+
+def _store_detection(result: dict) -> None:
+    """Remember one detection - the only place the cache is written."""
+    with _DETECT_LOCK:
+        _DETECT_CACHE["value"] = result
+        _DETECT_CACHE["at"] = time.monotonic()
+    _DETECT_STORED.set()
+
+
+def _refresh_detect_cache() -> None:
+    """One background refresh: detect off the request thread, then store."""
+    try:
+        _store_detection(_detect_cards())
+    finally:
+        with _DETECT_LOCK:
+            _DETECT_CACHE["in_flight"] = False
+
+
+def _refresh_detect_cache_async() -> bool:
+    """Start THE background refresh, unless one is already running.
+
+    True when a thread was started, False when a refresh was already in flight
+    (or could not start) - so a burst of expired-cache requests starts ONE
+    detection, never one per request. Never raises.
+    """
+    with _DETECT_LOCK:
+        if _DETECT_CACHE["in_flight"]:
+            return False
+        _DETECT_CACHE["in_flight"] = True
+    thread = threading.Thread(target=_refresh_detect_cache,
+                              name="jarvis-presets-detect", daemon=True)
+    try:
+        thread.start()
+    except Exception:
+        with _DETECT_LOCK:
+            _DETECT_CACHE["in_flight"] = False
+        return False
+    return True
+
+
+def _warm_on_startup() -> bool:
+    """Is this the real HUD process? Only the HUD warms the cache at startup: a
+    test's `install()` must not run `nvidia-smi` behind the suite that called
+    it. `backend/_where.py` sets JARVIS_SUITE_RUNNING for the suites, and the
+    HUD is the script named `jarvis_hud.py` (the desktop app starts that file).
+    """
+    if os.environ.get("JARVIS_SUITE_RUNNING"):
+        return False
+    main = sys.modules.get("__main__")
+    name = os.path.basename(str(getattr(main, "__file__", "") or "")).lower()
+    return name == "jarvis_hud.py"
+
+
+def _detected_cards() -> dict:
+    """Every card this PC reports, from jarvis_hardware.detect() - never a
+    hardcoded two-card table. Never raises; count 0 is said plainly.
+
+    STALE-WHILE-REVALIDATE. Once a snapshot exists it is served until the TTL
+    runs out; when the TTL expires the request STILL gets the old snapshot
+    immediately, and one background thread refreshes it. The request thread
+    never runs the detection except on the very first call, when there is no
+    snapshot to serve - because `detect()` measured ~10 s on the owner PC and
+    used to block one `GET /api/work` / `GET /api/presets` every minute.
+    """
+    with _DETECT_LOCK:
+        value = _DETECT_CACHE["value"]
+        at = _DETECT_CACHE["at"]
+    if value is not None:
+        if time.monotonic() - at < DETECT_CACHE_SECONDS:
+            return _copy_detection(value)
+        _refresh_detect_cache_async()
+        return _copy_detection(value)
+    # Nothing cached yet, so the first answer has to be a real detection. A
+    # startup warm-up may already be running it; wait for that ONE detection
+    # rather than starting a second, and detect here if it never lands.
+    with _DETECT_LOCK:
+        in_flight = _DETECT_CACHE["in_flight"]
+    if in_flight:
+        _DETECT_STORED.wait(DETECT_COLD_WAIT_SECONDS)
+        with _DETECT_LOCK:
+            value = _DETECT_CACHE["value"]
+        if value is not None:
+            return _copy_detection(value)
+    result = _detect_cards()
+    _store_detection(result)
+    return _copy_detection(result)
 
 
 def hardware_block() -> dict:
