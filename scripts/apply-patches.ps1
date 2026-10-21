@@ -2109,6 +2109,7 @@ $SHIPPED = @(
     'jarvis_voice_ui.py'
 'jarvis_barge_in.py'       # Voice Slice F phase-1 prototype: no live import,
 # [voice] aec_barge_in = false, nothing wired (docs/DESIGN-VOICE-BARGE-IN.md)
+'jarvis_price_radar.py'       # F1 price/flight radar (read-only, off; docs/DESIGN-PRICE-RADAR.md)
 )
 
 # The settings file. Installed only where none exists; never overwritten.

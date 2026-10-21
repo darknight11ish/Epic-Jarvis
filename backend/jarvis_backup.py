@@ -77,7 +77,9 @@ real file, made by jarvis_chat_log.py, is "chat-history.db")
     jobs.db, ledger.db and watch.db, the files of the arbiter, jobs, ledger and
     watch modules; and (2026-10-08) tasks.db, the job list; and (2026-10-14)
     receipts.db, the action receipts and their Undo snapshots
-    (jarvis_receipts.py). A receipt holds the owner's own words - what changed,
+    (jarvis_receipts.py); and (2026-10-21) price-radar.db, the flight price
+    history (jarvis_price_radar.py) - a fare observed yesterday cannot be
+    re-fetched, so the history is carried like the owner's other data. A receipt holds the owner's own words - what changed,
     and what the thing looked like before - and a restore that put goals.db or
     projects.db back while dropping the receipts for those rows would leave
     Undo pointing at changes the archive had already replaced. The whole
@@ -521,10 +523,16 @@ CODE_GROUPS, CODE_GROUP_LEN = 4, 5
 #: about his own life, so it belongs in the locked backup for the same reason
 #: memory.db does - and test_backup.py's own rule catches a module that names a
 #: database and does not get it in here, which is how this was found.
+#: price-radar.db (2026-10-21) is the flight price history (jarvis_price_radar.py):
+#: whole-cent fare snapshots per tracked route. A fare observed yesterday cannot
+#: be re-fetched -- the page only shows today's price -- so losing it loses the
+#: history itself, which is the same "the owner's own data, not a cache" reason
+#: receipts.db and voiceprint.db are carried. It is read-only in the module that
+#: writes it until the owner turns [price_radar] on.
 SOURCE_DBS = ("memory.db", "chat-history.db", "schedule.db", "feedback.db", "projects.db",
               "goals.db", "study.db", "arbiter.db", "jobs.db", "ledger.db", "watch.db",
               "tasks.db", "knowledge.db", "traces.db",
-              "receipts.db", "voiceprint.db")
+              "receipts.db", "voiceprint.db", "price-radar.db")
 
 #: How long a snapshot/table-count connection waits for a lock before giving
 #: up. `sqlite3.connect(timeout=...)` IS SQLite's busy handler (it passes the

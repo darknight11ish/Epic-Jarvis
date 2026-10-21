@@ -1155,6 +1155,10 @@ SHIPPED = (
     # prototype only - docs/DESIGN-VOICE-BARGE-IN.md, [voice] aec_barge_in = false,
     # no live module imports it and nothing wires it yet.
     "jarvis_barge_in.py",
+    # The price/flight radar, F1 (owner-approved 2026-10-21): a read-only
+    # flight engine + price history. [price_radar] enabled = false; no route,
+    # no app surface, no booking path - docs/DESIGN-PRICE-RADAR.md.
+    "jarvis_price_radar.py",
 )
 
 
