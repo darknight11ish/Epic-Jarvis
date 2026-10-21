@@ -2750,3 +2750,11 @@ Built in `jarvis-desktop/src/jarvis_hud.html` (copied byte-identically to
 `hud-window-settings.js`, the "The big HUD window" card in
 `jarvis-desktop/src/settings.html`, and proven by `tests/hud.mjs` and
 `tests/hud-window.mjs`.
+
+## 2026-10-21 - the whole Live & Voice program approved; barge-in starts as a design, off and unwired
+
+  * **The owner's decision.** The whole audited Live & Voice program is approved (2026-10-21) - the slices are built in order, each with its own switch and its own measurement, and each lands as its own pull request. This entry records the biggest and riskiest of them, **Voice Slice F: true barge-in on open speakers with echo cancellation**.
+  * **What phase 1 is.** A design plus an off-by-default prototype, not a live feature. `backend/jarvis_barge_in.py` subtracts the PC's own TTS PCM from the microphone signal with a small NLMS filter and answers ONE question - is there 350 ms of speech-shaped residual, and does the owner check say it is the owner's voice - as a decision dict. Nothing acts on it, no live module imports it, and no route calls it, so the current voice path is exactly as it was (`docs/DESIGN-VOICE-BARGE-IN.md`).
+  * **Why off, and what turns it on.** The project's rule is that a feature touching the live microphone path is off until that feature is measured on the owner's hardware (the second-card rule, applied to voice). The switch is `[voice] aec_barge_in = false`; turning it on is one `change_own_config` approval card, turning it off is immediate, and enabling a wiring is a later, separately reviewed change. Real open-speaker barge-in is **NOT-MEASURED** until then.
+  * **No new dependency, by choice.** The first attempt uses numpy, which the voice modules already need. speexdsp or the WebRTC echo canceller are only candidates if the measured plan (residual echo level, false-cut rate, owner check on the residual, barge-in latency) rejects the no-dep prototype; that would be its own decision with a `requirements.lock` change and the THIRD-PARTY-NOTICES process.
+  * **Desktop only, on purpose.** The prototype needs the PC's TTS PCM and the PC's CAM++ check, so the phone cannot run this half; it already keeps Android's `AcousticEchoCanceler` in voice-call mode. Written in `docs/ARCHITECTURE.md` §8 as a one-sided row, not left to look like a missed screen.

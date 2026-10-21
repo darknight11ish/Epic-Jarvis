@@ -2107,6 +2107,8 @@ $SHIPPED = @(
     # or switch; a phone Live session reads nothing. Changes stay on the
     # existing control_computer tool and its ONE physical-tap card.
     'jarvis_voice_ui.py'
+'jarvis_barge_in.py'       # Voice Slice F phase-1 prototype: no live import,
+# [voice] aec_barge_in = false, nothing wired (docs/DESIGN-VOICE-BARGE-IN.md)
 )
 
 # The settings file. Installed only where none exists; never overwritten.
