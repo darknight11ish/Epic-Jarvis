@@ -597,16 +597,26 @@ speed, `MODEL-TOPOLOGY.md:335-339`, published figures).
    existing bake-off before it replaces anything.
 4. **Start checking early (later, measured):** send the clip when Smart Turn
    first says "finished", and throw the result away if you carry on
-   talking. The owner check still comes first; only your own words are ever
-   transcribed.
+   talking. The owner check decides which words are used; since 2026-10-20
+   the transcription runs BESIDE that check and a refused clip's words are
+   discarded (see the "Not allowed" note below).
 5. **Camera off when not needed.** The camera costs 1-3 s per turn; the Live
    screen says so next to the switch.
 
-**Not allowed, even though each would be faster:** turning speech into words
-before or alongside the voice check (`jarvis_voice_flow.py:69-71`); any
-speech-to-text on the phone; talk-and-listen-at-once models
+**Not allowed, even though each would be faster:** any speech-to-text on the
+phone; talk-and-listen-at-once models
 (`CUTTING-EDGE-2026-09-26-voice-vision.md:309-321`: they skip the voice check,
-the on-screen rules and cards); any cloud service.
+the on-screen rules and cards); any cloud service. **One entry used to sit
+first here - "turning speech into words before or alongside the voice check
+(`jarvis_voice_flow.py:69-71`)" - and the owner changed it on 2026-10-20**:
+he chose the voice-latency work order's Opt 3.1, so `hear()` now runs the
+check and the transcription beside each other and throws the words away
+unless the check passes. The reason it was not allowed before - a stranger's
+words being transcribed on the way to refusing them - is answered rather than
+ignored: the words never leave that worker, are never returned, logged,
+stored, learned from or sent to a model, and the worker is joined before the
+request answers. The dated decision is in `docs/DECISIONS.md` (2026-10-20)
+and the API-facing rule is `docs/JARVIS-API.md` section 5.
 
 ### 4.1 The measured speed slice (2026-10-18)
 

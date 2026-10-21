@@ -11,9 +11,12 @@ suite proves three things instead, each with real code:
   1. A missing/corrupt model file makes sherpa_onnx raise RuntimeError -
      really, not by assumption - and jarvis_speech swallows it into an honest
      "not available" rather than a crash or a hang.
-  2. hear() never reaches speech-to-text for a voice that fails the owner
-     check - proven by making the STT path raise if it is ever called, then
-     driving hear() with a clip that does not match any enrolled profile.
+  2. With NO engine installed, hear() never starts speech-to-text for a voice
+     that fails the owner check - proven by making the STT path raise if it is
+     ever called, then driving hear() with a clip that does not match any
+     enrolled profile. (Since 2026-10-20 an INSTALLED engine is started beside
+     the owner check and its words are discarded unless the check passes -
+     test_voice_parallel.py is the suite that proves that, on every sink.)
   3. WAV bytes in, WAV bytes out is exact: encode, decode, compare samples.
   4. Which FOLDER the speech-to-text files are looked in, for the optional
      multilingual Parakeet TDT 0.6B v3 - off by default, and a string "false"
@@ -181,8 +184,13 @@ class EngineConstructionIsHonest(ReloadsBetweenTests):
         self.assertEqual(calls["n"], 2)
 
 
-class HearNeverTranscribesAStranger(ReloadsBetweenTests):
-    """The one invariant the whole module exists to protect."""
+class HearRefusesAStranger(ReloadsBetweenTests):
+    """The invariant the whole module exists to protect, as it stands since
+    2026-10-20 (Opt 3.1): no transcript of a clip the owner check refused is
+    ever returned, logged, stored, learned from or used. The words may now be
+    MADE beside the check; test_voice_parallel.py proves they are thrown away,
+    with a spy on every sink. Here, with no engine installed anywhere, nothing
+    is even started."""
 
     def test_a_voice_with_no_enrolled_profile_is_refused(self):
         heard = S.hear(_tone_wav(440.0), source="push_to_talk")
@@ -196,9 +204,11 @@ class HearNeverTranscribesAStranger(ReloadsBetweenTests):
         self.assertFalse(heard.available)
         self.assertIn("could not read", heard.reason)
 
-    def test_stt_is_never_called_for_a_voice_that_fails_the_gate(self):
-        # If hear() ever reached transcription before the gate passed, this
-        # would raise and fail the test - which is the point.
+    def test_with_no_engine_nothing_is_started_for_a_stranger(self):
+        # No speech-to-text model is installed in this container, so there is
+        # nothing to run beside the check and the old "not even attempted"
+        # behaviour is what happens. If hear() ever started one anyway, this
+        # raises and fails the test - which is the point.
         with mock.patch.object(S, "_transcribe",
                                 side_effect=AssertionError("STT ran on a stranger")):
             heard = S.hear(_tone_wav(440.0), source="push_to_talk")

@@ -2723,8 +2723,10 @@ they landed):
 
 - `jarvis_speech.py` now exists, in `backend/`, with `jarvis_wakeword.py`,
   and `apply-patches.ps1` copies both in. It is what the four `/api/voice/*`
-  routes call: speech check (Silero VAD), speaker check, then speech-to-text,
-  and text-to-speech back, all on this machine. Its model files are NOT in the
+  routes call: speech check (Silero VAD), speaker check (with speech-to-text
+  running beside it since 2026-10-20, its words used only where the check
+  passed and discarded otherwise - `docs/JARVIS-API.md` section 5), and
+  text-to-speech back, all on this machine. Its model files are NOT in the
   repo: until the owner runs the installs in `backend/README.md` ("Voice that
   works"), those routes answer "not installed" honestly rather than working.
 - `jarvis_framework.py`, `jarvis_router.py`, `jarvis_initiative.py`,

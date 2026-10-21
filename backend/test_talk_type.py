@@ -16,10 +16,11 @@ What it proves:
   3. OFF is immediate, raises no card, and withdraws a waiting ON card.
   4. While off, a talk-to-type clip is refused before ANYTHING runs - not
      read, not checked, not transcribed.
-  5. While on: the owner check still runs first (a stranger is refused and
-     never transcribed), the words come back cleaned of "um"/"uh", nothing
-     is noted for chat history or the delay table, and nothing is marked to
-     be read aloud.
+  5. While on: a stranger is refused by the owner check and the words made
+     beside that check are discarded (since 2026-10-20, Opt 3.1 - never
+     returned or noted anywhere), the words come back cleaned of "um"/"uh",
+     nothing is noted for chat history or the delay table, and nothing is
+     marked to be read aloud.
   6. The status the apps read carries the switch.
   7. clean_dictation() on its own (the lists adapted from Handy, MIT).
 """
@@ -176,13 +177,21 @@ def t_hear_while_on():
             check("nothing marked to be read aloud",
                   not (h.private_aloud or h.memory_aloud or h.sensitive_aloud), h)
 
-            boom = mock.Mock(side_effect=AssertionError("a stranger was transcribed"))
-            with mock.patch.object(S, "_transcribe", boom):
+            # A stranger: the owner check says no, and since 2026-10-20 (Opt
+            # 3.1) the words made BESIDE that check are discarded. What must
+            # never happen is the words coming back or reaching history.
+            made = []
+            with mock.patch.object(S, "_transcribe",
+                                   side_effect=lambda *a, **k: made.append(1) or
+                                   "STRANGER WORDS THAT MUST NOT ESCAPE"):
                 h = S.hear(_clip("stranger", 2.5), source="talk_to_type", mic="desktop")
-            check("a stranger: refused by the owner check, never transcribed",
-                  not h.is_owner and h.text == "", h)
+            check("a stranger: refused by the owner check, and the words made "
+                  "beside the check are discarded",
+                  not h.is_owner and h.text == "" and noted == [] and made == [1],
+                  (h, noted, made))
 
-            with mock.patch.object(S, "_transcribe", boom):
+            with mock.patch.object(S, "_transcribe",
+                                   side_effect=AssertionError("a short clip was transcribed")):
                 h = S.hear(_clip("owner", 1.0), source="talk_to_type", mic="desktop")
             check("too short: 'say a little more', before the check, never transcribed",
                   not h.is_owner and h.too_short and "say a little more" in h.reason, h)

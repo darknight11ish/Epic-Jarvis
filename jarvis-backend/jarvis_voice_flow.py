@@ -66,9 +66,17 @@ THE OWNER'S THREE DECISIONS (2026-09-24), in plain words:
    they asked only once the previous sentence had finished playing, which
    left a silence between sentences as long as say() took. The gap
    between sentences is not in `flow.timings`.
-   What was checked and NOT changed: the owner check still runs before
-   speech-to-text, always (running them side by side would transcribe a
-   stranger's words on the way to refusing them).
+   Changed 2026-10-20 (the voice-latency work order's Opt 3.1, the owner's
+   choice): the owner check and speech-to-text now run BESIDE each other on
+   the same in-memory clip, and the words are used only if the check passed.
+   This paragraph used to say that was not allowed because "running them side
+   by side would transcribe a stranger's words on the way to refusing them",
+   and the answer to that is in jarvis_speech.hear(): a failed check JOINS
+   the worker and throws its words away (`text = ""`), so a stranger's clip
+   is transcribed locally and its answer is read by nothing - never returned,
+   logged, stored, learned from or sent to a model. It saves about 140 ms on
+   every clip the owner speaks. See docs/DECISIONS.md (2026-10-20) and
+   docs/JARVIS-API.md section 5.
 
 3. "ONE MOMENT." If no sound has started about a second after the owner
    finished, the apps may play a short clip: "One moment.", in the voice

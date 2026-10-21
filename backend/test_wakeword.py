@@ -267,8 +267,9 @@ def t_order_the_owner_is_heard_and_the_phrase_removed():
                 mock.patch.object(S, "_transcribe", stt):
             h = S.hear(tone(220.0), source="wake_word")
         d = h.as_dict()
-        check("spotter, then owner check, then speech-to-text - in that order",
-              order == ["spot", "verify", "stt"], order)
+        check("the spotter decides before anything else, and since 2026-10-20 the "
+              "owner check and the words run beside each other (their order is not fixed)",
+              order[0] == "spot" and sorted(order) == ["spot", "stt", "verify"], order)
         check("the command without the wake phrase is what comes back",
               d["ok"] and d["wake_heard"] and d["text"] == "what is on my calendar?"
               and d["wake_score"] == 0.97, d)
@@ -429,8 +430,9 @@ def t_one_hey_jarvis_heard_by_two_devices():
         check("the phone's copy: no words, `other_device`, the plain reason",
               phone["text"] == "" and phone["other_device"] is True
               and phone["reason"] == "answered on your other device" and not phone["awake"], phone)
-        check("... and the voice check still came before any speech-to-text",
-              order == ["verify", "stt"], order)
+        check("... and the copy was still checked, with the words beside that check "
+              "(order not fixed since 2026-10-20)",
+              sorted(order) == ["stt", "verify"], order)
         check("... and nothing from it went to chat history", history == [], history)
         check("the phone drops it without a word (WakeRules IGNORE)",
               _phone_verdict(phone) == "IGNORE", phone)
