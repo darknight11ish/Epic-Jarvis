@@ -38,6 +38,15 @@ touched, and only the child's `~` is redirected):
      `--state-env` prints it too.
   6. The logging-machinery suites still pass with JARVIS_LOG_DIR in their
      environment - they clear it themselves.
+  7. RULING 8.5 - the automatic guard: a HAND-RUN python -B test_x.py with no
+     JARVIS_LOG_DIR writes to a throwaway directory, never the owner's real
+     log, and says so in one plain line on stderr.
+  8. An explicit JARVIS_LOG_DIR still wins over the guard (the runner's own
+     behaviour is therefore unchanged).
+  9. A non-test __main__ (a production script) is untouched - the default is
+     still ~/.openjarvis/logs.
+ 10. A config that names a TEMP log_directory is already isolated and is left
+     alone (the logging-machinery suites keep choosing their own folder).
 
 No live writes: every directory here is under the system temp folder, and the
 child's HOME is one of them.
@@ -321,6 +330,142 @@ def t_the_log_suites_still_pass_with_the_variable_set():
               _log_files(logs) == [], _log_files(logs))
     finally:
         _clean(logs, home)
+
+
+def _fake_suite(folder: Path, name: str) -> Path:
+    """A stand-in for a hand-run test file: imports the framework, reports
+    where it thinks the log goes, and makes the two audit calls the gate makes.
+    Written to a throwaway folder, never beside the real suites."""
+    f = folder / name
+    f.write_text(
+        "import json\n"
+        "import jarvis_framework as fw\n"
+        "print(json.dumps({'log_dir': str(fw.log_dir())}))\n"
+        "fw.audit_log('gate.asked', {'action': 'test', 'tier': 'ask'})\n",
+        encoding="utf-8")
+    return f
+
+
+def _run_file(suite: Path, env: dict):
+    return _run(["-B", suite], env)
+
+
+def t_a_hand_run_test_file_gets_a_throwaway_log():
+    """(7) RULING 8.5: the automatic guard. A child whose __main__ IS a file
+    named test_*.py, run directly with no JARVIS_LOG_DIR, must put its audit
+    lines in a throwaway directory - never in HOME's real log - and say so."""
+    home = _fresh("jarvis-logiso-home-")
+    fake = _fresh("jarvis-logiso-fake-")
+    cfg = _fresh("jarvis-logiso-config-") / "jarvis-framework.toml"
+    # A config with no [logging].log_directory: the fallback is the real folder.
+    cfg.write_text("[autonomy]\n", encoding="utf-8")
+    redirected = None
+    try:
+        suite = _fake_suite(fake, "test_direct_run.py")
+        r = _run_file(suite, _child_env(home, JARVIS_FRAMEWORK_TOML=str(cfg)))
+        check("the hand-run test child ran", r.returncode == 0,
+              (r.stdout or "")[-600:] + (r.stderr or "")[-600:])
+        check("... the plain stderr notice was printed, naming the runner",
+              "direct test run: audit log redirected to" in (r.stderr or "")
+              and "backend/run_suites.py" in (r.stderr or ""), r.stderr[-600:])
+        check("... nothing of Jarvis's was written under HOME",
+              _log_files(home) == [], _log_files(home))
+        said = json.loads((r.stdout or "{}").splitlines()[0] or "{}")
+        redirected = Path(said.get("log_dir") or "/nonexistent")
+        check("... log_dir() itself reports the throwaway directory",
+              redirected.is_dir() and str(home) not in str(redirected),
+              (said, str(home)))
+        files = _log_files(redirected)
+        check("... the synthetic line landed there under the usual file name",
+              len(files) == 1
+              and bool(re.fullmatch(r"jarvis-\d{4}-\d{2}-\d{2}\.jsonl", files[0])),
+              files)
+        rows = [row for p in redirected.rglob("*.jsonl") for row in _jsonl(p)]
+        check("... with the gate.asked line in it",
+              [row.get("event") for row in rows] == ["gate.asked"], rows)
+    finally:
+        _clean(home, fake, cfg.parent, redirected)
+
+
+def t_the_override_still_wins_over_the_guard():
+    """(8) The runner's JARVIS_LOG_DIR must beat the guard, exactly as it beat
+    the config: a direct test run WITH the variable writes where it says, and
+    the guard stays quiet."""
+    home = _fresh("jarvis-logiso-home-")
+    fake = _fresh("jarvis-logiso-fake-")
+    logs = _fresh("jarvis-logiso-logs-")
+    cfg = _fresh("jarvis-logiso-config-") / "jarvis-framework.toml"
+    cfg.write_text("[autonomy]\n", encoding="utf-8")
+    try:
+        suite = _fake_suite(fake, "test_direct_run.py")
+        r = _run_file(suite, _child_env(home, JARVIS_FRAMEWORK_TOML=str(cfg),
+                                        JARVIS_LOG_DIR=str(logs)))
+        check("the child ran", r.returncode == 0, r.stderr[-600:])
+        check("the guard stayed quiet - the explicit variable won",
+              "direct test run: audit log redirected to" not in (r.stderr or ""),
+              r.stderr[-600:])
+        check("... the lines are in JARVIS_LOG_DIR, not under HOME",
+              len(_log_files(logs)) == 1 and _log_files(home) == [],
+              {"logs": _log_files(logs), "home": _log_files(home)})
+        said = json.loads((r.stdout or "{}").splitlines()[0] or "{}")
+        check("... and log_dir() reports that directory",
+              Path(said.get("log_dir", "/nonexistent")) == logs, said)
+    finally:
+        _clean(home, fake, logs, cfg.parent)
+
+
+def t_a_non_test_main_is_untouched():
+    """(9) A production script (its file name does not start with test_) is not
+    a test: no guard, no notice, and the default is still ~/.openjarvis/logs.
+    This is the production-imports-are-unaffected half of Ruling 8.5."""
+    home = _fresh("jarvis-logiso-home-")
+    fake = _fresh("jarvis-logiso-fake-")
+    cfg = _fresh("jarvis-logiso-config-") / "jarvis-framework.toml"
+    cfg.write_text("[autonomy]\n", encoding="utf-8")
+    try:
+        app = _fake_suite(fake, "fake_app.py")
+        r = _run_file(app, _child_env(home, JARVIS_FRAMEWORK_TOML=str(cfg)))
+        check("the production child ran", r.returncode == 0, r.stderr[-600:])
+        check("no guard notice for a non-test __main__",
+              "direct test run: audit log redirected to" not in (r.stderr or ""),
+              r.stderr[-600:])
+        files = _log_files(home)
+        check("... and the default still writes under HOME/.openjarvis/logs",
+              files and all(p.startswith(".openjarvis") for p in files), files)
+        said = json.loads((r.stdout or "{}").splitlines()[0] or "{}")
+        check("... because log_dir() reports that same real folder",
+              Path(said.get("log_dir", "/nonexistent")) == home / ".openjarvis" / "logs",
+              said)
+    finally:
+        _clean(home, fake, cfg.parent)
+
+
+def t_a_config_naming_a_temp_folder_is_left_alone():
+    """(10) The logging-machinery suites point the config's log_directory at a
+    temp folder ON PURPOSE: that is already isolated (#684's own shape), so the
+    guard must not move it out from under them."""
+    home = _fresh("jarvis-logiso-home-")
+    fake = _fresh("jarvis-logiso-fake-")
+    config_named = _fresh("jarvis-logiso-config-named-")
+    cfg = _fresh("jarvis-logiso-config-") / "jarvis-framework.toml"
+    cfg.write_text("[logging]\n"
+                   f"log_directory = '{config_named.as_posix()}'\n",
+                   encoding="utf-8")
+    try:
+        suite = _fake_suite(fake, "test_direct_run.py")
+        r = _run_file(suite, _child_env(home, JARVIS_FRAMEWORK_TOML=str(cfg)))
+        check("the child ran", r.returncode == 0, r.stderr[-600:])
+        check("the guard did not move a deliberately-temp log folder",
+              "direct test run: audit log redirected to" not in (r.stderr or ""),
+              r.stderr[-600:])
+        check("... the lines are where the config names them, nowhere under HOME",
+              len(_log_files(config_named)) == 1 and _log_files(home) == [],
+              {"config_named": _log_files(config_named), "home": _log_files(home)})
+        said = json.loads((r.stdout or "{}").splitlines()[0] or "{}")
+        check("... and log_dir() reports the config's own folder",
+              Path(said.get("log_dir", "/nonexistent")) == config_named, said)
+    finally:
+        _clean(home, fake, cfg.parent, config_named)
 
 
 def _clean(*paths):

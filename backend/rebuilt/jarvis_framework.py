@@ -44,6 +44,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import tempfile
 import threading
 import time
 from copy import deepcopy
@@ -99,6 +100,86 @@ CONFIG_NAME = "jarvis-framework.toml"
 #: the owner's real folder. See log_dir(); run_suites.py sets it for every
 #: suite, and the logging-machinery suites clear it.
 LOG_DIR_ENV = "JARVIS_LOG_DIR"
+
+
+# --------------------------------------------------------------------------
+#   Ruling 8.5 (2026-10-21): a hand-run test file can never write the owner's
+#   real audit log
+# --------------------------------------------------------------------------
+#
+# The runner (backend/run_suites.py) already keeps suites out of the owner's log
+# by setting JARVIS_LOG_DIR (2026-10-20). That still depends on the developer
+# remembering to use the runner: a hand-run `python -B backend/test_x.py` once
+# put 191 synthetic gate.asked lines into ~/.openjarvis/logs while the run
+# looked completely local. This is the automatic defence in depth Ruling 8.5
+# asks for - the resolver itself notices it is inside a directly-run test file
+# and moves the log to a throwaway directory, so the mistake is not possible
+# from the outside either. It is deliberately tiny and only ever runs for a
+# `__main__` whose file name starts with `test_` and ends with `.py`.
+
+_DIRECT_TEST_WHERE: Optional[Path] = None
+_DIRECT_TEST_ASKED = False
+
+
+def _test_main_name() -> Optional[str]:
+    """The file name of the interpreter's `__main__` when it is a test file.
+
+    None for everything else: a production import, the runner, `python -c`,
+    `-m pytest`, a repl. `__main__.__file__` is absent for `-c` and `-m`, so
+    those can never trip the guard."""
+    try:
+        main = sys.modules.get("__main__")
+        path = getattr(main, "__file__", None)
+        if not path:
+            return None
+        name = os.path.basename(str(path))
+        if name.startswith("test_") and name.endswith(".py"):
+            return name
+        return None
+    except Exception:
+        return None
+
+
+def _is_real_log_dir(where: Path) -> bool:
+    """Whether `where` resolves to the owner's real log folder.
+
+    The shipped config names `~/.openjarvis/logs/`, and the fallback is
+    CONFIG_DIR/logs, which is the same folder unless the config directory
+    itself was moved. A suite that points the config somewhere temp on purpose
+    (the logging-machinery suites) is already isolated and is left alone -
+    that is #684's behaviour, unchanged."""
+    try:
+        got = os.path.normcase(os.path.abspath(str(where)))
+        candidates = {
+            os.path.normcase(os.path.abspath(str(LOG_DIR))),
+            os.path.normcase(os.path.abspath(
+                str(Path(os.path.expanduser("~")) / ".openjarvis" / "logs"))),
+        }
+        return got in candidates
+    except Exception:
+        return False
+
+
+def _direct_test_log_dir(where: Path) -> Path:
+    """`where` unless this process is a hand-run test file writing the owner's
+    real log, in which case a throwaway directory (made once per process) and
+    one plain line on stderr.
+
+    The runner's per-suite JARVIS_LOG_DIR is checked before this, so a suite
+    that runs through the runner never reaches here; that also means this
+    cannot change any suite's behaviour, only a direct run's."""
+    global _DIRECT_TEST_WHERE, _DIRECT_TEST_ASKED
+    if _test_main_name() is None or not _is_real_log_dir(where):
+        return where
+    if not _DIRECT_TEST_ASKED:
+        _DIRECT_TEST_ASKED = True
+        try:
+            _DIRECT_TEST_WHERE = Path(tempfile.mkdtemp(prefix="jarvis-direct-"))
+            print(f"direct test run: audit log redirected to {_DIRECT_TEST_WHERE}; "
+                  f"use backend/run_suites.py", file=sys.stderr)
+        except Exception:
+            _DIRECT_TEST_WHERE = None
+    return _DIRECT_TEST_WHERE or where
 
 
 def _explicit() -> Optional[Path]:
@@ -464,6 +545,15 @@ def log_dir() -> Path:
     whole process without a restart. `backend/run_suites.py` sets it for every
     suite; the suites that test this machinery themselves clear it, because
     they choose their own log directory.
+
+    THE HAND-RUN TEST GUARD (Ruling 8.5, 2026-10-21). The override only helps
+    when the developer remembered the runner. A `__main__` whose file name
+    starts with `test_` and ends with `.py` - a hand-run `python -B
+    backend/test_x.py` - therefore gets a throwaway directory instead of the
+    real folder, and one plain line on stderr saying so; see
+    _direct_test_log_dir(). It is the last step only: an explicit JARVIS_LOG_DIR
+    still wins, a config naming a temp folder is already isolated, and a
+    production import never has such a `__main__`, so nothing else changes.
     """
     override = os.environ.get(LOG_DIR_ENV)
     if override:
@@ -471,8 +561,8 @@ def log_dir() -> Path:
     cfg = section("logging")
     raw = cfg.get("log_directory")
     if raw:
-        return Path(os.path.expanduser(str(raw)))
-    return Path(LOG_DIR)
+        return _direct_test_log_dir(Path(os.path.expanduser(str(raw))))
+    return _direct_test_log_dir(Path(LOG_DIR))
 
 
 def logging_enabled() -> bool:
