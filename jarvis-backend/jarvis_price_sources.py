@@ -63,11 +63,15 @@ BOUNDARIES, said plainly:
     module reads it defensively and treats a missing/unknown section as OFF).
     Both entry points return a plain "switched off" answer and fetch nothing
     when it is off.
-  * NO ROUTE, NO APP SURFACE YET. Nothing imports this module in production
-    until F1's `jarvis_price_radar.py` wiring; that is why the contract lives
-    in this docstring rather than a JARVIS-API route section (Lead-approved
-    for this scaffold: there is no user surface to document yet - F1's wiring
-    adds the config keys, the alert words and the docs with it). The tests are
+  * WIRED INTO F1, STILL NO ROUTE OR APP SURFACE. `jarvis_price_radar.py` (F1)
+    owns the switch, the price history and the integration surface
+    (`set_sources`/`register_alert_renderer`/`alert_text`); the first time its
+    switch reads true it calls `install_f2()`, which calls `install_into()`
+    here. The disclosure sentences are F1's (ONE copy each) and this module
+    delegates to them. Nothing calls either module from a route yet; that is
+    why the contract lives in this docstring rather than a JARVIS-API route
+    section (Lead-approved for this scaffold - the user surface and its docs
+    come with the route/card slice). The tests are
     `backend/test_price_sources.py`.
 
 HARD REFUSALS (Ruling 10.3, 2026-10-21 - the owner's accepted contract for
@@ -187,7 +191,8 @@ _DECOUPLING_STRIP = ("cookie", "cookie2", "etag", "if-none-match",
                      "authorization", "proxy-authorization")
 
 #: The reason a site challenge is reported with (Ruling 10.3's fixed word),
-#: never a retry loop and never a solve attempt.
+#: never a retry loop and never a solve attempt. Kept EQUAL to
+#: ``jarvis_price_radar.BLOCKED_REASON`` by the tests - one fixed code.
 BLOCKED_BY_SITE_CHALLENGE = "blocked_by_site_challenge"
 
 #: Hard poll floor and jitter, mirrored for F1/whoever schedules a check.
@@ -196,13 +201,11 @@ BLOCKED_BY_SITE_CHALLENGE = "blocked_by_site_challenge"
 POLL_MIN_SECONDS = 300
 POLL_JITTER = 0.30
 
-#: The disclosure wording Ruling 10.3 fixes, word for word. F1 renders them;
-#: this module supplies them so there is ONE copy of each sentence.
-DISCLOSURE_NEW_VISITOR = "Checked as a new visitor (no cookies or account used)."
-STEERING_ROW = ("This store showed two different prices at the same time: "
-                "${a:.2f} (Desktop · via search referral) vs. "
-                "${b:.2f} (Mobile · direct).")
-PROXY_TAG = "Checked via configured proxy ({exit_label})."
+# THE DISCLOSURE SENTENCES LIVE IN `jarvis_price_radar.py`, ONCE. F1 owns the
+# approved wording (`RESULT_FOOTER`, `STEERING_ROW_FORMAT`, `PROXY_FOOTER_FORMAT`
+# and its `steering_row()`/`proxy_note()` formatters). This module delegates
+# through `result_footer()`/`steering_row()`/`proxy_note()` and carries NO
+# second copy of any sentence - a test holds that with an `ast` check.
 
 _LATCH_WHY = "price_radar"
 
@@ -390,12 +393,44 @@ def _is_challenge(status, body) -> bool:
     return any(marker in head for marker in _CHALLENGE_MARKERS)
 
 
-def proxy_tag(exit_label) -> str:
-    """The proxy tag Ruling 10.3 fixes, with the configured exit's label.
-    This module does not proxy anything yet - this is the ONE copy of the
-    sentence a later owner-configured proxy slice renders."""
-    label = str(exit_label or "").strip() or "unnamed exit"
-    return PROXY_TAG.format(exit_label=label)
+def _radar():
+    """The F1 module (`jarvis_price_radar.py`), or None. The ONE owner of the
+    approved disclosure wording; this module never carries a second copy."""
+    try:
+        import jarvis_price_radar as radar
+    except Exception:
+        return None
+    return radar
+
+
+def result_footer() -> str:
+    """The per-result disclosure, from F1's ONE copy (`RESULT_FOOTER`); "" when
+    the radar module is not installed (never an invented sentence)."""
+    radar = _radar()
+    return str(getattr(radar, "RESULT_FOOTER", "") or "") if radar else ""
+
+
+def steering_row(x_cents, y_cents) -> str:
+    """The approved two-price disclosure, formatted by F1 (`steering_row`)."""
+    radar = _radar()
+    if radar is None or x_cents is None or y_cents is None:
+        return ""
+    try:
+        return str(radar.steering_row(int(x_cents), int(y_cents)))
+    except Exception:
+        return ""
+
+
+def proxy_note(exit_label) -> str:
+    """The approved proxy disclosure, formatted by F1 (`proxy_note`). No proxy
+    is used by this module yet; the sentence lives in F1 for the later slice."""
+    radar = _radar()
+    if radar is None:
+        return ""
+    try:
+        return str(radar.proxy_note(exit_label))
+    except Exception:
+        return ""
 
 
 def next_poll_seconds(base_interval_s, rng=None):
@@ -563,11 +598,11 @@ def query_searxng_prices(query, *, categories=("general", "shopping"),
     section = cfg if cfg is not None else _price_cfg()
     if isinstance(section, dict) and not _as_bool(section.get("enabled"), False):
         return {"ok": False, "why": "disabled", "stale": False, "reason": "disabled",
-                "footer": DISCLOSURE_NEW_VISITOR, "words": OFF_WORDS}
+                "footer": result_footer(), "words": OFF_WORDS}
     q = str(query or "").strip()
     if not q or len(q) > MAX_QUERY_CHARS:
         return {"ok": False, "why": "unreadable", "stale": False, "reason": "unreadable",
-                "footer": DISCLOSURE_NEW_VISITOR,
+                "footer": result_footer(),
                 "words": "That search needs between 1 and "
                          f"{MAX_QUERY_CHARS} characters."}
     base = searxng_url(section if isinstance(section, dict) else None)
@@ -581,30 +616,30 @@ def query_searxng_prices(query, *, categories=("general", "shopping"),
         status, body = fetcher(url)
     except Exception:
         return {"ok": False, "why": "unavailable", "stale": False, "reason": "unavailable",
-                "footer": DISCLOSURE_NEW_VISITOR, "words": NO_SEARXNG_WORDS}
+                "footer": result_footer(), "words": NO_SEARXNG_WORDS}
     if status == 403:
         return {"ok": False, "why": "json_off", "stale": False, "reason": "json_off",
-                "footer": DISCLOSURE_NEW_VISITOR, "words": JSON_OFF_WORDS}
+                "footer": result_footer(), "words": JSON_OFF_WORDS}
     if status == 429:
         # Ruling 10.3: a challenge/limiter stops the check, marks stale, and
         # never retries. SearXNG's own limiter is the local case of it.
         return {"ok": False, "why": "blocked_by_site_challenge", "stale": True,
                 "reason": BLOCKED_BY_SITE_CHALLENGE,
-                "footer": DISCLOSURE_NEW_VISITOR, "words": CHALLENGE_RATE_WORDS}
+                "footer": result_footer(), "words": CHALLENGE_RATE_WORDS}
     if status != 200:
         return {"ok": False, "why": "unavailable", "stale": False, "reason": "unavailable",
-                "footer": DISCLOSURE_NEW_VISITOR, "words": NO_SEARXNG_WORDS}
+                "footer": result_footer(), "words": NO_SEARXNG_WORDS}
     if len(body) > SEARXNG_MAX_BYTES:
         return {"ok": False, "why": "unreadable", "stale": False, "reason": "unreadable",
-                "footer": DISCLOSURE_NEW_VISITOR, "words": UNREADABLE_WORDS}
+                "footer": result_footer(), "words": UNREADABLE_WORDS}
     try:
         doc = json.loads(body.decode("utf-8", "replace"))
     except ValueError:
         return {"ok": False, "why": "unreadable", "stale": False, "reason": "unreadable",
-                "footer": DISCLOSURE_NEW_VISITOR, "words": UNREADABLE_WORDS}
+                "footer": result_footer(), "words": UNREADABLE_WORDS}
     if not isinstance(doc, dict) or not isinstance(doc.get("results"), list):
         return {"ok": False, "why": "unreadable", "stale": False, "reason": "unreadable",
-                "footer": DISCLOSURE_NEW_VISITOR, "words": UNREADABLE_WORDS}
+                "footer": result_footer(), "words": UNREADABLE_WORDS}
 
     results, seen = [], set()
     for row in doc["results"]:
@@ -628,13 +663,13 @@ def query_searxng_prices(query, *, categories=("general", "shopping"),
         results.append({"title": title[:300], "url": link[:500], "host": host,
                         "prices_cents": prices,
                         "min_cents": min(prices) if prices else None,
-                        "footer": DISCLOSURE_NEW_VISITOR})
+                        "footer": result_footer()})
         if len(results) >= MAX_RESULTS:
             break
     if not results:
         return {"ok": True, "query": q, "categories": cats, "results": [],
                 "count": 0, "stale": False, "reason": "",
-                "footer": DISCLOSURE_NEW_VISITOR,
+                "footer": result_footer(),
                 "words": ("SearXNG answered but returned no usable results, so no prices "
                           "were read. This is usually the container's own engines failing "
                           "- backend/README.md, \"Web search\", step 3a, has the checks.")}
@@ -645,7 +680,7 @@ def query_searxng_prices(query, *, categories=("general", "shopping"),
              f"outside text, not something Jarvis learned.")
     return {"ok": True, "query": q, "categories": cats, "results": results,
             "count": len(results), "stale": False, "reason": "",
-            "footer": DISCLOSURE_NEW_VISITOR, "words": words}
+            "footer": result_footer(), "words": words}
 
 
 # --------------------------------------------------------------------------
@@ -658,7 +693,7 @@ def _probe_result(ok, why, url, words, *, stale=False, **kw) -> dict:
     out = {"ok": bool(ok), "why": str(why), "url": url, "words": words,
            "stale": bool(stale),
            "reason": BLOCKED_BY_SITE_CHALLENGE if stale else str(why or ""),
-           "footer": DISCLOSURE_NEW_VISITOR, "steering_row": "",
+           "footer": result_footer(), "steering_row": "",
            "price_a_cents": None, "price_b_cents": None,
            "steering_delta_cents": None, "which_persona_lower": "",
            "steering_detected": False, "probes": []}
@@ -783,7 +818,7 @@ def probe_steering(url, *, headers_for: Optional[Callable] = None,
                              price_a_cents=a, price_b_cents=b,
                              steering_delta_cents=0)
     lower = PERSONA_COMPARISON if delta < 0 else PERSONA_MOBILE
-    row = STEERING_ROW.format(a=a / 100.0, b=b / 100.0)
+    row = steering_row(a, b)
     words = (f"Two readings of the same page: the comparison-shopper view showed "
              f"{a / 100:.2f} and the mobile view showed {b / 100:.2f} - they "
              f"differ, so this store appears to steer prices by visitor "
@@ -794,3 +829,94 @@ def probe_steering(url, *, headers_for: Optional[Callable] = None,
                          steering_delta_cents=delta,
                          which_persona_lower=lower,
                          steering_detected=True, steering_row=row)
+
+# --------------------------------------------------------------------------
+#   3. What F1 installs: source objects, alert renderer, one install call
+# --------------------------------------------------------------------------
+#
+# `jarvis_price_radar.py` (F1) owns the integration surface and imports
+# NOTHING from here at load. The first time the owner's switch reads true its
+# `enabled()` calls `install_f2()`, which calls `install_into()` below: F1 gets
+# the two source objects (`name`/`fetch()`/`render()`) and the alert renderer.
+# A base without this module keeps working exactly as it did before.
+
+class SearxngPriceSource:
+    """`query` -> the multi-source price mentions, in F1's source contract:
+    an object with `name`, `fetch()` and `render()`."""
+
+    name = "searxng"
+
+    def fetch(self, query, *, cfg=None, fetcher=None):
+        return query_searxng_prices(query, cfg=cfg, fetch=fetcher)
+
+    def render(self, result) -> str:
+        if not isinstance(result, dict):
+            return ""
+        words = str(result.get("words") or "").strip()
+        footer = str(result.get("footer") or "") or result_footer()
+        return " ".join(part for part in (words, footer) if part)
+
+
+class SteeringProbeSource:
+    """`url` -> the two-persona steering check, in the same source contract."""
+
+    name = "steering"
+
+    def fetch(self, url, *, cfg=None, headers_for=None, fetcher=None):
+        return probe_steering(url, cfg=cfg, headers_for=headers_for, fetch=fetcher)
+
+    def render(self, result) -> str:
+        if not isinstance(result, dict):
+            return ""
+        parts = [str(result.get("words") or "").strip()]
+        if result.get("steering_detected") and result.get("steering_row"):
+            parts.append(str(result.get("steering_row")))
+        parts.append(str(result.get("footer") or "") or result_footer())
+        return " ".join(part for part in parts if part)
+
+
+def sources() -> tuple:
+    """The F2 sources F1 installs (`set_sources` contract)."""
+    return (SearxngPriceSource(), SteeringProbeSource())
+
+
+def radar_sources() -> tuple:
+    """Alias kept for the wiring call in F1's `install_f2()`."""
+    return sources()
+
+
+def alert_renderer(store, route_id, change) -> str:
+    """F1's `register_alert_renderer` contract: render ONE alert as outside
+    text. `change` is F1's diff dict; a steering-ready change may carry
+    `steering_detected`/`price_a_cents`/`price_b_cents` for the approved row.
+    The disclosure sentences come from F1, never from a second copy here."""
+    if not isinstance(change, dict):
+        return ""
+    text = str(change.get("text") or "").strip()
+    if not text:
+        return ""
+    parts = [text]
+    if change.get("steering_detected"):
+        row = steering_row(change.get("price_a_cents"), change.get("price_b_cents"))
+        if row:
+            parts.append(row)
+    footer = result_footer()
+    if footer:
+        parts.append(footer)
+    return " ".join(parts)
+
+
+def install_into(radar=None) -> bool:
+    """Register this module with F1: its source objects and alert renderer.
+    Called by F1's `install_f2()` (lazily, only when the switch is on).
+    False when the radar module is absent - a base without it has nothing to
+    install into and must keep working."""
+    radar = radar or _radar()
+    if radar is None:
+        return False
+    try:
+        radar.set_sources(sources())
+        radar.register_alert_renderer(alert_renderer)
+        return True
+    except Exception:
+        return False

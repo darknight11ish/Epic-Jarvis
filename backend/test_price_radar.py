@@ -482,6 +482,12 @@ def t_switch_and_poll_floor():
         check("a config that cannot be read means OFF, never ON", R.enabled() is False)
     finally:
         R.fw = real
+    # The F1 wiring installs F2's sources the first time the switch reads
+    # true; this suite is about the flight core, so put the integration state
+    # back for the tests below.
+    R.set_sources(())
+    R.register_alert_renderer(None)
+    R._F2_INSTALLED = False
     import random as _random
     floor = R.POLL_FLOOR_SECONDS
     now = 1_000_000.0
@@ -751,12 +757,32 @@ def t_integration_points():
         "The price dropped"), R.alert_text(store, route["id"]))
     store.close()
 
-    # The core never imports the F2/F3 module; if one exists it is a separate
-    # shipped file and this suite does not need it. The integration is by the
-    # functions above, not by an import.
-    check("this core has not imported the F2 sources module",
-          "jarvis_price_sources" not in sys.modules, sorted(
-              m for m in sys.modules if m.startswith("jarvis_price")))
+    # WIRING (2026-10-21): the F2 sources module is a separate shipped file,
+    # imported LAZILY and only when the owner's switch reads true. Nothing
+    # here imports it at load; with the switch off a base without it works.
+    R.set_sources(())
+    R.register_alert_renderer(None)
+    R._F2_INSTALLED = False
+    real = R.fw
+    try:
+        R.fw = _FakeFw({"enabled": False})
+        check("switch off: F2's sources are NOT installed",
+              R.enabled() is False and R.sources() == ()
+              and R._F2_INSTALLED is False, R.sources())
+        R.fw = _FakeFw({"enabled": True})
+        check("switch on: the F2 sources are installed once",
+              R.enabled() is True and R._F2_INSTALLED is True, R._F2_INSTALLED)
+        names = [getattr(src, "name", None) for src in R.sources()]
+        check("... and they satisfy the source contract (name/fetch()/render())",
+              names == ["searxng", "steering"] and all(
+                  callable(getattr(src, "fetch", None))
+                  and callable(getattr(src, "render", None)) for src in R.sources()),
+              names)
+    finally:
+        R.fw = real
+        R.set_sources(())
+        R.register_alert_renderer(None)
+        R._F2_INSTALLED = False
 
 
 def _quiet_store():

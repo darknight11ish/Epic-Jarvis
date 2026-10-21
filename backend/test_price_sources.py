@@ -495,25 +495,29 @@ def t_ruling_103_no_write_verbs_no_body_no_auth_imports():
 
 
 def t_ruling_103_disclosure_wording_is_exact():
-    check("the per-result footer is Ruling 10.3's sentence word for word",
-          P.DISCLOSURE_NEW_VISITOR
+    import jarvis_price_radar as R
+    check("the per-result footer is Ruling 10.3's sentence word for word, and F2 "
+          "carries no second copy",
+          P.result_footer() == R.RESULT_FOOTER
           == "Checked as a new visitor (no cookies or account used).",
-          P.DISCLOSURE_NEW_VISITOR)
+          (P.result_footer(), R.RESULT_FOOTER))
+    check("... the fixed challenge reason is F1's one constant too",
+          P.BLOCKED_BY_SITE_CHALLENGE == R.BLOCKED_REASON, R.BLOCKED_REASON)
     body = _searxng_json([{"title": "Widget $10.00",
                            "url": "https://shop.example.com/w", "content": ""}])
     got = P.query_searxng_prices("widget", cfg=ON, fetch=Recorder((200, body)))
     row = (got.get("results") or [{}])[0]
     check("... carried on every result row as its `footer`",
-          row.get("footer") == P.DISCLOSURE_NEW_VISITOR
-          and got.get("footer") == P.DISCLOSURE_NEW_VISITOR, row)
+          row.get("footer") == R.RESULT_FOOTER
+          and got.get("footer") == R.RESULT_FOOTER, row)
     got = P.probe_steering(PUBLIC_URL, cfg=ON,
                            fetch=Recorder((200, _product_html("1249.99"), "text/html"),
                                           (200, _product_html("1299.99"), "text/html")),
                            headers_for=_headers_for)
-    check("the steering row is Ruling 10.3's sentence word for word",
-          got.get("steering_row")
-          == ("This store showed two different prices at the same time: $1249.99 "
-              "(Desktop · via search referral) vs. $1299.99 (Mobile · direct)."),
+    check("the steering row is F1's formatter, word for word",
+          got.get("steering_row") == R.steering_row(124999, 129999)
+          == ("This store showed two different prices at the same time: $1,249.99 "
+              "(Desktop · via search referral) vs. $1,299.99 (Mobile · direct)."),
           got.get("steering_row"))
     got = P.probe_steering(PUBLIC_URL, cfg=ON,
                            fetch=Recorder((200, _product_html("9.99"), "text/html"),
@@ -521,10 +525,103 @@ def t_ruling_103_disclosure_wording_is_exact():
                            headers_for=_headers_for)
     check("... and there is NO steering row when the readings are equal",
           got.get("steering_row") == "", got.get("steering_row"))
-    check("the proxy tag is the fixed sentence, with the exit's label",
-          P.proxy_tag("Tailscale exit")
+    check("the proxy tag is F1's formatter, with the exit's label",
+          P.proxy_note("Tailscale exit") == R.proxy_note("Tailscale exit")
           == "Checked via configured proxy (Tailscale exit).",
-          P.proxy_tag("Tailscale exit"))
+          P.proxy_note("Tailscale exit"))
+
+
+def t_f2_disclosure_sentences_exist_once_in_f1():
+    """Each approved sentence lives in jarvis_price_radar.py ONLY; F2 must not
+    carry a second copy (checked with `ast`, never a source-text pin)."""
+    import ast as _ast
+    import jarvis_price_radar as R
+    tree = _ast.parse((HERE / "jarvis_price_sources.py").read_text(encoding="utf-8"))
+    literals = set()
+    for node in _ast.walk(tree):
+        if isinstance(node, _ast.Constant) and isinstance(node.value, str):
+            literals.add(node.value)
+    duplicates = [sentence for sentence in
+                  (R.RESULT_FOOTER, R.PROXY_FOOTER_FORMAT, R.STEERING_ROW_FORMAT)
+                  if sentence in literals]
+    check("no approved disclosure sentence is duplicated in the F2 module",
+          duplicates == [], duplicates)
+
+
+def t_f1_installs_the_f2_sources_only_when_the_switch_is_on():
+    import jarvis_price_radar as R
+    real_config = R._config_enabled
+    R.set_sources(())
+    R.register_alert_renderer(None)
+    R._F2_INSTALLED = False
+    R._config_enabled = lambda: False
+    try:
+        check("(set-up) the switch reads off",
+              R.enabled() is False and R.sources() == (), R.sources())
+    finally:
+        R._config_enabled = real_config
+    check("switch off: NOTHING was installed and the F2 module was not imported "
+          "by the core", R.sources() == () and R._F2_INSTALLED is False,
+          (R.sources(), R._F2_INSTALLED))
+    R.set_sources(())
+    R.register_alert_renderer(None)
+    R._F2_INSTALLED = False
+    real_config = R._config_enabled
+    R._config_enabled = lambda: True
+    try:
+        on = R.enabled()
+    finally:
+        R._config_enabled = real_config
+    names = [getattr(src, "name", None) for src in R.sources()]
+    check("switch on: the two F2 sources are installed (once)",
+          on is True and names == ["searxng", "steering"], names)
+    check("... each satisfying F1's contract: name + fetch() + render()",
+          all(isinstance(getattr(src, "name", ""), str) and callable(getattr(src, "fetch", None))
+              and callable(getattr(src, "render", None)) for src in R.sources()),
+          names)
+    check("... and the F1 install is idempotent",
+          R.install_f2() is True and [getattr(s, "name", None) for s in R.sources()]
+          == ["searxng", "steering"])
+    R.set_sources(())
+    R.register_alert_renderer(None)
+    R._F2_INSTALLED = False
+
+
+def t_alert_wording_goes_through_the_f1_renderer():
+    import jarvis_price_radar as R
+    R.register_alert_renderer(P.alert_renderer)
+
+    class Store:
+        def diff(self, route_id):
+            return {"changed": True, "text": "The fare dropped.",
+                    "steering_detected": False}
+    got = R.alert_text(Store(), 1)
+    check("an alert renders through F1's alert_text with F1's exact footer",
+          "The fare dropped." in got and R.RESULT_FOOTER in got and got.endswith(
+              R.RESULT_FOOTER), got)
+
+    class SteeredStore:
+        def diff(self, route_id):
+            return {"changed": True, "text": "The item is cheaper.",
+                    "steering_detected": True,
+                    "price_a_cents": 124999, "price_b_cents": 129999}
+    got = R.alert_text(SteeredStore(), 1)
+    check("... a steered item also carries F1's exact steering row",
+          R.steering_row(124999, 129999) in got and R.RESULT_FOOTER in got, got)
+    R.register_alert_renderer(None)
+
+
+def t_both_shipped_tomls_carry_the_searxng_url():
+    from _where import REPO
+    paths = [REPO / "backend" / "rebuilt" / "jarvis-framework.toml",
+             REPO / "jarvis-backend" / "jarvis-framework.toml"]
+    for path in paths:
+        text = path.read_text(encoding="utf-8")
+        check(f"the shipped toml has the [price_radar] switch off: {path.name} "
+              f"({path.parent.name})", "enabled = false" in text.split("[price_radar]", 1)[-1],
+              "")
+        check(f"... and the verified SearXNG address: {path.parent.name}",
+              'searxng_url = "http://127.0.0.1:8888"' in text, "")
 
 
 def t_ruling_103_poll_floor_and_owned_scheduler():

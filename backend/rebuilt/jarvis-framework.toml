@@ -2047,3 +2047,6 @@ enabled = false
 # immediate. No checks run while it is off.
 [price_radar]
 enabled = false
+# The local SearXNG address the F2 item sources ask (127.0.0.1:8888 is the
+# docker-compose host mapping; the container's own port is 8080).
+searxng_url = "http://127.0.0.1:8888"

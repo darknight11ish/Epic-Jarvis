@@ -205,8 +205,43 @@ def _config_enabled() -> bool:
 
 
 def enabled() -> bool:
-    """True only when the owner turned the radar on. Default: False."""
-    return _config_enabled()
+    """True only when the owner turned the radar on. Default: False.
+
+    The FIRST time this reads true it installs F2's optional item sources
+    (`jarvis_price_sources.py`) through `install_f2()`; nothing here imports
+    them at load, so a base without that module runs exactly as before."""
+    on = _config_enabled()
+    if on:
+        install_f2()
+    return on
+
+
+_F2_INSTALLED = False
+
+
+def install_f2() -> bool:
+    """Install F2's item sources and alert renderer ONCE, lazily.
+
+    `jarvis_price_sources.py` provides the objects (`name`/`fetch()`/`render()`)
+    and an `install_into()` that calls `set_sources()` + `register_alert_renderer()`
+    below. The switch is checked by the caller (`enabled()`), so a radar that
+    is off never imports the item module; a base without it answers False and
+    carries on with flights only.
+    """
+    global _F2_INSTALLED
+    if _F2_INSTALLED:
+        return True
+    try:
+        import jarvis_price_sources as price_sources
+    except Exception:
+        return False
+    try:
+        installed = bool(price_sources.install_into())
+    except Exception:
+        installed = False
+    if installed:
+        _F2_INSTALLED = True
+    return installed
 
 
 # ==========================================================================
@@ -1174,7 +1209,8 @@ def check_route(store: PriceStore, route: dict, *,
 
 
 # ==========================================================================
-#   F2/F3 integration points (this module imports NOTHING from them)
+#   F2/F3 integration points (imported lazily by `install_f2()` only, and
+#   only when the switch reads true - the core works without them)
 # ==========================================================================
 
 _SOURCES: list = []

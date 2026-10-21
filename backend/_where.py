@@ -358,7 +358,7 @@ SHIPPED = (
     "jarvis_local_http.py", "jarvis_child_env.py",
     # the price radar's source readers (2026-10-21, F2 scaffold): local
     # SearXNG price mentions + the dual-persona steering probe. No route yet;
-    # jarvis_price_radar.py imports it when F1 lands.
+    # jarvis_price_radar.py installs it (lazily, switch on) as its F2 sources.
     "jarvis_price_sources.py",
     "jarvis_voices.py", "jarvis_f5_worker.py",
     # which Kokoro voice pack is installed, its voices by name, the pinned

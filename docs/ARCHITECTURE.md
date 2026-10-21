@@ -2745,9 +2745,13 @@ cart, no seat hold, no checkout, no booking/PNR path, no cookies, no login, no
 redirects, one host, one GET, one attempt (a 403/429 is recorded stale and
 never retried), at least 300 s between checks with jitter. It adds **no app
 surface at all** - no route, no card, no Settings row in either app - so
-nothing here is on one app and missing from the other; the multi-source
-product pages (F2) and proxy exits (F3) are their own separate modules and
-slices. Design, the disclosure wording and what is NOT measured (the endpoint
+nothing here is on one app and missing from the other. The multi-source
+product pages are F2's own module (`jarvis_price_sources.py`: local SearXNG
+price mentions + the dual-persona steering probe); F1 installs its source
+objects lazily from `enabled()` (`install_f2()`, nothing imported while the
+switch is off), and F2 delegates to F1's disclosure constants so each
+approved sentence exists once. Proxy exits (F3) are a later, separate slice.
+Design, the disclosure wording and what is NOT measured (the endpoint
 is unofficial and no live request is made in the suite):
 `docs/DESIGN-PRICE-RADAR.md`.
 

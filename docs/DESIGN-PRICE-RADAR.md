@@ -159,26 +159,44 @@ suite proves it with captured stdout/stderr and a logging handler). The page's
 words are outside text: a real change latches the gate taint and the cards say
 so. No cookies, no account, no session, no redirect, no proxy.
 
-## 7. What F2 and F3 wire in (F1 imports neither)
+## 7. What F2 and F3 wire in (F1 imports them lazily, only when the switch is on)
 
-* `set_sources(sources)` / `sources()` - F2 (`jarvis_price_sources.py`) installs
-  its source objects (each with `name`, `fetch()`, `render()`).
-* `register_alert_renderer(fn)` - F2/F3 install the card renderer;
+* `install_f2()` - called by `enabled()` the FIRST time the switch reads true.
+  It imports `jarvis_price_sources.py` lazily and calls that module's
+  `install_into()`, so a base without F2 runs exactly as F1 does today and an
+  off switch never imports the item module. The call is idempotent.
+* `set_sources(sources)` / `sources()` - F2 (`jarvis_price_sources.py`)
+  installs its two source objects, `searxng` and `steering` (each with
+  `name`, `fetch()` and `render()`; `SearxngPriceSource` and
+  `SteeringProbeSource` in that module).
+* `register_alert_renderer(fn)` - F2 installs its card renderer (`alert_renderer`);
   `alert_text(store, route_id)` uses it, and falls back to F1's core words
-  (diff + footer + the unofficial note).
+  (diff + footer + the unofficial note). The renderer adds the approved
+  steering row only when the change says steering was detected.
 * `PriceStore(path=None)` - passed explicitly to F2's sources; F2 calls
   `add_route` / `record` / `record_stale` / `diff` on the same store, so the
   history and the outside-text rules are one implementation.
-* the four disclosure constants/functions in §5.
+* **the four disclosure constants/functions in §5 are F1's and stay here ONCE.**
+  F2 delegates through `jarvis_price_radar` (`result_footer()`,
+  `steering_row()`, `proxy_note()` in the F2 module are thin wrappers) and
+  carries no second copy of any sentence - its test holds that with an `ast`
+  check.
+* `[price_radar] searxng_url = "http://127.0.0.1:8888"` is in BOTH shipped
+  toml copies (the docker-compose host mapping; the container's own port is
+  8080). It is the address F2's SearXNG query dials; an override must be an
+  address `jarvis_search`'s own rule accepts (this PC or the owner's own
+  networks).
 
-F2 and F3 therefore add their files and their transports without editing F1's
-core; the combined feature is still a price radar, never a booking flow.
+F2 and F3 therefore add their files and their transports; the wiring is one
+lazy `install_f2()` in F1's switch getter, not a second radar. The combined
+feature is still a price radar, never a booking flow.
 
 ## 8. Switch, one-sidedness, and what is not measured
 
 * `[price_radar] enabled = false` in both shipped toml copies. Turning it on is
   one `change_own_config` approval card; turning it off is immediate (it only
-  takes something away). No scheduled checks run until it is on.
+  takes something away). No scheduled checks run until it is on, and the F2
+  sources are not even imported until it is on.
 * **Backend only, for now, and there is no app surface to be one-sided about:**
   no route, no chat tool, no card, no Settings row in either app is added by
   F1. When F2/F3 make it visible, the desktop/phone split (if any) belongs in
