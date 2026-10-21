@@ -10,6 +10,21 @@ restore's outcome is now PERSISTED in `last-restore.json` so a poll can never
 swallow it, and dismissing it is an explicit POST rather than a side effect of
 reading it.
 
+THE 2026-10-21 AUDIT FIXES (independent audit of the 2026-10-20 slice;
+`.dsh-scratch/AUDIT-678-BACKUP-FAIL-CLOSED-2026-10-21.md`, finding ids in the
+code and the suite): `last-restore.json` never rides into a backup (M1); a
+paired device cannot dismiss the notice while this PC still holds the safety
+backup's unread one-time code, because that would destroy the only way to open
+it (M2); a failed record write leaves an honest fallback marker, or removes the
+stale record, so a restart never reports an older restore as the current one
+(M3); the record is written under the same lock that publishes it (LOW-1); a
+partial restore failure names what it had replaced (LOW-2); an exception in
+verification is a clean refusal rather than a dead card thread (LOW-3); a
+verification-failed safety backup is removed, or named if it cannot be (LOW-4);
+and a successful apply re-checks the safety backup's presence/size and says so
+if it has gone (LOW-5). The fail-closed order and the one-time-code rule are
+UNCHANGED by all of that.
+
 THE PHONE'S HALF (2026-10-13, the owner asked for a "Back up now" button on
 the phone on 2026-10-10 and was told why not - this is the answer built for
 real). Three routes: `STATUS_ROUTE` (read-only, any paired device) says what
@@ -353,9 +368,21 @@ RESTORE_ROUTE = "/api/backup/restore"
 #: Dismissing the last restore's outcome (Gemini ruling 8.1, 2026-10-20).
 #: The outcome is persisted and readable by both apps until the owner clears
 #: it; this route is the ONLY thing that clears it, so no poll can swallow it.
-#: Any paired device may ask (it is not destructive and reveals nothing); the
-#: restore itself stays THIS PC ONLY.
+#: Any paired device may ask, BUT while this PC still holds the safety
+#: backup's one-time recovery code (the PC has not read it out yet) a device's
+#: dismiss is refused with DISMISS_CODE_PENDING: clearing the record would
+#: destroy the only copy of the code and leave the safety backup unopenable
+#: (audit 2026-10-21, M2). The PC itself may always clear it - the owner is
+#: sitting there and can read the code in the same panel first. The restore
+#: itself stays THIS PC ONLY.
 DISMISS_ROUTE = "/api/backup/restore/dismiss"
+#: Said to a paired device that asks to dismiss while the PC has not shown
+#: this restore's one-time recovery code yet. Plain words: what to do instead.
+DISMISS_CODE_PENDING = ("Read it on the PC first: this restore made a safety backup whose "
+                        "recovery code is shown only once, on the PC (Settings, Backups), "
+                        "and clearing the notice from here would throw that code away. "
+                        "Nothing was cleared - open Jarvis on the PC and read the code, "
+                        "then dismiss the notice from wherever you like.")
 #: A safety backup that could not be verified before the restore would touch
 #: anything. The audit record of such a refusal carries this exact reason.
 SAFETY_UNVERIFIED = "safety_unverified"
@@ -813,6 +840,29 @@ RECOVERY_CODE_HINT = ("The safety backup's recovery code was shown once, in the 
                       "Jarvis (a stored code would open the safety backup for anyone who "
                       "read the file), so write it down when you see it.")
 
+#: The short record left when the FULL `last-restore.json` could not be written
+#: (a full disk, a folder that went away). The previous restore's record would
+#: otherwise stay there and be reported as the current one after a restart
+#: (audit 2026-10-21, M3), so the fallback says plainly what happened and keeps
+#: only the outcome it knows; the names of restored files are what is lost.
+PERSIST_FAILED_WORDS = ("The restore finished, but Jarvis could not save its full record to "
+                        "disk (a full disk, or the settings folder could not be written). "
+                        "What is known is shown here; after a restart only this short notice "
+                        "remains, without the list of restored files. The safety backup's "
+                        "recovery code was shown once, in the panel.")
+
+#: The most a `last-restore.json` may be before it is refused as damaged. The
+#: record is a handful of short fields; anything bigger is not one of ours (a
+#: corrupt or hand-edited file must not be read into memory without a bound).
+MAX_RESTORE_RESULT_BYTES = 256 * 1024
+
+#: Added when the safety backup that made the restore undoable is not there any
+#: more after the apply finished (audit 2026-10-21, LOW-5).
+SAFETY_LOST_WARNING = ("WARNING: the safety backup made just before this restore is no longer "
+                       "in the backup folder, so the one-time recovery code can no longer "
+                       "open it. Your data was restored, but the step back is gone - check "
+                       "the backup folder before relying on it.")
+
 
 def last_restore_path() -> Path:
     """last-restore.json in the Jarvis settings folder.
@@ -824,13 +874,32 @@ def last_restore_path() -> Path:
     return _config_dir() / LAST_RESTORE_FILE
 
 
+def _own_settings_files() -> tuple:
+    """The settings-folder JSON files that are JARVIS'S OWN BOOKKEEPING.
+
+    `backup.json` names the backup folder; `last-restore.json` is the last
+    restore's record. Neither is owner data, so neither belongs inside a
+    backup - and the restore's own settings allow-list must refuse them too:
+    a `last-restore.json` riding in an archive would be restored as if it were
+    a settings file and could put an OLD record over the current one (audit
+    2026-10-21, M1). One tuple, so the archive rule and the restore rule
+    cannot drift apart."""
+    return (settings_path().name, last_restore_path().name)
+
+
 def _write_json_durable(path: Path, data: dict) -> None:
     """Write one small JSON state file, flushed and fsynced before the rename.
 
     `last-restore.json` is the owner's only record of what a restore replaced
     once the process has restarted, so it must be on disk when this returns,
     not merely in the page cache. The temp file goes beside it (same folder,
-    same volume, so the rename is atomic) and is removed if anything fails."""
+    same volume, so the rename is atomic) and is removed if anything fails.
+
+    FSYNC DECISION (audit 2026-10-21, NIT): the FILE is fsynced, the containing
+    DIRECTORY is not. On this project's platform (Windows/NTFS) a rename is
+    journaled, so the directory fsync POSIX would want is not needed here; and
+    on POSIX a lost rename after a crash costs one restore notice (the code it
+    could carry was never on disk anyway, `RECOVERY_CODE_HINT`), never data."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + f".{uuid.uuid4().hex[:8]}.tmp")
     try:
@@ -864,8 +933,11 @@ def _spawn(fn: Callable[[], None]) -> None:
 
 
 def _audit(event: str, detail: dict) -> None:
-    # Counts and outcomes only. Never a folder's path, a file name that
-    # could hint at its date, or (obviously) a recovery code.
+    # Counts and outcomes only: never a folder's path, never a recovery code,
+    # and never the CONTENT of a file. THE ONE EXCEPTION (2026-10-20 ruling
+    # 8.1, accepted; audit 2026-10-21 LOW-6): `backup.restored` carries the
+    # exact NAMES of the files put back, because the owner asked for that
+    # receipt - names are metadata, not the files' words.
     try:
         if fw is not None:
             fw.audit_log(event, detail)
@@ -1102,12 +1174,23 @@ def _named_settings_entries(names) -> list:
     (`settings/config.toml`, `settings/speed.jsonl`). One list, so the rule for
     what may land in the owner's settings folder is stated once and
     `_apply_restore` cannot drift away from `build_archive`.
+
+    Jarvis's OWN bookkeeping JSON files are refused here even when an archive
+    carries them (an older backup, or a crafted one): `_own_settings_files`
+    (audit 2026-10-21, M1) - restoring `last-restore.json` from a backup would
+    report an OLD restore as the current one, and `backup.json` would silently
+    change the backup folder from an archive. Compared CASEFOLDED: NTFS is
+    case-insensitive, so `settings/Last-restore.json` would otherwise land on
+    the real `last-restore.json` (audit addendum 2026-10-21, V1).
     """
+    own = {name.casefold() for name in _own_settings_files()}
     out = []
     for name in names:
         if not name.startswith("settings/"):
             continue
         rest = name[len("settings/"):]
+        if rest.casefold() in own:
+            continue
         if rest.endswith(".json") or rest in SETTINGS_NAMES:
             out.append(name)
     return out
@@ -1144,9 +1227,16 @@ def build_archive() -> tuple:
                     if name == STUDY_DB:
                         zf.writestr("secrets/study-decks-key.b64", study_key_b64)
                         manifest["study_decks_key"] = True
+            own = {name.casefold() for name in _own_settings_files()}
             for jf in sorted(conf.glob("*.json")):
-                if jf.name == settings_path().name:
-                    continue  # backup.json names only a folder - never useful inside itself
+                if jf.name.casefold() in own:
+                    # backup.json names only a folder - never useful inside
+                    # itself; last-restore.json is the LAST restore's record -
+                    # inside a backup it would ride into every later archive,
+                    # be restored as if it were owner data, and could report an
+                    # OLD restore as current (audit 2026-10-21, M1). Casefolded
+                    # because NTFS is case-insensitive (V1 of the addendum).
+                    continue
                 try:
                     zf.write(jf, arcname=f"settings/{jf.name}")
                     manifest["settings_files"] += 1
@@ -2017,8 +2107,11 @@ RESTORE_LAST_WORDS = {
     "failed": "It was approved, but the restore itself failed. Everything it had already "
               "changed was put back, so your data is as it was - the safety backup made just "
               "before it is still there.",
-    "failed_before": "It was approved, but the safety backup could not be made first, so "
-                     "nothing was restored and your data was not changed.",
+    # "could not be made OR VERIFIED" (audit 2026-10-21, LOW-6): the safety
+    # backup may have been written and then failed its on-disk check, which is
+    # not the same as never made - the sentence stays plain and true for both.
+    "failed_before": "It was approved, but the safety backup could not be made or verified "
+                     "first, so nothing was restored and your data was not changed.",
     "failed_partial": "It was approved, but the restore failed part-way AND putting things "
                       "back did not fully work, so some of your files may now be the backup's "
                       "and some may be as they were. Do not carry on as normal: your data as "
@@ -2095,33 +2188,76 @@ def _restored_names(applied) -> dict:
     return out
 
 
-def _persist_restore_result(record: dict) -> None:
+def _without_code(record: dict) -> dict:
+    """The record as it may be written to disk: no recovery code anywhere."""
+    safe = {k: v for k, v in record.items() if k != "recovery_code"}
+    safety = safe.get("safety_backup")
+    if isinstance(safety, dict):
+        safe["safety_backup"] = {k: v for k, v in safety.items() if k != "recovery_code"}
+    safe["recovery_code_hint"] = RECOVERY_CODE_HINT
+    return safe
+
+
+def _persist_restore_result(record: dict) -> bool:
     """Write the last restore's record to `last-restore.json`, WITHOUT the code.
 
-    Never raises: the restore has already happened (or its refusal is already
-    in memory) when this is called, and a full disk must not turn a finished
-    restore into an exception the card's thread drops. The one-time recovery
-    code is stripped here - it was never on disk and this file must not be the
-    first place it is - and a hint says where it was shown instead."""
+    Returns True when the full record is on disk. Never raises: the restore has
+    already happened (or its refusal is already in memory) when this is called,
+    and a full disk must not turn a finished restore into an exception the
+    card's thread drops. The one-time recovery code is stripped here - it was
+    never on disk and this file must not be the first place it is - and a hint
+    says where it was shown instead.
+
+    A FAILED WRITE MUST NOT LEAVE THE OLDER RESTORE LOOKING CURRENT (audit
+    2026-10-21, M3): the file still holds the PREVIOUS restore's record, which a
+    restart would then report as the latest. So on failure this writes a short
+    fallback record saying the full one could not be saved (and which outcome
+    this run knew), and if even that cannot be written it removes the stale
+    file - "no record" is honest, an older restore reported as current is not.
+    """
     try:
-        safe = {k: v for k, v in record.items() if k != "recovery_code"}
-        safety = safe.get("safety_backup")
-        if isinstance(safety, dict):
-            safe["safety_backup"] = {k: v for k, v in safety.items()
-                                     if k != "recovery_code"}
-        safe["recovery_code_hint"] = RECOVERY_CODE_HINT
-        _write_json_durable(last_restore_path(), safe)
+        _write_json_durable(last_restore_path(), _without_code(record))
+        return True
     except Exception:                                          # noqa: BLE001
         _audit("backup.restore.persist_failed", {"why": "could not write last-restore.json"})
+    fallback = {"outcome": record.get("outcome") or "unknown",
+                "persist_failed": True,
+                "at": record.get("at") or time.time(),
+                "message": PERSIST_FAILED_WORDS,
+                "warning": "", "restored": {},
+                "safety_backup": None,
+                "recovery_code_hint": RECOVERY_CODE_HINT}
+    try:
+        _write_json_durable(last_restore_path(), fallback)
+        _audit("backup.restore.persist_fallback", {"how": "marker"})
+        return False
+    except Exception:                                          # noqa: BLE001
+        pass
+    try:
+        last_restore_path().unlink()
+        _audit("backup.restore.persist_fallback", {"how": "removed stale"})
+    except FileNotFoundError:
+        _audit("backup.restore.persist_fallback", {"how": "none"})
+    except OSError:
+        # Nothing can be written and the old file cannot even be removed: the
+        # reader may still see the older record, but the audit line above says
+        # so and the in-memory record carries `persist_failed`.
+        _audit("backup.restore.persist_fallback", {"how": "failed"})
+    return False
 
 
 def _load_restore_result() -> dict:
     """The persisted last restore, or {} when there is none (or it is damaged).
 
     Never raises and can never contain a recovery code: the file it reads has
-    never had one (`_persist_restore_result` strips it)."""
+    never had one (`_persist_restore_result` strips it). A file bigger than
+    `MAX_RESTORE_RESULT_BYTES` is not one of ours (or is damaged) and is
+    ignored instead of being read into memory unbounded."""
     try:
-        raw = json.loads(last_restore_path().read_text(encoding="utf-8"))
+        path = last_restore_path()
+        if path.stat().st_size > MAX_RESTORE_RESULT_BYTES:
+            return {}
+        raw = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
     return raw if isinstance(raw, dict) else {}
@@ -2129,7 +2265,7 @@ def _load_restore_result() -> dict:
 
 def _restore_finish(pid: str, outcome: str, *, why: str = "", safety=None,
                     message: Optional[str] = None, warning: str = "",
-                    applied=None, reason: str = "") -> None:
+                    applied=None, reason: str = "", partial: bool = False) -> None:
     record = {
         "outcome": outcome, "why": why, "at": time.time(),
         "message": (message if message is not None
@@ -2139,11 +2275,15 @@ def _restore_finish(pid: str, outcome: str, *, why: str = "", safety=None,
         # useless both in the owner's receipt and in a bug report. `applied` is
         # `_apply_restore`'s own dict; a failure before any write passes none,
         # and the record then says so by having no `restored` groups at all.
+        # A partial failure passes the names it HAD replaced before it stopped
+        # (audit 2026-10-21, LOW-2) with `partial` set, so the reader knows the
+        # list is "what may now be the backup's", not "everything went in".
         "restored": _restored_names(applied),
     }
     if reason:
         record["reason"] = reason
-    keep = False
+    if partial:
+        record["partial"] = True
     with _R_LOCK:
         if _R_STATE["pending"].get("id") == pid:
             _R_STATE["pending"].clear()
@@ -2152,13 +2292,24 @@ def _restore_finish(pid: str, outcome: str, *, why: str = "", safety=None,
             return
         _R_STATE["last"].clear()
         _R_STATE["last"].update(record)
-        keep = True
-    if keep:
         # DURABLE, so a restart and any number of polls keep the outcome
         # (ruling 8.1); the record in memory additionally holds the one-time
         # code for exactly one read.
-        _persist_restore_result(record)
-    _audit("backup.restore.card", {"outcome": outcome, "reason": reason})
+        #
+        # THE DISK WRITE IS INSIDE THE LOCK (audit 2026-10-21, LOW-1): a dismiss
+        # can then only run BEFORE the new record is visible or AFTER it is on
+        # disk - never in the window between, where it would report success and
+        # the write would put the record back. A dismiss that runs after this
+        # release clears both copies; a dismiss that ran before it saw the old
+        # state, which is the truth it acted on.
+        persisted = _persist_restore_result(record)
+        if not persisted:
+            # The full record is not on disk. In memory the outcome is still
+            # true, and the flag says the durable copy is the fallback marker
+            # (or gone), so a reader never mistakes it for the full receipt.
+            _R_STATE["last"]["persist_failed"] = True
+    _audit("backup.restore.card", {"outcome": outcome, "reason": reason,
+                                   "partial": bool(partial)})
 
 
 def take_restore_result() -> Optional[dict]:
@@ -2203,24 +2354,54 @@ def restore_result_for_reader(*, here: bool) -> Optional[dict]:
     return {k: v for k, v in stored.items() if k != "why"}
 
 
-def dismiss_restore_result() -> bool:
-    """Clear the last restore's outcome everywhere. True when there was one.
+def _code_unread_locked() -> bool:
+    """Is the safety backup's one-time recovery code still held, unread?
 
-    The ONLY thing that clears it (ruling 8.1): a read never does. A notice
-    that cannot be removed from disk is not reported as dismissed."""
-    had = last_restore_path().is_file()
+    Called with `_R_LOCK` held. The code is the only copy anywhere - it was
+    never written to disk - so clearing the record before the PC has read it
+    would leave the safety backup permanently unopenable (audit 2026-10-21,
+    M2)."""
+    safety = _R_STATE["last"].get("safety_backup")
+    return bool(isinstance(safety, dict) and safety.get("recovery_code"))
+
+
+def recovery_code_pending() -> bool:
+    """True while this process holds a safety-backup code no PC read has shown.
+
+    Both app views carry it, so a dismiss button can say why a device's clear
+    was refused; it reveals nothing (the record itself is already visible to a
+    paired device)."""
     with _R_LOCK:
-        if _R_STATE["last"]:
-            had = True
+        return _code_unread_locked()
+
+
+def dismiss_restore_result(*, remote: bool = False) -> tuple:
+    """Clear the last restore's outcome everywhere.
+
+    Returns `(cleared, refused)`: `cleared` is True when there was something to
+    clear and it is gone; `refused` is "" normally, or the plain sentence a
+    REMOTE caller is given when the PC has not yet shown this restore's
+    one-time recovery code (`DISMISS_CODE_PENDING`). That refusal is the M2
+    rule (audit 2026-10-21): the code exists only in this process's memory, so
+    a device clearing the notice first would destroy the one way back to the
+    safety backup. The PC itself never hits it - the owner is sitting there
+    and can read the code in the same panel first.
+
+    The ONLY thing that clears the record (ruling 8.1): a read never does. A
+    notice that cannot be removed from disk is not reported as dismissed."""
+    with _R_LOCK:
+        if remote and _code_unread_locked():
+            return False, DISMISS_CODE_PENDING
+        had = last_restore_path().is_file() or bool(_R_STATE["last"])
         _R_STATE["last"].clear()
-    try:
-        last_restore_path().unlink()
-    except FileNotFoundError:
-        pass
-    except OSError:
-        _audit("backup.restore.dismiss_failed", {})
-        return False
-    return had
+        try:
+            last_restore_path().unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            _audit("backup.restore.dismiss_failed", {"remote": bool(remote)})
+            return False, ""
+    return had, ""
 
 
 def _inside(root: Path, rel: str, *, flat: bool = False) -> Optional[Path]:
@@ -2245,11 +2426,17 @@ def _inside(root: Path, rel: str, *, flat: bool = False) -> Optional[Path]:
 class RestoreError(Exception):
     """A restore that stopped. `state`: "unchanged" (nothing had been replaced
     yet, or everything replaced was put back) or "partial" (putting back failed
-    too - some files may be the backup's and some the old ones)."""
+    too - some files may be the backup's and some the old ones).
 
-    def __init__(self, message: str, state: str = "unchanged"):
+    `applied` (audit 2026-10-21, LOW-2): the `_apply_restore` summary of what
+    had really been put in place before the failure, so a PARTIAL restore can
+    still name the files that may now be the backup's. None when nothing was
+    written, or when everything was put back."""
+
+    def __init__(self, message: str, state: str = "unchanged", applied=None):
         super().__init__(message)
         self.state = state
+        self.applied = applied
 
 
 def _apply_restore(zip_bytes: bytes) -> dict:
@@ -2335,40 +2522,47 @@ def _apply_restore(zip_bytes: bytes) -> dict:
                 continue
             data = zf.read(info)
             if where is not None:
-                plan.append((where[1], data, where[0] == "databases"))
+                plan.append((where[1], data, where[0] == "databases", where[0], shown))
                 applied[where[0]] += 1
-                if shown:
-                    applied["restored"][where[0]].append(shown)
             elif name == "jarvis-framework.toml":
                 toml_dest = _toml_source()
-                plan.append((toml_dest if toml_dest is not None else (conf / name), data, False))
+                plan.append((toml_dest if toml_dest is not None else (conf / name),
+                             data, False, "framework_toml", name))
                 applied["framework_toml"] = True
-                applied["restored"]["framework_toml"].append(name)
             elif name == "secrets/chat-history-key.b64":
                 key_data = data
             elif name == "secrets/study-decks-key.b64":
                 study_key_data = data
     tag = uuid.uuid4().hex[:8]
-    staged: list = []            # (dest, temp, is_database)
+    staged: list = []            # (dest, temp, is_database, group, shown name)
     swapped: list = []           # (dest, copy of the old file or None)
     aside: list = []             # (path, where it was moved to) - wal/shm
+    #: group -> the names really replaced (a swap that succeeded). Built while
+    #: swapping, not while planning: a PARTIAL failure must not claim a file it
+    #: never got to (audit 2026-10-21, LOW-2).
+    done: dict = {}
+    for group in applied["restored"]:
+        done[group] = []
     try:
-        for dest, data, is_db in plan:
+        for dest, data, is_db, group, shown in plan:
             dest.parent.mkdir(parents=True, exist_ok=True)
             tmp = dest.parent / f".{dest.name}.{tag}.tmp"
-            staged.append((dest, tmp, is_db))       # listed first: cleaned up even if half-written
+            # listed first: cleaned up even if half-written
+            staged.append((dest, tmp, is_db, group, shown))
             tmp.write_bytes(data)
     except BaseException as exc:
-        _remove_all([t for _d, t, _i in staged])
+        _remove_all([t for _d, t, _i, _g, _s in staged])
         raise RestoreError(f"could not prepare the files ({type(exc).__name__})") from exc
     try:
-        for dest, tmp, is_db in staged:
+        for dest, tmp, is_db, group, shown in staged:
             old = None
             if dest.exists():
                 old = dest.parent / f".{dest.name}.{tag}.old"
                 shutil.copyfile(dest, old)
             swapped.append((dest, old))
             os.replace(tmp, dest)
+            if shown:
+                done[group].append(shown)
             if is_db:
                 for suffix in ("-wal", "-shm"):
                     side = dest.parent / (dest.name + suffix)
@@ -2379,9 +2573,13 @@ def _apply_restore(zip_bytes: bytes) -> dict:
                         side.unlink()
     except BaseException as exc:
         problems = _put_back(swapped, aside)
-        _remove_all([t for _d, t, _i in staged])
+        _remove_all([t for _d, t, _i, _g, _s in staged])
+        # When putting back failed too, the names replaced before the stop are
+        # exactly what may now be the backup's - handed to the record.
+        applied["restored"].update({g: sorted(v) for g, v in done.items()})
         raise RestoreError(f"could not replace a file ({type(exc).__name__})",
-                           "partial" if problems else "unchanged") from exc
+                           "partial" if problems else "unchanged",
+                           applied=applied if problems else None) from exc
     _remove_all([old for _d, old in swapped if old] + [m for _p, m in aside])
     if key_data is not None:
         try:
@@ -2404,8 +2602,9 @@ def _apply_restore(zip_bytes: bytes) -> dict:
             jarvis_decks.forget_key()   # the running store must reopen with this key
         except Exception:
             applied["study_decks_key_failed"] = True
-    for group in applied["restored"]:
-        applied["restored"][group] = sorted(applied["restored"][group])
+    for group, names in done.items():
+        applied["restored"][group] = sorted(names)
+    applied["restored"]["keys"] = sorted(applied["restored"]["keys"])
     return applied
 
 
@@ -2439,7 +2638,14 @@ def _put_back(swapped: list, aside: list) -> list:
 class SafetyBackupUnverified(Exception):
     """The safety backup made just before a restore is not on disk as a whole,
     verifiable backup. A restore NEVER proceeds past this (Gemini ruling 8.1,
-    2026-10-20, accepted by the owner)."""
+    2026-10-20, accepted by the owner).
+
+    Audit 2026-10-21 (NIT): `backup_now` never raises this, so with the real
+    safety backup the refusal is the `_verify_safety_backup` return below; the
+    class stays for a caller that supplies its own `safety_fn` and wants to
+    refuse in the same words. No branch here depends on it alone: an
+    unexpected exception from a caller's safety_fn is caught by the same
+    plain-words refusal."""
 
 
 def _verify_safety_backup(safety, folder) -> str:
@@ -2492,6 +2698,64 @@ def _verify_safety_backup(safety, folder) -> str:
         return f"the safety backup's manifest could not be read back ({type(exc).__name__})"
     if not isinstance(manifest, dict) or not manifest.get("created_at"):
         return "the safety backup's manifest could not be read back"
+    return ""
+
+
+def _discard_unverified_safety(safety, folder) -> str:
+    """Remove a safety backup that FAILED verification; name it if it stays.
+
+    Audit 2026-10-21 (LOW-4): such a file's one-time code was never shown, so
+    nobody can ever open it - left on disk it is an unopenable orphan that
+    still counts as one of the KEEP backups. Best effort: when it cannot be
+    removed the returned sentence names it so the refusal record says so.
+    """
+    if not isinstance(safety, dict) or not folder:
+        return ""
+    name = safety.get("name")
+    if not isinstance(name, str) or not name:
+        return ""
+    path = _inside(Path(folder), name, flat=True)
+    if path is None:
+        return ""
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        _audit("backup.restore.safety_orphan", {"removed": True})
+        return ""
+    except OSError:
+        _audit("backup.restore.safety_orphan", {"removed": False})
+        return (f"A safety backup was written but failed verification and could not be "
+                f"removed (\"{name}\"); it cannot be opened because its one-time code was "
+                f"never shown, so it should be deleted from the backup folder by hand.")
+    _audit("backup.restore.safety_orphan", {"removed": True})
+    return ""
+
+
+def _safety_after_restore_problem(safety, folder) -> str:
+    """A cheap post-apply re-check of the safety backup: "" when it is there.
+
+    Audit 2026-10-21 (LOW-5): the file was verified BEFORE the apply, and the
+    apply can take a while - a sync client or a cleaning program can remove or
+    replace it meanwhile, which would make the record's "the safety backup
+    made just before it is still there" false. This checks presence and size
+    only (never decrypts again); the caller reports what it finds honestly.
+    """
+    if not isinstance(safety, dict) or not folder:
+        return ""
+    name = safety.get("name")
+    if not isinstance(name, str) or not name:
+        return ""
+    path = _inside(Path(folder), name, flat=True)
+    if path is None or not path.is_file():
+        return "the safety backup is no longer in the backup folder"
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return "the safety backup could not be read after the restore"
+    claimed = safety.get("size")
+    if isinstance(claimed, int) and not isinstance(claimed, bool) and claimed != size:
+        return (f"the safety backup changed size after the restore "
+                f"({size} bytes now, {claimed} when written)")
     return ""
 
 
@@ -2550,16 +2814,29 @@ def _decide_restore(pid: str, name: str, code: str, manifest: dict, zip_bytes: b
         # this reads the bytes back. Anything but a clean '' refuses the
         # restore with nothing changed, records why in the audit, and keeps the
         # outcome visible to the owner (persisted, ruling 8.1 part 2).
-        problem = _verify_safety_backup(safety, folder)
+        #
+        # AN UNEXPECTED EXCEPTION IN THE CHECK IS A REFUSAL, NOT A DEAD CARD
+        # (audit 2026-10-21, LOW-3): before this, a raise from inside the
+        # verifier escaped this thread before _restore_finish, leaving the
+        # restore card "waiting" for ever and every later restore a 409.
+        try:
+            problem = _verify_safety_backup(safety, folder)
+        except Exception as exc:                               # noqa: BLE001
+            problem = f"the safety backup could not be checked ({type(exc).__name__})"
         if problem:
+            orphan_left = _discard_unverified_safety(safety, folder)
             return _restore_finish(
                 pid, "failed",
                 why=f"nothing was restored: the safety backup could not be verified "
                     f"before the restore ({problem})",
                 message=RESTORE_LAST_WORDS["failed_before"],
-                reason=SAFETY_UNVERIFIED)
+                reason=SAFETY_UNVERIFIED, warning=orphan_left or "")
         safety_out = {"name": safety["name"], "at": safety["at"],
-                      "recovery_code": safety["recovery_code"]}
+                      "recovery_code": safety["recovery_code"],
+                      # Kept so the post-apply re-check can compare the size
+                      # it was written with (LOW-5); the persisted copy carries
+                      # it too (no code, of course).
+                      "size": safety.get("size")}
         try:
             applied = apply_fn(zip_bytes)
         except Exception as exc:
@@ -2567,14 +2844,23 @@ def _decide_restore(pid: str, name: str, code: str, manifest: dict, zip_bytes: b
             partial = getattr(exc, "state", "unchanged") == "partial"
             return _restore_finish(
                 pid, "failed", why=type(exc).__name__, safety=safety_out,
-                message=RESTORE_LAST_WORDS["failed_partial" if partial else "failed"])
+                message=RESTORE_LAST_WORDS["failed_partial" if partial else "failed"],
+                # A partial failure still names what it had replaced before it
+                # stopped (audit 2026-10-21, LOW-2).
+                applied=getattr(exc, "applied", None), partial=partial)
     _audit("backup.restored", {"applied": applied})
     key_failed = bool(isinstance(applied, dict) and applied.get("chat_history_key_failed"))
-    _restore_finish(pid, "restored", safety=safety_out,
-                    warning=KEY_WARNING if key_failed else "",
-                    applied=applied,
-                    message=RESTORE_LAST_WORDS["restored"] + (" " + KEY_WARNING if key_failed
-                                                              else ""))
+    # POST-APPLY RE-CHECK (audit 2026-10-21, LOW-5): the safety backup was
+    # verified before the apply; say plainly if it is not there any more.
+    lost = _safety_after_restore_problem(safety_out, folder)
+    warning = KEY_WARNING if key_failed else ""
+    message = RESTORE_LAST_WORDS["restored"] + (" " + KEY_WARNING if key_failed else "")
+    if lost:
+        _audit("backup.restore.safety_lost", {"why": lost})
+        warning = (warning + " " + SAFETY_LOST_WARNING).strip()
+        message = message + " " + SAFETY_LOST_WARNING
+    _restore_finish(pid, "restored", safety=safety_out, warning=warning,
+                    applied=applied, message=message)
 
 
 def request_restore(body, *, peer=None, local=None, here: Optional[bool] = None,
@@ -2652,15 +2938,25 @@ def request_dismiss_restore(body=None, *, peer=None, local=None,
     """POST /api/backup/restore/dismiss {"": nothing needed}. (code, body).
 
     The ONLY way the last restore's outcome is cleared (Gemini ruling 8.1,
-    2026-10-20). Any paired device may ask: clearing a notice is not
-    destructive, writes no data and reveals nothing - the restore itself stays
-    THIS PC ONLY (`request_restore`). Reading is never what clears it, so a
-    phone poll can no longer swallow the outcome or the recovery hint.
+    2026-10-20). Any paired device may ask - EXCEPT while this PC has not yet
+    shown the restore's one-time recovery code: the code exists only in the
+    PC's memory, so a device clearing the notice first would destroy the only
+    way to open the safety backup (audit 2026-10-21, M2). That request is
+    refused with **409** `{"ok": false, "code_pending": true, "error": ...}`
+    and nothing is cleared; the PC itself may always clear it (the owner can
+    read the code in the same panel first), and once the PC has read it any
+    paired device can. The restore itself stays THIS PC ONLY
+    (`request_restore`). Reading is never what clears it, so a phone poll can
+    no longer swallow the outcome or the recovery hint.
 
     200 {"ok": True, "dismissed": <true when there was something to clear>}.
     Idempotent: dismissing an already-empty record is a 200, not an error."""
     is_here = bool(here) if here is not None else _from_this_pc(peer, local)
-    had = dismiss_restore_result()
+    had, refused = dismiss_restore_result(remote=not is_here)
+    if refused:
+        _audit("backup.restore.dismiss_refused", {"why": "code_pending",
+                                                  "from": "device"})
+        return 409, {"ok": False, "code_pending": True, "error": refused}
     _audit("backup.restore.dismissed", {"had": had, "from": "pc" if is_here else "device"})
     return 200, {"ok": True, "dismissed": had}
 
@@ -2677,13 +2973,17 @@ def view(*, here: bool = False) -> dict:
     ever been made and when the last one was, plus the LAST RESTORE's outcome
     - read-only, with no recovery code and no `why` - so both apps can show
     it. From 2026-10-20 (ruling 8.1) that outcome is PERSISTED and reading it
-    never consumes it; only `POST /api/backup/restore/dismiss` clears it."""
+    never consumes it; only `POST /api/backup/restore/dismiss` clears it, and
+    from a paired device only after this PC has shown the one-time code
+    (`recovery_code_pending` says whether that is still owed - audit
+    2026-10-21, M2)."""
     with _B_LOCK:
         last_backup = dict(_B_STATE["last"]) if _B_STATE["last"] else None
     if not here:
         return {"available": True,
                 "last_backup_at": last_backup["at"] if last_backup else None,
-                "last_restore": restore_result_for_reader(here=False)}
+                "last_restore": restore_result_for_reader(here=False),
+                "recovery_code_pending": recovery_code_pending()}
     st = _load_settings()
     with _F_LOCK:
         pending = dict(_F_STATE["pending"]) if _F_STATE["pending"] else None
@@ -2701,7 +3001,8 @@ def view(*, here: bool = False) -> dict:
            "pending_delete_older_card": delete_pending, "last_delete_older": last_delete,
            "last_backup": last_backup, "pending_folder_card": pending,
            "last_folder_card": last_folder_card, "pending_restore_card": restore_pending,
-           "last_restore": last_restore, "erase_limit": ERASE_LIMIT}
+           "last_restore": last_restore, "recovery_code_pending": recovery_code_pending(),
+           "erase_limit": ERASE_LIMIT}
 
 
 # ---------------------------------------------------------------------------

@@ -2736,6 +2736,453 @@ def t_last_restore_survives_reads_a_restart_and_is_dismissed():
           B.take_restore_result() is None and code_ == 200)
 
 
+# ========================= audit 2026-10-21: the #678 findings ==============
+#
+# Each test names the finding it pins (the ids are in
+# `.dsh-scratch/AUDIT-678-BACKUP-FAIL-CLOSED-2026-10-21.md`). Every one FAILS
+# on the pre-fix code - the point of a finding is that it bit once.
+
+
+def t_m1_the_last_restore_record_is_never_swept_into_a_backup():
+    """M1: last-restore.json is Jarvis's own bookkeeping, never owner data."""
+    conf, backups = fresh_conf()
+    _plant(conf)
+    B._save_settings({"folder": str(backups)})
+    first = B.backup_now(str(backups))
+    _change(conf)
+    _restore_once(conf, backups, first)          # leaves a persisted record behind
+    check("(set-up) a restore left last-restore.json in the settings folder",
+          B.last_restore_path().is_file(), str(B.last_restore_path()))
+
+    later = B.backup_now(str(backups))           # an ordinary backup AFTER a restore
+    blob = B.decrypt_blob((backups / later["name"]).read_bytes(), later["recovery_code"])
+    names = zipfile.ZipFile(io.BytesIO(blob)).namelist()
+    check("a later backup does NOT contain the last-restore record",
+          "settings/last-restore.json" not in names, sorted(names))
+    check("... but does contain the owner's own settings file", "settings/a.json" in names,
+          sorted(names))
+    check("... and the manifest counts only real settings files",
+          later["counts"]["settings_files"] == 1, later["counts"])
+
+
+def t_m1_a_backup_carrying_the_record_file_is_refused():
+    """M1, restore side: an archive (old or crafted) cannot write the record."""
+    conf, backups = fresh_conf()
+    _plant(conf)
+    B._save_settings({"folder": str(backups)})
+    first = B.backup_now(str(backups))
+    _change(conf)
+    _restore_once(conf, backups, first)          # a real current record now exists
+
+    zip_bytes, _manifest = B.build_archive()
+    buf = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as src, \
+            zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as dst:
+        for info in src.infolist():
+            dst.writestr(info, src.read(info))
+        dst.writestr("settings/last-restore.json",
+                     json.dumps({"outcome": "INJECTED", "message": "INJECTED"}))
+    code = B.generate_code()
+    (backups / "crafted.jbak").write_bytes(B.encrypt_blob(buf.getvalue(), code))
+    B.request_restore({"name": "crafted.jbak", "code": code}, here=True,
+                      gate=approve, tier_of=tier_ask, spawn=sync_spawn,
+                      armed=lambda: True)
+    res = B.take_restore_result() or {}
+    restored = res.get("restored") or {}
+    check("the crafted backup still restores",
+          res.get("outcome") == "restored", res)
+    check("the record file inside the archive is NOT restored as a settings file",
+          "last-restore.json" not in (restored.get("settings_files") or []), restored)
+    check("... the owner's real settings file still is",
+          "a.json" in (restored.get("settings_files") or []), restored)
+    durable = json.loads(B.last_restore_path().read_text(encoding="utf-8"))
+    check("... and the record now says the restore, not the injected words",
+          durable.get("outcome") == "restored" and durable.get("message") != "INJECTED",
+          durable)
+
+
+def t_m1v1_a_mixed_case_bookkeeping_entry_cannot_land_on_ntfs():
+    """V1 of the 2026-10-21 verification addendum: NTFS is case-INSENSITIVE.
+
+    A crafted `settings/Last-restore.json` (or `settings/Backup.json`) used to
+    pass the case-sensitive allow-list; `_apply_restore` then replaced the real
+    lower-case `last-restore.json` / `backup.json` with the archive's copy - an
+    OLD restore shown as the current one, and a silently changed backup
+    folder. Old write order made the record hit transient, but on a real NTFS
+    folder the file IS replaced between the apply and the finish.
+    """
+    conf, backups = fresh_conf()
+    _plant(conf)
+    B._save_settings({"folder": str(backups)})
+    first = B.backup_now(str(backups))
+    _change(conf)
+    _restore_once(conf, backups, first)          # a real current record exists
+    current = B.last_restore_path().read_bytes()
+    folder_now = B._load_settings()["folder"]
+    zip_bytes, _manifest = B.build_archive()
+    buf = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as src, \
+            zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as dst:
+        for info in src.infolist():
+            dst.writestr(info, src.read(info))
+        dst.writestr("settings/Last-restore.json",
+                     json.dumps({"outcome": "INJECTED-OLD", "message": "INJECTED-OLD"}))
+        dst.writestr("settings/Backup.json", json.dumps({"folder": "C:\\injected"}))
+    crafted = buf.getvalue()
+
+    applied = B._apply_restore(crafted)          # exactly what a real restore runs
+    check("the mixed-case record entry is refused, so the real record file is "
+          "BYTE-IDENTICAL",
+          B.last_restore_path().read_bytes() == current,
+          (len(B.last_restore_path().read_bytes()), len(current)))
+    check("... a mixed-case backup.json entry is refused too: the folder did not move",
+          B._load_settings()["folder"] == folder_now, B._load_settings()["folder"])
+    check("... and neither is reported as a restored settings file",
+          sorted(applied["restored"]["settings_files"]) == ["a.json"],
+          applied["restored"]["settings_files"])
+    check("... both are counted as skipped", applied["skipped"] >= 2, applied["skipped"])
+
+    # through the whole restore route as well, so the receipt is right too
+    code = B.generate_code()
+    (backups / "crafted-case.jbak").write_bytes(B.encrypt_blob(crafted, code))
+    B.request_restore({"name": "crafted-case.jbak", "code": code}, here=True,
+                      gate=approve, tier_of=tier_ask, spawn=sync_spawn,
+                      armed=lambda: True)
+    res = B.take_restore_result() or {}
+    restored = res.get("restored") or {}
+    check("a full restore of the crafted backup still lands its real settings file",
+          res.get("outcome") == "restored"
+          and "a.json" in (restored.get("settings_files") or []), restored)
+    own = {name.casefold() for name in B._own_settings_files()}
+    check("... and its receipt names no bookkeeping file in ANY case",
+          not any(str(n).casefold() in own
+                  for n in (restored.get("settings_files") or [])), restored)
+
+
+def t_m2_a_device_dismiss_cannot_throw_away_the_unread_code():
+    """M2: the safety backup's one-time code is only in the PC's memory.
+
+    A paired device dismissing the notice first would destroy the only way to
+    open the safety backup, so a device is refused until the PC has read it.
+    """
+    conf, backups = fresh_conf()
+    _plant(conf)
+    B._save_settings({"folder": str(backups)})
+    first = B.backup_now(str(backups))
+    _change(conf)
+    B.request_restore({"name": first["name"], "code": first["recovery_code"]},
+                      here=True, gate=approve, tier_of=tier_ask,
+                      spawn=sync_spawn, armed=lambda: True)
+    with B._R_LOCK:
+        safety = dict((B._R_STATE["last"].get("safety_backup") or {}))
+    code = safety.get("recovery_code")
+    check("(set-up) the one-time code is held in memory and unread", bool(code))
+    check("(set-up) the PC-side view says the code is still pending",
+          B.recovery_code_pending() is True)
+
+    dcode, dbody = B.request_dismiss_restore({}, here=False)
+    check("a paired device's dismiss while the code is unread is REFUSED, in plain words",
+          dcode == 409 and dbody.get("code_pending") is True
+          and "Read it on the PC first" in dbody.get("error", ""), (dcode, dbody))
+    check("... nothing was cleared: the record is still there",
+          B.last_restore_path().is_file()
+          and (B.view(here=False).get("last_restore") or {}).get("outcome") == "restored")
+    check("... the phone's read did not swallow the code",
+          B.recovery_code_pending() is True)
+
+    pc = B.view(here=True)                       # the PC's first read: the code surfaces
+    got = (pc.get("last_restore") or {}).get("safety_backup") or {}
+    check("the PC read now has the code exactly once", got.get("recovery_code") == code, got)
+    check("... and the pending flag is off", B.recovery_code_pending() is False)
+    dcode, dbody = B.request_dismiss_restore({}, here=False)
+    check("after the PC read a paired device's dismiss succeeds",
+          dcode == 200 and dbody.get("dismissed") is True, (dcode, dbody))
+    check("... the record and the file are gone, and the code was never on disk",
+          not B.last_restore_path().exists() and B.take_restore_result() is None)
+
+    # the PC itself may always clear its notice (the owner can read it there)
+    second = B.backup_now(str(backups))
+    _change(conf)
+    B.request_restore({"name": second["name"], "code": second["recovery_code"]},
+                      here=True, gate=approve, tier_of=tier_ask,
+                      spawn=sync_spawn, armed=lambda: True)
+    pcode, pbody = B.request_dismiss_restore({}, here=True)
+    check("the PC may always clear its own notice, even with the code unread",
+          pcode == 200 and pbody.get("dismissed") is True, (pcode, pbody))
+
+
+def t_m3_a_failed_persist_never_reports_the_older_restore():
+    """M3: a full disk must not leave the PREVIOUS restore looking current."""
+    conf, backups = fresh_conf()
+    _plant(conf)
+    B._save_settings({"folder": str(backups)})
+    first = B.backup_now(str(backups))
+    _change(conf)
+    ok = _restore_once(conf, backups, first)[0]
+    check("(set-up) the first restore's record is on disk",
+          ok.get("outcome") == "restored"
+          and json.loads(B.last_restore_path().read_text(encoding="utf-8")).get("outcome")
+          == "restored", ok)
+
+    second = B.backup_now(str(backups))
+    _change(conf)
+    real_write = B._write_json_durable
+    calls = []
+
+    def full_disk_then_fallback(path, data):
+        calls.append(dict(data))
+        if not data.get("persist_failed"):
+            raise OSError(28, "No space left on device")
+        return real_write(path, data)
+    B._write_json_durable = full_disk_then_fallback
+    try:
+        bad = {"name": "nope.jbak", "at": time.time(),
+               "recovery_code": "AAAAA-BBBBB-CCCCC-DDDDD", "size": 0}
+        res, events = _restore_once(conf, backups, second, safety_fn=lambda: bad)
+    finally:
+        B._write_json_durable = real_write
+    check("the second attempt really failed", res.get("outcome") == "failed"
+          and res.get("reason") == B.SAFETY_UNVERIFIED, res)
+    check("the failed persistence is visible in memory (persist_failed)",
+          res.get("persist_failed") is True, res)
+    check("... and audited", any(e == "backup.restore.persist_failed" for e, _d in events),
+          [e for e, _d in events])
+    check("... and the fallback marker was written and audited",
+          any(e == "backup.restore.persist_fallback" and d.get("how") == "marker"
+              for e, d in events), [e for e, _d in events])
+    durable = json.loads(B.last_restore_path().read_text(encoding="utf-8"))
+    check("the marker says the full record could not be saved",
+          durable.get("persist_failed") is True, durable)
+
+    with B._R_LOCK:
+        B._R_STATE["last"].clear()               # a process restart: memory is gone
+    after = B.take_restore_result() or {}
+    check("after a restart the API does NOT report the older restore as current",
+          after.get("outcome") == "failed" and after.get("persist_failed") is True, after)
+    check("... it does not say the older 'restored' outcome either",
+          after.get("outcome") != "restored", after)
+
+
+def t_m3_a_failed_persist_with_no_fallback_removes_the_stale_record():
+    """M3's last line: if even the marker cannot be written, remove the stale
+    record - "no record" is honest, an older restore as current is not."""
+    conf, backups = fresh_conf()
+    _plant(conf)
+    B._save_settings({"folder": str(backups)})
+    first = B.backup_now(str(backups))
+    _change(conf)
+    _restore_once(conf, backups, first)          # an older record on disk
+    second = B.backup_now(str(backups))
+    _change(conf)
+    real_write = B._write_json_durable
+
+    def always_full(_path, _data):
+        raise OSError(28, "No space left on device")
+    B._write_json_durable = always_full
+    try:
+        bad = {"name": "nope.jbak", "at": time.time(),
+               "recovery_code": "AAAAA-BBBBB-CCCCC-DDDDD", "size": 0}
+        res, events = _restore_once(conf, backups, second, safety_fn=lambda: bad)
+    finally:
+        B._write_json_durable = real_write
+    check("the attempt failed and is flagged in memory", res.get("outcome") == "failed"
+          and res.get("persist_failed") is True, res)
+    check("the stale older record file is REMOVED", not B.last_restore_path().exists(),
+          str(B.last_restore_path()))
+    check("... and the removal is audited",
+          any(e == "backup.restore.persist_fallback" and d.get("how") == "removed stale"
+              for e, d in events), [e for e, _d in events])
+    with B._R_LOCK:
+        B._R_STATE["last"].clear()               # restart
+    check("after a restart there is NO record (not the older one)", B.take_restore_result() is None)
+
+
+def t_low2_a_partial_restore_names_what_it_had_replaced():
+    """LOW-2: when putting back fails too, name the files it had replaced."""
+    conf, backups = fresh_conf()
+    _plant(conf)
+    B._save_settings({"folder": str(backups)})
+    first = B.backup_now(str(backups))
+    _change(conf)
+    real_replace = os.replace
+
+    def failing(src, dst, *a, **k):
+        if Path(dst).name == "x.txt" and ".old" not in Path(src).name:
+            raise PermissionError("locked")       # the LAST file to be swapped
+        return real_replace(src, dst, *a, **k)
+
+    def failing_both(src, dst, *a, **k):
+        if Path(dst).name in ("x.txt", "memory.db", "a.json") \
+                and Path(src).name.endswith(".old"):
+            raise PermissionError("locked")       # putting back fails too
+        return failing(src, dst, *a, **k)
+    os.replace = failing_both
+    try:
+        res, events = _restore_once(conf, backups, first)
+    finally:
+        os.replace = real_replace
+    restored = res.get("restored") or {}
+    check("the restore really failed part-way", res.get("outcome") == "failed"
+          and res.get("partial") is True, res)
+    check("a PARTIAL restore still names the database it had replaced",
+          restored.get("databases") == ["memory.db"], restored)
+    check("... and the settings file", restored.get("settings_files") == ["a.json"], restored)
+    check("... the message still warns plainly", "part-way" in res.get("message", ""), res)
+    durable = json.loads(B.last_restore_path().read_text(encoding="utf-8"))
+    check("... and the persisted record names them too",
+          (durable.get("restored") or {}).get("databases") == ["memory.db"]
+          and durable.get("partial") is True, durable)
+    check("... the audit carries the names as well",
+          any(e == "backup.restore.card" and d.get("partial") is True for e, d in events),
+          [(e, d.get("partial")) for e, d in events])
+    leftovers = _leftovers(conf)
+    check("... and what remains is the .old copies (the last copy of the pre-restore "
+          "bytes), never a staging .tmp",
+          bool(leftovers) and all(".old" in name for name in leftovers), leftovers)
+
+
+def t_low3_an_unexpected_verify_crash_is_a_clean_refusal():
+    """LOW-3: an unexpected exception in the verifier must not wedge the card."""
+    conf, backups = fresh_conf()
+    _plant(conf)
+    B._save_settings({"folder": str(backups)})
+    first = B.backup_now(str(backups))
+    _change(conf)
+    before = _snapshot_state(conf)
+    real_verify = B._verify_safety_backup
+
+    def exploding(_safety, _folder):
+        raise RuntimeError("an unexpected verify failure")
+    B._verify_safety_backup = exploding
+    try:
+        res, events = _restore_once(conf, backups, first)
+        with B._R_LOCK:
+            pending = dict(B._R_STATE["pending"])
+    finally:
+        B._verify_safety_backup = real_verify
+    check("an unexpected crash in the verifier is a clean refusal, not a dead card",
+          res.get("outcome") == "failed" and res.get("reason") == B.SAFETY_UNVERIFIED, res)
+    check("... the record says nothing was restored", "not changed" in res.get("message", ""),
+          res.get("message"))
+    check("... the restore card is not left waiting", pending == {}, pending)
+    check("... no live file was touched", _snapshot_state(conf) == before)
+    check("... the refusal is persisted", json.loads(
+        B.last_restore_path().read_text(encoding="utf-8")).get("reason")
+        == B.SAFETY_UNVERIFIED)
+    ok = _restore_once(conf, backups, first)
+    check("... and a later restore still runs (no 409 wedge)",
+          ok[0].get("outcome") == "restored", ok[0])
+
+
+def t_low4_a_verify_failed_safety_backup_is_removed_not_left_dead():
+    """LOW-4: a safety backup that fails verification cannot ever be opened -
+    its code is dropped - so it must not stay as a KEEP slot."""
+    conf, backups = fresh_conf()
+    _plant(conf)
+    B._save_settings({"folder": str(backups)})
+    first = B.backup_now(str(backups))
+    _change(conf)
+    before_files = sorted(p.name for p in backups.glob("*.jbak"))
+    before_keep = len([r for r in B.list_backups(str(backups)) if r["complete"]])
+    real_verify = B._verify_safety_backup
+    B._verify_safety_backup = lambda _safety, _folder: "forced for the audit check"
+    try:
+        res, events = _restore_once(conf, backups, first)   # the real safety_fn makes one
+    finally:
+        B._verify_safety_backup = real_verify
+    after_files = sorted(p.name for p in backups.glob("*.jbak"))
+    after_keep = len([r for r in B.list_backups(str(backups)) if r["complete"]])
+    check("the refusal still says nothing was restored",
+          res.get("outcome") == "failed" and "not changed" in res.get("message", ""), res)
+    check("the safety backup a failed verification made is REMOVED (its code was never shown)",
+          after_files == before_files, (before_files, after_files))
+    check("... so it does not eat one of the KEEP slots", after_keep == before_keep,
+          (before_keep, after_keep))
+    check("... and the removal is audited",
+          any(e == "backup.restore.safety_orphan" and d.get("removed") is True
+              for e, d in events), [e for e, _d in events])
+
+
+def t_low5_a_safety_backup_that_vanishes_after_the_restore_is_reported():
+    """LOW-5: the safety backup is verified BEFORE the apply; say so honestly
+    if it is gone after."""
+    conf, backups = fresh_conf()
+    _plant(conf)
+    B._save_settings({"folder": str(backups)})
+    first = B.backup_now(str(backups))
+    _change(conf)
+    real_backup_now = B.backup_now
+    made = []
+
+    def tracking_backup_now(folder, **kwargs):
+        out = real_backup_now(folder, **kwargs)
+        made.append(out["name"])
+        return out
+
+    def apply_then_lose_safety(zip_bytes):
+        applied = B._apply_restore(zip_bytes)
+        for name in made:
+            try:
+                (Path(B._load_settings()["folder"]) / name).unlink()
+            except OSError:
+                pass
+        return applied
+    B.backup_now = tracking_backup_now
+    try:
+        res, events = _restore_once(conf, backups, first,
+                                    apply_fn=apply_then_lose_safety)
+    finally:
+        B.backup_now = real_backup_now
+    check("the restore itself landed", res.get("outcome") == "restored", res)
+    check("the vanished safety backup is named plainly in the message",
+          "no longer in the backup folder" in res.get("message", ""), res.get("message"))
+    check("... and in the record's warning", "no longer" in (res.get("warning") or ""), res)
+    check("... and audited honestly",
+          any(e == "backup.restore.safety_lost" for e, _d in events),
+          [e for e, _d in events])
+    durable = json.loads(B.last_restore_path().read_text(encoding="utf-8"))
+    check("... the persisted record carries the warning too",
+          "no longer" in (durable.get("warning") or ""), durable)
+    probe = backups / "probe.jbak"
+    probe.write_bytes(b"x" * 10)
+    said = B._safety_after_restore_problem(
+        {"name": "probe.jbak", "size": 4}, str(backups))
+    check("the cheap re-check also notices a safety backup that changed size",
+          "changed size" in said, said)
+
+
+def t_low3b_a_caller_that_refuses_its_own_safety_backup_lands_in_the_same_place():
+    """NIT: `SafetyBackupUnverified` is only reachable from a caller-supplied
+    safety_fn - keep that branch working so it is not dead code that bites."""
+    conf, backups = fresh_conf()
+    _plant(conf)
+    B._save_settings({"folder": str(backups)})
+    first = B.backup_now(str(backups))
+    _change(conf)
+
+    def refusing():
+        raise B.SafetyBackupUnverified("the caller's own check said no")
+    res, events = _restore_once(conf, backups, first, safety_fn=refusing)
+    check("a caller's own refusal is a clean safety_unverified failure",
+          res.get("outcome") == "failed" and res.get("reason") == B.SAFETY_UNVERIFIED, res)
+    check("... in the plain failed_before words", "not changed" in res.get("message", ""), res)
+    check("... and it points at the caller's reason in `why`",
+          "caller's own check" in (res.get("why") or ""), res.get("why"))
+
+
+def t_nits_an_oversized_or_damaged_last_restore_is_ignored():
+    """NIT: the record is a few short fields; do not read an unbounded file."""
+    conf, backups = fresh_conf()
+    B.last_restore_path().write_text(
+        json.dumps({"outcome": "restored",
+                    "pad": "x" * (B.MAX_RESTORE_RESULT_BYTES + 1024)}),
+        encoding="utf-8")
+    check("an oversized record file is ignored, not parsed",
+          B._load_restore_result() == {}, len(B.last_restore_path().read_bytes()))
+    B.last_restore_path().write_text("{not json", encoding="utf-8")
+    check("a damaged record file is ignored", B._load_restore_result() == {})
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):
