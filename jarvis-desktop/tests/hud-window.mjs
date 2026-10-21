@@ -497,6 +497,117 @@ await check("the module can be imported without a DOM, as the tests do", async (
   assert.equal(typeof mod.initHudWindowSettings, "function");
 });
 
+/* ── 4. The HUD's three layouts (2026-10-20) ─────────────────────────────── *
+ *  The setting half of the owner's "3 different UIs for the jarvis HUD":
+ *  the key, the three ids, the reading and the saving are all in hud-window.js
+ *  (the same module as the switch above, for the same reason: one key, read by
+ *  the window that changes it and obeyed by the window that wears it). The
+ *  page's own half is driven in tests/hud.mjs, which needs Playwright; this is
+ *  the browser-free half, so the setting is never untested.
+ * ------------------------------------------------------------------------ */
+
+await check("the layout key is namespaced with this window's other keys, and is one key", () => {
+  assert.match(S.HUD_LAYOUT_KEY, /^jarvis\.[\w.]+$/,
+    `"${S.HUD_LAYOUT_KEY}" is not namespaced like the others`);
+  assert.equal(S.HUD_LAYOUT_KEY, "jarvis.hud.layout");
+  assert.notEqual(S.HUD_LAYOUT_KEY, S.OPEN_BAR_KEY, "two settings, one key");
+});
+
+await check("the three layouts, default first, each with a name, a glyph and one line", () => {
+  assert.deepEqual(S.HUD_LAYOUTS, ["cockpit", "studio", "ambient"]);
+  for (const id of S.HUD_LAYOUTS) {
+    const info = S.HUD_LAYOUT_INFO[id];
+    assert.ok(info, `${id} has no HUD_LAYOUT_INFO entry`);
+    for (const field of ["label", "blurb", "glyph"]) {
+      assert.equal(typeof info[field], "string", `${id}.${field} is not a string`);
+      assert.ok(info[field].trim().length > 0, `${id}.${field} is empty`);
+    }
+    assert.doesNotMatch(info.blurb, /\n/, `${id}'s one line has a line break`);
+  }
+  // The work order's own three names, in the owner's words.
+  assert.match(S.HUD_LAYOUT_INFO.cockpit.label, /Command Cockpit/);
+  assert.match(S.HUD_LAYOUT_INFO.studio.label, /Studio/);
+  assert.match(S.HUD_LAYOUT_INFO.ambient.label, /Ambient/);
+});
+
+await check("a stored layout is read as this build reads it - anything unknown is Cockpit", () => {
+  assert.equal(S.normaliseHudLayout("cockpit"), "cockpit");
+  assert.equal(S.normaliseHudLayout("studio"), "studio");
+  assert.equal(S.normaliseHudLayout("ambient"), "ambient");
+  for (const bad of [null, undefined, "", "STUDIO", "cockpit ", "not-a-layout", 3, {}, []]) {
+    assert.equal(S.normaliseHudLayout(bad), "cockpit", `normaliseHudLayout(${JSON.stringify(bad)})`);
+  }
+});
+
+await check("with nothing stored, or storage unreadable, the default is Cockpit", () => {
+  // A fresh install: nothing stored at all.
+  assert.equal(S.readHudLayout(mem()), "cockpit");
+  // The one value this app writes for each layout.
+  for (const id of S.HUD_LAYOUTS) {
+    assert.equal(S.readHudLayout(mem({ [S.HUD_LAYOUT_KEY]: id })), id);
+  }
+  // An older or hand-edited value this build does not know.
+  assert.equal(S.readHudLayout(mem({ [S.HUD_LAYOUT_KEY]: "ember" })), "cockpit");
+  // Storage that refuses to be read (private mode, cleared site data): the
+  // default, never a throw into the page.
+  assert.equal(S.readHudLayout(THROWING), "cockpit");
+  assert.equal(S.readHudLayout(null), "cockpit");
+});
+
+await check("saving writes the normalised id, and says whether it could write", () => {
+  const store = mem();
+  assert.equal(S.saveHudLayout("studio", store), true);
+  assert.equal(store.getItem(S.HUD_LAYOUT_KEY), "studio");
+  assert.equal(S.saveHudLayout("studio", store), true);
+  assert.equal(S.saveHudLayout("bogus", store), true);
+  assert.equal(store.getItem(S.HUD_LAYOUT_KEY), "cockpit",
+    "an unknown layout was saved instead of the default");
+  // A store that refuses (private mode): false, and no pretend success.
+  assert.equal(S.saveHudLayout("ambient", THROWING), false);
+  assert.equal(S.saveHudLayout("ambient", null), false);
+});
+
+await check("the card's status line names the chosen layout in words", () => {
+  for (const id of S.HUD_LAYOUTS) {
+    const line = S.describeHudLayout(id);
+    assert.match(line, new RegExp(S.HUD_LAYOUT_INFO[id].label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+      `describeHudLayout(${id}) does not name it: ${line}`);
+  }
+  // An unknown id describes the default, exactly as the page would wear it.
+  assert.match(S.describeHudLayout("bogus"), /Command Cockpit/);
+});
+
+await check("the Settings card offers the three layouts, and nothing there needs Rust", () => {
+  const at = SETTINGS_HTML.indexOf('id="hud-window"');
+  assert.ok(at > 0, "settings.html has no #hud-window card");
+  const card = SETTINGS_HTML.slice(at, SETTINGS_HTML.indexOf("</section>", at));
+  assert.match(card, /<fieldset class="theme-list" id="hud-layout-list">/,
+    "the card has no layout picker fieldset");
+  assert.match(card, /<legend class="label" id="hud-layout-legend">HUD layout<\/legend>/);
+  assert.match(card, /id="hud-layout-status"/, "the picker has no status line");
+  // The rows are built from HUD_LAYOUT_INFO at run time (as the theme picker's
+  // are from THEME_INFO), so the page cannot list a layout the module does not
+  // know about.
+  assert.match(SETTINGS_JS, /HUD_LAYOUT_INFO/, "the card does not read the layout table");
+  assert.match(SETTINGS_JS, /HUD_LAYOUTS/, "the card does not read the layout list");
+  assert.doesNotMatch(SETTINGS_JS, /invoke\s*\(/, "the layout picker calls a Rust command");
+});
+
+await check("the page's own key is the one the module exports (the page cannot import it)", () => {
+  // jarvis_hud.html is served by the Python backend as one file, so its inline
+  // script spells the key again, like hud_bootstrap.js spells OPEN_BAR_KEY.
+  // tests/hud.mjs proves the agreement by DRIVING the page with this key; this
+  // is the cheap reading that says the page names it at all.
+  const HUD = read("src/jarvis_hud.html");
+  assert.ok(HUD.includes(`"${S.HUD_LAYOUT_KEY}"`),
+    `jarvis_hud.html does not name hud-window.js's ${S.HUD_LAYOUT_KEY}`);
+  assert.match(HUD, /body\.dataset\.hudLayout/, "the page never sets body.dataset.hudLayout");
+  for (const id of S.HUD_LAYOUTS) {
+    assert.ok(HUD.includes(`data-hud-layout-choice="${id}"`),
+      `the HUD's own picker offers no ${id} button`);
+  }
+});
+
 if (fails.length) {
   console.error(`\n${fails.length} test(s) failed`);
   process.exit(1);
