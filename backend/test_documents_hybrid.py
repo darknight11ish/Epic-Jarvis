@@ -233,6 +233,47 @@ def t_a_changed_file_is_reindexed_and_a_deleted_one_is_dropped():
           got["results"] == [] and got["matches"] == 0, got)
 
 
+def t_an_unchanged_file_is_not_read_again_by_the_index():
+    """Opt 5.2 of the 2026-10-20 work order, which the code ALREADY did.
+
+    The work order said the file walkers "recompute SHA-256 even when
+    (mtime_ns, size) is unchanged". There is no hashing pass in this module at
+    all: `_reconcile()` stats every file and compares (size, mtime_ns) with the
+    indexed row, reading only a new or changed one. This check pins that with a
+    read counter, so a future change cannot quietly start reading (or hashing)
+    unchanged files again - the exact cost the work order was aiming at, which
+    this tree does not pay.
+    """
+    fresh()
+    root = folder("FastSkip")
+    (root / "a.md").write_text("alpha was written first.", encoding="utf-8")
+    (root / "b.md").write_text("beta was written second.", encoding="utf-8")
+    read_paths = []
+    real_read = D.TextIndex._read_text
+
+    def counting_read(self, path):
+        read_paths.append(os.path.realpath(path))
+        return real_read(self, path)
+
+    D.TextIndex._read_text = counting_read
+    try:
+        D.search("alpha", roots=roots_of(root))
+        first = list(read_paths)
+        check("the first index pass reads every file once",
+              len(first) == 2 and len(set(first)) == 2, first)
+        D.search("beta", roots=roots_of(root))
+        check("a second search reads NO unchanged file again",
+              read_paths == first, read_paths)
+        page = root / "b.md"
+        stat = page.stat()
+        os.utime(page, ns=(stat.st_atime_ns, stat.st_mtime_ns + 250_000_000))
+        D.search("beta", roots=roots_of(root))
+        check("a file whose (mtime_ns) moved is read again - and ONLY that file",
+              read_paths == first + [os.path.realpath(str(page))], read_paths)
+    finally:
+        D.TextIndex._read_text = real_read
+
+
 def t_a_title_only_match_is_still_found():
     """The scan this replaced matched the FILE NAME as well as the text. The
     index has to, too, or a search for a page's own title stops finding it."""
@@ -486,6 +527,7 @@ def main():
              t_the_index_is_one_file_in_the_settings_folder,
              t_the_index_stores_no_document_text,
              t_a_changed_file_is_reindexed_and_a_deleted_one_is_dropped,
+             t_an_unchanged_file_is_not_read_again_by_the_index,
              t_a_title_only_match_is_still_found,
              t_a_snippet_is_read_from_the_file_not_the_index,
              t_without_a_meaning_model_the_words_still_answer,

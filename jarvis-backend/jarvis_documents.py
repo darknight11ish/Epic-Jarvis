@@ -1315,9 +1315,9 @@ class TextIndex:
                                 + 1.0 / (RRF_K + rank)
 
                 if embedder is not None and getattr(embedder, "semantic", False):
-                    qv = _embed_texts(embedder, [words])
-                    if qv and qv[0]:
-                        qvec = _unpack_vec(_pack_vec(qv[0]), len(qv[0]))
+                    qv = _query_vector(embedder, words)
+                    if qv:
+                        qvec = _unpack_vec(_pack_vec(qv), len(qv))
                         got = []
                         for row in c.execute(
                                 "SELECT path, dim, vec FROM doc_vec LIMIT ?",
@@ -1439,6 +1439,36 @@ def _embed_texts(embedder, texts: list) -> list:
         except Exception:
             return []
     return []
+
+
+def _query_vector(embedder, words: str) -> list:
+    """One question's vector, through THE one question cache.
+
+    Opt 5.1 of the 2026-10-20 work order. A turn can search memory and then the
+    folders with the SAME question; before this, each store ran its own ONNX
+    pass for it. The cache itself lives in `jarvis_memory.py` because that is
+    where the one model lives - keeping a second cache here (the work order's
+    literal wording) could only dedupe this module against itself, and the
+    duplication being removed is ACROSS the two stores.
+
+    Only an embedder that has opted in is cached; a caller-supplied object
+    keeps its own behaviour. A model failure reads as [] here, exactly as
+    `_embed_texts()` did, so the word half still answers.
+    """
+    if embedder is None:
+        return []
+    try:
+        import jarvis_memory as M                # the one embedder and its cache
+        ask = getattr(M, "_embed_query", None)
+    except Exception:
+        ask = None
+    if callable(ask):
+        try:
+            return list(ask(embedder, words))
+        except Exception:
+            pass                                 # a broken model is not a search error
+    got = _embed_texts(embedder, [words])
+    return list(got[0]) if got else []
 
 
 def _scan_search(words: str, *, roots: Optional[list] = None,

@@ -107,6 +107,7 @@ import threading
 import zlib
 import time
 from contextlib import closing
+from functools import lru_cache
 from pathlib import Path
 from typing import Iterable, Optional
 
@@ -396,7 +397,7 @@ def quiet_onnxruntime() -> None:
 class Embedder:
     """The base every embedder subclasses, and the shape the store relies on.
 
-    Four things, and the store touches nothing else:
+    The shape the store relies on - nothing else is assumed:
 
         name       str   identifies the MODEL. Written into the meta table; a
                          change to it is what triggers the facts_vec rebuild,
@@ -407,6 +408,15 @@ class Embedder:
         semantic   bool  whether these vectors mean anything. False for the
                          hash fallback, and search() checks it before
                          consulting vectors at all.
+        cache_query_vectors
+                   bool  may a QUESTION's vector be shared with another
+                         instance of the same model? Only an embedder whose
+                         `name` really identifies a model may say yes: the
+                         query cache keys on (class, name), so two instances of
+                         one model share one vector and nothing else does. Off
+                         by default - a caller's own object has promised
+                         nothing, so it is never cached or served another
+                         object's vector.
         embed(ts)  ->    one vector per text, in order. A LIST in, a list of
                          lists out - never a single text.
 
@@ -424,6 +434,9 @@ class Embedder:
     name = "base"
     dim = 0
     semantic = False
+    #: Off unless the subclass promises that (class, name) identifies one
+    #: model - see the attribute's line in the docstring above.
+    cache_query_vectors = False
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         raise NotImplementedError
@@ -527,9 +540,15 @@ class FastEmbedder(Embedder):
     prefix version when it uses prefixes, so a change of prefixes counts as a
     change of model: the store then embeds every fact again (never a mix -
     MemoryStore._init() compares the name, not the width).
+
+    The ONE embedder that opts in to the shared question cache: its `name` is
+    the model (plus the prefix version), so two instances - the memory store's
+    and jarvis_documents' - may share one question's vector. See
+    `_embed_query` below.
     """
 
     semantic = True
+    cache_query_vectors = True
 
     def __init__(self, model: Optional[str] = None) -> None:
         model = (model or embed_model_wanted()).strip()
@@ -571,10 +590,97 @@ class FastEmbedder(Embedder):
         return self._vectors([self._q + t for t in texts] if self._q else texts)
 
 
-def _embed_query(embedder, query: str):
-    """One question's vector: embed_query() where the embedder has one."""
+#: How many distinct (model, question) vectors the question cache holds. One
+#: turn can ask the same question of several stores - memory, then the folders
+#: - and each store used to pay for its own ONNX pass. 256 distinct questions
+#: is far more than a turn asks, and one vector is a few hundred floats.
+QUERY_CACHE_SIZE = 256
+
+#: Which embedder may answer for each cached (class, model name). Kept outside
+#: the lru_cache because the cache is keyed by the model's identity, not by the
+#: instance: that is what lets the memory store and the documents store - two
+#: FastEmbedder instances of one model - share a question's vector. An entry
+#: only holds one reference per model, so this stays tiny.
+_QUERY_EMBEDDERS: dict = {}
+_QUERY_LOCK = threading.Lock()
+
+
+def _query_cache_key(embedder):
+    """(class, model name) for an embedder that opted in, else None.
+
+    `Embedder.name`'s contract is that it identifies the MODEL, so two
+    instances of one class with one name compute one question's vector. An
+    embedder that did not opt in (`cache_query_vectors`) has promised nothing -
+    a caller's own object keeps its own behaviour, uncached and unshared.
+    """
+    if not getattr(embedder, "cache_query_vectors", False):
+        return None
+    name = str(getattr(embedder, "name", "") or "").strip()
+    if not name:
+        return None
+    return (type(embedder), name)
+
+
+def _query_vector_of(embedder, query: str) -> tuple:
+    """The one place a question's vector is computed, in the same order
+    jarvis_documents has always used: embed_query() where there is one."""
     fn = getattr(embedder, "embed_query", None)
-    return (fn if callable(fn) else embedder.embed)([query])[0]
+    return tuple(float(x) for x in
+                 (fn if callable(fn) else embedder.embed)([query])[0])
+
+
+@lru_cache(maxsize=QUERY_CACHE_SIZE)
+def _query_vector_cached(key, query: str) -> tuple:
+    """One question's vector for one model, computed once. `key` identifies the
+    model; the embedder that first asked stays registered so a later store with
+    the same model can be answered from here (see `_QUERY_EMBEDDERS`)."""
+    with _QUERY_LOCK:
+        embedder = _QUERY_EMBEDDERS.get(key)
+    if embedder is None:
+        # _clear_query_cache() ran between the registration and this lookup
+        # (another thread choosing a model). The caller computes it directly.
+        raise LookupError("the embedder for this cached question vector is gone")
+    return _query_vector_of(embedder, query)
+
+
+def _embed_query(embedder, query: str):
+    """One question's vector, computed once per (model, normalized question).
+
+    Opt 5.1 of the 2026-10-20 work order. The same question is asked of memory
+    and then of the folders in one turn; before this cache each store ran its
+    own ONNX pass for it (measured in the suite: two passes for one question).
+    The cache is keyed by the MODEL, so a change of model can never be served
+    the old model's vector, and `_make_embedder()` clears it when a model is
+    chosen again.
+
+    The cached value is a tuple, and every caller gets a fresh list, so nothing
+    outside can mutate what a later search is served. An embedder that has not
+    opted in (`_query_cache_key` returns None) is not cached at all.
+    """
+    normalized = " ".join(str(query).split())
+    key = _query_cache_key(embedder)
+    if key is None or not normalized:
+        return _query_vector_of(embedder, normalized)
+    with _QUERY_LOCK:
+        _QUERY_EMBEDDERS.setdefault(key, embedder)
+    try:
+        return list(_query_vector_cached(key, normalized))
+    except LookupError:
+        return _query_vector_of(embedder, normalized)
+
+
+def _clear_query_cache() -> None:
+    """Forget every cached question vector. Called when the MODEL may have
+    changed (`_make_embedder`), and by the suites that pin the cache."""
+    _query_vector_cached.cache_clear()
+    with _QUERY_LOCK:
+        _QUERY_EMBEDDERS.clear()
+
+
+def _query_cache_info() -> tuple:
+    """(hits, misses, size, maxsize) - the suite that pins the cache."""
+    info = _query_vector_cached.cache_info()
+    return (info.hits, info.misses, info.currsize, info.maxsize)
 
 
 def _say_refused(why: str) -> None:
@@ -591,7 +697,12 @@ def _make_embedder():
 
     JARVIS_MEMORY_EMBED_MODEL naming a model this fastembed does not have (or
     cannot load) is REFUSED in plain words - said once, and in status() - and
-    the default model is used instead, never a silent drop to words only."""
+    the default model is used instead, never a silent drop to words only.
+
+    Choosing an embedder is choosing a MODEL, so any cached question vector
+    from the previous one is forgotten here: the cache is keyed by the model,
+    but this also releases the old model's embedder reference."""
+    _clear_query_cache()
     if os.environ.get("JARVIS_NO_EMBED"):
         return HashEmbedder()
     wanted = embed_model_wanted()
