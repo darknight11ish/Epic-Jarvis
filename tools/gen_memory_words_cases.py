@@ -320,8 +320,8 @@ def _real_statuses() -> list:
         snap("on, used once, too slow four times")
         with contextlib.redirect_stderr(io.StringIO()):
             reset(state="loading")
-            M._rr_load(fails(ImportError("no fastembed")))
-            snap("off: fastembed missing")
+            M._rr_load(fails(ImportError("no onnxruntime")))
+            snap("off: onnxruntime or tokenizers missing")
             reset(state="loading")
             M._rr_load(fails(RuntimeError("bad file")))
             snap("off: the model could not be loaded")
