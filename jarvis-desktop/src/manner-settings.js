@@ -179,11 +179,11 @@ document.addEventListener("visibilitychange", () => {
 });
 
 // "Write like me" (jarvis_voiceprint.py; PR #665): the owner's own writing
-// samples and their ON/OFF switch, in this same "How Jarvis talks" card. The
+// samples and their ON/OFF switch, in this same "How Jarvis talks" screen. The
 // module is drawn by voiceprint-settings.js; this file only hands it the two
 // real functions and the link's own staleness. A READ is never held, every
-// write is held on a stale link here (isStale) and again on the PC, and no
-// approval card is raised either way - these are local settings.
+// write is held on a stale link here (isStale) and again on the PC, and
+// neither direction asks the owner for a yes - they are local settings.
 const voiceprint = mountVoiceprint(document.getElementById("voiceprint"), {
   invoke: (command, args) => invoke(command, args),
   confirm: (question) => window.confirm(question),
