@@ -6510,6 +6510,166 @@ def _remember_opened(conversation_id, groups) -> None:
 
 
 # --------------------------------------------------------------------------
+#   The tool list at the start of the prompt: one fixed order, and one
+#   conversation's tools carried forward (KV prefix cache, 2026-10-20)
+# --------------------------------------------------------------------------
+#
+# WHY. The tools are rendered by the model's chat template ahead of every
+# message - "the tool list sits at the start of the prompt", the fact the
+# short-list section above is built on - and Ollama reuses what it has
+# already read only while the next prompt starts the same way (PROMPT_USAGE
+# records the reuse Ollama reports). The top-K diet (F1, 2026-10-18) picks
+# tools for the QUESTION, so two questions in one conversation used to send
+# two different tool arrays: everything after the tool block was read again,
+# the whole earlier conversation included.
+#
+# WHAT. Within one conversation (the request's conversation_id):
+#   * tool names are shown in ONE fixed order (`_canonical_tool_order`: TOOLS
+#     order, the order every caller and test already uses; a plug-in
+#     program's tool - not in TOOLS - goes after, by name). Never a set's
+#     iteration order.
+#   * a turn shows its own diet pick PLUS what earlier turns of the same
+#     conversation picked, so the array stops changing once the conversation's
+#     questions have named the tools it needs: that turn and every turn after
+#     it serialize the same bytes, and Ollama's prefix cache holds.
+#   * at most MAX_STICKY_TOOLS are carried, but this turn's own diet is never
+#     cut - a multi-step chain legitimately picks up to
+#     TOOL_DIET_MULTI_LIMIT, and hiding one of those would undo the
+#     2026-10-19 blind-holdout fix.
+#   * the carried list starts over when the conversation changes (a different
+#     conversation_id has its own state), when the question falls back to the
+#     WHOLE allowed list (nothing was selected to carry, and the fallback is
+#     the safe side the diet still needs to be), and when the message prefix
+#     is compacted (`prefix_compacted`, called from the turn's own round:
+#     once earlier turns are dropped the cached prefix is gone whatever the
+#     tool list is, so the next question starts from the fresh diet).
+#   * no conversation_id (a request without one, or the warm-up) is exactly
+#     today's per-question diet: there is nothing to be sticky to.
+#
+# WHAT IT NEVER CHANGES. What a turn ALLOWS (`names`), what the gate lets
+# through and what asks: a tool that is not shown is still callable, exactly
+# as before (check_call reads the allowed list, not the shown one). Only the
+# `tools` array the model reads is steadied.
+#
+# IN MEMORY ONLY, bounded, gone on a restart - the same shape as _OPENED.
+
+#: How many tool names one conversation carries forward. Small on purpose:
+#: the diet's own cap is TOOL_DIET_LIMIT (8), so a normal conversation
+#: settles after a handful of questions, and a conversation that ranges over
+#: every tool still sends a list, not the whole catalogue.
+MAX_STICKY_TOOLS = 9
+#: Conversations remembered at once; the oldest is forgotten first.
+_STICKY_MAX = 200
+_STICKY: "dict[str, tuple]" = {}          # conversation_id -> names, oldest first
+_STICKY_LOCK = threading.Lock()
+
+
+def _canonical_tool_order(names) -> list:
+    """`names`, each once, in the one fixed tool order.
+
+    TOOLS' own order first - the order offered_tools, tool_offer and
+    tool_diet all use - then a name that is not a built-in tool (a plug-in
+    program's) by name. Deterministic for the same set of names: two turns
+    that show the same tools serialize the same bytes.
+    """
+    order = {name: i for i, name in enumerate(TOOLS)}
+    unique = list(dict.fromkeys(str(n) for n in (names or ())))
+    return sorted(unique, key=lambda n: (order.get(n, len(TOOLS)), n))
+
+
+def _usable_conversation_id(conversation_id) -> bool:
+    """A conversation id this module may key per-conversation state on: a
+    string of the shape the apps send (the same rule `_OPENED` and the
+    suggestion counters use)."""
+    return (isinstance(conversation_id, str)
+            and _CID_OK.match(conversation_id) is not None)
+
+
+def sticky_tool_names(conversation_id) -> list:
+    """The tool names this conversation carries forward, in canonical order
+    ([] for a request without a usable conversation id)."""
+    if not _usable_conversation_id(conversation_id):
+        return []
+    with _STICKY_LOCK:
+        return list(_STICKY.get(conversation_id, ()))
+
+
+def _remember_sticky_tools(conversation_id, names) -> None:
+    """Keep `names` for this conversation; the oldest conversation is
+    forgotten past _STICKY_MAX. At most MAX_STICKY_TOOLS are remembered (the
+    first ones in canonical order); a longer list this turn - a multi-step
+    chain - is shown whole but only its canonical head is carried."""
+    if not _usable_conversation_id(conversation_id):
+        return
+    kept = tuple(_canonical_tool_order(names)[:MAX_STICKY_TOOLS])
+    with _STICKY_LOCK:
+        _STICKY.pop(conversation_id, None)
+        _STICKY[conversation_id] = kept
+        while len(_STICKY) > _STICKY_MAX:
+            _STICKY.pop(next(iter(_STICKY)))
+
+
+def reset_sticky_tools(conversation_id=None) -> None:
+    """Forget one conversation's carried-forward tool list (`None`: every
+    one). Called when the message prefix is compacted, and by the tests."""
+    with _STICKY_LOCK:
+        if conversation_id is None:
+            _STICKY.clear()
+        else:
+            _STICKY.pop(conversation_id, None)
+
+
+def sticky_tool_union(conversation_id, chosen, allowed, *, cap: int = MAX_STICKY_TOOLS) -> list:
+    """The tool names this turn shows: `chosen`, plus what this conversation
+    already showed, in canonical order, at most `cap` (`MAX_STICKY_TOOLS`
+    normally; a Live turn passes its own smaller limit).
+
+    `chosen` - this turn's own diet pick - is never cut: a multi-step chain
+    legitimately picks up to TOOL_DIET_MULTI_LIMIT tools, and must not lose
+    one because a conversation is already carrying the full cap. Names not in
+    `allowed` are dropped (a plug-in program that stopped, an owner's setting
+    that changed) - what a turn may use never widens here.
+    """
+    chosen = _canonical_tool_order(chosen)
+    if not _usable_conversation_id(conversation_id):
+        return chosen
+    cap = max(1, int(cap or MAX_STICKY_TOOLS))
+    allowed_names = set(allowed or ())
+    chosen = [n for n in chosen if n in allowed_names]
+    if len(chosen) >= cap:
+        return chosen
+    union = _canonical_tool_order(
+        [n for n in sticky_tool_names(conversation_id) if n in allowed_names] + chosen)
+    if len(union) <= cap:
+        return union
+    keep = set(chosen)
+    out = [n for n in union if n in keep]
+    for n in union:
+        if len(out) >= cap:
+            break
+        if n not in keep:
+            out.append(n)
+            keep.add(n)
+    return _canonical_tool_order(out)
+
+
+def prefix_compacted(messages, budget) -> bool:
+    """Would `fit_messages` drop earlier turns from `messages` at `budget`?
+
+    The same test `compact_messages` makes, without building its digest. It
+    is what tells a conversation's carried-forward tool list to start over:
+    once the earlier turns of the prompt have to go, the cached prefix is gone
+    whatever the tool list is, so the next question may as well show only its
+    own diet again (`run_local_turn`'s round calls this). Never raises: a bad
+    shape is "not compacted", which changes nothing.
+    """
+    try:
+        return bool(fit_messages_detailed(list(messages or []), int(budget))[1])
+    except Exception:                                            # noqa: BLE001
+        return False
+
+
+# --------------------------------------------------------------------------
 #   Noticing a conversation could use the bigger model (jarvis_second_card's
 #   "combined" lane, CLAUDE.md 2026-09-27's "Both, with a setting" answer)
 # --------------------------------------------------------------------------
@@ -8286,7 +8446,19 @@ def _new_offer(names: list, opened=(), limit: Optional[int] = None) -> dict:
             "opened": set(opened), "extra": {}, "shown": [], "groups": [], "schemas": []}
 
 
-def _fill_offer(offer: dict, names: list, question: str = "") -> None:
+def _fill_offer(offer: dict, names: list, question: str = "",
+                *, conversation_id=None) -> None:
+    """Fill `offer` with what this turn shows the model: the short list's
+    fixed core plus more_tools when that is on, else the top-K diet for
+    `question` (F1, 2026-10-18).
+
+    `conversation_id` is the request's own conversation id. It is what lets
+    the tools earlier turns of this conversation picked be carried forward in
+    one canonical order, so the `tools` array at the start of the prompt
+    stops changing with every question (KV prefix cache - see MAX_STICKY_TOOLS
+    above). None (the warm-up, a request without one) keeps the plain
+    per-question list, exactly as before.
+    """
     offer["groups"] = more_tools_groups(names, short=offer["short"],
                                         plugins=offer["plugins"])
     if offer["short"] or not question or not tool_diet_on():
@@ -8322,6 +8494,23 @@ def _fill_offer(offer: dict, names: list, question: str = "") -> None:
         # Live turn every tool description again.
         keep = [n for n in offer["shown"] if n != MORE_TOOLS][:int(offer["limit"])]
         offer["shown"] = keep + ([MORE_TOOLS] if MORE_TOOLS in offer["shown"] else [])
+    # KV prefix cache (Opt 2.1, 2026-10-20): a conversation carries its
+    # earlier questions' tools forward in ONE canonical order, so this turn's
+    # `tools` array is the same bytes as the last turn's once the
+    # conversation's questions have named every tool it needs (see the
+    # section above MAX_STICKY_TOOLS). A full-list fallback is not carried: it
+    # selected nothing, and the next recognised question must still get the
+    # diet (the Live cap and the 2026-10-19 chain work both depend on that).
+    # A turn that offers no tools at all (a crisis turn, a model that cannot
+    # use tools) changes nothing: its empty list is not a selection either.
+    if not selection["fallback"] and names:
+        cap = MAX_STICKY_TOOLS if not offer.get("limit") else min(
+            MAX_STICKY_TOOLS, int(offer["limit"]))
+        shown = sticky_tool_union(conversation_id,
+                                  [n for n in offer["shown"] if n != MORE_TOOLS],
+                                  base + extra_names, cap=cap)
+        offer["shown"] = shown + ([MORE_TOOLS] if MORE_TOOLS in offer["shown"] else [])
+        _remember_sticky_tools(conversation_id, shown)
     # F4: a plug-in tool the selector did NOT name stays unshown, exactly like
     # a built-in one; on tool_diet_selection's fallback every name is shown,
     # so include_all_extra keeps the full-list fallback as before.
@@ -8856,11 +9045,14 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         _live_limit = None
     offer: dict = _new_offer(names, opened_groups(conv_id), limit=_live_limit)
     # The diet reads the owner's newest own words ONCE for this turn, so every
-    # round shows the same tool list (prompt reuse depends on that).
+    # round shows the same tool list (prompt reuse depends on that) - and
+    # `conv_id` carries the earlier questions' tools forward too, so the list
+    # is the same across TURNS of one conversation (KV prefix cache,
+    # MAX_STICKY_TOOLS above).
     diet_question = _newest_user_text(messages)
 
     def reoffer() -> None:
-        _fill_offer(offer, names, question=diet_question)
+        _fill_offer(offer, names, question=diet_question, conversation_id=conv_id)
 
     if offer["plugins"] and PLUGINS in offer["opened"]:
         # Opened earlier in this chat: the plug-in tools of programs still
@@ -8981,8 +9173,16 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         base_url = chat_url().rsplit("/v1", 1)[0] if "/v1" in chat_url() else chat_url()
         # Held out of the call so that what this round really sends can be
         # measured against what the model says it read - see sent_use.
+        prefix_messages = clear_old_tool_results(msgs, room)
+        # KV prefix cache (Opt 2.1, 2026-10-20): once this conversation's
+        # earlier turns have to be dropped, the cached prefix they gave away
+        # is gone whatever the tool list is - so the next question starts the
+        # conversation's tool list over from its own diet (reset_sticky_tools;
+        # this turn's rounds keep the list they were given).
+        if prefix_compacted(prefix_messages, room) and _usable_conversation_id(conv_id):
+            reset_sticky_tools(conv_id)
         sent_messages = dress_messages(
-            compact_messages(clear_old_tool_results(msgs, room), room,
+            compact_messages(prefix_messages, room,
                              question=question_text),
             manner=manner, focus=focus_brief, next_time=next_time["note"],
             spoken=watch.spoken, live=watch.live,

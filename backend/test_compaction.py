@@ -597,7 +597,7 @@ def t_the_agent_still_writes_refusals_that_way():
 def t_the_turn_uses_the_new_pipeline():
     src = (HERE / "jarvis_agent.py").read_text(encoding="utf-8")
     check("the turn builds its messages with compact_messages",
-          "compact_messages(clear_old_tool_results(msgs, room)," in src, "")
+          "compact_messages(prefix_messages, room," in src, "")
     check("... still passing the question for the recall",
           "question=question_text)" in src, "")
     check("fit_messages is still there for anything that wants only the trim",
