@@ -432,48 +432,85 @@ def _res(embedder, recall, dont_know, p95, *, reranker=None, rr_recall=None, rr_
 
 def t_the_memory_tryout():
     calls = []
+    loads = []
     table = {
         ("BAAI/bge-small-en-v1.5", "Xenova/ms-marco-MiniLM-L-6-v2"):
             _res("BAAI/bge-small-en-v1.5", 77.7, 2.37, 40, reranker="Xenova/ms-marco-MiniLM-L-6-v2",
                  rr_recall=78.0, rr_mrr=0.76),
-        ("Qwen/Qwen3-Embedding-0.6B-Q", None):
-            _res("Qwen/Qwen3-Embedding-0.6B-Q+prefixes-1", 84.0, 2.0, 180, distance_best=0.9),
-        ("google/embeddinggemma-300m", None):
+        ("BAAI/bge-base-en-v1.5", None):
+            _res("BAAI/bge-base-en-v1.5", 84.0, 2.0, 180, distance_best=0.9),
+        ("sentence-transformers/all-MiniLM-L6-v2", None):
             _res("BAAI/bge-small-en-v1.5", 77.7, 2.37, 40),      # an older jarvis_memory.py
         ("BAAI/bge-small-en-v1.5", "Xenova/ms-marco-MiniLM-L-12-v2"):
             _res("BAAI/bge-small-en-v1.5", 77.7, 2.37, 40, reranker="Xenova/ms-marco-MiniLM-L-12-v2",
                  rr_recall=80.0, rr_mrr=0.8),
     }
+    loads.append(("engine", "asked"))          # the fake engine was handed in
+
+    class _Unavailable(Exception):
+        pass
+
+    class FakeEngine:
+        """A stand-in for jarvis_memory: two meaning models and two re-rankers."""
+
+        ONNX_EMBED_MODELS = {"BAAI/bge-small-en-v1.5": {},
+                             "BAAI/bge-base-en-v1.5": {},
+                             "sentence-transformers/all-MiniLM-L6-v2": {}}
+        ONNX_RERANK_MODELS = {"Xenova/ms-marco-MiniLM-L-6-v2": {},
+                              "Xenova/ms-marco-MiniLM-L-12-v2": {}}
+        EmbedModelUnavailable = _Unavailable
+
+        class OnnxEmbedder:
+            def __init__(self, name):
+                loads.append(("embed", name))
+
+        class OnnxReranker:
+            def __init__(self, name):
+                loads.append(("rerank", name))
 
     def fake_run(cmd, env=None, timeout=None):
         key = (env["JARVIS_MEMORY_EMBED_MODEL"], env.get("JARVIS_MEMORY_RERANK_MODEL"))
-        calls.append((key, cmd[cmd.index("--reranker") + 1]))
+        calls.append((key, cmd[cmd.index("--reranker") + 1],
+                      env.get("JARVIS_MEMORY_RERANK")))
         out = Path(cmd[cmd.index("--out") + 1])
         (out / "memory-eval-1.json").write_text(json.dumps(table[key]))
 
-    have = ("0.8.1", {"BAAI/bge-small-en-v1.5", "Qwen/Qwen3-Embedding-0.6B-Q",
-                      "google/embeddinggemma-300m"},
-            {"Xenova/ms-marco-MiniLM-L-6-v2", "Xenova/ms-marco-MiniLM-L-12-v2"})
+    argv = ["--embedders", "BAAI/bge-base-en-v1.5",
+            "sentence-transformers/all-MiniLM-L6-v2",
+            "Qwen/Qwen3-Embedding-0.6B-Q",
+            "--rerankers", "Xenova/ms-marco-MiniLM-L-12-v2",
+            "jinaai/jina-reranker-v1-turbo-en"]
     buf = io.StringIO()
     with NoSocket(), contextlib.redirect_stdout(buf):
-        code = MT.main([], run=fake_run, lists=have, out_root=TMP / "mem")
+        code = MT.main(argv, run=fake_run, engine=FakeEngine, out_root=TMP / "mem")
     out = buf.getvalue()
     check("the memory tryout finishes", code == 0, out[-600:])
+    check("the model it compares against is loaded through the backend's own class",
+          loads[:3] == [("engine", "asked"),
+                        ("embed", "BAAI/bge-small-en-v1.5"),
+                        ("rerank", "Xenova/ms-marco-MiniLM-L-6-v2")], loads[:3])
     check("each run gets its model through the two switches, for that run only",
-          [k for k, _ in calls] == [
+          [k for k, _r, _f in calls] == [
               ("BAAI/bge-small-en-v1.5", "Xenova/ms-marco-MiniLM-L-6-v2"),
-              ("Qwen/Qwen3-Embedding-0.6B-Q", None), ("google/embeddinggemma-300m", None),
+              ("BAAI/bge-base-en-v1.5", None),
+              ("sentence-transformers/all-MiniLM-L6-v2", None),
               ("BAAI/bge-small-en-v1.5", "Xenova/ms-marco-MiniLM-L-12-v2")], calls)
     check("... the meaning-model runs without a re-ranker, the re-ranker runs with it",
-          [r for _k, r in calls] == ["auto", "off", "off", "auto"])
-    check("a re-ranker this fastembed does not have is not run, and the upgrade line is shown",
-          "jinaai/jina-reranker-v1-turbo-en" in out and "fastembed==0.8.1" in out
-          and "--require-hashes" in out)
+          [r for _k, r, _f in calls] == ["auto", "off", "off", "auto"], calls)
+    check("... and only the re-ranker runs turn JARVIS_MEMORY_RERANK on, for that run",
+          [f for _k, _r, f in calls] == ["1", None, None, "1"], calls)
+    check("a meaning model this build cannot run is not tried, and the gone ones say why",
+          "Qwen/Qwen3-Embedding-0.6B-Q" in out
+          and "no tryout of them is possible" in out, out)
+    check("a re-ranker this build cannot run is not tried either",
+          "jinaai/jina-reranker-v1-turbo-en" in out
+          and "Not a model this build can run, so not tried" in out, out)
     check("a better meaning model at its own distance floor: worth trying, with what to set",
-          "Qwen/Qwen3-Embedding-0.6B-Q: worth trying" in out
+          "BAAI/bge-base-en-v1.5: worth trying" in out
           and "JARVIS_MEMORY_MAX_DISTANCE=0.9" in out, out)
     check("a run that measured the default instead is caught, and says why",
-          "google/embeddinggemma-300m: not tested" in out and "apply-patches.ps1" in out)
+          "sentence-transformers/all-MiniLM-L6-v2: not tested" in out
+          and "apply-patches.ps1" in out, out)
     check("the L-6 re-ranker adds too little: does not help",
           "Xenova/ms-marco-MiniLM-L-6-v2: does not help" in out)
     check("the L-12 one adds enough: helps", "Xenova/ms-marco-MiniLM-L-12-v2: helps" in out)
@@ -485,14 +522,20 @@ def t_the_memory_tryout():
     check("a better but slow meaning model: keep bge-small, because of the time",
           MT.embed_verdict(base, slow)[0].startswith("keep")
           and "400" in MT.embed_verdict(base, slow)[1])
-    check("the upgrade is one PowerShell line, with the wheel's hash",
-          "\n" not in MT.FASTEMBED_UPGRADE and "b4f4043080af36ee820d22d2d3034df635c1a8b97"
-          in MT.FASTEMBED_UPGRADE)
     said = []
     n = len(calls)
-    code = MT.main([], run=fake_run, lists=(), out_root=TMP / "m2", say=said.append)
-    check("no fastembed at all: said plainly, nothing run",
-          code == 2 and "fastembed is not installed" in said[0] and len(calls) == n, said)
+    code = MT.main([], engine=object(), out_root=TMP / "m2", say=said.append)
+    check("an older jarvis_memory.py: said plainly, nothing run",
+          code == 2 and "older than this tryout" in said[0] and len(calls) == n, said)
+    real_installed = MT.engine_installed
+    MT.engine_installed = lambda: False
+    said = []
+    try:
+        code = MT.main([], out_root=TMP / "m3", say=said.append)
+    finally:
+        MT.engine_installed = real_installed
+    check("no onnxruntime/tokenizers at all: said plainly, nothing run",
+          code == 2 and "onnxruntime and tokenizers" in said[0] and len(calls) == n, said)
 
 
 def main() -> int:
