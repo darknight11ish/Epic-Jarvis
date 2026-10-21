@@ -435,9 +435,10 @@ def t_private_state_makes_a_stray_model_download_fail_fast():
     """Check 9 (2026-10-18): every run's environment is OFFLINE for model loaders.
 
     THE DEFECT THIS CLOSES. `test_attention_phrases.py`'s header says "no
-    model, no network", but importing the memory store taught fastembed to
-    fetch its 5 model files on a cold cache - under the patcher that suite sat
-    for 900 s on a download it never wanted. The runner cannot stop a suite
+    model, no network", but importing the memory store taught the memory
+    library to fetch its 5 model files on a cold cache - under the patcher that
+    suite sat for 900 s on a download it never wanted. The runner cannot stop a
+    suite
     importing a module; it CAN make the download fail at once in every suite's
     environment (huggingface_hub and friends honour these), which is what this
     checks. The values are the same set `jarvis_child_env` and `jarvis_voices`

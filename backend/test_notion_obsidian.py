@@ -10,7 +10,7 @@ outside the vault, a runaway zip fills the disk. Each guard below is checked,
 and the checks that matter are checked against a REAL vault in a temp folder -
 no pytest, no network, and nothing written outside it.
 
-No fastembed, no Ollama, no model. Nothing here reads the owner's files.
+No meaning model, no Ollama, no model. Nothing here reads the owner's files.
 """
 import json
 import os

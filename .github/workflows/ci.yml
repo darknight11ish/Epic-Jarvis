@@ -165,7 +165,7 @@ jobs:
     # (test_speech, test_voice_contract, test_wakeword) need the three voice
     # packages from backend/requirements.txt, and test_chat_log needs
     # `cryptography` (chat history is encrypted); nothing else from it is needed,
-    # and the memory ones (fastembed, sqlite-vec) are left out on purpose -
+    # and the memory ones (onnxruntime and the meaning model, sqlite-vec) are left out on purpose -
     # the suites use a hash embedder and must pass without them.
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -516,7 +516,7 @@ jobs:
       # The four pins the Ubuntu backend job installs, for the same reason: a
       # new release must not change what CI tests overnight. Update these
       # together with requirements.lock. Nothing else from it - the memory
-      # packages (fastembed, sqlite-vec) are left out there and here, on
+      # packages (onnxruntime and the meaning model, sqlite-vec) are left out there and here, on
       # purpose, and every suite below passes without them.
       #
       # Then the two the Ubuntu job cannot install, because they are Windows

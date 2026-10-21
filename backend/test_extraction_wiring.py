@@ -32,7 +32,7 @@ HUD = BACKEND / "jarvis_hud.py"
 # jarvis_memory already has loaded (jarvis_intake._live_store). Nothing here
 # used to pin one, so the moment any test in the process loaded jarvis_memory,
 # the learner's next pass read the OWNER'S OWN ~/.openjarvis/memory.db, and
-# fastembed downloaded bge-small-en-v1.5 there and back (about fifteen seconds
+# the old memory library downloaded bge-small-en-v1.5 there and back (about fifteen seconds
 # the first time) while holding that store's lock.
 #
 # Measured 2026-10-04: `a burst of turns produces one pass, not one per turn`

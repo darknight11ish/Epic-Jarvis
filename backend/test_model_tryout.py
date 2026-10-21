@@ -26,7 +26,7 @@ chat_tryout.py
 memory_tryout.py
   - each self-test run gets its model through the two switches, for that run
     only; the meaning-model and re-ranker verdicts follow their rules;
-  - a model this fastembed does not have is not run, and the one-line
+  - a model this build does not have is not run, and the one-line
     upgrade is printed; a run that silently measured the default instead
     (an older jarvis_memory.py) is caught;
   - the scoreboard rows use docs/MEMORY-SCOREBOARD.md's table format.

@@ -4,7 +4,7 @@
 
 WHY THIS EXISTS (Gemini's 2026-10-20 work order, Layer 5, Opt 5.1). A turn can
 ask several stores the SAME question - memory first, then the folders - and
-each store ran the question through the fastembed ONNX model again. The model
+each store ran the question through the memory model again. The model
 does not change between those asks, so the second and third were paid for
 nothing. `jarvis_memory._embed_query()` now keeps an `lru_cache(256)` of the
 question's vector, keyed by the model's own identity, and
@@ -38,7 +38,7 @@ from _where import require_shipped  # noqa: E402
 
 require_shipped("rebuilt/jarvis_memory.py", "jarvis_documents.py")
 sys.path.insert(0, str(HERE / "rebuilt"))
-#: A stand-in fastembed is never loaded here; the embedders are injected.
+#: A real model is never loaded here; the embedders are injected.
 os.environ["JARVIS_NO_EMBED"] = "1"
 
 import jarvis_documents as D  # noqa: E402
