@@ -594,6 +594,11 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
 .layout-picker{
   display:flex; gap:2px; padding:2px; border:1px solid var(--line);
   border-radius:4px; background:var(--plate-2); flex-shrink:0;
+  /* Wrap the three pills rather than run past the window's right edge if a
+     wide text setting or an unusual DPI leaves the header very narrow: a pill
+     that is pushed off the edge is a control the owner cannot click (the
+     field report of 2026-10-21, and the pixels it was argued from). */
+  flex-wrap:wrap; max-width:100%;
 }
 .layout-choice{
   display:flex; align-items:center; gap:5px; padding:4px 8px; border-radius:3px;
