@@ -467,6 +467,20 @@ data class PendingItem(
      * key. Null for every other card - which then looks exactly as before.
      */
     @SerialName("form_picture") val formPicture: String? = null,
+    /**
+     * The PC's answer to "does approving this card replace what is already
+     * there?" (review ruling 8.2, 2026-10-20; `jarvis_gate.pending()` puts
+     * `replaces` on every waiting row). True for a backup restore, a phone-key
+     * registration, a forget-range and the voice-training clear.
+     *
+     * Additive and defaulted: an older PC sends no field, so every card it
+     * sends is ordinary and behaves exactly as it did before this guard
+     * existed. [ReplaceConfirm.applies] is the one place the phone decides
+     * from it, with the three real action names as the fallback for that older
+     * PC. The card then draws the "REPLACES CURRENT DATA" heading and asks for
+     * a second press of Approve.
+     */
+    @SerialName("replaces") val replaces: Boolean = false,
     val task: String? = null,
 ) {
     /**

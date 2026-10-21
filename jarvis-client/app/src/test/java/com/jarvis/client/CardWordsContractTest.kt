@@ -128,7 +128,13 @@ class CardWordsContractTest {
         // Read as text: they are Compose and Glance, which this JVM test
         // cannot draw. The order in the source IS the order on screen (a Row).
         val card = source("ui/approval/ApprovalCard.kt")
-        assertTrue(card.indexOf("Refuse(CardWords.BUTTONS[0]") in 0 until card.indexOf("Affirm(CardWords.BUTTONS[1]"))
+        // Review ruling 8.2 (2026-10-20): the approve button's words are now
+        // the confirm label on a state-replacing card and CardWords.BUTTONS[1]
+        // otherwise, so the static check names the button rather than the
+        // exact literal. What it holds is the same thing: Deny is drawn first,
+        // and the affirmative side still falls back to the shared word.
+        assertTrue(card.indexOf("Refuse(CardWords.BUTTONS[0]") in 0 until card.indexOf("Affirm("))
+        assertTrue(card.indexOf("CardWords.BUTTONS[1]") > card.indexOf("Refuse(CardWords.BUTTONS[0]"))
         val widget = source("widget/ApprovalWidget.kt")
         val row = widget.substring(widget.indexOf("Row(modifier = GlanceModifier.fillMaxWidth())"))
         assertTrue(row.indexOf("label = \"Deny\"") in 0 until row.indexOf("label = \"Review\""))

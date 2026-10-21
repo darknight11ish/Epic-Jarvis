@@ -16,6 +16,7 @@
  */
 
 import { fallbackTitle } from "./card-words.js";
+import { isReplaceCard } from "./replace-confirm.js";
 import { markMigrated, migrated, storeAnimal } from "./animal-shared.js";
 import { loadFaceTuning } from "./face-tuning.js";
 
@@ -213,6 +214,11 @@ export function normaliseApproval(row) {
     created: Number(row.created || 0),
     detail,
     options,
+    // Review ruling 8.2: the PC's own answer to "does approving this replace
+    // what is already there?" (jarvis_gate.pending()). Kept exactly as sent -
+    // a missing field is `false` and the card is ordinary; replace-confirm.js
+    // owns the older-PC fallback for the three real action names.
+    replaces: row.replaces === true,
     risk: risk
       ? {
           reversible: String(risk.reversible || "no"),
@@ -334,6 +340,11 @@ export function expiryWords(expiresAt, now = Date.now()) {
  * 2. Nothing `raised` it. An item carrying `raised` is on the card *because*
  *    outside text tried to make the reader go faster, so the one response that
  *    must not be available is the fast one — whatever `swipe_ok` says.
+ * 3. It is not a state-REPLACING card (review ruling 8.2, 2026-10-20). Those
+ *    take two explicit presses of Approve in the Jarvis bar
+ *    (replace-confirm.js); a typed "approve" is a gesture, and the whole point
+ *    of the guard is that one deliberate-looking act must not restore a backup.
+ *    A typed deny still works: refusing costs a retry.
  *
  * Exported rather than inlined so that a future swipe, a bulk selection or a
  * keyboard shortcut cannot each arrive at their own answer. There is no swipe
@@ -342,6 +353,7 @@ export function expiryWords(expiresAt, now = Date.now()) {
 export function quickActionable(approval) {
   if (!approval || !approval.risk) return false;
   if (approval.raised) return false;
+  if (isReplaceCard(approval)) return false;
   return approval.risk.swipeOk === true;
 }
 

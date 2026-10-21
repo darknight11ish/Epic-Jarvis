@@ -740,6 +740,55 @@ places between screens. Presentation only - no approval logic changed.
   approve-by-voice**: the voice check cannot tell a recording from the owner,
   so a spoken "yes" answers nothing. For the same reason no sentence says
   "until you say yes" any more ("until you approve the card").
+- **Two MECHANICAL guards against blind, stacked approvals (2026-10-20).**
+  The owner's incident: one "approve all" click approved three backup
+  restores, two imports and a device-key registration, because repeated
+  requests had STACKED identical cards and muscle memory walked the queue.
+  The review the owner accepted (ruling 8.2 of
+  `FOR-GEMINI-COMPREHENSIVE-REVIEW-2026-10-20-LATE`) asked for two
+  mechanical guards rather than advice, and neither weakens nor answers a
+  card:
+  1. **One card per identical request.** A request whose action AND target
+     (a canonical digest of every input that changes what approving does)
+     matches a card still in `state='pending'` reuses that card: the
+     duplicate caller is told which card is already waiting and runs
+     nothing, so one approved card is one action instead of three
+     restores. Different actions or targets are never merged; a card that
+     was answered, denied or expired is never reused; nothing is
+     auto-approved. The SELECT and INSERT are one `BEGIN IMMEDIATE`
+     transaction (`jarvis_gate.check()`, `backend/gate-touches.patch` - the
+     file is patch-carried, not shipped whole).
+  2. **State-replacing cards say so and take a second press.** The cards
+     that REPLACE or delete what is already there - `restore_backup`,
+     `register_approval_key`, `memory_forget_range`, and the
+     voice-training clear (raised as the shared `change_own_config` and
+     marked by its own module) - carry `replaces: true` on every waiting
+     row (`jarvis_gate.pending()`), so both apps and the HUD get the same
+     set from one place. Each draws a plain **"REPLACES CURRENT DATA"**
+     heading (real words, never colour alone) and Approve takes TWO
+     presses: the first arms it and says what the second will do, the
+     second sends; the button's own label changes between them. A typed
+     "approve", a right swipe and the desktop widget do not decide these
+     cards (`quickActionable` refuses them; the widget opens the bar,
+     where the two-press gate lives). Deny and a left swipe are never
+     touched - refusing is always the safe direction. Ordinary cards are
+     exactly as they were. `jarvis_gate.replaces_for()` is the backend
+     table; `replace-confirm.js` (desktop, widget, bar) and
+     `net/ReplaceConfirm.kt` (phone) are the client rule, with the three
+     real action names as the fallback for a PC too old to send the field.
+     **The HUD window is guarded by its own injected bootstrap.** The vendored
+     page's `onclick` never runs inside the desktop HUD - `hud_bootstrap.js`
+     captures every card press and sends through `decide_approval`, so a
+     page-only rule cannot protect that window (the 2026-10-21 pre-merge audit
+     found it could still approve a restore in one click). The bootstrap reads
+     the PC's own `/api/pending` row, requires the explicit second press for a
+     `replaces` row, arms ONE card id for 10 seconds and sends once; the page's
+     two-press stays for a browser tab with no bootstrap. Only an EXPLICIT
+     `replaces: false` is one click: an absent field, a missing row or a failed
+     read is UNKNOWN and requires the second press, because treating doubt as
+     "ordinary" is how this guard would re-open during its own deploy window.
+     The pure rule is executed in `hud-replace-confirm.mjs`; the click wiring in
+     the running window is executed by the Playwright case in `hud.mjs`.
 
 ---
 

@@ -44,8 +44,16 @@ const lift = (name) => {
   assert.ok(m, `jarvis_hud.html has no function ${name}`);
   return m[0];
 };
+// apprCardHtml() (lifted below) now also builds the "REPLACES CURRENT DATA"
+// heading for the state-replacing cards, so the guard block and its three
+// constants are lifted with the functions. The block is marked in the page
+// for exactly this (review ruling 8.2).
+const replaceGuard = HUD.slice(
+  HUD.indexOf("/* == replace-confirm guard begin =="),
+  HUD.indexOf("/* == replace-confirm guard end =="));
+assert.ok(replaceGuard.length > 100, "jarvis_hud.html lost its replace-confirm block markers");
 const hud = new Function(
-  `${["apprEscape", "apprDescribe", "apprCardHtml", "apprRaised", "apprRiskLine", "apprCutOff",
+  `${replaceGuard}\n${["apprEscape", "apprDescribe", "apprCardHtml", "apprRaised", "apprRiskLine", "apprCutOff",
       "apprTitle"].map(lift).join("\n")}; return { apprCardHtml, apprTitle };`)();
 
 check("the label, the button order and the no-action title are the PC's", () => {

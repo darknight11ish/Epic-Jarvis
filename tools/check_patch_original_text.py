@@ -156,7 +156,17 @@ PIN = {
     # rather than drift, and checked: the three hunks were `git apply --check`ed
     # against the published gate and test_gate_touches.py applies them forwards
     # and reverses them out of it byte-for-byte.
-    "gate-touches.patch":                      (5, 59),   # position 137
+    # RAISED AGAIN 2026-10-20 to 8/93 for the blind-approval guards (review
+    # ruling 8.2): pending-card deduplication in check()'s ask branch, its two
+    # helpers, and the `replaces` flag pending() carries to both apps. The three
+    # new hunks read 34 lines of the owner's ORIGINAL gate - the `import` block,
+    # the code above `def check(`, and check()'s own INSERT into the queue,
+    # which the owner's file already had - and no patch in this walk writes any
+    # of them, so they are honest rather than drift. Checked the same way: the
+    # whole patch is `git apply`ed forwards and reversed out of the published
+    # gate byte-for-byte by backend/test_gate_touches.py, and
+    # backend/test_approval_guards.py proves the behaviour against that copy.
+    "gate-touches.patch":                      (8, 93),   # position 137
     "presets.patch":                           (4, 27),   # position 146 - presets.patch
     # (2026-10-18, the preset model selector): the active-lane helper and the
     # four chat call sites are the owner's original HUD text. Measured, not

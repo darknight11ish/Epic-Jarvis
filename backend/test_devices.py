@@ -60,6 +60,17 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from _where import REPO, require_shipped  # noqa: E402
 
+#: devices.patch's OWN two lines for this action, used by the
+#: later_rewriting() question below. The question is "does a later patch
+#: REWRITE one of the lines devices.patch wrote", so the needle is the LINE,
+#: not the bare action name: gate-touches.patch (2026-10-20) names
+#: register_approval_key again, in its own `_REPLACES_ACTIONS` table for the
+#: blind-approval guards, without touching either of these lines. A bare name
+#: flagged that new table and proved nothing about the lines that matter.
+DEVICES_TIER_LINE = ('"register_approval_key",  # jarvis_devices.py acts only '
+                     'on tier "ask"')
+DEVICES_RISK_LINE = '"register_approval_key": ("yes", "local",'
+
 require_shipped("jarvis_devices.py")
 
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-devices-"))
@@ -703,11 +714,16 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # has exactly TWO hunks, both in jarvis_gate.py: under
                                 # `_PROTECTED`/`_PROTECTED_RE` and at check()'s own
                                 # `hit = _touches_protected(prompt, detail)` call. It
-                                # removes no line, adds no gate list entry, no risk row
-                                # and no _TOOL_ACTIONS line, and has no jarvis_hud.py
-                                # hunk at all - so it cannot rewrite a line
-                                # devices.patch wrote. The later_rewriting() half below
-                                # proves it.
+                                # removes no line, adds no gate list entry and no
+                                # _TOOL_ACTIONS line, and has no jarvis_hud.py hunk at
+                                # all - so it cannot rewrite a line devices.patch wrote.
+                                # (Since 2026-10-20 it DOES name
+                                # `register_approval_key` once more, in its own
+                                # `_REPLACES_ACTIONS` table for the blind-approval
+                                # guards - a new table, on lines devices.patch never
+                                # wrote, which is why the later_rewriting() half below
+                                # now asks about devices.patch's OWN two lines rather
+                                # than the bare name.)
                                 "gate-touches.patch",
                                 # picture-card.patch (2026-10-10) is "which card
                                 # draws the pictures": ONE hunk in jarvis_hud.py,
@@ -803,7 +819,8 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # and the install block that wires POST /api/work/apply. No gate list,
                                 # no tier row, no _RISK row, no line this patch writes.
                                 "presets.patch"}
-          and not _stack.later_rewriting("devices.patch", "register_approval_key"), order[-3:])
+          and not _stack.later_rewriting("devices.patch", DEVICES_TIER_LINE)
+          and not _stack.later_rewriting("devices.patch", DEVICES_RISK_LINE), order[-3:])
     text, log = _stack.stand_in("jarvis_hud.py")
     check("the stacked jarvis_hud.py builds", text is not None, "\n".join(log[-3:]))
     if text is None:

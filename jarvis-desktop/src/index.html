@@ -866,6 +866,20 @@
             </details>
           </div>
 
+          <!-- ── REPLACES CURRENT DATA (review ruling 8.2, 2026-10-20) ─────
+               Drawn only for the cards that replace or delete what is already
+               on the PC (a backup restore, a phone-key registration, a
+               forget-range, the voice-training clear). The PC says which those
+               are - `replaces` on every waiting row from jarvis_gate.pending()
+               - so the desktop, the HUD and the phone cannot disagree about
+               the set. The heading is PLAIN WORDS, never colour alone, and the
+               Approve button below takes a second press on these cards. -->
+          <div class="approval-replaces" id="approval-replaces" hidden>
+            <strong class="approval-replaces-head">REPLACES CURRENT DATA</strong>
+            <span class="approval-replaces-note">Approving this replaces what is
+              there now. Press Approve again to confirm.</span>
+          </div>
+
           <div class="approval-preview markdown" id="approval-preview"></div>
 
           <!-- The picture of a filled-in web form, only on a "submit this

@@ -140,8 +140,15 @@ const lift = (name) => {
   assert.ok(m, `jarvis_hud.html has no function ${name}`);
   return m[0];
 };
-const hudSrc = ["apprEscape", "apprDescribe", "apprCardHtml", "apprRaised", "apprRiskLine",
-                "apprCutOff", "apprTitle"].map(lift).join("\n");
+// The replace-confirm guard block is lifted WHOLE: apprCardHtml() calls
+// apprReplace(), which needs the three constants declared beside it. The
+// block in the page is marked for exactly this (review ruling 8.2).
+const replaceGuard = HUD.slice(
+  HUD.indexOf("/* == replace-confirm guard begin =="),
+  HUD.indexOf("/* == replace-confirm guard end =="));
+assert.ok(replaceGuard.length > 100, "jarvis_hud.html lost its replace-confirm block markers");
+const hudSrc = [replaceGuard].concat(["apprEscape", "apprDescribe", "apprCardHtml", "apprRaised",
+                 "apprRiskLine", "apprCutOff", "apprTitle"].map(lift)).join("\n");
 const hud = new Function(`${hudSrc}; return { apprCardHtml, apprCutOff, apprTitle };`)();
 
 check("the HUD card shows the rush warning, its quote and the risk sentence", () => {
@@ -176,6 +183,26 @@ check("the HUD refuses Approve on a cut-off request", () => {
   assert.equal(hud.apprCutOff({ detail: cut }), true);
   assert.match(hud.apprCardHtml({ id: "c", action: "x", tier: "ask", detail: cut }, 0),
                /cannot be approved here/);
+});
+
+check("the HUD draws 'REPLACES CURRENT DATA' only on the marked cards", () => {
+  // Review ruling 8.2: the PC marks the state-replacing rows with `replaces`
+  // (jarvis_gate.pending()), and the HUD card says so in plain words.
+  const marked = hud.apprCardHtml({ id: "s1", action: "restore_backup", tier: "ask",
+                                    replaces: true, detail: "{}", prompt: "card" }, 0);
+  assert.match(marked, /REPLACES CURRENT DATA/);
+  assert.match(marked, /Press Approve again/);
+  const ordinary = hud.apprCardHtml({ id: "s2", action: "send_email", tier: "ask",
+                                      replaces: false, detail: "{}", prompt: "card" }, 0);
+  assert.doesNotMatch(ordinary, /REPLACES CURRENT DATA/);
+  // ... and the older-PC fallback names the three real actions, not the
+  // review's wording.
+  assert.match(hud.apprCardHtml({ id: "s3", action: "restore_backup", tier: "ask",
+                                  detail: "{}", prompt: "card" }, 0),
+               /REPLACES CURRENT DATA/);
+  assert.doesNotMatch(hud.apprCardHtml({ id: "s4", action: "backup_restore", tier: "ask",
+                                         detail: "{}", prompt: "card" }, 0),
+                      /REPLACES CURRENT DATA/);
 });
 
 console.log(fails.length ? `\n${fails.length} failed` : "\nall approval-row checks passed");
