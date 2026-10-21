@@ -30,12 +30,19 @@ use crate::ChatState;
 
 /// Every read the HUD page makes, exactly. `/api/retrieve` is the one with a
 /// query, and it is checked on its own in [`allowed_get`].
-pub const HUD_GET_PATHS: [&str; 5] = [
+///
+/// `/api/presets` (2026-10-21): the left rail's five focus presets are a
+/// read of the PC's own contract (JARVIS-API section 145), added at the
+/// owner's request for the HUD. Applying one is NOT a read and does not
+/// happen here - `focus_presets::apply_focus_preset` is the one command
+/// for that, with its ONE switch_model card, exactly as the bar uses it.
+pub const HUD_GET_PATHS: [&str; 6] = [
     "/api/status",
     "/api/graph",
     "/api/pending",
     "/api/initiative",
     "/api/memory/pending",
+    "/api/presets",
 ];
 
 /// The retrieval trace: `/api/retrieve?q=<the question>`, and nothing else.
@@ -325,6 +332,10 @@ mod tests {
         for path in HUD_GET_PATHS {
             assert_eq!(allowed_get(path).as_deref(), Some(path));
         }
+        // The rail's five presets, added 2026-10-21 - and only as a plain
+        // GET: the apply is `apply_focus_preset`, never a read.
+        assert_eq!(allowed_get("/api/presets").as_deref(), Some("/api/presets"));
+        assert_eq!(allowed_get("/api/work/apply"), None);
         assert_eq!(
             allowed_get("/api/retrieve?q=what%20is%20on%20today").as_deref(),
             Some("/api/retrieve?q=what%20is%20on%20today")
