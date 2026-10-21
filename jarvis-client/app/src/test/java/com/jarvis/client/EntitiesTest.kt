@@ -3,6 +3,7 @@ package com.jarvis.client
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.Entities
 import com.jarvis.client.net.JarvisJson
+import com.jarvis.client.net.MemoryAsOf
 import com.jarvis.client.net.MemoryUsed
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.int
@@ -202,6 +203,101 @@ class EntitiesTest {
             "topics is no longer drawn before the Galaxy plate",
             brain.indexOf("""plate("topics"""") < brain.indexOf("""plate("people-and-things""""),
         )
+    }
+
+    // --------------------------- A1: kind chips, search, shared count, as of ---
+
+    @Test
+    fun theKindChipsAndTheSearchArePureFilters() {
+        val list = Entities.parse(obj(entitiesBody))!!
+        assertEquals(
+            listOf(Entities.ALL, "People", "Pets", "Places", "Organisations",
+                   "Projects", "Things", "Other"),
+            Entities.filterLabels(list),
+        )
+        // "Other" is offered only when a name really has no (or an unknown) kind.
+        val knownOnly = Entities.parse(
+            obj("""{"entities": [{"id": 1, "name": "Ann", "kind": "person", "fact_ids": [1]}]}"""),
+        )!!
+        assertEquals(
+            listOf(Entities.ALL, "People", "Pets", "Places", "Organisations",
+                   "Projects", "Things"),
+            Entities.filterLabels(knownOnly),
+        )
+        assertEquals(listOf("Priya", "Dan"),
+            Entities.visible(list, "People", "").map { it.name })
+        assertEquals(listOf("Priya"),
+            Entities.visible(list, "People", "pri").map { it.name })
+        assertTrue(Entities.visible(list, "People", "zzz").isEmpty())
+        // The search trims and ignores case, and "All" never hides anything.
+        assertEquals("Priya", Entities.visible(list, Entities.ALL, "  PRIYA ").single().name)
+        assertEquals(list.size, Entities.visible(list, Entities.ALL, "").size)
+        // An unknown kind is under "Other", not under a guessed group.
+        val other = Entities.visible(list, Entities.OTHER, "").map { it.name }
+        assertTrue(other.containsAll(listOf("Kettle", "Odd")))
+        assertFalse(other.contains("Priya"))
+    }
+
+    @Test
+    fun aRowSaysHowManyNamesItSharesFactsWith() {
+        val many = Entities.parse(
+            obj("""{"entities": [
+                {"id": 1, "name": "Ann", "kind": "person", "fact_ids": [1, 2, 3]},
+                {"id": 2, "name": "Bob", "kind": "person", "fact_ids": [1, 2, 3]},
+                {"id": 3, "name": "Cat", "kind": "person", "fact_ids": [1]},
+                {"id": 4, "name": "Dog", "kind": "pet", "fact_ids": [9]}
+            ]}"""),
+        )!!
+        val partners = Entities.sharedPartners(many)
+        assertEquals(2, partners["1"])       // Ann shares with Bob and Cat
+        assertEquals(2, partners["2"])
+        assertEquals(2, partners["3"])       // Cat shares fact 1 with Ann and Bob
+        assertEquals(0, partners["4"])
+        assertEquals("Shares facts with 2 names", Entities.sharesLine(2))
+        assertEquals("Shares facts with 1 name", Entities.sharesLine(1))
+        assertNull(Entities.sharesLine(0))
+        // The desktop's own rule: a fact naming more than twelve names is a
+        // list, not an edge, so it joins nothing - held here too.
+        val thirteen = Entities.parse(
+            obj("""{"entities": [${(1..13).joinToString(",") {
+                """{"id": $it, "name": "N$it", "kind": "person", "fact_ids": [501]}"""
+            }}]}"""),
+        )!!
+        assertTrue(Entities.sharedPartners(thirteen).values.all { it == 0 })
+    }
+
+    @Test
+    fun asOfNarrowsTheSameListToTheFactsActiveOnADate() {
+        val list = Entities.parse(obj(entitiesBody))!!
+        val facts = MemoryAsOf.parseRows(
+            obj("""{"available": true, "facts": [
+                {"id": 9, "text": "a", "current": true, "created": 1789000000.0},
+                {"id": 7, "text": "b", "current": false, "created": 1788000000.0},
+                {"id": 12, "text": "c", "current": true, "created": 1787000000.0},
+                {"id": 6, "text": "d", "current": true, "created": 1786000000.0},
+                {"id": 999, "text": "another entity", "current": true}
+            ], "known_at": 1.8e9}"""),
+        )!!
+        val asOf = Entities.asOfEntities(list, facts)
+        // The SAME list, narrowed to names with an active fact on that date.
+        assertEquals(listOf("Priya", "Dan"), asOf.map { it.name })
+        assertEquals(listOf(9L), asOf.first { it.name == "Priya" }.factIds)
+        assertEquals(listOf(12L, 6L), asOf.first { it.name == "Dan" }.factIds)
+        assertEquals("Priya, 1 fact on 12 Oct 2026",
+            Entities.asOfRowLine(asOf.first(), "12 Oct 2026"))
+        assertEquals("No active facts on 12 Oct 2026.", Entities.asOfNone("12 Oct 2026"))
+        assertEquals("Facts as of 12 Oct 2026", Entities.asOfLine("12 Oct 2026"))
+        // The retired fact (current = false then) is NOT counted, and the
+        // details keep it apart so the plate can draw it muted.
+        val rows = Entities.asOfRows(list.first { it.name == "Priya" }, facts, ZoneOffset.UTC)
+        assertEquals(listOf(9L), rows.active.map { it.id })
+        assertEquals(listOf(7L), rows.retired.map { it.id })
+        assertFalse(rows.active.first().forgotten)
+        // A date on which nothing was active says so instead of drawing nothing.
+        val none = MemoryAsOf.parseRows(
+            obj("""{"facts": [{"id": 7, "text": "b", "current": false}]}"""),
+        )!!
+        assertTrue(Entities.asOfEntities(list, none).isEmpty())
     }
 
     private fun repoFile(rel: String): File {

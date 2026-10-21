@@ -125,9 +125,40 @@ map's *edges* - who appears alongside whom - so the list now says them: tapping 
 `MAX_NAMES_PER_FACT` = 12 joins nothing), worked out from the `/api/memory/entities` read already
 in hand by intersecting `fact_ids`. **No new route, no `/api/graph`, no canvas and no write** -
 still no picture, no force layout, no dragging, no merge and no Forget/Erase/Pin from this screen.
-What stays the desktop's: the drawing itself, the search-by-name box, the names under each fact in
-the Memory tab, "About <name>", the "are these the same?" merge card, and the fact-words panel's
-paging that hangs off a dot. The map's information reaches the phone; the map does not.
+What stays the desktop's: the drawing itself, the map's own floating search box and its hover,
+the names under each fact in the Memory tab, "About <name>", the "are these the same?" merge card,
+and the fact-words panel's paging that hangs off a dot. The map's information reaches the phone;
+the map does not.
+
+**A1 (2026-10-21, owner + Gemini approved): the list becomes easy to look through - still read-only.**
+The phone's plate gains four things, every one a VIEW of the same `/api/memory/entities` read and
+**none** a new route, a write, a card or a canvas:
+
+- **kind filter chips** `All / People / Pets / Places / Organisations / Projects / Things`, plus
+  `Other` only when a name really has no (or an unknown) kind, and a **search box over names**
+  (case-insensitive, trimmed, names only - never the words of a fact);
+- the **shared-facts count on a row** ("Shares facts with 2 names"), the number
+  `Entities.connections` already computes for the name opened, now said on the row itself and
+  worked out for the whole list in one pass (`Entities.sharedPartners`, the desktop's
+  `MAX_NAMES_PER_FACT` rule kept);
+- **as-of chips** `Now / 7d / 30d / Pick date…`: `Now` is today's list untouched; the others read the
+  **existing** `GET /api/memory/facts?known_at=` (the same one-shot read the Memory screen's as-of
+  plate already uses, `JarvisRuntime.memoryAsOf`) and narrow each name's own `fact_ids` to the facts
+  the PC says were `current` on that date. A name with no active fact then drops out; when NO name
+  had one the plate says "No active facts on <date>." instead of drawing nothing; and opening a name
+  lists the retired facts (no longer true then) **muted** under "No longer true then". The phone's
+  `MemoryDates.knownAt` rule turns a typed date into the end of that day, the same rule the desktop
+  uses, so both apps ask the same question;
+- all of it stays **inside** the existing hidden-lists/App-lock gate: the plate returns
+  `HiddenSection` before it reads anything, so the chips, the search and the as-of read do not
+  exist while memory lists are hidden. Every new word TalkBack reads is a phone-only constant
+  (`Entities.ALL`, `SEARCH`, `AS_OF`, `RETIRED`, ...), in the same place as `TITLE`/`UNDER`.
+
+**Deferred: the read-only Capabilities/Neural list mode.** The work order allowed it "only if the PC
+route exists by then"; on this tree there is **no `GET /api/galaxy/capabilities` route** (checked in
+`backend/`, `jarvis-client/` and `tools/`), so the phone did not invent one and the mode is not
+built. When that read-only route lands, it is a list fed by it with no owner data and no actions -
+the same shape as this plate.
 
 ## 5. Gate, routes, parity summary
 
@@ -163,6 +194,16 @@ that an erased fact's id in `fact_ids` reads back with empty text through
 `used_view()`, so the panel's assumption is pinned.
 Phone (option B only): `PeopleThingsTest.kt` for the reader and the paging, reading
 the same fixture words.
+
+**A1 (2026-10-21):** pure-JVM tests in `EntitiesTest.kt` - the kind chips are
+`All .. Other` (Other only when a name has no/unknown kind), the search filters on
+the name only (trimmed, case-insensitive, no match says so), the shared-facts count is
+the same fact-intersection rule as `connections` (including the twelve-name rule), and
+the as-of narrowing keeps the SAME list with each name's active-then ids, drops a date
+with no active facts, says the plain line, and keeps retired facts apart for the muted
+section. `MemoryAsOfTest.kt` gains the id-keeping reader (`parseRows`) used for that
+count. `PhoneGalaxyTest.kt`'s existing hidden-mode, no-canvas and no-write pins still
+run unchanged.
 The feature audit runs with the build (bugs, both apps or the written reason,
 fit).
 

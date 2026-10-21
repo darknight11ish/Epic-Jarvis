@@ -76,4 +76,22 @@ class MemoryAsOfTest {
     fun `no facts list at all is not read as nothing known`() {
         assertNull(MemoryAsOf.parse(body("""{"available": true, "known_at": 1790000000.0}""")))
     }
+
+    @Test
+    fun `the Galaxy's reader keeps each fact's id and saved time`() {
+        // Same response as above: the as-of PLATE drops the id, but the phone's
+        // Galaxy needs it to count a name's facts on a date (A1, 2026-10-21).
+        val rows = MemoryAsOf.parseRows(real)!!
+        assertEquals(listOf(3L, 2L), rows.map { it.id })
+        assertEquals(listOf(true, false), rows.map { it.trueThen })
+        assertEquals("The owner lives on Elm Street", rows[0].text)
+        assertEquals(1789000000.0, rows[0].created!!, 0.001)
+        // Junk is dropped the same way: no id, a string id and an empty fact.
+        val junk = MemoryAsOf.parseRows(
+            body("""{"facts": [{"id": 1, "text": "kept"}, {"text": "no id"},
+                    {"id": "7", "text": "a string id"}, {"id": 4, "text": "  "}]}"""),
+        )!!
+        assertEquals(listOf(1L), junk.map { it.id })
+        assertNull(MemoryAsOf.parseRows(body("""{"available": true}""")))
+    }
 }
