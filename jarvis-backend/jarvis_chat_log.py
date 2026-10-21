@@ -945,7 +945,19 @@ class ChatLog:
         # on this tree, 100 `_connect()` calls executed 500 CREATE TABLE /
         # CREATE INDEX statements (5 per call). `ensure_schema` runs them the
         # first time this process meets the file and answers False after that.
-        jarvis_sqlite.ensure_schema(self.db_path, self._create_schema)
+        ran = jarvis_sqlite.ensure_schema(self.db_path, self._create_schema)
+        if not ran and not self._schema_ok:
+            # A PATH THIS PROCESS HAS ALREADY INITIALISED CAN STILL BE A FILE
+            # THIS INSTANCE HAS NEVER OPENED, and a history written before
+            # `kind`/`project`/`tag_id` existed must still be migrated in
+            # place. Two shapes of that: the suites replace a history file
+            # behind the process to prove the migration (t_migration in
+            # test_chat_kinds.py, t_migration_of_an_old_file in
+            # test_chat_tags.py), and a new HUD build meets an old
+            # chat-history.db. Run the idempotent schema pass once for THIS
+            # instance on the caller's own connection; repeat calls stay at
+            # zero DDL because `_schema_ok` is then True.
+            self._create_schema(c)
         return c
 
     def _create_schema(self, c) -> None:
