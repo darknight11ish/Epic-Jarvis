@@ -1060,6 +1060,16 @@
             </div>
           </div>
         </div>
+        <!-- ── Write like me (2026-10-20; jarvis_voiceprint.py, JARVIS-API
+             section 133): the owner's own writing samples, the computed
+             voiceprint and the local ON/OFF switch. Drawn by
+             voiceprint-settings.js into this empty section, mounted once from
+             manner-settings.js - the same "How Jarvis talks" card both apps
+             keep this under. A READ is never held; the three writes (the
+             switch, "Keep this sample", "Forget this sample") are held while
+             the link catches up, here and in src-tauri/src/voiceprint.rs.
+             Nothing here raises an approval card: they are local settings. -->
+        <section id="voiceprint" class="block"></section>
       </section>
 
       <!-- ── A new conversation starts after ────────────────────────────────
@@ -3145,6 +3155,7 @@
     <script type="module" src="devices.js"></script>
     <script type="module" src="tool-updates-settings.js"></script>
     <script type="module" src="manner-settings.js"></script>
+    <script type="module" src="voiceprint-settings.js"></script>
     <script type="module" src="idle-new-settings.js"></script>
     <script type="module" src="prompt-coach-settings.js"></script>
     <script type="module" src="thinking-settings.js"></script>

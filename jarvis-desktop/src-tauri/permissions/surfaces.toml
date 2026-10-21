@@ -1608,6 +1608,25 @@ identifier = "setup-questionnaire"
 description = "Read the setup questionnaire's questions, current values and last outcomes; ask for a read-only plan; and apply the owner's confirmed answers through the PC's existing setters, one change at a time. Settings only; nothing here approves a card."
 permissions = ["allow-setup-questionnaire"]
 
+# "Write like me" (PR #665, 2026-10-20; voiceprint.rs; the PC's module is
+# backend/jarvis_voiceprint.py, JARVIS-API section 133): Settings reads the
+# owner's OWN writing samples and their computed voiceprint, keeps ONE sample
+# from text the PC scrubs first, forgets ONE after the page's own
+# are-you-sure (the PC enforces confirm:true as well), and the local ON/OFF
+# switch. None of it raises an approval card and none of it leaves this PC:
+# the PC answers these on its own loopback route. A read is never held; the
+# three writes are held while the event stream is stale, in Rust as well as in
+# the page. Only Settings shows it.
+[[set]]
+identifier = "voiceprint"
+description = "Read the owner's own writing samples, the computed voiceprint and the local ON/OFF switch; keep ONE sample (scrubbed on the PC first), forget ONE after the page asks, and set the switch. Settings only; no card and nothing leaves this PC."
+permissions = [
+  "allow-voiceprint-status",
+  "allow-voiceprint-add",
+  "allow-voiceprint-forget",
+  "allow-voiceprint-set-enabled",
+]
+
 [[set]]
 identifier = "focus"
 description = "Read the focus session (a countdown, booleans and counts - never what was in front) and do ONE thing to it: pause, resume, +10 minutes, stop, or lock on where the owner lands. No card; resume, extend and lock are held on a stale link."

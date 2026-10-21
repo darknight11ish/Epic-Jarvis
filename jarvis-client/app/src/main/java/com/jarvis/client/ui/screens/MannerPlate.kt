@@ -20,6 +20,7 @@ import androidx.compose.ui.semantics.Role
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.Manner
+import com.jarvis.client.net.WriteLikeMe
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
@@ -49,6 +50,38 @@ internal fun MannerSection(canAct: Boolean) {
     var busy by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<String?>(null) }
     var humorBusy by remember { mutableStateOf(false) }
+    // "Write like me" (jarvis_voiceprint.py): the samples and their ON/OFF
+    // switch, drawn under this same card by VoiceprintPlate.kt. A READ is
+    // never held; the three writes are held on a stale link, here through the
+    // runtime ([JarvisRuntime.setVoiceprintEnabled] and friends) and again on
+    // the PC. No approval card anywhere: these are local settings.
+    var vpReads by remember { mutableIntStateOf(0) }
+    var vpView by remember { mutableStateOf<WriteLikeMe.View?>(null) }
+    var vpMissing by remember { mutableStateOf(false) }
+    var vpReadError by remember { mutableStateOf<String?>(null) }
+    var vpBusy by remember { mutableStateOf(false) }
+    var vpSaid by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(vpReads) {
+        when (val r = JarvisRuntime.voiceprint()) {
+            is ApiResult.Ok -> {
+                val v = WriteLikeMe.parse(r.value)
+                if (v == null) {
+                    vpMissing = true
+                } else {
+                    vpView = v
+                    vpMissing = false
+                }
+                vpReadError = null
+            }
+            is ApiResult.Failed -> if (WriteLikeMe.missing(r.error)) {
+                vpMissing = true
+                vpReadError = null
+            } else {
+                vpReadError = JarvisRuntime.noticeFor(r.error)
+            }
+        }
+    }
 
     LaunchedEffect(reads) {
         when (val r = JarvisRuntime.manner()) {
@@ -95,6 +128,23 @@ internal fun MannerSection(canAct: Boolean) {
             } finally {
                 humorBusy = false
                 reads += 1
+            }
+        }
+    }
+
+    // ONE tap is ONE change for "Write like me" too; the runtime holds each of
+    // the three writes on a stale link and the PC holds them again. The re-read
+    // after every write keeps the switch and the list the PC's truth.
+    fun voiceprintWrite(action: suspend () -> String) {
+        if (vpBusy) return
+        vpBusy = true
+        vpSaid = null
+        scope.launch {
+            try {
+                vpSaid = action()
+            } finally {
+                vpBusy = false
+                vpReads += 1
             }
         }
     }
@@ -151,6 +201,31 @@ internal fun MannerSection(canAct: Boolean) {
                             onCheckedChange = null)
                     }
                     Text(v.humorDetail, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+                    Gap(12)
+                    // "Write like me" (PR #665's UI): the owner's own samples
+                    // and their switch, under the same "How Jarvis talks"
+                    // card. An older PC says so in one line instead of drawing
+                    // controls that could only fail.
+                    val vpErr = vpReadError
+                    when {
+                        vpMissing -> Text(WriteLikeMe.MISSING,
+                            style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+                        vpView == null && vpErr != null -> Text(
+                            "Couldn't read it: $vpErr",
+                            style = MaterialTheme.typography.bodySmall, color = chrome.warnInk,
+                        )
+                        vpView == null -> Text("Reading…",
+                            style = MaterialTheme.typography.bodySmall, color = chrome.textLo)
+                        else -> VoiceprintPlate(
+                            canAct = canAct,
+                            view = vpView,
+                            busy = vpBusy,
+                            said = vpSaid,
+                            onToggle = { on -> voiceprintWrite { JarvisRuntime.setVoiceprintEnabled(on) } },
+                            onAdd = { text -> voiceprintWrite { JarvisRuntime.addVoiceprint(text) } },
+                            onForget = { sample -> voiceprintWrite { JarvisRuntime.forgetVoiceprint(sample.id) } },
+                        )
+                    }
                 }
             }
             said?.let {

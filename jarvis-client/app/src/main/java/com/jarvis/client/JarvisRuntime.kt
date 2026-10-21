@@ -3039,6 +3039,43 @@ object JarvisRuntime {
         return com.jarvis.client.net.Manner.humorReplyLine(api.mannerPost(body), on)
     }
 
+    // -------------------------------------------------- write like me ----
+    // "Write like me" (jarvis_voiceprint.py) - see
+    // [com.jarvis.client.net.WriteLikeMe] and ui/screens/VoiceprintPlate.kt.
+    // The samples and the local switch, under "How Jarvis talks". NO approval
+    // card anywhere: these are local settings, so rule 4's stale-link hold is
+    // the only holding that applies. A read is never held; each of the three
+    // writes is held on a stale link like every change sent to the PC
+    // ([actionBlocker]) and again on the PC.
+
+    /** `GET /api/voiceprint`. A read: never held. */
+    suspend fun voiceprint(): ApiResult<JsonObject> = api.voiceprint()
+
+    /** The switch, ONE tap, held on a stale link. */
+    suspend fun setVoiceprintEnabled(on: Boolean): String {
+        actionBlocker()?.let { return it }
+        val body = com.jarvis.client.net.WriteLikeMe.enabledBody(on).toString()
+        return com.jarvis.client.net.WriteLikeMe.enabledLine(api.setVoiceprintEnabled(body), on)
+    }
+
+    /** Keep ONE sample the owner wrote; held on a stale link. */
+    suspend fun addVoiceprint(text: String): String {
+        actionBlocker()?.let { return it }
+        val body = com.jarvis.client.net.WriteLikeMe.addBody(text)
+        return com.jarvis.client.net.WriteLikeMe.addedLine(api.addVoiceprint(body))
+    }
+
+    /**
+     * Forget ONE sample, after the plate's own "are you sure?"; held on a
+     * stale link. `confirm: true` is only ever sent from here, and the PC
+     * enforces it again.
+     */
+    suspend fun forgetVoiceprint(id: String): String {
+        actionBlocker()?.let { return it }
+        val body = com.jarvis.client.net.WriteLikeMe.forgetBody(id)
+        return com.jarvis.client.net.WriteLikeMe.forgottenLine(api.forgetVoiceprint(body))
+    }
+
     // ------------------------------------------ thinking levels (5.5) ----
 
     /** `GET /api/thinking`. A read: never held. */

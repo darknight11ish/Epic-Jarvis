@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-voiceprint-status"
+description = "Enables the voiceprint_status command without any pre-configured scope."
+commands.allow = ["voiceprint_status"]
+
+[[permission]]
+identifier = "deny-voiceprint-status"
+description = "Denies the voiceprint_status command without any pre-configured scope."
+commands.deny = ["voiceprint_status"]

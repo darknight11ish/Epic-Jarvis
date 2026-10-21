@@ -106,6 +106,17 @@ ALLOWLISTS = {
 # "planned"      - on the backend, for both apps, and neither calls it yet
 CLASSIFICATION = {
     "/api/appearance": ("ported", ""),
+    # Write Like Me V2 UI slice (2026-10-20, PR #665): both apps call the same
+    # three routes. Desktop: Settings -> "How Jarvis talks" -> "Write like me"
+    # (src/voiceprint-settings.js, mounted by manner-settings.js; the four Tauri
+    # commands in src-tauri/src/voiceprint.rs, granted to the Settings window by
+    # capabilities/settings.json's `voiceprint` set). Phone: the same card,
+    # drawn under MannerSection (net/WriteLikeMe.kt, VoiceprintPlate.kt). The
+    # routes are the backend's own loopback-only voiceprint routes.
+    "/api/voiceprint": ("ported", "Write Like Me: the owner's own writing samples and the computed voiceprint. Both apps render the PC's own words; Forget asks 'are you sure?' first on both. Backend jarvis_voiceprint.py, plugin install=handler. Desktop: Settings, How Jarvis talks, Write like me (src/voiceprint-settings.js, src-tauri/src/voiceprint.rs, settings window only). Phone: the same card (net/WriteLikeMe.kt, VoiceprintPlate.kt, MannerSection)."),
+    "/api/voiceprint/sample": ("ported", "Write Like Me: one piece of the owner's own writing, scrubbed on the PC before storage. One tap is one change; no approval card."),
+    "/api/voiceprint/forget": ("ported", "Write Like Me: delete one sample; needs confirm:true. Both apps ask 'are you sure?' before sending it."),
+    "/api/voiceprint/enabled": ("ported", "Write Like Me: the local ON/OFF switch, POST {\"enabled\": bool} (the earlier draft's \"on\" is accepted as an alias). No card, no model, no network - one small JSON file on the PC."),
     "/api/big-model": ("ported", "The big model (slow) with colibri: what was found and its three switches, each ON an approval card (backend/big-model.patch, 2026-09-24). Desktop: Settings, Big model (slow) (get_big_model / set_big_model, settings window only). Phone: Brain, Big model (slow) (BigModelPlate.kt)."),
     "/api/hardware": ("ported", "The graphics cards and the three setups for them (backend/hardware.patch, docs/HARDWARE-PROFILES.md, 2026-09-25). Desktop: Settings, Hardware and models (hardware.rs get_hardware, settings window only). Phone: Brain, Hardware (HardwarePlate.kt, net/Hardware.kt): names and memory, what runs now, the three setups as the PC's words - never a model list or a picker (CLAUDE.md)."),
     "/api/prompt/coach": ("ported", "The prompt coach's own state: whether it is on, and the words the settings screen shows (JARVIS-API section 120). Desktop: Settings, the Prompt coach card (settings.html, src/prompt-coach-settings.js, src-tauri/src/prompt_coach.rs). Phone: Settings, the Prompt coach row (net/PromptCoach.kt, PromptCoachPlate.kt, SettingsScreen.kt). It returns the label, the detail paragraph and the four button words, so neither app invents its own."),

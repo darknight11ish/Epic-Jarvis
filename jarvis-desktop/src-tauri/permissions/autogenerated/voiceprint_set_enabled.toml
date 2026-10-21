@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-voiceprint-set-enabled"
+description = "Enables the voiceprint_set_enabled command without any pre-configured scope."
+commands.allow = ["voiceprint_set_enabled"]
+
+[[permission]]
+identifier = "deny-voiceprint-set-enabled"
+description = "Denies the voiceprint_set_enabled command without any pre-configured scope."
+commands.deny = ["voiceprint_set_enabled"]

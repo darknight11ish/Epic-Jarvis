@@ -87,6 +87,10 @@ pub mod vision;
 pub mod voice;
 pub mod voice_flow;
 pub mod voice_training;
+// "Write like me" (voiceprint.rs; PR #665, 2026-10-20): the samples and the
+// local ON/OFF switch under Settings -> "How Jarvis talks", over the PC's own
+// loopback route. Settings window only; no card and no model.
+pub mod voiceprint;
 pub mod web_search;
 pub mod window_memory;
 pub mod windows;
@@ -1359,6 +1363,14 @@ pub fn run() {
             // confirmed answers through the existing setters, one change at a
             // time. Settings only; nothing here approves a card.
             setup_questionnaire::setup_questionnaire,
+            // "Write like me" (voiceprint.rs; PR #665, 2026-10-20; JARVIS-API
+            // section 133): the samples, the switch, keeping ONE sample and
+            // forgetting ONE after the page's own are-you-sure. Settings only;
+            // no approval card, no model and no network.
+            voiceprint::voiceprint_status,
+            voiceprint::voiceprint_add,
+            voiceprint::voiceprint_forget,
+            voiceprint::voiceprint_set_enabled,
             // Interrupting by talking and "One moment." (voice_flow.rs).
             voice_flow::judge_barge_in,
             voice_flow::get_voice_flow,

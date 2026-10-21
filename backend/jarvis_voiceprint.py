@@ -167,6 +167,45 @@ except Exception:                                    # pragma: no cover
     fw = None
 
 
+ENABLED_PATH = "/api/voiceprint/enabled"
+ENABLED_FILE = "voiceprint.json"
+
+
+def _enabled_file() -> Path:
+    return _config_dir() / ENABLED_FILE
+
+
+def _enabled_override() -> Optional[bool]:
+    """The owner's ON/OFF switch, when this module's own file has it. Never raises."""
+    try:
+        doc = json.loads(_enabled_file().read_text(encoding="utf-8"))
+        value = doc.get("enabled") if isinstance(doc, dict) else None
+        return value if isinstance(value, bool) else None
+    except Exception:
+        return None
+
+
+def set_enabled(on: bool) -> dict:
+    """Write the ON/OFF switch. No card, no network, this PC only.
+
+    One small JSON file beside the settings (the same pattern receipts use);
+    written to a .tmp then os.replace so a crash cannot leave half a file."""
+    if not isinstance(on, bool):
+        return {"ok": False, "error": "bad_body",
+                "message": "enabled must be true or false"}
+    path = _enabled_file()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps({"enabled": on}, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, path)
+    except Exception as exc:                                # noqa: BLE001
+        return {"ok": False, "error": "not_written",
+                "message": f"could not save the switch ({type(exc).__name__})"}
+    _audit("voiceprint.enabled", {"on": on})
+    return {"ok": True, "enabled": on}
+
+
 def _cfg(key: str, default):
     """This module's settings, from `[voiceprint]` in jarvis-framework.toml.
 
@@ -174,6 +213,10 @@ def _cfg(key: str, default):
     `min_words`) also fall back to `[style]`, so a setting the owner already
     has keeps meaning what it meant.
     """
+    if key == "enabled":
+        own = _enabled_override()
+        if own is not None:
+            return own
     try:
         got = fw.load_framework()
     except Exception:
@@ -1101,6 +1144,11 @@ def handle_post(route: str, body: Optional[dict]) -> tuple:
             return 503, {"ok": False, "error": "no_scrubber", "message": WORDS["no_scrubber"]}
         sample_id = add_owner_edit(before, after, prompt=str(body.get("prompt") or ""))
         return 200, {"ok": True, "id": sample_id, "learned": bool(sample_id)}
+    if route == ENABLED_PATH:
+        # The ruling's field name is "enabled"; "on" stays as an alias so a
+        # client written against the earlier draft keeps working.
+        value = body["enabled"] if "enabled" in body else body.get("on")
+        return 200, set_enabled(value)
     if route == FORGET_PATH:
         return 200, forget(str(body.get("id") or ""), bool(body.get("confirm")))
     return 404, {"ok": False, "error": "not_found"}
@@ -1189,17 +1237,25 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
     def do_POST(self):
         from urllib.parse import urlsplit
         route = urlsplit(str(getattr(self, "path", "") or "")).path.rstrip("/")
-        if route not in (SAMPLE_PATH, EDIT_PATH, FORGET_PATH):
+        if route not in (SAMPLE_PATH, EDIT_PATH, FORGET_PATH, ENABLED_PATH):
             return post0(self)
         if not _allowed(self):
             return None
-        peer, local = _peer_local(self)
-        # 2026-10-20 audit, Part I catch 2C: every route below WRITES (add,
-        # learn an edit, forget), so another device is refused BEFORE the body
-        # is read. Reads (GET) stay a token-guarded read, as before.
-        if not _from_this_pc(peer, local):
-            return self._send(403, {"ok": False, "error": "not_this_pc",
-                                    "message": NOT_THIS_PC})
+        # 2026-10-20 audit, Part I catch 2C: adding, learning an edit or
+        # forgetting the owner's OWN WRITING SAMPLES is for this PC only, so
+        # another device is refused BEFORE the body is read. Reads (GET) stay a
+        # token-guarded read, as before.
+        #
+        # The local ON/OFF switch is EXEMPT on the owner's decision of
+        # 2026-10-20: it carries none of the owner's words, it is an ordinary
+        # client setting like "How Jarvis talks" (which the paired phone may
+        # also change), and the phone plate's switch has to keep working -
+        # turning it off is instant, and neither direction raises a card.
+        if route != ENABLED_PATH:
+            peer, local = _peer_local(self)
+            if not _from_this_pc(peer, local):
+                return self._send(403, {"ok": False, "error": "not_this_pc",
+                                        "message": NOT_THIS_PC})
         try:
             body = json.loads(read_body(self) or b"{}")
         except Exception:
@@ -1219,7 +1275,7 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
 
 def status() -> dict:
     """What the engine is doing. The shape the apps read."""
-    return {"available": True, "samples": count(),
+    return {"available": True, "enabled": bool(_cfg("enabled", True)), "samples": count(),
             "scrubber": _scrubber() is not None,
             "exemplars": int(_cfg("exemplars", 3) or 3),
             "note": ("Retrieved at generation time through the memory store, so "
