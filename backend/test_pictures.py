@@ -771,7 +771,7 @@ def t_the_api_document_has_the_section_and_it_matches_this_code():
 #: writes down that they meant to. That is the price of a check that bites, and
 #: it is why the failure message below spells out the difference instead of
 #: saying "the document changed".
-EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 152))   # 129 ..= 151 (146 app control; 147 setup questionnaire; 148 REA reverse-engineering tool; 149 searchable recordings, F5 S2; 150 approval guards; 151 Obsidian vault organizer)
+EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 153))   # 129 ..= 152 (146 app control; 147 setup questionnaire; 148 REA reverse-engineering tool; 149 searchable recordings, F5 S2; 150 the blind-approval guards, 2026-10-21; 151 the Obsidian vault organizer, 2026-10-21; 152 the Notion export -> Obsidian vault routes, 2026-10-21)
 #: 137 is a REAL section, not a gap: `## 137. Starting the local model when
 #: it is not running`; 138 is `skills.lock` (PR #455). The tail reads
 #: 129 ..= 138 with no hole.
@@ -785,7 +785,9 @@ EXPECTED_SECTIONS_FROM_129 = tuple(range(129, 152))   # 129 ..= 151 (146 app con
 #: setup questionnaire (2026-10-20, #643); 148 the reverse-engineering tool REA
 #: (2026-10-20); 149 the searchable recordings index (F5 S2, 2026-10-20, #641);
 #: 150 the two mechanical guards against blind / stacked approvals (review
-#: ruling 8.2, 2026-10-20, #680). A section added above 138 gets its row here in
+#: ruling 8.2, 2026-10-20, #680); 151 the Obsidian vault organizer (#681,
+#: 2026-10-21); 152 the Notion export -> Obsidian vault routes (#683,
+#: 2026-10-21). A section added above 138 gets its row here in
 #: the same commit.
 #:
 #: This list names the RELEASED tail, so a dropped section anywhere in it is

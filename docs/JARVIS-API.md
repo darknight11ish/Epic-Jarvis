@@ -23536,3 +23536,138 @@ undoable, taint is latched by the writer and not the plan, the writer writes no
 memory row, the routes are PC-only and flag-gated, and an existing MOC is
 snapshotted and put back exactly. Two writer revert-checks were measured too: a
 stale-check removed made four checks fail; skipped snapshots made three fail.
+## 152. Bringing a Notion export into an Obsidian vault: `/api/notion/preview` and `/api/notion/import` (backend only, added 2026-10-16, audit fixes 2026-10-21)
+
+Notion can export a whole workspace as Markdown & CSV or as HTML, and what it
+writes is not an Obsidian vault: ids sit on every file and folder name, page
+properties are loose lines under the title, each database is a CSV beside its
+pages, links point at names that no longer exist, and pictures and PDFs are
+scattered. The plugin folder `plugins/ready/notion-obsidian` calls
+`jarvis_notion_obsidian.install()`, which wraps the core handler and answers the
+two routes below. There is **no patch**: the module ships as a plugin, the same
+way `/api/folders` does, and it imports `jarvis_documents.safe_parts`,
+`jarvis_documents.protected` and `jarvis_documents.ImportRefused` rather than
+writing a second extractor.
+
+**Both routes are PC only, before the body is read.** After the server's own
+origin and token checks, `jarvis_owner_check.from_this_pc(peer, local)` decides:
+loopback is this PC, a program on this PC calling its own mesh address is this
+PC, and a peer that cannot be placed **fails closed**. A phone (or any other
+device) gets:
+
+```
+403 {"ok": false, "pc_only": true,
+     "reason": "Jarvis brings a Notion export in on the PC only - the export file and the vault are chosen here."}
+```
+
+The refusal names no path and no folder. This is the same rule
+`/api/folders/import` keeps, for the same reason: the export and the vault are
+folders on this PC, and the preview works out what is inside the export.
+`GET /api/notion/preview` remains a token+origin read of the route's title and
+detail only (no paths, no plan); both POST routes are the PC-only pair.
+
+| route | body | answer |
+|---|---|---|
+| `POST /api/notion/preview` | `{"source": "<path to the .zip or the unzipped folder>", "vault": "<path to an Obsidian vault>"}` | `200 {"ok": true\|false, "plan": {...}, "said": "<plain words>"}` |
+| `POST /api/notion/import` | the same, plus optional `"digest"` copied from the preview | `200 {"ok": true, "folder", "receipt_id", "notes", "attachments", "databases", "rows", "rows_without_notes", "html_pages", "said"}` or `{"ok": false, "reason"}` |
+
+**`/api/notion/preview` is a dry run.** It plans, extracts into a throw-away
+folder under the system temp folder, and writes nothing into the vault, nothing
+into the settings folder, and raises **no approval card**. The `plan` object
+carries `source`, `vault`, `name`, `notes`, `attachments`, `databases`, `rows`,
+`renamed`, `collisions`, `html_pages`, `refused`, `digest`, `said` (the
+extraction map is deliberately not exposed). A plan whose target folder already
+exists answers `ok: false` with the plain reason.
+
+**`/api/notion/import` writes the vault after ONE person's yes.** It asks the
+gate once for `import_notion_export` (tier `ask` in
+`backend/rebuilt/jarvis-framework.toml`), and a denied, timed-out or refused
+card brings nothing in. When a `digest` is supplied and no longer matches the
+plan, it refuses rather than importing a changed export. The whole tree lands
+in one atomic move inside a new folder named after the export, and one
+reversible entry is recorded in `jarvis_receipts`, so Undo takes the folder
+back off.
+
+**What the vault looks like.** Notion's ids come off file and folder names
+(collisions decided deterministically: `Meeting Notes.md`, `Meeting Notes 2.md`
+in walk order); page properties become YAML frontmatter with `notion_id` kept,
+so importing the same export twice is refused rather than doubled; HTML pages
+become Markdown (callouts, toggles, checklists, fenced code with its language,
+pipe tables); relative links become wikilinks through the cleaned-name map; and
+pictures/PDFs/audio/video move into the vault's single `attachments/` folder
+and are rewritten to `![[name]]`.
+
+Each exported CSV database gets:
+
+* its row's columns merged into the child note's frontmatter, with a relation
+  value that names a page of the export becoming `"[[That Page]]"`. Notion's id
+  is taken off **only** when the id-free value names a page of this export;
+  every other value is left byte-for-byte (an ordinary `ref <32 hex>` stays
+  whole; a number with a thousands separator stays a number);
+* a hub note `_Database - <Name>.md`: frontmatter `type: database-index`,
+  `title`, `rows`, `columns`, `rows_without_notes`; a rendered Markdown table
+  whose title column links every row; a collapsible `<details>` summary of row
+  counts by Status/Category/Tags when one is present; and a sentence saying how
+  many rows have no page. A row whose page is missing **stays in the table** as
+  an unresolved `[[wikilink]]` and is counted, never dropped;
+* a `.base` beside it, whose filter is `file.inFolder("<export folder>/<database folder>")`.
+
+Two CSV exports of one database (`X.csv` and `X_all.csv`) are ONE database:
+their rows are merged, `_all`'s non-empty values win, rows only one file holds
+are all kept, and two rows with one title in one file stay **two rows** (rows
+are matched across the two files by occurrence, never by title alone). A
+generated hub note or `.base` goes through the same deterministic collision
+rule as a page, so a real page named `_Database - Tasks` is never replaced: the
+hub gets a free name instead (`_Database - Tasks 2.md`). The comparison is
+case-folded, so two databases called `Alpha` and `alpha` do not write one file
+on the owner's NTFS (the two hub files get distinct names).
+
+**The limits, in one place.** The same numbers cap a folder and a zip:
+
+| limit | value | where |
+|---|---|---|
+| files in the export | 20,000 | counted as files are written, both ingest paths |
+| total bytes written | 1 GiB | counted as bytes are written |
+| one file | 200 MiB | declared size pre-checked; streamed cap as backstop |
+| the `.zip` itself | 2 GiB | refused before it is opened |
+| declared unpacked total | 500 MiB | `jarvis_documents.zip_bomb_problem`, before a member is opened |
+| compression ratio | 100:1 | the extra zip-bomb rule, before a member is opened |
+| members / largest member | `MAX_FILES` / `MAX_ONE` | pre-checked on the zip's own `infolist()` |
+
+The 500 MiB total is deliberately different from
+`jarvis_documents.EXPORT_UNCOMPRESSED_MAX` (250 MiB): that import unpacks a
+Notion export only to **read** it, while this one **writes** a new vault and
+copies its attachments too. Each number is stated here once; the total check
+itself is imported from `jarvis_documents`, not copied.
+
+**Known limitations, said plainly.**
+* `rows_without_notes` appears in the **import** response and the hub note, not
+  in `preview`: it needs the built page map, and the plan is deliberately cheap.
+  The card therefore cannot promise the exact count before the owner approves;
+  it reports it after the import (and the rows themselves are kept either way).
+* Two rows with the same title in one database are kept as separate rows and
+  separate child pages, but the hub links both to the **first** page of that
+  title: Notion's CSV carries no row-to-page id, and guessing which page is
+  which would be worse than an honest duplicate link.
+* The hub note and `.base` live in the export's folder beside the child pages.
+  The Phase-2 organizer that will move database children into
+  `Databases/<Name>/` must regenerate the `.base` filter (it names the current
+  path) and treat the hub note as generated; that contract is not implemented
+  yet.
+* Neither app is wired yet (see `docs/ARCHITECTURE.md` §8): the desktop file
+  picker for this is not built, the phone has no view of the PC's folders, and
+  the approval card is raised by the backend route itself.
+
+Tests: `backend/test_notion_obsidian.py` - ids/collisions, zip-slip and the
+caps (declared total, ratio, member count and largest member refused from the
+zip's own directory before a member is opened, streamed caps as the
+lying-header backstop), properties and dates, the hub note's frontmatter/table/
+summary/missing-row count, `X.csv`+`X_all.csv` union and precedence, duplicate
+row titles inside one file surviving with both values, relation wikilinks and
+the byte-for-byte preservation of everything that is not a page, a database
+genuinely named `*_all` keeping its name, a page and a hub never replacing each
+other (both file orders and the case-only variant), case-only database names
+never sharing a file, HTML/Markdown same-title pages both surviving, the
+plan/gate/one-card/receipt/undo shape, one card for an import and none for a
+preview, the installed handler's PC-only 403 on both routes with no path in the
+answer, and the run path keeping a refusal's plain sentence.
