@@ -1570,6 +1570,142 @@ def t_the_route():
         L.ENGINE = old
 
 
+def t_the_persistent_stream_route_is_a_frozen_stub():
+    """Slice G (2026-10-21): the stream URL/switch/refusal are fixed; no audio.
+
+    The design is `docs/DESIGN-PHONE-LIVE-STREAM.md`; this pins its one shipping
+    piece. The route must answer 501 with the switch state and a plain reason,
+    must NOT read a body (so no future code can start by accepting audio), must
+    be behind the same origin/token gate as Live, and must leave every existing
+    Live route and the session engine untouched. The switch is OFF by default
+    and a missing key/table is OFF, never permission.
+    """
+    import pathlib
+    check("the stream route is the design's frozen URL",
+          L.STREAM_ROUTE == "/api/live/stream", L.STREAM_ROUTE)
+
+    # --- the switch: OFF by default, missing is OFF, only real on words on ---
+    real_cfg = L._live_cfg
+    try:
+        L._live_cfg = lambda key, default=None: default       # no [live] table
+        check("a settings file with no [live] stream key is OFF",
+              L.stream_enabled() is False)
+        L._live_cfg = lambda key, default=None: False
+        check("stream = false is OFF", L.stream_enabled() is False)
+        for on in (True, "true", "1", "yes", "on", " TRUE "):
+            L._live_cfg = lambda key, default=None, _on=on: _on
+            check(f"stream = {on!r} is ON", L.stream_enabled() is True)
+        for off in (False, "false", "0", "no", "off", 1, None, "maybe"):
+            L._live_cfg = lambda key, default=None, _off=off: _off
+            check(f"stream = {off!r} stays OFF (only an explicit on turns it on)",
+                  L.stream_enabled() is False)
+    finally:
+        L._live_cfg = real_cfg
+
+    # --- the stub body: different sentence per state, always 501, no audio ---
+    code, body = L.stream_stub(False)
+    check("switched off: 501 with the off sentence",
+          code == 501 and body["ok"] is False and body["available"] is False
+          and body["enabled"] is False and body["stream"] == "off"
+          and "switched off" in body["error"], body)
+    code, body = L.stream_stub(True)
+    check("switched on but not built: 501 with the not-built sentence",
+          code == 501 and body["ok"] is False and body["enabled"] is True
+          and body["stream"] == "not_built" and "not built" in body["error"],
+          body)
+    check("the two states say different, plain sentences",
+          L.stream_stub(False)[1]["error"] != L.stream_stub(True)[1]["error"])
+
+    # --- the installed handler: auth first, 501, and the body is never read ---
+    class H(FakeHandler):
+        pass
+
+    reads = []
+    L.install(H, origin_ok=lambda s: True, token_ok=lambda s: s.token,
+              read_body=lambda s: (reads.append(1), s.body)[1])
+    old = L.ENGINE
+    L.ENGINE = World().engine
+    try:
+        FakeHandler.sent = None
+        h = H("/api/live/stream")
+        h.do_GET()
+        check("GET /api/live/stream: 501 with the frozen body",
+              FakeHandler.sent[0] == 501 and FakeHandler.sent[1]["stream"] == "off"
+              and "error" in FakeHandler.sent[1], FakeHandler.sent)
+        FakeHandler.sent = None
+        h = H("/api/live/stream", body=b'{not json')
+        h.do_POST()
+        check("POST /api/live/stream: 501 and the BODY WAS NOT READ (no audio accepted)",
+              FakeHandler.sent[0] == 501 and reads == [],
+              (FakeHandler.sent, reads))
+        FakeHandler.sent = None
+        h = H("/api/live/stream", token=False)
+        h.do_GET()
+        check("no token on the stream: 401, like every Live request",
+              FakeHandler.sent[0] == 401, FakeHandler.sent)
+        FakeHandler.sent = None
+        h = H("/api/live/stream", token=False)
+        h.do_POST()
+        check("... and POST without a token: 401 too", FakeHandler.sent[0] == 401)
+
+        # Existing Live routes and the session engine are untouched by the stub.
+        before = dict(L.ENGINE.status())
+        FakeHandler.sent = None
+        h = H("/api/voice/live")
+        h.do_GET()
+        check("the existing Live status route still answers as before",
+              FakeHandler.sent[0] == 200 and FakeHandler.sent[1]["state"] == "off",
+              FakeHandler.sent)
+        check("... and the stub changed no session state",
+              dict(L.ENGINE.status()) == before,
+              (before, L.ENGINE.status()))
+        FakeHandler.sent = None
+        h = H("/api/voice/utterance?source=live")
+        h.do_POST()
+        check("every other route still goes to the server",
+              FakeHandler.sent == ("orig-post", None), FakeHandler.sent)
+        FakeHandler.sent = None
+        h = H("/api/live/stream/extra")
+        h.do_GET()
+        check("... and a longer path is not the frozen route",
+              FakeHandler.sent == ("orig-get", None), FakeHandler.sent)
+    finally:
+        L.ENGINE = old
+
+    # --- the shipped switch and the design doc are where the contract says ---
+    framework = (REPO / "backend" / "rebuilt" / "jarvis-framework.toml").read_text(
+        encoding="utf-8")
+    base = (REPO / "jarvis-backend" / "jarvis-framework.toml").read_text(encoding="utf-8")
+    check("the shipped framework file carries [live] stream = false",
+          "stream = false" in framework and framework == base)
+    check("... and the switch comment records the owner's either-app decision",
+          "EITHER app may turn it ON" in framework
+          and "Windows-Hello-class" in framework)
+    design = REPO / "docs" / "DESIGN-PHONE-LIVE-STREAM.md"
+    text = design.read_text(encoding="utf-8") if design.is_file() else ""
+    check("the design document exists and says the switch is off by default",
+          design.is_file() and "stream = false" in text and "501" in text, text[:120])
+    low = text.lower()
+    check("... it records the owner's answers and the Gemini refinements: "
+          "tailnet only, PCM-only v1 (no Opus), either app turns it on, drop the "
+          "unfinished sentence, design then G2",
+          "tailnet encryption only" in low and "pcm-only" in low
+          and "no opus" in low
+          and "either app may turn it on" in low
+          and "drop the unfinished sentence" in low
+          and "no one-reconnect stitching" in low
+          and "advisory" in low
+          and "design first" in low and "g2" in low, text[:200])
+    check("... and it does not contradict the decisions by claiming the phone "
+          "cannot turn it on or that Opus is v1",
+          "phone cannot turn it on" not in low
+          and "pc only, one approval card" not in low
+          and "opus with a pcm fallback" not in low, text[:200])
+    check("... and every latency/data figure is marked NOT-MEASURED",
+          "NOT-MEASURED" in text
+          and ("not measured" in low or "not-measured" in low), text[-200:])
+
+
 def t_the_patch_and_shipping():
     import _stack
     order = _stack.order()
