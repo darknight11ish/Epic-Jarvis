@@ -93,6 +93,8 @@ SOURCE = TMP / "Meeting notes"
 A32 = "1a2b3c4d5e6f708192a3b4c5d6e7f809"
 B32 = "abcdef0123456789abcdef0123456789"
 C32 = "ffffffffffffffffffffffffffffffff"
+D32 = "0123456789abcdef0123456789abcdef"
+E32 = "fedcba9876543210fedcba9876543210"
 
 
 # ── 2. names ────────────────────────────────────────────────────────────────
@@ -201,8 +203,13 @@ def t_the_zip_guards_are_jarvis_documents_own():
 def t_a_zip_bomb_is_refused_not_unpacked():
     src = fresh()
     zpath = TMP / "bomb.zip"
+    # INCOMPRESSIBLE bytes on purpose: this check is the ABSOLUTE per-file cap
+    # (`_copy_capped`), which is the backstop behind the ratio/size guards the
+    # crafted-archive check below covers. A run of zeros here would be refused
+    # by the ratio guard first, and then this check would no longer prove the
+    # streaming cap still bites.
     with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr(f"huge {A32}.md", "0" * (300 * 1024))
+        zf.writestr(f"huge {A32}.md", os.urandom(300 * 1024))
     real_max = N.MAX_ONE
     N.MAX_ONE = 100 * 1024
     try:
@@ -216,6 +223,70 @@ def t_a_zip_bomb_is_refused_not_unpacked():
     check("one file over the cap is refused, in plain words",
           "MB" in refused or "bigger" in refused, refused)
     check("and nothing was unpacked", not (VAULT / EXPORT).exists())
+
+
+def t_a_zip_bomb_is_refused_by_its_own_directory_before_unpacking():
+    """The review's archive-safety rule: what the zip's own directory declares.
+
+    A zip bomb is refused from `infolist()` BEFORE the first member is
+    extracted: too much declared unpacked in total, or too high a compression
+    ratio. The absolute caps remain the backstop (`_copy_capped`) because a
+    header can lie; these checks prove the cheap pre-check exists and refuses
+    without opening a single member.
+    """
+    fresh()
+    bomb = TMP / "ratio-bomb.zip"
+    with zipfile.ZipFile(bomb, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(f"packed {A32}.md", "0" * (512 * 1024))
+    with zipfile.ZipFile(bomb) as zf:
+        info = zf.infolist()[0]
+    ratio = info.file_size / max(1, info.compress_size)
+    check("(set-up) the crafted zip really is compressed over 100:1",
+          ratio > 100, ratio)
+
+    opened = []
+    real_copy = N._copy_capped
+
+    def counting_copy(*args, **kwargs):
+        opened.append(args[0])
+        return real_copy(*args, **kwargs)
+
+    N._copy_capped = counting_copy
+    said = ""
+    try:
+        try:
+            N.plan_import(str(bomb), str(VAULT), today="2026-01-01")
+        except Exception as exc:
+            said = str(exc)
+    finally:
+        N._copy_capped = real_copy
+    check("...a ratio like that is refused, in plain words",
+          "zip bomb" in said or "compressed" in said, said)
+    check("...and not one member was opened to find out",
+          opened == [], len(opened))
+
+    fresh()
+    big = TMP / "declared.zip"
+    # STORED (not compressed) on purpose: no ratio can catch this one, so the
+    # guard that bites is the archive's own DECLARED unpacked total.
+    with zipfile.ZipFile(big, "w", zipfile.ZIP_STORED) as zf:
+        zf.writestr(f"page {A32}.md", "x" * 300_000)
+    real_room = N.MAX_ZIP_UNCOMPRESSED
+    N.MAX_ZIP_UNCOMPRESSED = 256 * 1024
+    said = ""
+    try:
+        try:
+            N.plan_import(str(big), str(VAULT), today="2026-01-01")
+        except Exception as exc:
+            said = str(exc)
+    finally:
+        N.MAX_ZIP_UNCOMPRESSED = real_room
+    check("an archive declaring more unpacked than the cap is refused from the directory",
+          "unpacked" in said and "nothing" in said, said)
+    check("...so nothing from that export reached the vault either",
+          sorted(p.name for p in VAULT.iterdir()) == [".obsidian"],
+          sorted(p.name for p in VAULT.iterdir()))
+
 
 
 def t_a_source_that_is_not_an_export_is_refused():
@@ -336,12 +407,15 @@ def t_a_csv_database_becomes_frontmatter_a_note_and_a_base():
     note = (folder / "Ship it.md").read_text(encoding="utf-8")
     check("the row's columns are merged into the note's frontmatter",
           "status: Done" in note and "owner: Sam" in note, note)
-    index = folder / "Tasks.md"
-    check("an index note is generated for the database", index.is_file(),
+    index = folder / "_Database - Tasks.md"
+    check("the database hub note is named _Database - <Name>.md", index.is_file(),
           sorted(x.name for x in folder.iterdir()))
     body = index.read_text(encoding="utf-8") if index.is_file() else ""
-    check("with a [[wikilink]] to every row",
-          "[[Ship it]]" in body and "[[Later]]" in body, body)
+    check("with a [[wikilink]] to every row in a rendered table",
+          "| [[Ship it]] | Done | Sam |" in body
+          and "| [[Later]] | Waiting | Sam |" in body, body)
+    check("and a header naming the database's columns",
+          "| Name | Status | Owner |" in body, body)
     base = folder / "Tasks.base"
     check("and a .base file beside it", base.is_file(),
           sorted(x.name for x in folder.iterdir()))
@@ -349,6 +423,108 @@ def t_a_csv_database_becomes_frontmatter_a_note_and_a_base():
           f'file.inFolder("{EXPORT}")' in
           (base.read_text(encoding="utf-8") if base.is_file() else ""),
           base.read_text(encoding="utf-8") if base.is_file() else "")
+
+
+def t_the_database_hub_note_says_what_it_is_and_never_drops_a_row():
+    """Review rule 4: a real hub note - frontmatter, a row table, a summary."""
+    src = fresh()
+    write(src, f"Tasks {A32}_all.csv",
+          "Name,Status,Priority\n"
+          "Ship it,Done,High\n"
+          "Later,Waiting,Low\n"
+          "Ghost,Done,High\n")
+    write(src, f"Ship it {B32}.md", "# Ship it\n\nDo the thing.\n")
+    write(src, f"Later {C32}.md", "# Later\n\nAnother.\n")
+    p = N.plan_import(str(src), str(VAULT), today="2026-01-01")
+    out = N.run_import(p, approved=True, record=False)
+    folder = VAULT / EXPORT
+    index = folder / "_Database - Tasks.md"
+    body = index.read_text(encoding="utf-8") if index.is_file() else ""
+    check("its frontmatter says it is a database index with the row count",
+          "type: database-index" in body and "rows: 3" in body, body)
+    check("...and names the columns it holds",
+          "columns:" in body and "Status" in body and "Priority" in body, body)
+    check("a row whose child page has gone still surfaces - a link, never dropped",
+          "[[Ghost]]" in body, body)
+    check("...and the note REPORTS how many rows have no page",
+          "rows_without_notes: 1" in body, body)
+    check("...and says it in a sentence too",
+          "1 row" in body and "no note" in body, body)
+    check("the run result reports the same count",
+          out.get("rows_without_notes") == 1, out)
+    check("rows are grouped by Status in a collapsible summary",
+          "<details>" in body and "<summary>" in body and "By Status" in body
+          and "Done" in body and "2" in body, body)
+    check("the .base is still written beside the hub note",
+          (folder / "Tasks.base").is_file(), sorted(x.name for x in folder.iterdir()))
+
+
+def t_a_database_exported_twice_keeps_every_row():
+    """`X.csv` and `X_all.csv` are ONE database; the combined rows must land."""
+    src = fresh()
+    write(src, f"Tasks {A32}.csv", "Name,Status\nShip it,Done\nOnly in plain,Waiting\n")
+    write(src, f"Tasks {B32}_all.csv",
+          "Name,Status,Owner\nShip it,Done,Sam\nLater,Waiting,Sam\n")
+    write(src, f"Ship it {C32}.md", "# Ship it\n\nDo.\n")
+    write(src, f"Only in plain {D32}.md", "# Only in plain\n\nBody.\n")
+    write(src, f"Later {E32}.md", "# Later\n\nBody.\n")
+    p = N.plan_import(str(src), str(VAULT), today="2026-01-01")
+    check("two CSV files of one database are counted as ONE database",
+          p.databases == 1, p.databases)
+    check("...and rows are counted once each, not once per file",
+          p.rows == 3, p.rows)
+    N.run_import(p, approved=True, record=False)
+    folder = VAULT / EXPORT
+    body = (folder / "_Database - Tasks.md").read_text(encoding="utf-8")
+    check("a row only the plain CSV holds is still in the hub table",
+          "[[Only in plain]]" in body, body)
+    check("a row only the _all CSV holds is in the hub table too",
+          "[[Later]]" in body, body)
+    check("the _all CSV's extra column reaches the matching note's frontmatter",
+          "owner: Sam" in (folder / "Ship it.md").read_text(encoding="utf-8"),
+          (folder / "Ship it.md").read_text(encoding="utf-8"))
+
+
+def t_relation_columns_become_wikilinks_and_other_values_are_untouched():
+    """Review rule 3: a relation target that IS a page becomes a `[[wikilink]]`."""
+    src = fresh()
+    write(src, f"Project Atlas {A32}.md", "# Project Atlas\n\nThe project.\n")
+    write(src, f"Tasks {B32}_all.csv",
+          "Name,Project,Owner,Count\n"
+          f"Ship it,Project Atlas {A32},Sam,\"1,234\"\n")
+    write(src, f"Ship it {C32}.md",
+          f"# Ship it\n\nProject: Project Atlas {A32}\n"
+          f"Reviewer: Project Atlas {A32}\n\nDo.\n")
+    p = N.plan_import(str(src), str(VAULT), today="2026-01-01")
+    out = N.run_import(p, approved=True, record=False)
+    note = (VAULT / EXPORT / "Ship it.md").read_text(encoding="utf-8")
+    check("a relation value naming a page of this export becomes a wikilink",
+          'project: "[[Project Atlas]]"' in note, note)
+    check("...in the page's own property block as well as the CSV's",
+          'reviewer: "[[Project Atlas]]"' in note, note)
+    check("...with Notion's id no longer inside the value", A32 not in note, note)
+    check("a value that is not a page is left exactly as it was",
+          "owner: Sam" in note, note)
+    check("a number with a thousands separator is not split or relinked",
+          "count:" in note and "1,234" in note, note)
+    check("the import still lands", out.get("ok") is True, out)
+
+
+def t_a_database_whose_title_column_is_renamed_still_merges():
+    """Notion's CSV header is the database's OWN title-property name."""
+    src = fresh()
+    write(src, f"Tasks {A32}_all.csv", "Task,Status\nFix login,Done\n")
+    write(src, f"Fix login {B32}.md", "# Fix login\n\nDo.\n")
+    p = N.plan_import(str(src), str(VAULT), today="2026-01-01")
+    N.run_import(p, approved=True, record=False)
+    folder = VAULT / EXPORT
+    note = (folder / "Fix login.md").read_text(encoding="utf-8")
+    check("a title column that is not called Name still merges its row",
+          "status: Done" in note, note)
+    body = (folder / "_Database - Tasks.md").read_text(encoding="utf-8")
+    check("...and the hub table links the child note on that column",
+          "| [[Fix login]] | Done |" in body, body)
+
 
 
 # ── 4. HTML -> Markdown ─────────────────────────────────────────────────────
@@ -743,12 +919,17 @@ def main():
              t_a_zip_a_folder_and_notions_part_archives,
              t_the_zip_guards_are_jarvis_documents_own,
              t_a_zip_bomb_is_refused_not_unpacked,
+             t_a_zip_bomb_is_refused_by_its_own_directory_before_unpacking,
              t_a_source_that_is_not_an_export_is_refused,
              t_the_destination_must_be_a_real_vault,
              t_properties_become_frontmatter,
              t_dates_and_lists_are_what_obsidian_expects,
              t_a_second_import_is_idempotent,
              t_a_csv_database_becomes_frontmatter_a_note_and_a_base,
+             t_the_database_hub_note_says_what_it_is_and_never_drops_a_row,
+             t_a_database_exported_twice_keeps_every_row,
+             t_relation_columns_become_wikilinks_and_other_values_are_untouched,
+             t_a_database_whose_title_column_is_renamed_still_merges,
              t_html_becomes_obsidian_markdown,
              t_html_never_raises_on_odd_input,
              t_links_are_rewritten_through_the_cleaned_names,

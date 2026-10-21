@@ -10,10 +10,13 @@ Obsidian can open, WITHOUT losing anything it cannot put back.
 
 WHAT IT DOES, IN ORDER
   1. INGEST a `.zip`, a folder already unzipped, or either containing Notion's
-     `Export-...-Part-2.zip` parts. Nothing is unpacked outside the staging
-     folder, `..` and absolute names are refused (the same guard
-     `jarvis_documents.import_notion` uses - see WHY IT IS NOT A SECOND
-     EXTRACTOR below), and the caps are counted as bytes are written.
+     `Export-...-Part-2.zip` parts. A zip is judged by its OWN directory before
+     a byte is written - the unpacked total it declares and its compression
+     ratio, so a zip bomb is refused rather than filled to - and the absolute
+     caps are counted as bytes are written because a header can lie. Nothing is
+     unpacked outside the staging folder, and `..` and absolute names are
+     refused (the same guard `jarvis_documents.import_notion` uses - see WHY IT
+     IS NOT A SECOND EXTRACTOR below).
   2. CLEAN the tree: strip Notion's 32-hex (and hyphenated 36-char) ids from
      file and folder names, replace what Windows and Obsidian forbid, and
      resolve collisions DETERMINISTICALLY - two pages called `Meeting Notes`
@@ -23,8 +26,12 @@ WHAT IT DOES, IN ORDER
      step 5 needs it.
   3. PROPERTIES into YAML frontmatter, including `notion_id`, so importing the
      same export twice is idempotent. Each exported CSV database has its row's
-     columns merged into the matching note's frontmatter, and gets BOTH a
-     Markdown index note of `[[wikilinks]]` AND a `.base` file.
+     columns merged into the matching note's frontmatter (a relation value that
+     names a page of the export becomes `[[that page]]`), and gets a generated
+     `_Database - <Name>.md` hub note - type, row count and columns in its
+     frontmatter, a row table linking every child note, and a count of rows
+     whose page is missing - plus a `.base` file. `X.csv` and `X_all.csv` are
+     ONE database and their rows are merged.
   4. HTML into Obsidian Markdown when the export is HTML: callouts, toggles,
      `- [ ]` checklists, fenced code with its language, pipe tables.
   5. LINKS and ATTACHMENTS: `%20` is decoded, Notion's relative links become
@@ -127,6 +134,14 @@ MAX_FILES = 20_000
 MAX_BYTES = 1024 * 1024 * 1024
 MAX_ONE = 200 * 1024 * 1024
 MAX_ZIP = 2 * 1024 * 1024 * 1024
+#: The two numbers a zip's OWN directory is judged by, before a byte is
+#: written (2026-10-20 review, rule 1): the total it declares it unpacks to,
+#: and how much it claims to shrink its contents. A real Notion export is
+#: pages and CSVs - text, around 2-10:1 - so 100:1 is not a working archive.
+#: The absolute caps above stay as the backstop: a header can lie, and the
+#: bytes actually written are what fill a disk.
+MAX_ZIP_UNCOMPRESSED = 500 * 1024 * 1024
+MAX_ZIP_RATIO = 100
 MAX_NAME = 120                                # characters in one path part
 #: The longest a Notion property value may be before it is cut. A runaway value
 #: must not become a runaway frontmatter block.
@@ -287,6 +302,34 @@ def _unique(want: str, taken: set) -> str:
 #   1. Ingest: a zip, a folder, and Notion's own Part-N.zip inside either
 # --------------------------------------------------------------------------
 
+def _zip_problem(zf: zipfile.ZipFile) -> str:
+    """Why this archive is refused BEFORE a byte is written, or "".
+
+    A zip bomb is refused from its own central directory - the declared
+    unpacked total and the declared compression ratio - rather than after
+    writing the bytes it claims. The caps in `_copy_capped` stay as the
+    backstop for an archive whose header lies.
+    """
+    unpacked = packed = 0
+    for info in zf.infolist():
+        if info.is_dir():
+            continue
+        unpacked += int(info.file_size or 0)
+        packed += int(info.compress_size or 0)
+        if unpacked > MAX_ZIP_UNCOMPRESSED:
+            return (f"the zip says it holds more than "
+                    f"{MAX_ZIP_UNCOMPRESSED // (1024 * 1024)} MB once unpacked, so "
+                    f"nothing was unpacked")
+    if unpacked > 0 and packed == 0:
+        return ("the zip says it holds data but no compressed bytes at all, so "
+                "nothing was unpacked")
+    if packed > 0 and unpacked / packed > MAX_ZIP_RATIO:
+        return (f"the zip claims {unpacked:,} bytes from {packed:,} - more than "
+                f"{MAX_ZIP_RATIO}:1 compressed, which is what a zip bomb looks like - "
+                f"so nothing was unpacked")
+    return ""
+
+
 def _read_zip(zip_path: str, dest: str, counts: dict, depth: int = 0) -> None:
     """Unpack one zip into `dest`. Refuses traversal, links and the caps.
 
@@ -300,6 +343,9 @@ def _read_zip(zip_path: str, dest: str, counts: dict, depth: int = 0) -> None:
                        "checks that refuse a zip's `..` names are missing - nothing "
                        "was unpacked")
     with zipfile.ZipFile(zip_path) as zf:
+        why = _zip_problem(zf)
+        if why:
+            raise _refused(why)
         for info in zf.infolist():
             if info.is_dir():
                 continue
@@ -979,6 +1025,10 @@ def _survey(staging: str) -> tuple:
     mapping: dict = {}
     taken_dirs: dict = {}
     used_files: dict = {}
+    #: database key -> the set of row titles it holds, so TWO CSV files of one
+    #: database (`X.csv` and `X_all.csv`) count as one database with no row
+    #: counted twice.
+    database_titles: dict = {}
     stats = {"notes": 0, "attachments": 0, "databases": 0, "rows": 0,
              "renamed": 0, "collisions": 0, "html": 0}
     root = os.path.realpath(staging)
@@ -1009,26 +1059,127 @@ def _survey(staging: str) -> tuple:
             elif lower == ".csv":
                 clean = clean_name(name)
                 new = _unique(clean, used_files[clean_dir])
-                mapping[old] = f"{clean_dir}/{new}" if clean_dir else new
-                stats["databases"] += 1
-                stats["rows"] += _count_rows(os.path.join(dirpath, name))
+                rel = f"{clean_dir}/{new}" if clean_dir else new
+                mapping[old] = rel
+                titles = database_titles.setdefault(_database_key(rel), set())
+                for row in _read_csv(os.path.join(dirpath, name)):
+                    title = _row_title(row)
+                    if title:
+                        titles.add(title.casefold())
             else:
                 continue
             if os.path.splitext(os.path.basename(mapping[old]))[0].casefold() != \
                     os.path.splitext(stem)[0].casefold():
                 stats["renamed"] += 1
+    stats["databases"] = len(database_titles)
+    stats["rows"] = sum(len(titles) for titles in database_titles.values())
     return mapping, stats
 
 
-def _count_rows(path: str) -> int:
-    """How many rows a Notion CSV has, header aside. A count, not a parse - the
-    plan must be cheap enough to run on every keystroke of a preview."""
-    try:
-        with open(path, "r", encoding="utf-8", errors="replace", newline="") as f:
-            lines = sum(1 for line in f if line.strip())
-        return max(0, lines - 1)
-    except OSError:
-        return 0
+def _title_column(row: dict) -> str:
+    """Which column of this row is the page's title.
+
+    Notion writes the database's OWN title-property name as the first CSV
+    header, so the title column is `Name` usually and whatever the owner named
+    it otherwise (`Task`, `Project`...) - never assume the word.
+    """
+    for key in ("Name", "Title"):
+        if key in row:
+            return key
+    return next(iter(row), "")
+
+
+def _row_title(row: dict) -> str:
+    """The page title a database row is for: its title column's value."""
+    if not isinstance(row, dict) or not row:
+        return ""
+    return str(row.get(_title_column(row), "") or "").strip()
+
+
+def _database_key(csv_rel: str) -> tuple:
+    """(folder, name) of a database - `X.csv` and `X_all.csv` are ONE database."""
+    folder = os.path.dirname(csv_rel)
+    stem = os.path.splitext(os.path.basename(csv_rel))[0]
+    return (folder, re.sub(r"_all$", "", stem))
+
+
+def _merged_database_rows(csv_rows: dict) -> dict:
+    """Every CSV export of one database as ONE row list, keyed by its title.
+
+    Notion can export a database as `X.csv` and `X_all.csv`; the `_all` file is
+    the complete one (it holds columns the plain export omits or truncates), so
+    its non-empty values win while rows that only one of the files holds are
+    all kept. Ordered by first sight, so the same export always lists the same
+    rows in the same order.
+    """
+    merged: dict = {}
+    for csv_rel, rows in sorted(csv_rows.items()):
+        is_all = os.path.splitext(os.path.basename(csv_rel))[0].endswith("_all")
+        slots = merged.setdefault(_database_key(csv_rel), {})
+        for row in rows:
+            title = _row_title(row)
+            if not title:
+                continue
+            slot = slots.setdefault(title.casefold(), {"title": title, "row": {}})
+            for key, value in row.items():
+                if not str(value or "").strip():
+                    continue
+                if is_all or not str(slot["row"].get(key) or "").strip():
+                    slot["row"][key] = value
+    return {key: list(slots.values()) for key, slots in merged.items()}
+
+
+def _known_pages(mapping: dict) -> dict:
+    """casefolded page title -> the name to link to, from the Pass-1 map.
+
+    Both the page's original title (Notion's id off, which is what a relation
+    column writes) and its cleaned vault name resolve, so a link is only made
+    to a page this export really holds - never to a guessed name.
+    """
+    out: dict = {}
+    for old, new in mapping.items():
+        if not str(new).lower().endswith(".md"):
+            continue
+        display = os.path.splitext(os.path.basename(new))[0]
+        for title in (split_id(os.path.basename(old))[0],
+                      clean_name(os.path.basename(old), keep_kind=False)):
+            title = os.path.splitext(title)[0]
+            if title:
+                out.setdefault(title.casefold(), display)
+        out.setdefault(display.casefold(), display)
+    return out
+
+
+def _relation_value(value, pages: dict) -> str:
+    """One database cell, for a frontmatter property.
+
+    Notion's id is taken off a relation value, and a target that names a page
+    of THIS export becomes `[[that page]]`, so Obsidian's graph connects a
+    database relation by itself. A value that is not a page is returned
+    UNCHANGED - byte for byte, comma and all - because ordinary cells
+    (`1,234`, a long date) must not be rewritten by a relation rule.
+    """
+    text = str(value or "").strip()
+    if not text:
+        return text
+    pieces = [p.strip() for p in re.split(r"\s*,\s*", text) if p.strip()]
+    out, changed = [], False
+    for piece in pieces:
+        clean, _id = split_id(piece)
+        clean = clean.strip()
+        target = pages.get(clean.casefold())
+        if target:
+            out.append(f"[[{target}]]")
+            changed = True
+        else:
+            out.append(clean if clean != piece else piece)
+            changed = changed or clean != piece
+    return ", ".join(out) if changed else text
+
+
+def _table_cell(value) -> str:
+    """One Markdown table cell: never a pipe inside it, never a raw newline."""
+    return " ".join(str(value or "").split()).replace("|", "\\|")
 
 
 def _clean_dir(rel_dir: str, taken: dict, stats: dict) -> str:
@@ -1093,7 +1244,7 @@ def run_import(p: Plan, *, approved: bool = False,
         mapping, stats = _survey(extracted)
         built = os.path.join(staging, "built")
         os.makedirs(built)
-        created = _build(extracted, built, mapping, p.name)
+        created, rows_without_notes = _build(extracted, built, mapping, p.name)
         if record and receipts is not None:
             receipt_id = receipts.record(
                 RECEIPT_TOOL,
@@ -1120,6 +1271,7 @@ def run_import(p: Plan, *, approved: bool = False,
     return {"ok": True, "folder": str(final), "receipt_id": receipt_id,
             "notes": stats["notes"], "attachments": stats["attachments"],
             "databases": stats["databases"], "rows": stats["rows"],
+            "rows_without_notes": rows_without_notes,
             "html_pages": stats["html"],
             "said": f"Brought {stats['notes']:,} note(s) into \"{p.name}\"."}
 
@@ -1140,8 +1292,10 @@ if receipts is not None:                      # pragma: no cover - import-time h
         pass
 
 
-def _build(src: str, dest: str, mapping: dict, name: str) -> list:
-    """Write the vault tree from the extracted export. Returns what was made.
+def _build(src: str, dest: str, mapping: dict, name: str) -> tuple:
+    """Write the vault tree from the extracted export.
+
+    Returns `(what was made, how many database rows had no page of their own)`.
 
     TWO PASSES, and the order matters: every database is read FIRST, because a
     row's columns are merged into the frontmatter of the page that row is, and
@@ -1184,46 +1338,131 @@ def _build(src: str, dest: str, mapping: dict, name: str) -> list:
             title = _html_title(raw, split_id(os.path.splitext(fname)[0])[0])
             props = {}
             text = _rewrite_links(html_to_markdown(raw), mapping)
-        front = frontmatter_of(title or split_id(os.path.splitext(fname)[0])[0],
-                               split_id(fname)[1], props)
-        front = _merge_database(front, title, csv_rows, mapping)
+        page_title = (title or "").strip() or split_id(os.path.splitext(fname)[0])[0]
+        front = frontmatter_of(page_title, split_id(fname)[1], props)
+        front = _wikilink_properties(front, mapping)
+        front = _merge_database(front, page_title, csv_rows, mapping)
         _write(target, yaml_block(front) + "\n\n" + text.rstrip() + "\n")
         created.append(new)
-    created += _database_notes(dest, csv_rows, mapping, name)
-    return created
+    db_notes, rows_without_notes = _database_notes(dest, csv_rows, mapping, name)
+    created += db_notes
+    return created, rows_without_notes
 
 
-def _merge_database(front: dict, title: str, csv_rows: dict, mapping: dict) -> dict:
-    """A database row's columns, into the frontmatter of the page that row is."""
-    for _csv, rows in csv_rows.items():
-        for row in rows:
-            if str(row.get("Name", "")).strip().casefold() != (title or "").strip().casefold():
-                continue
-            for key, value in row.items():
-                if key == "Name" or not str(value).strip():
-                    continue
-                name = re.sub(r"[^A-Za-z0-9_]+", "_", key.strip().lower()).strip("_")
-                if name and name not in front:
-                    front[name] = str(value).strip()[:MAX_VALUE]
+def _wikilink_properties(front: dict, mapping: dict) -> dict:
+    """A page's own property block: a relation value naming a page becomes a link.
+
+    The header block carries the same relation columns a database CSV does, so
+    both halves get the same rule. `title` and `notion_id` are the page's
+    identity, never a link (an id on its own would be stripped to nothing).
+    """
+    pages = _known_pages(mapping)
+    for key, value in list(front.items()):
+        if key in ("notion_id", "title") or not isinstance(value, str):
+            continue
+        front[key] = _relation_value(value, pages)
     return front
 
 
+def _merge_database(front: dict, title: str, csv_rows: dict, mapping: dict) -> dict:
+    """A database row's columns, into the frontmatter of the page that row is.
+
+    The row is found by its TITLE column - Notion names that column after the
+    database's own title property, often `Name` and sometimes not. A relation
+    value naming a page of this export becomes a `[[wikilink]]` (see
+    `_relation_value`); the page's own property block wins over a CSV column
+    when both carry one.
+    """
+    pages = _known_pages(mapping)
+    wanted = (title or "").strip().casefold()
+    for rows in _merged_database_rows(csv_rows).values():
+        for entry in rows:
+            row = entry["row"]
+            if entry["title"].casefold() != wanted:
+                continue
+            title_col = _title_column(row)
+            for key, value in row.items():
+                if key == title_col or not str(value or "").strip():
+                    continue
+                name = re.sub(r"[^A-Za-z0-9_]+", "_", key.strip().lower()).strip("_")
+                if name and name not in front:
+                    front[name] = _relation_value(value, pages)[:MAX_VALUE]
+    return front
+
+
+#: The prefix that marks a generated database hub note, so it sorts with the
+#: rest of Jarvis's generated notes and is recognisable as one.
+DATABASE_PREFIX = "_Database - "
+#: The columns whose row counts become the hub note's collapsible summary.
+DATABASE_GROUPS = ("Status", "Category", "Tags")
+
+
 def _database_notes(dest: str, csv_rows: dict, mapping: dict,
-                    export: str = "") -> list:
-    """For each exported database: an index note of wikilinks, and a .base."""
+                    export: str = "") -> tuple:
+    """For each exported database: a hub note and a `.base`.
+
+    Returns `(created paths, rows that had no page of their own)`.
+
+    The hub note is `_Database - <Name>.md`: frontmatter saying what it is
+    (`type: database-index`, its row count, its columns, how many rows have no
+    note), then a rendered Markdown table whose title column links every row to
+    its child note. A row whose child page is missing is STILL a row in that
+    table - an unresolved `[[wikilink]]`, exactly how an Obsidian vault shows a
+    link to a note that is not there - and the note states the count in words
+    too, so nothing a database declares is silently dropped. `X.csv` and
+    `X_all.csv` are ONE database: their rows are merged before any of this.
+    """
     created: list = []
-    for csv_rel, rows in sorted(csv_rows.items()):
-        folder = os.path.dirname(csv_rel)
-        base_name = os.path.splitext(os.path.basename(csv_rel))[0]
-        base_name = re.sub(r"_all$", "", base_name)
+    rows_without_notes = 0
+    pages = _known_pages(mapping)
+    for (folder, base_name), entries in sorted(_merged_database_rows(csv_rows).items()):
         target = os.path.join(dest, *folder.split("/")) if folder else dest
         os.makedirs(target, exist_ok=True)
-        links = [f"- [[{str(row.get('Name', '')).strip()}]]" for row in rows
-                 if str(row.get("Name", "")).strip()]
-        front = yaml_block({"title": base_name, "rows": len(links)})
-        _write(os.path.join(target, f"{base_name}.md"),
-               front + "\n\n" + f"# {base_name}\n\n" + "\n".join(links) + "\n")
-        created.append(f"{folder}/{base_name}.md" if folder else f"{base_name}.md")
+        columns: list = []
+        for entry in entries:
+            for key in entry["row"]:
+                if key not in columns:
+                    columns.append(key)
+        title_col = _title_column(entries[0]["row"]) if entries else "Name"
+        other = [c for c in columns if c != title_col]
+        table = ["| " + " | ".join([_table_cell(title_col)]
+                                   + [_table_cell(c) for c in other]) + " |",
+                 "| " + " | ".join(["---"] * (1 + len(other))) + " |"]
+        missing = 0
+        for entry in entries:
+            title = entry["title"]
+            link = pages.get(title.casefold()) or clean_name(title, keep_kind=False) or title
+            if title.casefold() not in pages:
+                missing += 1       # a row with no page still gets its line
+            table.append("| " + " | ".join(
+                [f"[[{link}]]"]
+                + [_table_cell(_relation_value(entry["row"].get(col, ""), pages))
+                   for col in other]) + " |")
+        rows_without_notes += missing
+        front = {"type": "database-index", "title": base_name,
+                 "rows": len(entries), "columns": [title_col] + other,
+                 "rows_without_notes": missing}
+        body = [yaml_block(front), "", f"# {base_name}", "", "\n".join(table)]
+        if missing:
+            body += ["", (f"{missing} row(s) in this database have no note in this export - "
+                          f"they stay in the table above so nothing the database holds "
+                          f"is lost.")]
+        group_col = next((c for c in DATABASE_GROUPS
+                          if c in other and any(str(e["row"].get(c, "")).strip()
+                                                for e in entries)), "")
+        if group_col:
+            counts: dict = {}
+            for entry in entries:
+                label = " ".join(str(entry["row"].get(group_col, "") or "").split()) or "(empty)"
+                counts[label] = counts.get(label, 0) + 1
+            summary = [f"<details>", f"<summary>By {group_col}</summary>", ""]
+            summary += [f"- {label}: {n}" for label, n in sorted(counts.items())]
+            summary += ["", "</details>"]
+            body += ["", "\n".join(summary)]
+        _write(os.path.join(target, f"{DATABASE_PREFIX}{base_name}.md"),
+               "\n".join(body) + "\n")
+        created.append(f"{folder}/{DATABASE_PREFIX}{base_name}.md"
+                       if folder else f"{DATABASE_PREFIX}{base_name}.md")
         # Obsidian's Bases file: a table of everything in this folder. The path
         # is vault-relative, so it carries the export folder's own name.
         where = "/".join(p for p in (export, folder) if p)
@@ -1235,7 +1474,7 @@ def _database_notes(dest: str, csv_rows: dict, mapping: dict,
                 f"    name: {base_name}\n")
         _write(os.path.join(target, f"{base_name}.base"), base)
         created.append(f"{folder}/{base_name}.base" if folder else f"{base_name}.base")
-    return created
+    return created, rows_without_notes
 
 
 def _write(path: str, text: str) -> None:
