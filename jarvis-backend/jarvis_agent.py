@@ -7244,6 +7244,27 @@ def with_screen(messages: list, mark: str) -> tuple:
         return list(messages or []), {"read": False, "text": "", "note": "", "mode": ""}
 
 
+def _live_voice_read(messages: list, watch, *, engine=None, reader=None,
+                     session=None) -> tuple:
+    """(messages, info): a Live question that ASKS to read this PC's screen or
+    selection gets those words added by the existing primitives (jarvis_screen
+    "Look at this" / jarvis_ui_control.read_selection), as OUTSIDE TEXT of its
+    own - or `messages` unchanged and info["read"] False.
+
+    Called only on a Live turn, only on this PC's own session (the module
+    refuses a phone session with a fixed line), and only when the owner's
+    newest words ask one of the two reads. It clicks nothing, raises no card
+    and writes nothing: actions that change things stay on the existing
+    `control_computer` tool and its ONE approval card."""
+    try:
+        import jarvis_voice_ui
+        return jarvis_voice_ui.with_voice_read(
+            messages, getattr(watch, "newest_own_words", "") or "",
+            engine=engine, reader=reader, session=session)
+    except Exception:
+        return list(messages or []), {"read": False}
+
+
 def _phone_screen_turn(request) -> bool:
     """Does the request, as the app sent it, carry the phone's screen
     picture (`screen: "phone"`)? Such a picture is only ever READ for its
@@ -9421,12 +9442,28 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         # "Proposed after Jarvis read: your screen".
         if watch.screen or _has_screen_text_part(convo):
             convo, screen_info = with_screen(convo, watch.screen)
+        elif live_turn and watch.newest_own_words:
+            # "what's on my screen?", "read this selection": the owner ASKING
+            # out loud in Jarvis Live is the same act as pressing "Look at
+            # this". The read half only (task-39, the audit's V7); a phone
+            # Live session gets a fixed line and nothing is read - the screen
+            # is THIS PC's (docs/ARCHITECTURE.md section 8).
+            convo, screen_info = _live_voice_read(convo, watch)
+        else:
+            screen_info = {}
+        if screen_info:
             if screen_info.get("picture_said"):
                 # Picture mode (the owner's decision of 2026-09-29) was on and
                 # the picture was not used: said in the answer itself, by code,
                 # never left to the model to pass on.
                 tell_owner(screen_info["picture_said"])
                 said["gap"] = True           # the model's own words start a new paragraph
+            if screen_info.get("said"):
+                # A fixed line from the read (a phone session asking, a paused
+                # look, no highlighted text): said by code, never invented by
+                # the model from a refusal it cannot see.
+                tell_owner(screen_info["said"])
+                said["gap"] = True
             if screen_info.get("read"):
                 screen_read = True
                 say_step("tool_started", SCREEN_TOOL)
