@@ -23465,8 +23465,38 @@ them")** after the pre-merge audit named the other irreversible data-changing
 actions. The voice-training clear is not an action name in the table: it is
 raised as the shared `change_own_config` and marked by
 `backend/jarvis_voice_enroll.py`'s own detail, and the marker path is kept
-exactly for cards like it. Both apps and the HUD draw a plain **"REPLACES CURRENT DATA"**
-heading on those cards and require a **second, explicit confirmation** before
+exactly for cards like it.
+
+### Three accurate labels, not one generic one (review ruling 8.1, 2026-10-21)
+
+One generic heading would be a lie on some of those cards, so the set is split
+into three labels - the PC sends **`replaces_kind`**, **`replaces_heading`** and
+**`replaces_note`** on every waiting row (words owned by
+`jarvis_card_words.py`, one place for both apps), and every surface draws
+exactly what it is given. A kept copy is promised **only** where one is really
+kept - the columns below are checked against the gate's own `_RISK` why by
+`backend/test_approval_guards.py`, action by action:
+
+| label (`replaces_kind`) | actions | what the card says | is a copy kept? |
+|---|---|---|---|
+| **DELETES OR REPLACES DATA** (`deletes_data`) | `delete_file`, `delete_joplin_note`, `delete_logseq_page` | "deletes the file/note; there is no undo from here" | **no** |
+| | `memory_forget_range` | "forgets the listed facts and deletes the chats; Undo puts them back for 10 minutes, then they are gone" | yes, for 10 minutes (its own Undo) |
+| | the voice-training clear (detail-marked `change_own_config`) | the category's honest fallback: "deletes data saved on this PC; there is no undo from here" | **no** |
+| **OVERWRITES EXISTING NOTE** (`overwrites_note`) | `edit_joplin_note`, `edit_logseq_page` | "replaces the note's/page's current text; Jarvis keeps no copy of the old version" | **no automatic copy** - the owner's own vault app version history is the way back |
+| **REPLACES LIVE CODE OR STATE** (`replaces_code_or_state`) | `restore_backup` | "puts back an older backup ... your CURRENT data is backed up first, with a fresh recovery code, so this can itself be undone" | **yes** (backup of the current data first) |
+| | `app_merge_change` | "writes the change shown on the card into the app's files; the older version stays in the app's git history, but there is no Undo button for it yet" | **yes** (the app's git history) |
+| | `register_approval_key` | "adds the phone named on the card as an approver; you can remove the device in Settings, Devices, to drop the key again" | **yes** (removable in Settings, not a copy) |
+| | `modify_own_code` | "changes Jarvis's own running code; a backup is the only way back" | **only the owner's backup** - the card does not claim one is automatic |
+
+An older PC whose rows carry `replaces` but not the words still gets the right
+category heading from each client's own three-name fallback, and a card that
+says it replaces data but gives no category at all keeps the original generic
+heading. **The exact words are asserted** (heading and note per action, against
+the recovery listed above): rewording a card so it claims a kept copy it does
+not have fails the backend suite.
+
+Both apps and the HUD draw that accurate heading on those cards and require a
+**second, explicit confirmation** before
 the approve is sent: the desktop bar and the HUD page change the button from
 "Approve" to "Confirm replace" after the first press and send only on the
 second; the phone does the same on its card and refuses the right swipe. A

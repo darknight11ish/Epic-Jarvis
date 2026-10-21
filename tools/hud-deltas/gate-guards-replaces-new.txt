@@ -4,3 +4,10 @@
         # the warning heading and ask a second, explicit confirmation
         # for these; every other card is unchanged.
         d["replaces"] = replaces_for(d.get("action", ""), d.get("detail"))
+        # The words the guard draws (review ruling 8.1): category, heading and
+        # the honest one-line consequence, from the ONE words module. Ordinary
+        # cards carry None/"" so a client never has to guess.
+        _kinds = replaces_words_for(d.get("action", ""), d.get("detail"))
+        d["replaces_kind"] = _kinds.get("kind")
+        d["replaces_heading"] = _kinds.get("heading", "")
+        d["replaces_note"] = _kinds.get("note", "")

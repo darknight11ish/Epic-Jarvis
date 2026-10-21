@@ -484,14 +484,14 @@ fun ApprovalCard(
         if (replace) {
             Spacer(Modifier.height(10.dp))
             Text(
-                text = ReplaceConfirm.WARNING,
+                text = ReplaceConfirm.heading(item),
                 style = MaterialTheme.typography.titleSmall,
                 color = chrome.badInk,
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             )
             Spacer(Modifier.height(2.dp))
             Text(
-                text = ReplaceConfirm.NOTE,
+                text = ReplaceConfirm.note(item),
                 style = MaterialTheme.typography.bodySmall,
                 color = chrome.textHi,
             )

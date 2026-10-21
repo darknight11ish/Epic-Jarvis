@@ -1405,12 +1405,19 @@
     replaceArmId = "";
   }
 
-  function armReplaceCard(card, id, verdict) {
+  function armReplaceCard(card, id, verdict, row) {
     // Arming a DIFFERENT card first clears whatever the last one was showing,
     // so no card can keep a "Confirm replace" label for an arm that is gone.
     disarmReplaceCard();
+    // Review ruling 8.1: the PC's own category and honest words when the row
+    // carries them; the generic sentence stays for an older PC that marks the
+    // card but sends no words.
+    var heading = row && row.replaces_heading
+      ? String(row.replaces_heading) : "REPLACES CURRENT DATA";
+    var note = row && row.replaces_note ? String(row.replaces_note) : "";
     var words = verdict === "arm-replace"
-      ? "This REPLACES what is on your PC. Press Approve once more to do it."
+      ? heading + (note ? ". " + note : " This REPLACES what is on your PC.")
+        + " Press Approve once more to do it."
       : "I could not check what this will replace. Press Approve once more if "
         + "you want it.";
     sayOnCard(card, words);
@@ -1505,13 +1512,13 @@
           answerApproval(id, true, card);
           return;
         }
-        armReplaceCard(card, id, verdict);   // nothing is sent on this press
+        armReplaceCard(card, id, verdict, row);   // nothing is sent on this press
       }, function () {
         // The queue could not be read: UNKNOWN, never "ordinary".
         replaceArmBusy[id] = false;
         var verdict = replacePress.decide(id, null);
         if (verdict === "send") answerApproval(id, true, card);
-        else armReplaceCard(card, id, verdict);
+        else armReplaceCard(card, id, verdict, null);
       });
     },
     true
