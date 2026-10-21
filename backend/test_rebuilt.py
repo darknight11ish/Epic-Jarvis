@@ -47,6 +47,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _where import BACKEND, REPO, explain, missing  # noqa: E402
 
+# This suite tests the audit-log machinery ITSELF: it patches load_framework's
+# logging section and then reads and writes exactly that directory. The
+# runner's test isolation therefore leaves JARVIS_LOG_DIR out for it
+# (run_suites' LOG_MACHINERY_SUITES) - and this clears it here too, because
+# apply-patches.ps1 runs every suite directly with the variables `--state-env`
+# printed, which include it.
+os.environ.pop("JARVIS_LOG_DIR", None)
+
 
 def _words_of(text):
     import jarvis_memory as _m
