@@ -429,7 +429,15 @@ if (el.section) {
 onLink(() => paint());
 // A card answered (or expired): the folder or the last outcome may have
 // changed. onQueue also delivers the current queue at once - the first read.
-onQueue(() => load());
+// A HIDDEN page must NOT make that read: the first PC read after a restore
+// hands over the safety backup's one-time recovery code (shown once), so a
+// hidden panel would consume it without showing it. The visibility listener
+// below does the read when the owner actually looks (audit 2026-10-21,
+// LOW-6); the PC-side dismiss rule (M2) relies on the same "PC has read it"
+// state.
+onQueue(() => {
+  if (!document.hidden) load();
+});
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) load();
 });
