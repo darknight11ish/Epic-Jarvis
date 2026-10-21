@@ -23322,3 +23322,141 @@ published gate, with a revert-check for each guard); the desktop half is
 `backend/gate-touches.patch` carries the gate change to the owner's own file
 and `backend/test_gate_touches.py` applies it forwards and reverses it out
 byte-for-byte.
+
+## 151. The Obsidian vault organizer: a read-only plan, then ONE card and one-click Undo (backend half added 2026-10-20)
+
+**What it is.** A batch tidy-up planner for an Obsidian vault on this PC. It
+reads the vault's notes and answers what a tidy-up **would** do, so the owner
+can look before anything changes. The DEFAULT scheme is the safest one,
+`mocs_only`, which moves **no file**: it merges `tags` into each note's YAML
+frontmatter (never erasing the owner's own), adds an
+`up: "[[_MOC - <Topic>]]"` link, and would create `_MOC - <Topic>.md` hub notes
+plus one `00 - Vault Home.md`. The two moving schemes, `topic_folders` and
+`para`, are previewed by the same plan; they exist behind the explicit
+`scheme` parameter for a later run. The module is
+`backend/jarvis_vault_organizer.py` and its docstring is the contract.
+
+**THIS SLICE IS THE PLAN HALF, AND IT IS READ-ONLY.** `POST
+/api/vault/organize-plan` opens notes for reading only and writes nothing
+anywhere - not in the vault, not in the settings folder, not in `memory.db` -
+raises no approval card, calls no model and embeds nothing. The clustering is
+pure Python and deterministic: folder, database membership and a TF-IDF over
+headings/tags, with ties broken by name, so the same vault twice gives the same
+`plan_id`, `digest` and every preview line. `JARVIS_NO_EMBED=1` changes nothing
+because nothing here embeds.
+
+**THE WRITER DOES EXACTLY WHAT A PLAN PREVIEWED, UNDER ONE CARD.** `POST
+/api/vault/organize` takes the `plan_id` and `digest` of a plan the owner has
+seen. It re-reads the vault first: if anything changed since the preview, the
+plan is **stale** and the route refuses rather than acting on it. Then it raises
+**ONE `organize_obsidian_vault` card at tier ask** that names the vault, the
+scheme, how many files change and says in words that nothing is deleted and
+ONE Undo puts the whole vault back. Only after the yes does it save a
+`jarvis_file_guardian.snapshot_before_write()` copy of **every existing file**
+it is about to change, move or replace - one failed copy refuses the whole
+batch before a byte is written. It keeps its own copy of every original under
+`~/.openjarvis/vault-organizer-backups/<plan_id>/` with a manifest, records
+**ONE `jarvis_receipts.py` batch receipt** (tool name `organize_obsidian_vault`)
+**before** the first write, and writes atomically (`.tmp` + `os.replace`).
+**NO note is ever deleted**: duplicates and zero-word stubs are listed only.
+ONE Undo - the receipt's own - restores the exact bytes AND paths (moved files
+included), removes only the notes the batch created, and takes off only the
+folders it made. It works after a backend restart because it reads its own
+manifest; the receipt stores no absolute path (the receipt scrubber would
+redact it), only the plan id. A write that fails part-way is reported
+honestly as **partial**, with the receipt and copy it already saved.
+
+**Routes (all PC-only, token-guarded, and OFF by default).**
+
+* `POST /api/vault/organize-plan` - body `{"vault": "<path>", "scheme":
+  "mocs_only"|"topic_folders"|"para", "max_clusters": N,
+  "archive_empty_stubs": false}`. The vault is optional: it defaults to
+  `[notes.obsidian] vault_directory` / `JARVIS_OBSIDIAN_VAULT` through the
+  existing `jarvis_notes.obsidian_vault()`, and an unusable vault is refused
+  with the notes module's own words. Answers `ok`, `plan_id`, `digest`,
+  `scheme`, `summary` (notes_scanned / notes_moved / notes_tagged /
+  mocs_to_create / databases_indexed / links_rewritten / duplicates_found /
+  empty_stubs_found), `moves_preview`, `mocs_preview`, `home_preview`,
+  `tag_plan`, `duplicates_and_stubs`, `partial`, `warnings` and `said`. A plan
+  that hits the file/byte/time caps says it is **partial** rather than hanging.
+  Duplicates and zero-word stubs are **listed, never deleted**.
+* `POST /api/vault/organize` - body `{"plan_id": "...", "digest": "..."}`. The
+  writer above: ONE card, guardian snapshots, atomic writes, one batch receipt,
+  one-click Undo. Refusals: a plan_id that is not in memory (a restart forgets
+  plans), a digest that does not match, a vault that changed since the preview,
+  a denied/timed-out card, a snapshot that cannot be taken, a batch over 2,000
+  existing files, or a second writer already running. Each refusal changes
+  nothing and says why.
+* `GET /api/vault/organizer` - the switch, its action and tier, the default
+  scheme, the schemes that exist, and whether the writer can apply
+  (`can_apply`, `apply_action`, `apply_tier`).
+* `POST /api/vault/organizer/enabled` - body `{"enabled": true|false}`. **OFF
+  is immediate** (200, withdraws a waiting card); **ON is ONE
+  `change_own_config` card at tier ask** (202 `waiting`), and a denied,
+  timed-out, refused or unraisable card changes nothing. Turning it off needs
+  no card.
+
+**Ship state, said plainly.** The shipped template has
+`[vault_organizer] enabled = false` (`backend/rebuilt/jarvis-framework.toml`):
+the feature is OFF until the owner turns it on with the card above. The plan
+route answers `{"ok": false, "enabled": false, "why": ...}` while it is off.
+Every route is refused for a caller that is not this PC (`403 not_this_pc`):
+the plan reads a vault of the owner's own writing, and no phone control for it
+exists or is planned.
+
+**Safety limits.** Every note is resolved and must stay inside the vault
+(`jarvis_notes._inside`, the notes search's own rule); symlinks and paths that
+resolve outside are refused and named in `warnings`. The work is bounded:
+`MAX_FILES`, `MAX_FILE_BYTES`, `MAX_SECONDS` and `MAX_CLUSTERS`, with a file
+over the byte ceiling skipped (not read) and reported. No note text is stored
+anywhere: `jarvis_memory` is not imported by this module, and the only note
+wording a plan returns is the one-line preview snippet it renders for a MOC,
+passed through the project's own scrubbers (`jarvis_scrub.scrub_text`,
+`jarvis_agent.strip_chat_markers`) when they are present.
+
+**The owner's runbook: the FIRST REAL RUN IS ON A COPY OF THE VAULT.**
+1. Copy the vault folder in File Explorer (right-click, Copy, then Paste) and
+   give the copy a clear name, for example `Vault - first organize test`.
+2. Point the organizer at the COPY: `POST /api/vault/organize-plan` with
+   `{"vault": "C:\\path\\to\\Vault - first organize test"}` (no setting
+   change; a vault that is not Obsidian's is refused in words).
+3. Read the answer's `summary`, `moves_preview`, `mocs_preview` and
+   `duplicates_and_stubs`. Nothing has changed yet.
+4. Apply only that plan: `POST /api/vault/organize` with its `plan_id` and
+   `digest`, and approve the ONE card. If the plan is stale, nothing happens:
+   plan again.
+5. Open the copy in Obsidian and look. If it is not wanted, press Undo once on
+   the receipt - the copy comes back exactly.
+6. Only after the copy looks right, repeat on the real vault if the owner
+   chooses. Keep the copy until the real run has been looked at.
+
+**The write half's limits, said plainly.** `archive_empty_stubs` is recorded in
+the plan but nothing is archived by the writer yet - stubs stay listed. A
+wiki-link is rewritten only when a MOVE changes a note's title (a folder move
+keeps the name, so Obsidian resolves it untouched); a title two notes share is
+ambiguous and is left exactly as written. The moving schemes are previewed and
+writable, but the default remains `mocs_only`. The writer needs a vault the
+plan scan could read inside its caps, and one batch stops at 2,000 existing
+files so one receipt stays readable. None of this has been run against the
+owner's real Notion vault yet - that is the runbook above.
+
+**Checked by** `backend/test_vault_organizer.py` (170 checks, runs anywhere):
+the plan is byte-for-byte read-only on a real vault, the tag merge never erases
+an owner tag, duplicates/stubs are listed not deleted, both moving schemes
+preview only inside the vault, an empty vault is a clean no-op, planning writes
+nothing to `memory.db`, two plans of one vault are byte-identical, the caps
+report `partial`, symlink escape is refused, the switch is off by default and
+is ONE card, the plan route is PC-only and flag-gated, and `install()` wraps
+the routes. Two revert-checks were measured while building it: one cache write
+in the planner made four read-only checks fail; a clock in the digest made the
+determinism check fail. The writer half adds: the tree it changes is
+exactly the planned set, ONE card with the right words, a denied/low-tier/
+unraisable card changes nothing byte-for-byte, a stale or wrong digest and an
+unknown plan refuse, a snapshot is taken for every changed file (and a failed
+snapshot refuses the whole batch), ONE Undo restores the exact tree including
+moves and works after a restart, a second Undo refuses, a second apply writes
+nothing, no note is ever deleted, a partial failure is honest and still
+undoable, taint is latched by the writer and not the plan, the writer writes no
+memory row, the routes are PC-only and flag-gated, and an existing MOC is
+snapshotted and put back exactly. Two writer revert-checks were measured too: a
+stale-check removed made four checks fail; skipped snapshots made three fail.

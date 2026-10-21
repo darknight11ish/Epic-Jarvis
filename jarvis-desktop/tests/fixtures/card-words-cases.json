@@ -247,6 +247,10 @@
       "title": "Jarvis wants to open this PC to the internet"
     },
     {
+      "action": "organize_obsidian_vault",
+      "title": "Jarvis wants to organize your Obsidian vault with tags and Maps of Content"
+    },
+    {
       "action": "page_read",
       "title": "Jarvis wants to fetch a web page you're watching"
     },
@@ -1133,6 +1137,18 @@
       "notice": {
         "title": "Jarvis wants to open this PC to the internet",
         "summary": "Jarvis wants to open this PC to the internet.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "organize_obsidian_vault",
+      "notice": {
+        "title": "Jarvis wants to organize your Obsidian vault with tags and Maps of Content",
+        "summary": "Jarvis wants to organize your Obsidian vault.",
         "full": "not classified, so treated as the worst case. nothing has happened yet.",
         "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",

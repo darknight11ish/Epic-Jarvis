@@ -253,6 +253,9 @@ TITLES = {
     # action's own name - 'Jarvis wants your OK for "import notion
     # export"' - on a card whose whole job is to be understood.
     "import_notion_export": "bring your Notion export into your vault",
+    # --- the Phase-2 Obsidian vault organizer (2026-10-20): ONE card for the
+    # whole batch, after a plan the owner has already seen.
+    "organize_obsidian_vault": "organize your Obsidian vault with tags and Maps of Content",
     # --- helpers and anything else a tool asks for
     "agent_spawn": "start a helper task",
     "agent_kill": "stop a helper task",
@@ -412,6 +415,8 @@ SUMMARY = {
     "vault_put": "keep a secret for you",
     # --- a Notion export into an Obsidian vault (2026-10-16)
     "import_notion_export": "bring your Notion export in",
+    # --- the Phase-2 Obsidian vault organizer (2026-10-20)
+    "organize_obsidian_vault": "organize your Obsidian vault",
     # --- helpers and anything else a tool asks for
     "agent_spawn": "start a helper task",
     "agent_kill": "stop a helper task",

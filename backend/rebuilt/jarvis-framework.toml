@@ -636,6 +636,12 @@ vault_put                = "ask"
 # This importer writes a NEW tree of files into a vault that is on no list, so
 # there is nothing already approved to lean on and it asks.
 import_notion_export     = "ask"
+# The Phase-2 vault organizer (backend/jarvis_vault_organizer.py,
+# docs/JARVIS-API.md section 151). The PLAN is read-only and opens no card;
+# the WRITE half - ONE card for the whole batch, after a plan the owner
+# has seen - takes this action. A missing line means "ask" anyway; it is
+# here so the tier is the owner's setting, not a fall-through.
+organize_obsidian_vault   = "ask"
 
 [self_modification]
 enabled = true
@@ -1983,3 +1989,29 @@ enabled = false
 # is instant. Turning it back ON is one normal approval card.
 [media_index]
 enabled = true
+
+# THE OBSIDIAN VAULT ORGANIZER - Phase-2 batch organizer (2026-10-20)
+# ------------------------------------------------------------------------
+# The owner approved "Full Part II now" but could not pick an organization
+# scheme. The decision made for them is the SAFEST first run: `mocs_only`, which
+# moves NO file - it only enriches YAML frontmatter (`tags` merged, never
+# erasing the owner's own, and an `up: "[[_MOC - <Topic>]]"` link), creates
+# `_MOC - <Topic>.md` hubs and one `00 - Vault Home.md`. The two moving schemes
+# (`topic_folders`, `para`) are previewed by the SAME read-only plan and only a
+# later, explicitly approved apply can use them.
+#
+# THIS SHIPS OFF. The plan itself is read-only - it reads the vault's notes and
+# writes nothing anywhere - but it answers over a route on a vault full of the
+# owner's own writing, so the feature is off until the owner turns it ON with
+# ONE change_own_config card (POST /api/vault/organizer/enabled). The routes
+# are PC-only: a plan is refused for any caller that is not this PC.
+#
+# WHAT THIS REPOSITORY BUILDS TODAY: the read-only plan and the switch
+# (backend/jarvis_vault_organizer.py, docs/JARVIS-API.md section 151; routes
+# installed by plugins/ready/vault-organizer/, no patch and no core edit). The
+# writer - ONE approval card, file-guardian snapshots, atomic writes, one batch
+# receipt with one-click Undo - is the named FOLLOW-UP slice and is NOT claimed
+# here: the organize route does not exist yet rather than shipping a
+# half-written writer that touches the owner's notes.
+[vault_organizer]
+enabled = false
