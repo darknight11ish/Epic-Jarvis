@@ -240,6 +240,13 @@ async function openHud(browser, status, pageOptions = {}) {
           ? route.abort("failed")
           : route.fulfill({ status: 200, headers: cors, json: status });
       }
+      // The approval queue. The injected bootstrap reads this too (review
+      // ruling 8.2 needs the PC's own `replaces` field before an Approve can
+      // mean anything), so a scenario can give rows with `status.pending`.
+      if (url.pathname === "/api/pending") {
+        return route.fulfill({ status: 200, headers: cors,
+          json: { available: true, pending: status.pending || [], history: [] } });
+      }
       if (url.pathname === "/api/chat") {
         chats.push(JSON.parse(req.postData() || "{}"));
         // A case from chat-stream-cases.json: the body AND Content-Type the
@@ -897,7 +904,11 @@ await check("a HUD approval card is answered HERE, through the shell's own decid
   // permission path: the page's own handler still does not run, and no
   // decision reaches the backend without the token Rust adds.
   const { page, problems, direct, decisions } = await openHud(browser,
-    { jarvis: false, ollama: true, proxy: false });
+    { jarvis: false, ollama: true, proxy: false,
+      // The card is put on the page by hand, so the PC's row has to say
+      // explicitly that it is ordinary: review ruling 8.2 treats an
+      // unknown/missing row as needing the second press.
+      pending: [{ id: "7", action: "send_email", tier: "ask", replaces: false }] });
   const place = () => page.evaluate(() => {
     const box = document.getElementById("approvals");
     box.hidden = false;
@@ -966,6 +977,55 @@ await check("a HUD approval card is answered HERE, through the shell's own decid
   assert.deepEqual(problems, []);
 });
 
+
+await check("a HUD card that REPLACES data takes TWO presses in the injected window", async () => {
+  // Review ruling 8.2, the surface the pre-merge audit found: the page's own
+  // two-press never runs inside the desktop HUD (the injected bootstrap
+  // captures the click), so the bootstrap must own the rule. The PC says the
+  // card replaces data (`replaces: true`); ONE click must send nothing, the
+  // second must send exactly one decide_approval.
+  const { page, decisions } = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false,
+      pending: [{ id: "7", action: "restore_backup", tier: "ask",
+                  replaces: true,
+                  risk: { reversible: "yes", reach: "local", swipe_ok: true } }] });
+  await page.evaluate(() => {
+    const box = document.getElementById("approvals");
+    box.hidden = false;
+    box.innerHTML = '<div class="appr" data-id="7"><div class="det">restore it</div>'
+      + '<div class="btns"><button class="no">Deny</button><button class="yes">Approve</button></div></div>';
+  });
+
+  await page.evaluate(() => document.querySelector("#approvals .yes").click());
+  await K.until(page, "the replacing card to ask for its confirming press", async () => {
+    const label = await page.evaluate(() =>
+      (document.querySelector("#approvals .yes") || {}).textContent || "");
+    return label === "Confirm replace";
+  }, { ms: 8000 });
+  const afterFirst = await page.evaluate(() => ({
+    decided: window.__invokes.filter((c) => c[0] === "decide_approval").map((c) => c[1]),
+    said: (document.querySelector("#approvals .appr .why") || {}).textContent || "",
+  }));
+  assert.deepEqual(afterFirst.decided, [], "the first press sent an approval");
+  assert.match(afterFirst.said, /REPLACES what is on your PC/,
+    `the first press did not say plainly what the next one does: ${afterFirst.said}`);
+
+  await page.evaluate(() => document.querySelector("#approvals .yes").click());
+  await K.until(page, "exactly one decide_approval", async () =>
+    (await page.evaluate(() =>
+      window.__invokes.filter((c) => c[0] === "decide_approval").length)) === 1,
+  { ms: 8000 });
+  const afterSecond = await page.evaluate(() =>
+    window.__invokes.filter((c) => c[0] === "decide_approval").map((c) => c[1]));
+  await page.waitForTimeout(400);
+  await page.close();
+  assert.deepEqual(afterSecond, [{ id: "7", approved: true }],
+    `the confirming press did not send exactly one decision: ${JSON.stringify(afterSecond)}`);
+  assert.deepEqual(decisions.map((d) => [d.path, d.body.id, d.body.by]),
+    [["/api/approve", "7", "desktop_spotlight"]],
+    "the confirming press did not send the command the bar sends");
+});
+
 await check("a refused HUD decision says so on the card, in the command's own words", async () => {
   // Windows Hello not set up, a stale link, App lock: the command refuses and
   // writes the sentence. The card must carry it rather than the button going
@@ -973,7 +1033,8 @@ await check("a refused HUD decision says so on the card, in the command's own wo
   const refusal = "App lock is on, so approvals are made in the Jarvis bar, not the Jarvis HUD. "
     + "The Jarvis bar is opening - approve it there";
   const { page, problems } = await openHud(browser,
-    { jarvis: false, ollama: true, proxy: false, decideFails: refusal });
+    { jarvis: false, ollama: true, proxy: false, decideFails: refusal,
+      pending: [{ id: "7", action: "send_email", tier: "ask", replaces: false }] });
   await page.evaluate(() => {
     const box = document.getElementById("approvals");
     box.hidden = false;

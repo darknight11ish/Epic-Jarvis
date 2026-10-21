@@ -1188,6 +1188,28 @@ def stage_clear(*, gate: Callable, tier_of: Callable, spawn: Callable) -> tuple:
                              "Nothing is deleted until you do.")}
 
 
+def clear_card_detail(p: dict) -> dict:
+    """The `detail` dict the clear card is raised with.
+
+    ITS OWN FUNCTION so the "this card REPLACES data" mark is testable without
+    a gate, a thread or a voice file. The clear card is raised as
+    `ACTION = change_own_config` - the same action the voice settings beside it
+    use - so an action name alone cannot tell them apart, and this marker is
+    what does: `jarvis_gate.replaces_for()` reads it and puts `replaces: true`
+    on the waiting row, and both apps then draw their plain "REPLACES CURRENT
+    DATA" heading and ask a second, explicit confirmation before approving
+    (the owner's blind-approval ruling 8.2, 2026-10-20). It is DATA on the card
+    the module already builds, never prose a reader has to be trusted to read.
+    """
+    return {"text": p.get("text", ""),
+            "what": "clear the saved voice training (the voice prints, the "
+                    "\"hey Jarvis\" checks and the live-adaptation notes)",
+            "files": p.get("files", 0), "prints": p.get("prints", 0),
+            "verifiers": p.get("verifiers", 0),
+            "adaptation": p.get("adaptation", 0),
+            "replaces": True}
+
+
 def _decide_clear(pid: str, *, gate: Callable) -> dict:
     """Raise the clear card for `pid`, wait for the answer, act on it.
 
@@ -1200,12 +1222,7 @@ def _decide_clear(pid: str, *, gate: Callable) -> dict:
             return {"outcome": "gone"}
         paths = list(p.get("paths") or [])
         text = p.get("text", "")
-        detail = {"text": text,
-                  "what": "clear the saved voice training (the voice prints, the "
-                          "\"hey Jarvis\" checks and the live-adaptation notes)",
-                  "files": p.get("files", 0), "prints": p.get("prints", 0),
-                  "verifiers": p.get("verifiers", 0),
-                  "adaptation": p.get("adaptation", 0)}
+        detail = clear_card_detail(p)
     try:
         v = gate(ACTION, detail, text)
     except Exception as exc:

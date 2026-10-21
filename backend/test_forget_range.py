@@ -56,6 +56,15 @@ if hasattr(time, "tzset"):
     time.tzset()
 
 HERE = Path(__file__).resolve().parent
+
+#: forget-range.patch's OWN risk-table line for the action, used by the
+#: later_rewriting() question below. The question is "does a later patch
+#: REWRITE one of the lines forget-range.patch wrote", so the needle is the
+#: LINE, not the bare `forget_range`: gate-touches.patch (2026-10-20) names
+#: `memory_forget_range` again, in its own `_REPLACES_ACTIONS` table for the
+#: blind-approval guards, without touching this line. A bare name flagged that
+#: new table and proved nothing about the line that matters.
+FORGET_RANGE_RISK_LINE = '"memory_forget_range": ("no", "local",'
 sys.path.insert(0, str(HERE))
 from _where import REPO, require_shipped  # noqa: E402
 
@@ -835,7 +844,7 @@ def t_fit():
              if l.strip().startswith("'")]
     try:
         import _stack as _st
-        rewritten = _st.later_rewriting("forget-range.patch", "forget_range", names)
+        rewritten = _st.later_rewriting("forget-range.patch", FORGET_RANGE_RISK_LINE, names)
     except Exception as exc:  # noqa: BLE001 - reported as the check's detail
         rewritten = [repr(exc)]
     check("forget-range.patch is in apply-patches.ps1, and no later patch rewrites its lines",

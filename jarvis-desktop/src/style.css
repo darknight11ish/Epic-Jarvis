@@ -2204,6 +2204,38 @@ html[data-state="approval"] .pulse {
    pressure is the control this whole feature exists to avoid.
    ========================================================================== */
 
+/* Review ruling 8.2 - the "REPLACES CURRENT DATA" heading on the cards that
+   replace what is already there (a restore, a phone-key registration, a
+   forget-range, the voice-training clear). Plain words first: the heading is
+   real text, so the warning survives a screen reader, a monochrome display and
+   colour-blindness; the border is a second, weaker signal and nothing depends
+   on it. Only shown when the PC marked the card (`replaces`), hidden by
+   default in index.html. */
+.approval-replaces {
+  margin: 0 14px 8px 16px;
+  padding: 8px 10px;
+  border: 1px solid rgb(var(--bad-rgb) / 0.45);
+  border-left-width: 3px;
+  border-radius: var(--radius-card);
+  background: rgb(var(--bad-rgb) / 0.09);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.approval-replaces-head {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--bad);
+}
+
+.approval-replaces-note {
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  color: var(--text);
+}
+
 .raised {
   margin: 0 14px 8px 16px;
   padding: 8px 10px;

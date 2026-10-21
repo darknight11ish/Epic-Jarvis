@@ -23245,3 +23245,80 @@ warning, a damaged stored row is stripped AGAIN on the way out, and the
 `my_files` chat result's JSON never carries a raw marker while the private-lane
 latch still fires on a result carrying words. The feature list's own row was
 updated in all three copies.
+
+## 150. Two mechanical guards against blind, stacked approvals (added 2026-10-20)
+
+The owner's incident: one "approve all" click approved three backup restores,
+two imports and a device-key registration. The review the owner accepted
+(ruling 8.2 of `FOR-GEMINI-COMPREHENSIVE-REVIEW-2026-10-20-LATE`) asked for two
+mechanical guards, and this section is what the API now promises. Neither one
+answers a card, weakens rule 4, or suppresses a card: the card that exists is
+still drawn and still waits for a person.
+
+### One card per identical request
+
+`jarvis_gate.check()` no longer inserts a second row for a request identical to
+one still `pending`. "Identical" is `(action, target digest)`, where the digest
+is a SHA-256 of the action and a canonical JSON of `detail` (sorted keys, no
+whitespace); when `detail` carries no parameters at all the card's `prompt` is
+mixed in too, because then it is the only recorded difference between two
+requests. The duplicate call does not wait a second time: it is answered at
+once with a refused verdict whose `request_id` is the waiting card's id and
+whose reason says the same request is already waiting. Approving that card
+therefore runs ONE action, not three. Different actions or targets never
+merge, and a card that was approved, denied or expired is never reused - an
+answered card is an answer.
+
+### State-replacing cards: the `replaces` field
+
+Every waiting row now carries **`replaces`** (a JSON boolean, always present):
+`true` for the cards that replace or delete what is already there -
+`restore_backup`, `register_approval_key`, `memory_forget_range`, and the "clear
+the saved voice training" card (raised as `change_own_config`, like the
+voice-settings cards beside it, and marked by
+`backend/jarvis_voice_enroll.py`'s own detail). The set is
+`jarvis_gate.replaces_for(action, detail)`; the marker is data on the detail,
+never prose. Both apps and the HUD draw a plain **"REPLACES CURRENT DATA"**
+heading on those cards and require a **second, explicit confirmation** before
+the approve is sent: the desktop bar and the HUD page change the button from
+"Approve" to "Confirm replace" after the first press and send only on the
+second; the phone does the same on its card and refuses the right swipe. A
+typed "approve" does not answer them (`quickActionable`), and the desktop
+widget's clamped strip redirects them to the bar. The phone cannot send the
+confirmation with a single tap. Ordinary cards are untouched: the field is
+`false`, the heading is not drawn and Approve is one press as before.
+
+**The HUD window's own injected bootstrap implements the same rule.** Inside
+the desktop HUD the vendored page's `onclick` never runs - the bootstrap
+(`jarvis-desktop/src-tauri/src/hud_bootstrap.js`) captures every card press and
+sends the decision through `decide_approval`, so a page-only rule could not
+protect that window (found by the 2026-10-21 pre-merge audit, fixed before
+merge). The bootstrap reads `/api/pending` through its allowed `hud_get`,
+requires an explicit second press for a row with `replaces: true`, says
+"This REPLACES what is on your PC. Press Approve once more to do it.", keeps
+the arm for that card id only with a 10-second window, and sends exactly one
+`decide_approval` on the second press; an ordinary card still sends on one
+click, and the page's own two-press stays for a browser tab with no bootstrap.
+The rule is executed by `jarvis-desktop/tests/hud-replace-confirm.mjs` (it is
+lifted out of the bootstrap and driven with a fake clock, including the
+unknown-row and expiry cases); the CLICK wiring itself is executed by the
+Playwright case in `jarvis-desktop/tests/hud.mjs`, where a fake `/api/pending`
+returns a `replaces` card and the first click is waited on and asserted to
+send no `decide_approval` before the second sends exactly one.
+
+### What a client must not do
+
+Do not derive the state-replacing set from card text or from `risk` -
+`restore_backup` and `register_approval_key` are both classified reversible and
+local, which is why the heavy-card delay never covered them. Read `replaces`;
+an older PC that does not send it is handled by the three real action names as
+a client-side fallback, and a card that is not recognised is ordinary, never
+guessed in the dangerous direction.
+
+The backend half is `backend/test_approval_guards.py` (behavioural, against the
+published gate, with a revert-check for each guard); the desktop half is
+`jarvis-desktop/tests/replace-confirm.mjs`; the phone half is
+`ReplaceConfirmTest.kt` with the drawing in `ui/approval/ApprovalCard.kt`.
+`backend/gate-touches.patch` carries the gate change to the owner's own file
+and `backend/test_gate_touches.py` applies it forwards and reverses it out
+byte-for-byte.

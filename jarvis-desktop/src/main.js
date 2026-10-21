@@ -220,6 +220,12 @@ import { createAnswerMemory, createTemporaryToggle } from "./answer-memory.js";
 // (the creativity audit, 2026-09-25) - card-words.js.
 import { CARD_KICKER, cardTitle, createCardVoice, isCardLine } from "./card-words.js";
 import { HeavyGate, isHeavy } from "./heavy-approve.js";
+import {
+  ReplaceGate,
+  approveLabel,
+  isReplaceCard,
+  REPLACES_NOTE,
+} from "./replace-confirm.js";
 import { buildSayableList } from "./sayable.js";
 // The command palette (docs/UI-AUDIT-2026-10-05.md section 2.4, "what I would
 // change" row 4): the list and the search live in palette.js, which is pure,
@@ -429,6 +435,9 @@ const dom = {
   approvalNoteInput: $("approval-note"),
   approvalNoteSend: $("approval-note-send"),
   approvalHint: $("approval-hint"),
+  // Review ruling 8.2: the plain "REPLACES CURRENT DATA" heading on the
+  // state-replacing cards (index.html, replace-confirm.js).
+  approvalReplaces: $("approval-replaces"),
   approvalApprove: $("approval-approve"),
   approvalDeny: $("approval-deny"),
   approvalCount: $("approval-count"),
@@ -549,6 +558,13 @@ const heavyGate = new HeavyGate({
   scrollEl: dom.approvalPreview,
   onChange: () => syncApprovalButtons(),
 });
+
+/** Review ruling 8.2: a state-REPLACING card (a restore, a phone-key
+ * registration, a forget-range, the voice-training clear) takes TWO presses of
+ * Approve - the first arms it and says what the second will do, and only the
+ * second sends anything. See replace-confirm.js's own comment for why the
+ * existing heavy-card gate does not cover these. */
+const replaceGate = new ReplaceGate();
 
 /** The clipboard history drawer (Pillar 14B), mounted in the Boot section
  * below; `null` until then. The bar's hide button and "dismiss" close it
@@ -2554,6 +2570,12 @@ function refreshApproval(approval) {
   // overwritten below - the note field depends on it.
   const fresh = !state.approval || state.approval.id !== approval.id;
   state.approval = approval;
+  // Review ruling 8.2: is this one of the cards that replaces what is already
+  // there? A different card starts unarmed; a repaint of the same card keeps
+  // whatever arm it already had, so a queue resync cannot disarm the guard
+  // mid-press (nor restart it, which would mean two presses never finish).
+  const replacing = replaceGate.sync(approval);
+  dom.approvalReplaces.hidden = !replacing;
 
   // Feasibility I110: a genuinely new heavy card restarts the clock and the
   // scroll watch; a re-render of the SAME card (a resync, `raised` ticking
@@ -3012,6 +3034,7 @@ function closeApproval() {
   // Feasibility I110: no card left to watch. `openApproval`/`refreshApproval`
   // restarts it for whichever card (the same or a different one) opens next.
   heavyGate.stop();
+  replaceGate.reset();
   // `state.decided` is deliberately NOT cleared here. It is the guard that
   // stops an already-answered gate being answered again, and `decide_approval`
   // does not re-read the queue — so between answering and the server's next
@@ -3055,6 +3078,10 @@ function syncApprovalButtons() {
   // heavyGate conditions clear (the delay, and the preview having been in
   // view). Deny is never touched by this, same as `cutOff` below.
   const heavyBlocked = isHeavy(state.approval) && !heavyGate.ok;
+  // Review ruling 8.2: the label says which press this is. The first press on
+  // a state-replacing card only arms it (the click handler below), so nothing
+  // is sent while the label still reads "Approve".
+  dom.approvalApprove.textContent = approveLabel(state.approval, replaceGate.armed);
   // A card whose request was cut off on its way here cannot be approved: what
   // is on screen is not all of what would run. Deny stays - refusing
   // something unread costs a retry, approving it is the thing to prevent.
@@ -3121,6 +3148,10 @@ function paintApprovalClock() {
         ? `Approve unlocks in ${left}s.`
         : `Read the whole card (scroll down) - Approve unlocks once you have, and no sooner than ${left}s.`
     );
+  } else if (approval && isReplaceCard(approval) && replaceGate.armed) {
+    // Review ruling 8.2: the card is armed, so say plainly what the next press
+    // does. Nothing has been sent yet - the heading on the card said so first.
+    parts.push("Press Approve again to confirm. That REPLACES what is there now.");
   }
   const clock = approval ? expiryWords(approval.expiresAt) : "";
   if (clock) parts.push(clock);
@@ -5788,7 +5819,38 @@ dom.mic.addEventListener("keyup", (event) => {
 });
 dom.voiceAuto.addEventListener("click", () => setAutoListening(!state.autoListening));
 
-dom.approvalApprove.addEventListener("click", () => decideApproval(true));
+/**
+ * The Approve button.
+ *
+ * Review ruling 8.2: a STATE-REPLACING card takes two presses - the first arms
+ * it and sends NOTHING (the button then says "Confirm replace", the hint says
+ * what the second press does, and the heading on the card already said it
+ * replaces what is there), and only the second press sends the approval. Every
+ * ordinary card is unchanged: one press, as before.
+ *
+ * A repaint through `syncApprovalButtons()` is all the first press needs: the
+ * label and the hint line are painted from `replaceGate.armed`, and the arm
+ * survives a queue resync of the SAME card (ReplaceGate.sync only resets on a
+ * different id). The lock/typing/shortcut paths never reach this function -
+ * they call `decideApproval` themselves and are refused by
+ * `quickActionable` for these cards (jarvis-link.js), so a typed "approve"
+ * cannot skip the second press.
+ */
+function pressApprove() {
+  if (!state.approval || state.deciding) return;
+  if (isReplaceCard(state.approval) && !replaceGate.press()) {
+    // Armed, nothing sent. Repaint the label + hint, and say it out loud -
+    // the card heading is visual, and this is the one moment the guard is
+    // between the person and the thing that cannot be taken back.
+    syncApprovalButtons();
+    paintApprovalClock();
+    announce(REPLACES_NOTE);
+    return;
+  }
+  decideApproval(true);
+}
+
+dom.approvalApprove.addEventListener("click", pressApprove);
 dom.approvalDeny.addEventListener("click", () => decideApproval(false));
 dom.approvalNoteSend.addEventListener("click", sendNote);
 dom.approvalNoteInput.addEventListener("keydown", (event) => {

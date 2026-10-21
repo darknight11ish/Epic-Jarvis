@@ -31,6 +31,8 @@
  * already does for App lock and email cards. See that function's own comment.
  */
 
+import { isReplaceCard } from "./replace-confirm.js";
+
 /** How long Approve stays disabled at minimum, whatever else is true. */
 export const MIN_DELAY_MS = 2000;
 
@@ -80,6 +82,13 @@ export function isHeavy(approval) {
  */
 export function needsFullCard(approval) {
   if (!approval) return true;
+  // Review ruling 8.2 (2026-10-20): a card that REPLACES what is already on
+  // the PC needs the Jarvis bar for the same reason a heavy card does, and for
+  // one more - the bar is where the two-press confirm lives
+  // (replace-confirm.js). The widget's clamped strip never shows the heading
+  // and is built for one tap, so it must not decide one of these; Approve
+  // there opens the bar instead, exactly as `locked` and email already do.
+  if (isReplaceCard(approval)) return true;
   const risk = approval.risk;
   if (!risk || typeof risk !== "object") return true;
   return risk.reach !== "local" || risk.reversible !== "yes";

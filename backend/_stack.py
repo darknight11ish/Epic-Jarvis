@@ -385,7 +385,21 @@ RATCHET = {
     #: (`jarvis-backend/jarvis_gate.py`, which holds those lines in the state
     #: gate-touches.patch expects), and backend/test_gate_touches.py reruns
     #: patch forward/reverse against it. A ratchet: it may still only go down.
-    "jarvis_gate.py": 28,
+    #:
+    #: RAISED 2026-10-20, 28 -> 31, for gate-touches.patch's blind-approval
+    #: guards (review ruling 8.2 of FOR-GEMINI-COMPREHENSIVE-REVIEW-2026-10-20-
+    #: LATE): pending-card deduplication in check()'s ask branch with its two
+    #: helpers, and the `replaces` flag pending() carries to both apps. All
+    #: three new hunks sit on lines of the owner's ORIGINAL jarvis_gate.py -
+    #: the `import` block, the code above `def check(`, and check()'s own
+    #: INSERT into the approvals table, which his file already had - and no
+    #: earlier patch in this walk writes any of them, so the walk must invent
+    #: their pre-image. Honest rather than drift, measured not assumed:
+    #: `tools/check_patch_original_text.py` reads the same 8 hunks / 93 lines
+    #: and was raised with them, and test_gate_touches.py applies the whole
+    #: patch forwards and reverses it out of the published gate byte-for-byte.
+    #: A ratchet: it may still only go down.
+    "jarvis_gate.py": 31,
     "jarvis_extract.py": 9,
     "jarvis_models.py": 5,
     "jarvis_skills.py": 2,

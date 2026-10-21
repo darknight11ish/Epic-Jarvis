@@ -3035,6 +3035,30 @@ window.addEventListener("jarvis-lane", (event) => {
  * ---------------------------------------------------------------------- */
 const APPR = { seen:new Set(), timer:null };
 
+/* == replace-confirm guard begin == */
+/* Review ruling 8.2 (2026-10-20): the cards that REPLACE what is already on
+ * the PC take a plain "REPLACES CURRENT DATA" heading and TWO presses of
+ * Approve - the first arms it and sends nothing, the second sends. The PC
+ * marks those rows (`replaces`, jarvis_gate.pending()); the three action names
+ * are the fallback for an older PC whose rows carry no field. The same two
+ * strings live in the desktop's src/replace-confirm.js - this page cannot
+ * import modules, and tests/replace-confirm.mjs holds the surfaces together.
+ *
+ * THE MARKERS AROUND THIS BLOCK ARE NOT DECORATION: tests/approvals-contract.mjs
+ * and tests/card-words.mjs lift the HUD's card functions out of this file and
+ * run them in node, so the helper they call has to be lifted with them. */
+const REPLACES_WARNING = "REPLACES CURRENT DATA";
+const REPLACES_NOTE = "Approving this replaces what is there now. " +
+  "Press Approve again to confirm.";
+const REPLACE_ACTIONS = ["restore_backup", "register_approval_key",
+                         "memory_forget_range"];
+function apprReplace(p){
+  if(!p) return false;
+  if(p.replaces === true) return true;
+  return REPLACE_ACTIONS.indexOf(String(p.action || "")) >= 0;
+}
+/* == replace-confirm guard end == */
+
 function apprEscape(t){
   return String(t).replace(/[&<>"']/g, c =>
     ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -3090,7 +3114,23 @@ async function apprPoll(){
     // A request cut off before it reached this card cannot be approved from
     // it: what is shown is not all of what would run.
     if(apprCutOff(p)) yes.disabled = true;
-    yes.onclick = () => apprDecide(p.id, true, el);
+    if(apprReplace(p) && !apprCutOff(p)){
+      // Review ruling 8.2: TWO presses. The first arms the card and sends
+      // nothing at all - the button then says "Confirm replace", so a person
+      // reading the button sees the state change as well as the heading.
+      let armed = false;
+      yes.onclick = () => {
+        if(!armed){
+          armed = true;
+          yes.textContent = "Confirm replace";
+          yes.title = REPLACES_NOTE;
+          return;
+        }
+        apprDecide(p.id, true, el);
+      };
+    } else {
+      yes.onclick = () => apprDecide(p.id, true, el);
+    }
     el.querySelector(".no").onclick  = () => apprDecide(p.id, false, el);
     box.appendChild(el);
   }
@@ -3126,6 +3166,12 @@ function apprCardHtml(p, now){
   }
   html += `<div class="det">${apprEscape(apprDescribe(p, detail))}</div>`;
   html += `<div class="risk">${apprEscape(apprRiskLine(risk))}</div>`;
+  if(apprReplace(p)){
+    // Plain words, never colour alone - and the same words the quickbar and
+    // the phone show (replace-confirm.js / the Kotlin ReplaceConfirm).
+    html += `<div class="risk"><b>${apprEscape(REPLACES_WARNING)}</b> \u2014 `
+      + `${apprEscape(REPLACES_NOTE)}</div>`;
+  }
   if(apprCutOff(p)){
     html += `<div class="risk">This request was cut off before it reached this card, `
       + `so it cannot be approved here. Deny it and ask Jarvis for a shorter plan.</div>`;

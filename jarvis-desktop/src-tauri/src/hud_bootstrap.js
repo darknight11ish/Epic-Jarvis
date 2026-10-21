@@ -1247,6 +1247,151 @@
     );
   }
 
+  /* ---------------------------------------------------------------- *
+   * A card that REPLACES what is on the PC takes TWO presses - review
+   * ruling 8.2 of FOR-GEMINI-COMPREHENSIVE-REVIEW-2026-10-20-LATE.
+   *
+   * WHY IT LIVES HERE AS WELL AS IN THE PAGE. The page (jarvis_hud.html)
+   * draws "REPLACES CURRENT DATA" and its own two-press, but inside the
+   * desktop HUD the page's onclick NEVER RUNS: this capture listener stops it
+   * on every click and sends the decision through `decide_approval`. So a
+   * single click on a restore in the HUD window would decide it - the exact
+   * surface the owner's incident came from - and the page's rule could not
+   * save it. The rule is therefore implemented on the path that really owns
+   * the button, keyed by the card's id, and the page's copy stays for the
+   * browser case (where no bootstrap is injected).
+   *
+   * The set of state-replacing cards is READ FROM THE PC, not guessed here:
+   * `hud_get /api/pending` is one of the reads the page is already allowed,
+   * and each row carries `replaces` (jarvis_gate.pending()). That also means
+   * an older live page without the heading still gets the guard.
+   *
+   * FAIL SAFE, NEVER ONE CLICK ON DOUBT. The field has three states, and only
+   * an EXPLICIT `replaces: false` is ordinary: `true` replaces data, and an
+   * ABSENT field or a read that cannot confirm the row (a missing row, an
+   * older PC during a partial deploy, a failed read) means the PC never said
+   * "ordinary", so the second press is required with honest words. Treating
+   * an unknown as "ordinary" is how this guard would quietly re-open during
+   * exactly the deploy window it exists for.
+   * ---------------------------------------------------------------- */
+  var HUD_REPLACE_ARM_MS = 10000;
+
+  /* The pure rule, kept free of the DOM so a suite can drive it (see
+   * jarvis-desktop/tests/hud-replace-confirm.mjs and the Playwright case in
+   * jarvis-desktop/tests/hud.mjs): given a card id and the PC's answer about
+   * whether it replaces data, answer "send", "arm-replace" or "arm-unknown".
+   * `replaces` is true / false / null-undefined (unknown). An arm is for ONE
+   * id and expires; an EXPLICITLY ordinary card is always "send" at once. */
+  function replacePressGuard(opts) {
+    opts = opts || {};
+    var now = typeof opts.now === "function" ? opts.now : function () { return Date.now(); };
+    var armMs = typeof opts.armMs === "number" ? opts.armMs : HUD_REPLACE_ARM_MS;
+    var armedId = "";
+    var armedAt = 0;
+    function isArmed(id) {
+      return !!armedId && armedId === String(id || "") && (now() - armedAt) <= armMs;
+    }
+    return {
+      isArmed: isArmed,
+      /* Forget the arm for this id whatever the clock says - the expiry timer
+       * calls this unconditionally, so a timer that fires a millisecond late
+       * cannot leave the button saying "Confirm replace". */
+      clearIf: function (id) {
+        if (String(id || "") !== armedId) return;
+        armedId = "";
+        armedAt = 0;
+      },
+      clear: function () { armedId = ""; armedAt = 0; },
+      decide: function (id, replaces) {
+        id = String(id || "");
+        if (isArmed(id)) {
+          armedId = "";
+          armedAt = 0;
+          return "send";
+        }
+        if (replaces === false) return "send";
+        armedId = id;
+        armedAt = now();
+        return replaces === true ? "arm-replace" : "arm-unknown";
+      },
+    };
+  }
+
+  var replacePress = replacePressGuard();
+  var replaceArmTimer = null;
+  /* The card whose label/warning is showing, so arming another card clears it
+   * (the stale label was its own fail-open: a "Confirm replace" button on the
+   * wrong card looks like an ordinary one press). */
+  var replaceArmCard = null;
+  var replaceArmId = "";
+  /* Ids whose /api/pending read is in flight: a second click while it is out
+   * must be ignored, or one first press could queue two reads and two arms. */
+  var replaceArmBusy = {};
+
+  function restoreReplaceCard(card) {
+    if (!card) return;
+    var yes = card.querySelector("button.yes");
+    if (yes) yes.textContent = "Approve";
+    var why = card.querySelector(".why");
+    if (why && /REPLACES what is on your PC|could not check what this will replace/
+        .test(String(why.textContent || ""))) {
+      why.textContent = "";
+    }
+  }
+
+  function disarmReplaceCard() {
+    if (replaceArmTimer !== null) {
+      clearTimeout(replaceArmTimer);
+      replaceArmTimer = null;
+    }
+    if (replaceArmCard) restoreReplaceCard(replaceArmCard);
+    replaceArmCard = null;
+    replaceArmId = "";
+  }
+
+  function armReplaceCard(card, id, verdict) {
+    // Arming a DIFFERENT card first clears whatever the last one was showing,
+    // so no card can keep a "Confirm replace" label for an arm that is gone.
+    disarmReplaceCard();
+    var words = verdict === "arm-replace"
+      ? "This REPLACES what is on your PC. Press Approve once more to do it."
+      : "I could not check what this will replace. Press Approve once more if "
+        + "you want it.";
+    sayOnCard(card, words);
+    var yes = card.querySelector("button.yes");
+    if (yes) yes.textContent = "Confirm replace";
+    replaceArmCard = card;
+    replaceArmId = id;
+    replaceArmTimer = setTimeout(function () {
+      // UNCONDITIONAL for this id: an expiry firing a millisecond late must
+      // still take the arm and its label away, or the next press would send.
+      replaceArmTimer = null;
+      if (replaceArmId !== id) return;      // a different card is armed now
+      replacePress.clearIf(id);
+      restoreReplaceCard(card);
+      replaceArmCard = null;
+      replaceArmId = "";
+    }, HUD_REPLACE_ARM_MS);
+  }
+
+  /* The row this card is for, from the queue this page is allowed to read.
+   * A decision is never guessed from a card's words: only the PC's own
+   * `replaces` field answers whether it replaces data. A row that is not in
+   * the list (or a read that fails) returns null = UNKNOWN, which the rule
+   * treats as "require the second press". */
+  function pendingRowFor(id) {
+    if (!shellGet) return Promise.reject(new Error("no shell"));
+    return shellGet("/api/pending").then(function (response) {
+      return response.json();
+    }).then(function (doc) {
+      var rows = (doc && doc.pending) || [];
+      for (var i = 0; i < rows.length; i++) {
+        if (String(rows[i] && rows[i].id) === id) return rows[i];
+      }
+      return null;
+    });
+  }
+
   document.addEventListener(
     "click",
     function (event) {
@@ -1262,7 +1407,46 @@
       var card = button.closest(".appr");
       var id = card && card.dataset ? String(card.dataset.id || "") : "";
       if (!card || !id || button.disabled) return;
-      answerApproval(id, button.className.indexOf("yes") >= 0, card);
+
+      // Deny is never held and never two-step: refusing is the safe direction.
+      if (button.className.indexOf("yes") < 0) {
+        disarmReplaceCard();
+        answerApproval(id, false, card);
+        return;
+      }
+
+      // A confirming press: send it, and NOTHING was sent before it.
+      if (replacePress.isArmed(id)) {
+        replacePress.clearIf(id);
+        disarmReplaceCard();
+        answerApproval(id, true, card);
+        return;
+      }
+
+      // First press. Read the PC's own answer before deciding what this click
+      // means; while the read is in flight, more clicks on the same card are
+      // ignored so a double-tap cannot become one send.
+      if (replaceArmBusy[id]) return;
+      replaceArmBusy[id] = true;
+      pendingRowFor(id).then(function (row) {
+        replaceArmBusy[id] = false;
+        // Only EXPLICIT booleans are answers; anything else (a row missing
+        // from a successful read, an older PC with no field) is unknown.
+        var replaces = row && typeof row.replaces === "boolean"
+          ? row.replaces : null;
+        var verdict = replacePress.decide(id, replaces);
+        if (verdict === "send") {
+          answerApproval(id, true, card);
+          return;
+        }
+        armReplaceCard(card, id, verdict);   // nothing is sent on this press
+      }, function () {
+        // The queue could not be read: UNKNOWN, never "ordinary".
+        replaceArmBusy[id] = false;
+        var verdict = replacePress.decide(id, null);
+        if (verdict === "send") answerApproval(id, true, card);
+        else armReplaceCard(card, id, verdict);
+      });
     },
     true
   );

@@ -31,6 +31,7 @@ this module cannot do its job it refuses rather than waving things through.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -1486,6 +1487,98 @@ def filter_tool_result(name: str, content: Any) -> Any:
     return out.get("text", content)
 
 
+# --------------------------------------------------------------------------
+#   One card per identical request, and the cards that REPLACE what is there
+#
+#   Both guards come from the owner's own incident (2026-10-20): a single
+#   "approve all" click approved three backup restores, two imports and a
+#   device-key registration, because repeated clicks had STACKED identical
+#   cards and muscle memory walked the queue. Ruling 8.2 of the review the
+#   owner accepted asks for two MECHANICAL guards, and this is the backend
+#   half of both. Nothing here decides anything: no card is answered, no card
+#   is suppressed, and a card already decided is never reused.
+# --------------------------------------------------------------------------
+
+def _pending_target(action: str, detail: Any, prompt: str) -> str:
+    """A stable digest of every input that changes what approving would DO.
+
+    `action` plus the action's own parameters (its `detail`), canonicalised so
+    key order and whitespace cannot make one request look like two. The CARD'S
+    TEXT is not an input to the action: it is added only when the card carries
+    no parameters at all, where the prompt is the only recorded difference
+    between two requests and leaving it out could merge two different ones.
+    """
+    try:
+        target = json.dumps(detail or {}, sort_keys=True, separators=(",", ":"),
+                            default=str)
+    except Exception:
+        target = repr(detail)
+    if target in ("{}", "null", '""', "[]"):
+        target += "\x00" + str(prompt or "")
+    return hashlib.sha256((action + "\x00" + target).encode(
+        "utf-8", "replace")).hexdigest()
+
+
+def _pending_card_id(c: sqlite3.Connection, action: str, detail: Any,
+                     prompt: str) -> Optional[str]:
+    """The id of the pending card this request is IDENTICAL to, else None.
+
+    Only `state='pending'` rows count: a card that was approved, denied or
+    expired is an ANSWER, and answering the same question twice is the
+    owner's business, not an optimisation. A stored `detail` that no longer
+    parses (the row keeps at most 4000 characters, so a long one was cut on
+    the way in) is skipped rather than guessed at - the failure direction is
+    a second card, never a wrong merge between two different requests.
+    """
+    want = _pending_target(action, detail, prompt)
+    rows = c.execute(
+        "SELECT id, detail, prompt FROM approvals"
+        " WHERE state='pending' AND action=? ORDER BY created", (action,)).fetchall()
+    for row in rows:
+        stored = row["detail"]
+        try:
+            got = json.loads(stored) if stored else {}
+        except (TypeError, ValueError):
+            continue
+        if _pending_target(action, got, row["prompt"] or "") == want:
+            return row["id"]
+    return None
+
+
+#: Actions whose approval REPLACES or deletes data already on this PC. The
+#: apps draw a plain "REPLACES CURRENT DATA" heading on these cards and ask a
+#: second, explicit time before the approval is sent (guard 2 of the same
+#: ruling). This table is the one place the backend knows it; it travels to
+#: both apps as the `replaces` field on every waiting card (`pending()` below).
+_REPLACES_ACTIONS = frozenset({
+    "restore_backup",          # jarvis_backup.py: memory, chats, notes and the
+                               # key that unlocks them all go back in time
+    "register_approval_key",   # jarvis_devices.py: a phone may approve from then on
+    "memory_forget_range",     # jarvis_forget_range.py: facts retired, chats deleted
+})
+
+
+def replaces_for(action: str, detail: Any = None) -> bool:
+    """True when approving this card replaces or deletes what is already there.
+
+    Two ways a card earns it: its action is in `_REPLACES_ACTIONS`, or the
+    module that raised it marked its own detail (`{"replaces": true}`). The
+    marker is DATA, not card prose - it is how a card sharing a generic action
+    name with ordinary cards is told apart (the voice-training clear is a
+    `change_own_config` card, like the voice settings beside it). The prompt
+    is never read: it is text a model or outside writer can influence.
+    """
+    if str(action or "") in _REPLACES_ACTIONS:
+        return True
+    d = detail
+    if isinstance(d, str):
+        try:
+            d = json.loads(d)
+        except (TypeError, ValueError):
+            return False
+    return isinstance(d, dict) and d.get("replaces") is True
+
+
 def check(action: str,
           detail: Optional[dict] = None,
           prompt: str = "",
@@ -1562,21 +1655,54 @@ def check(action: str,
                        outcome="notify")
 
     # ---- "ask", and anything unrecognised, waits for a human ----
+    #
+    # ONE CARD PER IDENTICAL REQUEST is guard 1 of the blind-approval ruling
+    # (review ruling 8.2, 2026-10-20). Two requests that raise the same
+    # restore three times used to queue three cards - the owner then approved
+    # the stack once and three restores ran. A request identical to a card
+    # that is STILL PENDING reuses that card's id: one card, one decision,
+    # nothing auto-approved and nothing suppressed. The SELECT and the INSERT
+    # are one BEGIN IMMEDIATE transaction, so two processes raising the same
+    # thing at the same moment cannot both miss and both insert.
+    reused = False
     try:
         _init()
-        rid = uuid.uuid4().hex[:12]
+        rid = None
         now = time.time()
         with closing(_connect()) as c:
-            c.execute(
-                "INSERT INTO approvals (id,action,tier,detail,prompt,state,created,raised)"
-                " VALUES (?,?,?,?,?,'pending',?,?)",
-                (rid, action, tier, json.dumps(detail)[:4000], (prompt or "")[:2000], now,
-                 json.dumps(raised)[:1000] if raised else None))
+            c.execute("BEGIN IMMEDIATE")
+            try:
+                rid = _pending_card_id(c, action, detail, prompt)
+                reused = rid is not None
+                if not reused:
+                    rid = uuid.uuid4().hex[:12]
+                    c.execute(
+                        "INSERT INTO approvals (id,action,tier,detail,prompt,state,created,raised)"
+                        " VALUES (?,?,?,?,?,'pending',?,?)",
+                        (rid, action, tier, json.dumps(detail)[:4000],
+                         (prompt or "")[:2000], now,
+                         json.dumps(raised)[:1000] if raised else None))
+                c.execute("COMMIT")
+            except Exception:
+                c.execute("ROLLBACK")
+                raise
     except Exception as exc:
         _audit("gate.queue_unavailable", {"action": action, "error": str(exc)})
         return Verdict(False, tier, action,
                        f"approval queue unavailable, so the action is refused ({exc})",
                        outcome="refused")
+
+    if reused:
+        # The card this request is identical to is already on screen. Answer
+        # THIS caller now, naming it, and run nothing for the duplicate: one
+        # card is one action, and approving the stack once must not run three
+        # restores. Deliberately not auto-approved either - the person still
+        # decides the card; this request simply has nothing new to ask.
+        _audit("gate.pending_reused", {"id": rid, "action": action, "tier": tier})
+        return Verdict(False, tier, action,
+                       "the same request is already waiting for you (card "
+                       f"{rid}), so it was not asked twice; approve or deny that "
+                       "card and it happens once", rid, outcome="refused")
 
     _audit("gate.asked", {"id": rid, "action": action, "tier": tier, "detail": detail})
     # An unclassified action is safe (it became "ask") but opaque: you cannot
@@ -1955,6 +2081,11 @@ def pending() -> list[dict]:
         # desktop cannot word the same warning two different ways - and so
         # there is one place to audit what a notification may contain.
         d["notice"] = notice_for(d)
+        # Guard 2 (review ruling 8.2): whether approving this card
+        # REPLACES or deletes what is already on the PC. Both apps draw
+        # the warning heading and ask a second, explicit confirmation
+        # for these; every other card is unchanged.
+        d["replaces"] = replaces_for(d.get("action", ""), d.get("detail"))
         # approval-expiry.patch: how many seconds this card has left before
         # check() stops waiting and refuses it. check() waits APPROVAL_TIMEOUT
         # from just after the row is written, so `created` plus that is the

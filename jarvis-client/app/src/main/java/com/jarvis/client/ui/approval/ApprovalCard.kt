@@ -57,6 +57,7 @@ import com.jarvis.client.net.CardSummary
 import com.jarvis.client.net.CardWords
 import com.jarvis.client.net.FormReview
 import com.jarvis.client.net.PendingItem
+import com.jarvis.client.net.ReplaceConfirm
 import com.jarvis.client.ui.parts.Affirm
 import com.jarvis.client.ui.parts.Meter
 import com.jarvis.client.ui.parts.Pill
@@ -308,6 +309,27 @@ fun ApprovalCard(
         onDeny { decided = false }
     }
 
+    // Review ruling 8.2 (2026-10-20): a state-REPLACING card takes TWO presses
+    // of Approve. The first arms it and sends NOTHING (the button's own label
+    // becomes CONFIRM_LABEL and the card says what the second press does);
+    // only the second press calls `approve()`, which is the one decision path.
+    // Everything else - Deny, a left swipe, an ordinary card - is untouched.
+    //
+    // The swipe's right (approve) direction is refused for these cards further
+    // down: a swipe is a gesture people make without reading, which is exactly
+    // the incident this guard exists for. Denying by swipe still works.
+    val replace = ReplaceConfirm.applies(item)
+    var replaceArmed by rememberSaveable(item.id) { mutableStateOf(false) }
+    val approvePress: () -> Unit = {
+        if (replace && !replaceArmed) {
+            // Armed, and nothing sent. The state change is visible (the label
+            // below) and audible through the live region on the heading.
+            replaceArmed = true
+        } else {
+            approve()
+        }
+    }
+
     // Swipe, gated on `canDecide` rather than `canApprove`.
     //
     // A swipe is a gesture people make without reading. That is fine for
@@ -354,7 +376,7 @@ fun ApprovalCard(
                             // item springs back and does nothing - the same
                             // silent refusal a disabled Approve button already
                             // gives a tap, not a new behaviour invented here.
-                            offset.value > swipeThresholdPx && canApprove -> {
+                            offset.value > swipeThresholdPx && canApprove && !replace -> {
                                 approve()
                                 offset.animateTo(0f)
                             }
@@ -453,6 +475,27 @@ fun ApprovalCard(
         }
         Spacer(Modifier.height(6.dp))
         ReachBadge(item)
+
+        // Review ruling 8.2: the cards that REPLACE what is already there say
+        // so in plain words before anything else on the card. Never colour
+        // alone - the heading is real text, so it survives a screen reader, a
+        // monochrome screen and colour-blindness. The Approve button below
+        // then asks for its second press.
+        if (replace) {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = ReplaceConfirm.WARNING,
+                style = MaterialTheme.typography.titleSmall,
+                color = chrome.badInk,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = ReplaceConfirm.NOTE,
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textHi,
+            )
+        }
 
         // The card's own first sentence, when the PC sent no short words (an
         // older backend). Outside the fold: it IS the short summary then.
@@ -575,8 +618,13 @@ fun ApprovalCard(
                 Spacer(Modifier.width(8.dp))
                 Text(
                     text = when {
-                        swipeOn && canApprove ->
+                        swipeOn && canApprove && !replace ->
                             "Swipe right to approve, left to deny — ${item.risk.why}"
+                        swipeOn && canApprove ->
+                            // Review ruling 8.2: an approve swipe is refused on
+                            // a card that replaces what is there; the sentence
+                            // must not promise a gesture that does nothing.
+                            "Swipe left to deny — this card replaces what is there, so approve it with its button, twice — ${item.risk.why}"
                         swipeOn -> "Swipe left to deny — ${item.risk.why}"
                         else -> item.risk.why
                     },
@@ -737,7 +785,16 @@ fun ApprovalCard(
             if (!expired) {
                 Refuse(CardWords.BUTTONS[0], enabled = canDeny && !decided, onClick = deny)
                 if (!item.pcOnly) {
-                    Affirm(CardWords.BUTTONS[1], enabled = canApprove && !decided, onClick = approve)
+                    // Review ruling 8.2: on a state-replacing card the first
+                    // press only arms it - the label says which press this is,
+                    // so a person reading the button sees the state change and
+                    // nothing has been sent while it still reads "Approve".
+                    Affirm(
+                        if (replace && replaceArmed) ReplaceConfirm.CONFIRM_LABEL
+                        else CardWords.BUTTONS[1],
+                        enabled = canApprove && !decided,
+                        onClick = approvePress,
+                    )
                 }
                 if (SecurityRules.riskyByToday(item)) {
                     Text(
