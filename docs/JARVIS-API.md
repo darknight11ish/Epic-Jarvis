@@ -9205,7 +9205,7 @@ words too (`"Erase the words" cannot reach into an older backup ...`).
 
 | Route | Notes |
 |---|---|
-| `GET /api/backup` | From this PC: the folder, whether a card is waiting, the last backup and the last restore's outcome (a one-time recovery code included exactly once, then gone on the next read). From anywhere else: `{"available", "last_backup_at"}` only - the phone's "Last backup: ...". Never held. |
+| `GET /api/backup` | From this PC: the folder, whether a card is waiting, the last backup and the last restore's outcome (a one-time recovery code included exactly once, then gone on the next read). **Since 2026-10-20 (Gemini ruling 8.1, §45.4b) the last restore's outcome is PERSISTED** in `last-restore.json` in the settings folder: it stays readable until `POST /api/backup/restore/dismiss`, so a poll can no longer swallow it, and it survives a backend restart. The one-time recovery code keeps its old rule - shown exactly once, never stored on disk (the persisted record carries `recovery_code_hint` instead). From anywhere else: `{"available", "last_backup_at", "last_restore"}` - the phone's "Last backup: ...", plus the last restore's outcome WITHOUT the recovery code and without the technical `why`; reading it consumes nothing. Never held. |
 | `GET /api/backup/list` | The kept backup files in the folder, newest first. This PC only (**403** otherwise). |
 | `POST /api/backup/folder` `{"path"}` | Sets where backups are written. This PC only. **202** while ONE approval card waits (action `change_own_config`, the same action "Folders Jarvis may look in" uses to add a folder, and refused the same places - `jarvis_documents.check_folder`, imported not copied). |
 | `POST /api/backup/now` `{}` | Makes one backup into the folder already set. This PC only, **no card** - the folder was already approved. **409** with no folder set. 200 `{"ok", "name", "at", "counts", "recovery_code"}` - the code shown once. |
@@ -9214,7 +9214,9 @@ words too (`"Erase the words" cannot reach into an older backup ...`).
 | `POST /api/backup/commit` `{"id", "code"}` | **The owner says he has kept the code, and the PC writes the file** (2026-10-14). **THIS PC ONLY** - the write into the PC's folder is the PC's own action, so a caller that is not the PC is refused **before the body is read**: **403** `{"ok": false, "pc_only": true, "error": "The backup is written on your PC, so nothing was written from here. ..."}`. The code must be the one `prepare` minted and must still be inside `PENDING_TTL_S`; the comparison is cleaned the way the owner would type it (uppercase, hyphens and spaces dropped), so the four-groups-of-five form and the bare 20 characters are the same code. A **wrong or missing** code: **400**, the run stays open so a typo can be corrected, **nothing written**. An **expired or never-started** run: **409**, the run is dropped, **nothing written**. On success: 200 `{"ok", "name", "at", "counts", "size", "folder", "keep", "recovery_code", "message"}`, the file being made with **that same code** (`backup_now(code=...)`) - so the code the owner kept is the code that opens what landed. Any failure (a full disk, a refusal by the module) records `last_attempt.ok: false` and writes nothing. |
 | `POST /api/backup/restore/preview` `{"name", "code"}` | Decrypts to read the backup's own `manifest.json` - counts and its date, never any other content. Changes nothing. **400** `{"wrong_code": true}` for a code that does not open it. This PC only. |
 | `POST /api/backup/delete-older` `{}` | **"Delete older backups now"**, offered by both apps after an "Erase the words" (2026-09-30): erased words can still be readable in a backup made before the erase. This PC only (**403** otherwise). **202** while ONE approval card waits (action `change_own_config`, the folder card's own; the card says how many files go and that it cannot be undone). Approved: one FRESH backup is made first (a new recovery code, returned once in `last_delete_older.fresh_backup`), then every other backup file in the folder is deleted; if the fresh one cannot be made, nothing is deleted. **409** with no folder or no backups. The outcome is in `GET /api/backup` as `last_delete_older` (`outcome` `deleted`\|`denied`\|`timed_out`\|`withdrawn`\|`refused`\|`failed`, `deleted`, `message`, `fresh_backup`) and `pending_delete_older_card`. |
-| `POST /api/backup/restore` `{"name", "code"}` | **202** while ONE approval card waits, action **`restore_backup`** - in `jarvis_owner_check.PC_ONLY_ACTIONS`, so it ALWAYS needs Windows Hello and is ALWAYS refused from any device but this PC, whatever the gate's own risk table says (the same mechanism `loosen_what_asks_first` and `enable_reading_tool` use). From anything but this PC it is refused **up front, before the body is read** - **403** `{"ok": false, "pc_only": true, "error": "Restoring has to be done in Jarvis on your PC, so nothing was restored. Open Jarvis there, then Settings, Backups."}` - and never with the 202 above, which promises a Windows Hello card that such a caller can never approve (2026-10-10; the same words are on `/api/backup/restore/preview`). **Its card must not NAME a file `jarvis_gate.py` protects** (`jarvis_hud.py` among them): the card is what the gate is handed as its prompt, and a prompt naming one is refused at tier `never` before any card exists, so nobody is ever asked - the card says "the .py files in the folder Jarvis runs from", not the file's name, and `backend/test_backup.py` holds it against the gate's own `_PROTECTED` list. A refusal is recorded in `last_restore` with `outcome: "refused"`, the next step in plain words in `message` (the desktop's Settings, Backups shows that), and the technical reason - which tier, and the gate's own sentence - in `why`, for a bug report. On approval: Jarvis backs up the CURRENT state first, automatically, with a FRESH one-time recovery code (returned in the outcome exactly once), so the restore itself can be undone - then writes the backup's files back. Restore only adds and overwrites; it never deletes a file that is not in the backup. From 2026-10-05 it also writes the archive's `source/*.py` back into the folder the module runs from, so the CODE comes back with the data - and the card says plainly that restoring an OLDER backup therefore puts back the older program and undoes updates applied since, naming `apply-patches.ps1`. |
+| `POST /api/backup/restore` `{"name", "code"}` | **202** while ONE approval card waits, action **`restore_backup`** - in `jarvis_owner_check.PC_ONLY_ACTIONS`, so it ALWAYS needs Windows Hello and is ALWAYS refused from any device but this PC, whatever the gate's own risk table says (the same mechanism `loosen_what_asks_first` and `enable_reading_tool` use). From anything but this PC it is refused **up front, before the body is read** - **403** `{"ok": false, "pc_only": true, "error": "Restoring has to be done in Jarvis on your PC, so nothing was restored. Open Jarvis there, then Settings, Backups."}` - and never with the 202 above, which promises a Windows Hello card that such a caller can never approve (2026-10-10; the same words are on `/api/backup/restore/preview`). **Its card must not NAME a file `jarvis_gate.py` protects** (`jarvis_hud.py` among them): the card is what the gate is handed as its prompt, and a prompt naming one is refused at tier `never` before any card exists, so nobody is ever asked - the card says "the .py files in the folder Jarvis runs from", not the file's name, and `backend/test_backup.py` holds it against the gate's own `_PROTECTED` list. A refusal is recorded in `last_restore` with `outcome: "refused"`, the next step in plain words in `message` (the desktop's Settings, Backups shows that), and the technical reason - which tier, and the gate's own sentence - in `why`, for a bug report. On approval: Jarvis backs up the CURRENT state first, automatically, with a FRESH one-time recovery code (returned in the outcome exactly once), so the restore itself can be undone - then writes the backup's files back. Restore only adds and overwrites; it never deletes a file that is not in the backup. From 2026-10-05 it also writes the archive's `source/*.py` back into the folder the module runs from, so the CODE comes back with the data - and the card says plainly that restoring an OLDER backup therefore puts back the older program and undoes updates applied since, naming `apply-patches.ps1`. **Since 2026-10-20 (ruling 8.1, §45.4b): the safety backup must be VERIFIED ON DISK before one live file is touched** - present, not empty, its own `JBAK1` shape, the size that was written, it opens with its code, and its manifest reads back; anything else refuses the restore with nothing changed, `reason: "safety_unverified"` in `last_restore` and in the audit's `backup.restore.card`, and the plain sentence "the safety backup could not be made first, so nothing was restored". The outcome's `restored` block names the EXACT files put back (`databases`, `settings_files`, `notes_files`, `voice_files`, `source_files`, `framework_toml`, `keys`), not just counts. |
+
+| `POST /api/backup/restore/dismiss` `{}` | **Clears the last restore's outcome** (2026-10-20, Gemini ruling 8.1, §45.4b) - the ONLY thing that clears it, because reading `last_restore` now never consumes it. **Any paired device** may ask: clearing a notice is not destructive, writes no data and reveals nothing (restoring stays this PC only). 200 `{"ok": true, "dismissed": <true when there was something to clear>}`; **idempotent** - dismissing an empty record is a 200 with `"dismissed": false`, not an error. Removes `last-restore.json` from the settings folder and clears the in-memory copy. Audited as `backup.restore.dismissed {had, from}`. **No app draws the button yet** (named follow-up in §45.5): the route is the explicit action the persistent record requires. |
 
 `[autonomy.tiers]` carries `restore_backup = "ask"` (must stay `ask`, like
 every other PC-only-with-Windows-Hello action); `jarvis_card_words.TITLES`
@@ -9251,6 +9253,52 @@ or changed since is lost unless it is in the safety backup. Nothing can pause
 the programs that hold these files open (there is no such hook), so restart
 Jarvis afterwards, as the outcome says.
 
+### 45.4b Restore fails closed without a verifiable safety backup; the outcome is PERSISTED; every restored file is named (2026-10-20)
+
+From the owner's accepted ruling on Gemini's late review, Part I §2 ruling
+8.1. Three changes, all in `jarvis_backup.py` (shipped whole; no patch):
+
+1. **Fail closed before ANY overwrite.** The safety backup made at the start
+   of an approved restore is now VERIFIED ON DISK before one live database,
+   key or `jarvis-framework.toml`/settings/notes file is touched:
+   the file exists; it is bigger than nothing; it has the `JBAK1` magic and
+   the header shape (`check_file`); its size is the size that was just
+   written; it OPENS with the recovery code it was written with; and its
+   `manifest.json` reads back whole. `backup_now` also flushes and `os.fsync`s
+   the file before the rename. Anything but all-clear **refuses the restore
+   with nothing changed**, records `reason: "safety_unverified"` in the audit
+   event `backup.restore.card` and in `last_restore.reason`, and tells the
+   owner in the plain `failed_before` words ("the safety backup could not be
+   made first, so nothing was restored and your data was not changed"). A
+   safety backup that cannot even be made is refused the same way, as before.
+2. **The last restore's outcome is PERSISTED** in `last-restore.json` in the
+   settings folder (`_config_dir()`), written atomically and fsynced: outcome,
+   when, the plain `message`, `warning`, the safety backup's NAME and time,
+   the exact restored files (below), and - when it was a refusal -
+   `reason`. `GET /api/backup` reads it on every poll and a restart keeps it;
+   reading it consumes nothing (before this, the outcome lived in memory only
+   and the first read took the one-time code with it, so a poll could swallow
+   the recovery information). Both apps can read it: the phone's answer now
+   carries `last_restore` without the recovery code and without `why`.
+   **The one-time recovery-code rule is unchanged and deliberate**: the code
+   is still shown exactly once, read out of memory once, and NEVER written to
+   disk - a stored code would open the safety backup for anyone who read the
+   file, which is the opposite of the design. The persisted record says so in
+   `recovery_code_hint` rather than looking silently incomplete. The ONLY way
+   the record is cleared is `POST /api/backup/restore/dismiss` (idempotent,
+   any paired device, audited `backup.restore.dismissed`); a read never clears
+   it.
+3. **Exact restored names in the audit and the receipt.** `_apply_restore`
+   now returns, beside the counts, the exact filenames it put back, grouped
+   as the archive is: `{"databases": ["memory.db", ...], "settings_files":
+   ["a.json", ...], "notes_files": [...], "voice_files": [...],
+   "source_files": [...], "framework_toml": ["jarvis-framework.toml"],
+   "keys": ["chat-history-key", ...]}`. It rides in `last_restore.restored`
+   and in the audit event `backup.restored`'s `applied.restored`; the counts
+   are still there, so an older reader loses nothing. `backend/test_backup.py`
+   holds each part, and the suite fails if any guard is removed (the
+   fail-closed check, the persistence, or the names).
+
 ### 45.5 Desktop and phone
 
 Desktop: Settings, Backups (`backup.rs`, `backup-settings.js`). Setting the
@@ -9270,6 +9318,16 @@ there was one. It **asks for a backup** in two steps: `POST
 file once the owner has ticked that he saved the code. Choosing a folder,
 restoring, listing files and deleting older copies are the PC's alone: the
 folder picker is Windows', and restoring needs Windows Hello there.
+**2026-10-20 (ruling 8.1, §45.4b):** the phone's `GET /api/backup` answer also
+carries the persisted `last_restore` summary - outcome, plain message, the
+safety backup's name and time, and the exact restored filenames - WITHOUT the
+recovery code and without the technical `why`; reading it consumes nothing, so
+a poll can never swallow it. **No app draws the dismiss button yet:** the
+desktop's panel already shows the persisted outcome (its `last_restore.message`)
+and the phone's parser ignores the new field until a screen wants it;
+`POST /api/backup/restore/dismiss` is the named follow-up for that control.
+Until it is wired, the record is replaced when the next restore finishes and
+cleared only by that route - the reading itself never clears it.
 `tools/check_parity.py`: `/api/backup` is `ported` (both read it, at
 different depths); `/api/backup/status`, `/api/backup/prepare` and
 `/api/backup/commit` are `phone-only`; every other backup route is

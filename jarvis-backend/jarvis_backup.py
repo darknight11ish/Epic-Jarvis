@@ -4,8 +4,11 @@ docs/CUTTING-EDGE-2026-09-26-round2-trust.md, "2. Encrypted backup and plain
 restore"). docs/JARVIS-API.md section 45.
 
 NEW MODULE, shipped whole. backup.patch adds one call at start-up,
-`install(Handler, ...)`, which answers the nine routes below (the same shape
-as jarvis_documents.py).
+`install(Handler, ...)`, which answers the ten routes below (the same shape
+as jarvis_documents.py). The tenth is `DISMISS_ROUTE` (2026-10-20): the last
+restore's outcome is now PERSISTED in `last-restore.json` so a poll can never
+swallow it, and dismissing it is an explicit POST rather than a side effect of
+reading it.
 
 THE PHONE'S HALF (2026-10-13, the owner asked for a "Back up now" button on
 the phone on 2026-10-10 and was told why not - this is the answer built for
@@ -347,6 +350,15 @@ NOW_ROUTE = "/api/backup/now"
 LIST_ROUTE = "/api/backup/list"
 PREVIEW_ROUTE = "/api/backup/restore/preview"
 RESTORE_ROUTE = "/api/backup/restore"
+#: Dismissing the last restore's outcome (Gemini ruling 8.1, 2026-10-20).
+#: The outcome is persisted and readable by both apps until the owner clears
+#: it; this route is the ONLY thing that clears it, so no poll can swallow it.
+#: Any paired device may ask (it is not destructive and reveals nothing); the
+#: restore itself stays THIS PC ONLY.
+DISMISS_ROUTE = "/api/backup/restore/dismiss"
+#: A safety backup that could not be verified before the restore would touch
+#: anything. The audit record of such a refusal carries this exact reason.
+SAFETY_UNVERIFIED = "safety_unverified"
 
 #: The PHONE's half of Backups (2026-10-13, the owner's question of 2026-10-10
 #: answered for real). Two routes, both about ONE thing: the phone may ask for
@@ -780,6 +792,59 @@ def _save_settings(data: dict) -> None:
     tmp = p.with_suffix(p.suffix + f".{uuid.uuid4().hex[:8]}.tmp")
     tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
     os.replace(tmp, p)
+
+
+#: The LAST restore's outcome, PERSISTED (Gemini ruling 8.1, 2026-10-20). It
+#: used to live only in this process's memory: any later GET /api/backup - the
+#: desktop's own panel poll, or the phone asking for the folder - handed the
+#: outcome (and once, the safety backup's recovery code) to whoever read first,
+#: and a restart lost it entirely. Now the record is written here and read
+#: until the owner DISMISSES it (`DISMISS_ROUTE`), not until someone polls.
+LAST_RESTORE_FILE = "last-restore.json"
+
+#: Said IN the persisted record, because the recovery code itself is
+#: deliberately absent: the code is one-time and never touches disk
+#: (`settings_path`, `take_restore_result`). Persisting the code would turn a
+#: theft of one small file into "open every older backup", which is exactly the
+#: rule the design refuses - so the durable record keeps everything EXCEPT the
+#: code, and says so rather than looking silently incomplete.
+RECOVERY_CODE_HINT = ("The safety backup's recovery code was shown once, in the panel, when "
+                      "the restore finished. It is deliberately NOT stored on disk by "
+                      "Jarvis (a stored code would open the safety backup for anyone who "
+                      "read the file), so write it down when you see it.")
+
+
+def last_restore_path() -> Path:
+    """last-restore.json in the Jarvis settings folder.
+
+    Everything a reader needs to show the last restore - outcome, when, the
+    safety backup's NAME, and the exact filenames replaced - EXCEPT the
+    one-time recovery code, which is never written here (see
+    `RECOVERY_CODE_HINT`)."""
+    return _config_dir() / LAST_RESTORE_FILE
+
+
+def _write_json_durable(path: Path, data: dict) -> None:
+    """Write one small JSON state file, flushed and fsynced before the rename.
+
+    `last-restore.json` is the owner's only record of what a restore replaced
+    once the process has restarted, so it must be on disk when this returns,
+    not merely in the page cache. The temp file goes beside it (same folder,
+    same volume, so the rename is atomic) and is removed if anything fails."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + f".{uuid.uuid4().hex[:8]}.tmp")
+    try:
+        with tmp.open("w", encoding="utf-8") as fh:
+            fh.write(json.dumps(data, indent=2))
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise
 
 
 def _tier(action: str) -> str:
@@ -1364,6 +1429,21 @@ def backup_now(folder, *, code: Optional[str] = None) -> dict:
     tmp = Path(real) / f".{name}.{uuid.uuid4().hex[:8]}.tmp"
     try:
         tmp.write_bytes(blob)
+        # FLUSHED TO DISK BEFORE THE RENAME (Gemini ruling 8.1, 2026-10-20). The
+        # restore's fail-closed check reads this file straight back and refuses
+        # to touch live data unless it is whole; a write sitting in the page
+        # cache would pass that read and then be lost in a crash between the
+        # rename and the restore. The rename itself is the atomic step.
+        try:
+            with tmp.open("rb+") as fh:
+                fh.flush()
+                os.fsync(fh.fileno())
+        except OSError:
+            # The write itself is already done and checked below by the caller;
+            # a file system that refuses fsync (some network shares) must not
+            # turn a usable backup into a crash here - but the restore's own
+            # read-back verification is what decides whether it may proceed.
+            pass
         os.replace(tmp, dest)
     except BaseException:
         # A full disk (or a folder that went away) must not leave a half-written
@@ -1996,8 +2076,74 @@ def restore_card(name: str, manifest: dict) -> str:
     ])
 
 
+def _restored_names(applied) -> dict:
+    """The EXACT filenames a restore put back, grouped by the archive's own
+    folders (2026-10-20, Gemini ruling 8.1). Empty groups are left out.
+
+    `_apply_restore` builds this; `_restore_finish` puts it in the audit record
+    and in `last_restore`, so neither the owner's receipt nor a bug report has
+    to guess from "1 database" which database it was."""
+    out = {}
+    restored = applied.get("restored") if isinstance(applied, dict) else None
+    if not isinstance(restored, dict):
+        return out
+    for group in ("databases", "settings_files", "notes_files", "voice_files",
+                  "source_files", "framework_toml", "keys"):
+        names = [str(n) for n in (restored.get(group) or []) if n]
+        if names:
+            out[group] = sorted(names)
+    return out
+
+
+def _persist_restore_result(record: dict) -> None:
+    """Write the last restore's record to `last-restore.json`, WITHOUT the code.
+
+    Never raises: the restore has already happened (or its refusal is already
+    in memory) when this is called, and a full disk must not turn a finished
+    restore into an exception the card's thread drops. The one-time recovery
+    code is stripped here - it was never on disk and this file must not be the
+    first place it is - and a hint says where it was shown instead."""
+    try:
+        safe = {k: v for k, v in record.items() if k != "recovery_code"}
+        safety = safe.get("safety_backup")
+        if isinstance(safety, dict):
+            safe["safety_backup"] = {k: v for k, v in safety.items()
+                                     if k != "recovery_code"}
+        safe["recovery_code_hint"] = RECOVERY_CODE_HINT
+        _write_json_durable(last_restore_path(), safe)
+    except Exception:                                          # noqa: BLE001
+        _audit("backup.restore.persist_failed", {"why": "could not write last-restore.json"})
+
+
+def _load_restore_result() -> dict:
+    """The persisted last restore, or {} when there is none (or it is damaged).
+
+    Never raises and can never contain a recovery code: the file it reads has
+    never had one (`_persist_restore_result` strips it)."""
+    try:
+        raw = json.loads(last_restore_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
 def _restore_finish(pid: str, outcome: str, *, why: str = "", safety=None,
-                    message: Optional[str] = None, warning: str = "") -> None:
+                    message: Optional[str] = None, warning: str = "",
+                    applied=None, reason: str = "") -> None:
+    record = {
+        "outcome": outcome, "why": why, "at": time.time(),
+        "message": (message if message is not None
+                    else RESTORE_LAST_WORDS.get(outcome, "")),
+        "safety_backup": safety, "warning": warning,
+        # EXACT filenames, not counts (2026-10-20, ruling 8.1): "1 database" is
+        # useless both in the owner's receipt and in a bug report. `applied` is
+        # `_apply_restore`'s own dict; a failure before any write passes none,
+        # and the record then says so by having no `restored` groups at all.
+        "restored": _restored_names(applied),
+    }
+    if reason:
+        record["reason"] = reason
+    keep = False
     with _R_LOCK:
         if _R_STATE["pending"].get("id") == pid:
             _R_STATE["pending"].clear()
@@ -2005,19 +2151,29 @@ def _restore_finish(pid: str, outcome: str, *, why: str = "", safety=None,
         if _R_STATE["latest"].get("id") not in (None, pid):
             return
         _R_STATE["last"].clear()
-        _R_STATE["last"].update(outcome=outcome, why=why, at=time.time(),
-                                message=(message if message is not None
-                                         else RESTORE_LAST_WORDS.get(outcome, "")),
-                                safety_backup=safety, warning=warning)
-    _audit("backup.restore.card", {"outcome": outcome})
+        _R_STATE["last"].update(record)
+        keep = True
+    if keep:
+        # DURABLE, so a restart and any number of polls keep the outcome
+        # (ruling 8.1); the record in memory additionally holds the one-time
+        # code for exactly one read.
+        _persist_restore_result(record)
+    _audit("backup.restore.card", {"outcome": outcome, "reason": reason})
 
 
 def take_restore_result() -> Optional[dict]:
-    """The last restore's outcome, INCLUDING the safety backup's one-time
-    recovery code if there is one - read ONCE. A second call never sees the
-    code again, so it can never be re-read off a stale poll, logged by a
-    later request, or left sitting in memory for longer than one answer
-    needs it."""
+    """The last restore's outcome, WITH the safety backup's one-time recovery
+    code if this process still holds it - the code is readable exactly once.
+
+    Two things changed on 2026-10-20 (Gemini ruling 8.1), and only one of them
+    relaxes:
+      * the RECORD persists now. It is written to `last-restore.json` and is
+        read here (and by both apps through GET /api/backup) until the owner
+        dismisses it - a poll can no longer swallow the outcome;
+      * the CODE keeps its old rule. The first read here hands it over and
+        removes it from memory, and it was NEVER on disk, so a persisted file
+        can never open the safety backup. The record says so in
+        `recovery_code_hint`."""
     with _R_LOCK:
         last = dict(_R_STATE["last"])
         if last:
@@ -2025,7 +2181,46 @@ def take_restore_result() -> Optional[dict]:
             if isinstance(safety, dict) and "recovery_code" in safety:
                 _R_STATE["last"]["safety_backup"] = {k: v for k, v in safety.items()
                                                      if k != "recovery_code"}
+    if not last:
+        last = _load_restore_result()
     return last or None
+
+
+def restore_result_for_reader(*, here: bool) -> Optional[dict]:
+    """What GET /api/backup's `last_restore` shows.
+
+    `here` (this PC): the record, and once only the in-memory recovery code.
+    Any other paired device: the persisted summary and NEVER the code - and
+    reading it consumes nothing, so a phone poll cannot swallow the recovery
+    information the owner still needs. (The technical `why` is left out of the
+    phone's copy: it is for a bug report, and it is the one field that can name
+    an engine-room cause.)"""
+    if here:
+        return take_restore_result()
+    stored = _load_restore_result()
+    if not stored:
+        return None
+    return {k: v for k, v in stored.items() if k != "why"}
+
+
+def dismiss_restore_result() -> bool:
+    """Clear the last restore's outcome everywhere. True when there was one.
+
+    The ONLY thing that clears it (ruling 8.1): a read never does. A notice
+    that cannot be removed from disk is not reported as dismissed."""
+    had = last_restore_path().is_file()
+    with _R_LOCK:
+        if _R_STATE["last"]:
+            had = True
+        _R_STATE["last"].clear()
+    try:
+        last_restore_path().unlink()
+    except FileNotFoundError:
+        pass
+    except OSError:
+        _audit("backup.restore.dismiss_failed", {})
+        return False
+    return had
 
 
 def _inside(root: Path, rel: str, *, flat: bool = False) -> Optional[Path]:
@@ -2081,7 +2276,12 @@ def _apply_restore(zip_bytes: bytes) -> dict:
     applied = {"databases": 0, "settings_files": 0, "notes_files": 0, "voice_files": 0,
                "framework_toml": False, "chat_history_key": False, "study_decks_key": False,
                "source_files": 0,
-               "skipped": 0, "chat_history_key_failed": False, "study_decks_key_failed": False}
+               "skipped": 0, "chat_history_key_failed": False, "study_decks_key_failed": False,
+               # The EXACT names behind those counts (2026-10-20, ruling 8.1).
+               # Filled below and handed to the audit record and the receipt.
+               "restored": {"databases": [], "settings_files": [], "notes_files": [],
+                            "voice_files": [], "source_files": [], "framework_toml": [],
+                            "keys": []}}
     plan: list = []              # (dest, data, is_database)
     key_data = None
     study_key_data = None
@@ -2094,8 +2294,13 @@ def _apply_restore(zip_bytes: bytes) -> dict:
             if name.endswith("/") or name == "manifest.json":
                 continue
             where = None
+            #: The archive-relative name as the RECEIPT says it (2026-10-20,
+            #: ruling 8.1): "db/memory.db" is shown as "memory.db" under the
+            #: databases group, a nested note keeps its folders.
+            shown = ""
             if name.startswith("db/"):
-                where = ("databases", _inside(conf, name[len("db/"):], flat=True))
+                shown = name[len("db/"):]
+                where = ("databases", _inside(conf, shown, flat=True))
             elif name.startswith("settings/"):
                 # The JSON files, plus the named ones whose extension is not
                 # `.json` (config.toml, speed.jsonl - 2026-10-13). Both land in
@@ -2106,11 +2311,14 @@ def _apply_restore(zip_bytes: bytes) -> dict:
                 if name not in allowed_settings:
                     applied["skipped"] += 1
                     continue
-                where = ("settings_files", _inside(conf, name[len("settings/"):], flat=True))
+                shown = name[len("settings/"):]
+                where = ("settings_files", _inside(conf, shown, flat=True))
             elif name.startswith("notes/"):
-                where = ("notes_files", _inside(conf / "notes", name[len("notes/"):]))
+                shown = name[len("notes/"):]
+                where = ("notes_files", _inside(conf / "notes", shown))
             elif name.startswith("voice/"):
-                where = ("voice_files", _inside(conf / "voice", name[len("voice/"):]))
+                shown = name[len("voice/"):]
+                where = ("voice_files", _inside(conf / "voice", shown))
             elif name.startswith(SOURCE_PREFIX):
                 # The backend's own program files go back into the folder this
                 # module runs from (2026-10-05) - `_source_dir()`, read HERE and
@@ -2120,8 +2328,8 @@ def _apply_restore(zip_bytes: bytes) -> dict:
                 # per file, so a nested name is a tampered archive, not a
                 # layout to honour - `_inside` refuses it and it is counted
                 # under "skipped" like any other bad name.
-                where = ("source_files",
-                         _inside(_source_dir(), name[len(SOURCE_PREFIX):], flat=True))
+                shown = name[len(SOURCE_PREFIX):]
+                where = ("source_files", _inside(_source_dir(), shown, flat=True))
             if where is not None and where[1] is None:
                 applied["skipped"] += 1
                 continue
@@ -2129,10 +2337,13 @@ def _apply_restore(zip_bytes: bytes) -> dict:
             if where is not None:
                 plan.append((where[1], data, where[0] == "databases"))
                 applied[where[0]] += 1
+                if shown:
+                    applied["restored"][where[0]].append(shown)
             elif name == "jarvis-framework.toml":
                 toml_dest = _toml_source()
                 plan.append((toml_dest if toml_dest is not None else (conf / name), data, False))
                 applied["framework_toml"] = True
+                applied["restored"]["framework_toml"].append(name)
             elif name == "secrets/chat-history-key.b64":
                 key_data = data
             elif name == "secrets/study-decks-key.b64":
@@ -2178,6 +2389,7 @@ def _apply_restore(zip_bytes: bytes) -> dict:
             import jarvis_chat_log
             ts.WindowsStore(target=jarvis_chat_log.KEY_TARGET).write(key_data.decode("ascii"))
             applied["chat_history_key"] = True
+            applied["restored"]["keys"].append("chat-history-key")
         except Exception:
             # Not swallowed: the files ARE restored, but chats written with the
             # backup's key will not open without it. The outcome says so.
@@ -2188,9 +2400,12 @@ def _apply_restore(zip_bytes: bytes) -> dict:
             import jarvis_decks
             ts.WindowsStore(target=jarvis_decks.KEY_TARGET).write(study_key_data.decode("ascii"))
             applied["study_decks_key"] = True
+            applied["restored"]["keys"].append("study-decks-key")
             jarvis_decks.forget_key()   # the running store must reopen with this key
         except Exception:
             applied["study_decks_key_failed"] = True
+    for group in applied["restored"]:
+        applied["restored"][group] = sorted(applied["restored"][group])
     return applied
 
 
@@ -2221,9 +2436,68 @@ def _put_back(swapped: list, aside: list) -> list:
     return problems
 
 
+class SafetyBackupUnverified(Exception):
+    """The safety backup made just before a restore is not on disk as a whole,
+    verifiable backup. A restore NEVER proceeds past this (Gemini ruling 8.1,
+    2026-10-20, accepted by the owner)."""
+
+
+def _verify_safety_backup(safety, folder) -> str:
+    """'' when the safety backup on disk is verifiably whole, else why not.
+
+    FAIL-CLOSED, CHECKED BEFORE ANY LIVE FILE IS TOUCHED. Presence alone is not
+    enough - a crash, a full disk or a synchronising program can leave an empty,
+    cut-short or not-ours file with the right name, and a restore that trusts
+    it destroys the only copy of the "before" state. So the checks are, in
+    order: the record itself; a plain filename inside the backup folder; the
+    file's own JBAK1 header and minimum shape (`check_file`); its size is the
+    size that was written; it OPENS with the code it was written with; and its
+    manifest reads back whole. Any failure is a plain reason, and nothing is
+    restored.
+
+    The recovery code is used here (in memory) and is still never written to
+    disk. `folder` is the backup folder from the settings the restore was
+    started against; None means the folder went away, which is also a refusal."""
+    if not isinstance(safety, dict):
+        return "no safety backup was recorded"
+    name = safety.get("name")
+    code = safety.get("recovery_code")
+    if not isinstance(name, str) or not name:
+        return "the safety backup has no file name"
+    if not isinstance(code, str) or not code:
+        return "the safety backup has no recovery code to verify it with"
+    if not folder:
+        return "the backup folder is not set, so the safety backup cannot be found"
+    path = _inside(Path(folder), name, flat=True)
+    if path is None:
+        return "the safety backup's name is not a plain file name in the backup folder"
+    shape = check_file(path)
+    if not shape.get("ok"):
+        return f"the safety backup is not on disk as a whole backup ({shape.get('why')})"
+    size = int(shape.get("size") or 0)
+    if size <= 0:
+        return "the safety backup file is empty"
+    claimed = safety.get("size")
+    if isinstance(claimed, int) and not isinstance(claimed, bool) and claimed != size:
+        return f"the safety backup is {size} bytes, not the {claimed} just written"
+    try:
+        zip_bytes = decrypt_blob(path.read_bytes(), code)
+    except WrongCode:
+        return "the safety backup will not open with the code it was written with"
+    except (OSError, BackupUnavailable) as exc:
+        return f"the safety backup could not be read back ({type(exc).__name__})"
+    try:
+        manifest = _read_manifest(zip_bytes)
+    except Exception as exc:                                   # noqa: BLE001
+        return f"the safety backup's manifest could not be read back ({type(exc).__name__})"
+    if not isinstance(manifest, dict) or not manifest.get("created_at"):
+        return "the safety backup's manifest could not be read back"
+    return ""
+
+
 def _decide_restore(pid: str, name: str, code: str, manifest: dict, zip_bytes: bytes,
                     gate: Callable, tier_of: Callable, apply_fn: Callable,
-                    safety_fn: Callable) -> None:
+                    safety_fn: Callable, folder: Optional[str] = None) -> None:
     text = restore_card(name, manifest)
     detail = {"text": text, "what": "replace memory, chat history, review decks, settings and notes with "
                                     f"the backup {name}", "setting": "restore from backup",
@@ -2261,10 +2535,29 @@ def _decide_restore(pid: str, name: str, code: str, manifest: dict, zip_bytes: b
             return _restore_finish(pid, "withdrawn")
         try:
             safety = safety_fn()
+        except SafetyBackupUnverified as exc:
+            return _restore_finish(pid, "failed",
+                                   why=f"the safety backup was not verified ({exc})",
+                                   message=RESTORE_LAST_WORDS["failed_before"],
+                                   reason=SAFETY_UNVERIFIED)
         except Exception as exc:
             return _restore_finish(pid, "failed", why=f"the safety backup failed "
                                                        f"({type(exc).__name__})",
                                    message=RESTORE_LAST_WORDS["failed_before"])
+        # FAIL CLOSED (Gemini ruling 8.1, 2026-10-20, accepted): the safety
+        # backup must be provably ON DISK and whole BEFORE one live file is
+        # touched. The write above only tells us it thinks it wrote something;
+        # this reads the bytes back. Anything but a clean '' refuses the
+        # restore with nothing changed, records why in the audit, and keeps the
+        # outcome visible to the owner (persisted, ruling 8.1 part 2).
+        problem = _verify_safety_backup(safety, folder)
+        if problem:
+            return _restore_finish(
+                pid, "failed",
+                why=f"nothing was restored: the safety backup could not be verified "
+                    f"before the restore ({problem})",
+                message=RESTORE_LAST_WORDS["failed_before"],
+                reason=SAFETY_UNVERIFIED)
         safety_out = {"name": safety["name"], "at": safety["at"],
                       "recovery_code": safety["recovery_code"]}
         try:
@@ -2279,6 +2572,7 @@ def _decide_restore(pid: str, name: str, code: str, manifest: dict, zip_bytes: b
     key_failed = bool(isinstance(applied, dict) and applied.get("chat_history_key_failed"))
     _restore_finish(pid, "restored", safety=safety_out,
                     warning=KEY_WARNING if key_failed else "",
+                    applied=applied,
                     message=RESTORE_LAST_WORDS["restored"] + (" " + KEY_WARNING if key_failed
                                                               else ""))
 
@@ -2342,7 +2636,8 @@ def request_restore(body, *, peer=None, local=None, here: Optional[bool] = None,
         _R_STATE["latest"]["id"] = pid
     try:
         spawn(lambda: _decide_restore(pid, body["name"], body["code"], manifest, zip_bytes,
-                                      gate, tier_of, apply_fn, safety_fn))
+                                      gate, tier_of, apply_fn, safety_fn,
+                                      folder=st["folder"]))
     except Exception:
         with _R_LOCK:
             _R_STATE["pending"].clear()
@@ -2350,6 +2645,24 @@ def request_restore(body, *, peer=None, local=None, here: Optional[bool] = None,
     return 202, {"ok": True, "waiting": True, "message": "Waiting for your approval, with "
                                                           "Windows Hello. Nothing changes "
                                                           "unless you approve."}
+
+
+def request_dismiss_restore(body=None, *, peer=None, local=None,
+                            here: Optional[bool] = None) -> tuple:
+    """POST /api/backup/restore/dismiss {"": nothing needed}. (code, body).
+
+    The ONLY way the last restore's outcome is cleared (Gemini ruling 8.1,
+    2026-10-20). Any paired device may ask: clearing a notice is not
+    destructive, writes no data and reveals nothing - the restore itself stays
+    THIS PC ONLY (`request_restore`). Reading is never what clears it, so a
+    phone poll can no longer swallow the outcome or the recovery hint.
+
+    200 {"ok": True, "dismissed": <true when there was something to clear>}.
+    Idempotent: dismissing an already-empty record is a 200, not an error."""
+    is_here = bool(here) if here is not None else _from_this_pc(peer, local)
+    had = dismiss_restore_result()
+    _audit("backup.restore.dismissed", {"had": had, "from": "pc" if is_here else "device"})
+    return 200, {"ok": True, "dismissed": had}
 
 
 # ---------------------------------------------------------------------------
@@ -2360,25 +2673,27 @@ def request_restore(body, *, peer=None, local=None, here: Optional[bool] = None,
 def view(*, here: bool = False) -> dict:
     """GET /api/backup. From this PC: the folder, whether a card is
     waiting, how the last folder-card and the last backup/restore went, and
-    the retention count. From anywhere else (the phone): only whether a
-    backup has ever been made and when the last one was - "last backup: 3
-    days ago" and nothing more (the design's own words; the full flow is
-    desktop-only, docs/ARCHITECTURE.md section 8)."""
+    the retention count. From anywhere else (the phone): whether a backup has
+    ever been made and when the last one was, plus the LAST RESTORE's outcome
+    - read-only, with no recovery code and no `why` - so both apps can show
+    it. From 2026-10-20 (ruling 8.1) that outcome is PERSISTED and reading it
+    never consumes it; only `POST /api/backup/restore/dismiss` clears it."""
     with _B_LOCK:
         last_backup = dict(_B_STATE["last"]) if _B_STATE["last"] else None
     if not here:
         return {"available": True,
-                "last_backup_at": last_backup["at"] if last_backup else None}
+                "last_backup_at": last_backup["at"] if last_backup else None,
+                "last_restore": restore_result_for_reader(here=False)}
     st = _load_settings()
     with _F_LOCK:
         pending = dict(_F_STATE["pending"]) if _F_STATE["pending"] else None
         last_folder_card = dict(_F_STATE["last"]) if _F_STATE["last"] else None
     with _R_LOCK:
         restore_pending = dict(_R_STATE["pending"]) if _R_STATE["pending"] else None
-    # take_restore_result() takes _R_LOCK itself - called after releasing it
-    # above, never from inside it (that would deadlock: _R_LOCK is a plain
-    # Lock, not reentrant).
-    last_restore = take_restore_result()
+    # `restore_result_for_reader`/`take_restore_result` take _R_LOCK themselves
+    # - called after releasing it above, never from inside it (that would
+    # deadlock: _R_LOCK is a plain Lock, not reentrant).
+    last_restore = restore_result_for_reader(here=True)
     with _D_LOCK:
         delete_pending = dict(_D_STATE["pending"]) if _D_STATE["pending"] else None
     last_delete = take_delete_older_result()
@@ -2434,13 +2749,15 @@ def handle_post(route: str, body, *, peer=None, local=None) -> tuple:
         return preview_restore(body, peer=peer, local=local, here=here)
     if route == RESTORE_ROUTE:
         return request_restore(body, peer=peer, local=local, here=here)
+    if route == DISMISS_ROUTE:
+        return request_dismiss_restore(body, peer=peer, local=local, here=here)
     if route == DELETE_ROUTE:
         return request_delete_older(body, peer=peer, local=local, here=here)
     return 404, {"ok": False, "error": "not found"}
 
 
 def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
-    """Wrap `handler_cls.do_GET`/`do_POST` so the nine routes above are
+    """Wrap `handler_cls.do_GET`/`do_POST` so the ten routes above are
     answered here, after the server's own origin and token checks; every
     other request goes straight to the original - the same shape as
     jarvis_documents.py's `install`."""
@@ -2449,7 +2766,7 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
     if getattr(post0, "_jarvis_backup", False):
         _ARMED = True
         return ("  backups    /api/backup, folder, now, list, status, prepare, commit, "
-                "restore (already on)")
+                "restore, dismiss (already on)")
 
     from urllib.parse import urlsplit
 
@@ -2482,7 +2799,7 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
     def do_POST(self):
         route = urlsplit(str(getattr(self, "path", "") or "")).path.rstrip("/")
         if route not in (FOLDER_ROUTE, NOW_ROUTE, PREPARE_ROUTE, COMMIT_ROUTE,
-                         PREVIEW_ROUTE, RESTORE_ROUTE, DELETE_ROUTE):
+                         PREVIEW_ROUTE, RESTORE_ROUTE, DISMISS_ROUTE, DELETE_ROUTE):
             return post0(self)
         if not _allowed(self):
             return None
@@ -2502,7 +2819,8 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
     handler_cls.do_GET = do_GET
     handler_cls.do_POST = do_POST
     _ARMED = True
-    return "  backups    /api/backup, folder, now, list, status, prepare, commit, restore"
+    return ("  backups    /api/backup, folder, now, list, status, prepare, commit, "
+            "restore, dismiss")
 
 
 def _reset_for_tests() -> None:
@@ -2518,6 +2836,10 @@ def _reset_for_tests() -> None:
         _P_STATE["pending"].clear()
     with _D_LOCK:
         _D_STATE.update(pending={}, withdrawn=set(), last={}, latest={})
+    try:
+        last_restore_path().unlink()
+    except OSError:
+        pass
 
 
 if __name__ == "__main__":
