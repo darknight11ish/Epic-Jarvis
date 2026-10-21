@@ -981,6 +981,87 @@ for (const [width, height] of [[960, 640], [1280, 820]]) {
   });
 }
 
+/* The owner's real monitor runs at 150% (DPI 144). DPI does NOT divide CSS
+ * pixels: the app's own 1280x820 window is 1920x1230 PHYSICAL and the page's
+ * CSS viewport is still 1280 - measured from Windows on the installed app
+ * (window 1920x1230, client 1898x1174, dpi 144), not inferred. The field
+ * screenshots of exactly 1280x820 are therefore a CROP of the top-left
+ * physical pixels of that surface, which is why the second and third layout
+ * pills looked cut: they sit at CSS x 806-964, i.e. physical 1209-1446, inside
+ * the real window and outside a 1280-physical-pixel crop. These two checks
+ * are the bite test the Lead asked for at DPR 1.5: the header and the picker
+ * stay inside the CSS viewport, all three pills are clickable, and the page
+ * really paints at the physical size Windows reports. */
+await check("at 150% DPI (deviceScaleFactor 1.5) the header and the three pills fit, and each pill clicks", async () => {
+  const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false },
+    { viewport: { width: 1280, height: 820 }, deviceScaleFactor: 1.5 });
+  const shot = await page.screenshot();
+  const physical = { width: shot.readUInt32BE(16), height: shot.readUInt32BE(20) };
+  const m = await page.evaluate(() => {
+    const picker = document.getElementById("hud-layout-picker").getBoundingClientRect();
+    return {
+      vw: innerWidth, vh: innerHeight, dpr: devicePixelRatio,
+      scrollW: document.documentElement.scrollWidth,
+      picker: { x: Math.round(picker.x), right: Math.round(picker.right), w: Math.round(picker.width) },
+      pills: [...document.querySelectorAll("[data-hud-layout-choice]")].map((b) => {
+        const r = b.getBoundingClientRect();
+        return { layout: b.dataset.hudLayoutChoice, x: Math.round(r.x), right: Math.round(r.right),
+                 inView: r.left >= 0 && r.right <= innerWidth && r.width > 0 };
+      }),
+      labelsVisible: [...document.querySelectorAll(".lc-name")]
+        .some((n) => getComputedStyle(n).display !== "none"),
+    };
+  });
+  assert.equal(m.dpr, 1.5, "devicePixelRatio is not 1.5 - the test is not running at the owner's DPI");
+  assert.equal(m.vw, 1280, "the CSS viewport should stay 1280 CSS px at 150% DPI");
+  assert.equal(physical.width, 1920, `the painted surface should be 1920 physical px wide, got ${physical.width}`);
+  assert.equal(physical.height, 1230, `the painted surface should be 1230 physical px tall, got ${physical.height}`);
+  assert.ok(m.scrollW <= m.vw + 1, `horizontal overflow at DPR 1.5: ${m.scrollW} vs ${m.vw}`);
+  assert.deepEqual(m.pills.filter((p) => !p.inView), [], "a layout pill is outside a 1280-CSS viewport at DPR 1.5");
+  assert.ok(m.labelsVisible, "the owner's 1280 CSS window is wide enough for the pill labels");
+  for (const layout of ["studio", "ambient", "cockpit"]) {
+    await page.click(`[data-hud-layout-choice="${layout}"]`);
+    await K.until(page, `the page to switch to ${layout} at DPR 1.5`, async () =>
+      (await page.evaluate(() => document.body.dataset.hudLayout)) === layout, { ms: 5000 });
+    assert.equal(await page.evaluate(() => localStorage.getItem("jarvis.hud.layout")), layout);
+  }
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("at every CSS width a 150%-DPI window can produce, the pills stay inside and clickable", async () => {
+  const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false },
+    { viewport: { width: 1280, height: 820 }, deviceScaleFactor: 1.5 });
+  for (const [w, h] of [[1265, 782], [1280, 820], [960, 640], [853, 547], [731, 469], [627, 820]]) {
+    await page.setViewportSize({ width: w, height: h });
+    await page.waitForTimeout(250);
+    const m = await page.evaluate(() => {
+      const pills = [...document.querySelectorAll("[data-hud-layout-choice]")].map((b) => {
+        const r = b.getBoundingClientRect();
+        return { layout: b.dataset.hudLayoutChoice, inView: r.left >= 0 && r.right <= innerWidth,
+                 w: Math.round(r.width) };
+      });
+      return { vw: innerWidth, scrollW: document.documentElement.scrollWidth, pills,
+               labelShown: [...document.querySelectorAll(".lc-name")]
+                 .some((n) => getComputedStyle(n).display !== "none") };
+    });
+    assert.ok(m.scrollW <= m.vw + 1, `horizontal overflow at CSS ${w}x${h}: ${m.scrollW} vs ${m.vw}`);
+    assert.equal(m.pills.length, 3, `the layout picker lost a pill at CSS ${w}x${h}`);
+    assert.deepEqual(m.pills.filter((p) => !p.inView), [],
+      `a layout pill is outside the CSS ${w}x${h} viewport`);
+    assert.equal(m.labelShown, w > 1180,
+      `the pill labels should be hidden below 1180 CSS px and shown above (at ${w})`);
+    await page.click(`[data-hud-layout-choice="${m.pills[1].layout}"]`);
+    await K.until(page, `a click to switch at CSS ${w}x${h}`, async () =>
+      (await page.evaluate(() => document.body.dataset.hudLayout)) === m.pills[1].layout, { ms: 5000 });
+    await page.click('[data-hud-layout-choice="cockpit"]');
+    await K.until(page, `the way back to cockpit at CSS ${w}x${h}`, async () =>
+      (await page.evaluate(() => document.body.dataset.hudLayout)) === "cockpit", { ms: 5000 });
+  }
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
 /** #brand-sub as text, read without throwing while the window reloads itself. */
 function brandOf(page) {
   return page
