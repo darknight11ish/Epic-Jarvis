@@ -114,6 +114,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import jarvis_sqlite
 import json
 import math
 import os
@@ -936,6 +937,37 @@ class ChatLog:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         c = sqlite3.connect(str(self.db_path), timeout=10.0)
         c.execute("PRAGMA secure_delete = ON")
+        # Optimization 4.1 (2026-10-20): WAL / synchronous=NORMAL /
+        # busy_timeout / temp_store, the four every connection gets.
+        jarvis_sqlite.apply_pragmas(c)
+        # AND THE SCHEMA IS BUILT ONCE PER FILE, not once per call. This
+        # helper runs on every History read and every turn written; measured
+        # on this tree, 100 `_connect()` calls executed 500 CREATE TABLE /
+        # CREATE INDEX statements (5 per call). `ensure_schema` runs them the
+        # first time this process meets the file and answers False after that.
+        ran = jarvis_sqlite.ensure_schema(self.db_path, self._create_schema)
+        if not ran and not self._schema_ok:
+            # A PATH THIS PROCESS HAS ALREADY INITIALISED CAN STILL BE A FILE
+            # THIS INSTANCE HAS NEVER OPENED, and a history written before
+            # `kind`/`project`/`tag_id` existed must still be migrated in
+            # place. Two shapes of that: the suites replace a history file
+            # behind the process to prove the migration (t_migration in
+            # test_chat_kinds.py, t_migration_of_an_old_file in
+            # test_chat_tags.py), and a new HUD build meets an old
+            # chat-history.db. Run the idempotent schema pass once for THIS
+            # instance on the caller's own connection; repeat calls stay at
+            # zero DDL because `_schema_ok` is then True.
+            self._create_schema(c)
+        return c
+
+    def _create_schema(self, c) -> None:
+        """The tables a history file needs, run ONCE per database path.
+
+        Called through `jarvis_sqlite.ensure_schema` from `_connect`; the
+        migration below rides the same once-per-file call (it was already
+        once per ChatLog instance, but a long-lived process makes a new
+        instance for every HUD restart without a new file).
+        """
         c.execute("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v BLOB)")
         c.execute("CREATE TABLE IF NOT EXISTS conversations ("
                   " id TEXT PRIMARY KEY, title BLOB, started REAL, updated REAL,"
@@ -951,9 +983,7 @@ class ChatLog:
                   " conversation_id TEXT PRIMARY KEY, v BLOB)")
         c.execute("CREATE INDEX IF NOT EXISTS conversations_updated"
                   " ON conversations (updated)")
-        if not self._schema_ok:
-            self._migrate(c)
-        return c
+        self._migrate(c)
 
     def _migrate(self, c) -> None:
         """A history kept before `kind` and `project` existed (the chat audit,
@@ -2007,19 +2037,28 @@ class ChatLog:
         except KeyUnavailable as exc:
             out["why_not"] = out["why_not"] or str(exc)
             return out
-        with self._lock, closing(self._connect()) as c:
-            convs = c.execute(
-                "SELECT " + _conv_cols("c") + " FROM conversations c"
-                + (" WHERE COALESCE(c.kind, 'chat') = ?" if kind is not None else "")
-                + " ORDER BY c.updated DESC, c.id DESC LIMIT ?",
-                ([kind] if kind is not None else []) + [SEARCH_SCAN_MAX + 1]).fetchall()
-        if len(convs) > SEARCH_SCAN_MAX:
-            convs = convs[:SEARCH_SCAN_MAX]
-            out["partial"] = True
-        rx = [re.compile(re.escape(t), re.IGNORECASE) for t in terms]
-        deadline = time.monotonic() + SEARCH_SECONDS
         found = []
-        with closing(self._connect()) as c:
+        jarvis_sqlite.ensure_schema(self.db_path, self._create_schema)
+        # ONE connection for the whole search (Optimization 4.1: "where a
+        # single request performs multiple reads on one DB, reuse the
+        # connection for the call"). Before this, one search opened two
+        # connections and ran the schema statements twice; measured on this
+        # tree, 2 opens and 10 CREATEs per search, and 1 open + 0 CREATEs
+        # after the first. The lock is still held only for the list query -
+        # the scan below decrypts and matches in memory and must not block a
+        # turn being written on another thread for SEARCH_SECONDS.
+        with jarvis_sqlite.session(self.db_path) as c:
+            with self._lock:
+                convs = c.execute(
+                    "SELECT " + _conv_cols("c") + " FROM conversations c"
+                    + (" WHERE COALESCE(c.kind, 'chat') = ?" if kind is not None else "")
+                    + " ORDER BY c.updated DESC, c.id DESC LIMIT ?",
+                    ([kind] if kind is not None else []) + [SEARCH_SCAN_MAX + 1]).fetchall()
+            if len(convs) > SEARCH_SCAN_MAX:
+                convs = convs[:SEARCH_SCAN_MAX]
+                out["partial"] = True
+            rx = [re.compile(re.escape(t), re.IGNORECASE) for t in terms]
+            deadline = time.monotonic() + SEARCH_SECONDS
             for n, conv_row in enumerate(convs):
                 cv = _conv_named(conv_row)
                 cid, title_blob, started, updated = cv["id"], cv["title"], cv["started"], cv["updated"]

@@ -120,6 +120,7 @@ import time.
 from __future__ import annotations
 
 import json
+import jarvis_sqlite
 import os
 import re
 import secrets
@@ -477,6 +478,14 @@ def _reset_for_tests() -> None:
         _LAST_CARD.clear()
     with _INDEX_LOCK:
         pass
+    # A reset is where a test throws the index file away; the one-time schema
+    # init (Optimization 4.1) is remembered PER PATH, so the path must be
+    # forgotten here too or a recreated file at the same path would be opened
+    # with no tables.
+    try:
+        jarvis_sqlite.forget_initialized(index_path())
+    except Exception:
+        pass
 
 
 # --------------------------------------------------------------------------
@@ -498,7 +507,6 @@ def _reset_for_tests() -> None:
 def _db() -> sqlite3.Connection:
     """A connection that CLOSES when its `with` ends (`jarvis_sqlite.connect`,
     the one place this repository closes a connection properly)."""
-    import jarvis_sqlite
     c = jarvis_sqlite.connect(str(index_path()))
     c.row_factory = sqlite3.Row
     try:
@@ -510,7 +518,17 @@ def _db() -> sqlite3.Connection:
     return c
 
 
-def _ready(c: sqlite3.Connection) -> None:
+def _create_schema(c: sqlite3.Connection) -> None:
+    """The tables the media index needs, run ONCE per file (Optimization 4.1).
+
+    Called through `jarvis_sqlite.ensure_schema`; before this every
+    `_db()`+`_ready()` pair re-ran six CREATE statements plus the version
+    check on every search, every count and every index write - measured on
+    this tree, 100 `index_stats()` calls executed 500 CREATE statements (5 per
+    call). The version check still runs, because it is the first thing the
+    schema init does on a file this process has not met.
+    """
+    c.row_factory = sqlite3.Row
     c.execute("CREATE TABLE IF NOT EXISTS media_meta ("
               "key TEXT PRIMARY KEY, value TEXT NOT NULL)")
     row = c.execute("SELECT value FROM media_meta WHERE key='schema'").fetchone()
@@ -541,7 +559,18 @@ def _ready(c: sqlite3.Connection) -> None:
     if not have:
         c.execute("INSERT OR REPLACE INTO media_meta(key, value) VALUES('schema', ?)",
                   (str(INDEX_SCHEMA),))
-    c.commit()
+
+
+def _ready(c: sqlite3.Connection) -> None:
+    """Create what is missing: ONCE per database file in this process.
+
+    Kept as the same function its seven call sites already call, so the change
+    is one line per caller's meaning rather than a rewrite: `c` is still the
+    connection the caller is about to query, and after this returns the schema
+    is committed and visible to it. The DDL itself runs on `ensure_schema`'s
+    own short-lived connection, which closes before the caller's query.
+    """
+    jarvis_sqlite.ensure_schema(index_path(), _create_schema)
 
 
 def _terms(words: str, limit: int = 24) -> list:
@@ -1136,6 +1165,10 @@ def delete(path=None) -> dict:
                             break
                         except OSError:
                             time.sleep(0.05)
+                # This process initialised a file that no longer exists
+                # (Optimization 4.1's one-time schema init is per path): a
+                # new media-index.db at the same path needs its schema again.
+                jarvis_sqlite.forget_initialized(index)
             _audit("media_index.deleted", {"scope": "all"})
             return {"ok": True, "deleted": dropped, "index_file": True,
                     "words": "Deleted. The stored words from your recordings are gone, "

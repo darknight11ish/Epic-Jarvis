@@ -181,6 +181,14 @@ BUILTIN_CHECK = "event_pump"
 #: notices nothing and files nothing); it is work the heartbeat does.
 JOBS_TICK = "jobs"
 
+#: The name the database-maintenance ticker registers under (Gemini's Layer 4
+#: Optimization 4.2, 2026-10-20). Registered in `Engine.start()` beside the job
+#: ticker, for the same two reasons written on `_attach_jobs_ticker`: it is
+#: work, not an observation, and a clock only needs to run once the heartbeat
+#: is actually running. It returns None - housekeeping notices nothing and
+#: files nothing.
+MAINTENANCE_TICK = "sqlite-maintenance"
+
 #: How long after build_from_config() the pump may still be missing. The HUD
 #: builds and starts this engine at jarvis_hud.py:6027-6028 and constructs the
 #: pump around thirty lines later (:6064), and `Engine.start()` beats once
@@ -257,6 +265,34 @@ def jobs_tick() -> None:
     """
     import jarvis_jobs
     jarvis_jobs.tick()
+
+
+def sqlite_maintenance() -> None:
+    """The heartbeat's housekeeping job: WAL checkpoints, `PRAGMA optimize`,
+    and the `traces.db` retention cap if that database is ever there.
+
+    Gemini's Layer 4 Optimization 4.2 (2026-10-20): "run `PRAGMA
+    wal_checkpoint(PASSIVE)` + `PRAGMA optimize` during the 30-minute idle
+    tick". The 30-minute idle tick IS this engine's heartbeat, so the work is
+    attached here, beside the job queue ticker and for the same reason.
+
+    F10 STAYS BLOCKED, AND THAT IS SAID OUT LOUD. `traces.db` has no writer
+    in this repository or on the owner's live HUD (recorded as the
+    `traces-retention` BLOCKED delta in tools/reconcile_live_backend.py), so
+    on the owner's PC today this is a directory listing and nothing more. The
+    retention cap is wired and tested so that a traces.db from an older build
+    or a future writer cannot grow without bound; nothing here claims a writer
+    exists. Like `jobs_tick`, it returns None: housekeeping is work, not a
+    finding, and must never publish the owner's data to the apps.
+    """
+    try:
+        import jarvis_sqlite
+        jarvis_sqlite.idle_maintenance()
+    except Exception:
+        # Housekeeping may not take the heartbeat down: a locked database or
+        # an old module must not become a counted error on every beat.
+        pass
+
 
 
 #: What `drain()` mirrors onto a row, from a finding a check filed. `level` is
@@ -386,6 +422,14 @@ class Engine:
             if any(name == JOBS_TICK for name, _ in self.checks):
                 return
         self.register(JOBS_TICK, jobs_tick)
+        # Optimization 4.2 (2026-10-20): the same 30-minute beat folds WAL
+        # files down and caps traces.db. Registered after the queue ticker, in
+        # the same call, because both are the heartbeat's WORK rather than its
+        # observations - see this method's docstring for the two reasons.
+        with self._lock:
+            if any(name == MAINTENANCE_TICK for name, _ in self.checks):
+                return
+        self.register(MAINTENANCE_TICK, sqlite_maintenance)
 
     def stop(self, timeout: float = 2.0) -> None:
         self._stop.set()

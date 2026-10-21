@@ -155,6 +155,7 @@ replaces would have.
 from __future__ import annotations
 
 import importlib
+import jarvis_sqlite
 import json
 import os
 import re
@@ -287,6 +288,14 @@ def db_path() -> Path:
     return Path(env) if env else _config_dir() / DB_NAME
 
 
+def _create_schema(conn: sqlite3.Connection) -> None:
+    """The one table a receipts database needs, run ONCE per file (Optimization
+    4.1). Before this, every `_connect()` re-ran the SCHEMA script - measured
+    on this tree, 100 `recent()` calls executed 200 CREATE statements (2 per
+    call)."""
+    conn.executescript(SCHEMA)
+
+
 def _connect() -> sqlite3.Connection:
     """Always `with closing(_connect()) as c:` - never `with _connect() as c:`.
 
@@ -301,12 +310,16 @@ def _connect() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     # WAL so a read (the apps' list) never blocks a write (a receipt), and the
     # busy timeout so two actions finishing together wait rather than fail.
-    conn.execute("PRAGMA journal_mode=WAL")
+    # Optimization 4.1 (2026-10-20): the four standard pragmas are one copy,
+    # in jarvis_sqlite, and this module keeps only its own longer wait - set
+    # AFTER the shared four, or the shared 5000 ms would win over the 10000 ms
+    # this module has always used.
+    jarvis_sqlite.apply_pragmas(conn)
     conn.execute("PRAGMA busy_timeout=10000")
     # Deleted words must not come back out of free pages: a receipt is deleted
     # by the sweep below and by purge_words(), and both are about text leaving.
     conn.execute("PRAGMA secure_delete=ON")
-    conn.executescript(SCHEMA)
+    jarvis_sqlite.ensure_schema(path, _create_schema)
     return conn
 
 
