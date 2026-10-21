@@ -134,9 +134,17 @@ body {
       rgb(var(--sheen-rgb) / 0) 42%
     ),
     var(--surface);
-  border: 1px solid var(--hairline);
+  border: 1px solid var(--border-strong);
+  /* One insetable top highlight plus a deeper drop shadow, from the theme
+     contract only (--sheen-rgb/--shade-rgb/--accent-dim): the specular edge
+     is what makes the pane read as glass instead of a flat dark rectangle,
+     and all three themes move it because every value is a token. The height
+     rule above is unchanged on purpose - `.shell` still measures its own
+     content, and `#stack` still scrolls inside the 720px clamp. */
   box-shadow:
+    inset 0 1px 0 rgb(var(--sheen-rgb) / 0.10),
     0 0 0 1px rgb(var(--shade-rgb) / 0.6),
+    0 18px 44px -14px rgb(var(--shade-rgb) / 0.72),
     0 26px 60px -18px rgb(var(--shade-rgb) / 0.9),
     0 0 44px -22px var(--accent-dim);
   overflow: hidden;
@@ -283,14 +291,53 @@ html[data-state="streaming"] .shell::before {
    so the frame is drawn from more pixels than it shows). */
 
 .reactor {
+  position: relative;
   flex: 0 0 auto;
   width: 40px;
   height: 40px;
   display: grid;
   place-items: center;
-  /* The drop shadow is the frame's, not the rings': at this size a shadow on
-     the glass would sit over the animal's own soft outline and grey it. */
-  filter: drop-shadow(0 0 6px var(--accent-dim));
+  /* THE BLACK SQUARE, AND WHY THIS IS A CIRCLE NOW (2026-10-20). The face
+     frame's own canvas paints an opaque near-black sky: faces.html fills its
+     background every frame unless it is handed `&clear=1`, and only the
+     floating face's window may ask for that (faces.html's own CLEAR_BG note -
+     the HUD, the widget and the tray all want the sky). So the frame is an
+     opaque square inside a rounded pill, which is exactly what the owner saw
+     in the 2026-10-20 screenshot. The frame is shared, so the fix lives here,
+     not in faces.html: the slot is a circle and clips its child. The last few
+     pixels now fade into the bar's own glass instead of ending in four hard
+     corners, and the rim/glow below make it read as a lit mini-core.
+     `overflow: hidden` is what does the clipping; the face's own drawing is
+     untouched, and bar-face.mjs's square-slot measurement still reads 40 x 40
+     because clipping does not change the box. */
+  border-radius: 50%;
+  overflow: hidden;
+  /* Colour for the rim, the outside glow and the state rules below: the
+     theme's accent at rest (ice-cyan), and the same rules every other
+     state-driven surface uses (html[data-state] / html[data-voice]).
+     --core-glow is derived from --accent on THIS element, so the state rules
+     only have to move --accent and every glow below follows - one colour to
+     keep true instead of three. */
+  --core-glow: color-mix(in srgb, var(--accent) 34%, transparent);
+  filter: drop-shadow(0 0 6px var(--core-glow));
+  box-shadow: 0 0 20px -7px var(--core-glow);
+  transition:
+    box-shadow 240ms var(--ease),
+    filter 240ms var(--ease);
+}
+
+/* A hairline rim over the clipped edge, so the circle reads as a core rather
+   than a hole punched in the bar. It is drawn AFTER the frame (a positioned
+   pseudo paints over the in-flow iframe) and takes no pointer events. */
+.reactor::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--sheen-rgb) / 0.12),
+    inset 0 0 10px -2px var(--core-glow);
+  pointer-events: none;
 }
 
 #reactor-face {
@@ -347,14 +394,32 @@ html[data-state="streaming"] .shell::before {
   }
 }
 
-/* The face's own state colour, kept as a bar-level accent as well. The reactor
-   used to take it from these rules - ember for listening, `--bad` for an
-   error - and the bar still wants the accent to follow the state (the caret,
-   the shell's hairline and the frame's shadow do). The face inside the frame
-   takes its orb colour from the owner's own appearance bindings, so the two
-   cannot disagree about a colour the owner chose. */
+/* The mini-core's colour, from the bar's ONE state source. main.js writes
+   `html[data-state]` (idle | streaming | done | error | approval) and
+   voice.js writes `html[data-voice]` (listening / speaking), which is the
+   same pair every other state-driven surface in this window reads: the
+   shell's hairline, the caret, the pulse and the face frame. Nothing new is
+   invented here; each state just names the theme's own colour token, and the
+   ring / outside glow / face shadow all follow the local `--accent`:
+     rest/idle/done/standby (the face itself shows asleep) - theme accent;
+     listening (the microphone is live)                - --state-listening;
+     speaking (a reply is sounding)                    - --state-speaking;
+     streaming (Jarvis is working on the answer)       - --state-thinking;
+     waiting for the owner's approval                  - --state-approval;
+     an error                                          - --bad.
+   The face inside the frame takes its orb colour from the owner's own
+   appearance bindings, so the two cannot disagree about a colour the owner
+   chose. */
 html[data-voice="listening"] .reactor {
   --accent: var(--state-listening);
+}
+
+html[data-voice="speaking"] .reactor {
+  --accent: var(--state-speaking);
+}
+
+html[data-state="streaming"] .reactor {
+  --accent: var(--state-thinking);
 }
 
 html[data-state="error"] .reactor {
@@ -365,6 +430,21 @@ html[data-state="approval"] .reactor {
   --accent: var(--state-approval);
 }
 
+/* Which states pull the eye harder: a brighter ring and a wider glow, never
+   a loop (the one-moving-thing rule: the face's own light is what moves). */
+html[data-state="streaming"] .reactor,
+html[data-state="error"] .reactor,
+html[data-state="approval"] .reactor {
+  filter: drop-shadow(0 0 12px var(--core-glow));
+  box-shadow: 0 0 26px -5px var(--core-glow);
+}
+
+html[data-state="approval"] .reactor::after {
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--sheen-rgb) / 0.18),
+    inset 0 0 12px -2px var(--core-glow);
+}
+
 @media (prefers-reduced-motion: reduce) {
   /* `voice.js` already writes a flat zero here, so this is belt and braces
      for the frame between the media query flipping and the next tick. */
@@ -373,28 +453,28 @@ html[data-state="approval"] .reactor {
   }
 }
 
-/* While a reply streams - or an error is showing - the frame's own light is
-   what moves, so the bar adds nothing but a little more glow. The rings used
-   to spin here and in the error below; the face's own state now says both (a
-   thinking orb, a still concerned look and the error ring, docs/CRITTERS.md,
-   "Two still rings"), which also keeps the bar down to one moving thing. */
-html[data-state="streaming"] .reactor,
-html[data-state="error"] .reactor {
-  filter: drop-shadow(0 0 12px var(--accent));
-}
-
 /* --------------------------------------------------------------------------
-   Route badge + bar controls
+   The bar's second row: THREE zones - model pill, modes, window utilities
+   (2026-10-20). It used to be one undivided run of controls under the input;
+   the zones are what the owner's screenshot called "12 ungrouped controls".
+   DOM order is the reading order and `space-between` spreads the zones across
+   the bar; at 200% text they still wrap instead of running off the edge. Every
+   id, handler and aria hook inside is unchanged.
    -------------------------------------------------------------------------- */
 
 .bar-meta {
-  flex: 0 1 auto;
+  flex: 1 1 100%;
   min-width: 0;
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  gap: 6px 12px;
+  /* The hairline the screenshot's "bottom strip" was missing: it separates
+     the controls from the input row without adding a box or any height (an
+     inset shadow occupies no layout), so the bar stays exactly
+     `--bar-height` tall and `#stack` still gets every pixel below it. */
+  box-shadow: inset 0 1px 0 var(--border);
 }
 
 .route {
@@ -3682,4 +3762,175 @@ thead .st-cell {
   margin-top: 2px;
   color: var(--text-faint);
   font-size: var(--text-xs);
+}
+
+/* ==========================================================================
+   The bar's redesign (2026-10-20): the three zones under the input
+   --------------------------------------------------------------------------
+   The owner's screenshot said it plainly: the controls below the input were
+   one undivided row, several of them were icons with no word, the model and
+   the lane were two separate wide pills, and the face sat in a black square.
+   The face square is fixed on `.reactor` above (circular clip - the frame's
+   own drawing is untouched). This section is the other half: three zones,
+   short visible labels, and one compound pill. Every id, click handler,
+   aria-pressed meaning and screen-reader name is the one that was already
+   there; this section only groups and paints.
+
+   Tokens only: every colour below is a theme.css variable or a
+   `rgb(var(--hue-rgb) / a)` tint (scripts/check-tokens.py and tokens.mjs hold
+   that line), so deep-space, paper and high-contrast all move together.
+   ========================================================================== */
+
+/* ── Zone 1: the compound model + lane pill ──────────────────────────────── */
+
+.model-pill {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+/* The hairline between the halves. It exists in the markup so both halves
+   stay separate, focusable/readable nodes; it is only SHOWN while the preset
+   half is really on the bar - #preset-chip stays `hidden` until the PC names
+   a preset, so on a bar that has not been told one the pill is just the route
+   badge, exactly as before. */
+.model-pill-sep {
+  display: none;
+}
+
+.model-pill:has(#preset-chip:not([hidden])) .model-pill-sep {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 1px;
+  height: 14px;
+  background: var(--border-strong);
+}
+
+/* Joined: the two chips keep their own border, background and hover rules,
+   and only their inner corners lose the radius so the pair reads as one
+   control with a hairline between the halves. */
+.model-pill:has(#preset-chip:not([hidden])) #preset-chip {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right-width: 0;
+  padding-right: 8px;
+}
+
+.model-pill:has(#preset-chip:not([hidden])) #route {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left-width: 0;
+  padding-left: 8px;
+}
+
+/* ── Zone 2: the labelled mode chips ─────────────────────────────────────── */
+
+.mode-strip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* A mode chip: 16px icon + one visible word, the same pill family as the
+   route badge next to it. The word is aria-hidden because each button's
+   accessible name is its own existing one (an aria-label, or the sr-only
+   label main.js rewrites) - the label here is for the eye, not a second name.
+   At rest the chip is a faint wash so the row reads as five controls, not as
+   loose words; pressed uses the bar's existing accent treatment. */
+.icon-button.mode-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: auto;
+  height: 28px;
+  padding: 0 9px;
+  border-radius: var(--radius-chip);
+  background: rgb(var(--sheen-rgb) / 0.045);
+  border-color: var(--border);
+}
+
+.icon-button.mode-chip svg {
+  width: 16px;
+  height: 16px;
+}
+
+.chip-label {
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* A pressed mode gets the bar's existing "this control is active" treatment
+   (the [aria-pressed="true"] rule further up) plus one soft glow, so the
+   active mode is visible from across the desk instead of only by colour. */
+.icon-button.mode-chip[aria-pressed="true"] {
+  box-shadow: 0 0 14px -6px var(--accent-dim);
+}
+
+/* Temporary chat is a state of the whole chat, not a mode that tints the
+   bar: it keeps the pressed pill but the bar's own dashed outline (the
+   `.shell[data-temporary="true"] .bar` rule) remains the loudest sign. */
+
+/* ── Zone 3: the window utilities ────────────────────────────────────────── */
+
+.utility-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+}
+
+/* The one documented keyboard shortcut the bar has (Esc hides it, the same
+   command the close button calls). A badge, not a second button: it takes no
+   focus and no click, and the button's own title still names the key. */
+.key-badge {
+  display: grid;
+  place-items: center;
+  min-width: 24px;
+  height: 18px;
+  padding: 0 4px;
+  margin-left: 2px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--surface-1);
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  line-height: 1;
+}
+
+/* ── The primary action: the submit keycap on the input row ──────────────── */
+
+/* #submit-hint is a HINT, not a control: Enter in the textarea is the one
+   submit path (main.js's keydown). It sits beside the input it sends, with
+   the accent edge so the primary action is unmistakable at a glance. */
+#submit-hint {
+  flex: 0 0 auto;
+  min-width: 34px;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--border-accent);
+  border-bottom-width: 2px;
+  border-radius: 9px;
+  background: var(--accent-faint);
+  color: var(--accent-bright);
+  font-size: 15px;
+  box-shadow: 0 0 16px -8px var(--accent-dim);
+}
+
+/* Forced-colors mode must keep the focus/hover affordances even though the
+   decorative glass is dropped by the OS. */
+@media (forced-colors: active) {
+  .reactor,
+  .reactor::after,
+  .utility-cluster,
+  .key-badge,
+  #submit-hint {
+    border-color: ButtonBorder;
+    forced-color-adjust: auto;
+  }
 }
