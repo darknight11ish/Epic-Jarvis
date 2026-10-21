@@ -474,7 +474,17 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
 #model-warn #model-warn-host{color:var(--dim); opacity:.85;}
 
 /* ---------- responsive ---------------------------------------------- */
-.rail-toggle{display:none;}
+.rail-toggle{display:none; position:relative; z-index:30;}
+/* The visible way out of the right-rail drawer (field bug 2026-10-21: the
+   drawer opened over the toggle that opened it and there was no other
+   control). It sits at the drawer's top-LEFT so the toggle, which stays above
+   the drawer at the top-right, never covers it; shown only while the rail IS
+   the overlay (narrow window or Ambient). */
+#rail-close{
+  display:none; position:absolute; top:8px; left:8px; z-index:3;
+  align-items:center; justify-content:center; width:30px; height:30px;
+  padding:0; font-size:15px; line-height:1; border-radius:9px;
+}
 @media (max-width:1080px){
   #shell{grid-template-columns:188px minmax(0,1fr);}
   .rail.right{
@@ -483,6 +493,7 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
     border-left:1px solid var(--line-hot); box-shadow:-18px 0 44px rgb(var(--shade-rgb) / .55);
   }
   .rail.right.open{transform:none;}
+  .rail.right.open #rail-close{display:inline-flex;}
   .rail-toggle{display:flex;}
 }
 @media (max-width:720px){
@@ -889,9 +900,12 @@ html[data-hud-layout="ambient"] .rail.right{
   box-shadow:-18px 0 44px rgb(var(--shade-rgb) / .55);
 }
 html[data-hud-layout="ambient"] .rail.right.open{transform:none;}
+html[data-hud-layout="ambient"] .rail.right.open #rail-close{display:inline-flex; top:62px;}
 html[data-hud-layout="ambient"] .rail-toggle{display:flex;}
 html[data-hud-layout="ambient"] .stage-bar{
-  position:fixed; top:14px; right:16px; z-index:25;
+  /* Above the Ambient drawer's z-index:40, so the Telemetry toggle in this
+     pill can always be clicked to close it (field bug 2026-10-21). */
+  position:fixed; top:14px; right:16px; z-index:45;
   width:auto; min-height:0; padding:8px 12px; gap:8px;
   border:1px solid rgb(var(--accent-rgb) / .22); border-radius:999px;
   background:linear-gradient(180deg, rgb(var(--surface-2) / .86), rgb(var(--surface-1) / .74));
@@ -1202,7 +1216,8 @@ html[data-hud-layout="ambient"] .composer{
           <span class="lc-glyph" aria-hidden="true">&#9678;</span><span class="lc-name">Ambient</span>
         </button>
       </div>
-      <button class="ghost rail-toggle" id="rail-toggle">Telemetry</button>
+      <button class="ghost rail-toggle" id="rail-toggle" type="button"
+              aria-controls="rail-right" aria-expanded="false">Telemetry</button>
     </div>
 
     <!-- Studio layout only: the Inspector Stage's tabs. They choose what the
@@ -1304,6 +1319,11 @@ html[data-hud-layout="ambient"] .composer{
 
   <!-- ============ RIGHT RAIL ============ -->
   <aside class="rail right" id="rail-right">
+    <!-- The drawer's own way out (field bug 2026-10-21): visible while it is
+         open, at the top-left so the Telemetry toggle above it is never in
+         the way. Escape and the toggle itself close it too. -->
+    <button class="ghost" id="rail-close" type="button" aria-label="Close telemetry"
+            title="Close telemetry" tabindex="-1" aria-hidden="true">&#10005;</button>
     <!-- Cockpit layout's Bento inspector, first card: the approval queue's
          live count. The cards THEMSELVES stay in #approvals on the stage,
          where they already were and where the page's own tests read them;
@@ -2843,17 +2863,42 @@ $("insp-ask").addEventListener("click", () => {
 (function railDrawer(){
   const toggle = document.getElementById("rail-toggle");
   const rail = document.getElementById("rail-right");
+  const close = document.getElementById("rail-close");
   if(!toggle || !rail) return;
-  const paint = () => toggle.setAttribute("aria-expanded",
-    rail.classList.contains("open") ? "true" : "false");
-  toggle.addEventListener("click", () => { rail.classList.toggle("open"); paint(); });
-  window.addEventListener("keydown", (event) => {
-    if(event.key !== "Escape" || !rail.classList.contains("open")) return;
+  const isOpen = () => rail.classList.contains("open");
+  const paint = () => {
+    const open = isOpen();
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    // While the drawer is open the toggle is also a way out, and says so.
+    toggle.textContent = open ? "Hide telemetry" : "Telemetry";
+    if(close){
+      close.setAttribute("aria-hidden", open ? "false" : "true");
+      close.setAttribute("tabindex", open ? "0" : "-1");
+    }
+  };
+  const closeRail = (returnFocus) => {
+    if(!isOpen()) return;
     rail.classList.remove("open");
     paint();
-    toggle.focus();
-  });
+    if(returnFocus) toggle.focus();
+  };
   paint();
+  toggle.addEventListener("click", () => {
+    if(isOpen()){ closeRail(true); return; }
+    rail.classList.add("open");
+    paint();
+  });
+  if(close) close.addEventListener("click", () => closeRail(true));
+  window.addEventListener("keydown", (event) => {
+    if(event.key !== "Escape" || !isOpen()) return;
+    // Never take Escape away from a field being typed in, or from a dialog
+    // somebody opened on top: this hook owns only this drawer.
+    const t = event.target;
+    if(t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+    if(document.querySelector("dialog[open], [data-overlay].open")) return;
+    event.preventDefault();
+    closeRail(true);
+  });
 })();
 
 function renderLanes(){
