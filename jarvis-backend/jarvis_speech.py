@@ -914,6 +914,12 @@ def reload_engines() -> None:
         pass
     # The warm-up and the "One moment." clip were made with the old ones.
     _flow("reset_warm")
+    # Kept reflex confirmations are sounds too: another model file or voice
+    # pack makes a different sound, so they must not survive this.
+    try:
+        reflex_clear()
+    except Exception:
+        pass
 
 
 # --------------------------------------------------------------------------
@@ -3370,6 +3376,303 @@ def tts_speaker(voices_module=None) -> int:
     return v if v >= 0 else 0
 
 
+# --------------------------------------------------------------------------
+#   The reflex confirmations: a quick command's fixed answer, made once per
+#   voice and handed back without running ONNX again (2026-10-21)
+# --------------------------------------------------------------------------
+#
+# THE PREMISE, CHECKED BEFORE ANY OF THIS WAS WRITTEN. The audit this slice
+# came from said "Kokoro waits for a full sentence before it can start; split
+# the first fragment at four words". That is not true of this backend: nothing
+# here waits for a sentence. The one route that speaks, /api/voice/say
+# (voice-503.patch), hands the client's text straight to say() -> _synthesise()
+# -> kokoro_speak(), and each speaks exactly the text it was given. The
+# first-piece rule lives in the CLIENTS and both already cut the first piece
+# short (the desktop's speech-pieces.js: first comma after 10 characters, owner
+# decision 2026-09-24; the phone's SpeechText.kt is its own stream2sentence
+# port). So no splitter is added here - only the second half of the audit's
+# idea, which is genuinely missing.
+#
+# WHAT IT IS. jarvis_quick.py answers its own fixed commands in plain words,
+# without the model: "Added to your to-do list.", "Marked done.", "Resumed."
+# and the rest of REFLEX_TEXTS below - every one a literal in that file. The
+# words never change and hold nothing private, so the SOUND need not be made
+# twice either: the first time one is spoken in a voice it is kept, and a
+# repeat in the same voice is handed back as the same PCM with NO ONNX call.
+#
+# WHAT IT IS NOT, on purpose - this is the speak path, not a general cache:
+#   * ONLY the exact strings in REFLEX_TEXTS, and only while the BUILT-IN
+#     Kokoro voice speaks them. An owner's custom voice makes its own sound
+#     every time (different engine; this slice keeps nothing it made).
+#   * A confirmation with a number, a name or a list in it ("Timer set for 10
+#     minutes.", "Added 3 items to your shopping list.") is NOT here: its text
+#     changes, so it is synthesised normally - and never cached.
+#   * NOTHING derived from any other text can enter. A private answer, a
+#     recalled fact or anything the model wrote is synthesised every time; the
+#     whitelist is the whole of what may be kept (rule #492/#504's spirit: a
+#     private turn is never served out of a cache).
+#   * say()'s own rules are NOT skipped on a hit - the stop-word echo, "is
+#     Jarvis speaking", the quiet clock and the timing row all run exactly as
+#     before; only the synthesis is skipped.
+#   * the key is the whole sound recipe (active voice, engine, speaker, speed,
+#     pitch, crisis/plain voice, and the three Kokoro model files' sizes), so
+#     another voice, another speed or a replaced voice pack can never reuse a
+#     sound made for an older one. reload_engines() empties it too.
+#   * bounded: REFLEX_MAX entries, the least recently used goes first.
+
+#: The fixed confirmations jarvis_quick.py writes itself. Every one is a
+#: literal in that file; the audit's own list ("Done.", "Timer set.",
+#: "Reminder saved.", "Added to Today.", "Stopped.", "Muted.") was checked
+#: against the tree and only "Done." exists there - the rest of the real list
+#: is below.
+REFLEX_TEXTS = (
+    "Added to your to-do list.",
+    "That is already on your to-do list.",
+    "Marked done.",
+    "Resumed.",
+    "No timer is running.",
+    "No alarm is set.",
+    "Thinking is currently off.",
+    "Here you go.",
+    "I've stopped watching.",
+    "No briefing is set up.",
+    "Done.",
+)
+#: Most sounds kept - about two voices' worth of the list above, so a voice
+#: the owner switched away from is still there if they switch back, and the
+#: memory cannot grow without bound.
+REFLEX_MAX = 24
+
+_REFLEX: "dict[tuple, tuple]" = {}       # (voice key, text) -> (samples, rate, mouth payload)
+_REFLEX_ORDER: list = []                 # the same keys, oldest used first
+_REFLEX_LOCK = threading.Lock()
+_REFLEX_STATS = {"hits": 0, "misses": 0}
+_REFLEX_WARM: dict = {"key": None, "busy": False}
+
+
+def _reflex_key(voices_module, voice_now, *, plain: bool) -> Optional[tuple]:
+    """The whole sound recipe a kept confirmation belongs to, or None when it
+    cannot be read (then nothing is cached or reused).
+
+    Anything that would make the sound differ is in here: which voice and
+    engine is active (a custom voice's brief), the built-in speaker number,
+    speed and pitch rise, whether this is the plain crisis voice, and the
+    sizes of the three Kokoro model files - so a replaced voice pack or model
+    is a different key, not a stale hit."""
+    if not voice_now:
+        return None
+    try:
+        sid, speed, semis = voice_now
+        active, engine = "builtin", "kokoro"
+        if voices_module is not None and hasattr(voices_module, "brief"):
+            try:
+                b = voices_module.brief() or {}
+                active = str(b.get("active") or "builtin")
+                engine = str(b.get("engine") or "kokoro")
+            except Exception:
+                active, engine = "builtin", "kokoro"
+        paths = _sherpa_tts_paths()
+        sizes = []
+        for name in ("model", "voices", "tokens"):
+            try:
+                sizes.append(os.path.getsize(paths[name]))
+            except Exception:
+                sizes.append(-1)
+        return (active, engine, int(sid), round(float(speed), 4),
+                round(float(semis), 4), bool(plain), tuple(sizes))
+    except Exception:
+        return None
+
+
+def _reflex_lookup(text, voices_module, voice_now, *, plain: bool) -> Optional[tuple]:
+    """(samples, rate, mouth payload) kept for this exact confirmation in this
+    voice, or None. Only a REFLEX_TEXTS string is ever looked up."""
+    if text not in REFLEX_TEXTS:
+        return None
+    key = _reflex_key(voices_module, voice_now, plain=plain)
+    if key is None:
+        return None
+    with _REFLEX_LOCK:
+        got = _REFLEX.get((key, text))
+        if got is None:
+            _REFLEX_STATS["misses"] += 1
+            return None
+        try:
+            _REFLEX_ORDER.remove((key, text))
+        except ValueError:
+            pass
+        _REFLEX_ORDER.append((key, text))
+        _REFLEX_STATS["hits"] += 1
+        return got
+
+
+def _reflex_remember(text, voices_module, voice_now, audio, mouth, *, plain: bool) -> None:
+    """Keep the sound just made for one confirmation in this voice. Called only
+    from the built-in Kokoro path, with the result it really made."""
+    if audio is None or text not in REFLEX_TEXTS or audio[0] is None:
+        return
+    try:
+        if len(audio[0]) == 0:
+            return
+    except Exception:
+        return
+    key = _reflex_key(voices_module, voice_now, plain=plain)
+    if key is None:
+        return
+    payload = (mouth[0] or None) if mouth else None
+    with _REFLEX_LOCK:
+        _REFLEX[(key, text)] = (audio[0], audio[1], payload)
+        try:
+            _REFLEX_ORDER.remove((key, text))
+        except ValueError:
+            pass
+        _REFLEX_ORDER.append((key, text))
+        while len(_REFLEX_ORDER) > REFLEX_MAX:
+            oldest = _REFLEX_ORDER.pop(0)
+            _REFLEX.pop(oldest, None)
+
+
+def reflex_clear() -> None:
+    """Throw every kept confirmation away (reload_engines calls this: a new
+    voice pack or model path is a different sound). Tests use it too."""
+    with _REFLEX_LOCK:
+        _REFLEX.clear()
+        _REFLEX_ORDER.clear()
+        _REFLEX_STATS.update(hits=0, misses=0)
+        _REFLEX_WARM.update(key=None, busy=False)
+
+
+def _reflex_ready(voices_module, voice_now, *, plain: bool = False) -> int:
+    """How many of REFLEX_TEXTS are already kept for this voice."""
+    key = _reflex_key(voices_module, voice_now, plain=plain)
+    if key is None:
+        return 0
+    with _REFLEX_LOCK:
+        return sum(1 for t in REFLEX_TEXTS if (key, t) in _REFLEX)
+
+
+def reflex_status() -> dict:
+    """Numbers only, in memory: what the reflex cache holds right now. Never
+    the text of anything (it only ever holds the fixed list above anyway)."""
+    with _REFLEX_LOCK:
+        return {"texts": len(REFLEX_TEXTS), "max": REFLEX_MAX,
+                "entries": len(_REFLEX), "voices": len({k for k, _t in _REFLEX}),
+                "hits": _REFLEX_STATS["hits"], "misses": _REFLEX_STATS["misses"],
+                "warm": {"key": _REFLEX_WARM["key"], "busy": bool(_REFLEX_WARM["busy"])}}
+
+
+def reflex_warm(*, wait: bool = True, spawn: Optional[Callable] = None) -> dict:
+    """Make and keep every reflex confirmation in the voice in use now.
+
+    Called on its own thread after a sound is made in a new voice, so the next
+    quick command is instant; `wait=False` starts that thread. A custom voice
+    is skipped - it makes its own sound every time. Never raises; without a
+    Kokoro voice there is nothing to make."""
+    try:
+        V = _voices_mod()
+        active = "builtin"
+        if V is not None and hasattr(V, "brief"):
+            try:
+                active = str((V.brief() or {}).get("active") or "builtin")
+            except Exception:
+                active = "builtin"
+        if active != "builtin":
+            return {"ok": True, "ready": 0, "made": 0,
+                    "skipped": "a custom voice speaks; it makes its own sound every time"}
+        if not wait:
+            def work():
+                try:
+                    reflex_warm(wait=True)
+                finally:
+                    with _REFLEX_LOCK:
+                        _REFLEX_WARM.update(busy=False)
+            try:
+                (spawn or _reflex_spawn)(work)
+            except Exception:
+                with _REFLEX_LOCK:
+                    _REFLEX_WARM.update(busy=False)
+            return {"ok": True, "ready": _reflex_ready(V, tts_voice(V)), "made": 0}
+        engine = _tts_engine()
+        if engine is None:
+            return {"ok": False, "ready": 0, "made": 0,
+                    "why": "no Kokoro voice is installed on this PC"}
+        voice_now = tts_voice(V)
+        key = _reflex_key(V, voice_now, plain=False)
+        if key is None:
+            return {"ok": False, "ready": 0, "made": 0,
+                    "why": "the voice settings could not be read"}
+        made = 0
+        for text in REFLEX_TEXTS:
+            with _REFLEX_LOCK:
+                if (key, text) in _REFLEX:
+                    continue
+            try:
+                audio = kokoro_speak(engine, text, *voice_now)
+            except Exception:
+                continue
+            if audio is None or audio[0] is None:
+                continue
+            try:
+                if len(audio[0]) == 0:
+                    continue
+            except Exception:
+                continue
+            _reflex_remember(text, V, voice_now, audio, None, plain=False)
+            made += 1
+        with _REFLEX_LOCK:
+            _REFLEX_WARM.update(key=key, busy=False)
+        return {"ok": True, "ready": _reflex_ready(V, voice_now), "made": made, "key": key}
+    except Exception:
+        with _REFLEX_LOCK:
+            _REFLEX_WARM.update(busy=False)
+        return {"ok": False, "ready": 0, "made": 0, "why": "the warm-up failed"}
+
+
+def _reflex_spawn(fn: Callable[[], None]) -> None:
+    # NOT a daemon thread: like jarvis_voice_flow's own warm-up, this runs the
+    # ONNX engine, and a daemon thread still inside it when Python exits aborts
+    # the process. It is waited for instead - a second or two, once per voice.
+    threading.Thread(target=fn, name="jarvis-reflex", daemon=False).start()
+
+
+def _reflex_warm_soon(voices_module=None) -> None:
+    """Start making the confirmations for the voice in use now, once, after a
+    sound was made in it. Never raises and never blocks the caller."""
+    try:
+        if not _cfg("warm_engines", True):
+            return
+        V = voices_module if voices_module is not None else _voices_mod()
+        if V is not None and hasattr(V, "brief"):
+            try:
+                if str((V.brief() or {}).get("active") or "builtin") != "builtin":
+                    return
+            except Exception:
+                pass
+        # Only when a Kokoro voice is really installed: a suite's stand-in
+        # engine, or a PC with no voice pack, has nothing to warm.
+        try:
+            paths = _sherpa_tts_paths()
+            if not _files_present(paths["model"], paths["voices"], paths["tokens"]):
+                return
+        except Exception:
+            return
+        voice_now = tts_voice(V)
+        key = _reflex_key(V, voice_now, plain=False)
+        if key is None:
+            return
+        with _REFLEX_LOCK:
+            if _REFLEX_WARM["busy"]:
+                return
+            done = sum(1 for t in REFLEX_TEXTS if (key, t) in _REFLEX)
+            if _REFLEX_WARM["key"] == key and done == len(REFLEX_TEXTS):
+                return
+            _REFLEX_WARM.update(key=key, busy=True)
+        reflex_warm(wait=False)
+    except Exception:
+        with _REFLEX_LOCK:
+            _REFLEX_WARM.update(busy=False)
+
+
 def _synthesise(text: str, *, start_better: bool = True,
                 mouth: Optional[list] = None, plain: bool = False) -> tuple:
     """The sound for `text`, and nothing else - no timing row, nothing
@@ -3410,6 +3713,7 @@ def _synthesise(text: str, *, start_better: bool = True,
     engine = _tts_engine()
     if engine is None:
         return None, 0, "none", voice, fallback, note, "no Kokoro voice is installed"
+    voice_now: Optional[tuple] = None
     try:
         # The animal's pitch rise (tts_pitch) is 0 unless "Voice follows the
         # face" speaks for an animal face - and never for a crisis answer
@@ -3417,11 +3721,24 @@ def _synthesise(text: str, *, start_better: bool = True,
         # (`plain` is passed only when set, so a stand-in tts_voice with the
         # older one-argument shape still works for every other sentence.)
         voice_now = tts_voice(jarvis_voices, plain=True) if plain else tts_voice(jarvis_voices)
+        # A fixed quick confirmation this voice has already said: hand back the
+        # same PCM. Only the exact REFLEX_TEXTS strings can hit; everything
+        # else is synthesised as always and never kept (see the section above).
+        kept = _reflex_lookup(text, jarvis_voices, voice_now, plain=plain)
+        if kept is not None:
+            samples, rate, payload = kept
+            if mouth is not None and payload:
+                mouth.append(payload)
+            return samples, rate, "kokoro", voice, fallback, note, ""
         audio = kokoro_speak(engine, text, *voice_now, mouth=mouth)
     except Exception:
         return None, 0, "none", voice, fallback, note, "Kokoro failed"
     if audio is None:
         return None, 0, "none", voice, fallback, note, "Kokoro made no sound"
+    # Kept only if it is one of the fixed confirmations (a no-op otherwise), and
+    # the rest of the list is made in the background for the next quick command.
+    _reflex_remember(text, jarvis_voices, voice_now, audio, mouth, plain=plain)
+    _reflex_warm_soon(jarvis_voices)
     return audio[0], audio[1], "kokoro", voice, fallback, note, ""
 
 
