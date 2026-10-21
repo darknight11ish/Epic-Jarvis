@@ -72,36 +72,38 @@ reads the question with each of the top facts and puts the best first
 (today: `Xenova/ms-marco-MiniLM-L-6-v2`, switched off until it is shown to
 help).
 
-Tried here: the meaning models `Qwen/Qwen3-Embedding-0.6B-Q` and
-`google/embeddinggemma-300m`, and the re-rankers
-`Xenova/ms-marco-MiniLM-L-12-v2` and `jinaai/jina-reranker-v1-turbo-en`.
+Tried here: the re-rankers `Xenova/ms-marco-MiniLM-L-12-v2` and
+`jinaai/jina-reranker-v1-turbo-en` (both still available), and for the
+meaning model any name in Jarvis's own list of meaning models
+(`jarvis_memory.ONNX_EMBED_MODELS`, 28 of them - pass it with
+`--embedders`, for example `--embedders BAAI/bge-base-en-v1.5`).
 
-### 2a. First, the newer fastembed (only for the two meaning models)
+### 2a. The two newer meaning models are no longer available
 
-The two new meaning models need **fastembed 0.8.1** (fastembed is the
-library that runs these models on the processor). Jarvis's locked package
-list (`backend/requirements.lock`) still says 0.8.0, on purpose: it only
-takes a release once it is 7 days old, so a hijacked release has time to
-be noticed, and 0.8.1 came out on 22 September 2026 - it is old enough from
-**30 September 2026**. Until the list is remade, this one line installs just
-fastembed 0.8.1 (nothing else changes; the file is checked against its
-published fingerprint first, and 0.8.1 asks for exactly the same other
-packages as 0.8.0):
+The first version of this page said to try `Qwen/Qwen3-Embedding-0.6B-Q` and
+`google/embeddinggemma-300m` for the meaning model, and gave one line that
+installed **fastembed 0.8.1** by hand to make them available. **That is all
+obsolete, and neither model can be tried any more.**
 
-```powershell
-Set-Content -Path "$env:TEMP\fastembed-0.8.1.txt" -Value 'fastembed==0.8.1 --hash=sha256:b4f4043080af36ee820d22d2d3034df635c1a8b9764e5d2a642bc7aeb1d0e749'; py -3 -m pip install --no-deps --require-hashes -r "$env:TEMP\fastembed-0.8.1.txt"; Write-Host "Done. fastembed 0.8.1 is installed for py -3 (the list it came from is in your TEMP folder)."
-```
-
-Without it, the tryout still runs the re-rankers and says which models it
-skipped. `apply-patches.ps1` leaves 0.8.1 in place (it installs from
-`requirements.txt`, which names no version).
+Both models only ever arrived in fastembed 0.8.1. Jarvis's locked package
+list pins fastembed **0.8.0**, so **neither meaning model was ever in the
+locked install** - the hand-install was the only way to get them, and it was
+never the way Jarvis itself was installed. And Jarvis no longer uses the
+fastembed library at all: the backend runs the models on ONNX Runtime
+directly now, with fastembed 0.8.0's own model list copied into the code. The
+two models are not in that list, so the tryout refuses them with a plain
+sentence instead of running them, and there is no install line that would
+change that. The re-rankers below are unaffected and still work.
 
 ### 2b. The tryout
 
-About **1 to 3 hours** (longer the first time: each model downloads once,
-about 1.1 GB and 1.2 GB for the two meaning models). It uses made-up facts
-in a temporary folder, never your memory, and the graphics card is not used,
-so Jarvis keeps working (a little slower while it runs). **Run
+About **1 to 3 hours** (longer the first time: each model downloads once -
+about 130 MB for bge-small, more for the bigger meaning models, and about
+80 MB per re-ranker). It uses made-up facts in a temporary folder, never your
+memory, and the graphics card is not used, so Jarvis keeps working (a little
+slower while it runs). A model this build does not have, or one that cannot
+be downloaded on your PC, is said plainly in the output and skipped - the run
+carries on with the models that do work. **Run
 `apply-patches.ps1` first**: the switches it uses are new in
 `jarvis_memory.py`.
 
@@ -126,13 +128,14 @@ settings (each one line; quit Jarvis from the tray and start it again
 afterwards):
 
 - A meaning model - use the model's exact name and the distance floor the
-  tryout printed for it:
-  `[Environment]::SetEnvironmentVariable('JARVIS_MEMORY_EMBED_MODEL', 'Qwen/Qwen3-Embedding-0.6B-Q', 'User'); [Environment]::SetEnvironmentVariable('JARVIS_MEMORY_MAX_DISTANCE', '0.9', 'User'); Write-Host 'Saved. Quit Jarvis from the tray and start it again.'`
+  tryout printed for it (this is one example that this build can run - try it
+  with `--embedders BAAI/bge-base-en-v1.5` first):
+  `[Environment]::SetEnvironmentVariable('JARVIS_MEMORY_EMBED_MODEL', 'BAAI/bge-base-en-v1.5', 'User'); [Environment]::SetEnvironmentVariable('JARVIS_MEMORY_MAX_DISTANCE', '0.9', 'User'); Write-Host 'Saved. Quit Jarvis from the tray and start it again.'`
   **Jarvis then works out every saved fact's numbers again** with the new
   model - never a mix of old and new (the store notices the model changed,
   even when the numbers have the same length). Until that has finished,
-  facts are still found by their words. A name the installed fastembed does
-  not have is refused in plain words and bge-small is kept.
+  facts are still found by their words. A name this build's meaning-model
+  list does not have is refused in plain words and bge-small is kept.
   **One thing the tryout does not measure:** the learner's "is this the same
   fact said twice?" check also compares facts with the meaning model, and
   its cut-off (`NEAR_DUP_MIN` in `jarvis_intake.py`) was set for bge-small.
