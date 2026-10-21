@@ -810,23 +810,176 @@ await check("with the OS asking for less motion, the face redraws at most ~10 ti
   assert.deepEqual(problems, []);
 });
 
-await check("the HUD says what the link is doing, live, under the brand", async () => {
-  // #brand-sub was written once at boot from an Ollama probe and never again.
-  // The bootstrap now keeps its own line under it, from every link push.
+await check("the model truth and the link truth are said once, in ONE status row", async () => {
+  // Field defect 2026-10-21: the installed app showed "ONLINE · LOCAL FIRST"
+  // above "LINKED · LOCAL FIRST" - the same truth twice, because the page's
+  // boot-time #brand-sub and the shell bootstrap's injected line each carried
+  // a version of it. There is ONE row now: hud_bootstrap.js pushes the link
+  // words to the page (jarvis-link-status) and the page says both truths once.
   const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
-  const line = () => page.locator("#jarvis-link-line").textContent();
+  const row = () => brandOf(page);
+  // The marker the bootstrap reads to know the page composes the row itself.
+  assert.equal(
+    await page.evaluate(() => document.documentElement.getAttribute("data-hud-link-row")),
+    "1", "the page did not declare that it composes the one status row");
   await page.evaluate(() => window.__jarvisFeed("link", { connected: true, stale: false }));
-  assert.match(await line(), /linked/);
+  await K.until(page, "the one row to say the model and the link", async () =>
+    (await brandOf(page)).trim() === "online · linked", { ms: 8000 });
+  // The full sentence is the row's tooltip: the rail is only 191px wide at its
+  // widest, and "online · local first · linked" measures 204 - kept visible
+  // short so the row never wraps into the two lines the field test reported.
+  assert.match(await page.locator("#brand-sub").getAttribute("title"), /local first/,
+    "the full status sentence is not in the row's tooltip");
+  const fitsOneLine = await page.evaluate(() => {
+    const sub = document.getElementById("brand-sub");
+    return sub.scrollWidth <= sub.clientWidth + 1;
+  });
+  assert.ok(fitsOneLine, "the status row wraps onto a second line");
+  assert.equal(await page.locator("#jarvis-link-line").count(), 0,
+    "the bootstrap drew its own second line on a page that composes the row itself");
+  const visibleStatusLines = await page.evaluate(() =>
+    [...document.querySelectorAll("#brand-sub, #jarvis-link-line")]
+      .filter((n) => {
+        const r = n.getBoundingClientRect();
+        const cs = getComputedStyle(n);
+        return cs.display !== "none" && cs.visibility !== "hidden" && r.width > 1 && r.height > 1;
+      }).length);
+  assert.equal(visibleStatusLines, 1,
+    `${visibleStatusLines} status lines are displayed - the duplicate is back`);
   await page.evaluate(() => window.__jarvisFeed("link", { connected: true, stale: true }));
-  assert.match(await line(), /stale/, "a stale-but-connected link still read as linked");
+  await K.until(page, "the row to say the link is reconnecting", async () =>
+    (await brandOf(page)).includes("reconnecting"), { ms: 8000 });
   await page.evaluate(() => window.__jarvisFeed("link",
     { connected: false, stale: true, error: "Jarvis is not running at http://127.0.0.1:4719. Start it." }));
-  assert.match(await line(), /^offline · Jarvis is not running/);
-  // The page's own Ollama hint is left alone.
-  assert.ok((await page.locator("#brand-sub").textContent()).length > 0);
+  await K.until(page, "the row to say the link is offline", async () =>
+    /^offline · Jarvis is not running/.test((await brandOf(page)).trim()), { ms: 8000 });
   await page.close();
   assert.deepEqual(problems, []);
 });
+
+await check("an older page still gets the bootstrap's own link line (version skew loses nothing)", async () => {
+  // The live page is copied to the backend separately from the app, so a new
+  // shell can meet a page that does not compose the row itself. Simulated by
+  // removing the marker: the bootstrap's fallback line must come back and
+  // carry the link, rather than the link state disappearing.
+  const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  await page.evaluate(() => document.documentElement.removeAttribute("data-hud-link-row"));
+  await page.evaluate(() => window.__jarvisFeed("link", { connected: true, stale: false }));
+  await K.until(page, "the fallback line to say linked", async () =>
+    (await page.locator("#jarvis-link-line").textContent().catch(() => "")).includes("linked"),
+    { ms: 8000 });
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+/* The HUD must fit the window it is given (field defect 2026-10-21: it was
+ * restored at 815x691, below its 960x640 minimum, and the layout picker and
+ * the right-hand controls were off-screen; the app's own Text-size / Ctrl+=
+ * zoom shrinks the CSS viewport without changing the window, which looks the
+ * same to the page). These two sizes are the ones the Lead named; the window
+ * itself is clamped to the minimum in window_memory.rs. */
+for (const [width, height] of [[960, 640], [1280, 820]]) {
+  await check(`at ${width}x${height} every control is reachable and nothing overflows`, async () => {
+    const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false },
+      { viewport: { width, height } });
+    const measure = () => page.evaluate(() => {
+      const box = (selector) => {
+        const node = document.querySelector(selector);
+        if (!node) return null;
+        const r = node.getBoundingClientRect();
+        const cs = getComputedStyle(node);
+        return { x: Math.round(r.x), y: Math.round(r.y), right: Math.round(r.right),
+                 w: Math.round(r.width), h: Math.round(r.height), display: cs.display,
+                 visible: cs.display !== "none" && cs.visibility !== "hidden" &&
+                          r.width > 1 && r.height > 1 };
+      };
+      return {
+        vw: innerWidth, vh: innerHeight,
+        scrollW: document.documentElement.scrollWidth,
+        bodyW: document.body.scrollWidth,
+        layout: document.body.dataset.hudLayout,
+        stored: localStorage.getItem("jarvis.hud.layout"),
+        picker: [...document.querySelectorAll("[data-hud-layout-choice]")].map((b) => {
+          const r = b.getBoundingClientRect();
+          return { layout: b.dataset.hudLayoutChoice,
+                   inView: r.left >= 0 && r.right <= innerWidth && r.width > 0 };
+        }),
+        railRight: box("#rail-right"), toggle: box("#rail-toggle"),
+        waiting: box("#rail-waiting"),
+      };
+    });
+    const m = await measure();
+    assert.ok(m.scrollW <= m.vw + 1 && m.bodyW <= m.vw + 1,
+      `horizontal overflow at ${width}x${height}: scrollWidth ${m.scrollW}, body ${m.bodyW}, window ${m.vw}`);
+    assert.equal(m.picker.length, 3, "the three layout pills are not all drawn");
+    assert.deepEqual(m.picker.filter((p) => !p.inView), [],
+      `a layout pill is outside the ${width}x${height} window`);
+    if (width < 1080) {
+      // Below 1080 the right rail is the drawer: the toggle is the control that
+      // has to be reachable, and it has to put the rail on screen.
+      assert.ok(m.toggle && m.toggle.visible,
+        "no rail toggle is visible, so the right rail cannot be reached at this width");
+      assert.ok(!(m.railRight.x >= 0 && m.railRight.x < m.vw),
+        "the right-rail drawer is on screen before it was opened");
+      await page.click("#rail-toggle");
+      await page.waitForTimeout(450);
+      const open = await measure();
+      assert.ok(open.railRight.x >= 0 && open.railRight.x < m.vw,
+        `the opened right-rail drawer is not on screen (x=${open.railRight.x}, window ${m.vw})`);
+      assert.ok(open.waiting && open.waiting.visible,
+        "the Waiting-for-you card is not in the opened drawer");
+      // Close it again: the drawer sits over the toggle that opened it, so
+      // Escape is the way back (the window's own keyboard path). Both the
+      // toggle and the pills are reachable - never both at once.
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(450);
+      const closed = await measure();
+      assert.ok(!(closed.railRight.x >= 0 && closed.railRight.x < m.vw),
+        "Escape did not close the right-rail drawer");
+      assert.equal(await page.evaluate(() =>
+        document.getElementById("rail-toggle").getAttribute("aria-expanded")), "false",
+        "the rail toggle does not say the drawer is closed");
+    } else {
+      assert.ok(m.railRight && m.railRight.visible && m.railRight.x < m.vw,
+        "the right Bento rail is not on screen at this width");
+      assert.ok(m.waiting && m.waiting.visible, "the Waiting-for-you card is not visible at this width");
+    }
+    // The three layouts still switch (through the pills that are now inside the
+    // window) and persist, and none of them overflows at this size.
+    for (const layout of ["studio", "ambient", "cockpit"]) {
+      await page.click(`[data-hud-layout-choice="${layout}"]`);
+      await K.until(page, `the page to switch to ${layout}`, async () =>
+        (await page.evaluate(() => document.body.dataset.hudLayout)) === layout, { ms: 5000 });
+      assert.equal(await page.evaluate(() => localStorage.getItem("jarvis.hud.layout")), layout,
+        `the ${layout} choice was not persisted`);
+      const after = await measure();
+      assert.ok(after.scrollW <= after.vw + 1,
+        `horizontal overflow in the ${layout} layout at ${width}x${height}: ${after.scrollW} vs ${after.vw}`);
+      assert.deepEqual(after.picker.filter((p) => !p.inView), [],
+        `a layout pill is outside the window in the ${layout} layout at ${width}x${height}`);
+    }
+    // And the one status row fits on one line at this size too: the narrow
+    // rail is 159px wide here, and "online · local first · linked" (204px)
+    // would wrap into the two-line duplicate the field test reported.
+    await page.evaluate(() => window.__jarvisFeed("link", { connected: true, stale: false }));
+    await K.until(page, "the model and link truth in the one row", async () =>
+      (await brandOf(page)).includes("linked"), { ms: 8000 });
+    const statusLine = await page.evaluate(() => {
+      const sub = document.getElementById("brand-sub");
+      return { text: sub.textContent.trim(), fits: sub.scrollWidth <= sub.clientWidth + 1,
+               overflow: document.documentElement.scrollWidth > innerWidth + 1,
+               title: sub.getAttribute("title") || "" };
+    });
+    assert.ok(statusLine.fits,
+      `the status row wraps onto a second line at ${width}x${height}: "${statusLine.text}"`);
+    assert.match(statusLine.title, /local first/,
+      "the row's tooltip lost the full sentence (local first)");
+    assert.ok(!statusLine.overflow,
+      `horizontal overflow after the link status was pushed at ${width}x${height}`);
+    await page.close();
+    assert.deepEqual(problems, []);
+  });
+}
 
 /** #brand-sub as text, read without throwing while the window reloads itself. */
 function brandOf(page) {
@@ -859,7 +1012,7 @@ await check("a window that booted while Jarvis was unreachable stops claiming it
   await page.evaluate(() => window.__jarvisFeed("link", { connected: true, stale: false }));
 
   await K.until(page, "the window to stop saying it is not connected", async () =>
-    (await brandOf(page)).trim() === "online · local first", { ms: 8000 });
+    (await brandOf(page)).trim().startsWith("online · local first"), { ms: 8000 });
 
   // And not only the words: the window is really out of its sample mode, so
   // what the owner types from here reaches Jarvis.
@@ -890,7 +1043,7 @@ await check("a window in its no-server state waits for the owner's words, then p
   await page.locator("#input").fill("");
   await page.evaluate(() => window.apprPoll());
   await K.until(page, "the window to put itself right once the box was empty", async () =>
-    (await brandOf(page)).trim() === "online · local first", { ms: 8000 });
+    (await brandOf(page)).trim().startsWith("online · local first"), { ms: 8000 });
   await page.close();
 });
 

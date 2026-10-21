@@ -31,7 +31,7 @@
 use std::collections::HashSet;
 use std::sync::Mutex;
 
-use tauri::{AppHandle, Manager, PhysicalSize, Runtime, WebviewWindow};
+use tauri::{AppHandle, LogicalSize, Manager, PhysicalSize, Runtime, WebviewWindow};
 use tauri_plugin_window_state::{AppHandleExt, StateFlags, WindowExt};
 
 use crate::windows::{BRAIN_LABEL, FACES_LABEL, SETTINGS_LABEL};
@@ -49,6 +49,68 @@ pub const TRACKED: [&str; 4] = [HUD_LABEL, SETTINGS_LABEL, BRAIN_LABEL, FACES_LA
 /// Where the sizes are kept, in the app's config folder. The plugin's own
 /// default name, spelled out so a later plugin default cannot move it.
 const FILENAME: &str = ".window-state.json";
+
+/// The smallest INNER size a tracked window may be RESTORED to: one row per
+/// window whose builder declares a minimum the owner must never be given less
+/// than. Windows accepts a programmatic resize below `min_inner_size`, so a
+/// stale saved size beats the builder's minimum unless a restore checks it -
+/// the field defect of 2026-10-21, where the HUD came back at 815x691 with a
+/// declared minimum of 960x640 and its right-hand controls were off-screen.
+///
+/// The HUD's row must stay equal to `build_hud_window`'s
+/// `.min_inner_size(960.0, 640.0)` in lib.rs; the table exists because the
+/// builder's declaration is not readable back at runtime.
+pub const MIN_INNER: [(&str, f64, f64); 1] = [(HUD_LABEL, 960.0, 640.0)];
+
+/// The declared restored-size minimum for one window, if it has one.
+pub fn minimum_inner(label: &str) -> Option<(f64, f64)> {
+    MIN_INNER
+        .iter()
+        .find(|(tracked, _w, _h)| *tracked == label)
+        .map(|(_label, w, h)| (*w, *h))
+}
+
+/// A restored inner size at least as large as the declared minimum. Pure, so
+/// the rule can be tested without a window; `None` means the window has no
+/// minimum and is left exactly as restored.
+pub fn clamp_inner(size: (f64, f64), minimum: Option<(f64, f64)>) -> (f64, f64) {
+    match minimum {
+        None => size,
+        Some((min_w, min_h)) => (size.0.max(min_w), size.1.max(min_h)),
+    }
+}
+
+/// Clamps a window that was just restored from saved state back up to its
+/// declared minimum. Never fails and never shows the window.
+///
+/// A maximised window is skipped: Windows placed it, and resizing it here
+/// would fight the maximise that `finish_showing` applies once it is shown.
+fn clamp_restored_size(window: &WebviewWindow) {
+    let Some(minimum) = minimum_inner(window.label()) else {
+        return;
+    };
+    if window.is_maximized().unwrap_or(false) {
+        return;
+    }
+    let (Ok(scale), Ok(size)) = (window.scale_factor(), window.inner_size()) else {
+        return;
+    };
+    let now = size.to_logical::<f64>(scale);
+    let (w, h) = clamp_inner((now.width, now.height), Some(minimum));
+    if (w, h) == (now.width, now.height) {
+        return;
+    }
+    match window.set_size(LogicalSize::new(w, h)) {
+        Ok(()) => crate::logfile::log(&format!(
+            "[jarvis] `{}` was restored below its minimum size, so it opens at {w}x{h}",
+            window.label()
+        )),
+        Err(err) => crate::logfile::log(&format!(
+            "[jarvis] could not clamp the restored size of `{}`: {err}",
+            window.label()
+        )),
+    }
+}
 
 /// How much of a title bar must be on a monitor for the window to be
 /// grabbable, in physical pixels: enough to put the mouse on and drag.
@@ -99,6 +161,11 @@ pub fn is_tracked(label: &str) -> bool {
 /// window that stays hidden gets its size and place now and its maximise
 /// later, from [`finish_showing`]. Never shows a window. Never fails: a
 /// window that cannot be restored simply opens where it was built.
+///
+/// A restored size below the window's declared minimum is clamped back up
+/// ([`clamp_restored_size`]): Windows takes a programmatic resize under
+/// `min_inner_size`, so the saved size used to win and the HUD could come
+/// back too small for its own controls (field defect, 2026-10-21).
 pub fn restore(window: &WebviewWindow, shown: bool) {
     if !is_tracked(window.label()) {
         return;
@@ -115,6 +182,7 @@ pub fn restore(window: &WebviewWindow, shown: bool) {
         ));
         return;
     }
+    clamp_restored_size(window);
     keep_on_screen(window);
     if !shown && was_maximised(window) {
         if let Some(pending) = window.try_state::<PendingMaximize>() {
@@ -404,6 +472,58 @@ mod tests {
         assert_eq!(fitted((1180, 820), SCREEN), (1180, 820));
         assert_eq!(fitted((2400, 820), SCREEN), (1728, 820));
         assert_eq!(fitted((2400, 1300), SCREEN), (1728, 972));
+    }
+
+    /* ---- restored sizes are clamped up to the declared minimum -------- *
+     *  The field defect of 2026-10-21: the installed app restored its HUD at
+     *  815x691 while the builder declares 960x640, and the right-hand controls
+     *  were off-screen. Windows takes a programmatic resize below the
+     *  minimum, so the restore path is the one that has to clamp. */
+
+    #[test]
+    fn a_restored_width_below_the_minimum_is_clamped_up() {
+        // The measured field size: the height was already legal, the width was
+        // not - so only the width moves.
+        assert_eq!(
+            clamp_inner((815.0, 691.0), Some((960.0, 640.0))),
+            (960.0, 691.0)
+        );
+        assert_eq!(
+            clamp_inner((815.0, 500.0), Some((960.0, 640.0))),
+            (960.0, 640.0)
+        );
+    }
+
+    #[test]
+    fn a_restored_size_at_or_above_the_minimum_is_left_exactly_alone() {
+        assert_eq!(
+            clamp_inner((960.0, 640.0), Some((960.0, 640.0))),
+            (960.0, 640.0)
+        );
+        assert_eq!(
+            clamp_inner((1580.0, 900.0), Some((960.0, 640.0))),
+            (1580.0, 900.0)
+        );
+    }
+
+    #[test]
+    fn a_window_with_no_declared_minimum_keeps_whatever_was_saved() {
+        assert_eq!(clamp_inner((400.0, 300.0), None), (400.0, 300.0));
+    }
+
+    #[test]
+    fn the_hud_is_the_one_window_with_a_minimum_and_it_matches_the_builder() {
+        // lib.rs `build_hud_window`'s `.min_inner_size(960.0, 640.0)`. If one
+        // of the two moves, the restore clamp must move with it.
+        assert_eq!(minimum_inner(HUD_LABEL), Some((960.0, 640.0)));
+        assert_eq!(minimum_inner(SETTINGS_LABEL), None);
+        assert_eq!(minimum_inner(BRAIN_LABEL), None);
+        assert_eq!(minimum_inner(FACES_LABEL), None);
+        assert_eq!(
+            MIN_INNER.len(),
+            1,
+            "a window gained a minimum without a row here"
+        );
     }
 
     #[test]
