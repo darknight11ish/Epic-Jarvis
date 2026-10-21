@@ -1402,9 +1402,19 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
                 body = json.loads(body.decode("utf-8") or "{}")
         except Exception:
             body = {}
-        code, out = request_import(body if route == PATHS[1] else body)
+        # ONE ROUTE, ONE ACTION (2026-10-20, field test). This line used to be
+        #     code, out = request_import(body if route == PATHS[1] else body)
+        # - a conditional whose two branches are the same expression, so the
+        # IMPORT ran for the PREVIEW too: a documented dry run raised an
+        # approval card, wrote a real folder into the vault, and only then
+        # overwrote its answer with preview(). Measured on the owner's PC: two
+        # preview calls raised two cards (approved) and imported twice; the
+        # second preview then refused with "there is already a folder called".
+        # A dry run must do only what preview() does: plan, write nothing.
         if route == PATHS[0]:
             code, out = preview(body)
+        else:
+            code, out = request_import(body)
         return _send(self, code, out)
 
     do_GET._jarvis_notion = True       # type: ignore[attr-defined]
