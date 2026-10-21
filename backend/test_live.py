@@ -26,12 +26,15 @@ stranger) and a speech-to-text that only says what the test tells it:
      near misses -> "I'm having trouble recognising your voice".
   4. hear(source="live"): refused before anything looks at it with no
      session on THAT device, while a card waits or while muted; otherwise
-     every step in the same order - THE OWNER CHECK BEFORE ANY SPEECH-TO-TEXT,
-     for every clip - and no "hey Jarvis" needed. A too-short clip is
-     CHECKED only (never transcribed): the owner is asked for more (spoken at
-     most once a minute), anyone else is counted and nothing is said. "Stop"
-     works on Live clips. The phrases, after the owner check. The other
-     device's "hey Jarvis" offers to move Live there.
+     every step in the same order - THE OWNER CHECK, with speech-to-text
+     running BESIDE it since 2026-10-20 (Opt 3.1) and its words used only
+     if the check passed (a failed check's words are discarded, never
+     returned, logged, stored, learned from or sent anywhere) - and no
+     "hey Jarvis" needed. A too-short clip is CHECKED only (never
+     transcribed): the owner is asked for more (spoken at most once a
+     minute), anyone else is counted and nothing is said. "Stop" works on
+     Live clips. The phrases, after the owner check. The other device's
+     "hey Jarvis" offers to move Live there.
   5. TRUST: the three `hands_free_live` choices, by how Live started.
   6. SIDE TALK: the Live note, the marker, never learned from or counted.
   7. THE CAMERA IS OFF: not ready on a one-card PC; not ready with a passing
@@ -928,13 +931,16 @@ def t_live_clips_are_checked_before_words():
         check("the owner: words, no 'hey Jarvis' needed, Live on",
               h["ok"] and h["text"] == "what is the weather" and h["live"] == "on"
               and not h["wake_heard"], h)
-        check("THE ORDER: the owner check, and only then speech-to-text",
-              sp.calls == ["owner_check", "stt"], sp.calls)
+        check("THE ORDER: the owner check beside speech-to-text, and the words "
+              "used only because the check passed",
+              sorted(sp.calls) == ["owner_check", "stt"], sp.calls)
         check("counted as a turn, a number only", sp.w.engine.status()["turns"] == 1)
         sp.calls.clear()
         h = sp.hear(who="stranger", words="SHOULD NEVER BE HEARD")
-        check("a stranger: refused, never turned into words",
-              not h["ok"] and h["text"] == "" and sp.calls == ["owner_check"], (h, sp.calls))
+        check("a stranger: refused, with no words - the ones made beside the "
+              "check are discarded",
+              not h["ok"] and h["text"] == ""
+              and sorted(sp.calls) == ["owner_check", "stt"], (h, sp.calls))
         check("...and counted towards 'other voices'",
               sp.w.engine.status()["refused_in_a_row"] == 1)
         for _ in range(2):
@@ -972,7 +978,7 @@ def t_too_short_clips():
               and sp.calls == [] and not h["text"], (h, sp.calls))
         h = sp.hear(seconds=2.5, words="first full sentence")
         check("the first >= 2.0 s clip is the strict check and becomes the baseline",
-              h["ok"] and sp.calls == ["owner_check", "stt"]
+              h["ok"] and sorted(sp.calls) == ["owner_check", "stt"]
               and sp.w.engine.trust_state()["active"]
               and sp.w.engine.trust_state()["checks"] == 1, (h, sp.calls))
         sp.calls.clear()
@@ -993,7 +999,7 @@ def t_too_short_clips():
         sp.calls.clear()
         h = sp.hear(seconds=2.5, words="a normal sentence")
         check("a normal sentence checks again and refreshes the window",
-              h["ok"] and sp.calls == ["owner_check", "stt"]
+              h["ok"] and sorted(sp.calls) == ["owner_check", "stt"]
               and sp.w.engine.trust_state()["short_clips_since"] == 0, (h, sp.calls))
         sp.w.clock.t += 121
         sp.w.engine.note_active("phone")
@@ -1005,7 +1011,7 @@ def t_too_short_clips():
         sp.calls.clear()
         h = sp.hear(who="stranger", seconds=2.5, words="NEVER")
         check("a failed spot check aborts session trust immediately",
-              not h["ok"] and sp.calls == ["owner_check"]
+              not h["ok"] and sorted(sp.calls) == ["owner_check", "stt"]
               and sp.w.engine.trust_state()["aborts"] == 1
               and not sp.w.engine.trust_state()["active"], (h, sp.calls))
         h = sp.hear(seconds=1.6, words="NEVER TRANSCRIBED")
@@ -1014,9 +1020,11 @@ def t_too_short_clips():
         sp.calls.clear()
         with mock.patch.object(V, "verify", side_effect=RuntimeError("verifier died")):
             h = sp.hear(seconds=2.5, words="NEVER")
-        check("a voice-check ERROR fails closed: refused, trust off, nothing transcribed",
+        check("a voice-check ERROR fails closed: refused, trust off, and the words "
+              "made beside the failed check are discarded",
               not h["ok"] and h["available"] is False and "trust is off" in h["reason"]
-              and sp.calls == ["owner_check"] and not h["text"], (h, sp.calls))
+              and sorted(sp.calls) == ["owner_check", "stt"] and not h["text"],
+              (h, sp.calls))
         check("status exposes the trust state honestly (numbers/fixed words only)",
               set(("active", "last_verified_at", "short_clips_since", "window_s",
                    "max_short_clips", "expired")) <= set(sp.w.engine.status()["trust"]))
@@ -1147,8 +1155,10 @@ def t_live_phrases_on_the_speech_path():
         sp.w.engine.start("phone")
         sp.calls.clear()
         h = sp.hear(who="stranger", words="that's all for now")
-        check("a stranger saying 'that's all' ends nothing (never even transcribed)",
-              sp.w.engine.status()["on"] and "stt" not in sp.calls, h)
+        check("a stranger saying 'that's all' ends nothing: refused, and the words "
+              "made beside the check are discarded",
+              sp.w.engine.status()["on"] and h["text"] == ""
+              and sorted(sp.calls) == ["owner_check", "stt"], (h, sp.calls))
         sp.w.engine.stop()
         h = sp.hear(source="push_to_talk", words="Let's talk.")
         check("the talk button's 'let's talk': Live starts on this device, 'I'm listening.'",
@@ -1191,7 +1201,9 @@ def t_hey_jarvis_lets_talk_and_the_other_device():
                   "phone offers to move Live there, and does not answer here",
                   h["live_elsewhere"] == "desktop" and h["other_device"]
                   and not h["wake_heard"] and h["text"] == "", h)
-            check("...the owner check still came first", sp.calls[0] == "owner_check", sp.calls)
+            check("...the owner check ran beside the words, and no word of the clip "
+                  "went back (only the offer)",
+                  sorted(sp.calls) == ["owner_check", "stt"], sp.calls)
             S._close_awake()
             with mock.patch.object(W, "spot", return_value=W.Spot(True, heard=True, score=0.9)):
                 h = sp.hear(source="wake_word", words="Hey Jarvis, what time is it",

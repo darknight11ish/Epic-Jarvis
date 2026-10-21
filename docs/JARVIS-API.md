@@ -1077,13 +1077,16 @@ spotter: {available, engine, why}}` (`spotter` says whether this PC can hear
 **`source=wake_word`.** The server refuses it while the wake word is off
 (`available: false`). Otherwise it runs, in order: Silero VAD (no speech ->
 refused), the "hey Jarvis" spotter (not heard -> refused, never voice-checked
-or transcribed), the owner check, speech-to-text, and finally the transcript
-must start with "hey Jarvis" (else `text: ""`, "ignored"). Four fields were
-added to the reply: `wake_heard` (the phrase was heard, from the owner),
-`wake_score`, `awake` (the clip was only "hey Jarvis": the next `wake_word`
-clip within `awake_seconds` needs no phrase), `awake_seconds`. The returned
-`text` has the phrase removed. A client drops a reply with `wake_heard:
-false` silently. `backend/README.md`, "Voice that works", has the details.
+or transcribed), the owner check - with speech-to-text running beside it
+since 2026-10-20, its words used only if the check passed and **discarded**
+otherwise (section 5's "The owner check and the words" below) - and finally
+the transcript must start with "hey Jarvis" (else `text: ""`, "ignored").
+Four fields were added to the reply: `wake_heard` (the phrase was heard, from
+the owner), `wake_score`, `awake` (the clip was only "hey Jarvis": the next
+`wake_word` clip within `awake_seconds` needs no phrase), `awake_seconds`. The
+returned `text` has the phrase removed. A client drops a reply with
+`wake_heard: false` silently. `backend/README.md`, "Voice that works", has the
+details.
 
 **Two devices, one "hey Jarvis" (since 2026-09-27).** The window `awake`
 opens belongs to the microphone that heard it (`?mic=`, "phone" or
@@ -1097,7 +1100,8 @@ acted on (answered, or that opened a window) gets `other_device: true`,
 "answered on your other device"`. Nothing from it is kept (no chat history,
 no window). Both apps already drop a `wake_heard: false` reply without a
 word, so neither needed a change. Whichever copy is acted on first wins. The
-owner check still runs before speech-to-text on both copies; two clips from
+owner check still decides both copies, and since 2026-10-20 the words are made
+beside that check and kept only where it passed (section 5); two clips from
 the SAME microphone are never matched, and nor is the talk button. The route
 has no finer device id than `mic` yet, so two phones (or two older apps
 that send no `mic`) cannot be told apart. The 1.5 s is a first guess, to be
@@ -1298,6 +1302,36 @@ repository holds only as its published base
 **A client must not do speech-to-text.** That is a standing rule in
 `CLAUDE.md`, and it is why `utterance` posts a complete recorded clip rather
 than streaming: the phone's voice-print gate needs the whole clip to check it.
+
+**The owner check and the words: made beside each other, used by permission
+(2026-10-20, the voice-latency work order's Opt 3.1).** `jarvis_speech.hear()`
+used to run the owner-voice check (~140 ms) and then, only if it passed, the
+transcription (~219 ms) - one after the other, ~360 ms on every clip the owner
+speaks. They now run **at the same time on the same in-memory audio**, so a
+verified clip costs the longer of the two (~219 ms; ~140 ms saved). **The
+privacy rule has not moved, only its wording:** it is "verified before the
+words are USED", not "before they are made". When the check says no, the
+worker is joined and its answer is thrown away (`text = ""`) - the words are
+never returned, logged, stored, learned from or sent to any model, and no
+thread outlives the request. Three costs are said plainly: a stranger's clip
+now costs one local transcription that is dropped unread; a **refused** clip
+answers a little later, not sooner (the discard waits for the worker it
+started, so a refusal costs the longer of the two steps - ~219 ms rather than
+~140 ms); and the first clip after a restart may load the speech-to-text model
+before the check instead of after it (Live's Start pre-warms it, so in practice
+that is the desktop's first push-to-talk). With **no** engine installed
+nothing is started at all, and the
+check-only path of a Live voice pause keeps the old serial order (it exists to
+spend as little as possible on a clip that may not be the owner). Nothing
+changes on the wire: the reply, every field and every refusal read exactly as
+before. Tests: `backend/test_voice_parallel.py` (spies on every sink while the
+transcription returns a marker word, the discard, the joined worker, the
+overlap with slow stand-ins, no-engine, and the Live check-only path);
+`backend/test_live.py`, `backend/test_talk_type.py` and `backend/test_speech.py`
+carry the same rule where they assert the order. The ~140 ms is the work
+order's figure for the real models - **not measured here**: this repository
+has no CAM++ or Parakeet weights and no microphone, so what is proven is the
+mechanism, not the number.
 
 **Jarvis's own voice is not the owner's (F3, landed 2026-10-20).** On open
 speakers - especially with a cloned custom voice - Jarvis's own answer can
@@ -11861,8 +11895,10 @@ only stops Jarvis talking. Stop everything ends Live.
 ### 63.3 `POST /api/voice/utterance?source=live`
 
 Only while Live is on for the clip's `mic`. The order is the same as every
-clip: speech found, too short?, **the owner check**, and only then
-speech-to-text. Extra reply fields: `live` (the session after the clip, or
+clip: speech found, too short?, **the owner check**, with speech-to-text
+running beside it since 2026-10-20 and its words used only where the check
+passed (section 5, "The owner check and the words"; a paused-Live re-check
+keeps the older serial order). Extra reply fields: `live` (the session after the clip, or
 `started`/`refused` for "let's talk"), `live_pause`, `live_hint`, `live_say`
 (a FIXED line to say now), `live_ended`, `live_short` (`owner` or `other`:
 a too-short clip is checked, never turned into words, to tell "say a bit
@@ -12873,8 +12909,10 @@ the same as the talk button. `jarvis_speech.hear()` then:
   approval card first)"}`. Nothing checked, nothing transcribed.
 - with it **on**: every step a talk-button clip gets, in the same order -
   speech or not (Silero VAD), long enough to check (the "say a little
-  more" rule), the owner's voice (a stranger is never transcribed) - and
-  only then the words. Three differences from the talk button:
+  more" rule), the owner's voice - with the words made beside that check
+  since 2026-10-20 and **discarded** if it says no, never returned or noted
+  anywhere (section 5, "The owner check and the words"). Three differences
+  from the talk button:
   - `text` comes back cleaned: "um", "uh", "hmm" and the like removed, a
     word said three or more times in a row kept once, spaces tidied
     (`clean_dictation`, adapted from Handy, MIT - THIRD-PARTY-NOTICES.txt);

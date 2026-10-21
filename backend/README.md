@@ -1403,14 +1403,44 @@ a different, real `jarvis_speech.py`, the backup folder has it.
 
 ## Order matters, and it is the one thing this file exists to protect
 
-`hear()` runs the owner-voice check (`jarvis_voice.verify()`, rebuilt in an
-earlier pass) **before** it ever runs speech-to-text. A voice that is not the
-owner's is never turned into words — refusing after transcribing would leave
-a stranger's speech in memory on the way to saying no. `test_speech.py` proves
-this with real code, not a comment: it patches the transcription function to
-raise `AssertionError` if it is ever called, then drives `hear()` with a clip
-that matches no enrolled profile. If the ordering were ever reversed, that
-test fails instead of merely reading wrong.
+`hear()` never **uses** a transcript before the owner-voice check
+(`jarvis_voice.verify()`, rebuilt in an earlier pass) has passed. A voice that
+is not the owner's never has its words returned, logged, stored, learned from
+or sent to any model — refusing after transcribing would leave a stranger's
+speech in memory on the way to saying no. That is the rule, and it has not
+moved.
+
+**Changed 2026-10-20 (the voice-latency work order's Opt 3.1, the owner's
+choice): "before it is used", not "before it is made".** With a
+speech-to-text engine installed, the two now run **beside each other** on the
+same in-memory audio — the owner check (CAM++, ~140 ms) and the transcription
+(Parakeet, ~219 ms) — so a clip he speaks is ready in ~219 ms instead of
+~360 ms. If the check fails, `_EarlyStt.discard()` waits for the worker and
+then throws the words away: `text = ""`, and they exist nowhere the request
+can see — not the returned `Heard`, not its `as_dict()`, not the reason, not
+chat history, not the delay table, not the printed output. With **no** engine
+installed nothing is started at all, which is the old behaviour exactly; the
+check-only path of a Live voice pause (a clip that may not be the owner, and
+gets the cheapest possible look) keeps the old serial order too. Three costs
+are said plainly, because a faster turn must not be bought with a hidden one:
+a stranger's clip now costs one local transcription that is dropped unread; a
+**refused** clip answers a little later, not sooner (the discard waits for the
+worker it started, so a refusal costs the longer of the two steps — ~219 ms
+instead of ~140 ms); and the first clip after a restart may load the
+speech-to-text model before the check instead of after it (Live's Start
+pre-warms it, so in practice that is the desktop's first push-to-talk).
+
+`test_voice_parallel.py` proves the new rule with real code, not a comment:
+`test_speech.py` still patches the transcription function to raise
+`AssertionError` when no engine is installed (nothing may be attempted for a
+stranger there), and the parallel suite spies on **every** sink while making
+the transcription return a marker word — the marker must appear in none of
+them, and the worker must be joined before `hear()` returns. It also proves
+the two steps overlap with slow stand-ins (the transcription starting before
+the check ends, and the whole call shorter than the two sleeps added), rather
+than trusting a micro-benchmark. Reverting to the serial order turns those
+checks red; a version that returned the discarded words turns the sink checks
+red.
 
 ## A disagreement recorded rather than silently resolved
 
@@ -8245,11 +8275,14 @@ words, the last 20, in memory (gone when Jarvis restarts). The one line under
 "Owner steps" prints them. **What was cut:** the voice engines used to load
 inside your first spoken question after Jarvis started (a few seconds of
 waiting). Now they load in the background as soon as an app first asks the
-PC about voice. **What was checked and left alone:** both apps already start
-speaking the first sentence as soon as it is complete (since 2026-09-24,
-at its first comma once the phrase is long enough - "Spoken questions get
-spoken-style answers", below), and the "is it you?" check still runs
-before speech-to-text, always.
+PC about voice. **Changed 2026-10-20:** the "is it you?" check and
+speech-to-text now run beside each other (Opt 3.1), saving ~140 ms a clip -
+the words are used only if the check passed and are discarded otherwise, so
+the rule that a refused clip's words never go anywhere still holds
+("Order matters", above). **What was checked and left alone:** both apps
+already start speaking the first sentence as soon as it is complete (since
+2026-09-24, at its first comma once the phrase is long enough - "Spoken
+questions get spoken-style answers", below).
 
 **3. "One moment."** If nothing has started playing about a second after you
 finish, an app can play a short "One moment." in the voice Jarvis is using.
@@ -16418,11 +16451,13 @@ The fixtures made from the real backend were regenerated
 `python3 backend/test_talk_type.py` (38 checks): off by default; on is one
 card and deny, a timeout and a wrong tier change nothing; off is at once
 and withdraws a waiting card; while off, a clip is refused before
-anything runs; while on, a stranger is never transcribed, a short clip is
-"say a little more", the words come back cleaned and are not noted for
-history; the status carries it; `clean_dictation` on its own.
+anything runs; while on, a stranger is refused by the owner check and the
+words made beside it are discarded (nothing returned, nothing noted), a
+short clip is "say a little more", the words come back cleaned and are not
+noted for history; the status carries it; `clean_dictation` on its own.
 `test_voice_strict.py`, `test_speech.py` and `test_voice_enroll.py` still
-pass.
+pass; `test_voice_parallel.py` is the suite that watches every sink for an
+unverified clip's words.
 
 ## Not checked, said plainly
 

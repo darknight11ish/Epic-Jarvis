@@ -2646,3 +2646,55 @@ has its own separate approval.
   two-hour reminder re-asks him rather than letting it drift.
 * **Third graphics card: not yet** - the second card's own features are still
   unmeasured, so measuring the two cards comes first.
+
+## 2026-10-20 - the voice latency work: all three, and two were already done
+
+Put to the owner on 2026-10-20, on Gemini's optimization work order
+(`gemini_full_jarvis_optimization_review_and_work_order_2026_10_20.md`, Layer
+3): he chose **all three** voice-latency changes for this wave - "parallel
+CAM++/Parakeet with verify-before-commit", "Smart Turn v3.2 early end-of-turn
+cut", "first-clause streaming TTS".
+
+**What the code already had.** The work order's baseline was stale: two of the
+three had been on `main` since 2026-09-24. Smart Turn v3.2 already cuts the
+turn early on both listeners - `backend/jarvis_turn.py` (the ONNX classifier and
+`POST /api/voice/turn`), `jarvis_speech._turn_state()` (`turn.enabled` on by
+default, `ask_after_ms` 200, `max_pause_ms`), the desktop
+(`voice.rs` `pause_step`, falling back to the old 900 ms silence when the model
+is absent) and the phone (`LiveRules.kt` / `SmartTurn.kt` / `OrtTurnModel.kt`,
+its own copy of the model, `SmartTurnTest.kt`). And speech already starts at
+the first comma - the owner's own 2026-09-24 decision - through
+`jarvis-desktop/src/speech-pieces.js` fed by the live token stream in
+`main.js` (`checkForSpeakableSentence`, one clip made ahead), the phone's
+`SpeechText.kt`/`SpeechAhead.kt`, and the private/tainted-answer gate
+(`private-speech.js`, checked before a clip's sound is asked for and again
+before it plays). The work order's own numbers for these (0.85 threshold,
+400 ms ask, ~450 ms cut, 8-word clause) are **slower** than what shipped.
+
+**Decided:**
+* **Build the one that was missing - parallel verify + speech-to-text** (Opt
+  3.1), and do **not** retune the two that were working. `hear()` used to run
+  the owner check (~140 ms) and then the transcription (~219 ms) one after the
+  other; they now run beside each other on the same in-memory audio, so a clip
+  the owner speaks is ready ~140 ms sooner.
+* **The privacy rule keeps its promise, and its wording moves from "made" to
+  "used".** Unverified speech is still never returned, logged, stored, learned
+  from or sent to any model: when the check fails, the worker is joined, the
+  words are discarded (`text = ""`) and they exist nowhere the request can see.
+  Three costs are said plainly: a stranger's clip now costs one local
+  transcription that is dropped unread; a refused clip answers a little later,
+  not sooner (the discard waits for the worker it started, so a refusal costs
+  the longer of the two steps); and the first clip after a restart may load the
+  speech-to-text model before the check instead of after it. With no
+  engine installed nothing is started at all, and the check-only path of a Live
+  voice pause keeps the old serial order.
+* **Not measured here, and not claimed:** the ~140 ms is the work order's figure
+  for the real CAM++/Parakeet models on his PC. This repository has no weights
+  and no microphone, so what was proven is the mechanism (the transcription
+  starts before the check ends, every sink stays empty of an unverified clip's
+  words) - not the number.
+
+Built in `backend/jarvis_speech.py` (mirrored to `jarvis-backend/`), proven by
+the new `backend/test_voice_parallel.py` and the updated
+`test_live.py`/`test_talk_type.py`/`test_speech.py`; written up in
+`docs/JARVIS-API.md` section 5.

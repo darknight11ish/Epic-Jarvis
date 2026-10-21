@@ -35,11 +35,19 @@ missing module):
         owner to finish, kept only as a number in status()'s flow.timings
 
 ORDER MATTERS, and this is the one invariant that must never move: `hear()`
-verifies the SPEAKER through `jarvis_voice` before it ever runs speech-to-
-text. "A voice that is not the owner's is never turned into words - refusing
-after transcribing would leave a stranger's speech in memory on the way to
-saying no" (the same comment already lives beside the route that calls this).
-The safe failure is to say nothing back, not to say something quietly wrong.
+verifies the SPEAKER through `jarvis_voice` before any transcript is USED.
+Since 2026-10-20 it is "before it is used", not "before it is made": the
+owner chose the voice-latency work order's Opt 3.1, so when a speech-to-text
+engine is installed the transcription is STARTED beside the owner check and
+thrown away if the check fails (`_EarlyStt.discard()` - the words never leave
+that object, so unverified speech is still never returned, logged, stored,
+learned from or sent to any model). "A voice that is not the owner's is never
+turned into words it keeps - refusing after transcribing would leave a
+stranger's speech in memory on the way to saying no" (the same comment
+already lives beside the route that calls this). What changed is that the
+local model may now run beside the check and its answer is dropped unread,
+saving ~140 ms on every clip the owner speaks. The safe failure is still to
+say nothing back, not to say something quietly wrong.
 
 The whole order, since 2026-09-23 (each step can only refuse, never add):
 
@@ -71,8 +79,13 @@ The whole order, since 2026-09-23 (each step can only refuse, never add):
        little more". A short wake-word clip that is only "hey Jarvis"
        still goes on (it opens the listening window, step 6); a short one
        with a command in it is refused after step 5, its words dropped.
-    4. the owner check (jarvis_voice)    not the owner   -> refused, not transcribed
-    5. speech-to-text
+    4. the owner check (jarvis_voice)    not the owner   -> refused
+       since 2026-10-20 steps 4 and 5 run AT THE SAME TIME when a
+       speech-to-text engine is installed: the words are made beside the
+       check and DISCARDED unless it passes - never returned, logged,
+       stored, learned from or sent to a model. The delay numbers still
+       report the transcription's own length (`steps["stt"]`).
+    5. speech-to-text (its words are used only after step 4 said owner)
     6. wake word only: does the transcript START with "hey Jarvis"? The
        spotter heard something like it; this is the second opinion that
        stops "the computer in that film was called Jarvis" counting.
@@ -89,9 +102,10 @@ is refused, never looked at, unless a Live session is on for THAT
 microphone and not paused (a card waiting, or too many other voices);
 then every step above runs in the same order: speech found, long enough
 (3b - "say a bit more", the short line at most once a minute), THE OWNER
-CHECK, and only then speech-to-text. Its words may end Live ("that's all
-for now") or extend it ("20 more minutes") - jarvis_live.phrase(), only
-after the owner check. "Hey Jarvis, let's talk" (or the talk button's
+CHECK, and speech-to-text beside it (the words are used only if the check
+passed). Its words may end Live ("that's all for now") or extend it ("20
+more minutes") - jarvis_live.phrase(), only after the owner check. "Hey
+Jarvis, let's talk" (or the talk button's
 "let's talk") starts Live on the device that heard it, also only after the
 owner check. While Live is on one device, the OTHER device's "hey Jarvis"
 clips are dropped before the spotter (`other_device`, "Live is on your
@@ -2450,11 +2464,88 @@ def _too_short_reason(spoken: float, need: float) -> str:
             f"speech; a command needs at least {need:.1f}) - say a little more")
 
 
+class _EarlyStt:
+    """Speech-to-text started BESIDE the owner check (2026-10-20).
+
+    The owner chose the voice-latency work order's Opt 3.1: `hear()` used to
+    run the owner check (CAM++, ~140 ms) and then, only if it passed, the
+    transcription (Parakeet TDT, ~219 ms) - one after the other, ~360 ms on
+    every clip he speaks. Both read the SAME in-memory float samples and
+    neither waits on the other's answer, so they now run at the same time
+    and a verified clip costs ~219 ms instead of ~360 ms (~140 ms saved).
+
+    THE PRIVACY RULE IS NOT MOVED, only made true of "used" instead of
+    "made". If the check fails, `discard()` throws the words away before
+    `hear()` returns: they are never returned, logged, stored, learned from
+    or passed to any model. Three costs are said plainly, because a faster
+    turn must not be bought with a hidden one:
+      - a stranger's clip now also costs one local transcription whose
+        answer is dropped unread - the model is on this PC, the words never
+        leave this object, and nothing reads them;
+      - a REFUSED clip answers a little later, not sooner: `discard()` waits
+        for the worker it started, so a refusal costs the longer of the two
+        steps (~219 ms instead of ~140 ms) rather than returning at once;
+      - the first clip after a restart may load the speech-to-text model
+        before the check instead of after it (Live's Start already pre-warms
+        it, so in practice this is the desktop's first push-to-talk).
+
+    One worker thread rather than a pool: exactly one job, and its lifetime
+    is one `hear()` call. `join()` re-raises the engine's own error
+    unchanged, so `hear()`'s existing "transcription failed" handling is
+    exactly what it was when the call was inline.
+    """
+
+    def __init__(self, samples, sample_rate: int):
+        self._samples = samples
+        self._sample_rate = sample_rate
+        self._text = ""
+        self._error: Optional[BaseException] = None
+        #: The transcription's own length, not how long `join()` waited:
+        #: the delay numbers must still say what speech-to-text cost.
+        self.ms = 0.0
+        self._thread = threading.Thread(target=self._work, name="jarvis-stt-beside-check",
+                                        daemon=False)
+        self._thread.start()
+
+    def _work(self) -> None:
+        t0 = time.monotonic()
+        try:
+            self._text = _transcribe(self._samples, self._sample_rate)
+        except BaseException as exc:      # noqa: BLE001 - join() re-raises it
+            self._error = exc
+        finally:
+            self.ms = round((time.monotonic() - t0) * 1000.0, 1)
+            # A finished worker holds no audio: the clip is the caller's
+            # local, and this reference goes as soon as the words exist.
+            self._samples = None
+
+    def join(self) -> str:
+        """Wait for the words and return them, or raise the engine's error."""
+        self._thread.join()
+        if self._error is not None:
+            raise self._error
+        return self._text
+
+    def discard(self) -> None:
+        """Not the owner: wait for the worker, then drop what it made.
+
+        `text = ""` is the whole guarantee - the caller never sees the words,
+        and this object is the only place they ever were. Waiting first is
+        deliberate: a thread left behind would hold the clip's audio and keep
+        a model running after the request said no.
+        """
+        self._thread.join()
+        self._text = ""
+        self._error = None
+
+
 def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
          waited_ms=None) -> Heard:
-    """One complete WAV utterance in. Never transcribes before the speaker
-    is checked - see the module docstring for the whole order and why it is
-    load-bearing, not a style choice.
+    """One complete WAV utterance in. Never USES a transcript before the
+    speaker is checked - see the module docstring for the whole order and
+    why it is load-bearing, not a style choice. Since 2026-10-20 the words
+    may be MADE beside the check (Opt 3.1) and are discarded unless it
+    passes; nothing on the way out ever carries them (`_EarlyStt`).
 
     `mic`: "phone" or "desktop" (anything else counts as none named) - the
     clip is checked against that microphone's own voice print, and its own
@@ -2702,6 +2793,21 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
         return Heard(False, source=source, seconds=seconds, too_short=True,
                      min_seconds=need, reason=_too_short_reason(spoken, need), **extra)
 
+    # 4 + 5. The owner check and the words BESIDE it (2026-10-20, Opt 3.1).
+    #        Only when there is an engine to run: with none, `hear()` still
+    #        answers its own "no speech-to-text installed" after the check and
+    #        nothing is started. The check-only path of a Live voice pause is
+    #        left exactly as it was (checked, and only a passing clip turned
+    #        into words) - it exists to spend as little as possible on a clip
+    #        that may not be the owner. If a thread cannot be started, the
+    #        words are made after the check, exactly as before.
+    early = None
+    if not check_only and _stt_engine() is not None:
+        try:
+            early = _EarlyStt(samples, sample_rate)
+        except Exception:
+            early = None
+
     if live_trust == "trusted_short":
         verdict, embedder = _SessionTrusted(), None
         steps["owner_check"] = 0.0
@@ -2710,6 +2816,10 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
         try:
             verdict, embedder = check_owner()
         except Exception as exc:
+            # The clip never became a word the request could use: drop what
+            # the worker made (and wait for it) before answering as before.
+            if early is not None:
+                early.discard()
             if live:
                 try:
                     jarvis_live.ENGINE.abort_trust("check_error")
@@ -2758,11 +2868,18 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
                   screen_aloud=_screen_aloud(trust_src, trusted))
 
     if not verdict.is_owner:
+        # Not the owner: the words made beside the check are thrown away
+        # UNREAD - never returned, logged, stored, learned from or sent to a
+        # model. `discard()` waits for the worker first, so no thread outlives
+        # this request holding the clip's audio.
+        if early is not None:
+            early.discard()
         if live:
             # Not the owner's voice: counted (the sign says so after a few,
-            # and Live pauses after many), never turned into words, and the
-            # quiet clock does not move - the TV cannot keep Live open. A
-            # failed >= 2.0 s spot check also ends session trust at once.
+            # and Live pauses after many), its words dropped unread (made
+            # beside the check, discarded above), and the quiet clock does
+            # not move - the TV cannot keep Live open. A failed >= 2.0 s spot
+            # check also ends session trust at once.
             if live_trust == "check":
                 try:
                     jarvis_live.ENGINE.abort_trust("low_score")
@@ -2800,15 +2917,19 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
                             "installed here yet - see jarvis_speech.status()",
                      **common, **live_extra)
 
-    # 5. The words.
+    # 5. The words. When an engine is installed they were already being made
+    #    beside the owner check (Opt 3.1), so this join is usually a few
+    #    milliseconds; without one the call is exactly what it always was.
     t = time.monotonic()
     try:
-        text = _transcribe(samples, sample_rate)
+        text = early.join() if early is not None else _transcribe(samples, sample_rate)
     except Exception as exc:
         return Heard(True, available=False, wake_heard=wake,
                      reason=f"transcription failed ({type(exc).__name__})",
                      **common, **live_extra)
-    steps["stt"] = (time.monotonic() - t) * 1000.0
+    # The number is the transcription's OWN length - the delay table must not
+    # report the short join as if speech-to-text had become free.
+    steps["stt"] = early.ms if early is not None else (time.monotonic() - t) * 1000.0
     engine = f"{STT_ENGINE}:{_stt_files()[0]}"
     if live and live_trust == "trusted_short":
         try:
