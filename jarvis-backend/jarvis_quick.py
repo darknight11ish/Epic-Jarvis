@@ -216,6 +216,28 @@ THE "DONE" ACKNOWLEDGEMENT
 The reply is one short sentence, sent in the same format a model's answer is
 sent in, with `quick` in X-Jarvis-Route. Both apps show a small "Done" line
 under such an answer ("Done - answered on this PC without the AI model").
+
+VOICE REFLEX AND THE SPOKEN-COMMAND NORMALISER (2026-10-21, the Live/Voice
+audit's V4, revised by the wave's section 10.4). `normalize_spoken_command`
+runs BEFORE the grammar: it strips a documented list of polite lead-ins that
+`normalise` did not, and rewrites a number word into digits only where a
+whole-sentence grammar demands digits (a number before a length of time, "N
+more minutes", "N times a day", and the hour after "at"). Nothing else is
+rewritten - "one of the files" stays as it is - and it only decides which
+PATTERN matches: the model still gets the owner's original words whenever no
+pattern matches. One deterministic reflex (no model, no card of its own) was
+added, a router into an action that already existed:
+  * "speak faster" / "speak slower" / "speak normally" call the SAME
+    `jarvis_voices.set_speed` that POST /api/voice/voices/speed calls (a
+    cosmetic setting with NO card, set from either app).
+The SELECTION and SCREEN reads are NOT in this file: PR #691 shipped them for
+Live turns through the same primitives (`jarvis_voice_ui.py`), and a 0-ms
+copy here would intercept those phrases before that path could answer. The
+slice dropped its own read reflex when #691 merged, and `test_voice_reflex.py`
+holds this file to NOT matching them. It also holds the commands this slice
+did NOT build (HUD layout, bar pinning, "open galaxy/today", mute/unmute,
+"repeat that", scroll/back/home) to returning None with the reason: no honest
+backend action exists for them today.
 """
 from __future__ import annotations
 
@@ -270,6 +292,233 @@ def normalise(text) -> str:
     t = re.sub(r"\b(my|the)\s+to-?\s?dos?\b", r"\1 todo", t)
     t = re.sub(r"\bto-?\s?do\s+list\b", "todo list", t)
     return t
+
+
+# --------------------------------------------------------------------------
+#   The spoken-command normaliser (2026-10-21, Live/Voice audit V4)
+# --------------------------------------------------------------------------
+#
+# WHY THIS EXISTS. `normalise` already strips "hey jarvis", "jarvis",
+# "please", "can/could/would you"; `parse_duration` already reads number words
+# inside a length of time ("twenty five minutes", "a couple of minutes",
+# "an hour and a half"). Measured on the tree before this change (the probe is
+# in the PR body, and every line below is a test in test_voice_reflex.py):
+# those duration forms ALREADY hit the fast path, so rewriting them would be
+# change for change's sake. What genuinely fell through to the model was:
+#   * polite lead-ins `normalise` does not know ("would you mind ...",
+#     "can you kindly ...", "i would like you to ...", "do you think you
+#     could ...", "would it be possible to ...", "i was wondering if you
+#     could ..."),
+#   * number words in the three whole-sentence grammars that demand digits:
+#     "watch FIVE more minutes" (`_WATCH_MORE_N`), "speak up THREE times a
+#     day" (`_BUDGET_PER_DAY`) and "the brief arrives at EIGHT"
+#     (`_BRIEF_AT`).
+#
+# THE SAFE NUMBER RULE, stated once and tested: a number word (one..ninety
+# nine) becomes digits ONLY when the number is followed by (a) a length-of-
+# time word, directly or after "more"; (b) "time(s) a/per day"; or (c) the
+# number stands directly after "at" and ends the sentence or is followed by
+# am/pm/"in the morning|afternoon|evening"/"at night". Everything else is
+# left alone - "one of the files", "the one with the error", "call me three
+# times", "a couple of minutes", "half an hour", "an hour and a half" and
+# "twenty five" on its own all come out unchanged.
+#
+# IT ONLY DECIDES A MATCH. The grammar is tried on this string; a sentence
+# this does not match still goes to the model with the OWNER'S ORIGINAL
+# WORDS (`answer()` passes `text`, never this string), so a rewrite can never
+# change what the model is asked.
+
+#: Lead-ins `normalise` does not strip. Longest first: "would you mind " must
+#: be tried before "mind ", and "i would like you to " before any shorter
+#: tail of it.
+_EXTRA_LEADS = (
+    "would you be so kind as to ",
+    "i was wondering if you could ",
+    "i was wondering if you can ",
+    "would it be possible to ",
+    "do you think you could ",
+    "do you think you can ",
+    "i would like you to ",
+    "i would love you to ",
+    "any chance you could ",
+    "any chance you can ",
+    "could you possibly ",
+    "can you possibly ",
+    "possibly ",
+    "be so kind as to ",
+    "if you don't mind ",
+    "would you mind ",
+    "please ",
+    "kindly ",
+    "just ",
+    "mind ",
+)
+
+#: "would you mind SETTING a timer" - a polite lead is followed by a gerund,
+#: and the grammars below are written for the plain verb. Only the first word
+#: of a sentence whose lead was stripped is ever changed, and only for the
+#: verbs the fast path already acts on.
+_GERUND_VERB = {
+    "setting": "set", "opening": "open", "starting": "start", "stopping": "stop",
+    "making": "make", "adding": "add", "cancelling": "cancel", "canceling": "cancel",
+    "pausing": "pause", "resuming": "resume", "reminding": "remind", "turning": "turn",
+    "reading": "read", "switching": "switch", "playing": "play", "hiding": "hide",
+    "speaking": "speak", "talking": "talk", "showing": "show", "changing": "change", "pinning": "pin", "muting": "mute",
+    "unmuting": "unmute", "repeating": "repeat", "scrolling": "scroll",
+}
+
+#: The words a number may be followed by, for rule (a): the same lengths of
+#: time `_UNIT_S` below knows (written out here because this block runs first
+#: in the file), plus the calendar words a sentence may use.
+_TIME_UNITS = frozenset((
+    "h", "hr", "hrs", "hour", "hours",
+    "m", "min", "mins", "minute", "minutes",
+    "s", "sec", "secs", "second", "seconds",
+    "day", "days", "week", "weeks", "month", "months"))
+
+
+def _bare_token(tok: str) -> tuple:
+    """(the lower-case word, the punctuation after it) of one token."""
+    m = re.fullmatch(r"([a-z]+)([^a-z]*)", tok)
+    if not m:
+        return "", tok
+    return m.group(1), m.group(2)
+
+
+def _spoken_numbers(s: str) -> str:
+    """Number words to digits, only in the three safe positions above."""
+    # "twenty-five" is one number said as one hyphenated word: split it, then
+    # the token walk below sees "twenty" + "five" (the same two tokens
+    # parse_duration's own tokeniser produces).
+    s = re.sub(r"\b(twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)-"
+               r"(one|two|three|four|five|six|seven|eight|nine)\b", r"\1 \2", s)
+    toks = s.split(" ")
+    bare = [_bare_token(t) for t in toks]
+    out = []
+    i, n = 0, len(toks)
+    while i < n:
+        word = bare[i][0]
+        value, j = None, i
+        if word in _TENS:
+            value, j = float(_TENS[word]), i + 1
+            if j < n and bare[j][0] in _UNITS and 0 < _UNITS[bare[j][0]] < 10:
+                value += _UNITS[bare[j][0]]
+                j += 1
+        elif word in _UNITS and _UNITS[word] > 0:
+            value, j = float(_UNITS[word]), i + 1
+        if value is None:
+            out.append(toks[i])
+            i += 1
+            continue
+        nxt = bare[j][0] if j < n else ""
+        nxt2 = bare[j + 1][0] if j + 1 < n else ""
+        nxt3 = bare[j + 2][0] if j + 2 < n else ""
+        prev = bare[i - 1][0] if i > 0 else ""
+        rewrite = (
+            nxt in _TIME_UNITS
+            or (nxt == "more" and nxt2 in _TIME_UNITS)
+            or (nxt in ("time", "times") and nxt2 in ("a", "per") and nxt3 == "day")
+        )
+        if not rewrite and prev == "at":
+            rewrite = (
+                j >= n
+                or nxt in ("am", "pm")
+                or (nxt == "in" and nxt2 == "the"
+                    and nxt3 in ("morning", "afternoon", "evening"))
+                or (nxt == "at" and nxt2 == "night")
+            )
+        if rewrite:
+            # Keep the punctuation the number word carried ("at eight." ->
+            # "at 8."), and drop the words it was written as.
+            out.append(str(int(value)) + bare[j - 1][1])
+            i = j
+        else:
+            out.append(toks[i])
+            i += 1
+    return " ".join(out)
+
+
+def normalize_spoken_command(text) -> str:
+    """`text` tidied for the grammar: `normalise`'s own tidying, the polite
+    lead-ins `normalise` does not strip, and the three safe number rewrites
+    above. Idempotent (test_voice_reflex.py runs it twice on every sentence
+    it tests), and it NEVER changes which words the model is asked."""
+    t = normalise(text)
+    stripped = False
+    changed = True
+    while changed:
+        changed = False
+        for lead in _EXTRA_LEADS:
+            if t.startswith(lead):
+                t = normalise(t[len(lead):])
+                stripped = True
+                changed = True
+                break
+    if stripped and t:
+        first, _sep, rest = t.partition(" ")
+        if first in _GERUND_VERB:
+            t = _GERUND_VERB[first] + (" " + rest if rest else "")
+    return _spoken_numbers(t)
+
+
+# --------------------------------------------------------------------------
+#   The one voice reflex this slice adds (2026-10-21, Live/Voice audit V4)
+# --------------------------------------------------------------------------
+#
+# A ROUTER into an action that already exists, with its own permission model:
+# it raises no card and cannot bypass `jarvis_gate` - there is nothing to
+# approve. The commands this slice did NOT build are listed in
+# `docs/JARVIS-API.md` section 154 with the evidence.
+#
+# THE SELECTION/SCREEN READS ARE NOT HERE, DELIBERATELY (2026-10-21). PR #691
+# shipped "what's on my screen" / "read this selection" / "summarise what I
+# selected" for Live turns, through the SAME `jarvis_screen`/`read_selection`
+# primitives (`jarvis_voice_ui.py`, the audit's V7 read half). A second, 0-ms
+# copy in this fast path would intercept those phrases before the Live path
+# could answer them - two implementations of one feature, and the fast one
+# would win even inside Live. So this file does not match them, and
+# `test_voice_reflex.py` holds it to that (the slice's own read reflex was
+# dropped when #691 merged; see section 154.3 of docs/JARVIS-API.md).
+
+VOICES_MISSING = ("This PC's Jarvis cannot change the speaking speed yet - run "
+                  "apply-patches.ps1 on the PC.")
+
+_VOICE_SPEED = re.compile(
+    r"(?:speak|talk)\s+(?:a\s+(?:bit|little)\s+)?"
+    r"(?P<way>faster|more\s+quickly|slower|more\s+slowly|normally|normal)")
+_VOICE_SPEED_AT_NORMAL = re.compile(
+    r"(?:speak|talk)\s+at\s+(?:the\s+)?normal\s+speed")
+_SPEED_WAY = {"faster": "faster", "more quickly": "faster",
+              "slower": "slower", "more slowly": "slower",
+              "normally": "normal", "normal": "normal"}
+
+
+def _voice_speed(s: str) -> Optional[Intent]:
+    m = _VOICE_SPEED.fullmatch(s)
+    if m:
+        return Intent("voice_speed", {"speed": _SPEED_WAY[m.group("way")]})
+    if _VOICE_SPEED_AT_NORMAL.fullmatch(s):
+        return Intent("voice_speed", {"speed": "normal"})
+    return None
+
+
+def _run_voice_speed(intent: Intent) -> Result:
+    """The SAME action as POST /api/voice/voices/speed (jarvis_voices.
+    set_speed): a cosmetic setting, no card either way, its own words."""
+    n = intent.name
+    choice = intent.f.get("speed")
+    try:
+        import jarvis_voices as V
+    except Exception:
+        return Result(VOICES_MISSING, n)
+    try:
+        code, out = V.set_speed({"speed": choice})
+    except Exception as exc:                                   # noqa: BLE001
+        return Result(f"The speaking speed could not be changed ({type(exc).__name__}).", n)
+    out = out if isinstance(out, dict) else {}
+    if code != 200 or not out.get("ok"):
+        return Result(str(out.get("error") or "The speaking speed could not be changed."), n)
+    return Result(str(out.get("message") or V.SPEED_SAID.get(choice, "Done.")), n)
 
 # --------------------------------------------------------------------------
 #   Numbers and lengths of time
@@ -828,9 +1077,20 @@ def match(text, now: Optional[float] = None) -> Optional[Intent]:
 
 
 def _match(text, now: float) -> Optional[Intent]:
-    s = normalise(text)
+    s = normalize_spoken_command(text)
     if not s or len(s) > 400 or "\n" in s:
         return None
+
+    # --- the voice reflex (2026-10-21, Live/Voice audit V4) -----------------
+    # Before everything else, because it is a whole short sentence: "speak
+    # faster". It routes into an action that already exists
+    # (`jarvis_voices.set_speed`) - not a card of its own, and it cannot
+    # bypass `jarvis_gate` (there is nothing to approve). The selection and
+    # screen reads are PR #691's Live path, not this fast path; see the block
+    # above this language section.
+    got = _voice_speed(s)
+    if got is not None:
+        return got
 
     # --- bulk is refused outright: one at a time ----------------------------
     if re.fullmatch(r"(?:cancel|delete|remove|clear|stop)\s+(?:all|every|both)\s+(?:(?:of\s+)?"
@@ -4479,6 +4739,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     if n == "widget_make":
         # `messages`: the request's, as they arrived - for the taint check.
         return _run_widget(f, conversation, messages)
+    # Voice reflex (2026-10-21, Live/Voice audit V4): a router into an action
+    # that already exists and already has its own permission model.
+    if n == "voice_speed":
+        return _run_voice_speed(intent)
     import jarvis_schedule as S
     if n == "settings_open":
         return _run_settings_open(f)
