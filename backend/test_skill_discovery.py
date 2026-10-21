@@ -39,6 +39,12 @@ sys.path.insert(0, str(HERE / "rebuilt"))
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-skill-discovery-"))
 os.environ["OPENJARVIS_CONFIG_DIR"] = str(_TMP / "cfg")
 os.environ.pop("JARVIS_SKILLS_DIR", None)
+# This suite chooses the log directory it reads back (LOGS below, through the
+# framework config it patches), so it is one of the logging-machinery suites:
+# the runner's JARVIS_LOG_DIR isolation is cleared here and left out for it by
+# run_suites.LOG_MACHINERY_SUITES. Without this, the override would point the
+# audit lines somewhere this suite never looks, and its log reads would fail.
+os.environ.pop("JARVIS_LOG_DIR", None)
 
 import jarvis_framework as FW  # noqa: E402
 # On a real install (JARVIS_BACKEND set), the backend's own copy must be

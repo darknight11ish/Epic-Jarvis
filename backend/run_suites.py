@@ -220,18 +220,26 @@ REAL_HOME_ENV = "JARVIS_TESTS_USE_REAL_HOME"
 #: events to the OWNER's real log. Every suite gets a per-run temporary folder
 #: through this variable; the logging-machinery suites are exempt below.
 LOG_DIR_ENV = "JARVIS_LOG_DIR"
-#: The suites that test the audit-log machinery ITSELF. They set up and read
-#: their own log directory (by patching load_framework, or by testing this
-#: runner's isolation), so the runner leaves JARVIS_LOG_DIR out of their
-#: environment - otherwise they would be reading a directory nobody set up.
-#: Each of them ALSO clears the variable itself, because apply-patches.ps1 runs
-#: every suite directly with the variables `--state-env` printed, which include
-#: JARVIS_LOG_DIR and cannot be varied per suite.
+#: The suites that test the audit-log machinery ITSELF, or read audit lines back
+#: from a log folder they choose. They set up and read their own log directory
+#: (by patching load_framework, or by testing this runner's isolation), so the
+#: runner leaves JARVIS_LOG_DIR out of their environment - otherwise they would
+#: be reading a directory nobody set up. Each of them ALSO clears the variable
+#: itself, because apply-patches.ps1 runs every suite directly with the
+#: variables `--state-env` printed, which include JARVIS_LOG_DIR and cannot be
+#: varied per suite. A new suite that reads audit lines back from its own folder
+#: joins this list, the same way it would join NEEDS_OWNER when it needs a file
+#: from the owner's PC; the full sweep is what catches an omission.
 LOG_MACHINERY_SUITES = {
     "test_log_retention.py": "tests prune_logs()/log_dir() against a folder it builds",
     "test_rebuilt.py": "tests audit_log()/log_dir() by patching load_framework",
     "test_suite_state.py": "tests this runner's own state isolation; its CONTROL "
                            "runs are unisolated on purpose",
+    # Discovered by the first full sweep after the switch was added (2026-10-20):
+    # these two read the audit lines back from a log folder they choose
+    # themselves, so the override made them look in the wrong place.
+    "test_skill_discovery.py": "reads audit lines back from a log folder it chooses",
+    "test_memory_erase.py": "reads audit lines back from a log folder it chooses",
 }
 #: The model loaders must be OFFLINE in every suite's environment (2026-10-18).
 #: test_attention_phrases.py says "no model, no network" in its own header, but

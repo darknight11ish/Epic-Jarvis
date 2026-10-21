@@ -2721,9 +2721,11 @@ theory: measured over 22:00-23:22 on 2026-10-20, local suite runs appended 191
 and every live file were untouched - synthetic events in the forensic record.
 So `jarvis_framework.log_dir()` now honours `JARVIS_LOG_DIR` over both the
 config and `CONFIG_DIR/logs`, the runner sets it to a per-run temporary folder
-for every suite, and the three suites that test the logging machinery itself
-(`test_log_retention.py`, `test_rebuilt.py`, `test_suite_state.py`) are the
-explicit opt-out, named once in `run_suites.py`'s `LOG_MACHINERY_SUITES`.
+for every suite, and the suites that test the logging machinery itself, or read
+audit lines back from a log folder they choose (`LOG_MACHINERY_SUITES` in
+`backend/run_suites.py`: `test_log_retention.py`, `test_rebuilt.py`,
+`test_suite_state.py`, `test_skill_discovery.py`, `test_memory_erase.py`), are
+the explicit, documented opt-out.
 `backend/test_log_isolation.py` reproduces the hazard in a throwaway HOME and
 proves the fix, the precedence, the default and the runner's own behaviour.
 
