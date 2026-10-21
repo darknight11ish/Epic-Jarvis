@@ -7041,6 +7041,46 @@ same check on the addresses it actually connects to - before, urllib did a
 second lookup of its own, so an answer that changed between the check and
 the connect got through.
 
+**What a look reads now (Pillar 26, extended 2026-10-21).** The signals a
+page gives are read machine-markup first: every `application/ld+json` block
+(schema.org `Product`/`Offer`/`AggregateOffer`/`Flight`, top-level lists,
+`@graph`, `offers`, `price`/`lowPrice`) and the OpenGraph/`product:price`
+`<meta>` tags, then the prices SHOWN in the visible words that the markup did
+not already give - the same amount is never listed twice. Prices are integer
+whole cents, parsed with `Decimal` from the text the page actually wrote
+(`"$1,249.99"` and the JSON number `1249.99` are both exactly `124999`, never
+a float artefact). A schema.org availability maps into the existing
+three-state vocabulary (`InStock`/`LimitedAvailability` -> `in_stock`,
+`OutOfStock`/`SoldOut` -> `out_of_stock`; `PreOrder`/`BackOrder` are not
+claimed either way and leave the visible words to answer). That mattered
+because a discount or an `OutOfStock` is often only in the machine markup, so
+a page watch could sit quiet on a change a price watch would have seen. The
+snapshot's kind moved `t2:` -> `t3:` for it: the first look after the update
+records ONE silent new baseline instead of ringing the owner for a JSON-LD
+price the older reader could not see (`_look_page`'s existing rule for a
+kind it cannot compare). The machine markup is not visible page words, so the
+noise-stripped `clean_sha256` does not move when it changes; the page's words
+are still never kept, shown or quoted, and a real change still latches the
+gate taint (`why="page_watch"`).
+
+**Fetch hygiene, exported for the price radar (Slice 1, 2026-10-21).** Three
+pure helpers ship with this module: `canonicalize_watch_url` (strips
+`utm_*`, `gclid`, `fbclid`, `msclkid`, `mc_eid`, `_ga`, `ref`, `ref_*`,
+`tag`, `ascsubtag`, `psc`, `pf_rd_*`, `pd_rd_*` from the query only, keeps
+`id`/`sku`/`model`/`pid`/`variant` and the host/path/order/fragment,
+idempotent); `build_decoupled_headers` (seven browser-coherent profile sets -
+User-Agent, `Sec-CH-UA`/`Sec-CH-UA-Platform`/`Sec-CH-UA-Mobile` matching that
+own UA, `Sec-Fetch-*`, `Accept-Language` - and it never emits `Cookie`,
+`If-None-Match` or `If-Modified-Since`; `referer_mode="search_comparison"`
+sends only `https://www.google.com/`); and `next_poll_timestamp` (+/-30%
+jitter with a 300 s floor, deterministic under an injected RNG). **They are
+deliberately NOT wired into the existing watch path yet:** a stored watch's
+address must not silently change under the owner, and the two existing
+fetchers send this project's own honest Jarvis `User-Agent` on purpose - the
+radar's own fetch/schedule path (Slice 2) will use all three in one place, so
+there is never a second header builder in use. Tests:
+`backend/test_tellme_price_radar.py`.
+
 ### 30.3 A match only notifies
 
 A look rings no doorbell and writes no "fired" line (the kind is `silent`
