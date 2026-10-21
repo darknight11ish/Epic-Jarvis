@@ -11,9 +11,10 @@ Obsidian can open, WITHOUT losing anything it cannot put back.
 WHAT IT DOES, IN ORDER
   1. INGEST a `.zip`, a folder already unzipped, or either containing Notion's
      `Export-...-Part-2.zip` parts. A zip is judged by its OWN directory before
-     a byte is written - the unpacked total it declares and its compression
-     ratio, so a zip bomb is refused rather than filled to - and the absolute
-     caps are counted as bytes are written because a header can lie. Nothing is
+     a byte is written - the unpacked total it declares, its compression ratio,
+     how many members it holds and how big the largest one is, so a zip bomb is
+     refused rather than filled to - and the absolute caps are counted as bytes
+     are written because a header can lie. Nothing is
      unpacked outside the staging folder, and `..` and absolute names are
      refused (the same guard `jarvis_documents.import_notion` uses - see WHY IT
      IS NOT A SECOND EXTRACTOR below).
@@ -21,13 +22,17 @@ WHAT IT DOES, IN ORDER
      file and folder names, replace what Windows and Obsidian forbid, and
      resolve collisions DETERMINISTICALLY - two pages called `Meeting Notes`
      under different ids become `Meeting Notes.md` and `Meeting Notes 2.md`,
-     always the same way for the same export, and the
+     always the same way for the same export, and a generated hub note or
+     `.base` that would share a name follows the same rule rather than
+     replacing the page. The
      `old_relative_path_with_id -> new_vault_relative_path` map is kept because
      step 5 needs it.
   3. PROPERTIES into YAML frontmatter, including `notion_id`, so importing the
      same export twice is idempotent. Each exported CSV database has its row's
      columns merged into the matching note's frontmatter (a relation value that
-     names a page of the export becomes `[[that page]]`), and gets a generated
+     names a page of the export becomes `[[that page]]`; Notion's id is taken
+     off only when the id-free value names a page, so every other value is left
+     byte-for-byte), and gets a generated
      `_Database - <Name>.md` hub note - type, row count and columns in its
      frontmatter, a row table linking every child note, and a count of rows
      whose page is missing - plus a `.base` file. `X.csv` and `X_all.csv` are
@@ -54,6 +59,9 @@ WHAT IT NEVER DOES
   * It never overwrites a file that is already in the vault: a name already
     taken gets a number, and the plan says so before a person is asked.
   * It never reads facts, memory or chat: it is a files-in, files-out module.
+  * It answers no request from another device: both routes are this PC only,
+    the same rule the folder import keeps, because the export file and the
+    vault are folders on this PC (2026-10-21 audit, R4).
 
 WHY IT IS NOT A SECOND EXTRACTOR. `jarvis_documents.py` already ships
 `import_notion()`, and it already refuses zip-slip, caps the size, unpacks one
@@ -140,6 +148,15 @@ MAX_ZIP = 2 * 1024 * 1024 * 1024
 #: pages and CSVs - text, around 2-10:1 - so 100:1 is not a working archive.
 #: The absolute caps above stay as the backstop: a header can lie, and the
 #: bytes actually written are what fill a disk.
+#:
+#: THIS module's declared-total number is 500 MB, and that is on purpose:
+#: `jarvis_documents.EXPORT_UNCOMPRESSED_MAX` is 250 MB for the folder import
+#: that unpacks a Notion export only to READ it, while this one WRITES a new
+#: vault and copies its attachments too. The total check itself is
+#: `jarvis_documents.zip_bomb_problem` (imported, not copied); the ratio is
+#: the extra rule a zip bomb needs. The member COUNT and the largest single
+#: member are checked from `infolist()` in `_zip_problem` as well, before any
+#: member is opened (2026-10-21 audit, R2/R3).
 MAX_ZIP_UNCOMPRESSED = 500 * 1024 * 1024
 MAX_ZIP_RATIO = 100
 MAX_NAME = 120                                # characters in one path part
@@ -169,6 +186,13 @@ class ImportRefused(Exception):
 
 def _refused(why: str) -> "ImportRefused":
     return docs.ImportRefused(why) if docs is not None else ImportRefused(why)
+
+
+#: What a refusal can actually BE. `_refused()` raises `jarvis_documents`' own
+#: class when that module is beside this one, and this module's class when it
+#: is not - so every `except`/`isinstance` asks about BOTH, or the run path
+#: would catch neither and report "ImportRefused" instead of the sentence.
+_REFUSALS = (ImportRefused,) + ((docs.ImportRefused,) if docs is not None else ())
 
 
 # --------------------------------------------------------------------------
@@ -305,21 +329,43 @@ def _unique(want: str, taken: set) -> str:
 def _zip_problem(zf: zipfile.ZipFile) -> str:
     """Why this archive is refused BEFORE a byte is written, or "".
 
-    A zip bomb is refused from its own central directory - the declared
-    unpacked total and the declared compression ratio - rather than after
-    writing the bytes it claims. The caps in `_copy_capped` stay as the
-    backstop for an archive whose header lies.
+    A zip bomb is refused from its own central directory rather than after
+    writing the bytes it claims. Four numbers are judged here, all from
+    `infolist()`: the declared unpacked TOTAL, the compression ratio, how many
+    members the archive holds (the same `MAX_FILES` the folder path caps) and
+    the largest single member (`MAX_ONE`). The caps in `_copy_capped` stay as
+    the backstop for an archive whose header lies.
     """
+    members = 0
     unpacked = packed = 0
     for info in zf.infolist():
         if info.is_dir():
             continue
-        unpacked += int(info.file_size or 0)
+        members += 1
+        if members > MAX_FILES:
+            return (f"the zip holds more than {MAX_FILES:,} files, which is more than "
+                    f"one export can be - nothing was unpacked")
+        size = int(info.file_size or 0)
+        if size > MAX_ONE:
+            return (f"one file inside says it is bigger than "
+                    f"{MAX_ONE // (1024 * 1024)} MB once unpacked, so nothing was "
+                    f"unpacked")
+        unpacked += size
         packed += int(info.compress_size or 0)
-        if unpacked > MAX_ZIP_UNCOMPRESSED:
-            return (f"the zip says it holds more than "
-                    f"{MAX_ZIP_UNCOMPRESSED // (1024 * 1024)} MB once unpacked, so "
-                    f"nothing was unpacked")
+    # The declared TOTAL is `jarvis_documents`' own check - the same function its
+    # Notion import uses - so this module keeps importing that guard rather than
+    # copying it. The numbers differ on purpose and both are stated here: that
+    # import unpacks a folder to READ it (`jarvis_documents.EXPORT_UNCOMPRESSED_MAX`,
+    # 250 MB); this one WRITES a new vault including the attachments
+    # (`MAX_ZIP_UNCOMPRESSED`, 500 MB).
+    if docs is not None:
+        why = docs.zip_bomb_problem(zf, MAX_ZIP_UNCOMPRESSED)
+        if why:
+            return f"{why}, so nothing was unpacked"
+    elif unpacked > MAX_ZIP_UNCOMPRESSED:
+        return (f"the zip says it holds more than "
+                f"{MAX_ZIP_UNCOMPRESSED // (1024 * 1024)} MB once unpacked, so "
+                f"nothing was unpacked")
     if unpacked > 0 and packed == 0:
         return ("the zip says it holds data but no compressed bytes at all, so "
                 "nothing was unpacked")
@@ -383,6 +429,10 @@ def _read_zip(zip_path: str, dest: str, counts: dict, depth: int = 0) -> None:
             with zf.open(info) as src, open(real, "wb") as out:
                 _copy_capped(src, out, counts, MAX_ONE)
             counts["files"] += 1
+            # The per-archive check above cannot see the other Part-N zips, so
+            # the same cap is counted again here, as the bytes are written.
+            if counts["files"] > MAX_FILES:
+                raise _refused(f"the export has more than {MAX_FILES:,} files")
 
 
 def _copy_capped(src, out, counts: dict, one_max: int) -> None:
@@ -474,7 +524,7 @@ def extract(source: str, dest: str) -> dict:
             _read_zip(source, dest, counts)
         except zipfile.BadZipFile:
             raise _refused("that file is not a zip this can open")
-        except ImportRefused:
+        except _REFUSALS:
             raise
     else:
         raise _refused("point it at the .zip Notion made, or at a folder it was unzipped into")
@@ -1025,10 +1075,10 @@ def _survey(staging: str) -> tuple:
     mapping: dict = {}
     taken_dirs: dict = {}
     used_files: dict = {}
-    #: database key -> the set of row titles it holds, so TWO CSV files of one
-    #: database (`X.csv` and `X_all.csv`) count as one database with no row
-    #: counted twice.
-    database_titles: dict = {}
+    #: database key -> the set of row identities it holds (see `_row_key`), so
+    #: TWO CSV files of one database (`X.csv` and `X_all.csv`) count as one
+    #: database with no row counted twice, and two rows with one title are two.
+    database_rows: dict = {}
     stats = {"notes": 0, "attachments": 0, "databases": 0, "rows": 0,
              "renamed": 0, "collisions": 0, "html": 0}
     root = os.path.realpath(staging)
@@ -1048,11 +1098,15 @@ def _survey(staging: str) -> tuple:
                 stats["attachments"] += 1
             elif lower in NOTE_KINDS or lower == ".html":
                 clean = clean_name(name)
+                if lower == ".html":
+                    # One page, one target: the HTML page is WRITTEN as `.md`,
+                    # so its `.md` name is the one that must not collide with a
+                    # Markdown page of the same title beside it.
+                    clean = os.path.splitext(clean)[0] + ".md"
                 new = _unique(clean, used_files[clean_dir])
                 rel = f"{clean_dir}/{new}" if clean_dir else new
                 mapping[old] = rel
                 if lower == ".html":
-                    mapping[old] = os.path.splitext(rel)[0] + ".md"
                     stats["html"] += 1
                 else:
                     stats["notes"] += 1
@@ -1061,18 +1115,20 @@ def _survey(staging: str) -> tuple:
                 new = _unique(clean, used_files[clean_dir])
                 rel = f"{clean_dir}/{new}" if clean_dir else new
                 mapping[old] = rel
-                titles = database_titles.setdefault(_database_key(rel), set())
+                is_all = os.path.splitext(name)[0].endswith("_all")   # ORIGINAL name
+                rows_before = database_rows.setdefault(_database_key(rel, is_all), set())
+                seen: dict = {}
                 for row in _read_csv(os.path.join(dirpath, name)):
-                    title = _row_title(row)
-                    if title:
-                        titles.add(title.casefold())
+                    key = _row_key(row, seen)
+                    if key:
+                        rows_before.add(key)
             else:
                 continue
             if os.path.splitext(os.path.basename(mapping[old]))[0].casefold() != \
                     os.path.splitext(stem)[0].casefold():
                 stats["renamed"] += 1
-    stats["databases"] = len(database_titles)
-    stats["rows"] = sum(len(titles) for titles in database_titles.values())
+    stats["databases"] = len(database_rows)
+    stats["rows"] = sum(len(rows) for rows in database_rows.values())
     return mapping, stats
 
 
@@ -1096,36 +1152,68 @@ def _row_title(row: dict) -> str:
     return str(row.get(_title_column(row), "") or "").strip()
 
 
-def _database_key(csv_rel: str) -> tuple:
-    """(folder, name) of a database - `X.csv` and `X_all.csv` are ONE database."""
+def _row_key(row: dict, seen: dict) -> tuple:
+    """The identity of ONE CSV row, so two rows with one title both survive.
+
+    Notion's CSV carries no row id of its own, so a row whose TITLE ends in
+    Notion's id shape is keyed by that id (unique by construction); every other
+    row is keyed by its case-folded title plus the number of times that title
+    has been seen in THIS file. That pairs the same occurrence across `X.csv`
+    and `X_all.csv` while never merging two rows of one file.
+    """
+    title = _row_title(row)
+    if not title:
+        return ()
+    m = _ID.search(title)
+    if m:
+        return ("id", m.group(1).casefold())
+    key = title.casefold()
+    n = seen.get(key, 0)
+    seen[key] = n + 1
+    return ("title", key, n)
+
+
+def _database_key(csv_rel: str, is_all_variant: bool = False) -> tuple:
+    """(folder, name) of a database - `X.csv` and `X_all.csv` are ONE database.
+
+    `is_all_variant` comes from the ORIGINAL file name (Notion writes
+    `<name> <id>_all.csv`), never from the cleaned name alone: a database
+    genuinely called `Backlog_all`, whose plain export is
+    `Backlog_all <id>.csv`, must keep its `_all`.
+    """
     folder = os.path.dirname(csv_rel)
     stem = os.path.splitext(os.path.basename(csv_rel))[0]
-    return (folder, re.sub(r"_all$", "", stem))
+    if is_all_variant and stem.endswith("_all"):
+        stem = stem[:-len("_all")]
+    return (folder, stem)
 
 
-def _merged_database_rows(csv_rows: dict) -> dict:
-    """Every CSV export of one database as ONE row list, keyed by its title.
+def _merged_database_rows(csv_rows: dict, all_variants: Optional[dict] = None) -> dict:
+    """Every CSV export of one database as ONE row list.
 
-    Notion can export a database as `X.csv` and `X_all.csv`; the `_all` file is
-    the complete one (it holds columns the plain export omits or truncates), so
-    its non-empty values win while rows that only one of the files holds are
-    all kept. Ordered by first sight, so the same export always lists the same
-    rows in the same order.
+    Rows are keyed by `_row_key`, not by title alone, so duplicates inside one
+    file stay separate. Notion can export a database as `X.csv` and
+    `X_all.csv`; the `_all` file is the complete one (it holds columns the
+    plain export omits or truncates), so its non-empty values win while rows
+    that only one of the files holds are all kept. Ordered by first sight, so
+    the same export always lists the same rows in the same order.
     """
+    variants = all_variants or {}
     merged: dict = {}
     for csv_rel, rows in sorted(csv_rows.items()):
-        is_all = os.path.splitext(os.path.basename(csv_rel))[0].endswith("_all")
-        slots = merged.setdefault(_database_key(csv_rel), {})
+        is_all = bool(variants.get(csv_rel))
+        slots = merged.setdefault(_database_key(csv_rel, is_all), {})
+        seen: dict = {}
         for row in rows:
-            title = _row_title(row)
-            if not title:
+            key = _row_key(row, seen)
+            if not key:
                 continue
-            slot = slots.setdefault(title.casefold(), {"title": title, "row": {}})
-            for key, value in row.items():
+            slot = slots.setdefault(key, {"title": _row_title(row), "row": {}})
+            for col, value in row.items():
                 if not str(value or "").strip():
                     continue
-                if is_all or not str(slot["row"].get(key) or "").strip():
-                    slot["row"][key] = value
+                if is_all or not str(slot["row"].get(col) or "").strip():
+                    slot["row"][col] = value
     return {key: list(slots.values()) for key, slots in merged.items()}
 
 
@@ -1153,27 +1241,35 @@ def _known_pages(mapping: dict) -> dict:
 def _relation_value(value, pages: dict) -> str:
     """One database cell, for a frontmatter property.
 
-    Notion's id is taken off a relation value, and a target that names a page
-    of THIS export becomes `[[that page]]`, so Obsidian's graph connects a
-    database relation by itself. A value that is not a page is returned
-    UNCHANGED - byte for byte, comma and all - because ordinary cells
-    (`1,234`, a long date) must not be rewritten by a relation rule.
+    Notion's id is taken off only when the id-free value names a page of THIS
+    export, and that page becomes `[[that page]]`, so Obsidian's graph connects
+    a database relation by itself. Every other value is returned UNCHANGED -
+    byte for byte, comma and all - because ordinary cells (`1,234`, a long
+    date, a reference that happens to end in 32 hex characters) must not be
+    rewritten by a relation rule.
     """
     text = str(value or "").strip()
     if not text:
         return text
+    # A whole cell that IS a page first: a page title may contain a comma, so
+    # the comma-splitting below is only for a real multi-value relation cell.
+    target = pages.get(text.casefold())
+    if target:
+        return f"[[{target}]]"
+    clean_all, _id = split_id(text)
+    target = pages.get(clean_all.strip().casefold())
+    if target:
+        return f"[[{target}]]"
     pieces = [p.strip() for p in re.split(r"\s*,\s*", text) if p.strip()]
     out, changed = [], False
     for piece in pieces:
         clean, _id = split_id(piece)
-        clean = clean.strip()
-        target = pages.get(clean.casefold())
+        target = pages.get(clean.strip().casefold()) or pages.get(piece.casefold())
         if target:
             out.append(f"[[{target}]]")
             changed = True
         else:
-            out.append(clean if clean != piece else piece)
-            changed = changed or clean != piece
+            out.append(piece)          # not a page: every character kept
     return ", ".join(out) if changed else text
 
 
@@ -1255,7 +1351,7 @@ def run_import(p: Plan, *, approved: bool = False,
         os.replace(built, final)
     except BaseException as exc:
         shutil.rmtree(staging, ignore_errors=True)
-        if isinstance(exc, ImportRefused):
+        if isinstance(exc, _REFUSALS):
             return {"ok": False, "reason": str(exc)}
         return {"ok": False, "reason": f"the import stopped: {type(exc).__name__}"}
     finally:
@@ -1301,11 +1397,17 @@ def _build(src: str, dest: str, mapping: dict, name: str) -> tuple:
     row's columns are merged into the frontmatter of the page that row is, and
     a page whose name sorts before its database's CSV would otherwise be
     written before the columns were known.
+
+    `taken` is the set of names already claimed in each folder of THIS new
+    vault tree (pages and attachments). The generated hub note and `.base` go
+    through the same `_unique` rule, so a real page (or an earlier generated
+    file) is never silently replaced - the audit's F1/F2 findings.
     """
     created: list = []
     root = os.path.realpath(src)
     entries: list = []
     csv_rows: dict = {}
+    csv_all: dict = {}
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames.sort()
         rel_dir = os.path.relpath(dirpath, root)
@@ -1318,6 +1420,15 @@ def _build(src: str, dest: str, mapping: dict, name: str) -> tuple:
     for new, full, fname in entries:
         if os.path.splitext(fname)[1].lower() == ".csv":
             csv_rows[new] = _read_csv(full)
+            # `_all` is Notion's marker, read from the ORIGINAL name so a
+            # database genuinely called `Backlog_all` keeps its name.
+            csv_all[new] = os.path.splitext(fname)[0].endswith("_all")
+    taken: dict = {}
+    for new in mapping.values():
+        if os.path.splitext(new)[1].lower() == ".csv":
+            continue                        # a CSV becomes a note and a .base
+        taken.setdefault(os.path.dirname(new), set()).add(
+            os.path.basename(new).casefold())
     for new, full, fname in entries:
         lower = os.path.splitext(fname)[1].lower()
         target = os.path.join(dest, *new.split("/"))
@@ -1341,10 +1452,11 @@ def _build(src: str, dest: str, mapping: dict, name: str) -> tuple:
         page_title = (title or "").strip() or split_id(os.path.splitext(fname)[0])[0]
         front = frontmatter_of(page_title, split_id(fname)[1], props)
         front = _wikilink_properties(front, mapping)
-        front = _merge_database(front, page_title, csv_rows, mapping)
+        front = _merge_database(front, page_title, csv_rows, mapping, csv_all)
         _write(target, yaml_block(front) + "\n\n" + text.rstrip() + "\n")
         created.append(new)
-    db_notes, rows_without_notes = _database_notes(dest, csv_rows, mapping, name)
+    db_notes, rows_without_notes = _database_notes(dest, csv_rows, mapping, name,
+                                                   taken, csv_all)
     created += db_notes
     return created, rows_without_notes
 
@@ -1364,7 +1476,8 @@ def _wikilink_properties(front: dict, mapping: dict) -> dict:
     return front
 
 
-def _merge_database(front: dict, title: str, csv_rows: dict, mapping: dict) -> dict:
+def _merge_database(front: dict, title: str, csv_rows: dict, mapping: dict,
+                       all_variants: Optional[dict] = None) -> dict:
     """A database row's columns, into the frontmatter of the page that row is.
 
     The row is found by its TITLE column - Notion names that column after the
@@ -1375,7 +1488,7 @@ def _merge_database(front: dict, title: str, csv_rows: dict, mapping: dict) -> d
     """
     pages = _known_pages(mapping)
     wanted = (title or "").strip().casefold()
-    for rows in _merged_database_rows(csv_rows).values():
+    for rows in _merged_database_rows(csv_rows, all_variants).values():
         for entry in rows:
             row = entry["row"]
             if entry["title"].casefold() != wanted:
@@ -1398,7 +1511,8 @@ DATABASE_GROUPS = ("Status", "Category", "Tags")
 
 
 def _database_notes(dest: str, csv_rows: dict, mapping: dict,
-                    export: str = "") -> tuple:
+                    export: str = "", taken: Optional[dict] = None,
+                    all_variants: Optional[dict] = None) -> tuple:
     """For each exported database: a hub note and a `.base`.
 
     Returns `(created paths, rows that had no page of their own)`.
@@ -1411,13 +1525,25 @@ def _database_notes(dest: str, csv_rows: dict, mapping: dict,
     link to a note that is not there - and the note states the count in words
     too, so nothing a database declares is silently dropped. `X.csv` and
     `X_all.csv` are ONE database: their rows are merged before any of this.
+
+    `taken` is the shared set of names already used in each folder of the new
+    tree; both files go through `_unique`, so a page of the same name (or a
+    second database whose name differs only by case, one path on NTFS) gets a
+    free name here instead of being silently replaced. The hub's frontmatter
+    `title` stays the DATABASE's own name, and the `.base` view too - only the
+    file name gains the number when two would collide.
     """
     created: list = []
     rows_without_notes = 0
     pages = _known_pages(mapping)
-    for (folder, base_name), entries in sorted(_merged_database_rows(csv_rows).items()):
+    taken = {} if taken is None else taken
+    for (folder, base_name), entries in sorted(
+            _merged_database_rows(csv_rows, all_variants).items()):
         target = os.path.join(dest, *folder.split("/")) if folder else dest
         os.makedirs(target, exist_ok=True)
+        taken_here = taken.setdefault(folder, set())
+        hub_name = _unique(f"{DATABASE_PREFIX}{base_name}.md", taken_here)
+        base_file = _unique(f"{base_name}.base", taken_here)
         columns: list = []
         for entry in entries:
             for key in entry["row"]:
@@ -1459,10 +1585,8 @@ def _database_notes(dest: str, csv_rows: dict, mapping: dict,
             summary += [f"- {label}: {n}" for label, n in sorted(counts.items())]
             summary += ["", "</details>"]
             body += ["", "\n".join(summary)]
-        _write(os.path.join(target, f"{DATABASE_PREFIX}{base_name}.md"),
-               "\n".join(body) + "\n")
-        created.append(f"{folder}/{DATABASE_PREFIX}{base_name}.md"
-                       if folder else f"{DATABASE_PREFIX}{base_name}.md")
+        _write(os.path.join(target, hub_name), "\n".join(body) + "\n")
+        created.append(f"{folder}/{hub_name}" if folder else hub_name)
         # Obsidian's Bases file: a table of everything in this folder. The path
         # is vault-relative, so it carries the export folder's own name.
         where = "/".join(p for p in (export, folder) if p)
@@ -1472,8 +1596,8 @@ def _database_notes(dest: str, csv_rows: dict, mapping: dict,
                 "views:\n"
                 "  - type: table\n"
                 f"    name: {base_name}\n")
-        _write(os.path.join(target, f"{base_name}.base"), base)
-        created.append(f"{folder}/{base_name}.base" if folder else f"{base_name}.base")
+        _write(os.path.join(target, base_file), base)
+        created.append(f"{folder}/{base_file}" if folder else base_file)
     return created, rows_without_notes
 
 
@@ -1606,8 +1730,45 @@ def _person_said_yes(verdict) -> bool:
         str(getattr(verdict, "outcome", "")) == "approved"
 
 
+def _peer_local(handler) -> tuple:
+    """The two addresses a request carries, for `_from_this_pc`."""
+    peer = (getattr(handler, "client_address", None) or ("",))[0]
+    try:
+        local = handler.connection.getsockname()[0]
+    except Exception:
+        local = None
+    return peer, local
+
+
+def _from_this_pc(peer, local) -> bool:
+    """True only when this request comes from this PC (fail closed).
+
+    The SAME rule `jarvis_documents` uses for its folder routes: loopback is
+    this PC, and a program on this PC calling its own Tailscale address arrives
+    from the address it arrived at. `peer is None` is the in-process
+    convention (no network request behind the call); a real socket cannot
+    produce it. Anything unknown is not this PC.
+    """
+    try:
+        import jarvis_owner_check
+        return bool(jarvis_owner_check.from_this_pc(peer, local))
+    except Exception:
+        return False
+
+
+#: What a request from another device is told. It names no path and no folder.
+PC_ONLY_REASON = ("Jarvis brings a Notion export in on the PC only - the export "
+                  "file and the vault are chosen here.")
+
+
 def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
-    """Wrap the server's GET/POST so the two routes above are answered here."""
+    """Wrap the server's GET/POST so the two routes above are answered here.
+
+    Both POST routes are PC-only (2026-10-21 audit, R4): the export file and
+    the vault are folders on this PC, and the preview works out what is in the
+    export, so a paired device must not be able to ask either question - the
+    same rule `/api/folders/import` already keeps.
+    """
     global _ARMED
     get0, post0 = handler_cls.do_GET, handler_cls.do_POST
     if getattr(post0, "_jarvis_notion", False):
@@ -1635,6 +1796,9 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
             return post0(self)
         if not _allowed(self):
             return _send(self, 403, {"ok": False, "reason": "not allowed"})
+        if not _from_this_pc(*_peer_local(self)):
+            return _send(self, 403, {"ok": False, "pc_only": True,
+                                     "reason": PC_ONLY_REASON})
         try:
             body = read_body(self)
             if isinstance(body, bytes):

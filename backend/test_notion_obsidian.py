@@ -289,6 +289,95 @@ def t_a_zip_bomb_is_refused_by_its_own_directory_before_unpacking():
 
 
 
+def t_the_zip_member_limits_are_checked_before_any_member_is_opened():
+    """R2/R3: the archive's own directory is asked about its MEMBERS too.
+
+    The old guard checked the declared total and the ratio only, so a zip with
+    more members than MAX_FILES was unpacked file by file (the folder path
+    capped at 20,000, the zip path never did), and one member over MAX_ONE was
+    written up to the cap before `_copy_capped` refused. Both are refused from
+    `infolist()` now, before one member is opened; `_copy_capped` stays as the
+    backstop for a header that lies, which the last block proves.
+    """
+    fresh()
+    many = TMP / "many-members.zip"
+    with zipfile.ZipFile(many, "w", zipfile.ZIP_DEFLATED) as zf:
+        for i in range(12):
+            zf.writestr(f"page {i} {A32}.md", f"# page {i}\n")
+    real_files, real_copy = N.MAX_FILES, N._copy_capped
+    opened = []
+
+    def counting_copy(*args, **kwargs):
+        opened.append(args[0])
+        return real_copy(*args, **kwargs)
+
+    N.MAX_FILES, N._copy_capped = 5, counting_copy
+    said = ""
+    try:
+        try:
+            N.plan_import(str(many), str(VAULT), today="2026-01-01")
+        except Exception as exc:
+            said = str(exc)
+    finally:
+        N.MAX_FILES, N._copy_capped = real_files, real_copy
+    check("R2 a zip with more members than the cap is refused in plain words",
+          "more than 5 files" in said, said)
+    check("R2 ...before any member was opened", opened == [], len(opened))
+
+    fresh()
+    ordinary = TMP / "ordinary.zip"
+    with zipfile.ZipFile(ordinary, "w", zipfile.ZIP_DEFLATED) as zf:
+        for i in range(3):
+            zf.writestr(f"page {i} {A32}.md", f"# page {i}\n")
+    p = N.plan_import(str(ordinary), str(VAULT), today="2026-01-01")
+    check("R2 a normal zip still passes", p.notes == 3 and not p.refused, p.as_dict())
+
+    fresh()
+    over_one = TMP / "over-one.zip"
+    # Incompressible noise keeps the ratio low, zeros make one member big
+    # while the DECLARED total stays under the 500 MB and 100:1 caps: only a
+    # per-member pre-check can refuse this before it is written.
+    with zipfile.ZipFile(over_one, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("big.bin", b"\0" * (2 * 1024 * 1024))
+        zf.writestr("noise.bin", os.urandom(200_000))
+    real_one, real_copy = N.MAX_ONE, N._copy_capped
+    opened = []
+    N.MAX_ONE, N._copy_capped = 1024 * 1024, counting_copy
+    said = ""
+    try:
+        try:
+            N.plan_import(str(over_one), str(VAULT), today="2026-01-01")
+        except Exception as exc:
+            said = str(exc)
+    finally:
+        N.MAX_ONE, N._copy_capped = real_one, real_copy
+    check("R3 a member the directory declares over the per-file cap is refused",
+          "bigger than 1 MB" in said, said)
+    check("R3 ...before it is opened, so no bytes are written first",
+          opened == [], len(opened))
+
+    # A HEADER THAT LIES. The directory is made to look harmless (as a crafted
+    # or corrupted central directory could); the streamed cap must still refuse
+    # the bytes that actually arrive, and the vault must be untouched.
+    fresh()
+    real_problem, real_one = N._zip_problem, N.MAX_ONE
+    N._zip_problem = lambda zf: ""
+    N.MAX_ONE = 1024 * 1024
+    said = ""
+    try:
+        try:
+            N.plan_import(str(over_one), str(VAULT), today="2026-01-01")
+        except Exception as exc:
+            said = str(exc)
+    finally:
+        N._zip_problem, N.MAX_ONE = real_problem, real_one
+    check("R3 when the directory hides a size, the streamed cap still refuses",
+          "bigger than" in said, said)
+    check("R3 ...and nothing from that export reached the vault",
+          sorted(x.name for x in VAULT.iterdir()) == [".obsidian"],
+          sorted(x.name for x in VAULT.iterdir()))
+
+
 def t_a_source_that_is_not_an_export_is_refused():
     fresh()
     write(TMP / "Meeting notes", "page.txt", "not a page")
@@ -526,6 +615,227 @@ def t_a_database_whose_title_column_is_renamed_still_merges():
           "| [[Fix login]] | Done |" in body, body)
 
 
+# ── 3d. the 2026-10-21 audit's data-loss findings ──────────────────────────
+#
+# `.dsh-scratch/AUDIT-677-CONVERTER-GAPS-2026-10-21.md` found four ways the
+# converter could still lose something silently: a generated hub note replacing
+# a real page (F1), two databases whose names differ only by case sharing one
+# file on Windows (F2), two rows with one title collapsing into one row (F3),
+# and a value that is not a page having a Notion-id-shaped tail cut off (F4).
+# Each check below fails on the code before the fix; the comment names the
+# finding so the PR body and this suite agree.
+
+def t_a_generated_hub_never_overwrites_a_page():
+    """F1: a page and a database whose generated hub would share its name."""
+    layouts = (
+        # The page's file name sorts BEFORE the database's CSV.
+        ("page sorts first", f"Tasks {A32}.csv", f"_Database - Tasks {B32}.md"),
+        # ...and AFTER it: the walk order must not decide who survives.
+        ("csv sorts first", f"Tasks {C32}.csv", f"_Database - Tasks {D32}.md"),
+        # A page whose name differs from the hub only by CASE (NTFS case-fold).
+        ("case-only difference", f"Tasks {E32}.csv",
+         f"_database - tasks {B32}.md"),
+    )
+    for label, csv_name, page_name in layouts:
+        src = fresh()
+        write(src, page_name, "# The owner's page\n\nREAL PAGE MARKER\n")
+        write(src, csv_name, "Name,Status\nShip it,Done\n")
+        write(src, f"Ship it {B32}.md", "# Ship it\n\nThe child note.\n")
+        p = N.plan_import(str(src), str(VAULT), today="2026-01-01")
+        out = N.run_import(p, approved=True, record=False)
+        folder = VAULT / EXPORT
+        hubs = sorted(x.name for x in folder.iterdir()
+                      if x.name.casefold().startswith(N.DATABASE_PREFIX.casefold()))
+        bodies = {name: (folder / name).read_text(encoding="utf-8") for name in hubs}
+        check(f"F1 ({label}) the page and the hub are two files, never one",
+              len(hubs) == 2 and len({n.casefold() for n in hubs}) == 2, hubs)
+        check(f"F1 ({label}) the real page's own body survives",
+              any("REAL PAGE MARKER" in body for body in bodies.values()), bodies)
+        check(f"F1 ({label}) the generated hub is the other file",
+              any("type: database-index" in body for body in bodies.values()), bodies)
+        on_disk = sorted(x.relative_to(folder).as_posix()
+                         for x in folder.rglob("*") if x.is_file())
+        check(f"F1 ({label}) `created` lists exactly the files on disk",
+              sorted(p.created) == on_disk,
+              {"created": sorted(p.created), "disk": on_disk})
+        check(f"F1 ({label}) the import says it landed", out.get("ok") is True, out)
+
+
+def t_databases_whose_names_differ_only_by_case_never_share_a_file():
+    """F2: `Alpha.csv` and `alpha_all.csv` are two databases on a case-folding FS.
+
+    WHAT THIS PROVES, AND WHERE. The check asserts the two planned hub/base
+    names are unique AFTER case-folding and that both databases' rows are in
+    the vault. On the owner's NTFS those two old names are one path, so the old
+    code fails the "two files" half physically. On Linux CI the old code writes
+    two paths that differ only by case, which is still wrong for a vault that
+    will be opened on Windows - and the case-fold assertion catches exactly
+    that without needing a case-insensitive filesystem.
+    """
+    src = fresh()
+    write(src, f"Alpha {A32}.csv", "Name,Status\nA one,open\n")
+    write(src, f"alpha {B32}_all.csv", "Name,Status\nA two,done\n")
+    write(src, f"A one {C32}.md", "# A one\n")
+    write(src, f"A two {D32}.md", "# A two\n")
+    p = N.plan_import(str(src), str(VAULT), today="2026-01-01")
+    check("F2 the two CSVs are counted as TWO databases", p.databases == 2, p.databases)
+    out = N.run_import(p, approved=True, record=False)
+    folder = VAULT / EXPORT
+    hubs = sorted((x.name for x in folder.iterdir()
+                   if x.name.casefold().startswith(N.DATABASE_PREFIX.casefold())), key=str.casefold)
+    check("F2 two hub files survive, whose names are unique after case-folding",
+          len(hubs) == 2 and len({x.casefold() for x in hubs}) == 2, hubs)
+    halves = [x for x in hubs if x.lower().endswith(".md")]
+    bodies = [(folder / x).read_text(encoding="utf-8") for x in halves]
+    check("F2 both databases' rows are in the vault, each in exactly one hub",
+          sum("[[A one]]" in b for b in bodies) == 1
+          and sum("[[A two]]" in b for b in bodies) == 1, bodies)
+    bases = sorted((x.name for x in folder.iterdir() if x.suffix == ".base"), key=str.casefold)
+    check("F2 the .base files do not share a name after case-folding either",
+          len(bases) == 2 and len({x.casefold() for x in bases}) == 2, bases)
+    check("F2 the import says it landed", out.get("ok") is True, out)
+
+
+def t_two_rows_with_one_title_in_one_csv_are_both_kept():
+    """F3: duplicates INSIDE one CSV, not only across X.csv/X_all.csv."""
+    src = fresh()
+    write(src, f"Tasks {A32}.csv",
+          "Name,Priority\n"
+          "Fix bug,High\n"
+          "Fix bug,Low\n"
+          "Ghost,High\n"
+          "Ghost,Low\n")
+    write(src, f"Fix bug {B32}.md", "# Fix bug\n\nfirst page\n")
+    write(src, f"Fix bug {C32}.md", "# Fix bug\n\nsecond page\n")
+    p = N.plan_import(str(src), str(VAULT), today="2026-01-01")
+    check("F3 the plan counts all FOUR rows, not one per title", p.rows == 4, p.rows)
+    out = N.run_import(p, approved=True, record=False)
+    folder = VAULT / EXPORT
+    body = (folder / "_Database - Tasks.md").read_text(encoding="utf-8")
+    check("F3 both same-title rows are in the hub table with their own values",
+          body.count("| [[Fix bug]] |") == 2 and "| High |" in body and "| Low |" in body,
+          body)
+    check("F3 both child pages of that title were written",
+          len([x for x in folder.iterdir() if x.name.startswith("Fix bug")
+               and x.suffix == ".md"]) == 2,
+          sorted(x.name for x in folder.iterdir()))
+    check("F3 two same-title rows with no page are counted twice, not once",
+          "rows_without_notes: 2" in body and out.get("rows_without_notes") == 2,
+          {"body": body, "out": out.get("rows_without_notes")})
+    check("F3 the run result counts all four rows", out.get("rows") == 4, out)
+
+
+def t_duplicate_titles_across_x_and_x_all_keep_both_rows():
+    """F3 across the two exports of one database: pair by row, not by title."""
+    src = fresh()
+    write(src, f"Tasks {A32}.csv", "Name,Priority\nFix bug,High\nFix bug,Low\n")
+    write(src, f"Tasks {B32}_all.csv",
+          "Name,Priority\nFix bug,All-high\nFix bug,All-low\n")
+    write(src, f"Fix bug {C32}.md", "# Fix bug\n")
+    p = N.plan_import(str(src), str(VAULT), today="2026-01-01")
+    check("F3 the plan counts the two rows once, not once per file", p.rows == 2, p.rows)
+    N.run_import(p, approved=True, record=False)
+    body = (VAULT / EXPORT / "_Database - Tasks.md").read_text(encoding="utf-8")
+    check("F3 both rows survive and the _all export wins per row",
+          "All-high" in body and "All-low" in body and "High" not in body
+          and "Low" not in body, body)
+
+
+def t_a_value_that_is_not_a_page_keeps_every_character():
+    """F4: only a whole value that maps to a page may be rewritten."""
+    pages = N._known_pages({f"Project Atlas {A32}.md": "Project Atlas.md"})
+    hexish = f"ref {B32}"
+    uuidish = "8f14e45f-ceea-467f-a8b3-0c0f0c7e1234"
+    cases = (
+        ("a plain value is untouched", "Sam", "Sam"),
+        ("a thousands separator is untouched", "1,234", "1,234"),
+        ("a value ending in a 32-hex token is untouched", hexish, hexish),
+        ("a value ending in a UUID is untouched", f"id {uuidish}", f"id {uuidish}"),
+        ("a whole page id still becomes a wikilink",
+         f"Project Atlas {A32}", "[[Project Atlas]]"),
+        ("a mixed list links the mapped piece and keeps the other byte-for-byte",
+         f"Project Atlas {A32}, Other {B32}",
+         f"[[Project Atlas]], Other {B32}"),
+    )
+    for label, value, want in cases:
+        got = N._relation_value(value, pages)
+        check(f"F4 {label}", got == want, {"value": value, "got": got, "want": want})
+    src = fresh()
+    write(src, f"Project Atlas {A32}.md", "# Project Atlas\n")
+    write(src, f"Ship it {C32}.md", "# Ship it\n")
+    write(src, f"Tasks {B32}_all.csv",
+          "Name,Owner,Count\n"
+          f'Ship it,"{hexish}","1,234"\n')
+    p = N.plan_import(str(src), str(VAULT), today="2026-01-01")
+    N.run_import(p, approved=True, record=False)
+    note = (VAULT / EXPORT / "Ship it.md").read_text(encoding="utf-8")
+    check("F4 ...and the page's frontmatter keeps the whole value",
+          f"owner: {hexish}" in note, note)
+    check("F4 ...and the number with a comma is still a number",
+          'count: "1,234"' in note, note)
+
+
+def t_a_database_named_all_keeps_its_name():
+    """NIT-1: `_all` is Notion's suffix only when the plain export is beside it."""
+    src = fresh()
+    write(src, f"Backlog_all {A32}.csv", "Name,Status\nB one,open\n")
+    write(src, f"B one {B32}.md", "# B one\n")
+    p = N.plan_import(str(src), str(VAULT), today="2026-01-01")
+    check("NIT-1 a lone `Backlog_all.csv` is one database", p.databases == 1, p.databases)
+    N.run_import(p, approved=True, record=False)
+    folder = VAULT / EXPORT
+    hubs = sorted(x.name for x in folder.iterdir()
+                  if x.name.casefold().startswith(N.DATABASE_PREFIX.casefold()))
+    check("NIT-1 ...and its hub keeps the database's own name", hubs == [
+        "_Database - Backlog_all.md"], hubs)
+    base = folder / "Backlog_all.base"
+    check("NIT-1 ...and so does its .base", base.is_file(),
+          sorted(x.name for x in folder.iterdir()))
+
+
+def t_a_refusal_during_the_run_keeps_its_plain_words():
+    """NIT-2: the run's refusal is the plain sentence, not a class name."""
+    src = fresh()
+    write(src, f"Page {A32}.md", "# Page\n\nBody.\n")
+    p = N.plan_import(str(src), str(VAULT), today="2026-01-01")
+    real_extract, real_refused = N.extract, N._refused
+
+    def plain_sentence(why):
+        # What the module's own refusal helper returns is a `jarvis_documents`
+        # ImportRefused; `run_import` used to catch a DIFFERENT class with the
+        # same name, so the sentence was replaced by "ImportRefused".
+        return real_refused(why)
+    try:
+        N.extract = lambda *a, **k: (_ for _ in ()).throw(
+            plain_sentence("a plain refusal sentence"))
+        out = N.run_import(p, approved=True, record=False)
+    finally:
+        N.extract = real_extract
+    check("NIT-2 the run reports the plain sentence, word for word",
+          out.get("reason") == "a plain refusal sentence", out)
+    check("NIT-2 ...and never shows an exception class name to the owner",
+          "ImportRefused" not in str(out.get("reason")), out)
+
+
+def t_an_html_page_and_a_markdown_page_with_one_title_do_not_overwrite():
+    """F1b, found while fixing F1: same-stem `.md` + `.html` were one target."""
+    src = fresh()
+    write(src, f"Same {A32}.md", "# From markdown\n\nMARKDOWN BODY\n")
+    write(src, f"Same {B32}.html",
+          "<html><body><h1>From html</h1><p>HTML BODY</p></body></html>")
+    p = N.plan_import(str(src), str(VAULT), today="2026-01-01")
+    N.run_import(p, approved=True, record=False)
+    folder = VAULT / EXPORT
+    files = sorted(x.name for x in folder.iterdir()
+                   if x.name.startswith("Same") and x.suffix == ".md")
+    check("F1b two pages that clean to one name are written as two files",
+          len(files) == 2, files)
+    joined = "\n".join((folder / x).read_text(encoding="utf-8") for x in files)
+    check("F1b both bodies survive", "MARKDOWN BODY" in joined and "HTML BODY" in joined,
+          joined)
+    check("F1b the import says it landed", p.created and len(files) == 2, p.created)
+
+
 
 # ── 4. HTML -> Markdown ─────────────────────────────────────────────────────
 
@@ -725,19 +1035,37 @@ class _FakeWFile:
         self.buf += data
 
 
+class _FakeConn:
+    """The shape `_peer_local()` reads: the address the request ARRIVED at."""
+
+    def __init__(self, addr):
+        self._addr = addr
+
+    def getsockname(self):
+        return self._addr
+
+
 class RouteStand:
     """A stand-in for the core's Handler and its three callbacks - the shape
-    jarvis_plugins.py calls install() with, and a real response to read."""
+    jarvis_plugins.py calls install() with, and a real response to read.
 
-    def __init__(self, origin=True, token=True):
+    `peer`/`local` are the two addresses `from_this_pc()` rules on: both
+    loopback by default (the desktop), or a phone's address and the PC's for
+    the PC-only checks.
+    """
+
+    def __init__(self, origin=True, token=True, peer="127.0.0.1", local="127.0.0.1"):
         self.calls, self.status, self.payload = [], None, None
         self.origin, self.token = origin, token
+        self.peer, self.local = peer, local
         core = self
 
         class Handler:
             def __init__(self, path="/", body=b"{}"):
                 self.path, self.body = path, body
                 self.wfile = _FakeWFile()
+                self.client_address = (core.peer, 5000)
+                self.connection = _FakeConn((core.local, 4719))
 
             def do_GET(self):
                 core.calls.append(("GET", self.path))
@@ -882,6 +1210,51 @@ def t_the_preview_route_refuses_a_collision_without_importing():
           == "kept, not overwritten", {"before": before, "after": after})
 
 
+def t_both_routes_are_pc_only():
+    """R4: /api/notion/* follows /api/folders/import - this PC only.
+
+    The old guards were origin + token only, so a paired phone with the token
+    got `preview` 200 with the plan's absolute `source` and `vault` paths (a
+    filesystem oracle), and could raise an import card from the phone. The
+    check drives the INSTALLED handler with a phone's address, then again with
+    the desktop's loopback address.
+    """
+    src = fresh()
+    write(src, f"Meeting Notes {A32}.md", "# Meeting Notes\n\nA body.\n")
+    planned = N.plan_import(str(src), str(VAULT))
+    phone = RouteStand(peer="100.64.0.9", local="100.64.0.1")
+    line = N.install(phone.Handler, origin_ok=phone.origin_ok,
+                     token_ok=phone.token_ok, read_body=phone.read_body)
+    check("(set-up) install() arms the two routes for the PC-only check",
+          isinstance(line, str), line)
+    asked = []
+    real_gate = N._gate
+    N._gate = _record_yes(asked)
+    try:
+        prev_code, prev = phone.post(N.PATHS[0], {"source": str(src),
+                                                  "vault": str(VAULT)})
+        imp_code, imp = phone.post(N.PATHS[1], {"source": str(src),
+                                                "vault": str(VAULT)})
+    finally:
+        N._gate = real_gate
+    check("R4 the preview route refuses a NON-PC device with 403", prev_code == 403,
+          (prev_code, prev))
+    check("R4 ...and says it is the PC only, in plain words",
+          prev.get("pc_only") is True and "PC" in str(prev.get("reason") or ""), prev)
+    check("R4 the import route refuses a NON-PC device with 403 too", imp_code == 403,
+          (imp_code, imp))
+    check("R4 ...and does not even raise the approval card", asked == [], asked)
+    answer = json.dumps({"preview": prev, "import": imp})
+    check("R4 neither refusal names a path on this PC",
+          str(src) not in answer and str(VAULT) not in answer, answer[:300])
+    check("R4 nothing was written by the refused calls", not (VAULT / planned.name).exists(),
+          _vault_listing())
+    pc = _route_stand()
+    pc_code, pc_out = pc.post(N.PATHS[0], {"source": str(src), "vault": str(VAULT)})
+    check("R4 the PC itself still gets its preview", pc_code == 200
+          and pc_out.get("ok") is True, (pc_code, pc_out))
+
+
 # ── what it must never do ───────────────────────────────────────────────────
 
 def t_it_does_not_name_jarvis_memory():
@@ -920,6 +1293,7 @@ def main():
              t_the_zip_guards_are_jarvis_documents_own,
              t_a_zip_bomb_is_refused_not_unpacked,
              t_a_zip_bomb_is_refused_by_its_own_directory_before_unpacking,
+             t_the_zip_member_limits_are_checked_before_any_member_is_opened,
              t_a_source_that_is_not_an_export_is_refused,
              t_the_destination_must_be_a_real_vault,
              t_properties_become_frontmatter,
@@ -930,6 +1304,14 @@ def main():
              t_a_database_exported_twice_keeps_every_row,
              t_relation_columns_become_wikilinks_and_other_values_are_untouched,
              t_a_database_whose_title_column_is_renamed_still_merges,
+             t_a_generated_hub_never_overwrites_a_page,
+             t_databases_whose_names_differ_only_by_case_never_share_a_file,
+             t_two_rows_with_one_title_in_one_csv_are_both_kept,
+             t_duplicate_titles_across_x_and_x_all_keep_both_rows,
+             t_a_value_that_is_not_a_page_keeps_every_character,
+             t_a_database_named_all_keeps_its_name,
+             t_a_refusal_during_the_run_keeps_its_plain_words,
+             t_an_html_page_and_a_markdown_page_with_one_title_do_not_overwrite,
              t_html_becomes_obsidian_markdown,
              t_html_never_raises_on_odd_input,
              t_links_are_rewritten_through_the_cleaned_names,
@@ -941,6 +1323,7 @@ def main():
              t_the_preview_route_is_a_dry_run,
              t_the_import_route_still_asks_one_card_and_imports,
              t_the_preview_route_refuses_a_collision_without_importing,
+             t_both_routes_are_pc_only,
              t_it_does_not_name_jarvis_memory,
              t_the_settings_folder_is_the_one_variable_every_module_reads,
              t_it_opens_no_socket_and_runs_no_program)
