@@ -90,6 +90,7 @@ removing text from the skill's index, which is a different, gated change
 from __future__ import annotations
 
 import hashlib
+import jarvis_sqlite
 import os
 import re
 import sqlite3
@@ -149,17 +150,10 @@ def db_path() -> Path:
     return Path(env) if env else _config_dir() / "feedback.db"
 
 
-def _connect() -> sqlite3.Connection:
-    p = db_path()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    # Autocommit, like jarvis_memory's store: every write here is one
-    # statement or is wrapped in an explicit BEGIN below.
-    c = sqlite3.connect(p, timeout=30, isolation_level=None)
-    c.row_factory = sqlite3.Row
-    try:
-        c.execute("PRAGMA journal_mode=WAL")
-    except sqlite3.Error:
-        pass
+def _create_schema(c: sqlite3.Connection) -> None:
+    """The tables a feedback database needs, run ONCE per file (Optimization
+    4.1). Called through `jarvis_sqlite.ensure_schema`; before this every
+    `_connect()` re-ran six CREATE statements, on every turn's feedback read."""
     c.execute("""CREATE TABLE IF NOT EXISTS turns (
         turn_id  TEXT PRIMARY KEY,
         created  REAL NOT NULL)""")
@@ -181,6 +175,17 @@ def _connect() -> sqlite3.Connection:
         helpful      INTEGER NOT NULL,
         harmful      INTEGER NOT NULL,
         raised       REAL NOT NULL)""")
+
+
+def _connect() -> sqlite3.Connection:
+    p = db_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    # Autocommit, like jarvis_memory's store: every write here is one
+    # statement or is wrapped in an explicit BEGIN below.
+    c = sqlite3.connect(p, timeout=30, isolation_level=None)
+    c.row_factory = sqlite3.Row
+    jarvis_sqlite.apply_pragmas(c)
+    jarvis_sqlite.ensure_schema(p, _create_schema)
     return c
 
 

@@ -1034,9 +1034,16 @@ class TextIndex:
         c.row_factory = sqlite3.Row
         return c
 
-    def _ready(self, c) -> None:
-        """Create what is missing. Idempotent, and safe on a fresh file, an
-        existing index and a file left by a LATER version of this module."""
+    def _create_schema(self, c) -> None:
+        """The tables the text index needs, run ONCE per file (Optimization 4.1).
+
+        Called through `jarvis_sqlite.ensure_schema` from `_ready`. Before
+        this, every `_db()`+`_ready()` pair re-ran the version check and six
+        CREATE statements on every search, count and index write - measured on
+        this tree, 100 `TextIndex.status()` calls executed 400 CREATE
+        statements (4 per call).
+        """
+        c.row_factory = sqlite3.Row
         c.execute("CREATE TABLE IF NOT EXISTS doc_meta ("
                   "key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         row = c.execute("SELECT value FROM doc_meta WHERE key='schema'").fetchone()
@@ -1067,6 +1074,16 @@ class TextIndex:
         if not have:
             c.execute("INSERT OR REPLACE INTO doc_meta(key, value) "
                       "VALUES('schema', ?)", (str(INDEX_SCHEMA),))
+
+    def _ready(self, c) -> None:
+        """Create what is missing: ONCE per database file in this process.
+
+        Safe on a fresh file, an existing index and a file left by a LATER
+        version of this module. `c` is still the caller's connection, and the
+        schema is committed and visible to it when this returns; the DDL itself
+        runs on `ensure_schema`'s own short-lived connection.
+        """
+        jarvis_sqlite.ensure_schema(self.path, self._create_schema)
 
     def _can_drop_one_row(self, c) -> bool:
         """Does ONE row come out of this SQLite's contentless FTS index?
@@ -2196,6 +2213,16 @@ def _reset_for_tests() -> None:
         _INDEX = None
         _EMBEDDER = None
         _EMBEDDER_TRIED = False
+    # One-time schema init (Optimization 4.1) is remembered PER PATH: a reset
+    # that throws the index file away (the suites' `fresh()` does) must forget
+    # that path too, or the next file at the same path is opened with no
+    # tables - measured: test_documents_hybrid's checks that unlink the index
+    # and expect it rebuilt.
+    if jarvis_sqlite is not None:
+        try:
+            jarvis_sqlite.forget_initialized(index_path())
+        except Exception:
+            pass
     _READY.clear()
     _ARMED = False
 
