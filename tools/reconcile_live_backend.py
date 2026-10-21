@@ -37,6 +37,11 @@ WHAT IT DOES, IN ORDER (see --help and the summary it prints)
        the same way - it never guesses. A delta whose live anchor does not exist at all
        (F10 `traces.db` retention, Q2) is recorded in `BLOCKED_DELTAS` with its evidence,
        printed as BLOCKED LIVE DELTAS, and never staged: blocked is reported, not guessed.
+       Fixes that live in the published base HUD but in NO `.patch` (the DEF-002
+       status cache, its start call and `?force=1` route, and the reasoning fallback)
+       are literal deltas too: the entry carries the exact block bytes in
+       `tools/hud-deltas/` and either inserts them at an anchor or REPLACES an old
+       block that must appear exactly once.
 
     3. REHEARSAL. Every staged Python file is compiled with `py_compile` before any live
        file is touched. If compilation fails, nothing is written.
@@ -115,10 +120,12 @@ APP_CONTROL_ANCHOR = '        if route == "/api/memory/decide":'
 #: The line plugin-loader's install block goes in front of.
 BEFORE_SOCKET = "    # Before the main socket, so the banner lists every address together."
 
-#: The two 2026-10-14 HUD fixes that live in the published base HUD but in NO
-#: `.patch` - so `$PATCHES` never carries them - are literal deltas below. The
-#: block text is read from `tools/hud-deltas/`, extracted from the base and the
-#: live file, so this tool carries bytes rather than a paraphrase.
+#: The HUD fixes that live in the published base HUD but in NO `.patch` - so
+#: `$PATCHES` never carries them - are literal deltas below: DEF-002's status
+#: cache (its block, its start call and the route that reads it) and the
+#: 2026-10-14 reasoning fallback. The block text is read from
+#: `tools/hud-deltas/`, extracted from the base and the live file, so this tool
+#: carries bytes rather than a paraphrase.
 _DELTA_DIR = Path(__file__).resolve().parent / "hud-deltas"
 
 
@@ -139,6 +146,14 @@ STATUS_START_FILE = "status-start.txt"
 #: that shows a reasoning-only cloud answer instead of a blank card.
 REASONING_OLD_FILE = "reasoning-old.txt"
 REASONING_NEW_FILE = "reasoning-new.txt"
+
+#: DEF-002's third piece: the /api/status ROUTE itself, replaced by the base's
+#: cached one. #668's deltas inserted only the cache block and its start call, so
+#: the live route still probed upstream inline - measured 3094/3117 ms plain and
+#: 3084/3097 ms with `?force=1` (2026-10-20), i.e. the flag was ignored because
+#: the old route has no force handling. The old block must appear exactly once.
+STATUS_ROUTE_OLD_FILE = "status-route-old.txt"
+STATUS_ROUTE_NEW_FILE = "status-route-new.txt"
 
 #: The data-driven HUD-delta table. Each entry says, for one patch and one patched file:
 #:   probes: distinctive post-image lines; ALL must be in the live file to count as present
@@ -166,7 +181,9 @@ DELTA_TABLE = {
             "anchor": BEFORE_SOCKET,
         },
     },
-    # The two 2026-10-14 fixes: no .patch carries them, so they are literal.
+    # The HUD fixes that no .patch carries: literal, and a REPLACE entry's old
+    # block must appear in the live file exactly once (a half-applied deploy is
+    # refused, never guessed at).
     "hud-status-cache.patch": {
         "jarvis_hud.py": {
             "probes": ("_status_poller_daemon", "_STATUS_POLL_SECONDS"),
@@ -186,6 +203,17 @@ DELTA_TABLE = {
             "probes": ("CloudAnswer", "reasoning-fallback"),
             "file": REASONING_NEW_FILE,
             "replace_file": REASONING_OLD_FILE,
+        },
+    },
+    # DEF-002's route half: the base's cached route REPLACES the live inline one.
+    # Probes are two post-image lines that only the new route contains, so an
+    # inline live route cannot be mistaken for present.
+    "hud-status-route.patch": {
+        "jarvis_hud.py": {
+            "probes": ("if force or not _STATUS_CACHE:",
+                       "force = (parse_qs(urlparse(self.path).query)"),
+            "file": STATUS_ROUTE_NEW_FILE,
+            "replace_file": STATUS_ROUTE_OLD_FILE,
         },
     },
 }

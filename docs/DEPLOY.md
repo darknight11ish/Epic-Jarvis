@@ -68,6 +68,10 @@ replaced the two hand-written scripts used for the 2026-10-20 deploy:
 - for the five patched base files it adds only the HUD deltas a patch really
   needs, and **refuses** when an anchor is missing or a patch has no rule - it
   never guesses;
+- it also carries the HUD fixes that live in the published base but in **no**
+  `.patch` as literal deltas (DEF-002's status cache, its start call and the
+  cached `/api/status` route, and the reasoning fallback); a REPLACE delta's old
+  block must appear in the live file exactly once, or the run refuses;
 - it rehearses every staged file with `py_compile` before anything is swapped,
   clears stale `__pycache__/*.pyc`, and adds ready plug-ins that the running HUD
   does not already wire;
@@ -85,13 +89,32 @@ Exit codes: 0 success, 1 a plug-in or route probe failed, 2 refused before
 writing.
 
 **Verified on 2026-10-20 (Area 12, no `--apply`).** Dry run against the live
-backend folder: exit 0, **0 refusals**, `$SHIPPED` 217 files all unchanged, all
-185 HUD patch/file deltas already present, planned changes 153 (153 stale
-`.pyc` files; "DRY RUN, nothing written"), 7 ready plug-ins to add. Its own suite,
-`backend/test_reconcile_live_backend.py`, passes (121 checks, all on temporary
-folders). As an extra read-only check, its `run_probes()` was called directly
-against `http://127.0.0.1:4719` - no `--apply`, nothing written - and all four
-probes PASS (setup 200, media-index 200, app-control 409 while off, voice 200).
+backend folder: exit 0, **0 refusals**, `$SHIPPED` 218 files all unchanged, 188
+of 189 HUD patch/file deltas already present (the one to insert is DEF-002's
+route, below), 9 ready plug-ins present and 0 to add, planned changes 153 (1 HUD
+route insert + 152 stale `.pyc` files; "DRY RUN, nothing written"). A second dry
+run half an hour later planned 168 for the same two reasons (the running server
+keeps writing `.pyc`, so only the 1 HUD route insert is stable). Its own
+suite, `backend/test_reconcile_live_backend.py`, passes (144 checks, all on
+temporary folders). As an extra read-only check (Area 12), its `run_probes()`
+was called directly against `http://127.0.0.1:4719` - no `--apply`, nothing
+written - and all four probes PASS (setup 200, media-index 200, app-control 409
+while off, voice 200).
+
+**DEF-002's missing route delta (2026-10-20).** The two #668 deltas inserted the
+status cache and its start call, but not the route: the live `/api/status` still
+probed upstream inline (measured 3094/3117 ms plain and 3084/3097 ms with
+`?force=1`, which the old route ignored; the same ten keys either way).
+`tools/hud-deltas/` now carries the base's cached route as a literal REPLACE:
+`status-route-old.txt` is the live block (starts at
+`        if path == "/api/status":`, ends at the `            })` that closes
+`_send(200, {...})`, and appears in the live HUD exactly once) and
+`status-route-new.txt` is the same block from `jarvis-backend/jarvis_hud.py`.
+The dry run above stages exactly that one block (40 lines) and refuses instead
+of writing if the old block is absent or present twice. After `--apply` and a
+restart, a plain `GET /api/status` answers from the cache (no upstream probe) and
+`?force=1` deliberately re-probes on the caller's thread (about 3.1 s on this PC
+while the dead :8000/:4000 endpoints time out), with the same ten keys.
 
 **A recorded BLOCKED delta: `traces.db` retention (F10 / Q2, 2026-10-20).**
 Gemini's Q2 ruling asked for the trace store's retention to be a small

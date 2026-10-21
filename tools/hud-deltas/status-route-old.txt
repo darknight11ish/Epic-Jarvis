@@ -1,0 +1,32 @@
+        if path == "/api/status":
+            jarvis_up = _reachable(f"{JARVIS_URL}/health")
+            models = []
+            if jarvis_up:
+                try:
+                    data = _http_json(f"{JARVIS_URL}/v1/models")
+                    models = [m.get("id") for m in data.get("data", []) if m.get("id")]
+                except Exception:
+                    models = []
+            lanes = []
+            if PROXY_FILE.exists():
+                try:
+                    raw = PROXY_FILE.read_text(encoding="utf-8", errors="replace")
+                    lanes = list(dict.fromkeys(
+                        re.findall(r"^\s*-?\s*model_name:\s*([A-Za-z0-9_\-]+)", raw, re.M)
+                    ))
+                except OSError:
+                    pass
+            cfg = _read_toml(CONFIG_FILE)
+            budget = jarvis_router.Budget.load().status() if ROUTING else {}
+            return self._send(200, {
+                "routing": ROUTING,
+                "jarvis_injects_memory": jarvis_injects_memory(),
+                "budget": budget,
+                "jarvis": jarvis_up,
+                "ollama": _reachable(f"{OLLAMA_URL}/api/tags"),
+                "proxy": _reachable(f"{PROXY_URL}/health"),
+                "models": models,
+                "lanes": lanes,
+                "default_model": (cfg.get("intelligence") or {}).get("default_model", ""),
+                "tools": len((cfg.get("tools") or {}).get("enabled") or []),
+            })
