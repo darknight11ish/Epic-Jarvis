@@ -12,15 +12,23 @@ Since 2026-10-20 the audit log is moved by `JARVIS_LOG_DIR` as well, because
 moving the config folder alone did not move it (the config beside the modules
 names ~/.openjarvis/logs/). This suite is one of the three that test the
 logging machinery, so it clears that variable and the runner leaves it out for
-it (`run_suites.LOG_MACHINERY_SUITES`): the CONTROL runs below must be
-unisolated on purpose. `test_log_isolation.py` proves the new variable.
+it (`run_suites.LOG_MACHINERY_SUITES`). `test_log_isolation.py` proves the
+variable and, since Ruling 8.5 (2026-10-21), the automatic guard too.
 
-Each case below runs a suite with HOME (and USERPROFILE, which is Windows'
-"~") pointed at an empty folder, and looks in it afterwards. The CONTROL
-runs the same suite the old way, to prove it does write there - otherwise
-"nothing was written" would prove nothing.
+RULING 8.5 CHANGED WHAT A CONTROL CAN EXPECT. A hand-run `test_*.py` main no
+longer writes the owner's real log at all: `jarvis_framework.log_dir()` moves
+it to a throwaway directory and says so on stderr. So the CONTROL that used to
+prove "a direct run DOES write HOME's log" now proves the new truth - the
+guard redirected it, and HOME holds nothing of Jarvis's. The older lesson (the
+config's `log_directory` alone does not move the log, because the shipped
+config names ~/.openjarvis/logs/) is kept by a control whose `__main__` is a
+PRODUCTION-STYLE script, not a test file - the guard never touches those.
+
+Each case below runs a child with HOME (and USERPROFILE, which is Windows'
+"~") pointed at an empty folder, and looks in it afterwards.
 """
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -81,6 +89,36 @@ def _written(home: Path) -> list:
     return sorted(str(p.relative_to(home)) for p in home.rglob("*") if p.is_file())
 
 
+def _jarvis_files(home: Path) -> list:
+    """Only Jarvis's own folder: onnxruntime (which the voice suites load)
+    keeps a cache in ~/.cache whatever anyone does."""
+    return [p for p in _written(home) if not p.startswith(".cache")]
+
+
+_DIRECT_REDIRECT = re.compile(r"direct test run: audit log redirected to (.+?);")
+
+
+def _redirected(result) -> "Path | None":
+    """The throwaway audit-log folder the Ruling 8.5 guard named on stderr."""
+    m = _DIRECT_REDIRECT.search(result.stderr or "")
+    return Path(m.group(1)) if m else None
+
+
+#: A PRODUCTION-STYLE child: its file name is not test_*, so the Ruling 8.5
+#: guard leaves it alone - which is how the old "config alone is not enough"
+#: lesson can still be measured.
+_CONTROL_SCRIPT = (
+    "import jarvis_framework as fw\n"
+    "fw.audit_log('gate.asked', {'action': 'control', 'why': 'config log_directory'})\n"
+)
+
+
+def _prod_style_child(folder: Path, name: str = "owner_like_app.py") -> Path:
+    f = folder / name
+    f.write_text(_CONTROL_SCRIPT, encoding="utf-8")
+    return f
+
+
 def _run(args, env):
     return subprocess.run([sys.executable] + [str(a) for a in args], cwd=HERE, env=env,
                           capture_output=True, text=True, timeout=600)
@@ -118,10 +156,22 @@ def t_a_ci_run_leaves_home_alone():
         for suite in (SUITE, SUITE_REBUILT):
             home = Path(tempfile.mkdtemp(prefix="jarvis-empty-home-"))
             try:
-                _run([HERE / suite], _env(home, JARVIS_BACKEND=str(staged)))
-                before = _written(home)
-                check(f"CONTROL: {suite} run on its own writes the audit log into HOME",
-                      any(p.startswith(".openjarvis") for p in before), before)
+                r_direct = _run([HERE / suite], _env(home, JARVIS_BACKEND=str(staged)))
+                before = _jarvis_files(home)
+                check(f"CONTROL (Ruling 8.5): {suite} run on its own writes NOTHING "
+                      f"of Jarvis's into HOME", before == [], before)
+                where_direct = _redirected(r_direct)
+                check("... and the guard says it moved the audit log to a temporary folder",
+                      where_direct is not None and where_direct.is_dir()
+                      and str(home) not in str(where_direct),
+                      (r_direct.stderr or "")[-600:] + " || " + str(where_direct))
+                files_direct = (_jarvis_files(where_direct)
+                                if where_direct is not None and where_direct.is_dir() else [])
+                check(f"... which really received {suite}'s audit lines",
+                      any(re.fullmatch(r"jarvis-\d{4}-\d{2}-\d{2}\.jsonl", f)
+                          for f in files_direct), files_direct)
+                if where_direct is not None:
+                    shutil.rmtree(where_direct, ignore_errors=True)
                 shutil.rmtree(home)
                 home.mkdir()
                 r = _run([HERE / "run_suites.py", suite], _env(home))
@@ -140,14 +190,24 @@ def t_an_owner_like_run_leaves_home_alone():
     """The owner's PC: the config beside the modules names ~/.openjarvis/logs,
     which the audit log obeys over the config folder."""
     home = Path(tempfile.mkdtemp(prefix="jarvis-empty-home-"))
+    scripts = Path(tempfile.mkdtemp(prefix="jarvis-control-"))
     backend = _owner_like_backend()
     try:
-        _run([HERE / SUITE], _env(home, JARVIS_BACKEND=str(backend),
-                                  OPENJARVIS_CONFIG_DIR=str(home / "elsewhere")))
-        before = _written(home)
+        child = _prod_style_child(scripts)
+        env = _env(home, JARVIS_BACKEND=str(backend),
+                   OPENJARVIS_CONFIG_DIR=str(home / "elsewhere"))
+        env["PYTHONPATH"] = str(backend)
+        r_control = _run([child], env)
+        before = _jarvis_files(home)
         check("CONTROL: moving only the config folder is not enough - the config's "
-              "log_directory still sends the log to HOME",
-              any(p.startswith(".openjarvis") for p in before), before)
+              "log_directory still sends the log to HOME for a production-style "
+              "main (not a test_ file, which the Ruling 8.5 guard would redirect)",
+              r_control.returncode == 0
+              and any(p.startswith(".openjarvis") for p in before),
+              (before, (r_control.stderr or "")[-500:]))
+        check("... and the guard stayed out of it (no redirect notice for that child)",
+              "direct test run: audit log redirected to" not in (r_control.stderr or ""),
+              (r_control.stderr or "")[-500:])
         shutil.rmtree(home)
         home.mkdir()
         r = _run([HERE / "run_suites.py", SUITE], _env(home, JARVIS_BACKEND=str(backend)))
@@ -155,6 +215,7 @@ def t_an_owner_like_run_leaves_home_alone():
         check("and writes nothing at all into HOME", _written(home) == [], _written(home))
     finally:
         shutil.rmtree(home, ignore_errors=True)
+        shutil.rmtree(scripts, ignore_errors=True)
         shutil.rmtree(backend, ignore_errors=True)
 
 
