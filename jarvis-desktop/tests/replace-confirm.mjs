@@ -36,6 +36,15 @@ import { normaliseApproval, quickActionable } from "../src/jarvis-link.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SRC = path.join(HERE, "..", "src");
+//: The owner-approved set the client floor must hold (2026-10-21), the same
+//: names the backend's `_REPLACES_ACTIONS` marks.
+const REPLACE_FLOOR = [
+  "restore_backup", "register_approval_key", "memory_forget_range",
+  "delete_file", "delete_joplin_note", "delete_logseq_page",
+  "edit_joplin_note", "edit_logseq_page", "modify_own_code",
+  "app_merge_change",
+];
+
 const fails = [];
 
 async function check(name, fn) {
@@ -74,14 +83,29 @@ async function main() {
     assert.equal(isReplaceCard({ id: "a", replaces: false }), false);
   });
 
-  await check("isReplaceCard: the real action names are the older-PC fallback", () => {
-    assert.equal(isReplaceCard({ action: "restore_backup" }), true);
-    assert.equal(isReplaceCard({ action: "register_approval_key" }), true);
-    assert.equal(isReplaceCard({ action: "memory_forget_range" }), true);
+  await check("isReplaceCard: the real action names are the older-PC floor", () => {
+    // The owner extended the guard on 2026-10-21 ("Extend the two-press guard
+    // to them") to every irreversible data-changing action; the client list is
+    // the same set the backend marks, used when the PC's field cannot answer.
+    for (const action of REPLACE_FLOOR) {
+      assert.equal(isReplaceCard({ action }), true, action);
+    }
     // The three names the review wrote do not all exist; a guard keyed on them
     // would never fire. Two of them are wrong in the review's own wording.
     assert.equal(isReplaceCard({ action: "backup_restore" }), false);
     assert.equal(isReplaceCard({ action: "forget_range" }), false);
+  });
+
+  await check("a SPOOFED/absent field cannot subtract the second press", () => {
+    // The PC's field may ADD an action; the client floor may never be used to
+    // remove one. An explicit false on a listed action still takes the second
+    // press, and so does a row with no field at all.
+    for (const action of REPLACE_FLOOR) {
+      assert.equal(isReplaceCard({ action, replaces: false }), true,
+                   `${action}: an explicit false removed the guard`);
+      assert.equal(isReplaceCard({ action, replaces: null }), true, action);
+    }
+    assert.equal(isReplaceCard({ action: "send_email", replaces: false }), false);
   });
 
   await check("isReplaceCard: the voice-training clear needs the PC's mark, because its action is shared", () => {

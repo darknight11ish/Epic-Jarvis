@@ -1547,14 +1547,44 @@ def _pending_card_id(c: sqlite3.Connection, action: str, detail: Any,
 
 #: Actions whose approval REPLACES or deletes data already on this PC. The
 #: apps draw a plain "REPLACES CURRENT DATA" heading on these cards and ask a
-#: second, explicit time before the approval is sent (guard 2 of the same
-#: ruling). This table is the one place the backend knows it; it travels to
-#: both apps as the `replaces` field on every waiting card (`pending()` below).
+#: second, explicit time before the approval is sent (guard 2 of review ruling
+#: 8.2). This table is the one place the backend knows it; it travels to both
+#: apps as the `replaces` field on every waiting card (`pending()` below).
+#:
+#: THE SET WAS EXTENDED ON THE OWNER'S OWN INSTRUCTION (2026-10-21: "Extend the
+#: two-press guard to them"), after the pre-merge audit named the other
+#: irreversible DATA-CHANGING actions. Every one of them is reversible "no" or
+#: "hard" in `_RISK` above; the reason each is here is what approving it does
+#: to data that is already on the PC:
+#:   * restore_backup - memory, chats, notes and the unlocking key go back in time
+#:   * register_approval_key - a phone may approve risky actions from then on
+#:   * memory_forget_range - retires facts and deletes chats in a time range
+#:   * delete_file / delete_joplin_note / delete_logseq_page - the file or note
+#:     is gone; there is no undo from here
+#:   * edit_joplin_note / edit_logseq_page - the previous text is replaced in
+#:     place and is gone unless the owner versions that vault or graph
+#:   * modify_own_code - the running program's source is changed; a backup is
+#:     the only way back
+#:   * app_merge_change - writes the change shown on the card into the app's
+#:     own files, exactly as shown
+#: An ORDINARY action is not here: one click stays one click for it. A card
+#: whose module sets `{"replaces": true}` in its own `detail` is marked by that
+#: data instead (the voice-training clear uses the shared `change_own_config`
+#: action and marks itself), so no action name is duplicated for it.
 _REPLACES_ACTIONS = frozenset({
     "restore_backup",          # jarvis_backup.py: memory, chats, notes and the
                                # key that unlocks them all go back in time
     "register_approval_key",   # jarvis_devices.py: a phone may approve from then on
     "memory_forget_range",     # jarvis_forget_range.py: facts retired, chats deleted
+    "delete_file",             # the file is gone; not recoverable from here
+    "delete_joplin_note",      # the note is gone; not recoverable from here
+    "delete_logseq_page",      # the page is gone; not recoverable from here
+    "edit_joplin_note",        # previous text replaced in place; versioning is
+                               # the owner's, not this app's
+    "edit_logseq_page",        # same, for a Logseq graph page
+    "modify_own_code",         # the running program's source changes; a backup
+                               # is the only way back
+    "app_merge_change",        # writes the shown change into the app's own files
 })
 
 

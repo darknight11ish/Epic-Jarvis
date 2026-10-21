@@ -1319,6 +1319,19 @@
    * ---------------------------------------------------------------- */
   var HUD_REPLACE_ARM_MS = 10000;
 
+  /* The client-side FLOOR for the actions whose card replaces data, the same
+   * set as the page's and the phone's (the owner extended the guard on
+   * 2026-10-21 to the other irreversible data changers). The PC's `replaces`
+   * field can ADD an action; this list can never SUBTRACT one - an explicit
+   * `false` on a listed action still takes the second press, and an absent
+   * field on a listed action does too. */
+  var HUD_REPLACE_ACTIONS = [
+    "restore_backup", "register_approval_key", "memory_forget_range",
+    "delete_file", "delete_joplin_note", "delete_logseq_page",
+    "edit_joplin_note", "edit_logseq_page", "modify_own_code",
+    "app_merge_change",
+  ];
+
   /* The pure rule, kept free of the DOM so a suite can drive it (see
    * jarvis-desktop/tests/hud-replace-confirm.mjs and the Playwright case in
    * jarvis-desktop/tests/hud.mjs): given a card id and the PC's answer about
@@ -1473,10 +1486,20 @@
       replaceArmBusy[id] = true;
       pendingRowFor(id).then(function (row) {
         replaceArmBusy[id] = false;
-        // Only EXPLICIT booleans are answers; anything else (a row missing
-        // from a successful read, an older PC with no field) is unknown.
-        var replaces = row && typeof row.replaces === "boolean"
-          ? row.replaces : null;
+        // The PC's field is the authority and can ADD an action; the local
+        // list is the fail-safe FLOOR and can only ever ADD a second press.
+        // An explicit `false` on a listed action is NOT trusted to remove the
+        // guard, and a row missing from a successful read (or a read that
+        // failed) stays UNKNOWN, which also takes the second press.
+        var replaces = null;
+        if (row) {
+          var action = String(row.action || "");
+          if (row.replaces === true || HUD_REPLACE_ACTIONS.indexOf(action) >= 0) {
+            replaces = true;
+          } else if (typeof row.replaces === "boolean") {
+            replaces = row.replaces;
+          }
+        }
         var verdict = replacePress.decide(id, replaces);
         if (verdict === "send") {
           answerApproval(id, true, card);

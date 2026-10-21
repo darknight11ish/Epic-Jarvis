@@ -3172,7 +3172,10 @@ const REPLACES_WARNING = "REPLACES CURRENT DATA";
 const REPLACES_NOTE = "Approving this replaces what is there now. " +
   "Press Approve again to confirm.";
 const REPLACE_ACTIONS = ["restore_backup", "register_approval_key",
-                         "memory_forget_range"];
+                         "memory_forget_range", "delete_file",
+                         "delete_joplin_note", "delete_logseq_page",
+                         "edit_joplin_note", "edit_logseq_page",
+                         "modify_own_code", "app_merge_change"];
 function apprReplace(p){
   if(!p) return false;
   if(p.replaces === true) return true;

@@ -1132,51 +1132,70 @@ await check("a HUD approval card is answered HERE, through the shell's own decid
 
 
 await check("a HUD card that REPLACES data takes TWO presses in the injected window", async () => {
-  // Review ruling 8.2, the surface the pre-merge audit found: the page's own
-  // two-press never runs inside the desktop HUD (the injected bootstrap
-  // captures the click), so the bootstrap must own the rule. The PC says the
-  // card replaces data (`replaces: true`); ONE click must send nothing, the
-  // second must send exactly one decide_approval.
+  // Review ruling 8.2, the surface the pre-merge audit found, extended by the
+  // owner on 2026-10-21 ("Extend the two-press guard to them") to the other
+  // irreversible data changers: the page's own two-press never runs inside the
+  // desktop HUD (the injected bootstrap captures the click), so the bootstrap
+  // own the rule. The PC says each card replaces data (`replaces: true`); ONE
+  // click must send nothing, the second must send exactly one decide_approval.
+  // `delete_file` is here beside `restore_backup` so the EXTENDED set is driven
+  // through the real wiring, not only the original four.
+  const cards = [
+    { id: "7", action: "restore_backup" },
+    { id: "8", action: "delete_file" },
+  ];
   const { page, decisions } = await openHud(browser,
     { jarvis: false, ollama: true, proxy: false,
-      pending: [{ id: "7", action: "restore_backup", tier: "ask",
-                  replaces: true,
-                  risk: { reversible: "yes", reach: "local", swipe_ok: true } }] });
-  await page.evaluate(() => {
+      pending: cards.map((c) => ({ id: c.id, action: c.action, tier: "ask",
+                                    replaces: true,
+                                    risk: { reversible: "no", reach: "local",
+                                            swipe_ok: false } })) });
+  const place = (card) => page.evaluate((c) => {
     const box = document.getElementById("approvals");
     box.hidden = false;
-    box.innerHTML = '<div class="appr" data-id="7"><div class="det">restore it</div>'
-      + '<div class="btns"><button class="no">Deny</button><button class="yes">Approve</button></div></div>';
-  });
+    box.innerHTML = '<div class="appr" data-id="' + c.id + '">'
+      + '<div class="det">' + c.action + '</div>'
+      + '<div class="btns"><button class="no">Deny</button>'
+      + '<button class="yes">Approve</button></div></div>';
+  }, card);
+  const decidedCount = () => page.evaluate(() =>
+    window.__invokes.filter((c) => c[0] === "decide_approval").length);
 
-  await page.evaluate(() => document.querySelector("#approvals .yes").click());
-  await K.until(page, "the replacing card to ask for its confirming press", async () => {
-    const label = await page.evaluate(() =>
-      (document.querySelector("#approvals .yes") || {}).textContent || "");
-    return label === "Confirm replace";
-  }, { ms: 8000 });
-  const afterFirst = await page.evaluate(() => ({
-    decided: window.__invokes.filter((c) => c[0] === "decide_approval").map((c) => c[1]),
-    said: (document.querySelector("#approvals .appr .why") || {}).textContent || "",
-  }));
-  assert.deepEqual(afterFirst.decided, [], "the first press sent an approval");
-  assert.match(afterFirst.said, /REPLACES what is on your PC/,
-    `the first press did not say plainly what the next one does: ${afterFirst.said}`);
+  for (const card of cards) {
+    await place(card);
+    const before = await decidedCount();
+    await page.evaluate(() => document.querySelector("#approvals .yes").click());
+    await K.until(page, `the ${card.action} card to ask for its confirming press`, async () => {
+      const label = await page.evaluate(() =>
+        (document.querySelector("#approvals .yes") || {}).textContent || "");
+      return label === "Confirm replace";
+    }, { ms: 8000 });
+    const afterFirst = await page.evaluate(() => ({
+      count: window.__invokes.filter((c) => c[0] === "decide_approval").length,
+      said: (document.querySelector("#approvals .appr .why") || {}).textContent || "",
+    }));
+    assert.equal(afterFirst.count, before,
+      `${card.action}: the first press sent an approval`);
+    assert.match(afterFirst.said, /REPLACES what is on your PC/,
+      `${card.action}: the first press did not say plainly what the next one does: ${afterFirst.said}`);
 
-  await page.evaluate(() => document.querySelector("#approvals .yes").click());
-  await K.until(page, "exactly one decide_approval", async () =>
-    (await page.evaluate(() =>
-      window.__invokes.filter((c) => c[0] === "decide_approval").length)) === 1,
-  { ms: 8000 });
-  const afterSecond = await page.evaluate(() =>
-    window.__invokes.filter((c) => c[0] === "decide_approval").map((c) => c[1]));
-  await page.waitForTimeout(400);
+    await page.evaluate(() => document.querySelector("#approvals .yes").click());
+    await K.until(page, `exactly one more decide_approval for ${card.action}`, async () =>
+      (await page.evaluate(() =>
+        window.__invokes.filter((c) => c[0] === "decide_approval").length)) === before + 1,
+    { ms: 8000 });
+    const afterSecond = await page.evaluate(() =>
+      window.__invokes.filter((c) => c[0] === "decide_approval").map((c) => c[1]));
+    assert.deepEqual(afterSecond[afterSecond.length - 1],
+      { id: card.id, approved: true },
+      `${card.action}: the confirming press did not send exactly one decision`);
+    await page.waitForTimeout(400);
+  }
   await page.close();
-  assert.deepEqual(afterSecond, [{ id: "7", approved: true }],
-    `the confirming press did not send exactly one decision: ${JSON.stringify(afterSecond)}`);
   assert.deepEqual(decisions.map((d) => [d.path, d.body.id, d.body.by]),
-    [["/api/approve", "7", "desktop_spotlight"]],
-    "the confirming press did not send the command the bar sends");
+    [["/api/approve", "7", "desktop_spotlight"],
+     ["/api/approve", "8", "desktop_spotlight"]],
+    "the confirming presses did not send the command the bar sends");
 });
 
 await check("a refused HUD decision says so on the card, in the command's own words", async () => {
