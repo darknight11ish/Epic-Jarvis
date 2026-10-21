@@ -1,0 +1,18 @@
+    # ---- "ask", and anything unrecognised, waits for a human ----
+    try:
+        _init()
+        rid = uuid.uuid4().hex[:12]
+        now = time.time()
+        with closing(_connect()) as c:
+            c.execute(
+                "INSERT INTO approvals (id,action,tier,detail,prompt,state,created,raised)"
+                " VALUES (?,?,?,?,?,'pending',?,?)",
+                (rid, action, tier, json.dumps(detail)[:4000], (prompt or "")[:2000], now,
+                 json.dumps(raised)[:1000] if raised else None))
+    except Exception as exc:
+        _audit("gate.queue_unavailable", {"action": action, "error": str(exc)})
+        return Verdict(False, tier, action,
+                       f"approval queue unavailable, so the action is refused ({exc})",
+                       outcome="refused")
+
+    _audit("gate.asked", {"id": rid, "action": action, "tier": tier, "detail": detail})

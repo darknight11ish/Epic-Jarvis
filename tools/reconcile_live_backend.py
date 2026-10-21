@@ -37,11 +37,15 @@ WHAT IT DOES, IN ORDER (see --help and the summary it prints)
        the same way - it never guesses. A delta whose live anchor does not exist at all
        (F10 `traces.db` retention, Q2) is recorded in `BLOCKED_DELTAS` with its evidence,
        printed as BLOCKED LIVE DELTAS, and never staged: blocked is reported, not guessed.
-       Fixes that live in the published base HUD but in NO `.patch` (the DEF-002
-       status cache, its start call and `?force=1` route, and the reasoning fallback)
+       Fixes that live in the published base files but in NO `.patch` of their own
        are literal deltas too: the entry carries the exact block bytes in
        `tools/hud-deltas/` and either inserts them at an anchor or REPLACES an old
-       block that must appear exactly once.
+       block that must appear exactly once. The literal loop is not HUD-only - it
+       iterates whatever file an entry names, so any of the five patched files can
+       be carried this way (the 2026-10-14 HUD fixes do it for `jarvis_hud.py`;
+       review ruling 8.2's guard change does it for `jarvis_gate.py` in four
+       entries, because `gate-touches.patch` is already in the live patch list and
+       its new hunks would otherwise be reported ALREADY_PRESENT and never deploy).
 
     3. REHEARSAL. Every staged Python file is compiled with `py_compile` before any live
        file is touched. If compilation fails, nothing is written.
@@ -155,6 +159,30 @@ REASONING_NEW_FILE = "reasoning-new.txt"
 STATUS_ROUTE_OLD_FILE = "status-route-old.txt"
 STATUS_ROUTE_NEW_FILE = "status-route-new.txt"
 
+#: Review ruling 8.2's guard change (PR #680) reaches the live PC the same way
+#: the two HUD fixes do, and for a reason that reads like a silent trap:
+#: `gate-touches.patch` is ALREADY in the live `_jarvis-state.json` patch list,
+#: so the stack walk reports it ALREADY_PRESENT - and its new hunks (the
+#: pending-card dedup guard and the `replaces` flag) would never be deployed.
+#: So the change is carried as literal deltas, one per disjoint region of
+#: `jarvis_gate.py`; each old block is the text the owner's live gate holds and
+#: must appear there EXACTLY once (a half-applied file is refused, never
+#: guessed). The bytes were extracted from the published base gate before and
+#: after PR #680; the four deltas together reconstruct the published file byte
+#: for byte (`backend/test_reconcile_live_backend.py` proves it).
+GATE_GUARDS_IMPORT_OLD_FILE = "gate-guards-import-old.txt"
+GATE_GUARDS_IMPORT_NEW_FILE = "gate-guards-import-new.txt"
+GATE_GUARDS_HELPERS_NEW_FILE = "gate-guards-helpers-new.txt"
+GATE_GUARDS_DEDUP_OLD_FILE = "gate-guards-dedup-old.txt"
+GATE_GUARDS_DEDUP_NEW_FILE = "gate-guards-dedup-new.txt"
+GATE_GUARDS_REPLACES_OLD_FILE = "gate-guards-replaces-old.txt"
+GATE_GUARDS_REPLACES_NEW_FILE = "gate-guards-replaces-new.txt"
+
+#: The line the two guard helpers are inserted in front of. `check()` is
+#: defined once in `jarvis_gate.py`; the tool refuses if that is not true in
+#: the live file.
+GATE_GUARDS_CHECK_ANCHOR = "def check(action: str,"
+
 #: The data-driven HUD-delta table. Each entry says, for one patch and one patched file:
 #:   probes: distinctive post-image lines; ALL must be in the live file to count as present
 #:   anchor: the exact line the patch's added lines are inserted BEFORE (must appear once)
@@ -214,6 +242,42 @@ DELTA_TABLE = {
                        "force = (parse_qs(urlparse(self.path).query)"),
             "file": STATUS_ROUTE_NEW_FILE,
             "replace_file": STATUS_ROUTE_OLD_FILE,
+        },
+    },
+    # Review ruling 8.2 (PR #680): the guard change is carried to the live
+    # jarvis_gate.py as four literal deltas, ONE PER DISJOINT REGION - the
+    # hashlib import, the two guard helpers before check(), the dedup ask
+    # branch, and the `replaces` flag pending() puts on every waiting row.
+    # EACH has two distinctive post-image probes, so a half-applied live
+    # file can never be mistaken for a complete one; every old block must
+    # appear exactly once in the live file or the deploy is refused.
+    "gate-guards-import.patch": {
+        "jarvis_gate.py": {
+            "probes": ("import hashlib",),
+            "file": GATE_GUARDS_IMPORT_NEW_FILE,
+            "replace_file": GATE_GUARDS_IMPORT_OLD_FILE,
+        },
+    },
+    "gate-guards-helpers.patch": {
+        "jarvis_gate.py": {
+            "probes": ("def _pending_target(", "def _pending_card_id("),
+            "anchor": GATE_GUARDS_CHECK_ANCHOR,
+            "file": GATE_GUARDS_HELPERS_NEW_FILE,
+        },
+    },
+    "gate-guards-dedup.patch": {
+        "jarvis_gate.py": {
+            "probes": ("_pending_card_id(c, action, detail, prompt)",
+                       "BEGIN IMMEDIATE"),
+            "file": GATE_GUARDS_DEDUP_NEW_FILE,
+            "replace_file": GATE_GUARDS_DEDUP_OLD_FILE,
+        },
+    },
+    "gate-guards-replaces.patch": {
+        "jarvis_gate.py": {
+            "probes": ('d["replaces"] = replaces_for(',),
+            "file": GATE_GUARDS_REPLACES_NEW_FILE,
+            "replace_file": GATE_GUARDS_REPLACES_OLD_FILE,
         },
     },
 }
@@ -596,58 +660,69 @@ def plan_deltas(live: Path, patches: Iterable[str], *,
             if text != (staged.get(target) or live_text[target]):
                 staged[target] = text
                 deltas.append(DeltaAction(patch, target, "insert", tuple(added), anchor))
-    # Literal deltas: the 2026-10-14 HUD fixes that have no .patch. They are
-    # processed after the stack so their anchors see the same staged text, and
-    # only when the pick was not already made by a patch of the same name.
+    # Literal deltas: fixes that have no .patch of their own - the 2026-10-14
+    # HUD fixes, and review ruling 8.2's guard change carried to jarvis_gate.py
+    # (see DELTA_TABLE). They are processed after the stack so their anchors see
+    # the same staged text, and only when the pick was not already made by a
+    # patch of the same name. ANY of the five patched files may be named: a
+    # literal entry is ONE block in ONE file, which is what keeps a change
+    # touching two base files from needing new code (the HUD entries behave
+    # exactly as they did before this loop was generalised).
     known = set(patches)
     literal_items = list(table.items()) if literals else ()
     for patch, targets in literal_items:
         if patch in known:
             continue
-        entry = targets.get("jarvis_hud.py") or {}
-        lines = tuple(entry.get("lines") or ())
-        if not lines and entry.get("file"):
-            try:
-                lines = _delta_lines(str(entry["file"]))
-            except Exception as exc:                          # noqa: BLE001
-                refusals.append(f"{patch} -> jarvis_hud.py: its block file could "
-                                f"not be read ({type(exc).__name__})")
+        for target, entry in targets.items():
+            if target not in PATCHED_FILES:
+                refusals.append(
+                    f"{patch} -> {target}: a literal delta must name one of the "
+                    f"five patched base files ({', '.join(PATCHED_FILES)}); "
+                    f"refusing to guess.")
                 continue
-        if not lines:
-            continue
-        text = staged.get("jarvis_hud.py") or live_text.get("jarvis_hud.py", "")
-        if patch_present(patch, "jarvis_hud.py", (), text, table=table,
-                         state_patches=state):
-            deltas.append(DeltaAction(patch, "jarvis_hud.py", "already"))
-            continue
-        old = str(entry.get("replace") or "")
-        if not old and entry.get("replace_file"):
-            try:
-                old = "\n".join(_delta_lines(str(entry["replace_file"])))
-            except Exception as exc:                          # noqa: BLE001
-                refusals.append(f"{patch} -> jarvis_hud.py: its old block file "
-                                f"could not be read ({type(exc).__name__})")
+            lines = tuple(entry.get("lines") or ())
+            if not lines and entry.get("file"):
+                try:
+                    lines = _delta_lines(str(entry["file"]))
+                except Exception as exc:                      # noqa: BLE001
+                    refusals.append(f"{patch} -> {target}: its block file could "
+                                    f"not be read ({type(exc).__name__})")
+                    continue
+            if not lines:
                 continue
-        try:
-            if old:
-                count = text.count(old)
-                if count != 1:
-                    raise Refused(
-                        f"{patch} -> jarvis_hud.py: its old block appears "
-                        f"{count} time(s) in the live file; expected exactly 1. "
-                        f"Refusing rather than guessing.")
-                text = text.replace(old, "\n".join(lines), 1)
-            else:
-                text = insert_before_anchor(text, lines, entry.get("anchor") or "",
-                                            where=f"{patch} -> jarvis_hud.py")
-        except Refused as exc:
-            refusals.append(str(exc))
-            continue
-        if text != (staged.get("jarvis_hud.py") or live_text.get("jarvis_hud.py", "")):
-            staged["jarvis_hud.py"] = text
-            deltas.append(DeltaAction(patch, "jarvis_hud.py", "insert", tuple(lines),
-                                      str(entry.get("anchor")
-                                          or entry.get("replace_file") or "")))
+            text = staged.get(target) or live_text.get(target, "")
+            if patch_present(patch, target, (), text, table=table,
+                             state_patches=state):
+                deltas.append(DeltaAction(patch, target, "already"))
+                continue
+            old = str(entry.get("replace") or "")
+            if not old and entry.get("replace_file"):
+                try:
+                    old = "\n".join(_delta_lines(str(entry["replace_file"])))
+                except Exception as exc:                      # noqa: BLE001
+                    refusals.append(f"{patch} -> {target}: its old block file "
+                                    f"could not be read ({type(exc).__name__})")
+                    continue
+            try:
+                if old:
+                    count = text.count(old)
+                    if count != 1:
+                        raise Refused(
+                            f"{patch} -> {target}: its old block appears "
+                            f"{count} time(s) in the live file; expected exactly 1. "
+                            f"Refusing rather than guessing.")
+                    text = text.replace(old, "\n".join(lines), 1)
+                else:
+                    text = insert_before_anchor(text, lines, entry.get("anchor") or "",
+                                                where=f"{patch} -> {target}")
+            except Refused as exc:
+                refusals.append(str(exc))
+                continue
+            if text != (staged.get(target) or live_text.get(target, "")):
+                staged[target] = text
+                deltas.append(DeltaAction(patch, target, "insert", tuple(lines),
+                                          str(entry.get("anchor")
+                                              or entry.get("replace_file") or "")))
     # Only files that really changed need staging/swapping.
     staged = {name: text for name, text in staged.items()
               if text != live_text.get(name, "")}

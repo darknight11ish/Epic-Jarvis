@@ -136,7 +136,13 @@ def make_live(root: Path, *, with_deltas=False, app_control_section=False) -> Pa
         hud = R.insert_before_anchor(hud, ["    # setup.patch (test)", "    # /api/setup"],
                                      R.PLUGIN_LOADER_MARKER, where="fixture")
     write(live / "jarvis_hud.py", hud)
-    for name in ("jarvis_gate.py", "jarvis_extract.py", "jarvis_models.py", "jarvis_skills.py"):
+    # The gate gets the same kind of stand-in the HUD does: a COMPILABLE mini
+    # module carrying the OLD blocks review ruling 8.2's guard deltas replace
+    # (see MINI_GATE below). Without it, every test that plans the whole
+    # DELTA_TABLE with literals=True would (rightly) be refused for a gate file
+    # that cannot hold the guard change - a fixture gap, not a deploy finding.
+    write(live / "jarvis_gate.py", MINI_GATE)
+    for name in ("jarvis_extract.py", "jarvis_models.py", "jarvis_skills.py"):
         write(live / name, "# a live patched base file\n")
     write(live / "_jarvis-state.json", json.dumps({"patchList": [
         "rebuilt-patches/demo-old.patch"]}))
@@ -1021,8 +1027,202 @@ def t_a_literal_delta_refuses_a_bad_anchor_or_absent_old_block():
         shutil.rmtree(root, ignore_errors=True)
 
 
+# --------------------------------------------------------------------------
+#   review ruling 8.2's guard change: literal deltas for jarvis_gate.py
+# --------------------------------------------------------------------------
+
+#: A minimal COMPILABLE "live" gate carrying the OLD blocks the four deltas
+#: replace, in the same order and nesting they have in the real file. The rest
+#: of a live gate is not needed to prove the plan; `py_compile` is.
+MINI_GATE = (
+    '"""a live gate stand-in"""\n'
+    "\n"
+    "import json\n"
+    "import os\n"
+    "import re\n"
+    "\n"
+    "def pending():\n"
+    "    rows = []\n"
+    "    for r in rows:\n"
+    "        d = dict(r)\n"
+    + "\n".join(R._delta_lines(R.GATE_GUARDS_REPLACES_OLD_FILE)) + "\n"
+    "    return []\n"
+    "\n"
+    "\n"
+    # `def check(action: str,` is a prefix of this line, which is the text the
+    # helpers entry inserts in front of - exactly as in the real file.
+    "def check(action: str, detail=None):\n"
+    + "\n".join(R._delta_lines(R.GATE_GUARDS_DEDUP_OLD_FILE)) + "\n"
+    "    return None\n"
+    "\n"
+    "\n"
+    "def gate_tool(name, params):\n"
+    "    return check(name + str(params))\n"
+)
+
+
+#: Only the guard entries: the fixture below stubs the HUD file, so the HUD
+#: literal deltas (whose anchors live in a real HUD) are not part of these
+#: tests; the guard blocks are the whole subject here.
+GATE_GUARDS_TABLE = {name: entry for name, entry in R.DELTA_TABLE.items()
+                     if name.startswith("gate-guards-")}
+
+
+def make_gate_live(root: Path) -> Path:
+    """A temp 'live' folder: MINI_GATE and the other four patched files."""
+    live = root / "live-gate"
+    live.mkdir(parents=True, exist_ok=True)
+    write(live / "jarvis_gate.py", MINI_GATE)
+    for name in ("jarvis_hud.py", "jarvis_extract.py", "jarvis_models.py",
+                 "jarvis_skills.py"):
+        write(live / name, "# a live patched base file\n")
+    write(live / "_jarvis-state.json", json.dumps({"patchList": [
+        "rebuilt-patches/demo-old.patch"]}))
+    return live
+
+
+def t_the_gate_guards_are_carried_as_literal_deltas():
+    """Review ruling 8.2's guard change reaches the live PC as FOUR literal
+    deltas, because `gate-touches.patch` is already in the live patch list, so
+    the stack walk reports it ALREADY_PRESENT and the new hunks would silently
+    never deploy. Bite: with no DELTA_TABLE entries nothing is staged."""
+    root = tmpdir()
+    try:
+        live = make_gate_live(root)
+        deltas, staged, refusals = R.plan_deltas(live, [], show=fake_show,
+                                                 table=GATE_GUARDS_TABLE, literals=True)
+        gate_deltas = sorted((d.patch, d.status) for d in deltas
+                             if d.patch.startswith("gate-guards-"))
+        check("all four guard deltas are planned as literal inserts",
+              refusals == [] and gate_deltas == sorted([
+                  ("gate-guards-import.patch", "insert"),
+                  ("gate-guards-helpers.patch", "insert"),
+                  ("gate-guards-dedup.patch", "insert"),
+                  ("gate-guards-replaces.patch", "insert")]),
+              (gate_deltas, refusals))
+        text = staged.get("jarvis_gate.py", "")
+        check("the staged live gate has the dedup guards and the `replaces` flag",
+              "def _pending_target(" in text and "def _pending_card_id(" in text
+              and "BEGIN IMMEDIATE" in text and 'd["replaces"] = replaces_for(' in text,
+              text[:300])
+        check("... none of the OLD dedup block is left, and the replaces flag "
+              "sits once after the notice line it extends",
+              "\n".join(R._delta_lines(R.GATE_GUARDS_DEDUP_OLD_FILE)) not in text
+              and text.count('d["notice"] = notice_for(d)') == 1
+              and text.index('d["replaces"] = replaces_for(')
+              > text.index('d["notice"] = notice_for(d)'),
+              text[:300])
+        check("... and the staged gate still compiles", R.rehearse(staged) == [],
+              R.rehearse(staged))
+
+        # The NEW blocks are the PUBLISHED base gate's own text, and the OLD
+        # blocks are in none of it - the claim that this change is #680 carried
+        # to the live file, rather than a second hand-written copy.
+        published = (REPO / "jarvis-backend" / "jarvis_gate.py").read_text(encoding="utf-8")
+        for name in (R.GATE_GUARDS_IMPORT_NEW_FILE, R.GATE_GUARDS_HELPERS_NEW_FILE,
+                     R.GATE_GUARDS_DEDUP_NEW_FILE, R.GATE_GUARDS_REPLACES_NEW_FILE):
+            block = "\n".join(R._delta_lines(name))
+            check(f"the published base gate holds the NEW block {name}",
+                  block in published, name)
+        # Only the dedup block is wholly absent from the published gate: the old
+        # import block is a PREFIX of the new one and the old "notice" line is
+        # the first line of the new replaces block, so both legitimately appear.
+        old_dedup = "\n".join(R._delta_lines(R.GATE_GUARDS_DEDUP_OLD_FILE))
+        check("... and not the OLD dedup block", old_dedup not in published)
+
+        backup = R.Backup(live, stamp="gate-guards")
+        R.apply_deltas(staged, live, backup)
+        again, staged2, refusals2 = R.plan_deltas(live, [], show=fake_show,
+                                                  table=GATE_GUARDS_TABLE, literals=True)
+        statuses = {d.patch: d.status for d in again
+                    if d.patch.startswith("gate-guards-")}
+        check("a second plan sees all four guard deltas ALREADY_PRESENT",
+              refusals2 == [] and staged2 == {}
+              and len(statuses) == 4
+              and all(s == "already" for s in statuses.values()),
+              (statuses, staged2, refusals2))
+        check("idempotent: a second apply writes nothing",
+              R.apply_deltas(staged2, live, backup) == [])
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_a_half_applied_gate_is_refused_not_guessed():
+    """A live gate missing one of the four regions is not a complete deploy:
+    that delta's old block is gone and its probes are absent, so the plan must
+    refuse rather than insert a second copy of anything."""
+    root = tmpdir()
+    try:
+        live = make_gate_live(root)
+        gate = (live / "jarvis_gate.py").read_text(encoding="utf-8")
+        # Half-applied/truncated: the OLD ask branch is gone but the NEW one
+        # never landed, so the dedup delta can neither replace nor prove present.
+        gate = gate.replace(
+            "\n".join(R._delta_lines(R.GATE_GUARDS_DEDUP_OLD_FILE)), "", 1)
+        write(live / "jarvis_gate.py", gate)
+        _deltas, staged, refusals = R.plan_deltas(live, [], show=fake_show,
+                                                  table=GATE_GUARDS_TABLE, literals=True)
+        check("a half-applied guard change is REFUSED, never deployed",
+              staged == {} and any(
+                  "gate-guards-dedup.patch" in r and "old block appears" in r
+                  for r in refusals), refusals)
+        check("... and the refusal says how many times it found the old block",
+              any("expected exactly 1" in r for r in refusals), refusals)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_a_duplicated_old_block_is_refused():
+    """Two copies of an old block is an ambiguous file: refuse, do not guess."""
+    root = tmpdir()
+    try:
+        live = make_gate_live(root)
+        gate = (live / "jarvis_gate.py").read_text(encoding="utf-8")
+        dup = "\n".join(R._delta_lines(R.GATE_GUARDS_REPLACES_OLD_FILE))
+        gate = gate.replace(dup, dup + "\n" + dup, 1)
+        write(live / "jarvis_gate.py", gate)
+        _deltas, staged, refusals = R.plan_deltas(live, [], show=fake_show,
+                                                  table=GATE_GUARDS_TABLE, literals=True)
+        check("a duplicated old block is refused, and nothing is staged",
+              staged == {} and any("expected exactly 1" in r for r in refusals),
+              refusals)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_the_real_live_gate_gets_the_guards_read_only():
+    """Against the OWNER's real live folder, READ-ONLY when it is reachable.
+
+    CI has no live folder, so this SKIPS there (a skip is not a pass). At the
+    desk it answers the question the Lead asked: does a plain dry run plan the
+    guard deltas as inserts with no refusal?"""
+    live = Path(os.environ.get("JARVIS_LIVE_BACKEND", ""))
+    if not live.is_dir() or not (live / "jarvis_gate.py").is_file():
+        print("skip  no live backend folder here (JARVIS_LIVE_BACKEND unset or "
+              "missing) - the real-PC dry run is the desk check, not CI's")
+        return
+    gate_path = live / "jarvis_gate.py"
+    before = gate_path.read_bytes()
+    _shipped, patches = R.read_patch_lists(REPO)
+    deltas, staged, refusals = R.plan_deltas(live, patches, literals=True)
+    after = gate_path.read_bytes()
+    ids = [d for d in deltas if d.patch.startswith("gate-guards-")]
+    check("the real live gate plans all four guard deltas", len(ids) == 4,
+          [(d.patch, d.status) for d in ids])
+    check("... as inserts, or all already after the deploy",
+          all(d.status in ("insert", "already") for d in ids),
+          [(d.patch, d.status) for d in ids])
+    check("... with no refusal at all", refusals == [], refusals[:4])
+    check("... and the real live file was not written (read-only dry run)",
+          after == before)
+
+
 def main():
     for fn in (t_the_lists_parse_from_apply_patches,
+               t_the_gate_guards_are_carried_as_literal_deltas,
+               t_a_half_applied_gate_is_refused_not_guessed,
+               t_a_duplicated_old_block_is_refused,
+               t_the_real_live_gate_gets_the_guards_read_only,
                t_the_list_parser_refuses_rather_than_reading_nothing,
                t_a_patch_parses_into_per_file_added_lines,
                t_presence_is_decided_from_distinctive_lines,
