@@ -2721,6 +2721,21 @@ neither: nothing safe to build it on exists yet (§10).
 **PC-ONLY, and no phone route is planned** (2026-10-20): the **Obsidian vault organizer** (`backend/jarvis_vault_organizer.py`, `plugins/ready/vault-organizer/`, JARVIS-API section 151). Its read-only plan reads the full text of the owner's own vault of notes on this PC, so every route is refused from another device (403 `not_this_pc`, the project's own `from_this_pc` rule) and the phone gets no Settings row, no card and no chat tool for it. This is a decision, not a gap to close later: a phone control could only ever ask the PC to read that vault, and the feature is OFF by default behind `[vault_organizer] enabled = false` until the owner turns it on with one card. Both halves are built on the backend (read-only plan, and the writer under ONE card with guardian snapshots and one-click Undo, on a COPY of the vault first - `docs/JARVIS-API.md` section 151's runbook). No app is waiting on it because nothing in either app calls these routes, and none will: the phone deliberately gets no organizer control, only the owner at the PC's own screen.
 
 **The phone cannot read the PC's screen or selection out loud** (2026-10-21, task-39): a **Jarvis Live** session asks "what's on my screen?" or "read this selection" and gets one **read-only** look at this PC's screen through the existing `jarvis_screen.py` "Look at this" path, or the existing `jarvis_ui_control.read_selection()` - see JARVIS-API section 153. Only a session on the **PC** may do it: a session started on the phone gets a fixed line and **nothing is read**, because the screen is this PC's own screen and the phone cannot see it. If the device cannot be known, nothing is read. This is a decision, not a missing feature to port: the phone already has its own "show my phone to Jarvis" path (section 62) and that stays the phone's way to share what it sees. Actions that change a program are not part of the bridge either: they keep their existing ONE `control_computer` card, decided by a physical tap/click, and Live pauses while a card waits so a spoken "yes" cannot answer it.
+**True barge-in with echo cancellation is a design phase, off and unwired, and
+desktop-only on purpose** (2026-10-21; Voice Slice F, after the owner approved
+the whole Live & Voice program). `backend/jarvis_barge_in.py` is a
+reference-subtraction (NLMS) echo canceller over Jarvis's own outbound TTS PCM
+plus a 350 ms speech decision, behind `[voice] aec_barge_in = false`; no live
+module imports it and no route calls it, so the live voice path has no change
+at all. System WASAPI loopback is explicitly NOT the reference (the combined
+ruling of 2026-10-21); the residual is memory-only and zeroed, and the CAM++
+owner gate stays verify-first. The phone cannot run this half - the canceller
+needs the PC's own TTS PCM and the PC's CAM++ check - and it already keeps
+Android's `AcousticEchoCanceler` in voice-call mode, so there is no phone gap
+to close in this slice. Design, synthetic proof and the measurement plan:
+`docs/DESIGN-VOICE-BARGE-IN.md`. Real open-speaker barge-in is NOT-MEASURED
+until the owner's hardware.
+
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps

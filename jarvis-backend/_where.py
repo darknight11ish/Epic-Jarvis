@@ -1151,6 +1151,10 @@ SHIPPED = (
     # is this PC's). Actions that change things stay on the existing
     # control_computer tool and its ONE physical-tap approval card.
     "jarvis_voice_ui.py",
+    # Barge-in with echo cancellation, Voice Slice F (2026-10-21): PHASE 1
+    # prototype only - docs/DESIGN-VOICE-BARGE-IN.md, [voice] aec_barge_in = false,
+    # no live module imports it and nothing wires it yet.
+    "jarvis_barge_in.py",
 )
 
 
