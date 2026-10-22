@@ -133,6 +133,65 @@ function Step($n, $of, $title) {
     Write-Host "[$n/$of] $title" -ForegroundColor Cyan
 }
 
+# Take the secret shapes R4 names out of ONE line before it reaches a log.
+#
+# The desktop app keeps the same rule in Rust (log_scrub.rs). This script's log
+# is a PowerShell transcript - it records whatever the script prints - so the
+# filter is applied to a child program's output BEFORE it is printed or
+# appended below, and Finish-Run makes a final pass over the written files.
+# Windows PowerShell 5.1 compatible on purpose: no `??`, no ternary.
+function Scrub-LogLine {
+    param([string] $Line)
+    if ([string]::IsNullOrEmpty($Line)) { return $Line }
+    $s = $Line
+    # A pairing / device token.
+    $s = [regex]::Replace($s, 'jdk1\.[A-Za-z0-9._-]+', '[REDACTED_PAIR_TOKEN]')
+    # `Authorization: Bearer <token>` - the token is the SECOND word.
+    $s = [regex]::Replace($s, '(?i)(authorization|x-jarvis-token|token|auth)\s*[:=]\s*Bearer\s+[A-Za-z0-9._~+/=-]+', '$1=[REDACTED]')
+    $s = [regex]::Replace($s, '(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{16,}', 'Bearer [REDACTED]')
+    # A header, query or assignment secret: keep the name, lose the value.
+    $s = [regex]::Replace($s, '(?i)\b(x-jarvis-token|authorization|password|secret|token|sig|key)\s*[:=]\s*[^\s"&'']+', '$1=[REDACTED]')
+    # The known API-key shapes.
+    $s = [regex]::Replace($s, 'sk-[A-Za-z0-9_-]{16,}', '[REDACTED_API_KEY]')
+    $s = [regex]::Replace($s, 'gh[pousr]_[A-Za-z0-9]{20,}', '[REDACTED_API_KEY]')
+    $s = [regex]::Replace($s, 'AIza[0-9A-Za-z_-]{30,}', '[REDACTED_API_KEY]')
+    # A long hex/base64 blob right after token/key/sig, separator or not.
+    $s = [regex]::Replace($s, '(?i)\b(token|key|sig|secret|password)\s*[:=]?\s*([A-Fa-f0-9]{32,}|[A-Za-z0-9+/=_-]{32,})', '$1=[REDACTED]')
+    return $s
+}
+
+# Scrub ONE log file in place, best effort. Used by Protect-LogFiles below and
+# for the live check's own saved output.
+function Protect-LogFile {
+    param([string] $Path)
+    if (-not $Path) { return }
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    try {
+        $lines = @(Get-Content -LiteralPath $Path -ErrorAction Stop)
+        $changed = $false
+        $out = foreach ($line in $lines) {
+            $clean = Scrub-LogLine ([string]$line)
+            if ($clean -ne $line) { $changed = $true }
+            $clean
+        }
+        if ($changed) {
+            Set-Content -LiteralPath $Path -Value $out -Encoding UTF8 -ErrorAction Stop
+        }
+    } catch { }
+}
+
+# Stop the transcript and scrub the run log and the child log. Called from
+# Finish-Run, the one place every ending goes through. Best effort: a log that
+# cannot be re-read is left alone rather than failing a finished update.
+function Protect-LogFiles {
+    $paths = @($script:RunLog, $script:ChildLog)
+    $any = $false
+    foreach ($p in $paths) { if ($p) { $any = $true } }
+    if (-not $any) { return }
+    try { Stop-Transcript | Out-Null } catch { }
+    foreach ($p in $paths) { Protect-LogFile $p }
+}
+
 # --- what this run did, and how it ends ---------------------------------------
 #
 # One place decides how the run ends (Finish-Run), so a run that stopped early
@@ -251,6 +310,9 @@ function Finish-Run {
     if ($script:TempSource) {
         Remove-Item -LiteralPath $script:TempSource -Recurse -Force -ErrorAction SilentlyContinue
     }
+    # R4: the last thing a run does is take the secret shapes out of the two
+    # log files it just wrote (and stop the transcript first).
+    Protect-LogFiles
     if ($script:Problems.Count -gt 0) { exit 1 }
     if ($Kind -eq 'stopped') { exit 1 }
     exit 0
@@ -258,8 +320,9 @@ function Finish-Run {
 
 trap {
     Write-Host ""
-    Write-Host "  FAIL  The script stopped unexpectedly: $($_.Exception.Message)" -ForegroundColor Red
-    Add-Problem "The script stopped unexpectedly: $($_.Exception.Message)"
+    $failure = Scrub-LogLine ([string]$_.Exception.Message)
+    Write-Host "  FAIL  The script stopped unexpectedly: $failure" -ForegroundColor Red
+    Add-Problem "The script stopped unexpectedly: $failure"
     # This run may be the reason nothing is running any more.
     Restart-AppIfWeClosedIt
     Finish-Run
@@ -305,6 +368,9 @@ function Invoke-Native {
         if ($line -is [System.Management.Automation.ErrorRecord]) { "$($line.Exception.Message)" }
         else { "$line" }
     }
+    # R4: scrub BEFORE the screen and the log. The screen matters because
+    # Start-Transcript records what is printed.
+    $text = foreach ($line in $text) { Scrub-LogLine ([string]$line) }
     if ($LogTo) {
         try { $text | Out-File -LiteralPath $LogTo -Append -Encoding utf8 } catch { }
     }
@@ -1247,6 +1313,7 @@ if ($Print) {
             } finally {
                 $ErrorActionPreference = $prev
             }
+            if ($preflightOut) { Protect-LogFile $preflightOut }
             if ($preflightOut) { Info "the check's output is saved in: $preflightOut" }
             if ($code -ne 0) {
                 Add-Note "the live check above reported failures (exit $code). The update itself finished; each FAIL line says what to do."

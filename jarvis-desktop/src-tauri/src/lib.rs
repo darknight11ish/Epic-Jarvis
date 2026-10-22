@@ -48,6 +48,9 @@ pub mod limits;
 pub mod live;
 pub mod lock;
 pub mod logfile;
+// Best-effort scrubbing for the lines this app writes to its own log
+// (R4, 2026-10-21; README section 8 bullet 15). Pure, no dependency.
+pub mod log_scrub;
 pub mod look;
 // The searchable recordings and videos switch (media_index.rs; F5 S2, the
 // owner's decision of 2026-10-19). Settings only: the stored-word counts, the

@@ -814,10 +814,11 @@ permissions = [
   "allow-start-backend",
   "allow-stop-backend",
   # Diagnostics. `get_log_info` returns paths and sizes, never contents - the
-  # log is plain text with no redaction pass and must not become readable by a
-  # page just because the page can ask where it is. `open_log_folder` hands a
-  # directory to Explorer and takes no argument at all, so there is nothing a
-  # caller can point it at.
+  # log is plain text (desktop lines pass a best-effort redactor, R4; a pattern
+  # list is not a guarantee) and must not become readable by a page just because
+  # the page can ask where it is. `open_log_folder` hands a directory to
+  # Explorer and takes no argument at all, so there is nothing a caller can
+  # point it at.
   "allow-get-log-info",
   "allow-open-log-folder",
   # Starting with Windows. A registry write under HKEY_CURRENT_USER\...\Run,
