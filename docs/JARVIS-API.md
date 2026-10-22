@@ -23673,6 +23673,34 @@ manifest; the receipt stores no absolute path (the receipt scrubber would
 redact it), only the plan id. A write that fails part-way is reported
 honestly as **partial**, with the receipt and copy it already saved.
 
+**THE FIRST REAL RUN IS APPLIED TO A COPY, AND THAT IS ENFORCED (R7,
+Ruling 14, 2026-10-21).** A vault with no `.jarvis-organizer-verified.json`
+marker in it is never written to by `/api/vault/organize`: the writer first
+makes a **sibling copy** (`<Vault> - Jarvis Copy (<date>)`, ` (2)`, ` (3)` ...
+on a second run the same day), then plans and writes **in that copy only**. The
+card says so in its own words and names the copy; the answer carries
+`"mode": "copy"`, `"copy": <path>`, `"original_unchanged": true` and
+`copy_checks` (files, bytes, space needed, space free). The real vault is left
+byte-for-byte untouched - proved by a tree hash before and after. The copy is
+refused **before a byte is copied** when the vault holds a symbolic link (a
+copy of a link is not a copy of the note, and following it could leave the
+vault), when the vault is bigger than the bounded copy size
+(`MAX_COPY_BYTES = 2 GiB`, `MAX_COPY_FILES = 20,000`), or when the parent folder
+does not have `FREE_SPACE_FACTOR` (1.10) x the vault's size free. A failed copy
+is removed, so a refused first run leaves neither a half copy nor a changed
+vault.
+
+**Inspect the copy, then mark it verified.** The owner opens the copy in
+Obsidian and looks. If it is right, the marker goes into the **real** vault -
+`backend/jarvis_vault_organizer.py`'s `mark_verified(vault, copy=...)` writes
+`.jarvis-organizer-verified.json` (a tiny JSON file: `verified`, `at`, `copy`).
+From the next plan, `/api/vault/organize` writes **in place**, with exactly the
+same card, snapshots, receipt and one-click Undo as before. Creating that file
+by hand is the same decision; a later screen can call the helper. The marker is
+never written by the writer itself, and nothing is marked verified
+automatically.
+
+
 **Database rows stay where they are (Ruling 8.4, accepted 2026-10-21).** Under
 the two moving schemes the organizer moves **only standalone pages**. A note
 whose frontmatter carries `database:` and the `_Database - <Name>.md` hub it
@@ -23697,13 +23725,18 @@ moves nothing at all.
   `tag_plan`, `duplicates_and_stubs`, `partial`, `warnings` and `said`. A plan
   that hits the file/byte/time caps says it is **partial** rather than hanging.
   Duplicates and zero-word stubs are **listed, never deleted**.
-* `POST /api/vault/organize` - body `{"plan_id": "...", "digest": "..."}`. The
-  writer above: ONE card, guardian snapshots, atomic writes, one batch receipt,
-  one-click Undo. Refusals: a plan_id that is not in memory (a restart forgets
-  plans), a digest that does not match, a vault that changed since the preview,
-  a denied/timed-out card, a snapshot that cannot be taken, a batch over 2,000
-  existing files, or a second writer already running. Each refusal changes
-  nothing and says why.
+* `POST /api/vault/organize` - body `{"plan_id": "...", "digest": "...",
+  "apply_on_copy": <bool, optional>}`. The writer above: ONE card, guardian
+  snapshots, atomic writes, one batch receipt, one-click Undo. With no verified
+  marker the batch runs on a sibling copy (`apply_on_copy` defaults to the
+  ruling's `true`; `false` is the explicit in-place choice for a vault the
+  owner has already checked), and the answer says `mode`, `copy`,
+  `original_unchanged` and `copy_checks`. Refusals: a plan_id that is not in
+  memory (a restart forgets plans), a digest that does not match, a vault that
+  changed since the preview, a denied/timed-out card, a snapshot that cannot be
+  taken, a batch over 2,000 existing files, a second writer already running, and
+  (first run only) a symlinked / oversized / no-room-to-copy vault. Each
+  refusal changes nothing and says why.
 * `GET /api/vault/organizer` - the switch, its action and tier, the default
   scheme, the schemes that exist, and whether the writer can apply
   (`can_apply`, `apply_action`, `apply_tier`).
@@ -23731,21 +23764,26 @@ wording a plan returns is the one-line preview snippet it renders for a MOC,
 passed through the project's own scrubbers (`jarvis_scrub.scrub_text`,
 `jarvis_agent.strip_chat_markers`) when they are present.
 
-**The owner's runbook: the FIRST REAL RUN IS ON A COPY OF THE VAULT.**
-1. Copy the vault folder in File Explorer (right-click, Copy, then Paste) and
-   give the copy a clear name, for example `Vault - first organize test`.
-2. Point the organizer at the COPY: `POST /api/vault/organize-plan` with
-   `{"vault": "C:\\path\\to\\Vault - first organize test"}` (no setting
-   change; a vault that is not Obsidian's is refused in words).
-3. Read the answer's `summary`, `moves_preview`, `mocs_preview` and
-   `duplicates_and_stubs`. Nothing has changed yet.
-4. Apply only that plan: `POST /api/vault/organize` with its `plan_id` and
-   `digest`, and approve the ONE card. If the plan is stale, nothing happens:
-   plan again.
-5. Open the copy in Obsidian and look. If it is not wanted, press Undo once on
-   the receipt - the copy comes back exactly.
-6. Only after the copy looks right, repeat on the real vault if the owner
-   chooses. Keep the copy until the real run has been looked at.
+**The owner's runbook: the FIRST REAL RUN IS ON A COPY OF THE VAULT (now
+automatic).**
+1. Plan as usual: `POST /api/vault/organize-plan`. Read the answer's `summary`,
+   `moves_preview`, `mocs_preview` and `duplicates_and_stubs`. Nothing has
+   changed yet.
+2. Apply that plan: `POST /api/vault/organize` with its `plan_id` and `digest`,
+   and approve the ONE card. With no verified marker, the writer makes the
+   sibling copy first and applies to **that**; the real vault is not touched.
+   (If the plan is stale, nothing happens: plan again.)
+3. Open the copy in Obsidian and look. If it is not wanted, press Undo once on
+   the receipt - the copy comes back exactly, and the real vault was never
+   touched at all.
+4. If the copy looks right, mark it verified: `mark_verified(<real vault>,
+   copy=<copy>)`, or create `<real vault>/.jarvis-organizer-verified.json`
+   yourself. The next run works on the real vault, with the same one-Undo
+   safety.
+5. Keeping the copy until the real run has been looked at is still the safe
+   habit. (Copying the vault by hand in File Explorer and pointing the plan at
+   the copy also still works, but the writer now does the copy and the checks
+   for you.)
 
 **The write half's limits, said plainly.** `archive_empty_stubs` is recorded in
 the plan but nothing is archived by the writer yet - stubs stay listed. A
