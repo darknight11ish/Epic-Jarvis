@@ -6193,7 +6193,7 @@ pub fn get_log_info() -> serde_json::Value {
         "dir": dir.display().to_string(),
         "app": describe("jarvis-desktop.log"),
         "backend": describe("backend.log"),
-        "note": "plain text, and not redacted. Read it before you send it anywhere.",
+        "note": "plain text; desktop lines pass a best-effort redactor before they are written, but a pattern list never catches everything. Read it before you send it anywhere.",
     })
 }
 
