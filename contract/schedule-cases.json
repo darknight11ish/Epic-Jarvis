@@ -1,0 +1,368 @@
+{
+  "$comment": "F5/Q2 - the ONE canonical schedule action table. Derived from the real backend authority (backend/jarvis_schedule.py: Scheduler.act's decision table, the Kind registry, and Wave D-1's propose_ready/suggest_done for ready_for_review) and the words both apps already share. Surfaces (HUD jarvis_hud.html, coming-up.js, Schedule.kt) MUST match this table; tools/check_schedule_actions.py reports each surface, and contract/README.md says who still has to consume it. Data only: no code, no words that are not user-facing below. The shared desktop table is jarvis-desktop/src/hud-actions.js (coherence #729): the HUD's fallback and the Brain consume it; the shared table section below is the only desktop source of truth the checker reads.",
+  "schema": 1,
+  "updated": "2026-10-22",
+  "owner": "prompt-wiring (contract + checker only; surfaces are owned by their PRs)",
+  "authority": {
+    "module": "backend/jarvis_schedule.py",
+    "act": "Scheduler.act (one of pause, resume, delete, done, add_time, snooze; refusals in plain words)",
+    "kinds": "Kind registry (register_kind) - S.KINDS after KIND_MODULES load, plus jarvis_goals.KIND = goal_checkin when Goals registers it",
+    "states": "LISTED = active, paused, waiting; fired rows are shown under 'Just went off'; D-1 adds the ready_for_review marker to a to-do",
+    "snooze": "S.SNOOZABLE = timer, alarm, reminder; S.SNOOZE_DEFAULT seconds"
+  },
+  "shared": {
+    "file": "jarvis-desktop/src/hud-actions.js",
+    "exports": [
+      "ACTION_LABELS",
+      "WENT_OFF_ACTIONS",
+      "NO_PAUSE_KINDS",
+      "actionsFor",
+      "actionNames",
+      "kindAllowsAddTime"
+    ],
+    "consumers": {
+      "hud": "jarvis-desktop/src/jarvis_hud.html imports actionsFor (window.__hudActionsFor) and keeps a browser-served fallback",
+      "coming_up": "jarvis-desktop/src/coming-up.js imports ACTION_LABELS, WENT_OFF_ACTIONS and actionNames"
+    },
+    "why": "one module, no DOM, no dependency; the phone cannot import it yet (Session B / Q2), so its hand-written table stays the pending surface"
+  },
+  "labels": {
+    "add_time": {
+      "label": "+5 minutes",
+      "seconds": 300
+    },
+    "pause": {
+      "label": "Pause"
+    },
+    "resume": {
+      "label": "Resume"
+    },
+    "delete": {
+      "label": "Delete",
+      "danger": true
+    },
+    "done": {
+      "label": "Done"
+    },
+    "snooze": {
+      "label": "Snooze 10 minutes",
+      "seconds": 600
+    }
+  },
+  "rules": {
+    "add_time": "only a TIMER (S.act: 'Time can only be added to a timer.'); +5 minutes is the one amount both apps offer",
+    "done": "only a TO-DO (S.act: 'Only a to-do item can be marked done.')",
+    "pause": "an ACTIVE job of a kind that has a time of its own (never a to-do; never a Kind.ends kind such as nexttime)",
+    "resume": "a PAUSED job",
+    "snooze": "only a fired timer/alarm/reminder (S.SNOOZABLE), under 'Just went off', for 10 minutes",
+    "delete": "every listed state, and a fired entry too (DEF-008)",
+    "order": "the array order below IS the button order; surfaces draw it left to right",
+    "never": "no action ever means 'all', 'clear everything' or a bulk form"
+  },
+  "kinds": {
+    "timer": {
+      "listed": true,
+      "tag": "timer",
+      "snoozable": true,
+      "kind_module": "jarvis_schedule",
+      "states": {
+        "active": [
+          "add_time",
+          "pause",
+          "delete"
+        ],
+        "paused": [
+          "add_time",
+          "resume",
+          "delete"
+        ],
+        "waiting": [
+          "delete"
+        ],
+        "fired": [
+          "snooze",
+          "delete"
+        ]
+      }
+    },
+    "alarm": {
+      "listed": true,
+      "tag": "alarm",
+      "snoozable": true,
+      "kind_module": "jarvis_schedule",
+      "states": {
+        "active": [
+          "pause",
+          "delete"
+        ],
+        "paused": [
+          "resume",
+          "delete"
+        ],
+        "waiting": [
+          "delete"
+        ],
+        "fired": [
+          "snooze",
+          "delete"
+        ]
+      }
+    },
+    "reminder": {
+      "listed": true,
+      "tag": "reminder",
+      "snoozable": true,
+      "kind_module": "jarvis_schedule",
+      "states": {
+        "active": [
+          "pause",
+          "delete"
+        ],
+        "paused": [
+          "resume",
+          "delete"
+        ],
+        "waiting": [
+          "delete"
+        ],
+        "fired": [
+          "snooze",
+          "delete"
+        ]
+      }
+    },
+    "todo": {
+      "listed": true,
+      "tag": "to-do",
+      "snoozable": false,
+      "kind_module": "jarvis_schedule",
+      "states": {
+        "active": [
+          "done",
+          "delete"
+        ],
+        "paused": [],
+        "waiting": [],
+        "fired": []
+      }
+    },
+    "standby": {
+      "listed": true,
+      "tag": "standby",
+      "snoozable": false,
+      "kind_module": "jarvis_standby_schedule",
+      "states": {
+        "active": [
+          "pause",
+          "delete"
+        ],
+        "paused": [
+          "resume",
+          "delete"
+        ],
+        "waiting": [
+          "delete"
+        ],
+        "fired": []
+      }
+    },
+    "briefing": {
+      "listed": true,
+      "tag": "briefing",
+      "snoozable": false,
+      "kind_module": "jarvis_briefing",
+      "states": {
+        "active": [
+          "pause",
+          "delete"
+        ],
+        "paused": [
+          "resume",
+          "delete"
+        ],
+        "waiting": [
+          "delete"
+        ],
+        "fired": []
+      }
+    },
+    "tellme": {
+      "listed": true,
+      "tag": "tell me when",
+      "snoozable": false,
+      "kind_module": "jarvis_tellme",
+      "states": {
+        "active": [
+          "pause",
+          "delete"
+        ],
+        "paused": [
+          "resume",
+          "delete"
+        ],
+        "waiting": [
+          "delete"
+        ],
+        "fired": []
+      }
+    },
+    "nexttime": {
+      "listed": true,
+      "tag": "next time",
+      "snoozable": false,
+      "ends": true,
+      "kind_module": "jarvis_next_time",
+      "states": {
+        "active": [
+          "delete"
+        ],
+        "paused": [
+          "delete"
+        ],
+        "waiting": [
+          "delete"
+        ],
+        "fired": []
+      }
+    },
+    "today": {
+      "listed": true,
+      "tag": "today card",
+      "snoozable": false,
+      "kind_module": "jarvis_today",
+      "states": {
+        "active": [
+          "pause",
+          "delete"
+        ],
+        "paused": [
+          "resume",
+          "delete"
+        ],
+        "waiting": [
+          "delete"
+        ],
+        "fired": []
+      }
+    },
+    "review": {
+      "listed": true,
+      "tag": "card review",
+      "snoozable": false,
+      "owner": "Decks owns this row",
+      "kind_module": "jarvis_decks",
+      "states": {
+        "active": [],
+        "paused": [],
+        "waiting": [],
+        "fired": []
+      }
+    },
+    "goal_checkin": {
+      "listed": true,
+      "tag": "goal check-in",
+      "snoozable": false,
+      "registered_by": "jarvis_goals.KIND (Goals registers it when its module loads; not in jarvis_schedule.KIND_MODULES)",
+      "states": {
+        "active": [],
+        "paused": [],
+        "waiting": [],
+        "fired": []
+      },
+      "surface_compare": false,
+      "surface_note": "Goals owns this kind (jarvis_goals.KIND); it is registered only with Goals' own module, which is not in jarvis_schedule.KIND_MODULES. The phone already draws it with NO buttons; the desktop surfaces do not special-case it yet, so it is not in the cross-surface comparison until a Goals/HUD PR adds the special case. The contract entry (no actions) is what that PR must draw."
+    },
+    "focus": {
+      "listed": false,
+      "tag": "focus session",
+      "snoozable": false,
+      "kind_module": "jarvis_focus",
+      "states": {}
+    },
+    "tidy": {
+      "listed": false,
+      "tag": "overnight tidy",
+      "snoozable": false,
+      "kind_module": "jarvis_tidy",
+      "states": {}
+    },
+    "topic_sort": {
+      "listed": false,
+      "tag": "topic sorting",
+      "snoozable": false,
+      "kind_module": "jarvis_topics",
+      "states": {}
+    },
+    "referee": {
+      "listed": false,
+      "tag": "referee look",
+      "snoozable": false,
+      "kind_module": "jarvis_referee",
+      "states": {}
+    },
+    "tag_suggest": {
+      "listed": false,
+      "tag": "tag suggestion look",
+      "snoozable": false,
+      "kind_module": "jarvis_tag_suggest",
+      "states": {}
+    }
+  },
+  "states": {
+    "ready_for_review": {
+      "kind": "todo",
+      "actions": [
+        "done",
+        "delete"
+      ],
+      "tag": "Ready for your review",
+      "said": "Ready for your review - only you can mark it done.",
+      "authority": "Wave D-1 (#722): Scheduler.propose_ready/suggest_done set a marker only; act('done') is still the ONLY way to mark it done, and the view carries done=false",
+      "added_by": "D-1 #722, merged to main as 478c934f0 on 2026-10-22. The backend marker is on main; the HUD/Brain/Phone PRs that surface it have one table to draw.",
+      "surface_status": "pending-d1-surfacing",
+      "surface_note": "Wave D-1's backend marker is merged (#722 / 478c934f0); no desktop or phone surface draws it yet. The contract entry is the table they will draw; its absence is reported as a note, not as a surface difference, until a marker PR lands."
+    }
+  },
+  "surface_cases": {
+    "$comment": "The (kind, state, went_off) cases every surface is compared on; not every combination exists in the product, only the reachable ones.",
+    "base": [
+      "active",
+      "paused",
+      "waiting"
+    ],
+    "fired_for_snoozable": true,
+    "ready": [
+      "todo.ready_for_review"
+    ]
+  },
+  "surfaces": {
+    "hud": {
+      "file": "jarvis-desktop/src/jarvis_hud.html",
+      "twins": [
+        "backend/jarvis_hud.html",
+        "jarvis-backend/jarvis_hud.html"
+      ],
+      "table": "browser-served fallbackActionsFor + import of ./hud-actions.js (window.__hudActionsFor); tests/hud.mjs proves the two agree",
+      "shared": "jarvis-desktop/src/hud-actions.js",
+      "status": "enforced",
+      "owner": "Coherence Fix Slice (Session A) - consumed in #729",
+      "reason": "reads the shared hud-actions.js table; the browser-served fallback table matches the contract on every case"
+    },
+    "coming_up": {
+      "file": "jarvis-desktop/src/coming-up.js",
+      "table": "imports ACTION_LABELS / WENT_OFF_ACTIONS / actionNames from ./hud-actions.js; actionsOf delegates, labelOf reads the shared label",
+      "shared": "jarvis-desktop/src/hud-actions.js",
+      "status": "enforced",
+      "owner": "Coherence Fix Slice (Session A) - consumed in #729",
+      "reason": "a pure consumer of the shared hud-actions.js table; its own words and action list both come from it"
+    },
+    "phone": {
+      "file": "jarvis-client/app/src/main/java/com/jarvis/client/net/Schedule.kt",
+      "table": "actionsOf(job) + labelOf(action) + ACTIONS + WENT_OFF_ACTIONS",
+      "status": "pending",
+      "xfail": true,
+      "owner": "Session B / Android (coherence Q2)",
+      "reason": "add_time is missing from ACTIONS, actionsOf and labelOf (actBody therefore refuses it); no ready_for_review marker; goal_checkin and nexttime already match"
+    }
+  }
+}

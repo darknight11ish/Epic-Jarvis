@@ -47,6 +47,12 @@ export const SCHEDULE_MISSING =
   "Your PC's Jarvis does not have timers and reminders yet - run apply-patches.ps1 on the PC.";
 
 /** The buttons. */
+import {
+  ACTION_LABELS,
+  WENT_OFF_ACTIONS as SHARED_WENT_OFF_ACTIONS,
+  actionNames,
+} from "./hud-actions.js";
+
 export const PAUSE_LABEL = "Pause";
 export const RESUME_LABEL = "Resume";
 export const DELETE_LABEL = "Delete";
@@ -457,22 +463,23 @@ export function standbyTimes(start, end) {
  * every other row in this module names this action "Delete" (`labelOf`), and
  * "Clear" is already taken here by "Clear list", which means a whole list.
  */
-export const WENT_OFF_ACTIONS = Object.freeze(["snooze", "delete"]);
+export const WENT_OFF_ACTIONS = SHARED_WENT_OFF_ACTIONS;
 
-/** The buttons one row offers, as action names, in order. Never "all". */
+/** The buttons one row offers, as action names, in order. Never "all".
+ *
+ * F5 (2026-10-22): the table itself lives in `hud-actions.js`, shared with the
+ * HUD's Reminders panel, so the Brain and the HUD cannot drift. `add_time` is
+ * offered for a timer only, which is exactly where `jarvis_schedule.act`
+ * allows it; the cross-surface test reads the backend's own refusal sentence.
+ */
 export function actionsOf(job) {
-  // The review decks' daily job goes away with the last deck; Decks owns it.
-  if (job.kind === "review") return [];
-  if (job.kind === "todo") return ["done", "delete"];
-  if (job.state === "waiting") return ["delete"];
-  // A reminder for next time has no time of its own to pause.
-  if (job.kind === "nexttime") return ["delete"];
-  return [job.state === "paused" ? "resume" : "pause", "delete"];
+  return actionNames(job, false);
 }
 
 /** A button's label for an action name. */
 export function labelOf(action) {
   return {
+    add_time: ACTION_LABELS.add_time,
     pause: PAUSE_LABEL,
     resume: RESUME_LABEL,
     delete: DELETE_LABEL,

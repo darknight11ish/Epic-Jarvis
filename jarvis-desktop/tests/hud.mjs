@@ -31,13 +31,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, extname, join, normalize } from "node:path";
 import * as K from "./uikit.mjs";
-import {
-  OPEN_BAR_KEY,
-  HUD_LAYOUT_KEY,
-  HUD_LAYOUTS,
-  readHudLayout,
-  saveHudLayout,
-} from "../src/hud-window.js";
+import { OPEN_BAR_KEY, HUD_LAYOUTS } from "../src/hud-window.js";
 // The bar's own rule for what may be read aloud, which the HUD's spoken-reply
 // gate now holds itself to route by route (the check further down).
 import { usedSensitiveFact } from "../src/private-speech.js";
@@ -386,6 +380,24 @@ async function openHud(browser, status, pageOptions = {}) {
   await page.waitForTimeout(800);
   return { page, problems, chats, marks, decisions, memoryReads, memoryWrites, direct,
            scheduleWrites, hudLayoutWrites };
+}
+
+
+/**
+ * F1 (2026-10-22): the page has no layout pills any more. A HUD layout change
+ * reaches an open page through the shell bootstrap's own `jarvis:hud-look`
+ * event (the bootstrap reads the settings store); these tests dispatch the
+ * same event the bootstrap dispatches, so the page's real listener and its
+ * own applyLayout are what switch the view shape. No test writes a layout.
+ */
+async function setHudLook(page, look) {
+  await page.evaluate((name) => {
+    window.dispatchEvent(new CustomEvent("jarvis:hud-look", { detail: name }));
+  }, look);
+  await K.until(page, `the page to switch to ${look}`, async () =>
+    (await page.evaluate(() => document.body.dataset.hudLayout)) === look, { ms: 5000 });
+  const html = await page.evaluate(() => document.documentElement.getAttribute("data-hud-layout"));
+  assert.equal(html, look, `html[data-hud-layout] did not follow the look to ${look}`);
 }
 
 /**
@@ -974,12 +986,9 @@ for (const [width, height] of [[960, 640], [1280, 820]]) {
         scrollW: document.documentElement.scrollWidth,
         bodyW: document.body.scrollWidth,
         layout: document.body.dataset.hudLayout,
-        stored: localStorage.getItem("jarvis.hud.layout"),
-        picker: [...document.querySelectorAll("[data-hud-layout-choice]")].map((b) => {
-          const r = b.getBoundingClientRect();
-          return { layout: b.dataset.hudLayoutChoice,
-                   inView: r.left >= 0 && r.right <= innerWidth && r.width > 0 };
-        }),
+        badge: box("#hud-layout-badge"),
+        editToggle: box("#hud-edit-toggle"),
+        pills: document.querySelectorAll("[data-hud-layout-choice]").length,
         railRight: box("#rail-right"), toggle: box("#rail-toggle"),
         waiting: box("#rail-waiting"),
       };
@@ -987,9 +996,9 @@ for (const [width, height] of [[960, 640], [1280, 820]]) {
     const m = await measure();
     assert.ok(m.scrollW <= m.vw + 1 && m.bodyW <= m.vw + 1,
       `horizontal overflow at ${width}x${height}: scrollWidth ${m.scrollW}, body ${m.bodyW}, window ${m.vw}`);
-    assert.equal(m.picker.length, 3, "the three layout pills are not all drawn");
-    assert.deepEqual(m.picker.filter((p) => !p.inView), [],
-      `a layout pill is outside the ${width}x${height} window`);
+    assert.equal(m.pills, 0, "the retired layout pills are still drawn");
+    assert.ok(m.badge && m.badge.visible && m.badge.x >= 0 && m.badge.right <= m.vw,
+      `the read-only Layout badge is not inside the ${width}x${height} window`);
     if (width < 1080) {
       // Below 1080 the right rail is the drawer: the toggle is the control that
       // has to be reachable, and it has to put the rail on screen.
@@ -1005,8 +1014,7 @@ for (const [width, height] of [[960, 640], [1280, 820]]) {
       assert.ok(open.waiting && open.waiting.visible,
         "the Waiting-for-you card is not in the opened drawer");
       // Close it again: the drawer sits over the toggle that opened it, so
-      // Escape is the way back (the window's own keyboard path). Both the
-      // toggle and the pills are reachable - never both at once.
+      // Escape is the way back (the window's own keyboard path).
       await page.keyboard.press("Escape");
       await page.waitForTimeout(450);
       const closed = await measure();
@@ -1020,19 +1028,17 @@ for (const [width, height] of [[960, 640], [1280, 820]]) {
         "the right Bento rail is not on screen at this width");
       assert.ok(m.waiting && m.waiting.visible, "the Waiting-for-you card is not visible at this width");
     }
-    // The three layouts still switch (through the pills that are now inside the
-    // window) and persist, and none of them overflows at this size.
+    // The three view shapes still switch (the bootstrap's own jarvis:hud-look
+    // event; F1 removed the page-side control), none of them overflows, and
+    // the read-only Layout badge stays inside the window in every one.
     for (const layout of ["studio", "ambient", "cockpit"]) {
-      await page.click(`[data-hud-layout-choice="${layout}"]`);
-      await K.until(page, `the page to switch to ${layout}`, async () =>
-        (await page.evaluate(() => document.body.dataset.hudLayout)) === layout, { ms: 5000 });
-      assert.equal(await page.evaluate(() => localStorage.getItem("jarvis.hud.layout")), layout,
-        `the ${layout} choice was not persisted`);
+      await setHudLook(page, layout);
       const after = await measure();
       assert.ok(after.scrollW <= after.vw + 1,
         `horizontal overflow in the ${layout} layout at ${width}x${height}: ${after.scrollW} vs ${after.vw}`);
-      assert.deepEqual(after.picker.filter((p) => !p.inView), [],
-        `a layout pill is outside the window in the ${layout} layout at ${width}x${height}`);
+      assert.ok(after.badge && after.badge.visible && after.badge.right <= after.vw,
+        `the Layout badge is outside the window in the ${layout} layout at ${width}x${height}`);
+      assert.equal(after.pills, 0, "the retired layout pills came back");
     }
     // And the one status row fits on one line at this size too: the narrow
     // rail is 159px wide here, and "online · local first · linked" (204px)
@@ -1062,82 +1068,105 @@ for (const [width, height] of [[960, 640], [1280, 820]]) {
  * CSS viewport is still 1280 - measured from Windows on the installed app
  * (window 1920x1230, client 1898x1174, dpi 144), not inferred. The field
  * screenshots of exactly 1280x820 are therefore a CROP of the top-left
- * physical pixels of that surface, which is why the second and third layout
- * pills looked cut: they sit at CSS x 806-964, i.e. physical 1209-1446, inside
- * the real window and outside a 1280-physical-pixel crop. These two checks
- * are the bite test the Lead asked for at DPR 1.5: the header and the picker
- * stay inside the CSS viewport, all three pills are clickable, and the page
- * really paints at the physical size Windows reports. */
-await check("at 150% DPI (deviceScaleFactor 1.5) the header and the three pills fit, and each pill clicks", async () => {
+ * physical pixels of that surface. These checks keep the DPI bite test the
+ * Lead asked for, on the control that replaced the retired pills: the header,
+ * the read-only Layout badge (F1) and [Edit HUD] stay inside the CSS viewport
+ * and are clickable, and the page still paints at the physical size Windows
+ * reports. */
+await check("at 150% DPI (deviceScaleFactor 1.5) the header and the Layout badge fit, and the badge reveals Focus presets", async () => {
   const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false },
     { viewport: { width: 1280, height: 820 }, deviceScaleFactor: 1.5 });
+  await page.waitForSelector("#hud-layout-badge", { timeout: 10000 });
   const shot = await page.screenshot();
   const physical = { width: shot.readUInt32BE(16), height: shot.readUInt32BE(20) };
-  const m = await page.evaluate(() => {
-    const picker = document.getElementById("hud-layout-picker").getBoundingClientRect();
+  const measure = () => page.evaluate(() => {
+    const box = (id) => {
+      const node = document.getElementById(id);
+      if (!node) return null;
+      const r = node.getBoundingClientRect();
+      return { x: Math.round(r.x), right: Math.round(r.right), w: Math.round(r.width),
+               inView: r.left >= 0 && r.right <= innerWidth && r.width > 0,
+               visible: getComputedStyle(node).display !== "none" && r.width > 1 };
+    };
     return {
-      vw: innerWidth, vh: innerHeight, dpr: devicePixelRatio,
+      vw: innerWidth, dpr: devicePixelRatio,
       scrollW: document.documentElement.scrollWidth,
-      picker: { x: Math.round(picker.x), right: Math.round(picker.right), w: Math.round(picker.width) },
-      pills: [...document.querySelectorAll("[data-hud-layout-choice]")].map((b) => {
-        const r = b.getBoundingClientRect();
-        return { layout: b.dataset.hudLayoutChoice, x: Math.round(r.x), right: Math.round(r.right),
-                 inView: r.left >= 0 && r.right <= innerWidth && r.width > 0 };
-      }),
-      labelsVisible: [...document.querySelectorAll(".lc-name")]
-        .some((n) => getComputedStyle(n).display !== "none"),
+      badge: box("hud-layout-badge"),
+      edit: box("hud-edit-toggle"),
+      pills: document.querySelectorAll("[data-hud-layout-choice]").length,
+      badgeText: (document.getElementById("hud-layout-badge") || {}).textContent || "",
+      expanded: (document.getElementById("hud-layout-badge") || {}).getAttribute
+        ? document.getElementById("hud-layout-badge").getAttribute("aria-expanded") : null,
     };
   });
+  const m = await measure();
   assert.equal(m.dpr, 1.5, "devicePixelRatio is not 1.5 - the test is not running at the owner's DPI");
   assert.equal(m.vw, 1280, "the CSS viewport should stay 1280 CSS px at 150% DPI");
   assert.equal(physical.width, 1920, `the painted surface should be 1920 physical px wide, got ${physical.width}`);
   assert.equal(physical.height, 1230, `the painted surface should be 1230 physical px tall, got ${physical.height}`);
   assert.ok(m.scrollW <= m.vw + 1, `horizontal overflow at DPR 1.5: ${m.scrollW} vs ${m.vw}`);
-  assert.deepEqual(m.pills.filter((p) => !p.inView), [], "a layout pill is outside a 1280-CSS viewport at DPR 1.5");
-  assert.ok(m.labelsVisible, "the owner's 1280 CSS window is wide enough for the pill labels");
+  assert.equal(m.pills, 0, "the retired layout pills are still drawn");
+  assert.ok(m.badge && m.badge.visible && m.badge.inView,
+    `the Layout badge is not inside a 1280-CSS viewport at DPR 1.5 (${JSON.stringify(m.badge)})`);
+  assert.ok(m.edit && m.edit.visible && m.edit.inView,
+    `[Edit HUD] is not inside a 1280-CSS viewport at DPR 1.5 (${JSON.stringify(m.edit)})`);
+  assert.match(m.badgeText, /^Layout: /, `the badge does not name the layout: ${m.badgeText}`);
+  // L1/FT-1: the badge reveals the Focus presets card without entering Edit HUD.
+  await page.click("#hud-layout-badge");
+  await page.waitForTimeout(200);
+  assert.equal((await measure()).expanded, "true", "the layout badge did not reveal the presets");
+  await page.click("#hud-layout-badge");
+  await page.waitForTimeout(200);
+  assert.equal((await measure()).expanded, "false", "the layout badge did not hide the presets again");
   for (const layout of ["studio", "ambient", "cockpit"]) {
-    await page.click(`[data-hud-layout-choice="${layout}"]`);
-    await K.until(page, `the page to switch to ${layout} at DPR 1.5`, async () =>
-      (await page.evaluate(() => document.body.dataset.hudLayout)) === layout, { ms: 5000 });
-    assert.equal(await page.evaluate(() => localStorage.getItem("jarvis.hud.layout")), layout);
+    await setHudLook(page, layout);
+    const after = await measure();
+    assert.ok(after.scrollW <= after.vw + 1, `horizontal overflow in ${layout} at DPR 1.5`);
+    assert.ok(after.badge && after.badge.inView, `the Layout badge left the window in ${layout}`);
+    assert.equal(after.pills, 0);
   }
   await page.close();
   assert.deepEqual(problems, []);
 });
 
-await check("at every CSS width a 150%-DPI window can produce, the pills stay inside and clickable", async () => {
+await check("at every CSS width a 150%-DPI window can produce, the Layout badge stays inside and clickable", async () => {
   const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false },
     { viewport: { width: 1280, height: 820 }, deviceScaleFactor: 1.5 });
+  await page.waitForSelector("#hud-layout-badge", { timeout: 10000 });
   for (const [w, h] of [[1265, 782], [1280, 820], [960, 640], [853, 547], [731, 469], [627, 820]]) {
     await page.setViewportSize({ width: w, height: h });
     await page.waitForTimeout(250);
     const m = await page.evaluate(() => {
-      const pills = [...document.querySelectorAll("[data-hud-layout-choice]")].map((b) => {
-        const r = b.getBoundingClientRect();
-        return { layout: b.dataset.hudLayoutChoice, inView: r.left >= 0 && r.right <= innerWidth,
-                 w: Math.round(r.width) };
-      });
-      return { vw: innerWidth, scrollW: document.documentElement.scrollWidth, pills,
-               labelShown: [...document.querySelectorAll(".lc-name")]
-                 .some((n) => getComputedStyle(n).display !== "none") };
+      const node = document.getElementById("hud-layout-badge");
+      const r = node ? node.getBoundingClientRect() : null;
+      return {
+        vw: innerWidth, scrollW: document.documentElement.scrollWidth,
+        badge: r ? { x: Math.round(r.x), right: Math.round(r.right),
+                     inView: r.left >= 0 && r.right <= innerWidth } : null,
+        edit: (() => {
+          const e = document.getElementById("hud-edit-toggle");
+          if (!e) return null;
+          const er = e.getBoundingClientRect();
+          return { inView: er.left >= 0 && er.right <= innerWidth };
+        })(),
+        pills: document.querySelectorAll("[data-hud-layout-choice]").length,
+      };
     });
     assert.ok(m.scrollW <= m.vw + 1, `horizontal overflow at CSS ${w}x${h}: ${m.scrollW} vs ${m.vw}`);
-    assert.equal(m.pills.length, 3, `the layout picker lost a pill at CSS ${w}x${h}`);
-    assert.deepEqual(m.pills.filter((p) => !p.inView), [],
-      `a layout pill is outside the CSS ${w}x${h} viewport`);
-    assert.equal(m.labelShown, w > 1180,
-      `the pill labels should be hidden below 1180 CSS px and shown above (at ${w})`);
-    await page.click(`[data-hud-layout-choice="${m.pills[1].layout}"]`);
-    await K.until(page, `a click to switch at CSS ${w}x${h}`, async () =>
-      (await page.evaluate(() => document.body.dataset.hudLayout)) === m.pills[1].layout, { ms: 5000 });
-    await page.click('[data-hud-layout-choice="cockpit"]');
-    await K.until(page, `the way back to cockpit at CSS ${w}x${h}`, async () =>
-      (await page.evaluate(() => document.body.dataset.hudLayout)) === "cockpit", { ms: 5000 });
+    assert.equal(m.pills, 0, `the retired layout pills came back at CSS ${w}x${h}`);
+    assert.ok(m.badge && m.badge.inView, `the Layout badge is outside the CSS ${w}x${h} viewport`);
+    assert.ok(m.edit && m.edit.inView, `[Edit HUD] is outside the CSS ${w}x${h} viewport`);
+    await page.click("#hud-layout-badge");
+    await page.waitForTimeout(150);
+    assert.equal(await page.evaluate(() =>
+      document.getElementById("hud-layout-badge").getAttribute("aria-expanded")), "true",
+      `the badge did not reveal the presets at CSS ${w}x${h}`);
+    await page.click("#hud-layout-badge");
+    await page.waitForTimeout(150);
   }
   await page.close();
   assert.deepEqual(problems, []);
 });
-
 
 /* The Telemetry drawer must always have a way out. Owner bug report
  * 2026-10-21: "if i open telemetry on the jarvis HUD, i have no way of closing
@@ -1196,7 +1225,7 @@ for (const [name, width, height, layout] of [
     const { page, problems } = await openHud(
       browser, { jarvis: false, ollama: true, proxy: false }, { viewport: { width, height } });
     if (layout !== "cockpit") {
-      await page.click(`[data-hud-layout-choice="${layout}"]`);
+      await setHudLook(page, layout);
       await K.until(page, `the page to switch to ${layout}`, async () =>
         (await page.evaluate(() => document.body.dataset.hudLayout)) === layout, { ms: 5000 });
     }
@@ -1277,7 +1306,7 @@ await check("Cockpit keeps the grid rail with no drawer toggle, and Studio's tab
   assert.equal(cockpit.closeDisplay, "none",
     "the drawer's Close button is shown in the Cockpit grid");
   assert.ok(cockpit.railVisible, "the Cockpit rail is not in the grid");
-  await page.click('[data-hud-layout-choice="studio"]');
+  await setHudLook(page, "studio");
   await K.until(page, "the page to switch to studio", async () =>
     (await page.evaluate(() => document.body.dataset.hudLayout)) === "studio", { ms: 5000 });
   await page.click('[data-hud-tab-choice="telemetry"]');
@@ -2027,108 +2056,101 @@ const KEPT_IDS = [
   "banner", "model-warn", "rail-right", "r-model", "r-latency", "r-tokens",
   "r-gate", "r-complexity", "r-meter", "r-why", "tools-used", "r-facts",
   "r-docs", "r-ents", "r-tools", "r-mem", "r-rpm", "r-rpd", "r-stt", "r-tts",
-  "r-level", "hud-layout-picker", "stage-tabs", "history-toggle", "core-expand",
+  "r-level", "hud-layout-badge", "stage-tabs", "history-toggle", "core-expand",
   "rail-quickbar", "lane-compact", "appr-badge", "ambient-status", "studio-dock",
 ];
 
-const pickLayout = (page, name) => page.evaluate((n) => {
-  document.querySelector(`[data-hud-layout-choice="${n}"]`).click();
-}, name);
-
 const layoutOf = (page) => page.evaluate(() => document.body.dataset.hudLayout);
+const badgeOf = (page) => page.evaluate(() => {
+  const b = document.getElementById("hud-layout-badge");
+  return b ? { text: b.textContent.trim(), expanded: b.getAttribute("aria-expanded"),
+               shown: b.getBoundingClientRect().width > 0 } : null;
+});
 
-await check("the HUD opens in the Cockpit layout, and the picker says so", async () => {
+await check("F1: the HUD opens in Cockpit, and the read-only Layout badge says so", async () => {
   const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  await page.waitForSelector("#hud-layout-badge", { timeout: 10000 });
   const state = await page.evaluate(() => ({
     layout: document.body.dataset.hudLayout,
-    pressed: [...document.querySelectorAll("[data-hud-layout-choice]")]
-      .filter((b) => b.getAttribute("aria-pressed") === "true")
-      .map((b) => b.dataset.hudLayoutChoice),
+    html: document.documentElement.getAttribute("data-hud-layout"),
+    pills: document.querySelectorAll("[data-hud-layout-choice]").length,
     stored: (() => { try { return localStorage.getItem("jarvis.hud.layout"); } catch (e) { return "unreadable"; } })(),
   }));
-  const pickerShown = await page.locator("#hud-layout-picker").isVisible();
+  const badge = await badgeOf(page);
   await page.close();
-  assert.equal(state.layout, "cockpit", "the default layout is not Cockpit");
-  assert.deepEqual(state.pressed, ["cockpit"], "the picker does not show Cockpit as chosen");
-  assert.equal(state.stored, null, "a fresh window must have stored no layout choice");
-  assert.equal(pickerShown, true, "the layout picker is not drawn in the header");
+  assert.equal(state.layout, "cockpit", "the default view shape is not Cockpit");
+  assert.equal(state.html, "cockpit", "html and body disagree about the default layout");
+  assert.equal(state.pills, 0, "the retired layout pills are still drawn");
+  assert.equal(state.stored, null, "the page wrote the retired localStorage layout key");
+  assert.ok(badge && badge.shown && badge.text === "Layout: Cockpit",
+    `the read-only badge does not name Cockpit: ${JSON.stringify(badge)}`);
+  assert.equal(badge.expanded, "false", "the badge starts with the presets revealed");
   assert.deepEqual(problems, []);
 });
 
-await check("the picker switches all three layouts, and the choice is remembered", async () => {
+await check("the shell's saved view shape reaches the page, and every shape applies", async () => {
   const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  await page.waitForSelector("#hud-layout-badge", { timeout: 10000 });
   const seen = [];
   for (const name of HUD_LAYOUTS) {
-    await pickLayout(page, name);
-    await page.waitForTimeout(120);
+    await setHudLook(page, name);
     seen.push(await layoutOf(page));
   }
-  const stored = await page.evaluate((key) => localStorage.getItem(key), HUD_LAYOUT_KEY);
-  // A fresh load wears the stored layout, not the default.
-  await page.reload();
-  await page.waitForTimeout(900);
-  const afterReload = await layoutOf(page);
-  // ...and an unknown stored value falls back to Cockpit rather than an
-  // attribute no stylesheet has a rule for.
-  await page.evaluate((key) => localStorage.setItem(key, "not-a-layout"), HUD_LAYOUT_KEY);
-  await page.reload();
-  await page.waitForTimeout(900);
-  const afterBogus = await layoutOf(page);
+  // The badge names the SAVED HUD layout, not the view shape it is wearing:
+  // there is no control on this page that chooses a layout (F1).
+  const badge = await badgeOf(page);
+  // An unknown shape is not invented: normalLayout falls back to Cockpit.
+  await page.evaluate(() => window.dispatchEvent(
+    new CustomEvent("jarvis:hud-look", { detail: "not-a-layout" })));
+  await page.waitForTimeout(150);
+  const bogus = await layoutOf(page);
   await page.close();
-  assert.deepEqual(seen, HUD_LAYOUTS, `the picker did not switch: ${JSON.stringify(seen)}`);
-  assert.equal(stored, "ambient", "the last choice was not saved under hud-window.js's key");
-  assert.equal(afterReload, "ambient", "a reload did not keep the chosen layout");
-  assert.equal(afterBogus, "cockpit", "an unknown stored value did not fall back to Cockpit");
+  assert.deepEqual(seen, HUD_LAYOUTS, `the saved shape did not apply: ${JSON.stringify(seen)}`);
+  assert.ok(badge && badge.text === "Layout: Cockpit", `the badge moved with the view shape: ${JSON.stringify(badge)}`);
+  assert.equal(bogus, "cockpit", "an unknown view shape did not fall back to Cockpit");
   assert.deepEqual(problems, []);
 });
 
-await check("a layout change made in Settings reaches an open HUD at once", async () => {
-  // The road the owner's Settings picker uses: the key in this origin's
-  // localStorage, and the `storage` event the page listens for (the same one
-  // the "Open the Jarvis bar" switch already uses). The key comes from
-  // src/hud-window.js, not a hand-typed string, so the two cannot drift.
+await check("F1: the page cannot write a layout - no pill, no storage key, no direct write", async () => {
   const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  await page.waitForSelector("#hud-layout-badge", { timeout: 10000 });
   const start = await layoutOf(page);
-  await page.evaluate((key) => localStorage.setItem(key, "studio"), HUD_LAYOUT_KEY);
-  await page.evaluate((key) => window.dispatchEvent(new StorageEvent("storage", { key })), HUD_LAYOUT_KEY);
-  await page.waitForTimeout(150);
-  const mid = await layoutOf(page);
-  await page.evaluate((key) => localStorage.setItem(key, "bogus"), HUD_LAYOUT_KEY);
-  await page.evaluate((key) => window.dispatchEvent(new StorageEvent("storage", { key })), HUD_LAYOUT_KEY);
-  await page.waitForTimeout(150);
-  const afterBogus = await layoutOf(page);
-  // An unrelated key must change nothing.
-  await page.evaluate((key) => localStorage.setItem("jarvis.somethingElse", "1"), OPEN_BAR_KEY);
-  await page.evaluate((key) => window.dispatchEvent(new StorageEvent("storage", { key })), OPEN_BAR_KEY);
-  await page.waitForTimeout(120);
-  const afterUnrelated = await layoutOf(page);
+  // Clicking the badge is a VIEW peek (L1), never a layout choice.
+  await page.click("#hud-layout-badge");
+  await page.waitForTimeout(200);
+  const afterPeek = await layoutOf(page);
+  const writes = await page.evaluate(() => (window.__hudLayoutWrites || []).slice());
+  const stored = await page.evaluate(() => localStorage.getItem("jarvis.hud.layout"));
   await page.close();
   assert.equal(start, "cockpit");
-  assert.equal(mid, "studio", "a change made where Settings writes it did not reach the page");
-  assert.equal(afterBogus, "cockpit", "a bogus stored value did not fall back");
-  assert.equal(afterUnrelated, "cockpit", "an unrelated storage key moved the layout");
+  assert.equal(afterPeek, "cockpit", "clicking the read-only badge changed the layout");
+  assert.deepEqual(writes, [], "the page wrote a layout document with no edit action");
+  assert.equal(stored, null, "the page wrote the retired localStorage layout key");
   assert.deepEqual(problems, []);
 });
 
-await check("every layout keeps every id, and the picker is reachable in all three", async () => {
+await check("every view shape keeps every id, and the Layout badge is reachable in all of them", async () => {
   const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  await page.waitForSelector("#hud-layout-badge", { timeout: 10000 });
   const report = [];
   for (const name of HUD_LAYOUTS) {
-    await pickLayout(page, name);
-    await page.waitForTimeout(200);
+    await setHudLook(page, name);
+    await page.waitForTimeout(150);
     report.push(await page.evaluate((ids) => ({
       layout: document.body.dataset.hudLayout,
       missing: ids.filter((id) => !document.getElementById(id)),
-      pickerShown: (() => {
-        const b = document.getElementById("hud-layout-picker").getBoundingClientRect();
-        return b.width > 0 && b.height > 0;
+      badgeShown: (() => {
+        const b = document.getElementById("hud-layout-badge");
+        if (!b) return false;
+        const r = b.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
       })(),
     }), KEPT_IDS));
   }
   await page.close();
   for (const r of report) {
     assert.deepEqual(r.missing, [], `${r.layout}: removed ${JSON.stringify(r.missing)}`);
-    assert.equal(r.pickerShown, true, `${r.layout}: the layout picker is not reachable`);
+    assert.equal(r.badgeShown, true, `${r.layout}: the Layout badge is not reachable`);
   }
   assert.deepEqual(problems, []);
 });
@@ -2216,7 +2238,7 @@ await check("Cockpit: the second-brain tiles open the Galaxy map", async () => {
 
 await check("Studio: conversation and the Galaxy map are side by side, and the tabs drive the stage", async () => {
   const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
-  await pickLayout(page, "studio");
+  await setHudLook(page, "studio");
   await page.waitForTimeout(250);
   const split = await page.evaluate(() => {
     const shown = (id) => getComputedStyle(document.getElementById(id)).display !== "none";
@@ -2280,7 +2302,7 @@ await check("Studio: conversation and the Galaxy map are side by side, and the t
 
 await check("Ambient: no sidebars, a 320px core, the latest exchange and a centred composer", async () => {
   const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
-  await pickLayout(page, "ambient");
+  await setHudLook(page, "ambient");
   await page.waitForTimeout(300);
   await send(page, "first exchange");
   await send(page, "second exchange");
@@ -2786,7 +2808,7 @@ const remindersPanel = (page) => page.evaluate(() => {
 const openReminders = async (schedule) => {
   const opened = await openHud(browser, { jarvis: false, ollama: true, proxy: false,
     schedule });
-  await pickLayout(opened.page, "studio");
+  await setHudLook(opened.page, "studio");
   await opened.page.waitForTimeout(150);
   await opened.page.evaluate((n) => document.querySelector(
     `#stage-tabs [data-hud-tab-choice="${n}"]`).click(), "reminders");
@@ -2797,7 +2819,7 @@ const openReminders = async (schedule) => {
 await check("the Reminders tab is in the stage tab bar and the dock, and shows its own panel", async () => {
   const { page, problems } = await openHud(browser,
     { jarvis: false, ollama: true, proxy: false, schedule: REMINDERS_SCHEDULE });
-  await pickLayout(page, "studio");
+  await setHudLook(page, "studio");
   await page.waitForTimeout(200);
   const before = await page.evaluate(() => {
     const tab = document.querySelector('#stage-tabs [data-hud-tab-choice="reminders"]');
@@ -3035,6 +3057,77 @@ await check("the H1 layout model can open on the Reminders tab", async () => {
     "the layout model knows the tab but the page does not draw it");
 });
 
+await check("FT-3/L3: the Studio Reminders tab is a full-stage screen with the real panel", async () => {
+  const { page, problems, scheduleWrites } = await openReminders(REMINDERS_SCHEDULE);
+  const state = await page.evaluate(() => {
+    const rem = document.getElementById("rail-reminders");
+    const stage = document.getElementById("stage");
+    const form = document.getElementById("rem-form");
+    return {
+      parent: rem && rem.parentElement ? rem.parentElement.id : null,
+      inStage: Boolean(rem && stage && stage.contains(rem)),
+      width: rem ? Math.round(rem.getBoundingClientRect().width) : 0,
+      stageWidth: stage ? Math.round(stage.getBoundingClientRect().width) : 0,
+      formShown: Boolean(form && form.getBoundingClientRect().height > 0),
+      rows: document.querySelectorAll("#reminders-body .rem-row").length,
+      stageText: stage ? stage.textContent.trim().length : 0,
+      talkShown: (() => {
+        const talk = document.getElementById("talk");
+        return Boolean(talk && talk.getBoundingClientRect().height > 0);
+      })(),
+    };
+  });
+  assert.equal(state.parent, "stage", "the reminders panel is not docked in the stage");
+  assert.equal(state.inStage, true, "the panel is not inside #stage");
+  assert.equal(state.talkShown, false, "the conversation stayed behind the Reminders screen");
+  assert.ok(state.width >= state.stageWidth * 0.9,
+    `the Reminders screen is not full-stage: panel ${state.width} of ${state.stageWidth}`);
+  assert.equal(state.formShown, true, "the real add form is not in the stage screen");
+  assert.ok(state.rows > 0, "the stage screen shows no reminder rows");
+  assert.ok(state.stageText > 0, "the stage is empty on the Reminders tab");
+  assert.deepEqual(scheduleWrites, [], "opening the tab sent a write");
+  // Leaving the tab puts the ONE panel back in the right rail - it is moved,
+  // never copied (no second list, no second polling loop).
+  await page.evaluate(() => document.querySelector(
+    '#stage-tabs [data-hud-tab-choice="galaxy"]').click());
+  await page.waitForTimeout(250);
+  const back = await page.evaluate(() => {
+    const rem = document.getElementById("rail-reminders");
+    return {
+      inRail: Boolean(rem && document.getElementById("rail-right").contains(rem)),
+      stageChildren: [...document.querySelectorAll("#stage > #rail-reminders")].length,
+    };
+  });
+  assert.equal(back.inRail, true, "the panel did not return to the right rail");
+  assert.equal(back.stageChildren, 0, "the panel was copied instead of moved");
+  // Ambient / Quiet / Minimal (all wear the Ambient view shape) can still reach
+  // the same one panel through the rail drawer.
+  for (const preset of ["ambient", "quiet", "minimal"]) {
+    await setHudLook(page, "ambient");
+    await page.waitForTimeout(150);
+    const shown = await page.evaluate(() => {
+      const tog = document.getElementById("rail-toggle");
+      const rail = document.getElementById("rail-right");
+      const rem = document.getElementById("rail-reminders");
+      const hidden = (n) => !n || n.getBoundingClientRect().width <= 0;
+      if (rail && !rail.classList.contains("open") && tog && tog.getBoundingClientRect().width > 0) {
+        tog.click();
+      }
+      return { hasPanel: Boolean(rem), railClass: rail ? rail.className : "" };
+    });
+    await page.waitForTimeout(300);
+    const visible = await page.evaluate(() => {
+      const rem = document.getElementById("rail-reminders");
+      const b = rem ? rem.getBoundingClientRect() : null;
+      return Boolean(b && b.width > 0 && b.height > 0);
+    });
+    assert.equal(shown.hasPanel, true, `${preset}: no reminders panel exists`);
+    assert.equal(visible, true, `${preset}: the one Reminders panel cannot be reached`);
+  }
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
 /* =========================================================================
  * H2 of the editable HUD (2026-10-22, rulings 23-27): edit mode, one reducer
  * behind drag / click / keyboard, protected cards, autosave and persistence.
@@ -3096,6 +3189,73 @@ await check("H2: [Edit HUD] mounts the editor, draws the region shells and Escap
   const after = await page.evaluate(() => document.body.getAttribute("data-hud-edit"));
   assert.equal(after, "off", "Escape did not leave edit mode");
   await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("FT-2/L2: in Studio with the rail open, Edit HUD and the top card toolbar are clickable", async () => {
+  const { page, problems } = await openH2(browser);
+  await setHudLook(page, "studio");
+  await page.waitForTimeout(150);
+  // Open the Studio right rail (the Telemetry tab is one of the drawer states)
+  // and then enter edit mode, which is exactly the state the field test hit.
+  await page.evaluate(() => document.querySelector(
+    '#stage-tabs [data-hud-tab-choice="telemetry"]').click());
+  await page.waitForTimeout(250);
+  await page.click("#hud-edit-toggle");
+  await page.waitForTimeout(350);
+  const hit = await page.evaluate(() => {
+    const atCentre = (node) => {
+      if (!node) return false;
+      const r = node.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) return false;
+      const el = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+      return Boolean(el && (el === node || node.contains(el)));
+    };
+    const box = (node) => {
+      const r = node ? node.getBoundingClientRect() : null;
+      return r ? { x: Math.round(r.x), y: Math.round(r.y),
+                   w: Math.round(r.width), h: Math.round(r.height) } : null;
+    };
+    const toggle = document.getElementById("hud-edit-toggle");
+    const bar = document.querySelector(".stage-bar");
+    const rail = document.getElementById("rail-right");
+    const cards = [...document.querySelectorAll("[data-hud-card]")]
+      .filter((c) => !c.hidden && c.getBoundingClientRect().height > 0);
+    cards.sort((a, b) => a.getBoundingClientRect().y - b.getBoundingClientRect().y);
+    const top = cards[0] || null;
+    const tool = top
+      ? (top.querySelector('[data-hud-edit-size="S"]')
+        || top.querySelector("[data-hud-card-handle]")
+        || top.querySelector("[data-hud-edit-region]"))
+      : null;
+    const toggleBox = box(toggle);
+    const barBox = box(bar);
+    const railBox = box(rail);
+    return {
+      toggle: atCentre(toggle),
+      top: top ? top.getAttribute("data-hud-card") : null,
+      tool: atCentre(tool),
+      toggleBox, barBox, railBox,
+      railShown: Boolean(rail && getComputedStyle(rail).display !== "none"
+        && rail.getBoundingClientRect().width > 0),
+      railTop: railBox ? railBox.y : null,
+      barBottom: barBox ? barBox.y + barBox.h : null,
+    };
+  });
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(200);
+  await page.close();
+  assert.equal(hit.railShown, true, "the Studio rail was not open for this check");
+  assert.ok(hit.toggle, `the Studio rail covers [Edit HUD] (${JSON.stringify(hit.toggleBox)})`);
+  assert.ok(hit.top, "no visible card shell to test the top toolbar");
+  assert.ok(hit.tool,
+    `the Studio rail covers the top ${hit.top} card's toolbar (${JSON.stringify({ bar: hit.barBox, rail: hit.railBox })})`);
+  // The structural half: the rail starts BELOW the header band, not merely
+  // under it in paint order.
+  assert.ok(hit.railTop >= hit.barBottom - 2,
+    `the Studio rail starts at y=${hit.railTop}, inside the header band ending at ${hit.barBottom}`);
+  assert.ok(hit.toggleBox.y + hit.toggleBox.h <= hit.railTop + 1,
+    `[Edit HUD] sits at y=${hit.toggleBox.y} and the rail starts at ${hit.railTop}`);
   assert.deepEqual(problems, []);
 });
 

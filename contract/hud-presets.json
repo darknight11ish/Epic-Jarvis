@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "note": "The desktop HUD's built-in layout presets (H1). Mirror of BUILT-IN PRESETS in jarvis-desktop/src/hud-layout.js; tests/hud-layout.mjs fails if the two drift. Desktop-only on purpose: the phone has its own MenuCatalog-backed presets and does not read this file (docs/ARCHITECTURE.md section 8).",
+  "note": "The desktop HUD's built-in HUD-layout presets (H1, renamed from 'layouts' wording on 2026-10-22 when Focus became Quiet). Mirror of PRESETS in jarvis-desktop/src/hud-layout.js; tests/hud-layout.mjs fails if the two drift. Desktop-only on purpose: the phone has its own MenuCatalog-backed home HUD presets and does not read this file.",
   "regions": [
     "header",
     "left_rail",
@@ -219,7 +219,7 @@
           "col_span": 12,
           "row_span": 1,
           "visible": true,
-          "collapsed": true,
+          "collapsed": false,
           "options": {}
         },
         {
@@ -550,9 +550,9 @@
     },
     {
       "version": 1,
-      "id": "focus",
-      "name": "Focus",
-      "base_preset": "focus",
+      "id": "quiet",
+      "name": "Quiet",
+      "base_preset": "quiet",
       "shell_template": "two-column-left",
       "theme": "paper",
       "density": "comfortable",
