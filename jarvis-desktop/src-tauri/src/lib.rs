@@ -881,6 +881,9 @@ pub fn run() {
         // shortcut handler reads it and would panic on an unregistered state
         // if a fallible call above it ever returned early.
         .manage(hotkeys::HotkeyState::default())
+        // R6 (2026-10-21): the live Alt+Space verdict + retry count,
+        // shared by startup, the retry watcher and the Settings page.
+        .manage(hotkeys::AltSpaceState::default())
         .manage(update::UpdateState::default())
         .manage(appearance::AppearanceState::default())
         .manage(system_theme::AppliedTheme::default())
@@ -1260,6 +1263,8 @@ pub fn run() {
             hotkeys::get_hotkeys,
             hotkeys::set_hotkeys,
             hotkeys::reset_hotkeys,
+            hotkeys::alt_space_status,
+            hotkeys::reclaim_alt_space,
             commands::hide_widget,
             commands::resize_desktop_widget,
             commands::set_widget_always_on_top,
@@ -1785,6 +1790,16 @@ pub fn run() {
                     );
                     commands::notify(&handle, "Jarvis Desktop: hotkeys in use", &body);
                 }
+                // R6 (2026-10-21): the Alt+Space race is now SELF-HEALING for the
+                // first minute of logon. The summon key refused above is retried
+                // in the background at 2 s / 6 s / 15 s on the existing async
+                // runtime (never blocking setup, never touching the other keys),
+                // the OS verdict is kept in `AltSpaceState`, and Settings gets an
+                // honest status + [Re-claim Alt+Space]. The tray stays the
+                // fallback exactly as before. Windows can still refuse it for
+                // good if another program keeps the key - that is the honest
+                // limit, documented in docs/ARCHITECTURE.md.
+                hotkeys::start_alt_space_watch(&handle, &bound);
             }
 
             println!(

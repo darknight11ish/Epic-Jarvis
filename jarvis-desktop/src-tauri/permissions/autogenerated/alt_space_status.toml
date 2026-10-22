@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-alt-space-status"
+description = "Enables the alt_space_status command without any pre-configured scope."
+commands.allow = ["alt_space_status"]
+
+[[permission]]
+identifier = "deny-alt-space-status"
+description = "Denies the alt_space_status command without any pre-configured scope."
+commands.deny = ["alt_space_status"]
