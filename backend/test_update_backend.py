@@ -307,16 +307,23 @@ def t_every_mode_runs_the_same_checks():
           [plan["suite_count"] for plan in plans])
     listed = []
     for mode in U.MODE_ORDER:
-        cmd = U.suites_command(repo, U.workers_for(mode))
-        listed.append((cmd[:-2], cmd[-1], cmd[-2]))
-    check("the run_suites command differs ONLY in the worker count, and carries "
-          "the update's own lock bypass",
-          len({tuple(prefix) for prefix, _flag, _jobs in listed}) == 1
-          and all(_flag == U.LOCK_BYPASS_FLAG for _prefix, _flag, _jobs in listed),
+        cmd = U.suites_command(repo, U.workers_for(mode), backend)
+        listed.append(cmd)
+    prefixes = {tuple(c[:c.index("--backend-path")]) for c in listed}
+    backends = {c[c.index("--backend-path") + 1] for c in listed}
+    tails = [(c[c.index("--jobs") + 1], c[-1]) for c in listed]
+    check("the run_suites command differs ONLY in the worker count, names the "
+          "live backend EXPLICITLY, and carries the update's own lock bypass",
+          len(prefixes) == 1
+          and backends == {str(Path(backend).resolve())}
+          and all(flag == U.LOCK_BYPASS_FLAG for _jobs, flag in tails),
           listed)
     check("... and the updater is told the worker count, one per mode",
-          sorted(int(jobs) for _prefix, _flag, jobs in listed) == [1, 14, 22],
+          sorted(int(jobs) for jobs, _flag in tails) == [1, 14, 22],
           listed)
+    bare = U.suites_command(repo, 14)
+    check("without a backend argument it builds the old shape (no --backend-path)",
+          "--backend-path" not in bare and bare[-1] == U.LOCK_BYPASS_FLAG, bare)
 
 
 def t_the_safe_mode_can_never_be_parallel():

@@ -133,6 +133,65 @@ function Step($n, $of, $title) {
     Write-Host "[$n/$of] $title" -ForegroundColor Cyan
 }
 
+# Take the secret shapes R4 names out of ONE line before it reaches a log.
+#
+# The desktop app keeps the same rule in Rust (log_scrub.rs). This script's log
+# is a PowerShell transcript - it records whatever the script prints - so the
+# filter is applied to a child program's output BEFORE it is printed or
+# appended below, and Finish-Run makes a final pass over the written files.
+# Windows PowerShell 5.1 compatible on purpose: no `??`, no ternary.
+function Scrub-LogLine {
+    param([string] $Line)
+    if ([string]::IsNullOrEmpty($Line)) { return $Line }
+    $s = $Line
+    # A pairing / device token.
+    $s = [regex]::Replace($s, 'jdk1\.[A-Za-z0-9._-]+', '[REDACTED_PAIR_TOKEN]')
+    # `Authorization: Bearer <token>` - the token is the SECOND word.
+    $s = [regex]::Replace($s, '(?i)(authorization|x-jarvis-token|token|auth)\s*[:=]\s*Bearer\s+[A-Za-z0-9._~+/=-]+', '$1=[REDACTED]')
+    $s = [regex]::Replace($s, '(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{16,}', 'Bearer [REDACTED]')
+    # A header, query or assignment secret: keep the name, lose the value.
+    $s = [regex]::Replace($s, '(?i)\b(x-jarvis-token|authorization|password|secret|token|sig|key)\s*[:=]\s*[^\s"&'']+', '$1=[REDACTED]')
+    # The known API-key shapes.
+    $s = [regex]::Replace($s, 'sk-[A-Za-z0-9_-]{16,}', '[REDACTED_API_KEY]')
+    $s = [regex]::Replace($s, 'gh[pousr]_[A-Za-z0-9]{20,}', '[REDACTED_API_KEY]')
+    $s = [regex]::Replace($s, 'AIza[0-9A-Za-z_-]{30,}', '[REDACTED_API_KEY]')
+    # A long hex/base64 blob right after token/key/sig, separator or not.
+    $s = [regex]::Replace($s, '(?i)\b(token|key|sig|secret|password)\s*[:=]?\s*([A-Fa-f0-9]{32,}|[A-Za-z0-9+/=_-]{32,})', '$1=[REDACTED]')
+    return $s
+}
+
+# Scrub ONE log file in place, best effort. Used by Protect-LogFiles below and
+# for the live check's own saved output.
+function Protect-LogFile {
+    param([string] $Path)
+    if (-not $Path) { return }
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    try {
+        $lines = @(Get-Content -LiteralPath $Path -ErrorAction Stop)
+        $changed = $false
+        $out = foreach ($line in $lines) {
+            $clean = Scrub-LogLine ([string]$line)
+            if ($clean -ne $line) { $changed = $true }
+            $clean
+        }
+        if ($changed) {
+            Set-Content -LiteralPath $Path -Value $out -Encoding UTF8 -ErrorAction Stop
+        }
+    } catch { }
+}
+
+# Stop the transcript and scrub the run log and the child log. Called from
+# Finish-Run, the one place every ending goes through. Best effort: a log that
+# cannot be re-read is left alone rather than failing a finished update.
+function Protect-LogFiles {
+    $paths = @($script:RunLog, $script:ChildLog)
+    $any = $false
+    foreach ($p in $paths) { if ($p) { $any = $true } }
+    if (-not $any) { return }
+    try { Stop-Transcript | Out-Null } catch { }
+    foreach ($p in $paths) { Protect-LogFile $p }
+}
+
 # --- what this run did, and how it ends ---------------------------------------
 #
 # One place decides how the run ends (Finish-Run), so a run that stopped early
@@ -142,6 +201,7 @@ $script:Problems = New-Object System.Collections.ArrayList
 $script:Notes    = New-Object System.Collections.ArrayList
 $script:Changed  = $false
 $script:RunLog   = $null
+$script:NativeOutput = @()
 $script:InstallLine = $null
 # A throwaway source copy, when this folder had no git pull to do. Deleted at
 # the end of the run - by Finish-Run, which is the one place every ending goes
@@ -251,6 +311,9 @@ function Finish-Run {
     if ($script:TempSource) {
         Remove-Item -LiteralPath $script:TempSource -Recurse -Force -ErrorAction SilentlyContinue
     }
+    # R4: the last thing a run does is take the secret shapes out of the two
+    # log files it just wrote (and stop the transcript first).
+    Protect-LogFiles
     if ($script:Problems.Count -gt 0) { exit 1 }
     if ($Kind -eq 'stopped') { exit 1 }
     exit 0
@@ -258,8 +321,9 @@ function Finish-Run {
 
 trap {
     Write-Host ""
-    Write-Host "  FAIL  The script stopped unexpectedly: $($_.Exception.Message)" -ForegroundColor Red
-    Add-Problem "The script stopped unexpectedly: $($_.Exception.Message)"
+    $failure = Scrub-LogLine ([string]$_.Exception.Message)
+    Write-Host "  FAIL  The script stopped unexpectedly: $failure" -ForegroundColor Red
+    Add-Problem "The script stopped unexpectedly: $failure"
     # This run may be the reason nothing is running any more.
     Restart-AppIfWeClosedIt
     Finish-Run
@@ -274,20 +338,24 @@ trap {
 # error that hides the real message (the trap CLAUDE.md records). So the
 # preference is loosened around the call and put back afterwards.
 #
-# THE CHILD'S OUTPUT IS CAPTURED AND PRINTED, NEVER RETURNED. This used to be
-# `& $Exe @Arguments; return $LASTEXITCODE`, which hands the caller the child's
-# output AND the exit code as one array - and `$code -ne 0` on an array is TRUE
-# whenever the array holds anything, so a child that PRINTED something was
-# always read as a failure. A real first install found it: npm ci finished with
-# "exit 0" in npm's own log and this script reported "npm ci failed", then
-# skipped the build. Anything that prints while succeeding - npm, cargo, git -
-# hit the same trap.
+# THE CHILD'S OUTPUT IS CAPTURED HERE AND PRINTED BY Write-NativeOutput. This
+# used to be `& $Exe @Arguments; return $LASTEXITCODE`, which hands the caller
+# the child's output AND the exit code as one array - and `$code -ne 0` on an
+# array is TRUE whenever the array holds anything, so a child that PRINTED
+# something was always read as a failure. A real first install found it: npm ci
+# finished with "exit 0" in npm's own log and this script reported "npm ci
+# failed", then skipped the build. Anything that prints while succeeding - npm,
+# cargo, git - hit the same trap.
 #
-# -LogTo appends the output to a file as well. That exists because a transcript
-# does NOT capture a child process's output (measured, not assumed): without it
-# a failing npm left no trace at all in the log the owner is asked to send.
+# KEEP THIS FUNCTION SELF-CONTAINED. The CI powershell-5 job lifts
+# `function Invoke-Native \{.*?\n\}` out of this file with a regex and runs it
+# standalone against `cmd` (R4, PR #713: a call to Scrub-LogLine here made that
+# harness throw "not recognized"). It may use built-ins only, never another
+# function in this script. Output handling - including the R4 scrub at the
+# screen/log write points - lives in Write-NativeOutput below, and production
+# callers use Invoke-NativeLogged so nothing is printed unscrubbed.
 function Invoke-Native {
-    param([string] $Exe, [string[]] $Arguments, [string] $LogTo = '')
+    param([string] $Exe, [string[]] $Arguments)
     $prev = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
@@ -301,14 +369,32 @@ function Invoke-Native {
     # log as "System.Management.Automation.RemoteException" followed by a
     # PowerShell error block. A real run showed it. Its message is what is
     # wanted, and that is what both the screen and the log get.
-    $text = foreach ($line in $out) {
+    $script:NativeOutput = @(foreach ($line in $out) {
         if ($line -is [System.Management.Automation.ErrorRecord]) { "$($line.Exception.Message)" }
         else { "$line" }
-    }
+    })
+    return $code
+}
+
+# Print and log the lines the last Invoke-Native captured, with R4's scrub at
+# the write points. Scrubbing here (not inside Invoke-Native) is what keeps the
+# exit-code helper above runnable in the CI harness on its own.
+function Write-NativeOutput {
+    param([string] $LogTo = '')
+    $lines = @(foreach ($line in @($script:NativeOutput)) { Scrub-LogLine ([string]$line) })
     if ($LogTo) {
-        try { $text | Out-File -LiteralPath $LogTo -Append -Encoding utf8 } catch { }
+        try { $lines | Out-File -LiteralPath $LogTo -Append -Encoding utf8 } catch { }
     }
-    foreach ($line in $text) { Write-Host $line }
+    foreach ($line in $lines) { Write-Host $line }
+}
+
+# Run a program the way every production step does: exit code returned to the
+# caller, its output printed and logged through the scrubber. The harness-tested
+# Invoke-Native stays pure; this is the wrapper the script actually uses.
+function Invoke-NativeLogged {
+    param([string] $Exe, [string[]] $Arguments, [string] $LogTo = '')
+    $code = Invoke-Native -Exe $Exe -Arguments $Arguments
+    Write-NativeOutput -LogTo $LogTo
     return $code
 }
 
@@ -790,12 +876,12 @@ function Build-AndInstallDesktop($Repo, [switch] $DryRun) {
     Push-Location -LiteralPath $dir
     try {
         Info "running npm ci (a minute or two the first time)"
-        if ((Invoke-Native 'npm' @('ci', '--no-audit', '--no-fund') -LogTo $script:ChildLog) -ne 0) {
+        if ((Invoke-NativeLogged 'npm' @('ci', '--no-audit', '--no-fund') -LogTo $script:ChildLog) -ne 0) {
             Bad "npm ci failed - the app was not rebuilt"
             return $false
         }
         Info "building the app (several minutes; you can leave this window alone)"
-        if ((Invoke-Native 'npm' @('run', 'tauri', 'build') -LogTo $script:ChildLog) -ne 0) {
+        if ((Invoke-NativeLogged 'npm' @('run', 'tauri', 'build') -LogTo $script:ChildLog) -ne 0) {
             Bad "the build failed - the app was not replaced"
             return $false
         }
@@ -951,7 +1037,7 @@ if ($isGit -and (Get-Command git -ErrorAction SilentlyContinue)) {
         Info "would run: git pull (in $RepoRoot)"
     } else {
         Info "git pull (the code in this folder is what patches your backend)"
-        $code = Invoke-Native 'git' @('-C', $RepoRoot, 'pull', '--ff-only') -LogTo $script:ChildLog
+        $code = Invoke-NativeLogged 'git' @('-C', $RepoRoot, 'pull', '--ff-only') -LogTo $script:ChildLog
         if ($code -ne 0) {
             Warn "git pull did not finish cleanly, so the code already in this folder is used"
             Info "that is what happens on a branch with local changes, or with no network"
@@ -1086,7 +1172,7 @@ if ($SkipPatches) {
     # the closing screen came to say "Nothing on your PC was changed" about a
     # backend that had just been patched.
     $script:Changed = $true
-    $code = Invoke-Native 'powershell' (@('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $apply) + $applyArgs) -LogTo $script:ChildLog
+    $code = Invoke-NativeLogged 'powershell' (@('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $apply) + $applyArgs) -LogTo $script:ChildLog
     Say ""
     if ($code -ne 0) {
         # The desktop app is NOT touched: it is a client of this backend, and
@@ -1247,6 +1333,7 @@ if ($Print) {
             } finally {
                 $ErrorActionPreference = $prev
             }
+            if ($preflightOut) { Protect-LogFile $preflightOut }
             if ($preflightOut) { Info "the check's output is saved in: $preflightOut" }
             if ($code -ne 0) {
                 Add-Note "the live check above reported failures (exit $code). The update itself finished; each FAIL line says what to do."

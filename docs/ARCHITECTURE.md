@@ -2365,6 +2365,16 @@ microphone is described in the same words. Nothing is added to the phone's
 screens, no route changes, and `tools/check_parity.py` has nothing new to
 classify.
 
+**The `/api/presets` spelling is desktop-HUD-only, and that is a spelling
+rather than a parity gap** (2026-10-21, the owner's request for the HUD's left
+rail). `GET /api/presets` and `GET /api/work` are the same read route, answered
+by the same function (`backend/jarvis_presets.py` `install()` / `live_status()`):
+the phone reads the canonical `/api/work` (`net/FocusPresets.kt`), and the
+desktop HUD reads `/api/presets` through its window's fixed read allowlist
+(`hud_proxy.rs` `HUD_GET_PATHS`). The feature itself is in both apps; only one
+surface spells the route this way. `tools/check_parity.py` records it as
+`deliberate` for that reason.
+
 **Not on the phone yet, and that is the scope of this slice rather than a
 **Not on the phone yet, and that is the scope of this slice rather than a
 one-sided decision** (2026-10-19; extended by S3, 2026-10-20): **searchable
@@ -2794,6 +2804,8 @@ approved sentence exists once. Proxy exits (F3) are a later, separate slice.
 Design, the disclosure wording and what is NOT measured (the endpoint
 is unofficial and no live request is made in the suite):
 `docs/DESIGN-PRICE-RADAR.md`.
+
+**The `Alt+Space` startup race is now self-healing, and the honest limit is Windows itself** (R6, 2026-10-21; `hotkeys.rs`, `lib.rs`, `settings.js`). Registering a global hotkey at login competes with every other Run-key program, and Windows gives the loser no warning - before this, a machine where PowerToys Run or Copilot held `Alt+Space` simply had no spotlight and nothing in the app could say so or fix it (`autostart.rs` documented the race as deliberately unfixed; the startup code only printed the refusal). Now: the startup registration still reports every verdict, and **only the summon action** (`toggle_quickbar`, whose default is `Alt+Space`; watched by id, so an owner who moved the key is retried on the key they chose) gets up to **three bounded background retries at 2 s / 6 s / 15 s** on the existing Tauri async runtime when the OS refuses it. Each attempt asks the plugin's own live registry first and never re-registers a key this process already owns; it never unregisters or retouches the other shortcuts; and it never blocks setup - the tray's **Show or hide the Jarvis bar** remains the fallback, and Win+Shift+J and the rest are unchanged. The OS verdict + retry count + last reason live in managed state (`alt_space_status`); Settings -> Shortcuts shows an honest line ("alt+space is currently held by another program on this PC. Jarvis retried N times after logon.") and one **[Re-claim Alt+Space]** button (`reclaim_alt_space`) that makes exactly one more attempt and repaints what the OS answered - it never rebinds anything and never picks another key for the owner. **The honest limit**: if another program keeps the key, no amount of retrying can take it; the retries cover the logon rush only, the button works once that program lets go, and the tray is always there. The real boot race (two programs racing at login on the owner's PC) is owner-tested, not provable from a test suite; the unit tests drive the pure retry machine with an injected registration fn (fails twice then succeeds on the third - exactly three attempts; fails all four including the initial one - false + the last reason), and the Settings page + command seam is driven in the existing Playwright harness. One-sided on purpose: global hotkeys are a PC thing (the phone has no equivalent, like the other hotkey rows above).
 
 ## 9. Where the backend lives
 

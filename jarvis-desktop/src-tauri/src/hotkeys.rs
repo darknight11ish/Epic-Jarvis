@@ -30,7 +30,7 @@ use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 use tauri_plugin_store::StoreExt;
 
@@ -158,6 +158,260 @@ pub const ACTIONS: &[Action] = &[
 /// The key the Live hotkey's hint suggests. Checked below to be free of every
 /// other action's shipped key.
 pub const LIVE_SUGGESTED: &str = "Alt+Shift+L";
+
+/// The action whose default key is `Alt+Space` (the one that summons the bar).
+/// The startup retry watches THIS action, by id, so an owner who moved the key
+/// is retried on the key they chose rather than on the id's old default.
+pub const SUMMON_ID: &str = "toggle_quickbar";
+
+/// The bounded startup retry, in milliseconds (2 s / 6 s / 15 s).
+///
+/// Why bounded: a global hotkey at login competes with every other Run-key
+/// program, and the loser is decided by Windows' ordering - not by anything
+/// this app can control. Waiting longer does not make another program let go;
+/// three attempts cover the logon rush and then we stop and tell the owner,
+/// instead of holding a thread or pretending the key works.
+pub const RETRY_DELAYS_MS: [u64; 3] = [2_000, 6_000, 15_000];
+
+/// The event the Settings page listens on while it is open.
+pub const ALT_SPACE_EVENT: &str = "alt-space-state";
+
+/// What the desktop should believe about `Alt+Space` right now, and why.
+///
+/// `registered` is the OS's answer (the plugin's own live registry - not a
+/// saved preference). `attempts` counts the retries actually made, so the page
+/// can say "tried twice" honestly; `reason` keeps the last OS refusal so
+/// opening Settings after the retries still explains WHY, not merely that it
+/// is not working.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AltSpaceStatus {
+    pub registered: bool,
+    pub attempts: u8,
+    pub accelerator: String,
+    pub reason: String,
+}
+
+impl Default for AltSpaceStatus {
+    fn default() -> Self {
+        Self {
+            registered: false,
+            attempts: 0,
+            accelerator: "Alt+Space".to_string(),
+            reason: String::new(),
+        }
+    }
+}
+
+/// The managed state: last known status, shared by startup, the watcher and
+/// the two commands. One mutex, no async lock - every write is a few fields.
+#[derive(Default)]
+pub struct AltSpaceState(std::sync::Mutex<AltSpaceStatus>);
+
+impl AltSpaceState {
+    pub fn snapshot(&self) -> AltSpaceStatus {
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+    }
+
+    fn replace(&self, next: AltSpaceStatus) -> AltSpaceStatus {
+        *self
+            .0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = next.clone();
+        next
+    }
+}
+
+/// Is one registration attempt even needed?
+///
+/// Pulled out so the rule has a test without a window: `RegisterHotKey` on a
+/// combination this process already owns fails, and re-registering would look
+/// like a fresh conflict with ourselves. The startup retry and the Re-claim
+/// button both ask this question first.
+pub fn claim_needed(already_registered: bool) -> bool {
+    !already_registered
+}
+
+/// The bounded retry state machine, with the attempt and the wait INJECTED.
+///
+/// Pure on purpose: the tests drive it with a closure that fails twice and
+/// succeeds on the third call and with a fake wait, so no test sleeps 2+6+15
+/// seconds, no test needs a window, and the timing array itself is asserted.
+/// Returns `(registered, retries_made, last_reason)`.
+pub fn retry_alt_space<F, W>(mut attempt: F, mut wait: W) -> (bool, u8, Option<String>)
+where
+    F: FnMut() -> Result<(), String>,
+    W: FnMut(u64),
+{
+    let mut retries: u8 = 0;
+    let mut reason: Option<String> = None;
+    for delay in RETRY_DELAYS_MS {
+        wait(delay);
+        retries = retries.saturating_add(1);
+        match attempt() {
+            Ok(()) => return (true, retries, None),
+            Err(err) => reason = Some(err),
+        }
+    }
+    (false, retries, reason)
+}
+
+/// The accelerator currently configured for the summon action.
+fn summon_accelerator(app: &AppHandle) -> String {
+    configured(app).get(SUMMON_ID).cloned().unwrap_or_default()
+}
+
+/// Is the configured summon key bound by THIS process right now?
+fn summon_is_registered(app: &AppHandle) -> bool {
+    let accel = summon_accelerator(app);
+    match parse(&accel) {
+        Ok(shortcut) => app.global_shortcut().is_registered(shortcut),
+        Err(_) => false,
+    }
+}
+
+/// One attempt to bind the summon key, without touching any other accelerator.
+///
+/// This is what the retries and the Re-claim button call: it never
+/// unregisters the other four shortcuts (a failed `Alt+Space` must not cost
+/// the owner the working ones), and it never registers a key this process
+/// already owns.
+pub fn summon_registration_once(app: &AppHandle) -> Result<(), String> {
+    let accel = summon_accelerator(app);
+    if accel.trim().is_empty() {
+        return Err("no key is set for the Jarvis bar.".to_string());
+    }
+    let shortcut = parse(&accel)?;
+    let manager = app.global_shortcut();
+    if manager.is_registered(shortcut) {
+        return Ok(());
+    }
+    manager.register(shortcut).map_err(|err| err.to_string())
+}
+
+/// The status the rest of the app reads: OS truth + the last reason.
+fn current_status(app: &AppHandle) -> AltSpaceStatus {
+    let state = app.state::<AltSpaceState>();
+    let previous = state.snapshot();
+    let registered = summon_is_registered(app);
+    let mut next = AltSpaceStatus {
+        registered,
+        attempts: previous.attempts,
+        accelerator: summon_accelerator(app),
+        reason: if registered {
+            String::new()
+        } else if previous.reason.is_empty() {
+            "another program currently owns it".to_string()
+        } else {
+            previous.reason
+        },
+    };
+    if next.accelerator.trim().is_empty() {
+        next.accelerator = action_default(SUMMON_ID);
+    }
+    state.replace(next)
+}
+
+/// The shipped default for an id, for the "nothing saved" case.
+fn action_default(id: &str) -> String {
+    action(id)
+        .map(|a| a.default.to_string())
+        .unwrap_or_default()
+}
+
+/// One attempt, with the managed state updated and the event emitted.
+fn attempt_and_record(app: &AppHandle) -> AltSpaceStatus {
+    let (registered, reason) = match summon_registration_once(app) {
+        Ok(()) => (true, String::new()),
+        Err(err) => (false, err),
+    };
+    let state = app.state::<AltSpaceState>();
+    let previous = state.snapshot();
+    let next = AltSpaceStatus {
+        registered,
+        attempts: previous.attempts.saturating_add(1),
+        accelerator: summon_accelerator(app),
+        reason,
+    };
+    let next = state.replace(next);
+    let _ = app.emit(ALT_SPACE_EVENT, &next);
+    next
+}
+
+/// The startup hook: seed the state from `apply()`'s verdict and, when the
+/// summon key was refused, spawn the bounded retries on the existing Tauri
+/// async runtime.
+///
+/// It never waits, never panics and never blocks setup: a refused hotkey must
+/// not stop the tray, the event stream or the windows from coming up. The tray
+/// stays the fallback, exactly as before this change.
+pub fn start_alt_space_watch(app: &AppHandle, bound: &[Bound]) {
+    let verdict = bound.iter().find(|b| b.id == SUMMON_ID);
+    let state = app.state::<AltSpaceState>();
+    let status = match verdict {
+        Some(row) => AltSpaceStatus {
+            registered: row.registered,
+            attempts: 0,
+            accelerator: if row.accelerator.is_empty() {
+                row.default.clone()
+            } else {
+                row.accelerator.clone()
+            },
+            reason: if row.registered {
+                String::new()
+            } else {
+                row.error
+                    .clone()
+                    .unwrap_or_else(|| "another program currently owns it".to_string())
+            },
+        },
+        None => AltSpaceStatus {
+            registered: false,
+            attempts: 0,
+            accelerator: action_default(SUMMON_ID),
+            reason: "the summon action is missing from this build".to_string(),
+        },
+    };
+    // A key that already bound is finished: no retry, no second registration.
+    if status.registered {
+        let status = state.replace(status);
+        let _ = app.emit(ALT_SPACE_EVENT, &status);
+        return;
+    }
+    let status = state.replace(status);
+    let _ = app.emit(ALT_SPACE_EVENT, &status);
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        for delay in RETRY_DELAYS_MS {
+            tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+            let next = attempt_and_record(&handle);
+            if next.registered {
+                break;
+            }
+        }
+    });
+}
+
+/// Read the current state (the Settings page calls this when it opens).
+#[tauri::command]
+pub fn alt_space_status(app: AppHandle) -> AltSpaceStatus {
+    current_status(&app)
+}
+
+/// The [Re-claim Alt+Space] button: ONE fresh attempt, never a rebind and
+/// never a change to another key.
+///
+/// If the key is already ours this returns the current state without calling
+/// the OS - the same "do not re-register an owned key" rule as the retry.
+#[tauri::command]
+pub fn reclaim_alt_space(app: AppHandle) -> AltSpaceStatus {
+    if !claim_needed(summon_is_registered(&app)) {
+        return current_status(&app);
+    }
+    attempt_and_record(&app)
+}
 
 /// The key the Watch with me hotkey's hint suggests (same check).
 pub const WATCH_SUGGESTED: &str = "Alt+Shift+V";
@@ -791,6 +1045,101 @@ mod tests {
                 other.id
             );
         }
+    }
+
+    // ---------------------------------------------------------------- R6 --
+    // The Alt+Space startup retry + one-click re-claim (2026-10-21).
+    //
+    // These drive the PURE machine with an injected attempt and an injected
+    // wait: no test sleeps 2+6+15 seconds, no test opens a window, and the
+    // retry timetable itself is asserted rather than assumed.
+
+    #[test]
+    fn the_retry_succeeds_on_the_third_attempt_and_says_three() {
+        let mut attempts = 0u8;
+        let mut waits: Vec<u64> = Vec::new();
+        let (registered, retries, reason) = retry_alt_space(
+            || {
+                attempts += 1;
+                if attempts < 3 {
+                    Err(format!("attempt {attempts}: held by another program"))
+                } else {
+                    Ok(())
+                }
+            },
+            |delay| waits.push(delay),
+        );
+        assert!(
+            registered,
+            "third attempt succeeded but the machine said no"
+        );
+        assert_eq!(retries, 3, "exactly three retries must have been made");
+        assert_eq!(attempts, 3, "the registration fn was called three times");
+        assert_eq!(waits, vec![2_000, 6_000, 15_000], "the 2/6/15 s timetable");
+        assert_eq!(reason, None, "a success must clear the reason");
+    }
+
+    #[test]
+    fn failing_the_initial_attempt_and_all_three_retries_reports_failure() {
+        // initial (index 0, outside the machine) + 3 retries = 4 attempts.
+        let mut calls = 1u8;
+        let mut waits: Vec<u64> = Vec::new();
+        let (registered, retries, reason) = retry_alt_space(
+            || {
+                calls += 1;
+                Err(format!("still held (call {calls})"))
+            },
+            |delay| waits.push(delay),
+        );
+        assert!(
+            !registered,
+            "a key that never bound must report not registered"
+        );
+        assert_eq!(retries, 3);
+        assert_eq!(calls, 4, "the initial failure plus three retries");
+        assert_eq!(waits, vec![2_000, 6_000, 15_000]);
+        let reason = reason.expect("the last OS refusal must be kept, not dropped");
+        assert!(reason.contains("still held"), "reason was {reason:?}");
+    }
+
+    #[test]
+    fn an_already_registered_key_is_never_registered_again() {
+        // The plugin refuses a second registration of a key this process owns,
+        // so "re-register anyway" would look like a fresh conflict with
+        // ourselves. The startup retry and the Re-claim button both ask first.
+        assert!(
+            !claim_needed(true),
+            "an owned key must not be re-registered"
+        );
+        assert!(claim_needed(false), "a refused key must be retried");
+        // Same rule at the machine's start: nothing to try when it is owned.
+        let mut attempts = 0u8;
+        let already = true;
+        if claim_needed(already) {
+            attempts += 1;
+        }
+        assert_eq!(attempts, 0, "the already-registered path made an attempt");
+    }
+
+    #[test]
+    fn every_retry_delay_is_bounded_and_ascending() {
+        // The brief fixes ~2 s, 6 s, 15 s. A test keeps a later "let us wait a
+        // minute" from quietly turning a refused hotkey into a hung startup.
+        assert_eq!(RETRY_DELAYS_MS.len(), 3);
+        assert_eq!(RETRY_DELAYS_MS[0], 2_000);
+        assert_eq!(RETRY_DELAYS_MS[1], 6_000);
+        assert_eq!(RETRY_DELAYS_MS[2], 15_000);
+        assert!(RETRY_DELAYS_MS.windows(2).all(|pair| pair[0] < pair[1]));
+        assert!(RETRY_DELAYS_MS.iter().all(|ms| *ms <= 15_000));
+    }
+
+    #[test]
+    fn the_summon_action_is_the_one_the_settings_page_reclaims() {
+        // The retry watches an action ID, not a key string, so an owner who
+        // moved Alt+Space is retried on the key they actually chose.
+        let spec = action(SUMMON_ID).expect("the summon action exists");
+        assert_eq!(spec.default, "Alt+Space");
+        assert_eq!(spec.label, "Show or hide the Jarvis bar");
     }
 
     #[test]

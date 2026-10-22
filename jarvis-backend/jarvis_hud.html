@@ -172,6 +172,44 @@ button{font:inherit; color:inherit; background:none; border:none; cursor:pointer
   border-color:var(--gold); color:var(--gold);
   background:linear-gradient(90deg, rgb(var(--warn-rgb) / .14), rgb(var(--warn-rgb) / .03));
 }
+
+/* ---------- focus presets (the left rail; owner request 2026-10-21) ---
+ *  The five presets both apps render (GET /api/presets, JARVIS-API section
+ *  145) plus ONE Cloud button. A preset click asks the PC to apply it - ONE
+ *  change_own_config card, decided in #approvals like any other - and the
+ *  rail never marks one chosen until /api/presets says chosen_preset. */
+.presets{display:flex; flex-direction:column; gap:5px; margin-top:9px;}
+.preset{
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+  padding:7px 9px; border:1px solid var(--line); border-radius:3px;
+  background:var(--plate-2); font-family:var(--f-mono); font-size:11px;
+  color:var(--dim); text-align:left; transition:border-color .15s, color .15s;
+}
+.preset:hover{border-color:var(--line-hot); color:var(--text);}
+.preset[aria-pressed="true"]{
+  border-color:var(--ice); color:var(--ice);
+  background:linear-gradient(90deg, rgb(var(--accent-rgb) / .14), rgb(var(--accent-rgb) / .03));
+}
+.preset .preset-name{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.preset .preset-model{font-size:9px; color:var(--dim); flex-shrink:0;}
+.preset[aria-pressed="true"] .preset-model{color:var(--ice);}
+.preset-cloud{
+  display:flex; align-items:center; justify-content:center; gap:6px;
+  width:100%; margin-top:6px; padding:7px 9px; border-radius:3px;
+  border:1px solid var(--line); background:var(--plate-2);
+  font-family:var(--f-mono); font-size:11px; color:var(--dim);
+  transition:border-color .15s, color .15s;
+}
+.preset-cloud:hover{border-color:var(--line-hot); color:var(--text);}
+.preset-cloud[aria-pressed="true"]{
+  border-color:var(--gold); color:var(--gold);
+  background:linear-gradient(90deg, rgb(var(--warn-rgb) / .14), rgb(var(--warn-rgb) / .03));
+}
+.preset-cloud.down{opacity:.72; border-style:dashed;}
+.preset-words{
+  margin:7px 0 0; font-family:var(--f-mono); font-size:10px; line-height:1.35;
+  color:var(--dim);
+}
 .lane .tag{font-size:9px; letter-spacing:.1em; color:var(--dimmer); text-transform:uppercase;}
 .lane[aria-pressed="true"] .tag{color:rgb(var(--warn-rgb) / .75);}
 
@@ -754,6 +792,12 @@ html[data-hud-layout="cockpit"] .lane{
   border-radius:2px; font-size:10px;
 }
 html[data-hud-layout="cockpit"] .lane .tag{display:none;}
+html[data-hud-layout="cockpit"] .presets{flex-direction:row; flex-wrap:wrap; gap:4px; margin-top:8px;}
+html[data-hud-layout="cockpit"] .preset{
+  flex:1 1 46%; justify-content:center; padding:5px 7px; border-radius:2px; font-size:10px;
+}
+html[data-hud-layout="cockpit"] .preset-cloud{margin-top:5px; padding:5px 7px; font-size:10px;}
+html[data-hud-layout="cockpit"] .preset-words{font-size:9px;}
 html[data-hud-layout="cockpit"] #reactor{width:220px; height:220px;}
 html[data-hud-layout="cockpit"] .core-expand{
   /* Beside the core, not at the far edge of a full-width wrap: the wrap is
@@ -1114,12 +1158,25 @@ html[data-hud-layout="ambient"] .composer{
     </nav>
 
     <div class="rail-section hide-sm rail-lanes" id="rail-lanes">
-      <div class="hud-label">Brain in use</div>
-      <!-- Every lane this PC has, built by renderLanes() from /api/status.
-           The compact segmented look in the Cockpit layout is CSS only: the
-           SAME buttons (and the same data-lane hooks) stay here in every
-           mode, which is what the page's own tests read. -->
-      <div class="lanes" id="lanes"></div>
+      <div class="hud-label">Focus presets</div>
+      <!-- The owner's five focus presets (GET /api/presets, JARVIS-API
+           section 145), built by renderPresets(), plus ONE Cloud button.
+           A preset click posts /api/work/apply {"preset": id}: the PC
+           starts the preset's lane and raises its ONE change_own_config
+           card, and nothing is marked chosen here until the refetched
+           contract names it. The Cloud button only routes the next
+           message (the lane mechanism below); it raises no card. -->
+      <div class="presets" id="presets" role="group" aria-label="Focus presets"></div>
+      <button type="button" class="preset-cloud" id="preset-cloud" aria-pressed="false"
+              title="Send the next message to the cloud">
+        <span class="pc-glyph" aria-hidden="true">&#9729;</span><span class="pc-name">Cloud</span>
+      </button>
+      <p class="preset-words" id="preset-words" role="status" aria-live="polite"></p>
+      <!-- The lane list stays exactly where it was: it is still the page's
+           ONE lane mechanism (the Studio dock's dropdown and the page's
+           own lane tests drive these buttons), so it is hidden rather
+           than removed when the presets took the visible rail. -->
+      <div class="lanes" id="lanes" hidden></div>
     </div>
 
     <div class="rail-section hide-sm rail-systems" id="rail-systems">
@@ -1489,6 +1546,18 @@ const S = {
   linkUp: null,
   lane: "auto",
   lanes: [],
+  // The owner's focus presets: the PC's list (GET /api/presets), the one
+  // the PC says is chosen, and the model/lane words it gives for it. A
+  // transient sentence for the rail's status line (asking, refused, done)
+  // lives in presetWords; it never replaces the PC's own reading.
+  presets: [],
+  presetChosen: null,
+  presetModel: "",
+  presetWords: "",
+  presetBusy: false,
+  // /api/status's own `proxy`: is the PC's cloud proxy answering? null
+  // before the PC has said. The Cloud button never pretends it is up.
+  proxy: null,
   state: "idle",              // idle | listening | thinking | speaking
   level: 0,                   // mic amplitude 0..1
   messages: [],
@@ -2901,6 +2970,236 @@ $("insp-ask").addEventListener("click", () => {
   });
 })();
 
+/**
+ * Focus presets in the left rail (owner request 2026-10-21: "the presets we
+ * created instead, with one of the buttons being for the cloud").
+ *
+ * The CONTRACT is the PC's own: GET /api/presets (alias of GET /api/work,
+ * docs/JARVIS-API.md section 145) lists the five presets with id/title/model
+ * and says chosen_preset, chosen_model and the active lane. Applying is
+ * POST /api/work/apply {"preset": "<id>"} - the SAME call the bar's "Use this
+ * preset" makes through its Tauri bridge. It waits while the PC raises its ONE
+ * change_own_config card; the card lands in #approvals like every other card,
+ * and the owner decides it with a physical click (voice never approves).
+ *
+ * NOTHING HERE MARKS A PRESET CHOSEN BEFORE THE PC SAYS SO: after the POST
+ * settles the list is refetched, and the highlight comes from chosen_preset.
+ * The page's own lane override is cleared on success so the NEXT message is
+ * an ordinary routed turn at the PC's active lane - exactly what the bar and
+ * the phone send (their chat bodies carry no preset either; the applied
+ * preset lives on the PC). Cloud is different: it is a route for the next
+ * message only, the same lane buttons this rail always had, and it raises no
+ * card. When /api/status says proxy:false the button says the cloud lane is
+ * down and marks nothing.
+ */
+
+/** The cloud lane to route to: the documented general one when this PC has
+ *  it, else the first cloud lane /api/status listed. Empty: no cloud here. */
+function cloudLane(){
+  if(S.lanes.includes("jarvis-escalate")) return "jarvis-escalate";
+  return S.lanes.length ? S.lanes[0] : "";
+}
+
+/** Is the cloud lane really available to route to right now? */
+function cloudUp(){
+  return S.proxy === true && !!cloudLane();
+}
+
+/** The rail's own status line: the last thing said to the owner, or - when
+ *  silent - the PC's own honest reading of the chosen preset. */
+function paintPresetLine(){
+  const el = $("preset-words");
+  if(!el) return;
+  if(S.presetWords){ el.textContent = S.presetWords; return; }
+  if(S.presetChosen){
+    const row = S.presets.find(p => p.id === S.presetChosen);
+    el.textContent = "Chosen: " + ((row && row.title) || S.presetChosen)
+      + (S.presetModel ? " \u00b7 " + S.presetModel : "");
+    return;
+  }
+  el.textContent = S.presets.length
+    ? "No preset chosen yet \u00b7 the PC routes on its own."
+    : "Reading the presets from the PC\u2026";
+}
+
+/** Put one sentence on the rail's status line ("" puts the reading back). */
+function presetWords(text){
+  S.presetWords = text || "";
+  paintPresetLine();
+}
+
+/** Paint the Cloud button from the state the PC gave: active only while the
+ *  page's own lane IS the cloud lane, and down (plainly) while proxy is not
+ *  answering. */
+function paintCloud(){
+  const b = $("preset-cloud");
+  if(!b) return;
+  const lane = cloudLane();
+  const active = !!lane && S.lane === lane;
+  b.setAttribute("aria-pressed", active ? "true" : "false");
+  b.classList.toggle("down", !cloudUp());
+  b.title = !lane ? "This PC has no cloud lane"
+    : (S.proxy !== true ? "The cloud lane is down right now" : "Send the next message to the cloud");
+}
+
+/** Draw the five preset buttons from the PC's own list (no innerHTML: every
+ *  word is server text, so it is set with textContent). */
+function renderPresets(){
+  const box = $("presets");
+  if(!box) return;
+  box.replaceChildren();
+  if(!S.presets.length){ paintPresetLine(); return; }
+  S.presets.forEach(p => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "preset";
+    b.dataset.preset = String(p.id || "");
+    b.setAttribute("aria-pressed", p.id === S.presetChosen ? "true" : "false");
+    const name = document.createElement("span");
+    name.className = "preset-name";
+    name.textContent = String(p.title || p.id || "preset");
+    const model = document.createElement("span");
+    model.className = "preset-model";
+    model.textContent = String(p.model || "");
+    b.appendChild(name);
+    b.appendChild(model);
+    const what = [p.what, p.focus, p.model].filter(x => typeof x === "string" && x).join(" - ");
+    b.title = what + (p.pending ? " (being prepared)" : "");
+    b.addEventListener("click", () => applyPreset(String(p.id || "")));
+    box.appendChild(b);
+  });
+  paintPresetLine();
+}
+
+/** Read the presets contract. Reads only: it starts nothing and switches
+ *  nothing, and a PC without the route gets plain words, never invented
+ *  presets. */
+async function loadPresets(){
+  try{
+    const r = await jfetch("/api/presets", {cache:"no-store", headers:{"X-Jarvis-Client":"hud"}});
+    if(!r.ok) throw new Error("the PC answered " + r.status);
+    const j = await r.json();
+    if(!j || !Array.isArray(j.presets)) throw new Error("the PC sent no preset list");
+    S.presets = j.presets;
+    S.presetChosen = j.chosen_preset || j.chosen || null;
+    S.presetModel = typeof j.chosen_model === "string" ? j.chosen_model : "";
+    S.presetWords = "";
+    renderPresets();
+    paintCloud();
+  }catch(e){
+    S.presets = [];
+    S.presetChosen = null;
+    S.presetModel = "";
+    renderPresets();
+    presetWords("This PC's Jarvis did not list its focus presets ("
+      + ((e && e.message) || "no answer") + "). Update the backend by running "
+      + "apply-patches.ps1, then reload this window.");
+  }
+}
+
+/** The shell's command bridge, or null in a plain browser. The HUD page
+ *  holds NO token (apps security audit M2): every request it makes goes
+ *  through Rust, which adds it. Reads are redirected by the bootstrap's
+ *  fetch shim to `hud_get`; the preset APPLY is the bar's own command
+ *  `apply_focus_preset`, so the page never posts /api/work/apply itself
+ *  and the PC's ONE switch_model card is raised by that command's route. */
+function shellBridge(){
+  try{
+    const core = window.__TAURI__ && window.__TAURI__.core;
+    return core && typeof core.invoke === "function" ? core : null;
+  }catch(e){ return null; }
+}
+
+/** The PC's answer to one apply, read the same way on both roads. */
+async function applyAnswer(j, status){
+  if(status >= 200 && status < 300 && j && j.ok !== false){
+    // The PC switched lane and model. Clear THIS page's lane override so
+    // the next message is routed by the PC - the bar sends auto:true and
+    // the phone does the same; the applied preset lives on the PC.
+    S.lane = "auto";
+    renderLanes();
+    const model = (j.preset && j.preset.model) || j.model || "";
+    $("chip-model").textContent = model || S.defaultModel || "local model";
+    $("chip-model").className = "chip";
+    await loadPresets();
+    const row = S.presets.find(p => p.id === (j.preset && j.preset.id));
+    presetWords("Now using " + ((row && row.title) || (j.preset && j.preset.title) || "this preset")
+      + " - the next message goes through it.");
+    paintCloud();
+  }else{
+    const why = (j && (j.error || j.reason)) || ("the PC answered " + status);
+    presetWords(typeof why === "string" ? why : "That did not work.");
+    loadPresets();
+  }
+}
+
+/** ONE preset click: ask the PC to apply it. The card is the PC's own; this
+ *  only waits, then says what the PC answered. */
+async function applyPreset(id){
+  if(!id || S.presetBusy) return;
+  S.presetBusy = true;
+  presetWords("Asked the PC. Nothing changes until you answer the card.");
+  try{
+    const shell = shellBridge();
+    if(shell){
+      // Production: the bar's own command - Rust adds the token and posts
+      // /api/work/apply, and refuses a stale link before anything is sent.
+      let j = null;
+      try{ j = await shell.invoke("apply_focus_preset", {preset: id}); }
+      catch(err){
+        presetWords(typeof err === "string" ? err
+          : ((err && err.message) || "The PC refused that; nothing was changed."));
+        loadPresets();
+        return;
+      }
+      await applyAnswer(j, 200);
+      return;
+    }
+    // A plain browser (this page opened outside the shell, as the harness
+    // does): the same POST, which is what Rust would send.
+    const r = await jfetch("/api/work/apply", {
+      method:"POST",
+      headers:{"Content-Type":"application/json", "X-Jarvis-Client":"hud"},
+      body: JSON.stringify({preset: id})
+    });
+    let j = null;
+    try{ j = await r.json(); }catch(e){}
+    await applyAnswer(j, r.status);
+    return;
+  }catch(e){
+    presetWords("The PC did not answer (" + ((e && e.message) || "no answer")
+      + "); nothing was changed.");
+  }finally{
+    S.presetBusy = false;
+  }
+}
+
+/** The ONE Cloud button: route the next message to the cloud lane. It is a
+ *  lane choice, not an apply - no card, exactly as the lane buttons never
+ *  raised one - and it never claims to have switched while the proxy is
+ *  down. */
+function chooseCloud(){
+  const lane = cloudLane();
+  if(!lane){
+    presetWords("This PC has no cloud lane, so nothing was switched.");
+    paintCloud();
+    return;
+  }
+  if(S.proxy !== true){
+    presetWords("The cloud lane is down right now - nothing was switched. "
+      + "Your next message stays on this PC.");
+    paintCloud();
+    return;
+  }
+  S.lane = lane;
+  renderLanes();
+  paintCloud();
+  $("chip-model").textContent = "cloud \u00b7 " + lane.replace("jarvis-", "");
+  $("chip-model").className = "chip hot";
+  presetWords("Cloud: the next message goes to the cloud ("
+    + lane.replace("jarvis-", "") + ").");
+}
+
 function renderLanes(){
   const all = [{id:"auto", label:"auto", tag:"routed"},
                {id:"local", label:S.defaultModel || "local model", tag:"ollama"}]
@@ -2921,6 +3220,10 @@ function renderLanes(){
       renderLanes();
       $("chip-model").textContent = b.querySelector("span").textContent;
       $("chip-model").className = "chip" + (S.lane === "local" ? "" : " hot");
+      // A lane choice is a route, not a preset: the Cloud button follows
+      // it so it is only ever marked while the cloud lane is the one in use.
+      presetWords("");
+      paintCloud();
     }));
 }
 
@@ -2959,6 +3262,9 @@ async function boot(){
     const pm = status.power && (typeof status.power === "string" ? status.power : status.power.mode);
     if (typeof pm === "string" && pm) S.power = pm;
     S.lanes = status.lanes || [];
+    // null, not false: "the PC has not said" is not "down", and the Cloud
+    // button says which one it is looking at.
+    S.proxy = typeof status.proxy === "boolean" ? status.proxy : null;
     S.defaultModel = status.default_model || "local model";
     led("led-ollama", status.ollama);
     led("led-proxy",  status.proxy);
@@ -2975,6 +3281,7 @@ async function boot(){
     led("led-ollama", false, "—");
     led("led-proxy",  false, "—");
     S.lanes = ["jarvis-escalate","jarvis-critic","jarvis-bulk"];
+    S.proxy = false;
     S.defaultModel = "qwen3:8b";
     // The page's own fallback, and the shell's own marker: `recheckBrand`
     // (hud_bootstrap.js) recognises this exact prefix and reloads the window
@@ -2984,6 +3291,10 @@ async function boot(){
   }
 
   renderLanes();
+  renderPresets();
+  paintCloud();
+  // Its own read; it paints when it lands and says plainly if it cannot.
+  loadPresets();
   $("chip-model").textContent = S.defaultModel;
   reactor.set("idle");
   paintHost();
@@ -3636,7 +3947,7 @@ function subscribe(){
 
 // The safety net. Deliberately slow: if the stream is working this is nearly
 // free, and if it is not, this is what keeps the page usable.
-setInterval(() => { apprPoll(); initPoll(); }, 30000);
+setInterval(() => { apprPoll(); initPoll(); loadPresets(); }, 30000);
 // The shell's link push carries who set the power mode (hud_bootstrap.js
 // powerChanged); the `power` event carries only the mode. Registered once,
 // here, not in subscribe(), which runs again on every reconnect.
@@ -3988,7 +4299,11 @@ subscribe();
    *  Built from the SAME .lane buttons renderLanes() draws: choosing an
    *  option clicks that button, so the page's own handler changes the lane
    *  and repaints #lanes - there is one list of lanes, never a copy. */
-  var laneSelect = $("lane-compact");
+  var cloudButton = $("preset-cloud");
+if (cloudButton) {
+  cloudButton.addEventListener("click", chooseCloud);
+}
+var laneSelect = $("lane-compact");
   if (laneSelect) {
     laneSelect.addEventListener("change", function () {
       var buttons = document.querySelectorAll("#lanes .lane");

@@ -472,6 +472,73 @@ await check("CONTROL: the page still works when nothing is refused", async () =>
   for (const name of OFF) assert.equal(list.find((r) => r.name === name).state, "off");
 });
 
+/* ── R6: the Alt+Space startup row and its one-click re-claim ───────────── */
+
+await check("Alt+Space held after the retries is said in plain words", async () => {
+  const page = await open({
+    altSpace: {
+      registered: false, attempts: 3, accelerator: "Alt+Space",
+      reason: "HotKey already registered",
+    },
+  });
+  const row = await page.evaluate(() => {
+    const button = document.getElementById("reclaim-alt-space");
+    return {
+      line: document.getElementById("alt-space-state").textContent,
+      hidden: button.hidden,
+      label: button.textContent.trim(),
+    };
+  });
+  assert.match(row.line, /currently held by another program/i, row.line);
+  // The honest retry count, not just "in use": the startup watcher really
+  // tried 2 s / 6 s / 15 s and the page says so.
+  assert.match(row.line, /retried 3 times/, row.line);
+  assert.equal(row.hidden, false, "the Re-claim button is missing");
+  assert.equal(row.label, "Re-claim Alt+Space");
+  assert.deepEqual(page.__errors, [], page.__errors.join(" | "));
+  await page.close();
+});
+
+await check("Re-claim asks Rust exactly once and shows the state it returned", async () => {
+  const page = await open({
+    altSpace: {
+      registered: false, attempts: 3, accelerator: "Alt+Space",
+      reason: "HotKey already registered",
+    },
+    reclaimAltSpace: {
+      registered: true, attempts: 3, accelerator: "Alt+Space", reason: "",
+    },
+  });
+  await page.evaluate(() => document.getElementById("reclaim-alt-space").click());
+  await page.waitForFunction(
+    () => /Alt\+Space is working/.test(
+      document.getElementById("alt-space-state").textContent),
+    { timeout: 5000 },
+  );
+  const after = await page.evaluate(() => ({
+    line: document.getElementById("alt-space-state").textContent,
+    buttonHidden: document.getElementById("reclaim-alt-space").hidden,
+    calls: window.__calls.filter((call) => call[0] === "reclaim_alt_space").length,
+  }));
+  assert.match(after.line, /Alt\+Space is working/, after.line);
+  assert.equal(after.buttonHidden, true,
+    "the button must go away once the key is really ours");
+  assert.equal(after.calls, 1, `the page asked Rust ${after.calls} times`);
+  assert.deepEqual(page.__errors, [], page.__errors.join(" | "));
+  await page.close();
+});
+
+await check("an already-working Alt+Space offers no button and claims nothing", async () => {
+  const page = await open();
+  const row = await page.evaluate(() => ({
+    line: document.getElementById("alt-space-state").textContent,
+    hidden: document.getElementById("reclaim-alt-space").hidden,
+  }));
+  assert.match(row.line, /Alt\+Space is working/, row.line);
+  assert.equal(row.hidden, true, "a working key still shows a Re-claim button");
+  await page.close();
+});
+
 await browser.close();
 close();
 console.log(fails.length ? `\n${fails.length} failed: ${fails.join(", ")}` : "\nthe shortcuts hold");

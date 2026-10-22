@@ -17,8 +17,23 @@ copy of every module apply-patches.ps1 ships (backend/_where.py SHIPPED),
 side by side, the way they sit on the owner's PC - rebuilt/ flattened in.
 So the suites exercise the shipped LAYOUT, not the repository's folders, and
 a module that only works because of where it sits in this repository fails
-here. Set JARVIS_BACKEND to run against a real backend instead; then nothing
-is staged, and a suite is skipped only if its files are really not there.
+here.
+
+**A DEFAULT RUN IS HERMETIC, AND IT SAYS SO (2026-10-21).** `JARVIS_BACKEND`
+is set for the owner's Windows account on this PC, pointing at the LIVE backend
+folder - so a plain `python -B backend/run_suites.py` used to run the suites
+against the live folder without the person typing anything. That was not a
+choice anybody made in that moment, and it made a routine test run a live-code
+run. Now the ambient variable is **ignored** unless it is asked for:
+`--use-env-backend` runs against whatever `JARVIS_BACKEND` names, and
+`--backend-path DIR` runs against DIR, explicitly. Both are refused when what
+they name is not a folder, and the default prints one line when it had to
+ignore the ambient value, so nobody is surprised. A suite is skipped only if
+its files are really not there, whichever backend is used.
+
+   python3 backend/run_suites.py                       # throwaway copy (default)
+   python3 backend/run_suites.py --backend-path "C:/Users/you/Documents/jarvis-backend"
+   python3 backend/run_suites.py --use-env-backend     # whatever JARVIS_BACKEND says
 
 THE OWNER'S STATE IS LEFT ALONE. The suites run real code that writes -
 the audit log, approval queues, switch files - so each run gets a temporary
@@ -798,6 +813,67 @@ def suite_result(name: str, took: str, code, stdout, stderr, why="") -> tuple:
 LOCK_BYPASS_ENV = "JARVIS_INSIDE_PATCHER"
 LOCK_BYPASS_FLAG = "--ignore-update-lock"
 
+#: The explicit opt-in to run against the backend folder `JARVIS_BACKEND`
+#: names. A DEFAULT run never reads that variable - it is set for the owner's
+#: Windows account on this PC (to the live backend), so reading it meant a
+#: routine test run silently became a live-code run. See `_named_backend`.
+USE_ENV_BACKEND_FLAG = "--use-env-backend"
+#: The explicit way to name a backend folder on the command line, without
+#: relying on any environment variable. What the updater uses, so the update's
+#: own proof run can never be redirected by an ambient variable either.
+BACKEND_PATH_FLAG = "--backend-path"
+
+
+class UsageError(ValueError):
+    """A command line that cannot be honoured; `__main__` prints it and exits 2."""
+
+
+def _named_backend(use_env_backend: bool = False, backend_path=None):
+    """The backend a run must use, or None meaning "stage a throwaway copy".
+
+    THE DEFAULT IS HERMETIC. `JARVIS_BACKEND` is set for the owner's Windows
+    account on this PC, pointing at the LIVE backend folder, so a plain
+    `python -B backend/run_suites.py` used to run the suites against live code
+    without the person typing anything. This pops that ambient value and
+    returns None, so the caller stages its usual copy - and it prints one line
+    when it did, because silently ignoring a setting is its own surprise.
+
+    `--use-env-backend` asks for the ambient value explicitly;
+    `--backend-path DIR` names the folder outright (the updater uses this, so
+    not even a changed environment variable can redirect an update's proof
+    run). Passing both is refused: they can only name different folders.
+    """
+    if use_env_backend and backend_path:
+        raise UsageError(
+            f"{USE_ENV_BACKEND_FLAG} and {BACKEND_PATH_FLAG} name the backend two "
+            "ways; pass one of them")
+    if backend_path:
+        named = Path(os.path.expanduser(str(backend_path))).resolve()
+        if not named.is_dir():
+            raise UsageError(f"{BACKEND_PATH_FLAG} {backend_path!r} is not a folder")
+        print(f"[run_suites] LIVE MODE: running against un-staged backend at "
+              f"{named} ({BACKEND_PATH_FLAG})")
+        return named
+    if use_env_backend:
+        ambient = (os.environ.get("JARVIS_BACKEND") or "").strip()
+        if not ambient:
+            raise UsageError(
+                f"{USE_ENV_BACKEND_FLAG} was given but JARVIS_BACKEND is not set; "
+                f"pass {BACKEND_PATH_FLAG} DIR or set JARVIS_BACKEND")
+        named = Path(os.path.expanduser(ambient)).resolve()
+        if not named.is_dir():
+            raise UsageError(
+                f"JARVIS_BACKEND {ambient!r} is not a folder, so "
+                f"{USE_ENV_BACKEND_FLAG} cannot use it")
+        print(f"[run_suites] LIVE MODE: running against un-staged backend at "
+              f"{named} ({USE_ENV_BACKEND_FLAG})")
+        return named
+    ambient = os.environ.pop("JARVIS_BACKEND", None)
+    if ambient:
+        print("[run_suites] Note: ignoring ambient JARVIS_BACKEND (staging "
+              "hermetic copy; pass --use-env-backend to test live folder)")
+    return None
+
 
 def _update_lock_api():
     """`tools/update_backend.py`, imported for its lock section - or None.
@@ -841,7 +917,8 @@ def update_lock_refusal(ignore: bool = False) -> str:
     return api.lock_refusal_words(state) if state.get("valid") else ""
 
 
-def main(only=(), jobs: int = 1, ignore_update_lock: bool = False) -> int:
+def main(only=(), jobs: int = 1, ignore_update_lock: bool = False,
+         use_env_backend: bool = False, backend_path=None) -> int:
     """Every suite, or only the ones named (`run_suites.py test_x.py ...`).
 
     Refuses immediately (exit 3, nothing staged, no suite started) while a
@@ -850,6 +927,15 @@ def main(only=(), jobs: int = 1, ignore_update_lock: bool = False) -> int:
     lock published while it was staging still stops it. The update's own suite
     phase passes `ignore_update_lock=True` (or sets JARVIS_INSIDE_PATCHER=1),
     which is the only thing that bypasses both checks.
+
+    **The backend it runs against is chosen explicitly** (see
+    `_named_backend`): by default a throwaway copy of the shipped modules is
+    staged and the ambient `JARVIS_BACKEND` is ignored; `--use-env-backend`
+    takes the ambient value and `--backend-path DIR` names a folder. A bad
+    choice (`use_env_backend` for a non-folder, both at once) is a `UsageError`
+    for the caller to print and exit 2; when `main` is called programmatically
+    from the suites the refused value must not be silently replaced by a
+    staged copy, so the error is raised rather than swallowed.
 
     `jobs` is how many suites to run at once: **1 by default, and that is what
     CI runs**, so the ordinary output is byte-for-byte what it has always been.
@@ -878,10 +964,11 @@ def main(only=(), jobs: int = 1, ignore_update_lock: bool = False) -> int:
         print("Not run: nothing was staged and no suite was started.", file=sys.stderr)
         return 3
     jobs = max(1, int(jobs))
+    backend = _named_backend(use_env_backend, backend_path)
     root = Path(tempfile.mkdtemp(prefix=SWEEP_PREFIX))
     lock = claim(root, "sweep")
     try:
-        return _sweep(root, only, jobs, ignore_update_lock)
+        return _sweep(root, only, jobs, ignore_update_lock, backend)
     finally:
         # The lock goes FIRST: on Windows a file this process still holds open
         # cannot be deleted, so the marker would keep the whole folder alive -
@@ -1006,22 +1093,27 @@ def _sweep_parallel(suites: list, backend: Path, worker_envs: list, ran: dict,
 
 
 def _sweep(root: Path, only=(), jobs: int = 1,
-           ignore_update_lock: bool = False) -> int:
+           ignore_update_lock: bool = False, named_backend: "Path|None" = None) -> int:
     """One run, inside `root`: reap what a dead run left, stage, run each
     suite, report. Never called except from `main`, which owns `root`.
 
     `ignore_update_lock` is the update's own suite phase (see `main`); the
     second lock check below must respect the same bypass and must run after the
     backend is staged, so an update that starts while this run is staging is
-    still refused."""
+    still refused.
+
+    `named_backend` is the folder `main` resolved from an EXPLICIT
+    `--use-env-backend` / `--backend-path`; None means the default: stage a
+    throwaway copy. The ambient `JARVIS_BACKEND` is never read here - `main`
+    has already decided (and popped it when the run is hermetic)."""
     jobs = max(1, int(jobs))
     reaped = reap_orphans(keep=(root,))
     if reaped:
         print(f"reaped {len(reaped)} staging folder(s) an earlier run left behind: "
               + ", ".join(reaped))
-    real = os.environ.get("JARVIS_BACKEND")
-    backend = Path(real).resolve() if real else stage(root)
-    print(f"backend: {backend}" + ("" if real else "  (staged: every shipped module, flattened)"))
+    backend = Path(named_backend).resolve() if named_backend else stage(root)
+    print(f"backend: {backend}"
+          + ("" if named_backend else "  (staged: every shipped module, flattened)"))
     # S4: the check at the top of `main()` is not the last word - a lock can be
     # published while this run is staging the backend (that staging can take a
     # second). Ask again immediately before the first suite starts; on a
@@ -1074,8 +1166,9 @@ def _sweep(root: Path, only=(), jobs: int = 1,
               f"state-1 .. state-{jobs})")
         _sweep_parallel(suites, backend, worker_envs, ran, passed, failed, skipped)
     # No rmtree here any more: `root` - which holds the staged backend (unless
-    # JARVIS_BACKEND named a real one), the state folder and the suites' own
-    # scratch - is removed by main()'s `finally`, on every path out of here.
+    # an EXPLICIT --use-env-backend / --backend-path named a real one), the
+    # state folder and the suites' own scratch - is removed by main()'s
+    # `finally`, on every path out of here.
     print(f"\n{ran['passed']} passed, {ran['skipped']} skipped, {ran['failed']} failed")
     if ran["skipped"] or skipped:
         print(f"      (a skip is a check that could not run here: {ran['skipped']} inside the "
@@ -1110,7 +1203,14 @@ def state_env(where: str) -> int:
     suites directly, and that alone gave them the config's
     log_directory = "~/.openjarvis/logs/" - the owner's REAL audit log. The
     logging-machinery suites (LOG_MACHINERY_SUITES) clear it themselves, because
-    this list cannot vary per suite."""
+    this list cannot vary per suite.
+
+    THIS IS THE ONE PLACE THAT STILL READS THE AMBIENT JARVIS_BACKEND, on
+    purpose: `--state-env` is the patcher's own subcommand, and apply-patches.ps1
+    sets `$env:JARVIS_BACKEND` in its own process right before calling it (see
+    its test loop), so the value is the patcher's explicit choice for this run,
+    not an ambient surprise. A normal suite run never reaches this branch and
+    never reads the variable (see `_named_backend`)."""
     backend = Path(os.environ.get("JARVIS_BACKEND") or HERE).resolve()
     env = private_state(dict(os.environ), backend, Path(where))
     for k in ("OPENJARVIS_CONFIG_DIR", "JARVIS_CONFIG_DIR", "JARVIS_FRAMEWORK_TOML",
@@ -1125,6 +1225,8 @@ if __name__ == "__main__":
     args = list(sys.argv[1:])
     jobs = 1
     ignore_update_lock = False
+    use_env_backend = False
+    backend_path = None
     if LOCK_BYPASS_FLAG in args:
         # The update's own suite phase: it holds the lock, so it must not
         # refuse itself. Any other caller asking for this is saying "I know an
@@ -1140,7 +1242,26 @@ if __name__ == "__main__":
                   file=sys.stderr)
             sys.exit(2)
         del args[at:at + 2]
+    if USE_ENV_BACKEND_FLAG in args:
+        use_env_backend = True
+        args.remove(USE_ENV_BACKEND_FLAG)
+    if BACKEND_PATH_FLAG in args:
+        at = args.index(BACKEND_PATH_FLAG)
+        try:
+            backend_path = args[at + 1]
+        except IndexError:
+            print(f"FAIL  {BACKEND_PATH_FLAG} needs a folder, e.g. "
+                  f'{BACKEND_PATH_FLAG} "C:\\Users\\you\\Documents\\jarvis-backend"',
+                  file=sys.stderr)
+            sys.exit(2)
+        del args[at:at + 2]
     if len(args) == 2 and args[0] == "--state-env":
         sys.exit(state_env(args[1]))
-    sys.exit(main(tuple(a for a in args if a.startswith("test_")),
-                  max(1, jobs), ignore_update_lock=ignore_update_lock))
+    try:
+        sys.exit(main(tuple(a for a in args if a.startswith("test_")),
+                      max(1, jobs), ignore_update_lock=ignore_update_lock,
+                      use_env_backend=use_env_backend,
+                      backend_path=backend_path))
+    except UsageError as exc:
+        print(f"FAIL  {exc}", file=sys.stderr)
+        sys.exit(2)

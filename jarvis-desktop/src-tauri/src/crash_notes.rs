@@ -11,9 +11,11 @@
 //!
 //! WHY A SEPARATE FILE, NOT MORE LINES IN THE EXISTING LOG
 //!
-//! `logfile.rs`'s own doc comment is explicit that its two logs have "no
-//! redaction pass" and rely on discipline about what is ever printed to
-//! them. A panic message is NOT under that discipline - it is whatever
+//! `logfile.rs`'s own doc comment is explicit that its two logs rely on
+//! discipline about what is ever printed to them; since R4 (2026-10-21) the
+//! desktop lines also pass a best-effort scrubber, but a pattern list is not a
+//! guarantee and this file predates that change. A panic message is NOT under
+//! that discipline - it is whatever
 //! `std::fmt::Display`/`Debug` happened to produce for the value that broke,
 //! which can legitimately be a file path carrying the owner's Windows user
 //! name, or - if a future bug ever formats one into an error - a token or a

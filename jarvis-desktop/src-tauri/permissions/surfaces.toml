@@ -474,6 +474,13 @@ permissions = [
   "allow-get-hotkeys",
   "allow-set-hotkeys",
   "allow-reset-hotkeys",
+  # R6 (2026-10-21): the startup verdict for Alt+Space and its one-click
+  # re-claim. READ-ONLY (the status) plus ONE registration attempt (the
+  # button) - it never rebinds, never changes another key, and can only try
+  # the key already configured for the summon action. Settings-only for the
+  # same reason the three above are: a key is a machine-wide binding.
+  "allow-alt-space-status",
+  "allow-reclaim-alt-space",
   # Updates. `install_update` replaces the running executable, which is the
   # largest single thing this app can do to the machine — so it lives here,
   # behind the window a person has to open deliberately, and it is a separate
@@ -814,10 +821,11 @@ permissions = [
   "allow-start-backend",
   "allow-stop-backend",
   # Diagnostics. `get_log_info` returns paths and sizes, never contents - the
-  # log is plain text with no redaction pass and must not become readable by a
-  # page just because the page can ask where it is. `open_log_folder` hands a
-  # directory to Explorer and takes no argument at all, so there is nothing a
-  # caller can point it at.
+  # log is plain text (desktop lines pass a best-effort redactor, R4; a pattern
+  # list is not a guarantee) and must not become readable by a page just because
+  # the page can ask where it is. `open_log_folder` hands a directory to
+  # Explorer and takes no argument at all, so there is nothing a caller can
+  # point it at.
   "allow-get-log-info",
   "allow-open-log-folder",
   # Starting with Windows. A registry write under HKEY_CURRENT_USER\...\Run,

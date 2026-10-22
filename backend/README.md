@@ -420,6 +420,20 @@ ships; the suites that need your own `jarvis_hud.py`, `jarvis_gate.py` or
 `jarvis_extract.py` are skipped there, by name, so your PC is the only place
 those run.
 
+**The runner is hermetic by default (2026-10-21, Ruling 11).** `backend/run_suites.py`
+now **ignores the ambient `JARVIS_BACKEND`** unless it is asked for explicitly: a plain run
+stages a throwaway copy of the shipped modules - exactly what CI runs - and prints one note
+line saying so. That variable is set for the owner's Windows account on this PC, pointing at
+the LIVE backend, so before this a routine `py -3 backend\run_suites.py` silently tested live
+code. Two explicit modes exist, each announced with a `LIVE MODE` banner:
+`py -3 backend\run_suites.py --use-env-backend` runs against whatever `JARVIS_BACKEND` names,
+and `py -3 backend\run_suites.py --backend-path "<your backend folder>"` runs against that
+folder outright - which is what the updater uses, so an update's proof run can never be
+redirected by an environment variable. The "Test it" lines below that set `JARVIS_BACKEND` and
+then run a test file DIRECTLY are unchanged; this is only about the runner.
+`test_suites_env.py` holds the canary proof, and it bites: the old runner fails 10 of its
+checks, the new one passes all of them.
+
 **When a suite fails there, the whole reason is printed.** It used to print
 the last 25 lines of that suite and nothing else, and on 2026-10-05 that cost
 a diagnosis: `test_gate_push.py` failed one check out of 36 in its *second*
