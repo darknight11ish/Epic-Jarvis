@@ -1062,6 +1062,158 @@ await check("at every CSS width a 150%-DPI window can produce, the pills stay in
   assert.deepEqual(problems, []);
 });
 
+
+/* The Telemetry drawer must always have a way out. Owner bug report
+ * 2026-10-21: "if i open telemetry on the jarvis HUD, i have no way of closing
+ * it. The telemetry button is blocked". The drawer is a fixed panel over the
+ * top-right of the page, and the toggle that opens it sat UNDER it, so once
+ * open there was nothing left to click; the old check only knew Escape.
+ *
+ * These checks open it in the two places where it is an overlay - a 900px
+ * window (the drawer below 1080px) and Ambient at a wide 1280px - and prove
+ * BOTH controls are visible AND hit-testable (the centre of each really is
+ * that button, not the drawer over it), and that each of the three ways out -
+ * the toggle again, the drawer's own Close button, Escape - closes it and puts
+ * focus back on the toggle. */
+
+async function drawerState(page) {
+  return page.evaluate(() => {
+    const toggle = document.getElementById("rail-toggle");
+    const rail = document.getElementById("rail-right");
+    const close = document.getElementById("rail-close");
+    const box = (node) => {
+      if (!node) return null;
+      const r = node.getBoundingClientRect();
+      const cs = getComputedStyle(node);
+      const cx = r.x + r.width / 2;
+      const cy = r.y + r.height / 2;
+      const onScreen = cx > 0 && cy > 0 && cx < innerWidth && cy < innerHeight;
+      const hit = onScreen ? document.elementFromPoint(cx, cy) : null;
+      return {
+        visible: cs.display !== "none" && cs.visibility !== "hidden" &&
+                 r.width > 1 && r.height > 1 && r.right > 0 && r.x < innerWidth,
+        hitSelf: Boolean(hit && (hit === node || node.contains(hit))),
+        x: Math.round(r.x),
+        text: (node.textContent || "").trim(),
+        display: cs.display,
+      };
+    };
+    const railBox = rail.getBoundingClientRect();
+    return {
+      vw: innerWidth,
+      open: rail.classList.contains("open"),
+      onScreen: railBox.width > 1 && railBox.x >= 0 && railBox.x < innerWidth,
+      toggle: box(toggle),
+      close: box(close),
+      expanded: toggle.getAttribute("aria-expanded"),
+      controls: toggle.getAttribute("aria-controls"),
+      active: document.activeElement && document.activeElement.id,
+    };
+  });
+}
+
+for (const [name, width, height, layout] of [
+  ["a 900x700 window", 900, 700, "cockpit"],
+  ["Ambient at a wide 1280x820", 1280, 820, "ambient"],
+]) {
+  await check(`the Telemetry drawer always has a way out (${name})`, async () => {
+    const { page, problems } = await openHud(
+      browser, { jarvis: false, ollama: true, proxy: false }, { viewport: { width, height } });
+    if (layout !== "cockpit") {
+      await page.click(`[data-hud-layout-choice="${layout}"]`);
+      await K.until(page, `the page to switch to ${layout}`, async () =>
+        (await page.evaluate(() => document.body.dataset.hudLayout)) === layout, { ms: 5000 });
+    }
+    await page.waitForTimeout(450);
+
+    const before = await drawerState(page);
+    assert.ok(before.toggle && before.toggle.visible && before.toggle.hitSelf,
+      `the Telemetry toggle is not visible and clickable before opening (${JSON.stringify(before.toggle)})`);
+    assert.ok(!before.open && !before.onScreen, "the drawer starts open");
+    assert.equal(before.controls, "rail-right",
+      "the toggle does not name the drawer it controls");
+    assert.equal(before.expanded, "false", "the toggle does not start closed");
+    assert.equal(before.toggle.text, "Telemetry", before.toggle.text);
+
+    await page.click("#rail-toggle");
+    await page.waitForTimeout(500);
+    const open = await drawerState(page);
+    assert.ok(open.open && open.onScreen, "clicking the toggle did not open the drawer");
+    assert.equal(open.expanded, "true", "aria-expanded did not say the drawer is open");
+    assert.equal(open.toggle.text, "Hide telemetry",
+      "the open toggle does not offer the way out");
+    assert.ok(open.toggle.hitSelf,
+      `the toggle is covered by the open drawer (${JSON.stringify(open.toggle)})`);
+    assert.ok(open.close && open.close.visible && open.close.hitSelf,
+      `the open drawer has no visible, clickable Close button (${JSON.stringify(open.close)})`);
+
+    // 1. The drawer's own Close button.
+    await page.click("#rail-close");
+    await page.waitForTimeout(400);
+    const clicked = await drawerState(page);
+    assert.ok(!clicked.open && !clicked.onScreen, "the Close button did not close the drawer");
+    assert.equal(clicked.expanded, "false", "aria-expanded still says open after Close");
+    assert.equal(clicked.active, "rail-toggle", "Close did not return focus to the toggle");
+
+    // 2. Escape.
+    await page.click("#rail-toggle");
+    await page.waitForTimeout(400);
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(400);
+    const escaped = await drawerState(page);
+    assert.ok(!escaped.open, "Escape did not close the drawer");
+    assert.equal(escaped.expanded, "false", "aria-expanded still says open after Escape");
+    assert.equal(escaped.active, "rail-toggle", "Escape did not return focus to the toggle");
+
+    // 3. The toggle itself, which used to be under the drawer.
+    await page.click("#rail-toggle");
+    await page.waitForTimeout(400);
+    await page.click("#rail-toggle");
+    await page.waitForTimeout(400);
+    const toggled = await drawerState(page);
+    assert.ok(!toggled.open, "clicking the open toggle did not close the drawer");
+    assert.equal(toggled.expanded, "false", "aria-expanded still says open after the second click");
+    assert.equal(toggled.toggle.text, "Telemetry", "the closed toggle did not go back to its label");
+    await page.close();
+    assert.deepEqual(problems, []);
+  });
+}
+
+await check("Cockpit keeps the grid rail with no drawer toggle, and Studio's tabs still switch", async () => {
+  const { page, problems } = await openHud(
+    browser, { jarvis: false, ollama: true, proxy: false }, { viewport: { width: 1280, height: 820 } });
+  await page.waitForTimeout(300);
+  const cockpit = await page.evaluate(() => {
+    const toggle = document.getElementById("rail-toggle");
+    const close = document.getElementById("rail-close");
+    const rail = document.getElementById("rail-right");
+    const r = rail.getBoundingClientRect();
+    return {
+      layout: document.body.dataset.hudLayout,
+      toggleDisplay: getComputedStyle(toggle).display,
+      closeDisplay: getComputedStyle(close).display,
+      railVisible: getComputedStyle(rail).display !== "none" && r.width > 1 && r.x < innerWidth,
+    };
+  });
+  assert.equal(cockpit.layout, "cockpit", "the HUD no longer boots in Cockpit");
+  assert.equal(cockpit.toggleDisplay, "none",
+    "the Telemetry drawer toggle is shown in the Cockpit layout");
+  assert.equal(cockpit.closeDisplay, "none",
+    "the drawer's Close button is shown in the Cockpit grid");
+  assert.ok(cockpit.railVisible, "the Cockpit rail is not in the grid");
+  await page.click('[data-hud-layout-choice="studio"]');
+  await K.until(page, "the page to switch to studio", async () =>
+    (await page.evaluate(() => document.body.dataset.hudLayout)) === "studio", { ms: 5000 });
+  await page.click('[data-hud-tab-choice="telemetry"]');
+  await K.until(page, "Studio's Telemetry tab", async () =>
+    (await page.evaluate(() => document.body.dataset.hudTab)) === "telemetry", { ms: 5000 });
+  assert.equal(await page.evaluate(() =>
+    document.getElementById("rail-right").getBoundingClientRect().width > 1), true,
+    "Studio's Telemetry tab no longer shows the rail");
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
 /** #brand-sub as text, read without throwing while the window reloads itself. */
 function brandOf(page) {
   return page
