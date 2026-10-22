@@ -103,4 +103,22 @@ class FeatureDirectoryTest {
         assertTrue("a PC-Only row never offers a phone switch",
             pcOnly.all { it.switchKeys.isEmpty() && !it.isToggle })
     }
+
+    @Test
+    fun `the switches with no Settings row of their own are still findable`() {
+        // These are the BOOL_SETTINGS names the phone has no Settings row for
+        // (Brain, a plate, or the PC changes them). The directory is the answer
+        // that search points at, so every one must find at least one row.
+        val names = listOf(
+            "background learning", "sensitive topics", "ask before every search",
+            "sandbox", "media index", "pictures", "briefing senders", "big coder",
+            "big model", "alarm sounds", "reminder sounds", "briefing notification",
+            "handoff notification", "quiet hours", "voice follows the face",
+            "better voice", "write like me", "second card",
+        )
+        for (name in names) {
+            assertTrue("the directory cannot answer: $name",
+                FeatureSearch.search(name).isNotEmpty())
+        }
+    }
 }
