@@ -205,6 +205,10 @@ const dom = {
   saveHotkeys: $("save-hotkeys"),
   resetHotkeys: $("reset-hotkeys"),
   hotkeyStatus: $("hotkey-status"),
+  altSpaceState: $("alt-space-state"),
+  altSpaceHint: $("alt-space-hint"),
+  reclaimAltSpace: $("reclaim-alt-space"),
+  altSpaceStatus: $("alt-space-status"),
 
   aboutVersion: $("about-version"),
 
@@ -1233,6 +1237,70 @@ dom.openLogs.addEventListener("click", async () => {
 
 /** The bindings as last read from Rust, keyed by action id. */
 let hotkeys = [];
+
+/* == alt-space settings begin ==
+   R6 (2026-10-21): the honest Alt+Space state and its one-click re-claim.
+
+   The startup retry (hotkeys.rs) tries the summon key at 2 s / 6 s / 15 s
+   after login; if another program still holds it, this row says so in plain
+   words and offers ONE button that asks Rust to try once more. It never
+   rebinds anything, and it never blames "another app" for a key the owner
+   simply left off.
+
+   The functions below are PURE on purpose (no DOM, no invoke) so
+   `tests/hotkeys.mjs` can drive the words and the command seam; the page
+   supplies the real elements and the real invoke. */
+
+/** The words + button for one status from `alt_space_status`. */
+function altSpaceView(status) {
+  if (!status || typeof status !== "object") {
+    return {
+      line: "Alt+Space: Jarvis could not check what holds it. You can try claiming it back.",
+      button: "Re-claim Alt+Space",
+      canReclaim: true,
+    };
+  }
+  if (status.registered) {
+    return {
+      line: "Alt+Space is working. Jarvis is listening for it from anywhere.",
+      button: "Re-claim Alt+Space",
+      canReclaim: false,
+    };
+  }
+  const tries = Number(status.attempts) || 0;
+  const retried = tries > 0
+    ? ` Jarvis retried ${tries} time${tries === 1 ? "" : "s"} after logon.`
+    : "";
+  return {
+    line: "Alt+Space is currently held by another program on this PC."
+      + retried + " The tray still opens the Jarvis bar.",
+    button: "Re-claim Alt+Space",
+    canReclaim: true,
+  };
+}
+
+/** Paints one status into the row's elements and returns the view used. */
+function paintAltSpace(status, ui) {
+  const view = altSpaceView(status);
+  ui.state.textContent = view.line;
+  ui.button.textContent = view.button;
+  ui.button.hidden = !view.canReclaim;
+  return view;
+}
+
+/**
+ * The button's seam: ONE command call, then paint what Rust answered.
+ * `call` and `render` are injected so a test proves the wiring without a
+ * window: the button must ask `reclaim_alt_space` exactly once and show the
+ * status it got back - including when it is still refused.
+ */
+async function reclaimAltSpace(call, render) {
+  const status = await call("reclaim_alt_space");
+  render(status);
+  return status;
+}
+
+/* == alt-space settings end == */
 /** The row currently listening, if any. */
 let recording = null;
 
@@ -1460,6 +1528,56 @@ dom.resetHotkeys.addEventListener("click", async () => {
 });
 
 loadHotkeys();
+
+/* R6: the Alt+Space row above the shortcut list. Read once when Settings
+   opens (the startup retries may still have been running when the window was
+   created), and repaint on the event the watcher emits while this page is
+   open. The button is the only thing here that changes anything. */
+async function loadAltSpace() {
+  try {
+    paintAltSpace(await invoke("alt_space_status"), {
+      state: dom.altSpaceState,
+      button: dom.reclaimAltSpace,
+    });
+  } catch (error) {
+    report(dom.altSpaceStatus, String(error.message || error), "bad");
+  }
+}
+
+dom.reclaimAltSpace.addEventListener("click", async () => {
+  dom.reclaimAltSpace.disabled = true;
+  try {
+    const status = await reclaimAltSpace(
+      (command) => invoke(command),
+      (next) => paintAltSpace(next, {
+        state: dom.altSpaceState,
+        button: dom.reclaimAltSpace,
+      }),
+    );
+    report(
+      dom.altSpaceStatus,
+      status && status.registered
+        ? "Alt+Space claimed. Jarvis is listening for it from anywhere."
+        : "Still held by another program. The tray still opens the Jarvis bar.",
+      status && status.registered ? "ok" : "bad",
+    );
+  } catch (error) {
+    report(dom.altSpaceStatus, String(error.message || error), "bad");
+  } finally {
+    dom.reclaimAltSpace.disabled = false;
+  }
+});
+
+if (IS_TAURI && TAURI.event) {
+  TAURI.event.listen("alt-space-state", (event) => {
+    paintAltSpace(event.payload, {
+      state: dom.altSpaceState,
+      button: dom.reclaimAltSpace,
+    });
+  });
+}
+
+loadAltSpace();
 
 /* ==========================================================================
    Security - Windows Hello
