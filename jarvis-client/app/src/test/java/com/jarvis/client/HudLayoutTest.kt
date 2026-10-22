@@ -144,6 +144,9 @@ class HudLayoutTest {
     @Test
     fun `a copy for the owner is normalized and the built-in itself never changes`() {
         val d = HudLayout.defaults()
+        // The Default PRESET is its own arrangement, not HudLayout.defaults();
+        // the rule is that the built-in data does not change when a copy is made.
+        val builtInDefault = HudLayout.BUILT_IN_PRESETS.first { it.id == "default" }.layout
         val copy = HudLayout.copyAs("  My   evening  ", d)
         assertFalse(copy.builtIn)
         assertTrue(copy.id.startsWith("custom."))
@@ -151,7 +154,7 @@ class HudLayoutTest {
         assertEquals(HudLayout.defaults(), copy.layout)
         val changed = HudLayout.apply(copy.layout, HudLayout.Action.Reset)
         assertEquals(HudLayout.defaults(), changed)
-        assertEquals("the built-in is still the default", HudLayout.defaults(),
+        assertEquals("the built-in preset is untouched by a copy", builtInDefault,
             HudLayout.BUILT_IN_PRESETS.first { it.id == "default" }.layout)
         // A title that cannot be an id still gets a safe one.
         val odd = HudLayout.copyAs("!!!", d)

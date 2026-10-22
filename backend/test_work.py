@@ -799,8 +799,11 @@ def t_the_phone_reads_the_same_words():
     if not kt.is_file():
         return
     src = kt.read_text(encoding="utf-8")
-    check("... with the same routes", all(
-        r in src for r in ("/api/work", "/api/work/recommend", "/api/work/choose")))
+    # F11 (2026-10-22): the phone no longer builds the dead recommend route;
+    # the PC keeps it, and `POST /api/work/choose` stays handled/unified.
+    check("... with the routes the phone still uses",
+          all(r in src for r in ("/api/work", "/api/work/choose"))
+          and "RECOMMEND_PATH" not in src)
     check("... with the model-switch route named as the only step route",
           'SWITCH_PATH = "/api/models/switch"' in src)
     check("... and the five ids the PC sends", all(f'"{i}"' in src for i in W.SETUP_IDS))
@@ -812,9 +815,11 @@ def t_the_phone_reads_the_same_words():
           str(phone_test))
     if phone_test.is_file():
         t = phone_test.read_text(encoding="utf-8")
-        check("... including the two rules that matter most",
-              "a recommendation never switches a model on its own" in t
-              and "the explanation is on screen before the choice is applied" in t)
+        # F11 removed the phone offer surface, and with it that Kotlin test;
+        # the rule that remains is the other half - the explanation is on
+        # screen before a choice is applied.
+        check("... including the rule that the explanation is on screen first",
+              "the explanation is on screen before the choice is applied" in t)
     golden = (REPO / "jarvis-client" / "app" / "src" / "test" / "resources" / "contract"
               / "work-setups-cases.json")
     check("the golden file the phone reads is the one the tool writes", golden.is_file())
@@ -826,61 +831,45 @@ def t_the_phone_reads_the_same_words():
                   for i in range(len(W.SETUP_IDS))))
 
 
-def t_the_offer_is_not_wired_into_a_turn_yet():
-    """The branch's ONE honest gap, held by a test rather than by a sentence.
+def t_the_offer_surface_is_gone():
+    """F11 (2026-10-22): the dead phone-side work offer was REMOVED.
 
-    `JarvisRuntime.offerWorkSetup` is the only thing in either app that would
-    POST `/api/work/recommend`, and no Kotlin file under the phone's `main`
-    calls it - so the offer panel `HardwarePlate.kt` draws from
-    `JarvisRuntime.workOffer` can never be populated. `docs/WORK-SETUPS.md` and
-    `tools/check_parity.py` said otherwise, and `check_parity.py` went on saying
-    it because a route LITERAL is not a call.
-
-    This check is what makes that visible. It fails the day someone really does
-    wire the offer up (which is wanted), so the docs and the checker's
-    `UNREACHABLE` declaration have to be corrected in the same commit - and it
-    fails the day the function disappears, so the note cannot outlive the code.
-    `backend/test_parity_callgraph.py` proves the checker's own half."""
-    runtime = (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com"
-               / "jarvis" / "client" / "JarvisRuntime.kt")
+    `/api/work/recommend` was built only by `JarvisRuntime.offerWorkSetup`, and
+    nothing under the phone's `main` called it - so the offer panel could never
+    be populated. The owner's ruling was to remove that dead surface from the
+    phone and keep `POST /api/work/choose` handled and unified (the PC route
+    and the docs/parity side are Session A's). This check holds the removal, so
+    the surface cannot creep back without this file being updated on purpose.
+    """
+    client = (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com"
+              / "jarvis" / "client")
+    runtime = client / "JarvisRuntime.kt"
     if not runtime.is_file():
         check("the phone's runtime is in this checkout", False, str(runtime))
         return
     src = runtime.read_text(encoding="utf-8")
-    check("offerWorkSetup is still the phone's offer, in JarvisRuntime",
-          "fun offerWorkSetup(" in src and "WorkSetups.RECOMMEND_PATH" in src)
-    # A CALL is `offerWorkSetup(`, never the declaration the line above holds,
-    # and never a KDoc mention.
-    called_on = re.compile(r"(?<![\w])(?<!fun\s)offerWorkSetup\s*\(")
-    files_calling_it = []
-    for kt in runtime.parent.parent.rglob("*.kt"):
-        if called_on.search(kt.read_text(encoding="utf-8", errors="replace")):
-            files_calling_it.append(kt.name)
-    check("NOTHING calls offerWorkSetup yet, so the offer panel cannot fill",
-          files_calling_it == [],
-          f"a call site in {sorted(files_calling_it)}; if that is a real caller, "
-          "delete UNREACHABLE in tools/check_parity.py, correct "
-          "docs/WORK-SETUPS.md, and replace this check")
-
-    parity = (REPO / "tools" / "check_parity.py")
-    check("tools/check_parity.py is in the repository", parity.is_file())
-    if parity.is_file():
-        text = parity.read_text(encoding="utf-8")
-        check("... and it declares this route unreachable, with the reason",
-              '"/api/work/recommend": (' in text
-              and "UNREACHABLE" in text
-              and "offerWorkSetup" in text)
-    suite = HERE / "test_parity_callgraph.py"
-    check("... and the suite that proves that declaration cannot go stale is here",
-          suite.is_file(), str(suite))
+    check("the runtime has no work-offer function or state left",
+          "offerWorkSetup" not in src and "workOffer" not in src)
+    posts = []
+    for kt in client.rglob("*.kt"):
+        body = kt.read_text(encoding="utf-8", errors="replace")
+        if "RECOMMEND_PATH" in body:
+            posts.append(kt.name)
+    check("nothing under the phone's main builds the dead recommend route",
+          posts == [], f"still built by {sorted(posts)}")
+    work = client / "net" / "WorkSetups.kt"
+    kt = work.read_text(encoding="utf-8")
+    check("... and POST /api/work/choose is still the one work-setup write",
+          'CHOOSE_PATH = "/api/work/choose"' in kt)
+    api = (client / "net" / "JarvisApi.kt").read_text(encoding="utf-8")
+    check("... and the API layer serves exactly that route",
+          "path != WorkSetups.CHOOSE_PATH" in api)
 
 
-def t_the_phone_cannot_switch_a_model_from_an_offer():
-    """Read the phone's own runtime. The offer may ask the PC one thing only -
-    `/api/work/recommend` - and the switch is reached from the CHOSEN setup's
-    step and nowhere else. This is the half the Kotlin test cannot see: that
-    test proves what the PC's answer says, and this proves the client does not
-    act on it."""
+def t_the_phone_switches_a_model_only_from_a_chosen_setups_step():
+    """Read the phone's own runtime. A model switch is reached from the CHOSEN
+    setup's step and nowhere else - the Kotlin test proves what the PC's answer
+    says, and this proves the client does not act on anything else."""
     kt = (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis"
           / "client" / "JarvisRuntime.kt")
     if not kt.is_file():
@@ -900,13 +889,6 @@ def t_the_phone_cannot_switch_a_model_from_an_offer():
         rest = [i for i in (end, stop) if i != -1]
         return src[line:min(rest)] if rest else src[line:]
 
-    offer = body("offerWorkSetup")
-    check("offerWorkSetup posts ONLY the recommend route",
-          "WorkSetups.RECOMMEND_PATH" in offer)
-    check("... and never the switch route", "SWITCH_PATH" not in offer)
-    check("... and never a hardware POST", "hardwarePost" not in offer)
-    check("... and stores the offer only when the PC said it offered one",
-          "takeIf { it.offered }" in offer)
     step = body("workSetupStep")
     check("the step is posted through the EXISTING hardware switch route",
           "api.hardwarePost(ask.route, ask.body)" in step)
@@ -915,6 +897,8 @@ def t_the_phone_cannot_switch_a_model_from_an_offer():
     check("choosing posts only the choose route",
           "WorkSetups.CHOOSE_PATH" in choice and "SWITCH_PATH" not in choice
           and "hardwarePost" not in choice)
+    check("the offer route is not reachable from either",
+          "RECOMMEND_PATH" not in step and "RECOMMEND_PATH" not in choice)
 
 
 def main():
