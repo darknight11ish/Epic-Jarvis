@@ -136,6 +136,11 @@ async function openHud(browser, status, pageOptions = {}) {
       window.__TAURI__ = { core: { Channel, invoke: async (cmd, args) => {
         window.__invokes.push([cmd, cmd === "hud_chat" ? { body: args.body } : args]);
         switch (cmd) {
+          case "get_hud_layout":
+            // H1: the injected bootstrap reads the saved layout. With no
+            // saved document it leaves the page's own look alone, which is
+            // what these page tests assume.
+            return { layout: null, source: "none" };
           case "summon_push_to_talk":
             if (mode === "fail") throw new Error("not allowed on window");
             return null;
@@ -1495,7 +1500,7 @@ await check("the HUD page holds no token, and every request it makes goes throug
   assert.deepEqual(direct, [], `the page reached the backend by itself: ${JSON.stringify(direct)}`);
   assert.equal(chats.length, 1, "the chat did not reach the backend through the shell");
   assert.ok(log.some((m) => m.who === "jarvis" && m.body === "Hello from the backend."), JSON.stringify(log));
-  assert.deepEqual(held.invoked.filter((c) => !["hud_chat", "hud_get"].includes(c)), [],
+  assert.deepEqual(held.invoked.filter((c) => !["hud_chat", "hud_get", "get_hud_layout"].includes(c)), [],
     `the HUD called ${JSON.stringify(held.invoked)}`);
   // Every read is one hud_proxy.rs allows (HUD_GET_PATHS and /api/retrieve).
   const rust = readFileSync(join(HERE, "..", "src-tauri", "src", "hud_proxy.rs"), "utf8");
@@ -1626,7 +1631,8 @@ await check("the HUD mic opens the quickbar's push-to-talk, and records nothing 
     pressed: document.getElementById("mic").getAttribute("aria-pressed"),
   }));
   await page.close();
-  assert.deepEqual(after.invokes.map((c) => c[0]).filter((c) => c !== "hud_get"), ["summon_push_to_talk"],
+  assert.deepEqual(after.invokes.map((c) => c[0]).filter((c) => c !== "hud_get" && c !== "get_hud_layout"),
+    ["summon_push_to_talk"],
     "the mic must ask the shell for the quickbar's push-to-talk, and nothing else");
   assert.equal(after.listening, false, "the page's own (browser) recogniser started");
   assert.equal(after.pressed, "false");
@@ -1674,7 +1680,14 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
       // the BAR'S OWN `apply_focus_preset` (its one "Use this preset"), so
       // the PC raises the same switch_model card and the page never posts
       // /api/work/apply itself; the read is hud_get's /api/presets.
-      "focus-presets"]);
+      "focus-presets",
+      // H1 of the editable-HUD design (2026-10-21): the injected bootstrap
+      // reads the saved layout so the page can wear the owner's preset. READ
+      // ONLY: the Settings window's picker holds the write; the HUD page still
+      // cannot save a layout, and it still holds no pairing token.
+      "hud-layout-read"]);
+  assert.equal(cap.permissions.includes("hud-layout-write"), false,
+    "the HUD page was granted the layout WRITE; only the Settings picker may save one");
   assert.match(cap.description, /holds NO pairing token/);
   assert.doesNotMatch(cap.description, /worst any drop of that page can do with it is open a window/);
   assert.match(cap.description, /hud-approvals/,
