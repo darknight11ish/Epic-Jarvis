@@ -218,7 +218,9 @@ jobs:
         with:
           name: jarvis-desktop-${{ steps.plan.outputs.version }}
           path: jarvis-desktop/dist/*
-          retention-days: 14
+          # The installer/signature live on the release; this run copy is debug
+          # fallback only, so keep a week (package-efficiency ruling, 2026-10-22).
+          retention-days: 7
 
       - name: Write latest.json
         if: steps.plan.outputs.publish == 'true'
