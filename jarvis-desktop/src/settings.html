@@ -1345,28 +1345,38 @@
         </label>
         <p class="note" id="hud-open-bar-status" role="status"></p>
 
-        <!-- The HUD's seven layout presets (H1 of the editable-HUD design,
-             Gemini rulings 23-28, 2026-10-21): Cockpit, Studio, Ambient,
-             Focus, Telemetry & Ops, Second Brain & Planner and Minimal. The
-             rows are built from the preset table in hud-layout.js through
-             hud-layout-store.js, and the choice is saved in this computer's
-             desktop settings (the same appearance class as the theme; no
-             approval card, no backend, no phone). The old three-way choice is
-             migrated on the first load, so an owner who picked Studio keeps
-             Studio. Everything here is the STARTING layout; the editor that
-             drags cards between regions is H2, and the page's three existing
-             in-header pills still switch its look until then. -->
+        <!-- The HUD's layouts (H1/H3 of the editable-HUD design; rulings
+             23-28 and Q5): the seven built-in ones - Cockpit, Studio, Ambient,
+             Quiet, Telemetry & Ops, Second Brain & Planner and Minimal - plus
+             the owner's own saved layouts ("My layouts"). The rows are built
+             from the preset table in hud-layout.js through
+             hud-layout-store.js; the choice and the saved layouts are ONE
+             document in this computer's desktop settings (the same
+             appearance-class as the theme; no approval card, no backend, no
+             new command). The old three-way choice is migrated on the first
+             load, so an owner who picked Studio keeps Studio. H3 renders the
+             preset's own shell, density and opening tab. -->
         <fieldset class="theme-list" id="hud-layout-list">
-          <legend class="label" id="hud-layout-legend">HUD layout</legend>
+          <legend class="label" id="hud-layout-legend">HUD layouts</legend>
           <!-- Rows, built from the preset table so the names and one-line
                descriptions are written in one place. Radios, because a screen
                reader then says which is chosen. -->
         </fieldset>
         <p class="note">
-          These seven starting layouts are for the big "Jarvis" window on this
-          computer only, and picking one saves it at once - no approval card.
+          These layouts are for the big "Jarvis" window on this computer only,
+          and picking one saves it at once - no approval card. Your own saved
+          layouts appear under them; rename, delete or move one to another PC
+          from the window's <b>Layouts</b> menu (copy and paste the JSON text
+          there - no file picker, nothing leaves this computer).
         </p>
         <p class="status" id="hud-layout-status" role="status"></p>
+        <button type="button" class="btn ghost" id="hud-reset-layout">
+          Reset HUD to Cockpit
+        </button>
+        <p class="note">
+          Reset puts back the shipped Cockpit layout in one click, even if
+          every optional card was put away. Your saved layouts are kept.
+        </p>
 
         <!-- H2 of the editable-HUD design (2026-10-22): the editor lives in
              the HUD window itself (drag, or use each card's own buttons).
