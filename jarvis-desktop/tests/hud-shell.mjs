@@ -287,6 +287,95 @@ await check("export is explanation-free JSON; import repairs, refuses, and stays
   assert.equal(adopted.doc.id, adopted.doc.user_presets[adopted.doc.user_presets.length - 1].id);
 });
 
+await check("H3-1: an import ADDS to My layouts and never replaces it", () => {
+  // The owner already keeps one custom layout; the imported JSON carries an
+  // empty library (another PC, or a hand-written file).
+  const current = P.ensureCustomCopy(base());
+  const keeper = current.user_presets[0].id;
+  const importedDoc = L.presetLayout("quiet");
+  const imported = P.importLayoutText(P.exportLayoutJson(importedDoc));
+  assert.equal(imported.ok, true, imported.error);
+  const adopted = P.adoptImportedLayout(imported.doc, current);
+  assert.equal(adopted.refused, "");
+  const ids = adopted.doc.user_presets.map((entry) => entry.id);
+  assert.ok(ids.includes(keeper), `import dropped the owner's layout ${keeper}: ${JSON.stringify(ids)}`);
+  assert.equal(ids.length, 2, `import should add one layout, got ${JSON.stringify(ids)}`);
+  assert.equal(adopted.doc.base_preset, "quiet", "the imported layout is not active");
+  // The imported entry is in the library under its own name, not merged away.
+  assert.ok(adopted.doc.user_presets.some((entry) => entry.name === "Quiet"));
+
+  // Importing the owner's OWN full export must not duplicate the active entry
+  // (which would burn a slot toward the 20 cap - review H3-1).
+  const ownExport = P.importLayoutText(P.exportLayoutJson(current));
+  assert.equal(ownExport.ok, true, ownExport.error);
+  const again = P.adoptImportedLayout(ownExport.doc, current);
+  assert.equal(again.refused, "");
+  assert.equal(again.doc.user_presets.length, 1,
+    `importing the owner's own export duplicated the layout: ${JSON.stringify(again.doc.user_presets.map((e) => e.id))}`);
+  assert.equal(again.doc.id, keeper);
+  assert.equal(again.doc.user_presets[0].id, keeper);
+});
+
+await check("H3-1/H3-2: the 20 cap refuses an import in words, never trims silently", () => {
+  let full = base();
+  for (let n = 1; n <= 20; n += 1) full = P.duplicateLayout(full).doc;
+  assert.equal(full.user_presets.length, 20);
+  const imported = P.importLayoutText(P.exportLayoutJson(L.presetLayout("quiet")));
+  assert.equal(imported.ok, true, imported.error);
+  const adopted = P.adoptImportedLayout(imported.doc, full);
+  assert.equal(adopted.doc.user_presets.length, 20, "a refused import must not change the library");
+  assert.match(adopted.refused, /up to 20/);
+  assert.equal(adopted.doc.user_presets.length, userLayoutsOf(full).length);
+
+  // A JSON that itself carries 21 layouts is refused at validation time, before
+  // the normalizer could clamp it to 20 (review H3-2).
+  const oversize = JSON.parse(P.exportLayoutJson(full));
+  oversize.user_presets = Array.from({ length: 21 }, (_, n) => ({
+    ...oversize.user_presets[0], id: `custom-cockpit-${n + 1}`, name: `Copy ${n + 1}`,
+  }));
+  const refused = P.importLayoutText(JSON.stringify(oversize));
+  assert.equal(refused.ok, false);
+  assert.match(refused.error, /more than 20/);
+});
+
+function userLayoutsOf(doc) {
+  return L.userLayouts(doc);
+}
+
+await check("H3-4: the import size cap counts BYTES, the same unit the store uses", () => {
+  // 40,000 two-byte characters: fewer than 64K UTF-16 units, more than 64K
+  // bytes. The store's cap is bytes, so validation must refuse it here too.
+  const multibyte = `{"pad":"${"é".repeat(40000)}"}`;
+  assert.ok(multibyte.length < 64 * 1024);
+  assert.ok(new TextEncoder().encode(multibyte).length > 64 * 1024);
+  const refused = P.importLayoutText(multibyte);
+  assert.equal(refused.ok, false);
+  assert.match(refused.error, /too long/);
+});
+
+await check("H3-5: renaming a saved layout does not make it active", () => {
+  const one = P.ensureCustomCopy(base());
+  const two = P.duplicateLayout(one);
+  assert.equal(two.doc.user_presets.length, 2);
+  const other = two.doc.user_presets.find((entry) => entry.id !== two.doc.id);
+  const beforeActive = two.doc.id;
+  const renamed = P.renameUserLayout(two.doc, other.id, "Renamed elsewhere");
+  assert.equal(renamed.refused, "");
+  assert.equal(renamed.doc.id, beforeActive, "renaming a non-active layout switched to it");
+  assert.equal(renamed.doc.user_presets.find((entry) => entry.id === other.id).name,
+    "Renamed elsewhere");
+  assert.equal(renamed.doc.name, two.doc.name, "the active layout's own name changed");
+});
+
+await check("H3-3: Rust's known-base-preset list matches the JS PRESETS (plus the focus alias)", () => {
+  const rust = read("src-tauri/src/hud_layout.rs");
+  const block = /pub const BUILT_IN_PRESETS: &\[&str\] = &\[([\s\S]*?)\];/.exec(rust);
+  assert.ok(block, "hud_layout.rs no longer declares BUILT_IN_PRESETS");
+  const rustIds = [...block[1].matchAll(/"([a-z_]+)"/g)].map((match) => match[1]);
+  assert.deepEqual(rustIds, L.PRESETS.map((preset) => preset.id));
+  assert.match(rust, /pub const PRESET_ALIASES: &\[&str\] = &\["focus"\]/);
+});
+
 await check("the document shape never carries a colour theme or a stray library id", () => {
   const doc = P.ensureCustomCopy(base());
   assert.equal("theme" in doc, false);

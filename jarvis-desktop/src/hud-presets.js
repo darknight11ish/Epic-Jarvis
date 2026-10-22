@@ -100,6 +100,23 @@ export function duplicateLayout(doc) {
   return { doc: withLibrary({ ...clean, id, name }, [...userLayouts(clean), entry], id, name), refused: "" };
 }
 
+/**
+ * Rename one saved layout WITHOUT making it active (H3-5). Renaming an entry
+ * that is not current must not switch the window to it.
+ */
+export function renameUserLayout(doc, id, name) {
+  const clean = normalizeLayout(doc);
+  if (!userLayouts(clean).some((entry) => entry.id === id)) {
+    return { doc: clean, refused: "That layout is not saved here." };
+  }
+  if (clean.id === id) return renameActiveLayout(clean, name);
+  const wanted = String(name || "").trim().replace(/\s+/g, " ").slice(0, USER_NAME_MAX);
+  if (!wanted) return { doc: clean, refused: "A name is needed." };
+  const library = userLayouts(clean).map((entry) => (entry.id === id
+    ? { ...entry, name: wanted } : entry));
+  return { doc: withLibrary(clean, library, clean.id, clean.name), refused: "" };
+}
+
 /** Rename the ACTIVE user layout. Built-in layouts cannot be renamed. */
 export function renameActiveLayout(doc, name) {
   const clean = normalizeLayout(doc);
@@ -171,7 +188,12 @@ export const IMPORT_MAX_BYTES = 64 * 1024;
 export function importLayoutText(text) {
   const raw = typeof text === "string" ? text : "";
   if (!raw.trim()) return { ok: false, error: "Paste a layout first." };
-  if (raw.length > IMPORT_MAX_BYTES) {
+  // H3-4: count BYTES, the same unit the store's cap uses - a multi-byte
+  // character is one UTF-16 unit but more than one byte, and the save would
+  // otherwise fail after validation with a different sentence.
+  const bytes = typeof TextEncoder === "function"
+    ? new TextEncoder().encode(raw).length : raw.length * 2;
+  if (bytes > IMPORT_MAX_BYTES) {
     return { ok: false, error: "That JSON is too long to be one of your layouts." };
   }
   let value;
@@ -189,6 +211,12 @@ export function importLayoutText(text) {
   const rawCards = Array.isArray(value.cards) ? value.cards : [];
   if (!rawCards.length) {
     return { ok: false, error: "That layout has no cards. Nothing was imported." };
+  }
+  // H3-2: check the RAW library length before the normalizer clamps it, so an
+  // oversize import is refused in words instead of being silently truncated.
+  const rawLibrary = Array.isArray(value.user_presets) ? value.user_presets : [];
+  if (rawLibrary.length > MAX_USER_PRESETS) {
+    return { ok: false, error: `That JSON carries more than ${MAX_USER_PRESETS} layouts. Nothing was imported.` };
   }
   const clean = normalizeLayout(value);
   // normalizeLayout repairs unknown cards by dropping them. For an IMPORT,
@@ -208,18 +236,76 @@ export function importLayoutText(text) {
   return { ok: true, doc: clean };
 }
 
-/** The import becomes a user layout and is made active. */
-export function adoptImportedLayout(doc) {
-  const clean = normalizeLayout(doc);
-  if (userLayouts(clean).length >= MAX_USER_PRESETS) {
-    return { doc: clean, refused: `You can keep up to ${MAX_USER_PRESETS} layouts. Delete one first.` };
+const importSignature = (entry) => JSON.stringify({
+  base: entry.base_preset,
+  shell: entry.shell_template,
+  density: entry.density,
+  tab: entry.default_stage_tab,
+  cards: entry.cards,
+});
+
+/**
+ * The imported layout becomes ACTIVE and is added to My layouts - it never
+ * replaces or truncates the owner's saved library (H3-1).
+ *
+ * `currentDoc` is the document the owner already has. Its `user_presets` are
+ * the base of the merged library; the imported document's own entries are only
+ * added when their id and name are not already used, so importing the owner's
+ * own full export does not duplicate the active entry toward the 20 cap. If the
+ * merged library would exceed the cap, this REFUSES in words rather than
+ * silently trimming the owner's layouts.
+ */
+export function adoptImportedLayout(doc, currentDoc = null) {
+  const imported = normalizeLayout(doc);
+  const current = currentDoc ? normalizeLayout(currentDoc) : presetLayout(DEFAULT_PRESET_ID);
+  const merged = userLayouts(current).map((entry) => ({ ...entry }));
+  const ids = new Set(merged.map((entry) => entry.id));
+  const names = new Set(merged.map((entry) => entry.name.toLowerCase()));
+  const full = () => ({
+    doc: current,
+    refused: `You can keep up to ${MAX_USER_PRESETS} layouts. Delete one before importing.`,
+  });
+
+  // The imported document may itself carry a library (the owner's own export).
+  for (const entry of userLayouts(imported)) {
+    if (ids.has(entry.id) || names.has(entry.name.toLowerCase())) continue;
+    if (merged.length >= MAX_USER_PRESETS) return full();
+    merged.push(entry);
+    ids.add(entry.id);
+    names.add(entry.name.toLowerCase());
   }
-  const base = presetInfo(clean.base_preset) ? clean.base_preset : DEFAULT_PRESET_ID;
-  const name = (String(clean.name || "").trim() || "Imported layout").slice(0, USER_NAME_MAX);
-  const id = newLayoutId(clean, base);
-  const entry = entryFromDocument({ ...clean, base_preset: base }, name, id);
-  const library = [...userLayouts(clean), entry];
-  return { doc: withLibrary({ ...clean, id, name, base_preset: base }, library, id, name), refused: "" };
+
+  const base = presetInfo(imported.base_preset) ? imported.base_preset : DEFAULT_PRESET_ID;
+  let name = (String(imported.name || "").trim() || "Imported layout").slice(0, USER_NAME_MAX);
+  // Reuse the owner's own entry when the imported arrangement IS that entry
+  // (their own full export); otherwise this is a new saved layout.
+  let entry = merged.find((item) => item.name.toLowerCase() === name.toLowerCase()
+    && importSignature(item) === importSignature(entryFromDocument({
+      ...imported, base_preset: base,
+    }, name, "custom-placeholder")));
+  if (!entry && names.has(name.toLowerCase())) {
+    // Same name, different arrangement: keep both, with a plain, unique suffix.
+    let n = 2;
+    while (names.has(name.toLowerCase()) && n < 50) {
+      name = `${String(imported.name || "Imported layout").trim().slice(0, USER_NAME_MAX - 3)} ${n}`;
+      n += 1;
+    }
+  }
+  entry = merged.find((item) => item.name.toLowerCase() === name.toLowerCase()
+    && importSignature(item) === importSignature(entryFromDocument({
+      ...imported, base_preset: base,
+    }, name, "custom-placeholder")));
+  if (!entry) {
+    if (merged.length >= MAX_USER_PRESETS) return full();
+    const id = newLayoutId({ ...imported, user_presets: merged }, base);
+    entry = entryFromDocument({ ...imported, base_preset: base }, name, id);
+    merged.push(entry);
+  }
+  return {
+    doc: withLibrary({ ...imported, id: entry.id, name: entry.name, base_preset: base },
+      merged, entry.id, entry.name),
+    refused: "",
+  };
 }
 
 export { USER_ID_RE, MAX_USER_PRESETS };
@@ -537,8 +623,7 @@ export function mountHudPresets(options = {}) {
     cancel.type = "button";
     cancel.addEventListener("click", () => closeDialog(wrapper));
     saveButton.addEventListener("click", async () => {
-      const next = applyUserLayout(layout, id);
-      const renamed = renameActiveLayout(next, input.value);
+      const renamed = renameUserLayout(layout, id, input.value);
       if (renamed.refused) { line.textContent = renamed.refused; return; }
       closeDialog(wrapper);
       await commit(renamed.doc, `Renamed to "${input.value.trim()}".`);
@@ -617,7 +702,7 @@ export function mountHudPresets(options = {}) {
     importButton.addEventListener("click", async () => {
       const checked = importLayoutText(input.value);
       if (!checked.ok) { line.textContent = checked.error; return; }
-      const adopted = adoptImportedLayout(checked.doc);
+      const adopted = adoptImportedLayout(checked.doc, layout);
       if (adopted.refused) { line.textContent = adopted.refused; return; }
       closeDialog(wrapper);
       await commit(adopted.doc, `Imported "${adopted.doc.name}". It is now your layout.`);

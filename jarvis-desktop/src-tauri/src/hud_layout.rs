@@ -74,6 +74,25 @@ pub const MAX_USER_NAME: usize = 60;
 /// The largest saved document this build accepts (H3): a layout library is a
 /// few dozen tiny records, never a payload.
 pub const MAX_DOCUMENT_BYTES: usize = 64 * 1024;
+/// The built-in HUD layouts a saved layout may name as its base (H3). Keep in
+/// step with `PRESETS` in `jarvis-desktop/src/hud-layout.js`; the coherence
+/// slice renamed "focus" to "quiet", and the old id stays accepted as a silent
+/// migration alias, exactly as the JS normalizer does.
+pub const BUILT_IN_PRESETS: &[&str] = &[
+    "cockpit",
+    "studio",
+    "ambient",
+    "quiet",
+    "telemetry",
+    "second_brain",
+    "minimal",
+];
+/// Old preset ids still accepted on the save road (JS maps them on load).
+pub const PRESET_ALIASES: &[&str] = &["focus"];
+
+fn known_preset(id: &str) -> bool {
+    BUILT_IN_PRESETS.contains(&id) || PRESET_ALIASES.contains(&id)
+}
 /// The four cards no layout may hide (ruling 25).
 pub const PROTECTED_IDS: &[&str] = &[
     "approvals",
@@ -233,6 +252,14 @@ fn sanitise_user_preset(entry: &serde_json::Value) -> Result<serde_json::Value, 
         .ok_or_else(|| "a saved layout has no name".to_string())?;
     let base_preset = text_of(object.get("base_preset"), MAX_TEXT)
         .ok_or_else(|| "a saved layout names no base preset".to_string())?;
+    // H3-3: the JS normalizer drops a saved layout whose base preset is not one
+    // of the seven, so Rust must not store one either (otherwise the two
+    // normalizers disagree and an entry can be saved-but-never-shown).
+    if !known_preset(&base_preset) {
+        return Err(format!(
+            "a saved layout names an unknown base layout `{base_preset}`"
+        ));
+    }
     let shell_template = allowed(object.get("shell_template"), SHELL_TEMPLATES)
         .ok_or_else(|| "a saved layout names an unknown shell template".to_string())?;
     let density = allowed(object.get("density"), DENSITIES)
@@ -741,6 +768,29 @@ mod tests {
             sanitise(&doc).is_err(),
             "an empty saved-layout name was accepted"
         );
+
+        // H3-3: an unknown base preset is refused here too, so Rust can never
+        // store an entry the page's normalizer would silently drop.
+        let mut doc = base();
+        let mut stranger = user_layout("custom-cockpit-1", "Mine");
+        stranger["base_preset"] = serde_json::json!("holodeck");
+        doc["user_presets"] = serde_json::json!([stranger]);
+        assert!(
+            sanitise(&doc).is_err(),
+            "an unknown base preset was accepted"
+        );
+    }
+
+    #[test]
+    fn the_old_focus_name_is_still_an_accepted_base_preset() {
+        // F7: the JS normalizer migrates "focus" to "quiet"; the save road must
+        // not refuse an owner's H2-era saved layout because the label changed.
+        let mut doc = base();
+        let mut old = user_layout("custom-focus-1", "Evening");
+        old["base_preset"] = serde_json::json!("focus");
+        doc["user_presets"] = serde_json::json!([old]);
+        let clean = sanitise(&doc).expect("an old focus-saved layout must stay storable");
+        assert_eq!(clean["user_presets"][0]["base_preset"], "focus");
     }
 
     #[test]

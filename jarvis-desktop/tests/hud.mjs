@@ -125,7 +125,7 @@ async function openHud(browser, status, pageOptions = {}) {
   // does, with no __TAURI__ at all; `tauriInvoke: "fail"` makes the mic's
   // command refused.
   if (!status.noShell) {
-    await page.addInitScript(({ mode, backend, hangs, decideFails }) => {
+    await page.addInitScript(({ mode, backend, hangs, decideFails, hudLayout }) => {
       // Captured before the bootstrap replaces window.fetch.
       const origFetch = window.fetch.bind(window);
       const shellHeaders = { "X-Jarvis-Client": "hud", "X-Jarvis-Token": "test-token" };
@@ -138,8 +138,8 @@ async function openHud(browser, status, pageOptions = {}) {
             // H1: the injected bootstrap reads the saved layout. With no
             // saved document it leaves the page's own look alone, which is
             // what these page tests assume. H2 tests may pass `status.hudLayout`.
-            return status.hudLayout
-              ? { layout: status.hudLayout, source: "saved" }
+            return hudLayout
+              ? { layout: hudLayout, source: "saved" }
               : { layout: null, source: "none" };
           case "set_hud_layout": {
             // H2: the HUD page's own Edit mode saves here. This init script
@@ -242,6 +242,7 @@ async function openHud(browser, status, pageOptions = {}) {
         }
       } } };
     }, { mode: status.tauriInvoke || "ok", backend: BACKEND, hangs: Boolean(status.chatHangs),
+      hudLayout: status.hudLayout || null,
          decideFails: status.decideFails || "" });
   }
   // A browser's voice list, with one online voice and one local one, and
@@ -3436,6 +3437,69 @@ await check("H2: the editor works at the owner's 150% DPI and under reduced moti
   assert.ok(rmWrite, "a keyboard move under reduced motion was not saved");
   assert.equal(rmWrite.cards.find((card) => card.id === "budget").region, "stage_top");
   await rm.page.close();
+});
+
+
+/* =========================================================================
+ * H3 review H3-1/H3-6: the REAL Import dialog adds the pasted layout to My
+ * layouts instead of replacing the owner's saved library, and the DOM wiring
+ * (badge -> menu -> dialog -> save) works on the page.
+ * ========================================================================= */
+
+await check("H3: the Import dialog adds to My layouts and keeps the owner's existing layout", async () => {
+  const cockpit = presetLayout("cockpit");
+  const existing = normalizeLayout({
+    version: 1,
+    id: "custom-cockpit-1",
+    name: "My layout",
+    base_preset: "cockpit",
+    shell_template: "three-column",
+    density: "comfortable",
+    default_stage_tab: "talk",
+    cards: cockpit.cards,
+    user_presets: [{
+      id: "custom-cockpit-1", name: "My layout", base_preset: "cockpit",
+      shell_template: "three-column", density: "comfortable",
+      default_stage_tab: "talk", cards: cockpit.cards,
+    }],
+  });
+  const quiet = presetLayout("quiet");
+  const importText = JSON.stringify({
+    version: 1, kind: "jarvis.hud.layout", id: "quiet", name: "Quiet",
+    base_preset: "quiet", shell_template: "two-column-left",
+    density: "comfortable", default_stage_tab: "talk",
+    cards: quiet.cards, user_presets: [],
+  });
+  const { page, problems } = await openHud(browser, {
+    jarvis: false, ollama: true, proxy: false, hudLayout: existing,
+  });
+  await page.waitForSelector("#hud-layout-badge", { timeout: 10000 });
+  await page.waitForTimeout(600);
+  await page.click("#hud-layout-badge");
+  await page.waitForSelector("#hud-presets-menu:not([hidden])", { timeout: 5000 });
+  await page.getByRole("menuitem", { name: /Export \/ Import/ }).click();
+  await page.waitForSelector("#hud-presets-import-json", { timeout: 5000 });
+  await page.fill("#hud-presets-import-json", importText);
+  await page.getByRole("button", { name: "Validate & import" }).click();
+  await K.until(page, "the imported layout to be saved", async () =>
+    (await page.evaluate(() => (window.__hudLayoutWrites || []).length)) > 0, { ms: 10000 });
+  const saved = await page.evaluate(() => window.__hudLayoutWrites.at(-1));
+  const dialogOpen = await page.evaluate(() => Boolean(document.querySelector("dialog[open]")));
+  const activeName = await page.evaluate(() => {
+    const badge = document.getElementById("hud-layout-badge");
+    return badge ? badge.textContent.trim() : "";
+  });
+  await page.close();
+  assert.ok(saved, "the Import dialog saved nothing");
+  const ids = saved.user_presets.map((entry) => entry.id);
+  assert.ok(ids.includes("custom-cockpit-1"),
+    `Import dropped the owner's existing layout: ${JSON.stringify(ids)}`);
+  assert.equal(saved.user_presets.length, 2,
+    `Import should add one layout: ${JSON.stringify(ids)}`);
+  assert.equal(saved.base_preset, "quiet", "the imported layout is not the active one");
+  assert.equal(dialogOpen, false, "the Import dialog stayed open after a successful import");
+  assert.match(activeName, /Layout: Quiet/, `the badge does not name the imported layout: ${activeName}`);
+  assert.deepEqual(problems, []);
 });
 
 await browser.close();
