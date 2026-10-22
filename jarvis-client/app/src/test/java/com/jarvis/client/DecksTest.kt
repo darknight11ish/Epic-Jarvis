@@ -290,15 +290,14 @@ class DecksTest {
 
     @Test
     fun thePhonesOwnWordsForTheMarkedAnswerAndTheRadar() {
-        // Slice 22B is the phone's half: the box can now ask the PC to mark what
-        // was typed, so its word is the phone's own rather than the shared one
-        // (the desktop's box still shows `typed_placeholder`, one-sided until its
-        // review screen draws the same button - docs/ARCHITECTURE.md section 8).
+        // Slice 22B was the phone's half; since 2026-10-21 (R2) the desktop's
+        // review screen draws the same radar and "Mark my answer" button, so
+        // both apps say the SAME words - the shared fixture is the one source.
         assertEquals("Mark my answer", Decks.MARK_ANSWER)
         assertEquals("Cards fading", Decks.RADAR_HEADING)
+        assertEquals(w("typed_placeholder"), Decks.TYPE_HINT)
         assertTrue(Decks.TYPE_HINT.contains("mark", ignoreCase = true))
         assertFalse(Decks.TYPE_HINT.contains("not sent"))
-        assertNotEquals(w("typed_placeholder"), Decks.TYPE_HINT)
         // Neither word says the phone listens: it never does speech-to-text.
         listOf(Decks.MARK_ANSWER, Decks.RADAR_HEADING, Decks.TYPE_HINT).forEach {
             assertFalse(it, it.contains("voice", ignoreCase = true))
