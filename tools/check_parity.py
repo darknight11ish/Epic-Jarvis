@@ -86,7 +86,7 @@ _LIT = r"[A-Za-z0-9_-]+"
 _PH = r"(?:\$\{[^}\n]*\}|\{[^}/\"\n]*\}|\$[A-Za-z_][A-Za-z0-9_]*)"
 ROUTE = re.compile(rf"/api/{_LIT}(?:/(?:{_LIT}|{_PH}))*/?")
 _IS_PH = re.compile(rf"^{_PH}$")
-# `fun offerWorkSetup(` - the declaration half of the call check below.
+# `fun <name>(` - the declaration half of the call check below.
 _FUN = re.compile(r"\bfun\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")
 
 # Allow-lists: files whose routes are a list of what a window MAY read, not
@@ -816,25 +816,22 @@ PHONE_BUILT_ROUTES = {
 }
 
 # A `/api/...` literal proves a route is BUILT, not that the phone ever asks for
-# it - and this checker used to count the literal and stop there. That is how it
-# told this project two apps matched when only one had the code: the phone's
-# `/api/work/recommend` is built inside `JarvisRuntime.offerWorkSetup`, nothing
-# calls that function, and the offer panel it feeds (`HardwarePlate.kt`, "Jarvis
-# suggests a setup") can never be populated (2026-10-11).
+# it - and this checker must not count a literal as a caller. The declaration
+# below began as the phone's `/api/work/recommend`, built inside
+# `JarvisRuntime.offerWorkSetup` with no caller, so its offer panel could never
+# be populated. F11 (2026-10-22) removes that dead phone surface; the entry is
+# kept for the transition so this checker is correct on BOTH trees (before
+# #727 merges the builder is still there; after it merges the builder is gone).
+# Treat a declaration whose builder is **absent and whose route no app source
+# mentions** as satisfied and drop it silently - that is the removed-surface
+# case, not a stale declaration. A later cleanup deletes the entry.
 #
-# So a route whose ONLY call site is a function nothing calls must be declared
-# here, with the reason. Each entry is checked both ways: while the function has
-# no caller, any entry for it must stay (a route that is wired up must not be
-# left declared unreachable); once the function IS called, its entry must GO -
-# the checker fails and says which one, so the wiring cannot land while the
-# "nothing is wired" note, or this declaration, lives on. The route stays in the
-# phone's calls either way, so `CLASSIFICATION` and the two count lines above
-# cannot quietly change, and main() NAMES it in the warnings while keeping it out
-# of the "on the phone" list - so the tool says the missing half out loud, rather
-# than claiming the phone calls it (the defect of 2026-10-11) or saying nothing
-# at all about it (the follow-up of the same day). key -> (the text that proves
-# the function still builds the route, the file that holds the function, the
-# function, why nothing calls it).
+# If a future route's ONLY call site is a function nothing calls, declare it
+# here with the same four-part reason. Each entry is checked both ways - while
+# the function has no caller the entry must stay; once the function IS called
+# the entry must GO, so wiring cannot land while the "nothing is wired" note
+# lives on. key -> (the text that proves the function still builds the route,
+# the file that holds the function, the function, why nothing calls it).
 UNREACHABLE = {
     "/api/work/recommend": (
         "WorkSetups.RECOMMEND_PATH",
@@ -901,6 +898,14 @@ def _kt_texts():
                        strip_comments(fh.read(), ".kt"))
 
 
+def _route_mentioned_anywhere(route):
+    """True when any app source still names `route`. Used to tell the F11 case
+    (the whole surface was removed, so the declaration is obsolete and can be
+    dropped silently) apart from a genuinely stale declaration (the builder
+    moved or the route is still referenced somewhere, which must stay loud)."""
+    return _mentions(PHONE_DIRS, route) or _mentions(DESKTOP_DIRS, route)
+
+
 def reachable_calls(problems):
     """The declared routes whose builder function is CALLED from code that is
     itself reached. A declared route that is not in the answer, or that is not
@@ -926,6 +931,14 @@ def reachable_calls(problems):
                 if holder and holder != func and _call_sites(text, holder):
                     calls.append(f"{rel_kt}:{line_no} in {holder}()")
         if not builds_it:
+            if not _route_mentioned_anywhere(route):
+                # F11 (2026-10-22): the dead phone work-offer surface was removed
+                # whole, so this declaration describes nothing that exists any
+                # more. Drop it silently - it is obsolete, not stale. The
+                # declaration is kept in the map only so this checker is correct
+                # on BOTH trees while #727 is in flight; a later cleanup deletes
+                # it. A route that is still mentioned anywhere stays loud below.
+                continue
             problems.append(
                 f"{route} is declared unreachable in tools/check_parity.py, but {rel} "
                 f"no longer builds it ({needle!r} is gone). Delete the UNREACHABLE "
@@ -959,9 +972,23 @@ def phone_built_routes(problems):
                     found[route] = {rel}
         except OSError:
             pass
-    for route, (_needle, rel, _func, _why) in UNREACHABLE.items():
-        if route not in nothing_calls_it:
-            found.setdefault(route, set()).add(rel)
+    for route, (needle, rel, _func, _why) in UNREACHABLE.items():
+        try:
+            with open(os.path.join(ROOT, rel), encoding="utf-8",
+                      errors="replace") as fh:
+                builds_it = needle in fh.read()
+        except OSError:
+            builds_it = False
+        if not builds_it and not _route_mentioned_anywhere(route):
+            # Obsolete declaration for a surface that was removed whole (F11);
+            # do not put the route back into the phone's set because a dead
+            # declaration named it.
+            continue
+        if builds_it and route in nothing_calls_it:
+            # The declaration holds: the phone's source carries only a literal,
+            # nothing asks for the route, so it is not a route the phone is on.
+            continue
+        found.setdefault(route, set()).add(rel)
     return found, nothing_calls_it
 
 
