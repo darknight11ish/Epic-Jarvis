@@ -610,6 +610,167 @@ def senders(p: Plan, *, fetch: Optional[Callable[[Plan, int], tuple]] = None,
             "mailbox": p.mailbox, "criterion": p.criterion}
 
 
+# --------------------------------------------------------------------------
+#   Wave D-1 (2026-10-22): quiet-thread radar, read-only
+#
+#   "Threads that went quiet", from Claude Duet's follow-up behaviour, kept to
+#   what this module already holds: message HEADERS plus the short preview a
+#   local read already produced. These functions open no socket, send nothing,
+#   change no flag on the server, and never print a subject or a body - a row
+#   names only WHO, because the briefing's own rule is that the words of an
+#   email do not reach a log, an event or the model.
+# --------------------------------------------------------------------------
+
+#: A thread the owner wrote into is "quiet" from three days to two weeks.
+QUIET_MIN_DAYS = 3
+QUIET_MAX_DAYS = 14
+#: A message from a human waiting on the owner for longer than this is late.
+QUIET_WAITING_ON_YOU_HOURS = 48
+
+#: Shapes that end in a question or a request - read from text the local read
+#: already produced. Without such text the thread is NOT guessed at.
+_REQUEST_WORDS = (
+    "let me know", "please confirm", "please reply", "following up",
+    "can you", "could you", "would you", "any update", "circling back",
+    "attached", "please send", "reply", "confirm",
+)
+#: Header markers of a newsletter/automated mail. A human thread has none.
+_AUTOMATED_MARKERS = (
+    "list-unsubscribe", "list-id", "auto-submitted", "precedence: bulk",
+    "precedence: list", "x-autoreply", "x-auto-response-suppress",
+)
+
+
+def _at_epoch(value) -> Optional[float]:
+    """A message time as epoch seconds. Numbers only: a date string whose
+    format this module does not know is skipped, not guessed at."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    value = float(value)
+    return value if value > 0 and value == value else None
+
+
+def _direction(m: dict) -> str:
+    got = str(m.get("direction") or "").strip().lower()
+    if got in ("out", "sent", "outbox", "owner"):
+        return "out"
+    if got in ("in", "received", "inbox", "them"):
+        return "in"
+    if m.get("from_owner") is True:
+        return "out"
+    if m.get("from_owner") is False:
+        return "in"
+    return ""
+
+
+def _is_automated(m: dict) -> bool:
+    if m.get("automated") is True or m.get("list_unsubscribe") is True:
+        return True
+    headers = m.get("headers")
+    if isinstance(headers, (list, tuple)):
+        blob = "\n".join(str(h) for h in headers).lower()
+        if any(mark in blob for mark in _AUTOMATED_MARKERS):
+            return True
+    return False
+
+
+def _has_ask(text) -> bool:
+    blob = str(text or "").strip().lower()
+    if not blob:
+        return False
+    return "?" in blob or any(word in blob for word in _REQUEST_WORDS)
+
+
+def _who(m: dict) -> str:
+    """The display name only (jarvis_email's own From/To name, already
+    decoded/tidied) - never an address and never a subject."""
+    return " ".join(str(m.get("who") or m.get("name") or m.get("from_name") or "").split())[:60]
+
+
+def find_quiet_threads(messages, *, now=None, days_quiet_min: float = QUIET_MIN_DAYS,
+                       days_quiet_max: float = QUIET_MAX_DAYS,
+                       waiting_on_you_hours: float = QUIET_WAITING_ON_YOU_HOURS) -> list:
+    """The two classes of quiet email thread this PC can see without reading
+    the server again:
+
+    * `waiting_on_them` - the owner sent the last message 3..14 days ago and it
+      carried a question or a request; nobody has replied since.
+    * `waiting_on_you` - the last message is from a human (not a newsletter or
+      an automated sender), it asked something, and it has been unanswered for
+      more than 48 hours.
+
+    A row says only `kind`, `who`, `days`/`hours`, `thread` (the caller's own
+    opaque key, e.g. a header Message-ID) and one plain sentence. No subject,
+    no body and no address is ever returned. Boundaries are inclusive: exactly
+    3 days or exactly 14 days still counts as waiting-on-them; exactly 48
+    hours does NOT count as waiting-on-you (the text says "longer than")."""
+    now = time.time() if now is None else float(now)
+    threads = {}
+    for m in messages or ():
+        if not isinstance(m, dict):
+            continue
+        at = _at_epoch(m.get("at"))
+        direction = _direction(m)
+        if at is None or not direction:
+            continue
+        key = m.get("thread") or m.get("thread_id") or m.get("message_id") or m.get("id")
+        if not key:
+            key = f"{direction}:{at}"
+        threads.setdefault(str(key), []).append((at, direction, m))
+    rows = []
+    for key, items in threads.items():
+        items.sort(key=lambda it: it[0])
+        at, direction, last = items[-1]
+        age_s = max(0.0, now - at)
+        if direction == "out":
+            days = age_s / 86400.0
+            if days_quiet_min <= days <= days_quiet_max and _has_ask(
+                    last.get("text") or last.get("preview")):
+                who = _who(last)
+                n = round(days)
+                rows.append({
+                    "kind": "waiting_on_them",
+                    "thread": key,
+                    "who": who,
+                    "days": round(days, 1),
+                    "said": (f"You wrote to {who or 'someone'} {n} "
+                             f"{'day' if n == 1 else 'days'} ago and there has been "
+                             f"no reply."),
+                })
+        else:
+            hours = age_s / 3600.0
+            if hours > waiting_on_you_hours and not _is_automated(last) and _has_ask(
+                    last.get("text") or last.get("preview")):
+                who = _who(last)
+                n = round(hours)
+                rows.append({
+                    "kind": "waiting_on_you",
+                    "thread": key,
+                    "who": who,
+                    "hours": round(hours, 1),
+                    "said": (f"{who or 'Someone'} asked you something {n} "
+                             f"{'hour' if n == 1 else 'hours'} ago and there has been "
+                             f"no reply."),
+                })
+    rows.sort(key=lambda r: (r["kind"], -(r.get("days") or r.get("hours") or 0), r["thread"]))
+    return rows
+
+
+def quiet_threads_line(rows) -> str:
+    """One short line for the briefing: counts by the two classes, no names."""
+    rows = [r for r in (rows or ()) if isinstance(r, dict)]
+    them = sum(1 for r in rows if r.get("kind") == "waiting_on_them")
+    you = sum(1 for r in rows if r.get("kind") == "waiting_on_you")
+    if not them and not you:
+        return ""
+    parts = []
+    if you:
+        parts.append(f"{you} message(s) from someone waiting on your reply")
+    if them:
+        parts.append(f"{them} message(s) you sent with no reply")
+    return "; ".join(parts) + "."
+
+
 def run(p: Plan, *, fetch_messages: Optional[Callable[[Plan], list]] = None,
         approved: bool = False) -> dict:
     """Execute an approved plan. `approved` has no default of True.

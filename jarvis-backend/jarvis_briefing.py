@@ -411,6 +411,20 @@ class Deps:
     #: test never opens the memory store; a test of the line injects its own
     #: section, so the two stay independent.
     people_section: Optional[Callable[[list, float], Optional[dict]]] = None
+    #: Wave D-1 (D3): the caller's own read-only 2-minute-prep looks. Each takes
+    #: one calendar event and returns short strings already local. None means
+    #: "not read here", and the prep card says so - it never shows a blank card
+    #: that reads like "nothing to know".
+    prep_people: Optional[Callable] = None
+    prep_notes: Optional[Callable] = None
+    #: Wave D-1 (D4): the caller's own quiet-thread rows (jarvis_email.
+    #: find_quiet_threads). None: no thread read was wired, and the briefing
+    #: says nothing rather than inventing a quiet inbox.
+    quiet_threads: Optional[Callable[[], list]] = None
+    #: Wave D-1 (D7): the money / study / PC-health halves of the Pulse. None:
+    #: those sources are reported "not checked today", never filled with a
+    #: made-up number.
+    pulse_sources: Optional[Callable[[], dict]] = None
     senders_on: Callable[[], bool] = lambda: senders_setting()["on"]
     publish: Callable[[str, dict], None] = _publish
     deadline: float = READ_DEADLINE
@@ -847,6 +861,157 @@ def _people_section(events: list, now: float, deps: Deps) -> Optional[dict]:
         return None
 
 
+# --------------------------------------------------------------------------
+#   Wave D-1 (2026-10-22): first-step prep, quiet threads, Pulse
+#
+#   Claude Duet's proactive habits, kept inside this module's contract: the
+#   briefing only READS what the day's own reads already returned, plus what
+#   the caller already holds. No new socket, no model, no card, no write, and
+#   nothing from an email's body reaches a line, a log or an event.
+# --------------------------------------------------------------------------
+
+#: The Pulse shows the "where to look" strip only when something is wrong or
+#: waiting; three at most, so the strip stays a glance.
+PULSE_MAX_ANOMALIES = 3
+
+#: Titles of the two D3 sections, kept here so a test and the apps agree.
+TRAVEL_TITLE = "Travel and next steps"
+PREP_TITLE = "2-minute prep"
+QUIET_TITLE = "Quiet threads"
+
+
+def _calendar_duet(events: list, now: float, deps: Deps) -> tuple:
+    """`(warnings, prep_cards)` from today's OWN calendar read.
+
+    Both come from jarvis_calendar's pure functions over the events the
+    calendar read already returned. A missing module (an older PC) yields
+    nothing rather than an error: the briefing is never worse for a new line.
+    """
+    if not events:
+        return [], []
+    try:
+        import jarvis_calendar as CAL
+        warnings = CAL.detect_travel_and_flight_collisions(events)
+        cards = CAL.meeting_prep(events, people=deps.prep_people,
+                                 notes=deps.prep_notes)
+    except Exception:
+        return [], []
+    return warnings, cards
+
+
+def _travel_section(warnings: list) -> Optional[dict]:
+    rows = [w for w in warnings or () if isinstance(w, dict) and w.get("said")]
+    if not rows:
+        return None
+    return _section("travel", TRAVEL_TITLE, "ok",
+                    _plural(len(rows), "timing warning") + " on today's calendar.",
+                    [str(w["said"]) for w in rows[:MAX_ITEMS]])
+
+
+def _prep_section(cards: list) -> Optional[dict]:
+    rows = [c for c in cards or () if isinstance(c, dict)]
+    if not rows:
+        return None
+    items = []
+    for c in rows[:MAX_ITEMS]:
+        items.append(str(c.get("said") or c.get("summary") or "meeting"))
+    missing = sorted({m for c in rows for m in (c.get("missing") or ())})
+    summary = _plural(len(rows), "meeting") + " has a 2-minute prep."
+    if missing:
+        summary += " Not read for it: " + ", ".join(missing) + "."
+    return _section("prep", PREP_TITLE, "ok", summary, items)
+
+
+def _quiet_thread_rows(deps: Deps) -> list:
+    """The caller's rows, or [] when no quiet-thread read is wired. Never
+    raises: a broken provider means the line is absent, not a wrong count."""
+    if deps.quiet_threads is None:
+        return []
+    try:
+        rows = deps.quiet_threads() or []
+    except Exception:
+        return []
+    return [r for r in rows if isinstance(r, dict)]
+
+
+def _quiet_section(rows: list) -> Optional[dict]:
+    if not rows:
+        return None
+    import jarvis_email as MAIL
+    items = [str(r.get("said") or "") for r in rows if r.get("said")][:MAX_ITEMS]
+    return _section("quiet", QUIET_TITLE, "ok",
+                    MAIL.quiet_threads_line(rows) or _plural(len(rows), "quiet thread"),
+                    items)
+
+
+def _pulse_extras(deps: Deps) -> Optional[dict]:
+    if deps.pulse_sources is None:
+        return None
+    try:
+        got = deps.pulse_sources() or {}
+    except Exception:
+        return None
+    return got if isinstance(got, dict) else None
+
+
+def pulse_from(*, sections: list, warnings: list, quiet_rows: list, approvals: int,
+               extras: Optional[dict], deps: Deps) -> dict:
+    """The Daily Pulse: a few lines of what today holds, and the TOP 1-3
+    "where to look" items only. Pure; every input is something a caller
+    already read.
+
+    Honesty rules, and they are the whole point:
+    * a source nobody read is listed in `not_checked`, never shown as "0";
+    * the strip is capped at PULSE_MAX_ANOMALIES and sorted by how much a
+      decision matters (a flight collision before a waiting card);
+    * a normal day produces no strip at all - `where_to_look` is empty."""
+    lines, not_checked = [], []
+    by_key = {s.get("key"): s for s in sections or () if isinstance(s, dict)}
+    for key in ("today", "todo"):
+        s = by_key.get(key)
+        if s and s.get("summary"):
+            lines.append(str(s["summary"]))
+    if approvals:
+        lines.append(_plural(approvals, "approval card") +
+                     (" is" if approvals == 1 else " are") +
+                     " waiting for your yes or no.")
+    extras = extras or {}
+    for key, label in (("money", "Money"), ("study", "Study"), ("pc", "PC health")):
+        if extras.get(key):
+            lines.append(f"{label}: {str(extras[key]).strip()}")
+    if deps.quiet_threads is None and not quiet_rows:
+        not_checked.append("quiet email threads")
+    for key, label in (("money", "money and subscriptions"),
+                       ("study", "study decks"),
+                       ("pc", "PC and GPU health")):
+        if not extras.get(key):
+            not_checked.append(label)
+    anomalies = []
+    for w in warnings or ():
+        if isinstance(w, dict) and w.get("said"):
+            anomalies.append(str(w["said"]))
+            break
+    waiting_you = sum(1 for r in quiet_rows or () if r.get("kind") == "waiting_on_you")
+    if waiting_you:
+        anomalies.append(_plural(waiting_you, "message from someone") +
+                         " waiting on your reply.")
+    today_sec = by_key.get("today") or {}
+    if today_sec.get("state") == "ok" and (today_sec.get("items") or []):
+        anomalies.append(_plural(len(today_sec.get("items") or []), "thing") +
+                         " still to come today.")
+    if approvals:
+        anomalies.append(_plural(approvals, "approval card") +
+                         (" is" if approvals == 1 else " are") + " waiting.")
+    for one in extras.get("anomalies") or ():
+        if str(one).strip():
+            anomalies.append(str(one).strip())
+    return {
+        "lines": lines,
+        "where_to_look": anomalies[:PULSE_MAX_ANOMALIES],
+        "not_checked": not_checked,
+    }
+
+
 def sender_line(names: list, count: int, looked_at: int) -> str:
     """"From Alex, Your Bank and GitHub" - or, when there are more unread
     emails than were looked at, "The newest 5 are from ...". "" for none."""
@@ -1019,6 +1184,11 @@ def render(b: dict) -> str:
     for s in b["sections"]:
         lines.append(f"{s['title']}: {s['summary']}")
         lines.extend(f"- {i}" for i in s["items"])
+    pulse = b.get("pulse") or {}
+    if pulse.get("where_to_look"):
+        lines.append("Where to look today: " + " | ".join(pulse["where_to_look"]))
+    for line in pulse.get("lines") or ():
+        lines.append("Pulse: " + str(line))
     if b.get("source") != "missed":
         lines.append(b.get("outside_line") or OUTSIDE_LINE)
     for n in b.get("not_included") or []:
@@ -1088,11 +1258,40 @@ def build(*, sched=None, now: Optional[float] = None, deps: Optional[Deps] = Non
         people = _people_section(cal_seen.get("events") or [], now, deps)
         if people is not None:
             sections.append(people)
+        warnings, prep_cards = _calendar_duet(cal_seen.get("events") or [], now, deps)
+        travel = _travel_section(warnings)
+        if travel is not None:
+            sections.append(travel)
+        prep = _prep_section(prep_cards)
+        if prep is not None:
+            sections.append(prep)
+    else:
+        warnings, prep_cards = [], []
     sections.extend([today, todo, approvals])
     if "email" in got:
         sections.append(got["email"])
     if "news" in got:
         sections.append(got["news"])
+    quiet_rows = _quiet_thread_rows(deps)
+    quiet = _quiet_section(quiet_rows)
+    if quiet is not None:
+        sections.append(quiet)
+    approvals_n = 0
+    for s in sections:
+        if s.get("key") == "approvals" and s.get("state") == "ok":
+            # The section's own summary carries the count; the Pulse uses the
+            # same read's number rather than asking the gate a second time.
+            for n in range(0, 10000):
+                if f"{n} card" in str(s.get("summary") or ""):
+                    approvals_n = n
+                    break
+                if f"{n} cards" in str(s.get("summary") or ""):
+                    approvals_n = n
+                    break
+    extras = _pulse_extras(deps)
+    pulse = pulse_from(sections=sections, warnings=warnings,
+                       quiet_rows=quiet_rows, approvals=approvals_n,
+                       extras=extras, deps=deps)
     b = {
         "id": "b" + uuid.uuid4().hex[:10],
         "made": now,
@@ -1126,6 +1325,7 @@ def build(*, sched=None, now: Optional[float] = None, deps: Optional[Deps] = Non
         "outside_line": _outside_line(src["weather"]["state"] == "on",
                                       src["news"]["state"] == "on"),
         "lock_screen": LOCK_SCREEN,
+        "pulse": pulse,
     }
     b["text"] = render(b)
     return b
