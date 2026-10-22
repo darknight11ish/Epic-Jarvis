@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "note": "The desktop HUD's built-in HUD-layout presets (H1, renamed from 'layouts' wording on 2026-10-22 when Focus became Quiet). Mirror of PRESETS in jarvis-desktop/src/hud-layout.js; tests/hud-layout.mjs fails if the two drift. Desktop-only on purpose: the phone has its own MenuCatalog-backed home HUD presets and does not read this file.",
+  "note": "The desktop HUD's built-in layout presets (H1; H3 renders shell_template, density and default_stage_tab). Mirror of the seven built-in presets in jarvis-desktop/src/hud-layout.js; tests/hud-layout.mjs fails if the two drift. Colour theme is NOT part of a layout (Appearance owns it). The seven fixed cards H2 does not reparent have no col_span/row_span here: their spans are renderer-inert, so the contract does not carry them. Desktop-only on purpose: the phone has its own MenuCatalog-backed presets and does not read this file (docs/ARCHITECTURE.md section 8).",
   "regions": [
     "header",
     "left_rail",
@@ -23,7 +23,6 @@
       "name": "Cockpit",
       "base_preset": "cockpit",
       "shell_template": "three-column",
-      "theme": "system",
       "density": "comfortable",
       "default_stage_tab": "talk",
       "cards": [
@@ -31,8 +30,6 @@
           "id": "emergency_stop",
           "region": "header",
           "order": 0,
-          "col_span": 4,
-          "row_span": 1,
           "visible": true,
           "collapsed": false,
           "options": {}
@@ -91,8 +88,6 @@
           "id": "voice_controls",
           "region": "stage_top",
           "order": 1,
-          "col_span": 4,
-          "row_span": 1,
           "visible": true,
           "collapsed": false,
           "options": {}
@@ -101,8 +96,6 @@
           "id": "conversation",
           "region": "stage_main",
           "order": 0,
-          "col_span": 12,
-          "row_span": 4,
           "visible": true,
           "collapsed": false,
           "options": {
@@ -113,8 +106,6 @@
           "id": "composer",
           "region": "stage_main",
           "order": 1,
-          "col_span": 12,
-          "row_span": 1,
           "visible": true,
           "collapsed": false,
           "options": {}
@@ -188,7 +179,6 @@
       "name": "Studio",
       "base_preset": "studio",
       "shell_template": "split-stage",
-      "theme": "system",
       "density": "comfortable",
       "default_stage_tab": "talk",
       "cards": [
@@ -196,8 +186,6 @@
           "id": "emergency_stop",
           "region": "header",
           "order": 0,
-          "col_span": 4,
-          "row_span": 1,
           "visible": true,
           "collapsed": false,
           "options": {}
@@ -256,8 +244,6 @@
           "id": "voice_controls",
           "region": "stage_top",
           "order": 1,
-          "col_span": 4,
-          "row_span": 1,
           "visible": true,
           "collapsed": false,
           "options": {}
@@ -266,8 +252,6 @@
           "id": "conversation",
           "region": "stage_main",
           "order": 0,
-          "col_span": 6,
-          "row_span": 4,
           "visible": true,
           "collapsed": false,
           "options": {
@@ -278,8 +262,6 @@
           "id": "composer",
           "region": "stage_main",
           "order": 1,
-          "col_span": 6,
-          "row_span": 1,
           "visible": true,
           "collapsed": false,
           "options": {}
@@ -288,8 +270,6 @@
           "id": "galaxy",
           "region": "stage_main",
           "order": 2,
-          "col_span": 6,
-          "row_span": 4,
           "visible": true,
           "collapsed": false,
           "options": {
@@ -300,8 +280,6 @@
           "id": "reminders",
           "region": "stage_main",
           "order": 3,
-          "col_span": 6,
-          "row_span": 4,
           "visible": true,
           "collapsed": false,
           "options": {
@@ -312,8 +290,6 @@
           "id": "memory",
           "region": "stage_main",
           "order": 4,
-          "col_span": 6,
-          "row_span": 4,
           "visible": true,
           "collapsed": false,
           "options": {
@@ -389,7 +365,6 @@
       "name": "Ambient",
       "base_preset": "ambient",
       "shell_template": "center-core",
-      "theme": "system",
       "density": "spacious",
       "default_stage_tab": "talk",
       "cards": [
@@ -397,8 +372,6 @@
           "id": "emergency_stop",
           "region": "header",
           "order": 0,
-          "col_span": 4,
-          "row_span": 1,
           "visible": true,
           "collapsed": false,
           "options": {}
@@ -457,8 +430,6 @@
           "id": "voice_controls",
           "region": "stage_top",
           "order": 1,
-          "col_span": 4,
-          "row_span": 1,
           "visible": true,
           "collapsed": false,
           "options": {}
@@ -467,8 +438,6 @@
           "id": "conversation",
           "region": "stage_main",
           "order": 0,
-          "col_span": 12,
-          "row_span": 4,
           "visible": true,
           "collapsed": false,
           "options": {
@@ -479,8 +448,6 @@
           "id": "composer",
           "region": "stage_main",
           "order": 1,
-          "col_span": 12,
-          "row_span": 1,
           "visible": true,
           "collapsed": false,
           "options": {}
@@ -554,7 +521,6 @@
       "name": "Quiet",
       "base_preset": "quiet",
       "shell_template": "two-column-left",
-      "theme": "paper",
       "density": "comfortable",
       "default_stage_tab": "talk",
       "cards": [
@@ -562,8 +528,6 @@
           "id": "emergency_stop",
           "region": "header",
           "order": 0,
-          "col_span": 4,
-          "row_span": 1,
           "visible": true,
           "collapsed": false,
           "options": {}
@@ -622,8 +586,6 @@
           "id": "voice_controls",
           "region": "stage_top",
           "order": 1,
-          "col_span": 4,
-          "row_span": 1,
           "visible": true,
           "collapsed": false,
           "options": {}
@@ -632,8 +594,6 @@
           "id": "conversation",
           "region": "stage_main",
           "order": 0,
-          "col_span": 12,
-          "row_span": 4,
           "visible": true,
           "collapsed": false,
           "options": {
@@ -644,8 +604,6 @@
           "id": "composer",
           "region": "stage_main",
           "order": 1,
-          "col_span": 12,
-          "row_span": 1,
           "visible": true,
           "collapsed": false,
           "options": {}
@@ -719,7 +677,6 @@
       "name": "Telemetry & Ops",
       "base_preset": "telemetry",
       "shell_template": "three-column",
-      "theme": "deep-space",
       "density": "compact",
       "default_stage_tab": "telemetry",
       "cards": [
@@ -727,8 +684,6 @@
           "id": "emergency_stop",
           "region": "header",
           "order": 0,
-          "col_span": 4,
-          "row_span": 1,
           "visible": true,
           "collapsed": false,
           "options": {}
@@ -787,8 +742,6 @@
           "id": "voice_controls",
           "region": "stage_top",
           "order": 1,
-          "col_span": 4,
-          "row_span": 1,
           "visible": true,
           "collapsed": false,
           "options": {}
@@ -797,8 +750,6 @@
           "id": "conversation",
           "region": "stage_main",
           "order": 0,
-          "col_span": 12,
-          "row_span": 4,
           "visible": true,
           "collapsed": false,
           "options": {
@@ -809,8 +760,6 @@
           "id": "composer",
           "region": "stage_main",
           "order": 1,
-          "col_span": 12,
-          "row_span": 1,
           "visible": true,
           "collapsed": false,
           "options": {}
@@ -884,7 +833,6 @@
       "name": "Second Brain & Planner",
       "base_preset": "second_brain",
       "shell_template": "three-column",
-      "theme": "system",
       "density": "comfortable",
       "default_stage_tab": "galaxy",
       "cards": [
@@ -892,8 +840,6 @@
           "id": "emergency_stop",
           "region": "header",
           "order": 0,
-          "col_span": 4,
-          "row_span": 1,
           "visible": true,
           "collapsed": false,
           "options": {}
@@ -952,8 +898,6 @@
           "id": "voice_controls",
           "region": "stage_top",
           "order": 1,
-          "col_span": 4,
-          "row_span": 1,
           "visible": true,
           "collapsed": false,
           "options": {}
@@ -962,8 +906,6 @@
           "id": "conversation",
           "region": "stage_main",
           "order": 0,
-          "col_span": 12,
-          "row_span": 4,
           "visible": true,
           "collapsed": false,
           "options": {
@@ -974,8 +916,6 @@
           "id": "composer",
           "region": "stage_main",
           "order": 1,
-          "col_span": 12,
-          "row_span": 1,
           "visible": true,
           "collapsed": false,
           "options": {}
@@ -984,8 +924,6 @@
           "id": "galaxy",
           "region": "stage_main",
           "order": 2,
-          "col_span": 12,
-          "row_span": 4,
           "visible": true,
           "collapsed": false,
           "options": {
@@ -996,8 +934,6 @@
           "id": "reminders",
           "region": "stage_main",
           "order": 3,
-          "col_span": 6,
-          "row_span": 4,
           "visible": true,
           "collapsed": false,
           "options": {
@@ -1008,8 +944,6 @@
           "id": "memory",
           "region": "stage_main",
           "order": 4,
-          "col_span": 6,
-          "row_span": 4,
           "visible": true,
           "collapsed": false,
           "options": {
@@ -1085,7 +1019,6 @@
       "name": "Minimal",
       "base_preset": "minimal",
       "shell_template": "single-stage-bento",
-      "theme": "system",
       "density": "compact",
       "default_stage_tab": "talk",
       "cards": [
@@ -1093,8 +1026,6 @@
           "id": "emergency_stop",
           "region": "header",
           "order": 0,
-          "col_span": 4,
-          "row_span": 1,
           "visible": true,
           "collapsed": false,
           "options": {}
@@ -1153,8 +1084,6 @@
           "id": "voice_controls",
           "region": "stage_top",
           "order": 1,
-          "col_span": 4,
-          "row_span": 1,
           "visible": true,
           "collapsed": false,
           "options": {}
@@ -1163,8 +1092,6 @@
           "id": "conversation",
           "region": "stage_main",
           "order": 0,
-          "col_span": 12,
-          "row_span": 4,
           "visible": true,
           "collapsed": false,
           "options": {
@@ -1175,8 +1102,6 @@
           "id": "composer",
           "region": "stage_main",
           "order": 1,
-          "col_span": 12,
-          "row_span": 1,
           "visible": true,
           "collapsed": false,
           "options": {}

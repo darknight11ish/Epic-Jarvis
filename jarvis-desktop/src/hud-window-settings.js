@@ -5,20 +5,19 @@
  *  1. THE SWITCH (the owner's request of 2026-10-06): does the "Open the
  *     Jarvis bar" button show in the big "Jarvis" window? (`hud-window.js`
  *     OPEN_BAR_KEY, drawn by the bootstrap injected into the page.)
- *  2. THE LAYOUT (H1 of the editable-HUD design, Gemini rulings 23-28,
- *     2026-10-21): which of the seven built-in presets the big window starts
- *     from - Cockpit, Studio, Ambient, Focus, Telemetry & Ops, Second Brain &
- *     Planner and Minimal. The old three-way choice (cockpit/studio/ambient)
- *     is migrated the first time the store has nothing saved, so an owner who
- *     picked Studio keeps Studio.
+ *  2. THE LAYOUT (H1 + H3 of the editable-HUD design, rulings 23-28/Q5):
+ *     which layout the big window starts from - the seven built-in ones
+ *     (Cockpit, Studio, Ambient, Quiet, Telemetry & Ops, Second Brain &
+ *     Planner, Minimal) plus the owner's own saved layouts ("My layouts",
+ *     H3). The old three-way choice is migrated the first time the store has
+ *     nothing saved, so an owner who picked Studio keeps Studio.
  *
  * WHERE IT IS KEPT. The layout is a document in the desktop settings store
  * through the Rust commands `get_hud_layout`/`set_hud_layout` - the same
  * appearance class as the theme, no backend, no pairing token, no approval
- * card. The old `jarvis.hud.layout` localStorage key is still written as a
- * VIEW mirror so the page's three existing looks follow the pick at once;
- * it is not the source of truth. H2 draws the real region grid from the saved
- * document and the editor; this card only chooses a starting preset.
+ * card. The same document carries the owner's saved layouts; this card lists
+ * them and writes through the SAME one command (no new command, no new
+ * grant). H3 renders the preset's own shell, density and opening tab.
  *
  * A SAVE THAT DID NOT HAPPEN IS SHOWN AS NOT SAVED. The status line is painted
  * from the store's answer, never from the click.
@@ -37,7 +36,15 @@ import {
   layoutStatus,
   loadLayout,
   presetRows,
+  saveLayout,
 } from "./hud-layout-store.js";
+import {
+  DEFAULT_PRESET_ID,
+  normalizeLayout,
+  presetLayout,
+  userLayouts,
+} from "./hud-layout.js";
+import { applyUserLayout } from "./hud-presets.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -63,16 +70,18 @@ function paintLayoutStatus() {
 }
 
 function paintChosen() {
-  const chosen = answer && answer.layout ? answer.layout.base_preset : null;
-  for (const [id, radio] of layoutRows) radio.checked = id === chosen;
+  const activeId = answer && answer.layout ? answer.layout.id : null;
+  for (const [id, radio] of layoutRows) radio.checked = id === activeId;
   paintLayoutStatus();
 }
 
 /** Builds one row per built-in preset from the module's own table. */
 function buildLayoutRows() {
   const list = $("hud-layout-list");
-  if (!list || painted) return;
+  if (!list) return;
   painted = true;
+  list.replaceChildren();
+  layoutRows.clear();
   for (const row of presetRows(answer)) {
     const label = document.createElement("label");
     label.className = "theme-row";
@@ -105,7 +114,52 @@ function buildLayoutRows() {
     list.append(label);
     layoutRows.set(row.id, radio);
   }
+  buildUserRows(list);
   paintChosen();
+}
+
+/**
+ * One row per owner-saved layout (H3). Built from the SAME saved document the
+ * window's Layouts menu shows; choosing one writes through the one existing
+ * command, exactly like a built-in preset.
+ */
+function buildUserRows(list) {
+  const library = answer && answer.layout ? userLayouts(answer.layout) : [];
+  for (const entry of library) {
+    const label = document.createElement("label");
+    label.className = "theme-row";
+    label.dataset.choice = entry.id;
+    label.dataset.userLayout = "1";
+    const radio = document.createElement("input");
+    radio.type = "radio";
+    radio.name = "hud-layout";
+    radio.value = entry.id;
+    radio.addEventListener("change", () => pickUserLayout(entry.id));
+    const glyph = document.createElement("span");
+    glyph.className = "swatch layout-swatch";
+    glyph.setAttribute("aria-hidden", "true");
+    glyph.textContent = "\u2605";
+    const text = document.createElement("span");
+    text.className = "theme-text";
+    const name = document.createElement("span");
+    name.className = "theme-name";
+    name.textContent = entry.name;
+    const blurb = document.createElement("span");
+    blurb.className = "theme-blurb";
+    blurb.textContent = "Your saved layout. Edit it in the window's Layouts menu.";
+    text.append(name, blurb);
+    label.append(radio, glyph, text);
+    list.append(label);
+    layoutRows.set(entry.id, radio);
+  }
+  if (!library.length) {
+    const empty = document.createElement("p");
+    empty.className = "note";
+    empty.dataset.userLayout = "1";
+    empty.textContent = "No saved layouts yet: open the big window's Layouts "
+      + "menu and press Duplicate to keep one.";
+    list.append(empty);
+  }
 }
 
 /**
@@ -124,6 +178,27 @@ async function pickLayout(presetId) {
     source: chosen.source,
     error: chosen.error,
   };
+  paintChosen();
+}
+
+/** Choose one of the owner's own saved layouts (H3). */
+async function pickUserLayout(id) {
+  if (!answer || !answer.layout) return;
+  const saved = await saveLayout(applyUserLayout(answer.layout, id));
+  answer = { layout: saved.layout, saved: saved.saved, source: saved.source,
+    error: saved.error };
+  buildLayoutRows();
+  paintChosen();
+}
+
+/** One-click reset (Ruling 28 item 3): back to Cockpit, keeping My layouts. */
+async function resetToCockpit() {
+  const base = presetLayout(DEFAULT_PRESET_ID);
+  const library = answer && answer.layout ? userLayouts(answer.layout) : [];
+  const saved = await saveLayout(normalizeLayout({ ...base, user_presets: library }));
+  answer = { layout: saved.layout, saved: saved.saved, source: saved.source,
+    error: saved.error };
+  buildLayoutRows();
   paintChosen();
 }
 
@@ -166,6 +241,8 @@ export function initHudWindowSettings() {
   // chosen row when the store answers (and reports an honest failure).
   const editButton = $("hud-edit-open");
   if (editButton) editButton.addEventListener("click", openEditor);
+  const reset = $("hud-reset-layout");
+  if (reset) reset.addEventListener("click", resetToCockpit);
   buildLayoutRows();
   loadLayout().then((loaded) => {
     answer = loaded;

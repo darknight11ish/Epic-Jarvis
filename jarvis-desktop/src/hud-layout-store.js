@@ -38,23 +38,43 @@ import {
 export const LEGACY_KEY = "jarvis.hud.layout";
 
 /**
- * Which of the page's three existing looks each preset wears until H2 draws
- * the real region grid. It is a VIEW mapping, not a saved value: the layout
- * document keeps its own shell_template, and a later slice replacing the page's
- * three looks will drop this table rather than migrate anything.
+ * The first-paint preview mirror (H3, 2026-10-22). The layout document in the
+ * shell store is the ONLY truth; this localStorage key exists so the next HUD
+ * window can paint the right shell/density before the async store read lands.
+ * It is written after every successful save and read only for the first frame
+ * (`hud_bootstrap.js` writes it; `jarvis_hud.html` reads it). Never authority.
  */
-export const LOOK_BY_PRESET = Object.freeze({
-  cockpit: "cockpit",
-  studio: "studio",
-  ambient: "ambient",
-  quiet: "ambient",
-  telemetry: "cockpit",
-  second_brain: "studio",
-  minimal: "ambient",
-});
+export const PREVIEW_KEY = "jarvis.hud.preview";
 
-/** The three looks the page still understands in H1. */
-const LEGACY_LOOKS = new Set(["cockpit", "studio", "ambient"]);
+const PREVIEW_SHELLS = ["three-column", "split-stage", "center-core",
+  "two-column-left", "two-column-right", "single-stage-bento"];
+const PREVIEW_DENSITIES = ["comfortable", "compact", "spacious"];
+const PREVIEW_TABS = ["talk", "galaxy", "today", "reminders", "memory", "telemetry"];
+
+/** The preview facts for one layout document, or null. */
+export function previewOf(layout) {
+  if (!layout || typeof layout !== "object") return null;
+  return {
+    shell_template: PREVIEW_SHELLS.includes(layout.shell_template)
+      ? layout.shell_template : "three-column",
+    density: PREVIEW_DENSITIES.includes(layout.density)
+      ? layout.density : "comfortable",
+    default_stage_tab: PREVIEW_TABS.includes(layout.default_stage_tab)
+      ? layout.default_stage_tab : "talk",
+  };
+}
+
+/** Remember the first-paint facts of a saved document (best effort). */
+export function writePreview(layout, storage = globalThis.localStorage) {
+  const preview = previewOf(layout);
+  if (!preview) return false;
+  try {
+    if (storage) storage.setItem(PREVIEW_KEY, JSON.stringify(preview));
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /** The shell's invoke, or null in a plain browser (the page served alone). */
 function shellInvoke() {
@@ -62,16 +82,6 @@ function shellInvoke() {
   return tauri && tauri.core && typeof tauri.core.invoke === "function"
     ? tauri.core.invoke.bind(tauri.core)
     : null;
-}
-
-/** The page's look for a preset id, or the preset's own shell mapped down. */
-export function lookForPreset(presetId) {
-  if (LOOK_BY_PRESET[presetId]) return LOOK_BY_PRESET[presetId];
-  const preset = PRESETS.find((entry) => entry.id === presetId);
-  const shell = preset ? preset.shell_template : "three-column";
-  if (shell === "split-stage") return "studio";
-  if (shell === "center-core" || shell === "single-stage-bento") return "ambient";
-  return "cockpit";
 }
 
 /**
@@ -135,7 +145,9 @@ export async function saveLayout(layout, storage = globalThis.localStorage) {
   try {
     const answer = await invoke("set_hud_layout", { layout: clean });
     if (answer && answer.layout) {
-      return { layout: normalizeLayout(answer.layout), saved: true,
+      const stored = normalizeLayout(answer.layout);
+      writePreview(stored, storage);
+      return { layout: stored, saved: true,
         source: String(answer.source || "saved") };
     }
     return { layout: clean, saved: false, source: "saved",

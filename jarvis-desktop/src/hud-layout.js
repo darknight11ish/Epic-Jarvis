@@ -66,8 +66,19 @@ export const SHELL_TEMPLATES = Object.freeze([
 /** The densities the renderer understands. */
 export const DENSITIES = Object.freeze(["comfortable", "compact", "spacious"]);
 
-/** The themes the rest of the desktop already ships, plus "system". */
-export const THEMES = Object.freeze(["system", "deep-space", "paper", "high-contrast"]);
+/** The default values a document missing a field is repaired to. */
+export const DEFAULT_SHELL = "three-column";
+export const DEFAULT_DENSITY = "comfortable";
+export const DEFAULT_STAGE_TAB = "talk";
+
+/**
+ * The most user layouts the owner may keep, and the rules for their ids and
+ * names. Bounded here and in Rust (`hud_layout.rs`): a layout library is an
+ * appearance-class document, not a dumping ground.
+ */
+export const MAX_USER_PRESETS = 20;
+export const USER_NAME_MAX = 60;
+export const USER_ID_RE = /^custom-[a-z0-9][a-z0-9-]{0,39}$/;
 
 /** The stage tabs a layout can open on (the page's own four plus Talk). */
 export const STAGE_TABS = Object.freeze(["talk", "galaxy", "today", "reminders", "memory", "telemetry"]);
@@ -550,13 +561,13 @@ function cardsFor(presetId) {
 }
 
 const PRESET_FACTS = {
-  cockpit: { shell_template: "three-column", theme: "system", density: "comfortable", default_stage_tab: "talk" },
-  studio: { shell_template: "split-stage", theme: "system", density: "comfortable", default_stage_tab: "talk" },
-  ambient: { shell_template: "center-core", theme: "system", density: "spacious", default_stage_tab: "talk" },
-  quiet: { shell_template: "two-column-left", theme: "paper", density: "comfortable", default_stage_tab: "talk" },
-  telemetry: { shell_template: "three-column", theme: "deep-space", density: "compact", default_stage_tab: "telemetry" },
-  second_brain: { shell_template: "three-column", theme: "system", density: "comfortable", default_stage_tab: "galaxy" },
-  minimal: { shell_template: "single-stage-bento", theme: "system", density: "compact", default_stage_tab: "talk" },
+  cockpit: { shell_template: "three-column", density: "comfortable", default_stage_tab: "talk" },
+  studio: { shell_template: "split-stage", density: "comfortable", default_stage_tab: "talk" },
+  ambient: { shell_template: "center-core", density: "spacious", default_stage_tab: "talk" },
+  quiet: { shell_template: "two-column-left", density: "comfortable", default_stage_tab: "talk" },
+  telemetry: { shell_template: "three-column", density: "compact", default_stage_tab: "telemetry" },
+  second_brain: { shell_template: "three-column", density: "comfortable", default_stage_tab: "galaxy" },
+  minimal: { shell_template: "single-stage-bento", density: "compact", default_stage_tab: "talk" },
 };
 
 /** Build one preset's complete layout document (fresh objects, never shared). */
@@ -569,10 +580,10 @@ function buildPreset(presetId) {
     name: note.label,
     base_preset: presetId,
     shell_template: facts.shell_template,
-    theme: facts.theme,
     density: facts.density,
     default_stage_tab: facts.default_stage_tab,
     cards: sortCards(cardsFor(presetId)),
+    user_presets: [],
     updated_at: 0,
   };
 }
@@ -642,25 +653,16 @@ const PENDING_TABS = new Set(STAGE_TABS);
  * the default preset. The alternative - guessing what an older/newer document
  * meant - is how a layout silently becomes a different one.
  */
-export function normalizeLayout(doc) {
-  if (!doc || typeof doc !== "object" || Array.isArray(doc)) {
-    return presetLayout(DEFAULT_PRESET_ID);
-  }
-  if (doc.version !== LAYOUT_VERSION) {
-    return presetLayout(DEFAULT_PRESET_ID);
-  }
-  const baseKey = canonicalPresetId(doc.base_preset);
-  const idKey = canonicalPresetId(doc.id);
-  const baseId = PRESET_BY_ID.has(baseKey)
-    ? baseKey
-    : PRESET_BY_ID.has(idKey)
-      ? idKey
-      : DEFAULT_PRESET_ID;
-  const skeleton = buildPreset(baseId);
-  const rawCards = Array.isArray(doc.cards) ? doc.cards : [];
+/**
+ * The cards a document means: known ids only, unique, the four protected cards
+ * always present and visible, canonical region/order order. Shared by the
+ * active document and every saved user layout, so the two can never validate
+ * differently.
+ */
+function normalizedCards(rawCards) {
   const seen = new Set();
   const cards = [];
-  for (const entry of rawCards) {
+  for (const entry of Array.isArray(rawCards) ? rawCards : []) {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
     const id = textOf(entry.id, 40);
     if (!CARD_BY_ID.has(id) || seen.has(id)) continue;
@@ -682,28 +684,109 @@ export function normalizeLayout(doc) {
   // Stable region/order order: the renderer and the tests both read this, and
   // a document cannot smuggle in an order that puts a region's cards in
   // arbitrary array order.
-  cards.splice(0, cards.length, ...sortCards(cards));
+  return sortCards(cards);
+}
+
+/** One saved user layout, or null when the entry cannot be read safely. */
+function normalizedUserPreset(entry) {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
+  const baseKey = canonicalPresetId(entry.base_preset);
+  if (!PRESET_BY_ID.has(baseKey)) return null;
+  const id = textOf(entry.id, 40);
+  if (!USER_ID_RE.test(id) || PRESET_BY_ID.has(id)) return null;
+  const name = textOf(entry.name, USER_NAME_MAX);
+  if (!name) return null;
+  const skeleton = buildPreset(baseKey);
+  return {
+    id,
+    name,
+    base_preset: baseKey,
+    shell_template: SHELL_TEMPLATES.includes(entry.shell_template)
+      ? entry.shell_template
+      : skeleton.shell_template,
+    density: DENSITIES.includes(entry.density) ? entry.density : skeleton.density,
+    default_stage_tab: PENDING_TABS.has(entry.default_stage_tab)
+      ? entry.default_stage_tab
+      : skeleton.default_stage_tab,
+    cards: normalizedCards(entry.cards),
+  };
+}
+
+/** The saved user-layout library from a document (bounded, de-duplicated). */
+export function userLayouts(doc) {
+  const out = [];
+  const ids = new Set();
+  const raw = doc && typeof doc === "object" && Array.isArray(doc.user_presets)
+    ? doc.user_presets : [];
+  for (const entry of raw) {
+    if (out.length >= MAX_USER_PRESETS) break;
+    const clean = normalizedUserPreset(entry);
+    if (!clean || ids.has(clean.id)) continue;
+    ids.add(clean.id);
+    out.push(clean);
+  }
+  return out;
+}
+
+/** Whether the document is one of the owner's own saved layouts. */
+export function isUserLayout(doc) {
+  const id = doc && typeof doc === "object" ? doc.id : null;
+  return typeof id === "string" && USER_ID_RE.test(id)
+    && userLayouts(doc).some((entry) => entry.id === id);
+}
+
+export function normalizeLayout(doc) {
+  if (!doc || typeof doc !== "object" || Array.isArray(doc)) {
+    return presetLayout(DEFAULT_PRESET_ID);
+  }
+  if (doc.version !== LAYOUT_VERSION) {
+    return presetLayout(DEFAULT_PRESET_ID);
+  }
+  const baseKey = canonicalPresetId(doc.base_preset);
+  const idKey = canonicalPresetId(doc.id);
+  const baseId = PRESET_BY_ID.has(baseKey)
+    ? baseKey
+    : PRESET_BY_ID.has(idKey)
+      ? idKey
+      : DEFAULT_PRESET_ID;
+  const skeleton = buildPreset(baseId);
+  const cards = normalizedCards(doc.cards);
+  const library = userLayouts(doc);
+  const wantedId = textOf(doc.id, 60);
+  const activeUser = USER_ID_RE.test(wantedId)
+    ? library.find((entry) => entry.id === wantedId) || null
+    : null;
+  const builtInId = PRESET_BY_ID.has(idKey) ? idKey : null;
+  // A saved old name ("Focus") follows its preset to the new name ("Quiet");
+  // a custom layout's own name is never touched.
+  let name = (PRESET_ALIASES[doc.base_preset] || PRESET_ALIASES[doc.id])
+    && String(doc.name || "").trim().toLowerCase() === "focus"
+    ? skeleton.name
+    : textOf(doc.name, USER_NAME_MAX) || skeleton.name;
+  let id = builtInId || wantedId || skeleton.id;
+  if (activeUser) {
+    id = activeUser.id;
+    name = textOf(doc.name, USER_NAME_MAX) || activeUser.name;
+  } else if (USER_ID_RE.test(wantedId)) {
+    // A custom id with no library entry cannot be served: fall back to its
+    // base built-in rather than render a layout the list does not contain.
+    id = baseId;
+    name = skeleton.name;
+  }
   return {
     version: LAYOUT_VERSION,
-    id: PRESET_BY_ID.has(canonicalPresetId(doc.id))
-      ? canonicalPresetId(doc.id)
-      : textOf(doc.id, 60) || skeleton.id,
-    // A saved old name ("Focus") follows its preset to the new name ("Quiet");
-    // a custom layout's own name is never touched.
-    name: (PRESET_ALIASES[doc.base_preset] || PRESET_ALIASES[doc.id])
-      && String(doc.name || "").trim().toLowerCase() === "focus"
-      ? skeleton.name
-      : textOf(doc.name, 60) || skeleton.name,
+    id,
+    name,
     base_preset: baseId,
     shell_template: SHELL_TEMPLATES.includes(doc.shell_template)
       ? doc.shell_template
       : skeleton.shell_template,
-    theme: THEMES.includes(doc.theme) ? doc.theme : skeleton.theme,
     density: DENSITIES.includes(doc.density) ? doc.density : skeleton.density,
     default_stage_tab: PENDING_TABS.has(doc.default_stage_tab)
       ? doc.default_stage_tab
       : skeleton.default_stage_tab,
     cards,
+    user_presets: library,
     updated_at: intIn(doc.updated_at, 0, 2 ** 52, 0),
   };
 }

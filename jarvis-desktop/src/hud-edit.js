@@ -35,11 +35,14 @@ import {
   cardRow,
   describeLayout,
   effectiveCollapsed,
+  isUserLayout,
   normalizeLayout,
   presetInfo,
   presetLayout,
+  userLayouts,
 } from "./hud-layout.js";
 import { loadLayout, saveLayout } from "./hud-layout-store.js";
+import { ensureCustomCopy } from "./hud-presets.js";
 
 /** The size buttons, as the ruling asks: Small / Medium / Wide / Tall. */
 export const SIZES = Object.freeze([
@@ -294,10 +297,6 @@ export function mountHudEditor(options = {}) {
   let statusEl = null;
   let barEl = null;
   let badgeEl = null;
-  // L1/FT-1 (2026-10-22): the read-only layout badge can reveal the Focus
-  // presets card without entering Edit HUD. This peek is a VIEW state only -
-  // it never writes the saved layout.
-  let presetsPeek = false;
 
   const byId = (id) => doc.getElementById(id);
   const labelOf = (id) => (CARD_BY_ID.get(id) || { label: id }).label;
@@ -485,9 +484,7 @@ export function mountHudEditor(options = {}) {
       const regionName = EDIT_REGIONS.includes(card.region) ? card.region : "right_rail";
       byRegion.get(regionName).push(card);
       shell.hidden = !card.visible;
-      const peekingPresets = card.id === "lanes" && presetsPeek && !editing;
-      shell.classList.toggle("hud-card-collapsed",
-        peekingPresets ? false : effectiveCollapsed(card, pending));
+      shell.classList.toggle("hud-card-collapsed", effectiveCollapsed(card, pending));
       shell.setAttribute("data-hud-movable", "yes");
       shell.style.setProperty("--hud-span", String(card.col_span));
       shell.style.setProperty("--hud-rows", String(card.row_span));
@@ -540,6 +537,10 @@ export function mountHudEditor(options = {}) {
       if (answer && answer.layout) layout = answer.layout;
       if (answer && answer.saved) {
         lastSavedAt = new Date();
+        try {
+          globalThis.dispatchEvent(new CustomEvent("jarvis:hud-layout-saved",
+            { detail: layout }));
+        } catch { /* an old engine: the badge still shows the name */ }
         announce(`Saved. ${describeLayout(layout)}`);
       } else {
         announce(`Not saved: ${(answer && answer.error) || "the PC refused the write"}.`);
@@ -563,11 +564,29 @@ export function mountHudEditor(options = {}) {
       undoStack.push(before);
       if (undoStack.length > UNDO_LIMIT) undoStack.shift();
     }
-    layout = result.layout;
+    // H3 (Ruling 27): the first change to a SHIPPED layout is made to the
+    // owner's copy, never silently to the built-in. Reset keeps a custom copy
+    // a custom copy (its name and its saved layout survive a reset).
+    let next = result.layout;
+    let note = result.note;
+    if (action.type === "resetToPreset") {
+      if (isUserLayout(before)) {
+        next = normalizeLayout({
+          ...next,
+          id: before.id,
+          name: before.name,
+          user_presets: userLayouts(before),
+        });
+      }
+    } else if (!isUserLayout(before)) {
+      next = ensureCustomCopy(next);
+      note = `${note ? `${note} ` : ""}Editing your copy "${next.name}".`;
+    }
+    layout = next;
     render();
     scheduleSave();
-    if (result.note) announce(result.note);
-    return result;
+    if (note) announce(note);
+    return { ...result, layout };
   }
 
   function undo() {
@@ -793,15 +812,19 @@ export function mountHudEditor(options = {}) {
     });
   }
 
+  function currentLayoutName() {
+    if (!layout) return "Cockpit";
+    if (isUserLayout(layout)) return layout.name;
+    const info = presetInfo(layout.base_preset);
+    return info ? info.label : (layout.name || "Cockpit");
+  }
+
   function updateBadge() {
     if (!badgeEl || !layout) return;
-    const info = presetInfo(layout.base_preset);
-    const name = info ? info.label : (layout.name || "Cockpit");
+    const name = currentLayoutName();
     badgeEl.textContent = `Layout: ${name}`;
-    badgeEl.setAttribute("aria-expanded", String(presetsPeek));
-    badgeEl.title = `HUD layout: ${name}. Show the Focus presets and Cloud.`;
-    badgeEl.setAttribute("aria-label",
-      `HUD layout: ${name}. Show the Focus presets and Cloud.`);
+    badgeEl.title = `HUD layout: ${name}. Open the Layouts menu.`;
+    badgeEl.setAttribute("aria-label", `HUD layout: ${name}. Open the Layouts menu.`);
   }
 
   function ensureToggle() {
@@ -816,11 +839,9 @@ export function mountHudEditor(options = {}) {
     badgeEl.id = "hud-layout-badge";
     badgeEl.setAttribute("aria-expanded", "false");
     badgeEl.addEventListener("click", () => {
-      presetsPeek = !presetsPeek;
-      render();
-      announce(presetsPeek
-        ? "Focus presets and Cloud are shown. Click the layout badge again to hide them."
-        : "Focus presets hidden.");
+      try {
+        globalThis.dispatchEvent(new CustomEvent("jarvis:hud-presets-open"));
+      } catch { /* the badge still names the layout without a menu */ }
     });
     const button = doc.createElement("button");
     button.type = "button";
