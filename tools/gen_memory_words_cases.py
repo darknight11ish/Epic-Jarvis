@@ -271,7 +271,7 @@ def _real_statuses() -> list:
     # PINNED, like FIXED_DB below: whether sqlite-vec is installed on the
     # machine that runs this must not change the document. CI installs no
     # sqlite-vec ON PURPOSE (.github/workflows/ci.yml, the backend job: "the
-    # memory ones (fastembed, sqlite-vec) are left out - the suites use a hash
+    # memory ones (onnxruntime and the meaning model, sqlite-vec) are left out - the suites use a hash
     # embedder and must pass without them"), and the owner's PC has it, so the
     # same generator wrote two different files - 20,991 characters with it,
     # 22,503 without: `vector_search` true -> false and `unembedded` 0 -> 4
@@ -320,8 +320,8 @@ def _real_statuses() -> list:
         snap("on, used once, too slow four times")
         with contextlib.redirect_stderr(io.StringIO()):
             reset(state="loading")
-            M._rr_load(fails(ImportError("no fastembed")))
-            snap("off: fastembed missing")
+            M._rr_load(fails(ImportError("no onnxruntime")))
+            snap("off: onnxruntime or tokenizers missing")
             reset(state="loading")
             M._rr_load(fails(RuntimeError("bad file")))
             snap("off: the model could not be loaded")

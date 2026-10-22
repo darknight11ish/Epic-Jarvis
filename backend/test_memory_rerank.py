@@ -330,8 +330,8 @@ def _loading_never_blocks_a_chat():
 
         def score(self, q, t):
             return [float(i) for i in range(len(t))]
-    real = M.FastReranker
-    M.FastReranker = SlowLoad
+    real = M.OnnxReranker
+    M.OnnxReranker = SlowLoad
     try:
         t0 = time.perf_counter()
         got = ids_of(P.recall(st, "tennis", k=3))
@@ -350,7 +350,7 @@ def _loading_never_blocks_a_chat():
               == "on" and M.reranker_status()["model"] == "slow-load", (got, base))
     finally:
         release.set()
-        M.FastReranker = real
+        M.OnnxReranker = real
         _reset()
 
 
@@ -364,27 +364,44 @@ def _a_failed_load_is_said_once():
     st, ids = store(*FACTS)
     base = ids_of(st.search("tennis", k=3))
 
-    def no_fastembed():
-        raise ImportError("No module named 'fastembed'")
-    real = M.FastReranker
-    M.FastReranker = no_fastembed
-    _AUDIT.clear()
+    def no_engine(model, spec, *, rerank):
+        raise M.EmbedModelUnavailable(
+            "the memory search needs the onnxruntime and tokenizers packages, "
+            "and one of them is not installed, so meaning search is off and "
+            "words alone are used.")
+
+    def no_import(model, spec, *, rerank):
+        raise ImportError("No module named 'onnxruntime'")
+
+    real = M._backend_for
     try:
-        P.recall(st, "tennis", k=3)
-        for _ in range(100):
-            if M.reranker_status()["state"] == "off":
-                break
-            time.sleep(0.02)
-        for _ in range(3):
-            got = ids_of(P.recall(st, "tennis", k=3))
-        check("no fastembed: recall is exactly as before", got == base, (got, base))
-        said = [a for a in _AUDIT if a[0] == "memory.rerank_off"]
-        check("said once, in the audit log", len(said) == 1, _AUDIT)
-        s = st.status()["reranker"]
-        check("status() says it is off, and why", s["state"] == "off"
-              and "fastembed" in s["why"], s)
+        # The seam is the only way the real re-ranker is built, so a failing
+        # seam is "the model cannot be loaded", both ways it happens: the
+        # engine's own plain sentence, and a bare ImportError.
+        for name, factory, want in (
+                ("a model that cannot be loaded", no_engine,
+                 "onnxruntime and tokenizers packages"),
+                ("no onnxruntime", no_import,
+                 "the memory search packages are not installed")):
+            _reset()
+            _AUDIT.clear()
+            M._backend_for = factory
+            P.recall(st, "tennis", k=3)
+            for _ in range(100):
+                if M.reranker_status()["state"] == "off":
+                    break
+                time.sleep(0.02)
+            for _ in range(3):
+                got = ids_of(P.recall(st, "tennis", k=3))
+            check(f"{name}: recall is exactly as before", got == base, (got, base))
+            said = [a for a in _AUDIT if a[0] == "memory.rerank_off"]
+            check(f"{name}: said once, in the audit log", len(said) == 1, _AUDIT)
+            s = st.status()["reranker"]
+            check(f"{name}: status() says it is off, and why",
+                  s["state"] == "off" and want in s["why"]
+                  and "fastembed" not in s["why"].lower(), s)
     finally:
-        M.FastReranker = real
+        M._backend_for = real
         _reset()
 
 
@@ -399,7 +416,7 @@ def t_it_is_off_by_default():
              "fw = types.ModuleType('jarvis_framework'); fw.CONFIG_DIR = fw.LOG_DIR = %r; "
              "fw.audit_log = lambda *a, **k: None; fw.load_framework = lambda *a, **k: {}; "
              "sys.modules['jarvis_framework'] = fw; import jarvis_memory as M; "
-             "import time; M.FastReranker = lambda: time.sleep(3); "
+             "import time; M.OnnxReranker = lambda: time.sleep(3); "
              "print(M._RERANK_ON, M.reranker() is None, M.reranker_status()['state'])"
              % (str(HERE / "rebuilt"), str(HERE), str(_TMP)))
     for value, want in ((None, "False True off"), ("0", "False True off"),
@@ -437,12 +454,42 @@ def t_it_is_off_by_default():
 # ========================================================== 5. model ==
 
 def t_the_model_is_the_one_the_research_named():
+    """Behaviour, not source text: with JARVIS_MEMORY_RERANK=1 `reranker()`
+    builds the model through the module's one ONNX seam -
+    `_backend_for(..., rerank=True)` - exactly once, and what it builds is the
+    cross-encoder the research named. Nothing downloads: the seam is a
+    stand-in that records the call."""
     check("Xenova/ms-marco-MiniLM-L-6-v2 (Apache-2.0, about 80 MB)",
           M.RERANK_MODEL == "Xenova/ms-marco-MiniLM-L-6-v2")
-    src = (HERE / "rebuilt" / "jarvis_memory.py").read_text(encoding="utf-8")
-    check("fastembed's own cross-encoder, imported only when it is loaded",
-          "from fastembed.rerank.cross_encoder import TextCrossEncoder" in src
-          and src.index("from fastembed.rerank") > src.index("class FastReranker"))
+    check("... and the build's ONNX re-ranker list is what it loads from",
+          M.RERANK_MODEL_DEFAULT in M.ONNX_RERANK_MODELS, sorted(M.ONNX_RERANK_MODELS))
+    calls, probes = [], []
+
+    class _Backend:
+        def score_pairs(self, query, texts):
+            probes.append((query, list(texts)))
+            return [0.0 for _ in texts]
+
+    def seam(model, spec, *, rerank):
+        calls.append((model, rerank, spec.get("file")))
+        return _Backend()
+
+    real, keep = M._backend_for, M._RERANK_ON
+    M._backend_for, M._RERANK_ON = seam, True
+    _reset()
+    try:
+        rr = M.reranker(wait=True)
+        check("JARVIS_MEMORY_RERANK=1 loads it through the one ONNX seam, as a "
+              "re-ranker, exactly once",
+              calls == [(M.RERANK_MODEL_DEFAULT, True,
+                         M.ONNX_RERANK_MODELS[M.RERANK_MODEL_DEFAULT]["file"])], calls)
+        check("... and it is the cross-encoder the research named",
+              isinstance(rr, M.OnnxReranker) and rr.name == M.RERANK_MODEL_DEFAULT, rr)
+        check("... loaded now, not left for the first question",
+              probes == [("probe", ["probe"])], probes)
+    finally:
+        M._backend_for, M._RERANK_ON = real, keep
+        _reset()
 
 
 def t_the_self_test_loads_it_even_though_it_is_off():
@@ -455,21 +502,23 @@ def t_the_self_test_loads_it_even_though_it_is_off():
     class Loaded(M.Reranker):
         name = "stand-in for the real model"
 
-    real, keep = M.FastReranker, M._RERANK_ON
-    M.FastReranker, M._RERANK_ON = Loaded, False
+    real, keep = M.OnnxReranker, M._RERANK_ON
+    M.OnnxReranker, M._RERANK_ON = Loaded, False
     _reset()
     try:
         m, what = E._pick_reranker(M, "auto")
         check("--reranker auto loads the real model while the backend has it off",
               isinstance(m, Loaded) and what == Loaded.name, (m, what))
 
-        def no_fastembed():
-            raise ImportError("No module named 'fastembed'")
-        M.FastReranker = no_fastembed
+        def no_engine():
+            raise M.EmbedModelUnavailable(
+                "the memory search needs the onnxruntime and tokenizers packages, "
+                "and one of them is not installed, so meaning search is off")
+        M.OnnxReranker = no_engine
         m, what = E._pick_reranker(M, "auto")
-        check("... and says why when it cannot", m is None and "fastembed" in what, what)
+        check("... and says why when it cannot", m is None and "onnxruntime" in what, what)
     finally:
-        M.FastReranker, M._RERANK_ON = real, keep
+        M.OnnxReranker, M._RERANK_ON = real, keep
         _reset()
 
 

@@ -333,8 +333,8 @@ def t_a_chatgpt_export_shows_the_model_only_the_owners_words():
 
 def t_a_bad_progress_file_degrades_to_starting_over_rather_than_crashing():
     # NOT fresh(). That also builds a MemoryStore, whose meaning model is
-    # fastembed's - and the `fw.CONFIG_DIR = _TMP` stub at the top of this file
-    # moves fastembed's cache into a brand-new temp folder, so the model is
+    # the old memory library's - and the `fw.CONFIG_DIR = _TMP` stub at the top of this file
+    # moves the model cache into a brand-new temp folder, so the model is
     # fetched from HuggingFace again on every run (measured 2026-10-10: 5 files,
     # 38 s, on every run). This check drives `_load_progress()` alone and needs
     # only the progress path, so the store - and the download - is left out. The

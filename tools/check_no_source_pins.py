@@ -140,7 +140,13 @@ SOURCE_PIN_CEILING: dict[str, int] = {
     "backend/test_memory_entities.py": 3,
     "backend/test_memory_honesty.py": 7,
     "backend/test_memory_recall.py": 1,
-    "backend/test_memory_rerank.py": 2,
+    # LOWERED 2026-10-21, 2 -> 0: the fastembed -> direct ONNX Runtime change
+    # replaced test_memory_rerank.py's source-text pin on `from fastembed.
+    # rerank.cross_encoder import TextCrossEncoder` with a behavioural check -
+    # that reranker(wait=True) loads through _backend_for(..., rerank=True)
+    # exactly once - so this file now has no source pins at all. The ratchet
+    # only turns down; a ceiling left at 2 would be room for the next pin.
+    "backend/test_memory_rerank.py": 0,
     # RAISED 2026-10-18, 16 -> 17, for test_model_lanes.py's one named-lane
     # check: the old "for lane in LANES" string pin was replaced by real
     # behaviour checks (one start(lane=...) call from start_lane, lane_by_key
