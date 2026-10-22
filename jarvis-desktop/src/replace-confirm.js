@@ -42,6 +42,41 @@ export const REPLACES_NOTE =
   "Approving this replaces what is there now. Press Approve again to confirm.";
 
 /**
+ * Review ruling 8.1 (2026-10-21): the heading is not one generic sentence any
+ * more. The PC sends the category and its own words on every row
+ * (`replaces_kind`, `replaces_heading`, `replaces_note`, from
+ * `jarvis_gate.replaces_words_for()`), so a card can never claim a deletion
+ * when a recoverable copy is kept, nor promise a kept copy when there is none.
+ * These three are the OLDER-PC fallback (a row with `replaces: true` but no
+ * words yet), chosen by the category - the generic `REPLACES_WARNING` stays
+ * for a card that says it replaces data but gives no category at all.
+ */
+export const REPLACE_HEADINGS = {
+  deletes_data: "DELETES OR REPLACES DATA",
+  overwrites_note: "OVERWRITES EXISTING NOTE",
+  replaces_code_or_state: "REPLACES LIVE CODE OR STATE",
+};
+
+/** The heading this card draws: the PC's own words, else the category's. */
+export function replacesHeading(approval) {
+  if (!isReplaceCard(approval)) return "";
+  const heading = typeof approval.replacesHeading === "string"
+    ? approval.replacesHeading : "";
+  if (heading) return heading;
+  const kind = typeof approval.replacesKind === "string"
+    ? approval.replacesKind : "";
+  return REPLACE_HEADINGS[kind] || REPLACES_WARNING;
+}
+
+/** The honest one-line consequence this card draws. */
+export function replacesNote(approval) {
+  if (!isReplaceCard(approval)) return "";
+  const note = typeof approval.replacesNote === "string"
+    ? approval.replacesNote : "";
+  return note || REPLACES_NOTE;
+}
+
+/**
  * The client-side FLOOR for the actions whose card replaces or deletes data
  * already on the PC.
  *

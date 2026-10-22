@@ -629,10 +629,21 @@ def t_ruling_103_poll_floor_and_owned_scheduler():
           P.POLL_MIN_SECONDS)
     check("the jitter is the +/-30% the contract fixes",
           abs(P.POLL_JITTER - 0.30) < 1e-9, P.POLL_JITTER)
-    check("without Slice 1's scheduler, no cadence is invented (None)",
-          P.next_poll_seconds(600) is None, P.next_poll_seconds(600))
+    # Hermetic: this install may HAVE Slice 1's scheduler now (#699's tellme
+    # work landed after this test was written), so take it away for the
+    # no-scheduler assertion rather than depending on the tree - then put it
+    # back exactly as it was for the delegation check below.
     had = hasattr(T, "next_poll_timestamp")
     real = getattr(T, "next_poll_timestamp", None)
+    if had:
+        del T.next_poll_timestamp
+    try:
+        none_got = P.next_poll_seconds(600)
+    finally:
+        if had:
+            T.next_poll_timestamp = real
+    check("without Slice 1's scheduler, no cadence is invented (None)",
+          none_got is None, none_got)
     seen = []
 
     def fake(base, rng=None, now=None):

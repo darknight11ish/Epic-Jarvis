@@ -158,17 +158,23 @@ check("(e) the HUD click wiring cannot send an approve before the rule says so",
   const handler = BOOTSTRAP.slice(at, at + 8000);
   const firstPress = handler.indexOf("replaceArmBusy[id] = true;");
   assert.ok(firstPress > 0, "the handler has no first-press branch");
-  const branch = handler.slice(firstPress, firstPress + 2000);
+  const branch = handler.slice(firstPress);
   const decideAt = branch.indexOf("replacePress.decide(id, replaces)");
   assert.ok(decideAt > 0, "the first press does not consult the two-press rule");
   assert.match(branch, /if \(verdict === "send"\)/);
-  assert.match(branch, /armReplaceCard\(card, id, verdict\)/);
+  assert.match(branch, /armReplaceCard\(card, id, verdict, row\)/);
   // Deny is one press: it goes straight to the decision, before the rule.
   assert.match(handler, /button\.className\.indexOf\("yes"\) < 0/);
   // Both honest wordings exist, and they are not interchangeable: an UNKNOWN
   // card must say it could not be checked, never claim it replaces data.
+  // Review ruling 8.1: a row WITH the PC's words draws those words; the
+  // generic sentence stays only for an older PC that sends none.
   assert.match(BOOTSTRAP, /This REPLACES what is on your PC\./);
   assert.match(BOOTSTRAP, /I could not check what this will replace\./);
+  assert.match(BOOTSTRAP, /row\.replaces_heading/,
+    "the bootstrap does not draw the PC's own category heading");
+  assert.match(BOOTSTRAP, /row\.replaces_note/,
+    "the bootstrap does not draw the PC's own honest note");
   // The expiry timer clears for its id unconditionally, and arming a new card
   // first clears the previous card's label (the audit's NIT 1 and NIT 2).
   const timer = BOOTSTRAP.slice(BOOTSTRAP.indexOf("replaceArmTimer = setTimeout"),

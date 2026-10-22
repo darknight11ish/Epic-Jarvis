@@ -35,6 +35,28 @@ object ReplaceConfirm {
     /** The Approve button's words between the two presses. */
     const val CONFIRM_LABEL = "Confirm replace"
 
+    /** Review ruling 8.1: the older-PC fallback heading per category. */
+    private val HEADINGS = mapOf(
+        "deletes_data" to "DELETES OR REPLACES DATA",
+        "overwrites_note" to "OVERWRITES EXISTING NOTE",
+        "replaces_code_or_state" to "REPLACES LIVE CODE OR STATE",
+    )
+
+    /** The heading this card draws: the PC's own words, else its category's. */
+    fun heading(item: PendingItem?): String {
+        if (!applies(item)) return ""
+        val given = item?.replacesHeading?.trim().orEmpty()
+        if (given.isNotEmpty()) return given
+        return HEADINGS[item?.replacesKind?.trim().orEmpty()] ?: WARNING
+    }
+
+    /** The honest one-line consequence this card draws. */
+    fun note(item: PendingItem?): String {
+        if (!applies(item)) return ""
+        val given = item?.replacesNote?.trim().orEmpty()
+        return given.ifEmpty { NOTE }
+    }
+
     /**
      * The client-side FLOOR for the actions whose card replaces data. The PC's
      * `replaces` field can ADD an action; this list can never SUBTRACT one, so

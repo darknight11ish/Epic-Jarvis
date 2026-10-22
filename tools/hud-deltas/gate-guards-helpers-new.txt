@@ -98,6 +98,62 @@ _REPLACES_ACTIONS = frozenset({
     "app_merge_change",        # writes the shown change into the app's own files
 })
 
+#: The three warning categories the apps draw (review ruling 8.1): what the
+#: action really does decides the words, so a card never claims a deletion when
+#: a recoverable copy is kept, nor promises a kept copy when there is none.
+#: `jarvis_card_words.REPLACE_HEADINGS`/`REPLACE_NOTES` hold the words; this is
+#: the mapping, and a detail-marked card (the voice-training clear) falls back
+#: to the DELETES category because clearing the saved voice deletes it.
+_REPLACES_KINDS = {
+    "delete_file": "deletes_data",
+    "delete_joplin_note": "deletes_data",
+    "delete_logseq_page": "deletes_data",
+    "memory_forget_range": "deletes_data",
+    "edit_joplin_note": "overwrites_note",
+    "edit_logseq_page": "overwrites_note",
+    "restore_backup": "replaces_code_or_state",
+    "register_approval_key": "replaces_code_or_state",
+    "modify_own_code": "replaces_code_or_state",
+    "app_merge_change": "replaces_code_or_state",
+}
+
+
+def replaces_kind_for(action, detail=None):
+    """The warning category for this card, or None for an ordinary one.
+
+    The action decides it; a card whose module marked its own `detail` with
+    `{"replaces": True}` (the voice-training clear, raised as the shared
+    `change_own_config`) has no action of its own, so it takes the DELETES
+    category - clearing the saved voice does delete it, and saying less than
+    that would be the one direction this guard must not err.
+    """
+    if not replaces_for(action, detail):
+        return None
+    return _REPLACES_KINDS.get(str(action or ""), "deletes_data")
+
+
+def replaces_words_for(action, detail=None):
+    """The heading and honest note both apps draw, from ONE source of words.
+
+    `jarvis_card_words` owns the sentences; a checkout where that module is
+    missing or older still gets the category and empty words rather than an
+    exception on the approval path - a card with a plain heading is better
+    than a card that cannot be drawn, and the client's own fail-safe floor
+    still decides that it takes two presses.
+    """
+    kind = replaces_kind_for(action, detail)
+    if not kind:
+        return {}
+    heading = note = ""
+    try:
+        import jarvis_card_words as words
+        heading = words.replace_heading(kind)
+        note = (words.replace_note(action)
+                or words.replace_generic_note(kind))
+    except Exception:
+        pass
+    return {"kind": kind, "heading": heading, "note": note}
+
 
 def replaces_for(action: str, detail: Any = None) -> bool:
     """True when approving this card replaces or deletes what is already there.

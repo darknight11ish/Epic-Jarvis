@@ -56,6 +56,30 @@ class ReplaceConfirmTest {
     }
 
     @Test
+    fun `RULING 8_1 the phone draws the PC's category words, and falls back by category`() {
+        // The PC sends the category and its honest words; the phone draws them
+        // unchanged. A marked row with no words falls back to its category's
+        // heading, so a delete never says it overwrites a note.
+        val note = item("edit_joplin_note").copy(
+            replaces = true,
+            replacesKind = "overwrites_note",
+            replacesHeading = "OVERWRITES EXISTING NOTE",
+            replacesNote = "replaces the note's current text; Jarvis keeps no copy",
+        )
+        assertTrue(ReplaceConfirm.applies(note))
+        assertEquals("OVERWRITES EXISTING NOTE", ReplaceConfirm.heading(note))
+        assertTrue(ReplaceConfirm.note(note).contains("keeps no copy"))
+        assertFalse(ReplaceConfirm.heading(note).contains("DELETES"))
+
+        val marked = item("delete_file").copy(replaces = true, replacesKind = "deletes_data")
+        assertEquals("DELETES OR REPLACES DATA", ReplaceConfirm.heading(marked))
+
+        val ordinary = item("send_email")
+        assertEquals("", ReplaceConfirm.heading(ordinary))
+        assertEquals("", ReplaceConfirm.note(ordinary))
+    }
+
+    @Test
     fun `a SPOOFED or absent field cannot subtract the phone's second press`() {
         // The PC's field may ADD an action; the phone floor may never remove
         // one - an explicit false or a missing field on a listed action still

@@ -423,6 +423,11 @@ data class ProposalOption(
 @Serializable
 data class PendingItem(
     val id: String,
+    /** Review ruling 8.1: the PC's warning category/heading/note for a card
+     *  that replaces data. Older PCs send none; the client falls back. */
+    @SerialName("replaces_kind") val replacesKind: String = "",
+    @SerialName("replaces_heading") val replacesHeading: String = "",
+    @SerialName("replaces_note") val replacesNote: String = "",
     val title: String = "Approval required",
     val summary: String = "",
     val tier: String = "ask",

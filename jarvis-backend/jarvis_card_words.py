@@ -431,6 +431,82 @@ SUMMARY = {
 #: reviewer's memory, is what says so.
 SUMMARY_MAX_WORDS = 9
 
+#: The three plain warning headings the two-press guard draws above a card that
+#: replaces or removes data already on this PC (review ruling 8.1, 2026-10-21).
+#: The wording is deliberately split by WHAT the action really does, so a card
+#: never claims a deletion when a recoverable copy is kept (and never promises
+#: a kept copy when there is none). ONE source of words: `jarvis_gate` sends
+#: the chosen heading and note on every pending row and every surface (bar,
+#: HUD page, widget redirect, HUD bootstrap, phone plate) draws what it is
+#: given, so the wording cannot drift between the places a card appears.
+REPLACE_HEADINGS = {
+    "deletes_data": "DELETES OR REPLACES DATA",
+    "overwrites_note": "OVERWRITES EXISTING NOTE",
+    "replaces_code_or_state": "REPLACES LIVE CODE OR STATE",
+}
+
+#: What approving each action really does, in one honest sentence. Every
+#: claim here is checked against the recovery the action really has (the
+#: gate's own `_RISK` "why" says the same thing): a kept copy is promised
+#: ONLY for `restore_backup` (current data is backed up first, with a fresh
+#: recovery code), `app_merge_change` (the older version stays in the app's
+#: git history), and `register_approval_key` (the device can be removed again
+#: in Settings). The note edits say plainly that Jarvis keeps no copy; the
+#: deletions say there is no undo from here.
+REPLACE_NOTES = {
+    # --- true deletions -----------------------------------------------------
+    "delete_file": "deletes the file; there is no undo from here",
+    "delete_joplin_note": "deletes the note; there is no undo from here",
+    "delete_logseq_page": "deletes the page; there is no undo from here",
+    "memory_forget_range": ("forgets the listed facts and deletes the chats; "
+                            "Undo puts them back for 10 minutes, then they are gone"),
+    # --- note edits (no automatic copy is kept) -----------------------------
+    "edit_joplin_note": ("replaces the note's current text; Jarvis keeps no copy "
+                         "of the old version"),
+    "edit_logseq_page": ("replaces the page's current text; Jarvis keeps no copy "
+                         "of the old version"),
+    # --- live code / whole state -------------------------------------------
+    "restore_backup": ("puts back an older backup of your memory, chats, settings "
+                       "and notes; your CURRENT data is backed up first, with a "
+                       "fresh recovery code, so this can itself be undone"),
+    "register_approval_key": ("adds the phone named on the card as an approver; you "
+                              "can remove the device in Settings, Devices, to drop "
+                              "the key again"),
+    "modify_own_code": ("changes Jarvis's own running code; a backup is the only "
+                        "way back"),
+    "app_merge_change": ("writes the change shown on the card into the app's files; "
+                        "the older version stays in the app's git history, but "
+                         "there is no Undo button for it yet"),
+}
+
+#: For a card that marks itself in its DETAIL (a module saying "this one
+#: replaces data" without naming a new action - the voice-training clear,
+#: raised as the shared `change_own_config`), the action name says nothing
+#: about what it does, so the words fall back to the category, honestly.
+REPLACE_GENERIC_NOTES = {
+    "deletes_data": "deletes data saved on this PC; there is no undo from here",
+    "overwrites_note": ("replaces existing note text; Jarvis keeps no copy of "
+                        "the old version"),
+    "replaces_code_or_state": ("replaces live code or saved state on this PC; a "
+                               "backup is the only way back unless the card says "
+                               "otherwise"),
+}
+
+
+def replace_heading(kind: str) -> str:
+    """The heading for one warning category, or "" for an unknown one."""
+    return REPLACE_HEADINGS.get(str(kind or ""), "")
+
+
+def replace_note(action: str) -> str:
+    """The honest one-sentence consequence for one action, or ""."""
+    return REPLACE_NOTES.get(str(action or ""), "")
+
+
+def replace_generic_note(kind: str) -> str:
+    """The consequence when only the category is known (a detail-marked card)."""
+    return REPLACE_GENERIC_NOTES.get(str(kind or ""), "")
+
 #: The start of every title with a phrase.
 LEAD = "Jarvis wants to "
 

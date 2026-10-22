@@ -219,6 +219,12 @@ export function normaliseApproval(row) {
     // a missing field is `false` and the card is ordinary; replace-confirm.js
     // owns the older-PC fallback for the three real action names.
     replaces: row.replaces === true,
+    // Review ruling 8.1: the PC's own category and words, passed through
+    // unchanged so every desktop surface draws the same accurate label.
+    replacesKind: typeof row.replaces_kind === "string" ? row.replaces_kind : "",
+    replacesHeading: typeof row.replaces_heading === "string"
+      ? row.replaces_heading : "",
+    replacesNote: typeof row.replaces_note === "string" ? row.replaces_note : "",
     risk: risk
       ? {
           reversible: String(risk.reversible || "no"),

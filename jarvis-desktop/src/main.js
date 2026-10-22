@@ -224,7 +224,8 @@ import {
   ReplaceGate,
   approveLabel,
   isReplaceCard,
-  REPLACES_NOTE,
+  replacesHeading,
+  replacesNote,
 } from "./replace-confirm.js";
 import { buildSayableList } from "./sayable.js";
 // The command palette (docs/UI-AUDIT-2026-10-05.md section 2.4, "what I would
@@ -438,6 +439,8 @@ const dom = {
   // Review ruling 8.2: the plain "REPLACES CURRENT DATA" heading on the
   // state-replacing cards (index.html, replace-confirm.js).
   approvalReplaces: $("approval-replaces"),
+  approvalReplacesHead: $("approval-replaces-head"),
+  approvalReplacesNote: $("approval-replaces-note"),
   approvalApprove: $("approval-approve"),
   approvalDeny: $("approval-deny"),
   approvalCount: $("approval-count"),
@@ -2576,6 +2579,13 @@ function refreshApproval(approval) {
   // mid-press (nor restart it, which would mean two presses never finish).
   const replacing = replaceGate.sync(approval);
   dom.approvalReplaces.hidden = !replacing;
+  // Review ruling 8.1: the PC's own category decides the heading and the
+  // honest consequence line; an older PC without words falls back to the
+  // category heading, and a card with neither keeps the generic wording.
+  if (replacing) {
+    dom.approvalReplacesHead.textContent = replacesHeading(approval);
+    dom.approvalReplacesNote.textContent = replacesNote(approval);
+  }
 
   // Feasibility I110: a genuinely new heavy card restarts the clock and the
   // scroll watch; a re-render of the SAME card (a resync, `raised` ticking
@@ -3151,7 +3161,10 @@ function paintApprovalClock() {
   } else if (approval && isReplaceCard(approval) && replaceGate.armed) {
     // Review ruling 8.2: the card is armed, so say plainly what the next press
     // does. Nothing has been sent yet - the heading on the card said so first.
-    parts.push("Press Approve again to confirm. That REPLACES what is there now.");
+    const note = replacesNote(approval);
+    parts.push(note && !/confirm\.$/.test(note)
+      ? `${note} Press Approve again to confirm.`
+      : note || "Press Approve again to confirm.");
   }
   const clock = approval ? expiryWords(approval.expiresAt) : "";
   if (clock) parts.push(clock);
@@ -5851,7 +5864,7 @@ function pressApprove() {
     // between the person and the thing that cannot be taken back.
     syncApprovalButtons();
     paintApprovalClock();
-    announce(REPLACES_NOTE);
+    announce(replacesNote(state.approval));
     return;
   }
   decideApproval(true);

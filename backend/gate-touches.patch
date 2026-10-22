@@ -1,5 +1,5 @@
 diff --git a/jarvis_gate.py b/jarvis_gate.py
-index 2afade5..2065d4b 100644
+index 2afade5..58caf1f 100644
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
 @@ -31,6 +31,7 @@ this module cannot do its job it refuses rather than waving things through.
@@ -168,7 +168,7 @@ index 2afade5..2065d4b 100644
      for b in blobs:
          if not b:
              continue
-@@ -1355,6 +1498,140 @@ def filter_tool_result(name: str, content: Any) -> Any:
+@@ -1355,6 +1498,196 @@ def filter_tool_result(name: str, content: Any) -> Any:
      return out.get("text", content)
  
  
@@ -284,6 +284,62 @@ index 2afade5..2065d4b 100644
 +    "app_merge_change",        # writes the shown change into the app's own files
 +})
 +
++#: The three warning categories the apps draw (review ruling 8.1): what the
++#: action really does decides the words, so a card never claims a deletion when
++#: a recoverable copy is kept, nor promises a kept copy when there is none.
++#: `jarvis_card_words.REPLACE_HEADINGS`/`REPLACE_NOTES` hold the words; this is
++#: the mapping, and a detail-marked card (the voice-training clear) falls back
++#: to the DELETES category because clearing the saved voice deletes it.
++_REPLACES_KINDS = {
++    "delete_file": "deletes_data",
++    "delete_joplin_note": "deletes_data",
++    "delete_logseq_page": "deletes_data",
++    "memory_forget_range": "deletes_data",
++    "edit_joplin_note": "overwrites_note",
++    "edit_logseq_page": "overwrites_note",
++    "restore_backup": "replaces_code_or_state",
++    "register_approval_key": "replaces_code_or_state",
++    "modify_own_code": "replaces_code_or_state",
++    "app_merge_change": "replaces_code_or_state",
++}
++
++
++def replaces_kind_for(action, detail=None):
++    """The warning category for this card, or None for an ordinary one.
++
++    The action decides it; a card whose module marked its own `detail` with
++    `{"replaces": True}` (the voice-training clear, raised as the shared
++    `change_own_config`) has no action of its own, so it takes the DELETES
++    category - clearing the saved voice does delete it, and saying less than
++    that would be the one direction this guard must not err.
++    """
++    if not replaces_for(action, detail):
++        return None
++    return _REPLACES_KINDS.get(str(action or ""), "deletes_data")
++
++
++def replaces_words_for(action, detail=None):
++    """The heading and honest note both apps draw, from ONE source of words.
++
++    `jarvis_card_words` owns the sentences; a checkout where that module is
++    missing or older still gets the category and empty words rather than an
++    exception on the approval path - a card with a plain heading is better
++    than a card that cannot be drawn, and the client's own fail-safe floor
++    still decides that it takes two presses.
++    """
++    kind = replaces_kind_for(action, detail)
++    if not kind:
++        return {}
++    heading = note = ""
++    try:
++        import jarvis_card_words as words
++        heading = words.replace_heading(kind)
++        note = (words.replace_note(action)
++                or words.replace_generic_note(kind))
++    except Exception:
++        pass
++    return {"kind": kind, "heading": heading, "note": note}
++
 +
 +def replaces_for(action: str, detail: Any = None) -> bool:
 +    """True when approving this card replaces or deletes what is already there.
@@ -309,7 +365,7 @@ index 2afade5..2065d4b 100644
  def check(action: str,
            detail: Optional[dict] = None,
            prompt: str = "",
-@@ -1377,7 +1654,12 @@ def check(action: str,
+@@ -1377,7 +1710,12 @@ def check(action: str,
                         outcome="refused")
  
      # The one rule above the tier table: nothing gets to edit the tier table.
@@ -323,7 +379,7 @@ index 2afade5..2065d4b 100644
      if hit:
          _audit("gate.refused_protected", {"action": action, "file": hit})
          return Verdict(False, "never", action,
-@@ -1426,22 +1708,60 @@ def check(action: str,
+@@ -1426,22 +1764,60 @@ def check(action: str,
                         outcome="notify")
  
      # ---- "ask", and anything unrecognised, waits for a human ----
@@ -390,7 +446,7 @@ index 2afade5..2065d4b 100644
      _audit("gate.asked", {"id": rid, "action": action, "tier": tier, "detail": detail})
      # An unclassified action is safe (it became "ask") but opaque: you cannot
      # improve the pattern table without knowing what phrasing missed. Recording
-@@ -1599,9 +1919,16 @@ def gate_tool(name: str, params: Any) -> Optional[str]:
+@@ -1599,9 +1975,16 @@ def gate_tool(name: str, params: Any) -> Optional[str]:
      that mattered. Called from inside execute(), it sees every call.
      """
      action, _ = action_for_tool(name, params)
@@ -410,7 +466,7 @@ index 2afade5..2065d4b 100644
      if v.allowed:
          return None
      if v.timed_out:
-@@ -1633,29 +1960,74 @@ def gate_tool(name: str, params: Any) -> Optional[str]:
+@@ -1633,29 +2016,74 @@ def gate_tool(name: str, params: Any) -> Optional[str]:
  # some public questions answered by the local model; the alternative cost is
  # personal material reaching a cloud lane.
  
@@ -490,7 +546,7 @@ index 2afade5..2065d4b 100644
      try:
          _init()
          with closing(_connect()) as c:
-@@ -1666,6 +2038,9 @@ def taint_active() -> bool:
+@@ -1666,6 +2094,9 @@ def taint_active() -> bool:
  
  
  def clear_taint() -> bool:
@@ -500,7 +556,7 @@ index 2afade5..2065d4b 100644
      try:
          _init()
          with closing(_connect()) as c:
-@@ -1764,6 +2139,11 @@ def pending() -> list[dict]:
+@@ -1764,6 +2195,18 @@ def pending() -> list[dict]:
          # desktop cannot word the same warning two different ways - and so
          # there is one place to audit what a notification may contain.
          d["notice"] = notice_for(d)
@@ -509,6 +565,13 @@ index 2afade5..2065d4b 100644
 +        # the warning heading and ask a second, explicit confirmation
 +        # for these; every other card is unchanged.
 +        d["replaces"] = replaces_for(d.get("action", ""), d.get("detail"))
++        # The words the guard draws (review ruling 8.1): category, heading and
++        # the honest one-line consequence, from the ONE words module. Ordinary
++        # cards carry None/"" so a client never has to guess.
++        _kinds = replaces_words_for(d.get("action", ""), d.get("detail"))
++        d["replaces_kind"] = _kinds.get("kind")
++        d["replaces_heading"] = _kinds.get("heading", "")
++        d["replaces_note"] = _kinds.get("note", "")
          # approval-expiry.patch: how many seconds this card has left before
          # check() stops waiting and refuses it. check() waits APPROVAL_TIMEOUT
          # from just after the row is written, so `created` plus that is the

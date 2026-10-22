@@ -1,0 +1,6 @@
+        d["notice"] = notice_for(d)
+        # Guard 2 (review ruling 8.2): whether approving this card
+        # REPLACES or deletes what is already on the PC. Both apps draw
+        # the warning heading and ask a second, explicit confirmation
+        # for these; every other card is unchanged.
+        d["replaces"] = replaces_for(d.get("action", ""), d.get("detail"))

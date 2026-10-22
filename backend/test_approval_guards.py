@@ -78,6 +78,7 @@ sys.path.insert(0, str(BASE))
 sys.path.insert(0, str(HERE / "rebuilt"))
 
 import jarvis_gate as G  # noqa: E402
+import jarvis_card_words as W  # noqa: E402
 
 sys.path[:] = _SAVED_PATH
 sys.dont_write_bytecode = _SAVED_DONT_WRITE_BYTECODE
@@ -747,6 +748,41 @@ EXTENDED_REPLACES = (
     "app_merge_change",
 )
 
+#: Review ruling 8.1: each action maps to exactly ONE warning category, and
+#: the heading drawn is that category's heading - a card may never claim a
+#: deletion when a recoverable copy is kept, nor promise a kept copy when the
+#: action keeps none. These are the words both apps render (one source:
+#: `jarvis_card_words`).
+REPLACE_CATEGORIES = {
+    "delete_file": "deletes_data",
+    "delete_joplin_note": "deletes_data",
+    "delete_logseq_page": "deletes_data",
+    "memory_forget_range": "deletes_data",
+    "edit_joplin_note": "overwrites_note",
+    "edit_logseq_page": "overwrites_note",
+    "restore_backup": "replaces_code_or_state",
+    "register_approval_key": "replaces_code_or_state",
+    "modify_own_code": "replaces_code_or_state",
+    "app_merge_change": "replaces_code_or_state",
+}
+
+#: The claim each note must make, checked as a substring: a kept copy is named
+#: ONLY where the gate's own `_RISK` why says one is really kept (a backup of
+#: the CURRENT data first, the app's git history, removal in Settings), and
+#: the note edits/deletions say plainly that nothing is kept.
+REPLACE_CLAIMS = {
+    "delete_file": "no undo",
+    "delete_joplin_note": "no undo",
+    "delete_logseq_page": "no undo",
+    "memory_forget_range": "Undo",
+    "edit_joplin_note": "keeps no copy",
+    "edit_logseq_page": "keeps no copy",
+    "restore_backup": "backed up first",
+    "register_approval_key": "remove the device in Settings",
+    "modify_own_code": "backup is the only way back",
+    "app_merge_change": "older version stays in the app's git history",
+}
+
 
 def t_state_replacing_actions_are_marked():
     """The owner's extended set carries the flag; ordinary ones do not.
@@ -832,6 +868,55 @@ def _seed(action, detail, card_id, prompt="card"):
             (card_id, action, "ask", json.dumps(detail)[:4000], prompt, time.time()))
 
 
+def t_the_three_labels_are_accurate_per_action():
+    """Review ruling 8.1: three labels, each true for every action under it.
+
+    The heading and note are drawn by BOTH apps from this one payload, so the
+    pairing is checked here: every marked action has exactly one category, the
+    category's own heading is what the card will say, and the note's recovery
+    claim matches what the action really does (see `REPLACE_CLAIMS`, taken from
+    the gate's `_RISK` why). Reverting a wording - or giving an edit the
+    "keeps no copy" claim of a deletion, or promising a backup for an action
+    that keeps none - fails this test, which is what "the tests bite" means
+    for words.
+    """
+    check("every marked action has exactly one category",
+          sorted(G._REPLACES_KINDS) == sorted(EXTENDED_REPLACES),
+          sorted(G._REPLACES_KINDS))
+    check("the categories are only the three ruling 8.1 names",
+          set(G._REPLACES_KINDS.values()) == set(REPLACE_CATEGORIES.values()),
+          sorted(set(G._REPLACES_KINDS.values())))
+    headings = {}
+    for action, category in sorted(REPLACE_CATEGORIES.items()):
+        check(f"`{action}` maps to `{category}`",
+              G.replaces_kind_for(action, {"text": "card"}) == category,
+              G.replaces_kind_for(action, {"text": "card"}))
+        words = G.replaces_words_for(action, {"text": "card"})
+        headings.setdefault(category, set()).add(words.get("heading"))
+        check(f"`{action}` draws the `{category}` heading, not another one",
+              words.get("heading") == W.REPLACE_HEADINGS[category],
+              words.get("heading"))
+        check(f"`{action}` says what it really does",
+              REPLACE_CLAIMS[action] in (words.get("note") or ""),
+              words.get("note"))
+        check(f"`{action}`'s words are the card_words module's own (one source)",
+              words.get("note") == W.REPLACE_NOTES[action], words.get("note"))
+    check("each category has exactly ONE heading (no drift per action)",
+          all(len(v) == 1 for v in headings.values()),
+          {k: sorted(v) for k, v in headings.items()})
+    check("an ordinary action has no category and no warning words",
+          G.replaces_kind_for("send_email", {"to": "x@example.com"}) is None
+          and G.replaces_words_for("send_email", {"to": "x@example.com"}) == {},
+          "send_email")
+    marked = G.replaces_words_for("change_own_config", {"replaces": True})
+    check("a detail-marked card draws the DELETES label",
+          marked.get("kind") == "deletes_data"
+          and marked.get("heading") == W.REPLACE_HEADINGS["deletes_data"],
+          marked)
+    check("... and its note is the category's honest fallback",
+          marked.get("note") == W.REPLACE_GENERIC_NOTES["deletes_data"], marked)
+
+
 def t_pending_rows_carry_the_flag_to_both_apps():
     """The wire shape both apps read: `replaces` on EVERY waiting row."""
     _reset()
@@ -853,6 +938,26 @@ def t_pending_rows_carry_the_flag_to_both_apps():
     check("... the flag is a JSON boolean, the shape both apps serialise",
           isinstance(rows.get("seed-0", {}).get("replaces"), bool),
           repr(type(rows.get("seed-0", {}).get("replaces"))))
+    check("... the label words ride on the row too (ruling 8.1): kind, heading, note",
+          rows.get("seed-0", {}).get("replaces_kind") == "replaces_code_or_state"
+          and rows.get("seed-0", {}).get("replaces_heading")
+          == W.REPLACE_HEADINGS["replaces_code_or_state"]
+          and rows.get("seed-0", {}).get("replaces_note")
+          == W.REPLACE_NOTES["restore_backup"],
+          repr(rows.get("seed-0", {}))[-300:])
+    check("... a note-edit card carries the OVERWRITES label, not DELETES",
+          rows.get("seed-6", {}).get("replaces_kind") == "overwrites_note"
+          and "DELETES" not in (rows.get("seed-6", {}).get("replaces_heading") or ""),
+          repr(rows.get("seed-6", {}).get("replaces_heading")))
+    check("... a delete card carries DELETES, not the note-edit label",
+          rows.get("seed-3", {}).get("replaces_kind") == "deletes_data"
+          and "DELETES" in (rows.get("seed-3", {}).get("replaces_heading") or ""),
+          repr(rows.get("seed-3", {}).get("replaces_heading")))
+    check("... an ordinary card carries no label words at all",
+          rows.get("seed-email", {}).get("replaces_kind") is None
+          and rows.get("seed-email", {}).get("replaces_heading") == ""
+          and rows.get("seed-email", {}).get("replaces_note") == "",
+          repr(rows.get("seed-email", {})))
 
 
 def t_the_replaces_guard_is_what_marks_the_cards():
