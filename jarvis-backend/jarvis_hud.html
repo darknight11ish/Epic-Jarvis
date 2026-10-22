@@ -1356,7 +1356,7 @@ body[data-hud-edit="on"] .hud-card-collapsed .hud-card-folded-line{display:none;
     position:fixed; z-index:70; width:min(352px, calc(100vw - 16px));
     max-height:min(72vh, 620px); display:flex; flex-direction:column;
     background:var(--surface-sunken); border:1px solid var(--line-hot);
-    border-radius:6px; box-shadow:0 18px 48px rgba(0,0,0,.55);
+    border-radius:6px; box-shadow:var(--shadow-pane);
     padding:10px; font-family:var(--f-mono); color:var(--text);
   }
   .hud-presets-menu[hidden]{display:none !important;}
@@ -1396,7 +1396,7 @@ body[data-hud-edit="on"] .hud-card-collapsed .hud-card-folded-line{display:none;
     border:1px solid var(--line-hot); border-radius:6px; padding:14px;
     background:var(--surface-sunken); color:var(--text); font-family:var(--f-mono);
   }
-  .hud-presets-dialog::backdrop{background:rgba(0,0,0,.6);}
+  .hud-presets-dialog::backdrop{background:rgb(var(--shade-rgb) / .6);}
   .hud-presets-dialog-title{margin:0 0 8px; font-size:14px; color:var(--ice);}
   .hud-presets-dialog-line{font-size:11px; color:var(--dim); line-height:1.5; margin:6px 0;}
   .hud-presets-label{display:block; margin:10px 0 4px; font-size:10px;
