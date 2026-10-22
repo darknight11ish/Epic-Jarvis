@@ -18,10 +18,18 @@
 //!
 //! NO BACKEND, NO TOKEN. This is the desktop's own store, the same class as
 //! `theme`, and the HUD page still holds no pairing token (`hud.json` grants
-//! only the read, for the bootstrap; the Settings window holds the write).
+//! the read for the bootstrap, and since H2 of the editable-HUD design
+//! (2026-10-22, owner-approved) EXACTLY ONE write - `set_hud_layout`, so the
+//! page's own Edit mode can save its layout; the Settings picker writes the
+//! same document, and no other write command is granted to that window).
+//!
+//! H2 also adds `open_hud_edit`, called by the Settings window's "Edit HUD in
+//! the window" button: it shows the owner's HUD window and tells it to enter
+//! edit mode. One navigation command - it changes no setting and approves
+//! nothing.
 
 use serde::Serialize;
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_store::StoreExt;
 
 /// The store key the current layout is saved under.
@@ -290,6 +298,25 @@ pub fn set_hud_layout(app: AppHandle, layout: serde_json::Value) -> Result<Layou
         layout: Some(clean),
         source: "saved".to_string(),
     })
+}
+
+/// Open the HUD window in edit mode (Settings -> "The big HUD window" ->
+/// "Edit HUD in the window", H2 2026-10-22). It shows and focuses the owner's
+/// own HUD window and emits `jarvis:hud-edit-request`, which the injected
+/// bootstrap forwards to the page as a DOM event; the page then enters its
+/// edit mode. It writes no setting, raises no card and approves nothing.
+#[tauri::command]
+pub fn open_hud_edit(app: AppHandle) -> Result<(), String> {
+    let Some(hud) = app.get_webview_window("hud") else {
+        return Err("the HUD window is not open".to_string());
+    };
+    hud.show()
+        .map_err(|e| format!("could not show the HUD window: {e}"))?;
+    hud.set_focus()
+        .map_err(|e| format!("could not focus the HUD window: {e}"))?;
+    hud.emit("jarvis:hud-edit-request", ())
+        .map_err(|e| format!("could not ask the HUD window to edit: {e}"))?;
+    Ok(())
 }
 
 #[cfg(test)]

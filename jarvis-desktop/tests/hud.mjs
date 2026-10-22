@@ -41,6 +41,7 @@ import {
 // The bar's own rule for what may be read aloud, which the HUD's spoken-reply
 // gate now holds itself to route by route (the check further down).
 import { usedSensitiveFact } from "../src/private-speech.js";
+import { normalizeLayout, presetLayout } from "../src/hud-layout.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC = join(HERE, "..", "src");
@@ -114,6 +115,7 @@ async function openHud(browser, status, pageOptions = {}) {
   const memoryWrites = [];
   // What the Reminders tab sent through its two HUD commands (2026-10-21).
   const scheduleWrites = [];
+  const hudLayoutWrites = [];
   // Requests that reached the backend WITHOUT the token the shell adds - so
   // made by the page itself, not by the shell (apps security audit M2).
   const direct = [];
@@ -141,8 +143,21 @@ async function openHud(browser, status, pageOptions = {}) {
           case "get_hud_layout":
             // H1: the injected bootstrap reads the saved layout. With no
             // saved document it leaves the page's own look alone, which is
-            // what these page tests assume.
-            return { layout: null, source: "none" };
+            // what these page tests assume. H2 tests may pass `status.hudLayout`.
+            return status.hudLayout
+              ? { layout: status.hudLayout, source: "saved" }
+              : { layout: null, source: "none" };
+          case "set_hud_layout": {
+            // H2: the HUD page's own Edit mode saves here. This init script
+            // runs IN the page, so the record lives on window (a Node closure
+            // is not visible from here) and the checks read it back with
+            // page.evaluate.
+            window.__hudLayoutWrites = window.__hudLayoutWrites || [];
+            window.__hudLayoutWrites.push(args.layout);
+            return { layout: args.layout, source: "saved" };
+          }
+          case "open_hud_edit":
+            return null;
           case "summon_push_to_talk":
             if (mode === "fail") throw new Error("not allowed on window");
             return null;
@@ -370,7 +385,7 @@ async function openHud(browser, status, pageOptions = {}) {
   await page.goto(`${ORIGIN}/jarvis_hud.html`);
   await page.waitForTimeout(800);
   return { page, problems, chats, marks, decisions, memoryReads, memoryWrites, direct,
-           scheduleWrites };
+           scheduleWrites, hudLayoutWrites };
 }
 
 /**
@@ -1732,17 +1747,30 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
       // /api/work/apply itself; the read is hud_get's /api/presets.
       "focus-presets",
       // H1 of the editable-HUD design (2026-10-21): the injected bootstrap
-      // reads the saved layout so the page can wear the owner's preset. READ
-      // ONLY: the Settings window's picker holds the write; the HUD page still
-      // cannot save a layout, and it still holds no pairing token.
+      // reads the saved layout so the page can wear the owner's preset.
       "hud-layout-read",
       // The Reminders tab's writes (2026-10-21, the owner's dedicated HUD
       // Reminders menu): add ONE reminder/timer/alarm/to-do item, and change
       // ONE job - held on a stale link, no card, never a list form and never
       // a delete-all (Ruling 15: clear-list stays the Brain's).
-      "hud-schedule"]);
-  assert.equal(cap.permissions.includes("hud-layout-write"), false,
-    "the HUD page was granted the layout WRITE; only the Settings picker may save one");  assert.match(cap.description, /holds NO pairing token/);
+      "hud-schedule",
+      // H2 (2026-10-22, owner-approved 2026-10-21): EXACTLY ONE new grant -
+      // this window's own layout write, saved by its own Edit mode. No other
+      // write command is added, and the read grant above is not removed.
+      "hud-layout-write"]);
+  assert.equal(cap.permissions.includes("hud-layout-write"), true,
+    "the HUD page's own Edit mode cannot save without the layout write grant");
+  assert.equal(cap.permissions.includes("hud-layout-read"), true,
+    "the H2 change must not take the H1 read grant away");
+  const writeish = cap.permissions.filter((name) => [
+    "hud-layout-write", "hud-approvals", "focus-presets", "hud-voice", "hud-schedule",
+  ].includes(name));
+  assert.deepEqual(writeish.sort(),
+    ["focus-presets", "hud-approvals", "hud-layout-write", "hud-schedule", "hud-voice"],
+    "the HUD window gained a write command beyond its own layout and Reminders");
+  assert.match(cap.description, /hud-layout-write/);
+  assert.match(cap.description, /owner-approved/);
+  assert.match(cap.description, /holds NO pairing token/);
   assert.doesNotMatch(cap.description, /worst any drop of that page can do with it is open a window/);
   assert.match(cap.description, /hud-approvals/,
     "the capability does not say what the HUD's approve grant is");
@@ -2854,6 +2882,213 @@ await check("the H1 layout model can open on the Reminders tab", async () => {
   const html = readFileSync(join(SRC, "jarvis_hud.html"), "utf8");
   assert.match(html, /data-hud-tab-choice="reminders"/,
     "the layout model knows the tab but the page does not draw it");
+});
+
+/* =========================================================================
+ * H2 of the editable HUD (2026-10-22, rulings 23-27): edit mode, one reducer
+ * behind drag / click / keyboard, protected cards, autosave and persistence.
+ * The pure half is tests/hud-edit.mjs; these drive the real page.
+ * ========================================================================= */
+
+const H2_PANEL_CARDS = ["waiting", "telemetry", "tools", "brain_stats", "budget", "voice_stats"];
+
+/** The layout writes the page's own editor asked the shell to save. */
+const savedDocs = (page) => page.evaluate(() => (window.__hudLayoutWrites || []).slice());
+
+async function openH2(browser, status = {}, pageOptions = {}) {
+  const opened = await openHud(browser,
+    { jarvis: true, ollama: true, proxy: false, ...status }, pageOptions);
+  await opened.page.waitForSelector("#hud-edit-toggle", { timeout: 10000 });
+  return opened;
+}
+
+async function enterEdit(page) {
+  await page.click("#hud-edit-toggle");
+  await page.waitForTimeout(200);
+  return page.evaluate(() => ({
+    editing: document.body.getAttribute("data-hud-edit"),
+    bar: (() => { const b = document.getElementById("hud-edit-bar"); return b ? !b.hidden : null; })(),
+    regions: [...document.querySelectorAll("[data-hud-region]")].map((r) => r.getAttribute("data-hud-region")),
+    cards: [...document.querySelectorAll("[data-hud-card]")].map((c) => ({
+      id: c.getAttribute("data-hud-card"),
+      region: c.parentElement ? c.parentElement.getAttribute("data-hud-region") : null,
+      handle: Boolean(c.querySelector("[data-hud-card-handle]")),
+      sizes: c.querySelectorAll("[data-hud-edit-size]").length,
+      regionSelect: Boolean(c.querySelector("[data-hud-edit-region]")),
+      hidden: Boolean(c.hidden),
+    })),
+    toggle: (() => { const b = document.getElementById("hud-edit-toggle"); return b ? b.getAttribute("aria-pressed") : null; })(),
+  }));
+}
+
+await check("H2: [Edit HUD] mounts the editor, draws the region shells and Escape leaves it", async () => {
+  const { page, problems } = await openH2(browser);
+  const before = await page.evaluate(() => ({
+    body: document.body.getAttribute("data-hud-edit"),
+    bar: (() => { const b = document.getElementById("hud-edit-bar"); return b ? b.hidden : null; })(),
+  }));
+  const edit = await enterEdit(page);
+  assert.equal(before.body, "off", "the page starts in edit mode");
+  assert.equal(before.bar, true, "the editing bar is visible before edit mode");
+  assert.equal(edit.editing, "on", "the header button did not enter edit mode");
+  assert.equal(edit.bar, true, "the editing bar did not appear");
+  assert.deepEqual(edit.regions, ["left_rail", "stage_top", "right_rail"], edit.regions);
+  const ids = edit.cards.map((c) => c.id);
+  for (const id of H2_PANEL_CARDS) assert.ok(ids.includes(id), `${id} has no card shell`);
+  for (const card of edit.cards) {
+    assert.equal(card.handle, true, `${card.id} has no drag handle`);
+    assert.equal(card.sizes, 4, `${card.id} does not offer four sizes`);
+    assert.equal(card.regionSelect, true, `${card.id} has no direct region selector`);
+  }
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(200);
+  const after = await page.evaluate(() => document.body.getAttribute("data-hud-edit"));
+  assert.equal(after, "off", "Escape did not leave edit mode");
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("H2: drag, click-only and keyboard-only produce the SAME saved layout (SC 2.5.7)", async () => {
+  const regionOf = (doc, id) => (doc.cards.find((card) => card.id === id) || {}).region;
+  const expected = "stage_top";
+
+  const a = await openH2(browser);
+  await enterEdit(a.page);
+  await a.page.selectOption('[data-hud-edit-region="waiting"]', expected);
+  await a.page.waitForTimeout(700);
+
+  const b = await openH2(browser);
+  await enterEdit(b.page);
+  await b.page.focus('[data-hud-card="waiting"] [data-hud-card-handle]');
+  await b.page.keyboard.press("Alt+ArrowLeft");
+  await b.page.waitForTimeout(700);
+
+  const c = await openH2(browser);
+  await enterEdit(c.page);
+  const drag = await c.page.evaluate(() => {
+    const handle = document.querySelector('[data-hud-card="waiting"] [data-hud-card-handle]');
+    const region = document.querySelector('[data-hud-region="stage_top"]');
+    const h = handle.getBoundingClientRect();
+    const r = region.getBoundingClientRect();
+    return { from: { x: h.x + h.width / 2, y: h.y + h.height / 2 },
+             to: { x: r.x + r.width / 2, y: r.y + 4 } };
+  });
+  await c.page.mouse.move(drag.from.x, drag.from.y);
+  await c.page.mouse.down();
+  await c.page.mouse.move(drag.to.x, drag.to.y, { steps: 8 });
+  await c.page.mouse.up();
+  await c.page.waitForTimeout(700);
+
+  const clicks = (await savedDocs(a.page)).at(-1);
+  const keys = (await savedDocs(b.page)).at(-1);
+  const drags = (await savedDocs(c.page)).at(-1);
+  assert.ok(clicks && keys && drags, `a move did not save: clicks=${!!clicks} keys=${!!keys} drags=${!!drags}`);
+  assert.equal(regionOf(clicks, "waiting"), expected, "the click-only move was not saved");
+  assert.equal(regionOf(keys, "waiting"), expected, "the keyboard move was not saved");
+  assert.equal(regionOf(drags, "waiting"), expected, "the drag move was not saved");
+  const shape = (doc) => JSON.stringify(doc.cards.map((card) => ({
+    id: card.id, region: card.region, order: card.order,
+    col_span: card.col_span, row_span: card.row_span, visible: card.visible,
+  })));
+  assert.equal(shape(clicks), shape(keys), "the keyboard move saved a different layout from the click move");
+  assert.equal(shape(clicks), shape(drags), "the drag saved a different layout from the click move");
+  await a.page.close(); await b.page.close(); await c.page.close();
+});
+
+await check("H2: a protected card stays, cannot be hidden, and its controls say why", async () => {
+  const { page, hudLayoutWrites, problems } = await openH2(browser);
+  await enterEdit(page);
+  const state = await page.evaluate(() => {
+    const card = document.querySelector('[data-hud-card="approvals"]');
+    const hide = card.querySelector('[data-hud-edit-command="hide"]');
+    const select = card.querySelector("[data-hud-edit-region]");
+    return {
+      present: Boolean(card), hidden: Boolean(card.hidden),
+      hideDisabled: hide.disabled, hideReason: hide.title,
+      selectDisabled: select.disabled,
+      bodyShown: getComputedStyle(card.querySelector(".hud-card-body")).display !== "none",
+    };
+  });
+  assert.equal(state.present, true, "the approvals card is not on the page");
+  assert.equal(state.hidden, false, "the approvals card is hidden");
+  assert.equal(state.bodyShown, true, "the approvals card's body is not shown");
+  assert.equal(state.hideDisabled, true, "the approvals card's Hide button is enabled");
+  assert.match(state.hideReason, /Hide Waiting for you/);
+  assert.equal(state.selectDisabled, true, "the approvals card can be moved between regions");
+  const before = (await savedDocs(page)).length;
+  await page.click('[data-hud-card="approvals"] [data-hud-edit-command="hide"]', { force: true }).catch(() => {});
+  await page.waitForTimeout(150);
+  assert.equal((await savedDocs(page)).length, before,
+    "a click on the disabled Hide button saved a layout");
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("H2: a pending approval expands a collapsed card without writing the layout", async () => {
+  const collapsed = presetLayout("minimal");
+  const doc = {
+    ...collapsed,
+    cards: collapsed.cards.map((card) => (card.id === "approvals"
+      ? { ...card, collapsed: true } : card)),
+  };
+  const pending = [{ id: "ap-1", tier: "ask", title: "A waiting card", action: "change_own_config" }];
+  const { page } = await openH2(browser, {
+    hudLayout: normalizeLayout(doc), pending,
+  });
+  await page.waitForTimeout(400);
+  const state = await page.evaluate(() => {
+    const card = document.querySelector('[data-hud-card="approvals"]');
+    if (!card) return { present: false };
+    return {
+      present: true,
+      collapsedClass: card.classList.contains("hud-card-collapsed"),
+      bodyShown: getComputedStyle(card.querySelector(".hud-card-body")).display !== "none",
+    };
+  });
+  assert.equal(state.present, true, "the approvals card is not on the page");
+  assert.equal(state.bodyShown, true, "a waiting card did not expand the folded approvals card");
+  assert.equal((await savedDocs(page)).length, 0, "the transient auto-expand wrote the layout");
+  await page.close();
+});
+
+await check("H2: rapid actions collapse into one debounced save", async () => {
+  const { page } = await openH2(browser);
+  await enterEdit(page);
+  const before = (await savedDocs(page)).length;
+  for (const key of ["S", "M", "L"]) {
+    await page.click(`[data-hud-card="telemetry"] [data-hud-edit-size="${key}"]`);
+  }
+  await page.waitForTimeout(900);
+  const saved = await savedDocs(page);
+  const writes = saved.length - before;
+  assert.ok(writes >= 1, "none of the size changes was saved");
+  assert.ok(writes <= 2, `the debounce did not collapse the writes (${writes})`);
+  const last = saved.at(-1);
+  const telemetry = last.cards.find((card) => card.id === "telemetry");
+  assert.equal(telemetry.col_span, 12, "the last size change is not in the saved layout");
+  await page.close();
+});
+
+await check("H2: the editor works at the owner's 150% DPI and under reduced motion", async () => {
+  const dpr = await openH2(browser, {}, { deviceScaleFactor: 1.5 });
+  await enterEdit(dpr.page);
+  await dpr.page.selectOption('[data-hud-edit-region="tools"]', "stage_top");
+  await dpr.page.waitForTimeout(700);
+  const dprWrite = (await savedDocs(dpr.page)).at(-1);
+  assert.ok(dprWrite, "a move at DPR 1.5 was not saved");
+  assert.equal(dprWrite.cards.find((card) => card.id === "tools").region, "stage_top");
+  await dpr.page.close();
+
+  const rm = await openH2(browser);
+  await rm.page.emulateMedia({ reducedMotion: "reduce" });
+  await enterEdit(rm.page);
+  await rm.page.focus('[data-hud-card="budget"] [data-hud-card-handle]');
+  await rm.page.keyboard.press("Alt+ArrowLeft");
+  await rm.page.waitForTimeout(700);
+  const rmWrite = (await savedDocs(rm.page)).at(-1);
+  assert.ok(rmWrite, "a keyboard move under reduced motion was not saved");
+  assert.equal(rmWrite.cards.find((card) => card.id === "budget").region, "stage_top");
+  await rm.page.close();
 });
 
 await browser.close();

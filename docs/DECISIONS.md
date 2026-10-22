@@ -2839,3 +2839,48 @@ per-entity facts list, because `/api/memory/entities` is deliberately not reacha
 reachable either. It is the desktop HUD's alone: a phone has no HUD window, and the memory graph stays
 off the phone. Built in `jarvis-desktop/src/jarvis_hud.html` (copied byte-identically to `backend/` and
 `jarvis-backend/`), proven by `jarvis-desktop/tests/hud.mjs`, documented in `docs/ARCHITECTURE.md` §8.
+
+
+## 2026-10-22 - the HUD becomes editable: one reducer behind drag, click and keyboard
+
+H2 of the owner-approved editable-HUD design (Gemini rulings 23-27). The big
+HUD window's header now has **[Edit HUD]**: panel cards move between the left
+rail, the stage top and the right rail, resize S/M/L/Tall, fold and (except the
+four protected cards) hide; Settings -> "The big HUD window" has the door
+("Edit HUD in the window"). The decisions that matter:
+
+1. **ONE pure reducer.** `jarvis-desktop/src/hud-edit.js`'s `applyAction` is
+   the only writer; pointer drag, the card's own toolbar buttons, the keyboard
+   shortcuts and undo all call it, and every result goes through `normalizeLayout`.
+   That makes the WCAG 2.2 SC 2.5.7 equivalence mechanical: each card has
+   up/down, a direct `Move to` region selector, four real size buttons, fold and
+   hide (with a reason when protected), the handle takes arrow/Alt/Shift keys,
+   and a Playwright gate proves a drag, a click-only path and a keyboard-only
+   path save the **deep-equal** layout. The drag itself is one delegated
+   pointer-events handler inside the ruling's measured 180-line budget; CSS
+   Grid does the reflow. No new dependency.
+2. **Protected cards stay protected in the editor, not only in the data.** The
+   four protected ids keep a visible-but-refused Hide with a sentence naming the
+   card, the approvals card's region is locked, and the approvals auto-expand is
+   derived (`effectiveCollapsed(card, pendingCount)`) and never written. H4's
+   non-hideable safety banners are out of scope and untouched.
+3. **One new capability grant, owner-approved 2026-10-21.**
+   `capabilities/hud.json` gains `hud-layout-write` (its own layout, the same
+   appearance-class store as the theme) and **nothing else**; Rust
+   `sanitise` stays the authority for the saved document, the page still holds
+   no pairing token, and the capability test now asserts exactly this one grant
+   (and that the H1 read grant was not removed).
+4. **Saves are honest and bounded.** 400 ms debounced, flushed on Done/Escape,
+   the status line paints the store's own answer ("Saved." or the refusal);
+   undo is session-only (50 actions); Reset to preset and Discard changes are
+   one click each. The layout contains no private data, so no approval card.
+
+**Honest limits, said plainly:** the main stage (conversation, Galaxy, composer,
+stage tabs) is fixed in H2 - its rows round-trip, but the live stage is not
+reparented; no import/export (copy/paste JSON is H3), no user-preset management
+(H3), and touch/pen drag is NOT-TESTABLE on the owner's hardware here. Built in
+`jarvis-desktop/src/hud-edit.js`, `jarvis_hud.html` (copied byte-identically to
+`backend/` and `jarvis-backend/`), `hud_layout.rs`'s `open_hud_edit`,
+`settings.html`/`hud-window-settings.js` and the capability files; proven by
+`tests/hud-edit.mjs` and `tests/hud.mjs`; documented in `docs/ARCHITECTURE.md`
+§8.

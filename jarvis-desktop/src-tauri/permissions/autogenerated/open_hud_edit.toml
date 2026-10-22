@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-open-hud-edit"
+description = "Enables the open_hud_edit command without any pre-configured scope."
+commands.allow = ["open_hud_edit"]
+
+[[permission]]
+identifier = "deny-open-hud-edit"
+description = "Denies the open_hud_edit command without any pre-configured scope."
+commands.deny = ["open_hud_edit"]
