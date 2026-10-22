@@ -1488,6 +1488,27 @@ def _query_vector(embedder, words: str) -> list:
     return list(got[0]) if got else []
 
 
+def _private_withheld() -> bool:
+    """True when the private lists are hidden or the app is locked - read from
+    the trusted state the HUD already sets (the same place jarvis_brain_reads
+    and jarvis_people_crm read it), so the answer does not depend on a caller
+    remembering to pass a flag."""
+    try:
+        import jarvis_private_view as pv
+        state = pv.state()
+        return bool(state.get("app_locked") or state.get("hide_memory_lists"))
+    except Exception:                                        # noqa: BLE001
+        return False
+
+
+def _hit_provenance(real: str) -> dict:
+    """Wave D-2: {kind, file, label} for one hit; {} when withheld."""
+    if _private_withheld():
+        return {}
+    name = display_name(os.path.basename(real))
+    return {"kind": "file", "file": name, "label": f"From: {name}"}
+
+
 def _scan_search(words: str, *, roots: Optional[list] = None,
                  clock: Callable[[], float] = time.monotonic) -> dict:
     """The word scan - the fallback search() falls back TO.
@@ -1526,8 +1547,12 @@ def _scan_search(words: str, *, roots: Optional[list] = None,
         in_title = [w for w in want if w in title.casefold()]
         body = text.casefold()
         if all(w in in_title or w in body for w in want):
-            hits.append((not in_title, got[0].casefold(), {
-                "name": display_name(name), "path": got[0], "snippet": _snippet(text, want)}))
+            _row = {"name": display_name(name), "path": got[0],
+                    "snippet": _snippet(text, want)}
+            _prov = _hit_provenance(got[0])
+            if _prov:
+                _row["source_provenance"] = _prov
+            hits.append((not in_title, got[0].casefold(), _row))
         return True
 
     stopped = _walk(roots, visit, clock=clock) or capped[0]
@@ -1619,8 +1644,12 @@ def _index_results(words: str, want: list, ranked: dict, idx: "TextIndex",
         except OSError:
             continue
         read += 1
-        results.append({"name": display_name(hit["name"]), "path": real,
-                        "snippet": _snippet(text, want)})
+        _row = {"name": display_name(hit["name"]), "path": real,
+                "snippet": _snippet(text, want)}
+        _prov = _hit_provenance(real)
+        if _prov:
+            _row["source_provenance"] = _prov
+        results.append(_row)
     why = idx.why if not results and not ranked["ranked"] else ""
     out = {"ok": True, "results": results, "matches": int(ranked["matches"]),
            "files_searched": read, "note": SEARCH_NOTE,
@@ -1888,6 +1917,9 @@ def read(path: str, part=None, words: str = "", *, roots: Optional[list] = None,
     out = {"ok": True, "name": display_name(os.path.basename(real)), "path": real,
            "kind": DOC_KINDS.get(ext) or TEXT_KINDS.get(ext), "part": k, "parts": n,
            "title": title, "text": body}
+    _prov = _hit_provenance(real)
+    if _prov:
+        out["source_provenance"] = _prov
     if n > 1:
         shown = [f"{i}. {t or '(untitled)'}" for i, (t, _b) in enumerate(parts, 1)]
         out["contents"] = shown[:CONTENTS_SHOWN] + (

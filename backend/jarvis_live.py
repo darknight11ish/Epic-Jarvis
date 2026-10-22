@@ -1848,3 +1848,185 @@ def _reset_for_tests(**kw) -> "Live":
     kw.setdefault("run_loop", False)
     ENGINE = Live(**kw)
     return ENGINE
+
+
+# --------------------------------------------------------------------------
+#   Wave D-2.4 (2026-10-22): the walk brain-dump and the evening report
+# --------------------------------------------------------------------------
+#
+# "Talks through his mental to-do list on walks... saves the results for an
+# evening report." The walk half is a SPLITTER and a CLASSIFIER, not an agent:
+# it turns the owner's own spoken paragraph into discrete items, marks which
+# ones can be prepared without interrupting the walk (read-only prep) and
+# which need one of his approval cards, and stores them. The evening half is a
+# BUNDLE: completed prep, their provenance, and the cards that are still
+# waiting - withheld when the private lists are hidden or the app is locked.
+# NOTHING IS SENT AND NOTHING IS APPROVED HERE; there is no outbound call in
+# this section at all.
+
+#: One walk session's staged items. In memory, per backend process, like the
+#: side-talk store above: a walk dump is minutes-long material, and the
+#: evening report reads it back. Bounded so a long walk cannot grow for ever.
+WALK_MAX_ITEMS = 60
+_WALK: dict = {}
+_WALK_LOCK = threading.Lock()
+
+#: "First ... second ... also ..." and the action words that begin a new item.
+_WALK_ORDINAL = re.compile(
+    r"(?:^|[.;,]\s*|\band\s+)(?:first(?:ly)?|second(?:ly)?|third(?:ly)?|"
+    r"fourth(?:ly)?|fifth(?:ly)?|next|then|also|and another thing|another thing|"
+    r"finally|lastly)\b[\s,:;-]*", re.IGNORECASE)
+_WALK_ACTION = re.compile(
+    r"\b(?:check|email|e-mail|send|buy|book|call|remind|note|write|read|look up|"
+    r"research|prepare|draft|pay|order|schedule|message|text|ask|find|review)\b",
+    re.IGNORECASE)
+#: Items that are "prep" need no outbound action and no card: research/read/
+#: look-up/check/prepare/draft/note/review/find. Everything else waits.
+_WALK_READONLY = re.compile(
+    r"\b(?:check|read|look up|research|prepare|draft|note|review|find|"
+    r"summari[sz]e|compare|plan)\b", re.IGNORECASE)
+#: Items that reach another person or spend money always need a card.
+_WALK_NEEDS_CARD = re.compile(
+    r"\b(?:email|e-mail|send|buy|book|pay|order|call|message|text|remind|"
+    r"schedule|invite|post|publish|transfer|wire|trade)\b", re.IGNORECASE)
+
+
+def _walk_split(text) -> list:
+    """The owner's own spoken paragraph as separate items.
+
+    Splits on ordinal markers ("first", "second", "also", "and another
+    thing", "next", "finally") and on sentence boundaries, then trims the
+    markers so each item is the action itself. Pure string work: no model,
+    no network.
+    """
+    raw = " ".join(str(text or "").split())
+    if not raw:
+        return []
+    parts = _WALK_ORDINAL.split(raw)
+    if len(parts) <= 1:
+        parts = [p for p in re.split(r"(?<=[.!?])\s+", raw)]
+    items = []
+    for p in parts:
+        p = " ".join(str(p or "").split()).strip(" .,;:-")
+        if not p:
+            continue
+        if items and not _WALK_ACTION.search(p):
+            items[-1] = (items[-1] + " " + p).strip()
+            continue
+        items.append(p)
+    return items[:WALK_MAX_ITEMS]
+
+
+def _walk_classify(item: str) -> str:
+    """"read_only_prep" or "needs_approval_card" for one item.
+
+    A card is needed when the item reaches someone else or spends money. A
+    read-only action is prep even if it also names a later step ("draft the
+    email" is prep; "email Sam" is a card).
+    """
+    if _WALK_NEEDS_CARD.search(item) and not re.match(
+            r"(?i)^\s*(?:check|read|look up|research|prepare|note|review|find|"
+            r"summari[sz]e|compare|plan|draft)\b", item):
+        return "needs_approval_card"
+    if _WALK_READONLY.search(item):
+        return "read_only_prep"
+    if _WALK_NEEDS_CARD.search(item):
+        return "needs_approval_card"
+    return "read_only_prep"
+
+
+def _walk_private() -> bool:
+    try:
+        import jarvis_private_view as pv
+        state = pv.state()
+        return bool(state.get("app_locked") or state.get("hide_memory_lists"))
+    except Exception:                                        # noqa: BLE001
+        return False
+
+
+def stage_walk_brain_dump(utterances_or_text, *, session_id: str = "default",
+                          now_ts: Optional[float] = None) -> dict:
+    """Split one walk brain-dump into queued items, classified and stored.
+
+    `utterances_or_text` is either the whole paragraph or the list of the
+    recogniser's utterances (joined with spaces). Answers
+    {ok, session_id, items: [{text, kind, status}], counts, stored}. Nothing
+    is sent, no card is raised and no model is called: this is the splitter
+    the evening report reads back. Bounded at WALK_MAX_ITEMS.
+    """
+    if isinstance(utterances_or_text, (list, tuple)):
+        text = " ".join(str(u) for u in utterances_or_text)
+    else:
+        text = str(utterances_or_text or "")
+    items = []
+    for piece in _walk_split(text):
+        kind = _walk_classify(piece)
+        items.append({"text": piece, "kind": kind,
+                      "status": "queued" if kind == "needs_approval_card"
+                                else "ready"})
+    if not items and text.strip():
+        items = [{"text": " ".join(text.split()), "kind": "read_only_prep",
+                  "status": "ready"}]
+    session = str(session_id or "default")[:64]
+    stamped = float(now_ts if now_ts is not None else time.time())
+    with _WALK_LOCK:
+        bucket = _WALK.setdefault(session, [])
+        bucket.extend({**it, "staged_at": stamped} for it in items)
+        overflow = len(bucket) - WALK_MAX_ITEMS
+        if overflow > 0:
+            del bucket[:overflow]
+        stored = len(bucket)
+    prep = sum(1 for it in items if it["kind"] == "read_only_prep")
+    cards = len(items) - prep
+    return {"ok": True, "session_id": session, "items": items,
+            "counts": {"items": len(items), "read_only_prep": prep,
+                       "needs_approval_card": cards},
+            "stored": stored,
+            "said": (f"{len(items)} item(s) from the walk: {prep} can be prepared "
+                     f"without interrupting you and {cards} will wait for your yes.")}
+
+
+def build_evening_report(session_id: str = "default", *,
+                         hide_memory_lists: bool = False,
+                         app_locked: bool = False,
+                         now_ts: Optional[float] = None) -> dict:
+    """Bundle the walk's items into one return-to-desk report.
+
+    Completed read-only prep comes with its source provenance; the items that
+    need a card are listed as waiting, never approved. When the private lists
+    are hidden or the app is locked (by flag OR by the trusted state the HUD
+    set), the item TEXT and its provenance are withheld - counts and the fact
+    that something waits stay, because a count is not the owner's words. No
+    autonomous send: this function has no outbound path.
+    """
+    locked = bool(hide_memory_lists or app_locked or _walk_private())
+    session = str(session_id or "default")[:64]
+    with _WALK_LOCK:
+        staged = [dict(it) for it in _WALK.get(session, [])]
+    done = [it for it in staged if it["kind"] == "read_only_prep"]
+    waiting = [it for it in staged if it["kind"] == "needs_approval_card"]
+    report = {"ok": True, "session_id": session,
+              "generated_at": float(now_ts if now_ts is not None else time.time()),
+              "withheld": locked,
+              "counts": {"read_only_prep": len(done),
+                         "needs_approval_card": len(waiting),
+                         "total": len(staged)},
+              "prepared": [], "waiting": []}
+    if locked:
+        report["said"] = (f"{len(done)} prepared item(s) and {len(waiting)} waiting "
+                          f"card(s) are kept, but the details are hidden until you "
+                          f"show the private lists.")
+        report["words"] = "Hidden until you show the private lists."
+        return report
+    for it in done:
+        row = {"text": it["text"], "status": it["status"]}
+        row["source_provenance"] = {"kind": "walk_note",
+                                    "label": "From: your walk brain-dump"}
+        report["prepared"].append(row)
+    for it in waiting:
+        report["waiting"].append({"text": it["text"], "status": "waiting_approval",
+                                  "note": "needs your approval card - nothing is "
+                                          "approved for you"})
+    report["said"] = (f"Evening report: {len(done)} prepared item(s) from the walk, "
+                      f"and {len(waiting)} waiting for your yes.")
+    return report

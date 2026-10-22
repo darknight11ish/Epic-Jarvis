@@ -173,7 +173,9 @@ def t_the_index_ranks_with_bm25():
     check("the same keys search() has always returned are all there",
           {"ok", "results", "matches", "files_searched", "note"} <= set(got), sorted(got))
     check("every hit still has name, path and snippet",
-          all({"name", "path", "snippet"} == set(r) for r in got["results"]), got["results"])
+          all({"name", "path", "snippet"} <= set(r)
+              and set(r) <= {"name", "path", "snippet", "source_provenance"}
+              for r in got["results"]), got["results"])
 
 
 def t_the_index_is_one_file_in_the_settings_folder():

@@ -1949,6 +1949,33 @@ def _entries(sec: dict, only: str) -> list:
     return ents
 
 
+def _provenance(kind: str, files) -> Optional[dict]:
+    """Wave D-2: the `source_provenance` tag a summary carries.
+
+    `{"kind", "files", "label": "From: <names>"}` is ADDITIVE: every existing
+    key and sentence stays exactly where it was, and an old caller that does
+    not know this key is unaffected. Withheld - None - when the private lists
+    are hidden or the app is locked, because the file names are the owner's
+    own data.
+    """
+    names = sorted({str(f).strip() for f in (files or []) if str(f).strip()})
+    if not names or _private_withheld():
+        return None
+    return {"kind": kind, "files": names, "label": "From: " + ", ".join(names)}
+
+
+def _private_withheld() -> bool:
+    """True when the PC is in the hidden/locked state. Read from the trusted
+    private-view state the HUD already sets, the same place
+    jarvis_brain_reads and jarvis_people_crm read it."""
+    try:
+        import jarvis_private_view as pv
+        state = pv.state()
+        return bool(state.get("app_locked") or state.get("hide_memory_lists"))
+    except Exception:                                        # noqa: BLE001
+        return False
+
+
 def build_table(numbers: dict, *, by: str, period_label: str, sources: list,
                 counted_once: int, skipped: int, bad_dates: int, hidden_any: bool,
                 only_category: str = "", files: int = 1, extra_caveats=()) -> dict:
@@ -2053,6 +2080,10 @@ def build_table(numbers: dict, *, by: str, period_label: str, sources: list,
     if only_category:
         what = f"Spending on {only_category}" + (" by month" if by != "category" else "")
     title = what + (f", {period_label}" if period_label else "")
+    # The drawn table is a contract fixture for both apps
+    # (tools/gen_spending_cases.py serialises exactly this block), so its
+    # keys are frozen. Wave D-2 attaches source_provenance to the
+    # model-facing result below, which that file does not serialise.
     return {"kind": "spending", "version": 1, "title": title,
             "period": period_label or "All dates in the file",
             "sources": [hide_one(x)[:SOURCE_MAX] for x in sources[:ALL_FILES_MAX]],
@@ -2438,6 +2469,9 @@ def result_for_model(table: dict, numbers: dict) -> dict:
                            if _k == "category"][:12],
             "uncategorised": fmt(s["uncat"][0]) if s["uncat"][1] else None})
     out["caveats"] = table["caveats"]
+    _prov = table.get("source_provenance")
+    if _prov:
+        out["source_provenance"] = dict(_prov)
     out["instruction"] = (
         "The full table is already on the owner's screen; do not repeat it or list its rows. "
         "Reply with ONE short plain sentence that answers the question using only figures "
@@ -2529,6 +2563,7 @@ def build_subscriptions_table(audit: dict, *, period_label: str, sources: list,
         title = SUB_TITLE_PLAIN
     else:
         title = SUB_TITLE_DUP
+    # Same contract rule as build_table above: the drawn block is frozen.
     return {"kind": "spending", "version": 1, "title": title,
             "period": period_label or "All dates in the files",
             "sources": [hide_one(x)[:SOURCE_MAX] for x in sources[:ALL_FILES_MAX]],
@@ -2559,6 +2594,9 @@ def subscriptions_for_model(table: dict, audit: dict) -> dict:
             "charged_twice": [{"shop": d["merchant_stem"], "amount": fmt(d["amount_cents"])}
                               for d in part["dups"]]})
     out["caveats"] = table["caveats"]
+    _prov = table.get("source_provenance")
+    if _prov:
+        out["source_provenance"] = dict(_prov)
     out["instruction"] = (
         "The full table is already on the owner's screen; do not repeat it or list its rows. "
         "Reply with ONE short plain sentence that answers the question using only figures "
@@ -2904,6 +2942,9 @@ def _run_tool(args, roots, convert, today, rules) -> dict:
             sources=names, counted_once=once, skipped=skipped, bad_dates=bad_dates,
             hidden_any=hidden_any, files=len(files), extra_caveats=notes)
         res = subscriptions_for_model(table, audit)
+        _prov = _provenance("spreadsheet", names)
+        if _prov:
+            res["source_provenance"] = _prov
         res["_table"] = table
         return res
     numbers = summarise(txns, rules)
@@ -2914,6 +2955,9 @@ def _run_tool(args, roots, convert, today, rules) -> dict:
     if not (d_from or d_to):
         table["period"] = label
     res = result_for_model(table, numbers)
+    _prov = _provenance("spreadsheet", names)
+    if _prov:
+        res["source_provenance"] = _prov
     res["_table"] = table
     return res
 
