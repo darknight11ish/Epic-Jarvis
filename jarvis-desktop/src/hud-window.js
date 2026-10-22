@@ -88,6 +88,15 @@ export function describeOpenBar(on) {
 /* ==========================================================================
    The HUD's three layouts (2026-10-20)
 
+   LEGACY SINCE H1 (2026-10-21). These three ids and this key are now the
+   page's own three-way look and the fallback for a page served on its own in a
+   browser; the owner's layout is the versioned region document in
+   `hud-layout.js`, saved through `hud-layout-store.js`. `hud-window-settings.js`
+   no longer calls the save functions below - the store is the one writer - and
+   the injected bootstrap wears the saved preset's nearest look on load. The
+   functions stay because the vendored page still spells the key and its three
+   pills still switch it, and tests/hud-window.mjs covers that reading.
+
    The owner asked for a choice of three UIs for the big HUD window, "looking
    cutting edge while still being intuitive and effective" (the work order of
    2026-10-20, PART III+IV). All three are ONE page - jarvis_hud.html - switched

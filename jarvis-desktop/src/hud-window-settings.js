@@ -5,21 +5,23 @@
  *  1. THE SWITCH (the owner's request of 2026-10-06): does the "Open the
  *     Jarvis bar" button show in the big "Jarvis" window? (`hud-window.js`
  *     OPEN_BAR_KEY, drawn by the bootstrap injected into the page.)
- *  2. THE LAYOUT (the owner's request of 2026-10-20, the HUD work order's
- *     PART III+IV): which of the three UIs the big window wears - Command
- *     Cockpit (the default), Studio Split-Workspace or Ambient Voice Core.
- *     All three are ONE page switched by `document.body.dataset.hudLayout`
- *     (`hud-window.js` HUD_LAYOUT_KEY; the page's own inline script reads the
- *     same key).
+ *  2. THE LAYOUT (H1 of the editable-HUD design, Gemini rulings 23-28,
+ *     2026-10-21): which of the seven built-in presets the big window starts
+ *     from - Cockpit, Studio, Ambient, Focus, Telemetry & Ops, Second Brain &
+ *     Planner and Minimal. The old three-way choice (cockpit/studio/ambient)
+ *     is migrated the first time the store has nothing saved, so an owner who
+ *     picked Studio keeps Studio.
  *
- * The same shape as the other small Settings pages (notifications-settings.js
- * is the nearest one): import the reader, paint the controls from it, save on
- * change. Nothing here calls Rust - both choices are cosmetic, change at once
- * and raise no approval card - so this page needs no command, no capability and
- * no card. The layout rows are the theme picker's own row markup
- * (`label.theme-row`, radios, a glyph, the name and one line) because that is
- * this page's existing pattern for "pick one of N looks": a screen reader then
- * says which is chosen with no extra wiring.
+ * WHERE IT IS KEPT. The layout is a document in the desktop settings store
+ * through the Rust commands `get_hud_layout`/`set_hud_layout` - the same
+ * appearance class as the theme, no backend, no pairing token, no approval
+ * card. The old `jarvis.hud.layout` localStorage key is still written as a
+ * VIEW mirror so the page's three existing looks follow the pick at once;
+ * it is not the source of truth. H2 draws the real region grid from the saved
+ * document and the editor; this card only chooses a starting preset.
+ *
+ * A SAVE THAT DID NOT HAPPEN IS SHOWN AS NOT SAVED. The status line is painted
+ * from the store's answer, never from the click.
  *
  * @module hud-window-settings
  */
@@ -29,14 +31,13 @@ import {
   openBarShown,
   saveOpenBarShown,
   describeOpenBar,
-  HUD_LAYOUT_KEY,
-  HUD_LAYOUTS,
-  HUD_LAYOUT_INFO,
-  readHudLayout,
-  saveHudLayout,
-  normaliseHudLayout,
-  describeHudLayout,
 } from "./hud-window.js";
+import {
+  choosePreset,
+  layoutStatus,
+  loadLayout,
+  presetRows,
+} from "./hud-layout-store.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -50,112 +51,101 @@ function paintOpenBar() {
   if (line) line.textContent = describeOpenBar(on);
 }
 
-/* ── 2. The HUD layout picker ────────────────────────────────────────────── */
+/* ── 2. The HUD layout preset picker ─────────────────────────────────────── */
 
+const layoutRows = new Map();
+let answer = null;
 let painted = false;
 
-/** Builds the three rows once, from HUD_LAYOUT_INFO (never by hand). */
+function paintLayoutStatus() {
+  const line = $("hud-layout-status");
+  if (line) line.textContent = layoutStatus(answer);
+}
+
+function paintChosen() {
+  const chosen = answer && answer.layout ? answer.layout.base_preset : null;
+  for (const [id, radio] of layoutRows) radio.checked = id === chosen;
+  paintLayoutStatus();
+}
+
+/** Builds one row per built-in preset from the module's own table. */
 function buildLayoutRows() {
   const list = $("hud-layout-list");
   if (!list || painted) return;
   painted = true;
-  for (const id of HUD_LAYOUTS) {
-    const info = HUD_LAYOUT_INFO[id];
-    const row = document.createElement("label");
-    row.className = "theme-row";
-    // `data-choice`, not `data-hud-layout`: the HUD's own reading is the
-    // body attribute, and a row carrying it would describe itself as the
-    // layout rather than as a choice of one.
-    row.dataset.choice = id;
+  for (const row of presetRows(answer)) {
+    const label = document.createElement("label");
+    label.className = "theme-row";
+    // `data-choice`, not `data-hud-layout`: a row carrying the HUD's own
+    // attribute would describe itself as the layout rather than as a choice.
+    label.dataset.choice = row.id;
     const radio = document.createElement("input");
     radio.type = "radio";
     radio.name = "hud-layout";
-    radio.value = id;
+    radio.value = row.id;
+    radio.addEventListener("change", () => pickLayout(row.id));
     const glyph = document.createElement("span");
     glyph.className = "swatch layout-swatch";
     glyph.setAttribute("aria-hidden", "true");
-    glyph.textContent = info.glyph;
+    glyph.textContent = row.glyph;
     const text = document.createElement("span");
     text.className = "theme-text";
     const name = document.createElement("span");
     name.className = "theme-name";
-    name.textContent = info.label;
+    name.textContent = row.label;
     const blurb = document.createElement("span");
     blurb.className = "theme-blurb";
-    blurb.textContent = info.blurb;
+    blurb.textContent = row.blurb;
     text.append(name, blurb);
     const check = document.createElement("span");
     check.className = "theme-check";
     check.setAttribute("aria-hidden", "true");
     check.textContent = "\u2713";
-    row.append(radio, glyph, text, check);
-    radio.addEventListener("change", () => pickLayout(id));
-    list.append(row);
+    label.append(radio, glyph, text, check);
+    list.append(label);
+    layoutRows.set(row.id, radio);
   }
-}
-
-function paintLayoutRows() {
-  const list = $("hud-layout-list");
-  if (!list) return;
-  const chosen = readHudLayout();
-  for (const row of list.querySelectorAll(".theme-row")) {
-    row.querySelector("input").checked = row.dataset.choice === chosen;
-  }
-  const line = $("hud-layout-status");
-  if (line) line.textContent = describeHudLayout(chosen);
+  paintChosen();
 }
 
 /**
- * Saves the choice and repaints the rows.
+ * Saves the choice and repaints from what the store actually kept.
  *
- * Nothing is previewed in THIS window: the choice is about the big HUD
- * window, which is another window - it obeys through the shared `storage`
- * event while it is open, and on its next load otherwise. If storage refuses
- * the write (private mode, cleared site data), the rows must not show a
- * choice that was not kept - so they are repainted from what storage actually
- * holds.
+ * The HUD window itself (another window) reads the saved document on its next
+ * load through the injected bootstrap; the page's three in-header pills still
+ * switch its look for now (H2 replaces that picker). Nothing is previewed in
+ * THIS window.
  */
-function pickLayout(id) {
-  const chosen = normaliseHudLayout(id);
-  const saved = saveHudLayout(chosen);
-  paintLayoutRows();
-  const line = $("hud-layout-status");
-  if (line && !saved) {
-    line.textContent = `Could not save the HUD layout, so it stays ${
-      HUD_LAYOUT_INFO[readHudLayout()].label}. This computer is not letting `
-      + "Settings store a preference.";
-  }
+async function pickLayout(presetId) {
+  const chosen = await choosePreset(presetId);
+  answer = {
+    layout: chosen.layout,
+    saved: chosen.saved,
+    source: chosen.source,
+    error: chosen.error,
+  };
+  paintChosen();
 }
 
-/** The HUD window, which reads the same keys, may obey a change made while it
- *  is open (this window origin's `localStorage` is shared by every Jarvis
- *  window on this computer). Nothing else writes these keys today; the
- *  listener is here so a second writer could never make the two disagree
- *  silently. */
-function onStorageKey(event) {
-  if (event && event.key && event.key !== OPEN_BAR_KEY && event.key !== HUD_LAYOUT_KEY) return;
-  paintOpenBar();
-  paintLayoutRows();
-}
-
-/* ── Wiring ─────────────────────────────────────────────────────────────── */
+/* ── Start ───────────────────────────────────────────────────────────────── */
 
 export function initHudWindowSettings() {
+  paintOpenBar();
   const box = $("hud-open-bar-show");
-  const list = $("hud-layout-list");
-  if (!box && !list) return;
   if (box) {
-    paintOpenBar();
     box.addEventListener("change", () => {
       saveOpenBarShown(box.checked);
       paintOpenBar();
     });
   }
-  if (list) {
+  // `painted` guards the one-time row build; the async load repaints the
+  // chosen row when the store answers (and reports an honest failure).
+  buildLayoutRows();
+  loadLayout().then((loaded) => {
+    answer = loaded;
     buildLayoutRows();
-    paintLayoutRows();
-  }
-  window.addEventListener("storage", onStorageKey);
+    paintChosen();
+  });
 }
 
 if (typeof document !== "undefined") {
@@ -165,3 +155,5 @@ if (typeof document !== "undefined") {
     initHudWindowSettings();
   }
 }
+
+export { OPEN_BAR_KEY, openBarShown, saveOpenBarShown };

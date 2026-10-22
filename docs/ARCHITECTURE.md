@@ -2375,6 +2375,24 @@ desktop HUD reads `/api/presets` through its window's fixed read allowlist
 surface spells the route this way. `tools/check_parity.py` records it as
 `deliberate` for that reason.
 
+**The editable HUD's layout presets are the desktop's, on purpose** (2026-10-21;
+H1 of the editable-HUD design, Gemini rulings 23-28; `jarvis-desktop/src/hud-layout.js`,
+`contract/hud-presets.json`, `src-tauri/src/hud_layout.rs`). The big HUD
+window is a 1280x820 widescreen WebView2 cockpit whose named regions
+(`header`, `left_rail`, `stage_top`, `stage_main`, `right_rail`) and card ids
+exist only there. The seven built-in layouts - **Cockpit** (the default),
+**Studio**, **Ambient**, **Focus**, **Telemetry & Ops**, **Second Brain &
+Planner** and **Minimal** - are therefore desktop-only data, mirrored in
+`contract/hud-presets.json` for the desktop's own Rust and tests; the phone
+has its own `MenuCatalog`-backed home-HUD presets with a different screen
+geometry and different card ids (the Android `A1`-`A4` slice below), and it
+deliberately does not read this file. `tools/check_parity.py` has nothing to
+classify: no backend route and no phone source names it. The choice is saved
+in the desktop's appearance-class settings store (the same class as `theme`,
+no approval card, no pairing token), and a page served on its own in a
+browser keeps the old three-way `jarvis.hud.layout` fallback until H2 draws
+the real region grid.
+
 **Not on the phone yet, and that is the scope of this slice rather than a
 **Not on the phone yet, and that is the scope of this slice rather than a
 one-sided decision** (2026-10-19; extended by S3, 2026-10-20): **searchable
