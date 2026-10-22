@@ -1663,7 +1663,12 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
       // cut-off refusal and the App-lock rule apply to this window too. What
       // this set is NOT is as load-bearing as what it is: no amend, no
       // bulk, nothing the card's own two buttons do not need.
-      "hud-approvals"]);
+      "hud-approvals",
+      // The left rail's five focus presets, the OWNER'S ASK of 2026-10-21:
+      // the BAR'S OWN `apply_focus_preset` (its one "Use this preset"), so
+      // the PC raises the same switch_model card and the page never posts
+      // /api/work/apply itself; the read is hud_get's /api/presets.
+      "focus-presets"]);
   assert.match(cap.description, /holds NO pairing token/);
   assert.doesNotMatch(cap.description, /worst any drop of that page can do with it is open a window/);
   assert.match(cap.description, /hud-approvals/,
@@ -1678,6 +1683,13 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
       // Two yes/no answers (App lock, "Hide memory lists"): its face never
       // nods at a saved fact while either is on (face-moments.js).
       "allow-get-lock-flags"]);
+  // And the preset grant holds exactly the contract read and the BAR'S ONE
+  // apply: no model switch, no lane start, no approval command beside them.
+  const hudPresets = surfaces.slice(surfaces.indexOf('identifier = "focus-presets"'));
+  const presetPerms = hudPresets.slice(hudPresets.indexOf("permissions = ["),
+    hudPresets.indexOf("]") + 1);
+  assert.deepEqual(presetPerms.match(/allow-[a-z-]+/g),
+    ["allow-get-focus-presets", "allow-apply-focus-preset"]);
   // ...and the approve grant is its own set, holding one command: the card's
   // two buttons. An amend or a bulk decide has no business in a window whose
   // page draws neither control.

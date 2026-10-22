@@ -2365,6 +2365,16 @@ microphone is described in the same words. Nothing is added to the phone's
 screens, no route changes, and `tools/check_parity.py` has nothing new to
 classify.
 
+**The `/api/presets` spelling is desktop-HUD-only, and that is a spelling
+rather than a parity gap** (2026-10-21, the owner's request for the HUD's left
+rail). `GET /api/presets` and `GET /api/work` are the same read route, answered
+by the same function (`backend/jarvis_presets.py` `install()` / `live_status()`):
+the phone reads the canonical `/api/work` (`net/FocusPresets.kt`), and the
+desktop HUD reads `/api/presets` through its window's fixed read allowlist
+(`hud_proxy.rs` `HUD_GET_PATHS`). The feature itself is in both apps; only one
+surface spells the route this way. `tools/check_parity.py` records it as
+`deliberate` for that reason.
+
 **Not on the phone yet, and that is the scope of this slice rather than a
 **Not on the phone yet, and that is the scope of this slice rather than a
 one-sided decision** (2026-10-19; extended by S3, 2026-10-20): **searchable

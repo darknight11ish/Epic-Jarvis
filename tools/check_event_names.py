@@ -151,6 +151,11 @@ CONSUMED_WITHOUT_A_PAGE = {
 _KnownBreak = namedtuple("_KnownBreak", "reason fix")
 
 KNOWN_BREAKS = {
+    # Re-anchored ONCE MORE 2026-10-21 after #692 (layout DPI) and #703
+    # (telemetry drawer) merged ahead of the OWNER-REQUESTED preset rail:
+    # all three PRs grew the same vendored page above this handler, so these
+    # five read at the lines below now (the checker's own report is the
+    # authority). Same five recorded breaks, nothing new.
     # --- 1. a kind read in a handler registered for another type -------------
     # The key is this script's own four coordinates for that finding: the check
     # that reports it, `file` (the page), `line` (the line the kind is READ at -
@@ -180,11 +185,6 @@ KNOWN_BREAKS = {
     # - are the second jump, and #504's HUD fix is the third. A branch was fixed
     # or removed? Then fix or delete its entry - the shift is not a reason for
     # any of them to stay.
-    # +16 more on 2026-10-21, Ruling 8.1: this branch's three warning labels
-    # add the page's REPLACE_HEADINGS + apprReplaceHeading/apprReplaceNote
-    # above these branches, so the same five moved to
-    # 3556/3557/3564/3565/3566 (the checker's own report). Same five
-    # recorded breaks, nothing new.
     # Re-anchored 2026-10-21 for the tree that merged #689 (HUD field fixes):
     # its anchors are 3532/3533/3540/3541/3542, and this branch's owner-
     # approved extension of the two-press guard widens the page's
@@ -200,44 +200,39 @@ KNOWN_BREAKS = {
     # (2026-10-21, HUD fit + one status row): the page grew above this handler
     # (the fit guards, the one-row status block, its compact wording and
     # tooltip, and the drawer's Escape path), so the five now read at
-    # 3532/3533/3540/3541/3542, then 3537/3538/3545/3546/3547 by the 150%-DPI
-    # follow-up's pill-wrap rule, and finally the merge with #688 (the extended
-    # two-press guard) put the same five branches at 3540/3541/3548/3549/3550,
-    # which is what the merged page really reads - the handler itself is
-    # untouched; only its position moved. This merge was a keep-both: #688's
-    # markup and this branch's header wrap are both in the page.
-    # Re-anchored once more the same day after #709 (three accurate two-press
-    # labels, carried to the live gate) moved the page: its HUD label wording
-    # sits above this handler, and the Telemetry drawer's way-out fix (#703)
-    # adds the toggle state/label, the drawer's Close button and its z-index
-    # rules above it too. The five reads are now at 3601/3602/3609/3610/3611
-    # and the handler is registered at 3592 (the checker's own report). Same
-    # five recorded breaks, nothing new; the merge was a keep-both.
-    ("1 a read that can never arrive", "jarvis_hud.html", 3601, "message", "hello"):
+    # 3532/3533/3540/3541/3542 - the handler itself is untouched; only its
+    # position moved.
+    # Re-anchored AGAIN 2026-10-21 for the OWNER-REQUESTED preset rail (the
+    # five focus presets + one Cloud button that replaced the "BRAIN IN USE"
+    # lane boxes): that PR adds its CSS, markup and script above this handler,
+    # so the same five branch lines read at 3846/3847/3854/3855/3856 (the
+    # checker's own report is the authority). The handler itself is untouched;
+    # only its position moved, and the count is still five.
+    ("1 a read that can never arrive", "jarvis_hud.html", 3912, "message", "hello"):
         _KnownBreak(
             "the file is vendored byte for byte from the owner's backend folder, so a "
             "branch and a listener cannot be added here",
             "the backend's own copy of jarvis_hud.html: register a listener per kind "
             "the page reads - es.addEventListener(\"hello\", ...) - where that page lives"),
-    ("1 a read that can never arrive", "jarvis_hud.html", 3602, "message", "approval"):
+    ("1 a read that can never arrive", "jarvis_hud.html", 3913, "message", "approval"):
         _KnownBreak(
             "the file is vendored byte for byte from the owner's backend folder, so a "
             "branch and a listener cannot be added here",
             "the backend's own copy of jarvis_hud.html: register a listener per kind "
             "the page reads - es.addEventListener(\"approval\", ...) - where that page lives"),
-    ("1 a read that can never arrive", "jarvis_hud.html", 3609, "message", "proposal"):
+    ("1 a read that can never arrive", "jarvis_hud.html", 3920, "message", "proposal"):
         _KnownBreak(
             "the file is vendored byte for byte from the owner's backend folder, so a "
             "branch and a listener cannot be added here",
             "the backend's own copy of jarvis_hud.html: register a listener per kind "
             "the page reads - es.addEventListener(\"proposal\", ...) - where that page lives"),
-    ("1 a read that can never arrive", "jarvis_hud.html", 3610, "message", "finding"):
+    ("1 a read that can never arrive", "jarvis_hud.html", 3921, "message", "finding"):
         _KnownBreak(
             "the file is vendored byte for byte from the owner's backend folder, so a "
             "branch and a listener cannot be added here",
             "the backend's own copy of jarvis_hud.html: register a listener per kind "
             "the page reads - es.addEventListener(\"finding\", ...) - where that page lives"),
-    ("1 a read that can never arrive", "jarvis_hud.html", 3611, "message", "activity"):
+    ("1 a read that can never arrive", "jarvis_hud.html", 3922, "message", "activity"):
         _KnownBreak(
             "the file is vendored byte for byte from the owner's backend folder, so a "
             "branch and a listener cannot be added here",
