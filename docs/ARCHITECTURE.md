@@ -2394,6 +2394,28 @@ browser keeps the old three-way `jarvis.hud.layout` fallback until H2 draws
 the real region grid.
 
 **Not on the phone yet, and that is the scope of this slice rather than a
+**The HUD Reminders tab is the desktop HUD's, on purpose** (2026-10-21; the
+owner's dedicated Reminders menu). The HUD page (`jarvis_hud.html`, vendored
+byte-for-byte in three copies: `jarvis-desktop/src/`, `backend/` and
+`jarvis-backend/`) is a desktop window; the phone has its own Coming up
+screens on the same backend route. Its new `GET /api/schedule` read goes
+through `hud_proxy.rs`'s fixed list, and in Rust it gets the SAME word
+redaction the Brain window uses (`brain::schedule::redact_list`): while App
+lock or "Hide memory lists" is on, the words of reminders, to-do items and
+named lists are blanked while kinds, times and counts stay, so a page script
+cannot read round it. Its writes are two HUD-scoped commands,
+`hud_schedule_add` and `hud_schedule_act` (`hud-schedule` in
+`capabilities/hud.json`), held on a stale link like the Brain's, with no
+approval card because they only add or quieten, and with **no list form and no
+delete-all** (Ruling 15 keeps "clear named list" in the Brain window). Phase 1
+is view, add, and the EXISTING one-job actions - snooze, add time, pause,
+resume, done, delete. Editing an item's words/time/repeat, moving it between
+lists and reordering are Phase 2: they need backend actions and a rank column,
+so they need a later deploy, and they are not faked in the page. The phone is
+not missing a control: its own app already reads and acts on the same
+schedule. `tools/check_parity.py` has nothing new to classify, because no
+backend route is added and the phone's read of `/api/schedule` is unchanged.
+
 **Not on the phone yet, and that is the scope of this slice rather than a
 one-sided decision** (2026-10-19; extended by S3, 2026-10-20): **searchable
 recordings and videos** (`backend/jarvis_media_index.py`,
@@ -2700,7 +2722,18 @@ are deliberate and recorded rather than left to be discovered:
 | The Jarvis Live Quick Settings tile, the headset button in Live, and the 10-minute "Live ended - Resume" notification (the Jarvis Live extras), 2026-09-28 | Phone things: a tile lives in Android's pulled-down shade, a headset button reaches a phone's media session, and a notification is how a phone in a pocket offers Resume. The PC has the tray row and the Live hotkey (the desktop table) and its badge shows "Resume Live" for 15 seconds, in the Jarvis bar until the 10 minutes are up. |
 | Preferring a Bluetooth headset's microphone in Live, and saying which microphone is in use (the Jarvis Live extras), 2026-09-28 | On the phone Jarvis picks the microphone (Android's communication device; no Bluetooth permission). On the PC Windows picks it - Live opens the default microphone, both the plain and the echo-cancelled way (`aec.rs`) - so a Bluetooth headset is used when Windows makes it the default, and the Voice settings already say which microphone that is. Choosing a different microphone on the PC is a larger change to both capture paths, not made here. |
 | "Talk about this in Live" in Android's Share sheet (the Jarvis Live extras), 2026-09-28 | A Share sheet is Android's. The text is outside text exactly as a share to Home is (`provenance: "shared"`, JARVIS-API §18); the PC's quickbar already takes clipboard text with its own "clipboard" tag, in Live as anywhere. |
-| **The fading-card radar under "My study decks" and the "Mark my answer" button in the review card** (slice 22B, 2026-10-17; `Decks.kt` `DeckList.radar`, `Decks.Reveal.grade`, `DecksPlate.kt`; JARVIS-API §102.2) | The two PC fields are additive and are read by BOTH apps' net layers from the one shared fixture (`tools/gen_decks_cases.py`: `samples.decks.radar`, `samples.graded_reveal`; `src/decks.js` `readRadar`/`readGrade`), but **this slice builds only the phone screens**: the desktop's review card draws neither yet, and no desktop behaviour changed. The typed box's word differs on purpose, too: the phone can send its typed answer to the PC's deterministic grader on one tap ("Mark my answer"), so its word says so, while the desktop's box is unchanged and still sends nothing. **A phone must not do speech-to-text** (`CLAUDE.md`), so there is no microphone and nothing "spoken" here; the 22A voice-review receipt waits for a slice that records a clip and lets the PC transcribe it. |
+
+**The fading-card radar and the "Mark my answer" button were phone-only in
+slice 22B (2026-10-17) and are on BOTH apps since 2026-10-21.** The two PC
+fields are additive and both apps read them from the one shared fixture
+(`tools/gen_decks_cases.py`: `samples.decks.radar`, `samples.graded_reveal`).
+The desktop draws the same radar rows under the deck list, sends the typed box's
+words to the PC's deterministic grader only on the "Mark my answer" tap ("Show
+answer" still sends nothing), and shows the grader's own sentence word for
+word - the same sentence the phone shows. No route, key or word differs between
+the apps. **A phone must not do speech-to-text** (`CLAUDE.md`), so there is no
+microphone and nothing "spoken" here; the 22A voice-review receipt waits for a
+slice that records a clip and lets the PC transcribe it.
 
 **The picture-in-picture idea landed on both apps, on 2026-09-27, by two
 different sessions working at the same time - not one shared mechanism,

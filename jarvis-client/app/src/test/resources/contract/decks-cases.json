@@ -632,6 +632,7 @@
   "kind_translate": "Translate",
   "level_heading": "Level (roughly)",
   "level_label_b1": "Level B1 (roughly)",
+  "mark_answer": "Mark my answer",
   "mode_spanish": "Spanish practice",
   "mode_text": "Text",
   "model_unavailable": "The model on this PC did not answer. Nothing was changed - try again in a moment.",
@@ -644,6 +645,7 @@
   "pause": "Pause",
   "per_deck_note": "New cards a day is shared by every deck, so the decks can show more cards ready than the total above.",
   "quiz_intro": "Paste some text and Jarvis writes a few questions about it. Your answers are marked by the model on this PC. Nothing is saved unless you choose Keep, nothing is learned, and nothing leaves this PC.",
+  "radar_heading": "Cards fading",
   "rating_again": "Didn't remember",
   "rating_easy": "Easy",
   "rating_good": "Remembered",
@@ -662,6 +664,6 @@
   "stop": "Stop",
   "topic_counter": "0 / 60",
   "topic_label": "Topic (optional)",
-  "typed_placeholder": "Type your answer (only for you - it is not sent or marked)"
+  "typed_placeholder": "Type your answer (it stays on this device unless you ask the PC to mark it)"
  }
 }

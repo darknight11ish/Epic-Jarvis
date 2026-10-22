@@ -10466,7 +10466,10 @@ async function fetchReview() {
   }
 }
 
-async function revealCard() {
+/** Show the answer. `withAnswer` is the "Mark my answer" tap (slice 22B): the
+ *  typed words go to the PC's deterministic grader in the same reveal reply,
+ *  and nothing is sent when the box is empty - "Show answer" never sends them. */
+async function revealCard(withAnswer = false) {
   const r = dk.review;
   if (!r || !r.data || !r.data.card || r.busy) return;
   if (!linkWords(currentLink()).canAct) {
@@ -10476,7 +10479,10 @@ async function revealCard() {
   }
   r.busy = true;
   try {
-    const out = await invoke("brain_review_reveal", { card: r.data.card.id });
+    const args = { card: r.data.card.id };
+    const typed = withAnswer ? r.typed.trim() : "";
+    if (typed) args.answer = typed;
+    const out = await invoke("brain_review_reveal", args);
     if (Decks.isHiddenReview(out)) {
       r.error = Decks.REVIEW_HIDDEN;
     } else if (isRefusal(out)) {
@@ -10492,7 +10498,8 @@ async function revealCard() {
         r.reveal = back;
         dk.focusNext = "answer-heading";
         r.error = "";
-        // What was typed was only for the owner: dropped, never sent.
+        // What was typed was only for the PC's grader: dropped either way, and
+        // "Show answer" never sends it at all.
         r.typed = "";
       } else {
         r.error = Decks.MISSING;
@@ -10606,14 +10613,23 @@ function paintReview(box) {
       typed.placeholder = Decks.TYPED_PLACEHOLDER;
       typed.setAttribute("aria-label", Decks.TYPED_PLACEHOLDER);
       typed.dataset.fkey = "typed";
-      // Kept only so a repaint does not wipe it; never sent, dropped on Show answer.
+      // Kept only so a repaint does not wipe it. Sent ONLY by "Mark my answer"
+      // (slice 22B, wired on the desktop 2026-10-21) and dropped on reveal.
       typed.value = r.typed;
-      typed.addEventListener("input", () => { r.typed = typed.value; });
       top.append(typed);
       const actions = el("div", "goal-actions");
-      const show = button(Decks.SHOW_ANSWER, revealCard, { live: true });
+      const show = button(Decks.SHOW_ANSWER, () => revealCard(false), { live: true });
       show.dataset.fkey = "show";
       actions.append(show);
+      const mark = labelled(button(Decks.MARK_ANSWER, () => revealCard(true), { live: true }),
+        Decks.MARK_ANSWER);
+      mark.dataset.fkey = "mark-answer";
+      mark.disabled = !r.typed.trim();
+      typed.addEventListener("input", () => {
+        r.typed = typed.value;
+        mark.disabled = !r.typed.trim();
+      });
+      actions.append(mark);
       top.append(actions);
     } else {
       const back = el("div", "review-back");
@@ -10621,6 +10637,11 @@ function paintReview(box) {
       heading.tabIndex = -1;
       heading.dataset.fkey = "answer-heading";
       back.append(heading);
+      // The PC's own mark of the typed answer, word for word (the same sentence
+      // the phone shows; one source, the deterministic grader).
+      if (r.reveal.grade && r.reveal.grade.words) {
+        back.append(el("p", "review-grade", r.reveal.grade.words));
+      }
       back.append(el("p", "", r.reveal.answer || Decks.NO_CARD_ANSWER));
       if (r.reveal.passage) {
         back.append(el("p", "goal-note", Decks.backPassageHeading(r.reveal)));
@@ -10939,6 +10960,15 @@ function paintDecks() {
     // Each row counts what that deck alone would offer today; the day's new
     // cards are shared, so the rows can add up to more than the total above.
     if (Decks.perDeckNoteShown(view)) parts.push(el("p", "note", Decks.PER_DECK_NOTE));
+  }
+  // The PC's own fading-card sentences (slice 22B). Its rows name decks, so it
+  // is withheld with the private lists - Rust drops the field too, and this
+  // gate keeps the promise even if an older PC sends one.
+  if (view.available && !view.hidden && view.radar.length) {
+    const radar = el("div", "goal-block deck-radar");
+    radar.append(el("h3", "subhead", Decks.RADAR_HEADING));
+    for (const row of view.radar) radar.append(el("p", "note", row.words));
+    parts.push(radar);
   }
   if (view.hidden) {
     parts.push(el("p", "note", Decks.REVIEW_HIDDEN));

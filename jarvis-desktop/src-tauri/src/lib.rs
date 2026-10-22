@@ -45,6 +45,7 @@ pub mod hardware;
 pub mod hotkeys;
 pub mod hud_layout;
 pub mod hud_proxy;
+pub mod hud_schedule;
 pub mod limits;
 pub mod live;
 pub mod lock;
@@ -939,6 +940,11 @@ pub fn run() {
             hud_proxy::hud_get,
             hud_proxy::hud_chat,
             hud_proxy::hud_chat_cancel,
+            // The HUD Reminders tab's writes (2026-10-21, the owner's
+            // request): add ONE item or change ONE job, on the same backend
+            // routes the Brain uses, held on a stale link. HUD window only.
+            hud_schedule::hud_schedule_add,
+            hud_schedule::hud_schedule_act,
             // App lock and the widget (apps security audit M3).
             commands::get_app_lock,
             // The two lock switches, for the faces' fact nod (face-moments.js).
