@@ -453,6 +453,19 @@ object SettingsSearch {
             label = SettingsSearchWords.PLACEHOLDER, quotes = emptyList(),
             source = SCREEN,
         ),
+        Row(
+            // "All features and abilities" (2026-10-22): the phone directory of
+            // the 139 features, in the PC's five labels (FeatureDirectory.kt is
+            // generated from jarvis_feature_guide.abilities_directory()).
+            key = "all-features", title = "All features and abilities",
+            label = "All features; abilities; what can Jarvis do; feature list; " +
+                "typed commands; switches; safety rules; where to change a setting",
+            quotes = listOf(
+                "All features and abilities",
+                "Every feature Jarvis knows about, in the PC's own words.",
+            ),
+            source = PLATES + listOf("FeatureDirectoryPlate.kt"),
+        ),
     )
 
     /** The section keys that can be hidden by a search - everything but the box. */

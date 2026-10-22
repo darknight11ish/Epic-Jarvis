@@ -198,6 +198,9 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     // fourteen questions and its READ-ONLY plan, drawn by
     // SetupQuestionnairePlate.kt. A row added at the end moves no other number.
     "setup-questionnaire" to 30,
+    // "All features and abilities" (2026-10-22): the searchable directory of
+    // all 139 features. A row added at the end moves no other number.
+    "all-features" to 31,
 )
 
 /**
@@ -788,6 +791,10 @@ fun SettingsScreen(
                 SetupQuestionnaireSection()
             }
 
+            // "All features and abilities" (2026-10-22): the phone directory of
+            // all 139 features in the PC's own five labels (FeatureDirectory.kt
+            // is generated; FeatureDirectoryPlate draws and searches it).
+            item(key = "all-features") { FeatureDirectorySection() }
             item(key = "tail") { Gap(24) }
         }
     }
