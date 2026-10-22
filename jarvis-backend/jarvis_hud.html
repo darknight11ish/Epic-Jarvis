@@ -1171,6 +1171,81 @@ html[data-hud-layout="ambient"] .composer{
   html[data-hud-layout="studio"] .stage-tab{padding-left:8px; padding-right:8px;}
 }
 
+
+/* ---------- EDIT HUD (H2 of the editable HUD, 2026-10-22) -----------------
+ * The regions are CSS grid containers; the browser's own layout engine does
+ * every reflow at every width and DPI (ruling 23/24). Outside edit mode the
+ * card shells are invisible chrome - no border, no header - so the HUD keeps
+ * the look it had; edit mode draws the handles and toolbars. */
+.hud-edit-toggle{margin-left:4px; white-space:nowrap;}
+.hud-edit-toggle[hidden]{display:none;}
+.hud-edit-bar{
+  display:flex; flex-wrap:wrap; align-items:center; gap:8px;
+  margin:8px 0 0; padding:8px 12px; z-index:6; position:relative;
+  background:var(--surface-sunken); border:1px solid var(--line-hot); border-radius:4px;
+}
+.hud-edit-bar[hidden]{display:none;}
+.hud-edit-words{font-family:var(--f-mono); font-size:11px; color:var(--text);}
+.hud-edit-status{font-family:var(--f-mono); font-size:10.5px; color:var(--dim); flex:1; min-width:120px;}
+.hud-region{display:grid; grid-template-columns:repeat(12, minmax(0, 1fr)); gap:0; align-content:start; min-height:0;}
+.hud-region:empty{display:none;}
+.hud-region-left{margin-top:6px;}
+.hud-region-stage-top{margin:8px 0 0; order:-1;}
+.hud-region-right{margin-top:6px;}
+body[data-hud-edit="on"] .hud-region{gap:7px; padding:4px; border:1px dashed var(--line); border-radius:4px;}
+body[data-hud-edit="on"] .hud-region-drop{border-color:var(--ice); background:rgb(var(--accent-rgb) / .05);}
+.hud-card{
+  grid-column:span var(--hud-span, 12); grid-row:span var(--hud-rows, 1);
+  min-width:0; display:block;
+}
+.hud-card[hidden]{display:none;}
+.hud-card-head{display:none;}
+body[data-hud-edit="on"] .hud-card{
+  border:1px dashed rgb(var(--accent-rgb) / .38); border-radius:5px;
+  background:rgb(var(--accent-rgb) / .03); padding:3px;
+}
+body[data-hud-edit="on"] .hud-card-head{
+  display:flex; flex-wrap:wrap; align-items:center; gap:5px; margin-bottom:3px;
+}
+.hud-card-handle{
+  padding:2px 7px; border:1px solid var(--line); border-radius:3px;
+  background:var(--plate-2); color:var(--dim); font-family:var(--f-mono); font-size:11px;
+  cursor:grab; touch-action:none;
+}
+.hud-card-handle:hover{color:var(--text); border-color:var(--line-hot);}
+.hud-card-handle:focus-visible{outline:2px solid var(--ice); outline-offset:1px;}
+.hud-card-dragging{opacity:.55;}
+.hud-card-dragging .hud-card-handle{cursor:grabbing;}
+.hud-card-title{font-family:var(--f-mono); font-size:9.5px; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--ice); white-space:nowrap;}
+.hud-card-tools{display:flex; flex-wrap:wrap; align-items:center; gap:4px;}
+.hud-tool{
+  padding:1px 6px; border:1px solid var(--line); border-radius:3px;
+  background:var(--plate-2); color:var(--dim); font-family:var(--f-mono); font-size:10.5px;
+}
+.hud-tool:hover:not(:disabled){color:var(--text); border-color:var(--line-hot);}
+.hud-tool:disabled{opacity:.38; cursor:not-allowed;}
+.hud-tool[aria-pressed="true"]{background:rgb(var(--accent-rgb) / .12); color:var(--ice); border-color:var(--ice);}
+.hud-tool:focus-visible{outline:2px solid var(--ice); outline-offset:1px;}
+.hud-tool-select{display:flex; align-items:center; gap:3px; font-family:var(--f-mono);
+  font-size:9.5px; color:var(--dimmer); white-space:nowrap;}
+.hud-tool-select select{
+  background:var(--plate-2); border:1px solid var(--line); border-radius:3px;
+  color:var(--text); font-family:var(--f-mono); font-size:10px; padding:1px 2px;
+}
+.hud-tool-select select:focus-visible{outline:2px solid var(--ice); outline-offset:1px;}
+.hud-tool-sizes{display:flex; gap:2px;}
+.hud-card-body{min-width:0;}
+.hud-card-collapsed .hud-card-body{display:none;}
+.hud-card-folded-line{display:none;}
+.hud-card-collapsed .hud-card-folded-line{
+  display:block; font-family:var(--f-mono); font-size:10.5px; color:var(--dim); padding:4px 2px;
+}
+body[data-hud-edit="on"] .hud-card-collapsed .hud-card-folded-line{display:none;}
+.hud-card-body .rail-section{margin-top:0;}
+@media (max-width:720px){
+  .hud-edit-words{display:none;}
+}
 </style>
 
 <!-- ==================================================================== *
@@ -5201,5 +5276,18 @@ var laneSelect = $("lane-compact");
 <script type="module">
 import { paintLaneWarning } from "./lane-warning.js";
 window.paintLaneWarning = paintLaneWarning;
+
+/* H2 of the editable HUD (2026-10-22). An EXTERNAL module: the page keeps the
+ * inline-script count it had (tests/csp-inline.mjs pins it) and the CSP is
+ * untouched. In a plain browser the mount succeeds but the [Edit HUD] button
+ * hides itself: there is no shell to save a layout through. */
+import { mountHudEditor } from "./hud-edit.js";
+mountHudEditor({
+  shellPresent: Boolean(window.__TAURI__ && window.__TAURI__.core),
+}).then((editor) => {
+  window.__jarvisHudEdit = editor;
+}).catch(() => {
+  /* An older shell/page pairing: the HUD keeps working without the editor. */
+});
 </script>
 

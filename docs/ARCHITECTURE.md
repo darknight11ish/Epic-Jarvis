@@ -2390,8 +2390,48 @@ deliberately does not read this file. `tools/check_parity.py` has nothing to
 classify: no backend route and no phone source names it. The choice is saved
 in the desktop's appearance-class settings store (the same class as `theme`,
 no approval card, no pairing token), and a page served on its own in a
-browser keeps the old three-way `jarvis.hud.layout` fallback until H2 draws
-the real region grid.
+browser keeps the old three-way `jarvis.hud.layout` fallback.
+
+**H2 draws the editor: one reducer, every input (2026-10-22; H2 of the
+editable-HUD design, rulings 23-27; `jarvis-desktop/src/hud-edit.js`, the HUD
+page, `hud_layout.rs::open_hud_edit`).** The big HUD window's own header now
+has **[Edit HUD]**: the panel cards (the six Bento inspector cards, the three
+left-rail panels, the approvals queue and the Jarvis-bar button) are wrapped in
+card shells and can move between the left rail, the stage top and the right
+rail, resize S/M/L/Tall, fold and - except the four protected cards - hide.
+**Drag, the card's own buttons, the keyboard and undo all call the SAME pure
+`applyAction`**, which runs H1's `normalizeLayout` before anything is rendered
+or saved, so protected cards are present and visible and save-then-load cannot
+rewrite an edit. That is what makes the WCAG 2.2 SC 2.5.7 claim mechanical:
+every drag has a click-only and a keyboard-only twin, and a Playwright gate
+asserts the three save payloads are deep-equal. The pointer drag is one
+delegated pointer-events handler (inside the ruling's 180-line budget, measured
+by a test) and CSS Grid does every reflow - no vendored library, no new
+dependency. Autosave is one 400 ms debounced `set_hud_layout` write plus an
+immediate flush on `Done`/Escape; undo is session-only (50 actions) and
+`Reset to preset` / `Discard changes` are one click each. The approvals card's
+transient auto-expand stays DERIVED (`effectiveCollapsed(card, pendingCount)`),
+never written. The unsafe-to-hide safety banners from the rulings
+(outside-text/rush-latch, stale-link, App lock) are **H4's**, outside the
+region grid, and H2 does not touch them.
+
+**One write, owner-approved.** H1 gave the HUD window the layout READ only, for
+the bootstrap; H2's in-window editor needs the page to save the layout it just
+arranged, so `capabilities/hud.json` gains **exactly one grant,
+`hud-layout-write`** (owner-approved 2026-10-21) and **no other write command**
+- the existing capability test is flipped to assert precisely that, that the
+read grant stays, and that the page still holds no pairing token.
+`hud_layout.rs::sanitise` remains the authority for the saved document (the
+page-side normalizer is a second line of defence). Settings -> "The big HUD
+window" gains the door (`open_hud_edit`: show that window, ask it to edit -
+navigation only, no card), and the header button does the same without it.
+**Honest limits of H2, said in the PR:** the main stage (conversation, Galaxy,
+composer, stage tabs) is fixed - its registry rows round-trip but H2 does not
+reparent the live stage; there is no import/export (copy/paste JSON is H3), no
+user-preset management (`Duplicate to My Presets` is H3), and touch/pen drag is
+NOT-TESTABLE on real hardware here (keyboard/click paths are the guaranteed
+alternatives). Desktop-only, like H1: the phone has its own home HUD and never
+reads this.
 
 **Not on the phone yet, and that is the scope of this slice rather than a
 **The HUD Reminders tab is the desktop HUD's, on purpose** (2026-10-21; the

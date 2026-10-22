@@ -58,10 +58,16 @@ permissions = ["allow-set-theme", "allow-set-theme-follow-system"]
 # The HUD's saved layout (H1 of the editable-HUD design, 2026-10-21; Gemini
 # rulings 23-28). Read-only for the HUD window, whose injected bootstrap reads
 # the saved document so the page can wear it; the Settings window's picker
-# holds both, and it is the only surface that writes - the HUD page itself
-# still holds no settings-writing command and no pairing token. A layout is
-# the appearance class the theme is: card positions, visibility and names,
-# nothing private, so it raises no approval card.
+# holds the preset picker. Since H2 of the editable-HUD design (2026-10-22,
+# owner-approved) the HUD page itself ALSO holds exactly one write: its own
+# layout, saved from its own Edit mode - no other settings command and still
+# no pairing token. A layout is the appearance class the theme is: card
+# positions, visibility and names, nothing private, so it raises no card.
+[[set]]
+identifier = "hud-edit-open"
+description = "Show the HUD window and put it into edit mode (Settings -> The big HUD window, H2 2026-10-22)."
+permissions = ["allow-open-hud-edit"]
+
 [[set]]
 identifier = "hud-layout-read"
 description = "Read the HUD's saved layout."
@@ -69,7 +75,7 @@ permissions = ["allow-get-hud-layout"]
 
 [[set]]
 identifier = "hud-layout-write"
-description = "Choose the HUD's layout preset (Settings' picker)."
+description = "Save the HUD window's own layout (Settings' preset picker, and the HUD page's own Edit mode since H2, owner-approved 2026-10-21)."
 permissions = ["allow-set-hud-layout"]
 
 # Answering a gate is a decision with consequences, so it is separate from
