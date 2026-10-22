@@ -112,6 +112,8 @@ async function openHud(browser, status, pageOptions = {}) {
   const decisions = [];
   const memoryReads = [];
   const memoryWrites = [];
+  // What the Reminders tab sent through its two HUD commands (2026-10-21).
+  const scheduleWrites = [];
   // Requests that reached the backend WITHOUT the token the shell adds - so
   // made by the page itself, not by the shell (apps security audit M2).
   const direct = [];
@@ -167,6 +169,34 @@ async function openHud(browser, status, pageOptions = {}) {
             return null;
           }
           case "hud_chat_cancel": return null;
+          // The Reminders tab's two writes (2026-10-21, the owner's dedicated
+          // menu): the SAME POSTs `hud_schedule.rs` makes, with the shell's
+          // token, so a write that reached the backend without the shell is
+          // still a failure (audit M2). Only the two commands exist - there is
+          // no list form and no delete-all (Ruling 15).
+          case "hud_schedule_add":
+          case "hud_schedule_act": {
+            // (The Node-side call log cannot be touched from here: this
+            // function runs in the page. The commands are in window.__invokes,
+            // and what the fake shell POSTed is recorded by the route below.)
+            const path = cmd === "hud_schedule_add" ? "/api/schedule/add"
+              : "/api/schedule/act";
+            // The shell's command turns the page's flat arguments into the
+            // backend's body (hud_schedule.rs `act_body`): `action` is sent
+            // to Rust, `do` is what the PC receives. The stand-in does the
+            // same, so a test asserting the body is asserting the real POST.
+            let body = args;
+            if (cmd === "hud_schedule_act") {
+              body = { id: args.id, do: args.action };
+              if (typeof args.seconds === "number") body.seconds = args.seconds;
+            }
+            const r = await origFetch(backend + path, { method: "POST",
+              headers: { ...shellHeaders, "Content-Type": "application/json" },
+              body: JSON.stringify(body) });
+            const reply = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(reply.error || `the server answered HTTP ${r.status}`);
+            return reply;
+          }
           // The same command the bar's own Escape uses (commands.rs
           // `hide_quickbar`): the HUD's button hides the bar when it is up
           // (the owner's ask of 2026-10-09). Granted in surfaces.toml's
@@ -254,6 +284,25 @@ async function openHud(browser, status, pageOptions = {}) {
       if (url.pathname === "/api/graph" && status.graph) {
         return route.fulfill({ status: 200, headers: cors, json: status.graph });
       }
+      // The Reminders tab's one read (2026-10-21): the same GET the Brain's
+      // Coming up makes, with the words already blanked by Rust while App lock
+      // or the private lists are hidden - the fixture IS the redacted shape.
+      if (url.pathname === "/api/schedule" && req.method() === "GET") {
+        return route.fulfill({ status: 200, headers: cors,
+          json: status.schedule || { available: true, now: 0, tz: "UTC",
+                                     jobs: [], todo: [], went_off: [], lists: [] } });
+      }
+      if ((url.pathname === "/api/schedule/add" || url.pathname === "/api/schedule/act")
+          && req.method() === "POST") {
+        // What the shell's commands post; recorded so a test can prove the
+        // body the page asked for is the body the backend takes.
+        scheduleWrites.push({ wrote: url.pathname,
+                              body: JSON.parse(req.postData() || "{}") });
+        return route.fulfill({ status: 200, headers: cors, json:
+          url.pathname === "/api/schedule/add"
+            ? (status.scheduleAddReply || { ok: true, said: "Reminder set for tomorrow at 18:00." })
+            : (status.scheduleActReply || { ok: true, said: "Paused." }) });
+      }
       if (url.pathname === "/api/pending") {
         return route.fulfill({ status: 200, headers: cors,
           json: { available: true, pending: status.pending || [], history: [] } });
@@ -320,7 +369,8 @@ async function openHud(browser, status, pageOptions = {}) {
   });
   await page.goto(`${ORIGIN}/jarvis_hud.html`);
   await page.waitForTimeout(800);
-  return { page, problems, chats, marks, decisions, memoryReads, memoryWrites, direct };
+  return { page, problems, chats, marks, decisions, memoryReads, memoryWrites, direct,
+           scheduleWrites };
 }
 
 /**
@@ -1685,10 +1735,14 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
       // reads the saved layout so the page can wear the owner's preset. READ
       // ONLY: the Settings window's picker holds the write; the HUD page still
       // cannot save a layout, and it still holds no pairing token.
-      "hud-layout-read"]);
+      "hud-layout-read",
+      // The Reminders tab's writes (2026-10-21, the owner's dedicated HUD
+      // Reminders menu): add ONE reminder/timer/alarm/to-do item, and change
+      // ONE job - held on a stale link, no card, never a list form and never
+      // a delete-all (Ruling 15: clear-list stays the Brain's).
+      "hud-schedule"]);
   assert.equal(cap.permissions.includes("hud-layout-write"), false,
-    "the HUD page was granted the layout WRITE; only the Settings picker may save one");
-  assert.match(cap.description, /holds NO pairing token/);
+    "the HUD page was granted the layout WRITE; only the Settings picker may save one");  assert.match(cap.description, /holds NO pairing token/);
   assert.doesNotMatch(cap.description, /worst any drop of that page can do with it is open a window/);
   assert.match(cap.description, /hud-approvals/,
     "the capability does not say what the HUD's approve grant is");
@@ -2478,6 +2532,328 @@ await check("GALAXY v2: the lens is remembered, like the other cosmetic view cho
     "the chosen lens did not survive a reload");
   assert.match(after.counts, /Memory:/, "the remembered lens did not redraw its own counts");
   await page.close();
+});
+
+/* ── The Reminders tab (2026-10-21, the owner's dedicated HUD menu) ──────── *
+ *  Phase 1 is the tab itself, grouped rows from the PC's own GET
+ *  /api/schedule, the Add form and the EXISTING one-job actions - through two
+ *  HUD-scoped commands, held on a stale link, with no list form and no
+ *  delete-all (Ruling 15). Editing an item's words/time/list and reordering
+ *  are Phase 2 (backend changes + a later deploy) and are deliberately not
+ *  in this page; the checks below fail if a control for them appears.
+ * ------------------------------------------------------------------------ */
+
+const REMINDERS_SCHEDULE = {
+  available: true, now: 1000, tz: "UTC",
+  jobs: [
+    { id: "s0123456789", kind: "reminder", text: "Call Mum about the trip",
+      state: "active", when: "tomorrow at 18:00", repeats: true,
+      repeat: "every weekday at 18:00" },
+    { id: "s012345678a", kind: "timer", text: "", state: "active", left: 300,
+      when: "in 5 minutes" },
+    { id: "s012345678b", kind: "alarm", text: "Wake up", state: "paused",
+      when: "tomorrow at 07:00" },
+    { id: "s012345678c", kind: "standby", text: "", state: "active",
+      when: "on standby at 01:00 today" },
+  ],
+  todo: [
+    { id: "s012345678d", kind: "todo", text: "Buy milk", state: "active", list: "shopping" },
+    { id: "s012345678e", kind: "todo", text: "Send the form", state: "active", list: "" },
+  ],
+  went_off: [{ id: "s012345678f", kind: "timer", text: "Tea", state: "fired",
+               when: "07:00", went_off_at: "07:00" }],
+  lists: [{ name: "shopping", title: "Shopping list", open: 1 }],
+};
+
+/** While App lock / "Hide memory lists" is on, Rust blanks the words but
+ *  keeps kinds, times and counts - so the page must draw the lock rows, not
+ *  empty cells. This is the exact redacted answer. */
+const REMINDERS_HIDDEN = {
+  available: true, hidden: true, hidden_count: 3, now: 1000, tz: "UTC",
+  jobs: [
+    { id: "s0123456789", kind: "reminder", text: "", state: "active",
+      when: "tomorrow at 18:00", hidden: true },
+    { id: "s012345678a", kind: "timer", text: "", state: "active", left: 300,
+      when: "in 5 minutes", hidden: true },
+  ],
+  todo: [
+    { id: "s012345678d", kind: "todo", text: "", state: "active",
+      list: "hidden-1", hidden: true },
+  ],
+  went_off: [],
+  lists: [{ name: "hidden-1", title: "", open: 1 }],
+};
+
+const remindersPanel = (page) => page.evaluate(() => {
+  const shown = (n) => {
+    if (!n) return false;
+    const b = n.getBoundingClientRect();
+    return b.width > 0 && b.height > 0;
+  };
+  return {
+    tab: document.body.dataset.hudTab,
+    panel: shown(document.getElementById("rail-reminders")),
+    note: (document.getElementById("rem-note") || {}).textContent || "",
+    groups: [...document.querySelectorAll("#reminders-body .rem-group h3")].map((h) => h.textContent),
+    titles: [...document.querySelectorAll("#reminders-body .rem-title")].map((t) => t.textContent),
+    ids: [...document.querySelectorAll("#reminders-body .rem-row")].map((r) => r.dataset.remId),
+    actions: [...document.querySelectorAll("#reminders-body [data-rem-action]")]
+      .map((b) => b.dataset.remAction),
+    otherSectionsShown: [...document.querySelectorAll("#rail-right .rail-section")]
+      .filter((s) => s.id !== "rail-reminders").filter(shown).map((s) => s.id),
+  };
+});
+
+const openReminders = async (schedule) => {
+  const opened = await openHud(browser, { jarvis: false, ollama: true, proxy: false,
+    schedule });
+  await pickLayout(opened.page, "studio");
+  await opened.page.waitForTimeout(150);
+  await opened.page.evaluate((n) => document.querySelector(
+    `#stage-tabs [data-hud-tab-choice="${n}"]`).click(), "reminders");
+  await opened.page.waitForTimeout(250);
+  return opened;
+};
+
+await check("the Reminders tab is in the stage tab bar and the dock, and shows its own panel", async () => {
+  const { page, problems } = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false, schedule: REMINDERS_SCHEDULE });
+  await pickLayout(page, "studio");
+  await page.waitForTimeout(200);
+  const before = await page.evaluate(() => {
+    const tab = document.querySelector('#stage-tabs [data-hud-tab-choice="reminders"]');
+    const dock = document.querySelector('#studio-dock [data-hud-tab-choice="reminders"]');
+    return { tab: Boolean(tab), dock: Boolean(dock),
+             tabShown: Boolean(tab && tab.getBoundingClientRect().width > 0),
+             dockShown: Boolean(dock && dock.getBoundingClientRect().width > 0),
+             keyboard: (() => { tab.focus(); return document.activeElement === tab; })() };
+  });
+  await page.evaluate(() => document.querySelector(
+    '#stage-tabs [data-hud-tab-choice="reminders"]').focus());
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(250);
+  const after = await page.evaluate(() => ({
+    tab: document.body.dataset.hudTab,
+    selected: document.querySelector('#stage-tabs [data-hud-tab-choice="reminders"]')
+      .getAttribute("aria-selected"),
+    dockPressed: document.querySelector('#studio-dock [data-hud-tab-choice="reminders"]')
+      .getAttribute("aria-pressed"),
+  }));
+  const panel = await remindersPanel(page);
+  await page.close();
+  assert.equal(before.tab, true, "the Reminders stage tab is not in the tab bar");
+  assert.equal(before.dock, true, "the Reminders dock icon is not in the studio dock");
+  assert.equal(before.tabShown, true, "the Reminders tab is not drawn in Studio");
+  assert.equal(before.dockShown, true, "the Reminders dock icon is not drawn in Studio");
+  assert.equal(before.keyboard, true, "the Reminders tab cannot take keyboard focus");
+  assert.equal(after.tab, "reminders", "Enter on the focused tab did not choose it");
+  assert.equal(after.selected, "true");
+  assert.equal(after.dockPressed, "true", "the dock icon is not kept in step with the tab");
+  assert.equal(panel.panel, true, "the Reminders panel is not shown when its tab is chosen");
+  assert.deepEqual(panel.otherSectionsShown, [],
+    `choosing Reminders left other rail sections on: ${JSON.stringify(panel.otherSectionsShown)}`);
+  assert.deepEqual(problems, []);
+});
+
+await check("the tab groups the PC's own schedule, with one row per item and only existing actions",
+  async () => {
+    const { page, problems, scheduleWrites } = await openReminders(REMINDERS_SCHEDULE);
+    const panel = await remindersPanel(page);
+    // No click has happened: a READ must never have sent a write.
+    assert.deepEqual(scheduleWrites, [], `a read sent ${JSON.stringify(scheduleWrites)}`);
+    assert.deepEqual(panel.groups, ["Just went off", "Timers", "Alarms", "Reminders",
+      "To-do", "Shopping list", "Other schedules"], JSON.stringify(panel.groups));
+    for (const id of ["s0123456789", "s012345678a", "s012345678b", "s012345678c",
+      "s012345678d", "s012345678e", "s012345678f"]) {
+      assert.ok(panel.ids.includes(id), `${id} has no row: ${panel.ids}`);
+    }
+    assert.ok(panel.titles.includes("Call Mum about the trip"));
+    assert.ok(panel.titles.includes("Buy milk"));
+    // Only the existing one-job actions - never edit/move/reorder (Phase 2,
+    // backend changes + a later deploy), and no Clear list anywhere (Ruling 15).
+    const allowed = new Set(["pause", "resume", "delete", "done", "add_time", "snooze"]);
+    assert.deepEqual(panel.actions.filter((a) => !allowed.has(a)), [],
+      `the tab drew an action Phase 1 must not have: ${JSON.stringify(panel.actions)}`);
+    assert.equal(panel.actions.includes("snooze"), true, "a fired item has no Snooze");
+    const pageText = await page.evaluate(() => document.body.textContent);
+    assert.doesNotMatch(pageText, /Clear list/i, "the Phase-1 HUD must have no Clear list");
+    assert.deepEqual(problems, []);
+    await page.close();
+  });
+
+await check("hidden words draw lock rows, never blank cells", async () => {
+  const { page, problems } = await openReminders(REMINDERS_HIDDEN);
+  const panel = await remindersPanel(page);
+  await page.close();
+  assert.match(panel.note, /hidden/i, `the panel did not say why it is blank: "${panel.note}"`);
+  assert.match(panel.note, /App lock/i);
+  assert.ok(panel.titles.length >= 3, `no lock rows were drawn: ${JSON.stringify(panel.titles)}`);
+  for (const title of panel.titles) {
+    assert.notEqual(title.trim(), "", "a hidden row drew a blank title cell");
+    assert.match(title, /hidden/i, `a hidden row says "${title}" - the words may have survived`);
+  }
+  assert.ok(panel.ids.includes("s0123456789"), "hidden rows lost their ids");
+  assert.deepEqual(problems, []);
+});
+
+await check("the Add form sends the right HUD command and the body the backend takes", async () => {
+  const { page, problems, scheduleWrites, direct } = await openReminders(REMINDERS_SCHEDULE);
+  // One-off reminder: kind/text/date/time, and NO card (the command only adds).
+  await page.selectOption("#rem-kind", "reminder");
+  await page.fill("#rem-text", "Call the dentist");
+  await page.fill("#rem-date", "2030-09-15");
+  await page.fill("#rem-time", "18:00");
+  await page.fill("#rem-notes", "bring the card");
+  await page.click("#rem-add");
+  await page.waitForTimeout(350);
+  // Timer: minutes -> seconds.
+  await page.selectOption("#rem-kind", "timer");
+  await page.fill("#rem-minutes-input", "10");
+  await page.click("#rem-add");
+  await page.waitForTimeout(350);
+  // To-do on a named list.
+  await page.selectOption("#rem-kind", "todo");
+  await page.fill("#rem-text", "Buy oat milk");
+  await page.fill("#rem-list", "shopping");
+  await page.click("#rem-add");
+  await page.waitForTimeout(350);
+  const calls = await page.evaluate(() => window.__invokes
+    .filter((c) => c[0] === "hud_schedule_add").map((c) => c[1]));
+  await page.close();
+  assert.equal(calls.length, 3, `the form sent ${JSON.stringify(calls)}`);
+  assert.deepEqual(calls[0], { kind: "reminder", text: "Call the dentist",
+    notes: "bring the card", date: "2030-09-15", time: "18:00" });
+  assert.deepEqual(calls[1], { kind: "timer", text: "", notes: "", seconds: 600 });
+  assert.deepEqual(calls[2], { kind: "todo", text: "Buy oat milk", notes: "",
+    list: "shopping" });
+  const posted = scheduleWrites.filter((w) => w.wrote === "/api/schedule/add").map((w) => w.body);
+  assert.equal(posted.length, 3, `the backend got ${JSON.stringify(posted)}`);
+  assert.deepEqual(direct, [], "an add reached the backend without the shell's token");
+  assert.deepEqual(problems, []);
+});
+
+await check("a row action sends ONE job's own action - the right id and do", async () => {
+  const { page, problems, scheduleWrites } = await openReminders(REMINDERS_SCHEDULE);
+  const clickRow = async (id, action) => {
+    await page.evaluate(({ id, action }) => {
+      document.querySelector(`#reminders-body [data-rem-id="${id}"] [data-rem-action="${action}"]`)
+        .click();
+    }, { id, action });
+    await page.waitForTimeout(250);
+  };
+  await clickRow("s0123456789", "pause");   // a reminder
+  await clickRow("s012345678a", "add_time"); // a timer, +5 minutes
+  await clickRow("s012345678f", "snooze");   // a fired timer
+  await clickRow("s012345678d", "done");     // a to-do item
+  await page.close();
+  const body = scheduleWrites.filter((w) => w.wrote === "/api/schedule/act").map((w) => w.body);
+  assert.deepEqual(body, [
+    { id: "s0123456789", do: "pause" },
+    { id: "s012345678a", do: "add_time", seconds: 300 },
+    { id: "s012345678f", do: "snooze" },
+    { id: "s012345678d", do: "done" },
+  ]);
+  assert.deepEqual(problems, []);
+});
+
+await check("a script in the page cannot POST a schedule write itself (audit M2)", async () => {
+  const { page, direct, scheduleWrites } = await openReminders(REMINDERS_SCHEDULE);
+  const out = await page.evaluate(async () => {
+    const res = [];
+    for (const path of ["/api/schedule/add", "/api/schedule/act"]) {
+      const r = await window.fetch(JARVIS.url(path), { method: "POST",
+        headers: JARVIS.headers({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ kind: "todo", text: "sneak one in" }) });
+      res.push({ path, status: r.status });
+    }
+    return res;
+  });
+  await page.close();
+  assert.deepEqual(out, [{ path: "/api/schedule/add", status: 403 },
+    { path: "/api/schedule/act", status: 403 }], JSON.stringify(out));
+  assert.deepEqual(direct, [], "a schedule write reached the backend without the shell");
+  assert.deepEqual(scheduleWrites, [],
+    "a direct POST reached the backend through the page");
+});
+
+await check("three HUD copies are byte-identical, and the allowlist is schedule-read only", async () => {
+  const repo = join(HERE, "..", "..");
+  const files = [join(SRC, "jarvis_hud.html"),
+    join(repo, "backend", "jarvis_hud.html"),
+    join(repo, "jarvis-backend", "jarvis_hud.html")];
+  const hashes = files.map((f) => createHash("sha256").update(readFileSync(f)).digest("hex"));
+  assert.equal(new Set(hashes).size, 1,
+    `the HUD copies differ: ${files.map((f, i) => `${f} ${hashes[i].slice(0, 8)}`).join(", ")}`);
+  const rust = readFileSync(join(HERE, "..", "src-tauri", "src", "hud_proxy.rs"), "utf8");
+  const list = /HUD_GET_PATHS: \[&str; \d+\] = \[([\s\S]*?)\];/.exec(rust)[1];
+  const allowed = [...list.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(allowed.includes("/api/schedule"), "the tab's read is not on the HUD allowlist");
+  assert.equal(allowed.includes("/api/schedule/add"), false,
+    "the HUD may read /api/schedule/add - a write is a command, never a read");
+  assert.equal(allowed.includes("/api/schedule/act"), false,
+    "the HUD may read /api/schedule/act - a write is a command, never a read");
+  const cmd = readFileSync(join(HERE, "..", "src-tauri", "src", "hud_schedule.rs"), "utf8");
+  assert.equal((cmd.match(/require_link_live\(&app\)/g) || []).length, 2,
+    "not every Reminders write is held on a stale link");
+  assert.doesNotMatch(cmd, /clear_list_body|count: Option<u32>/,
+    "the Phase-1 HUD command reaches a clear-list form (Ruling 15 says it must not)");
+  const surfaces = readFileSync(join(HERE, "..", "src-tauri", "permissions", "surfaces.toml"), "utf8");
+  const set = surfaces.slice(surfaces.indexOf('identifier = "hud-schedule"'));
+  const perms = set.slice(set.indexOf("permissions = ["), set.indexOf("]") + 1);
+  assert.deepEqual(perms.match(/allow-[a-z-]+/g),
+    ["allow-hud-schedule-add", "allow-hud-schedule-act"]);
+});
+
+
+/** The PC's own refusal rules, not the page's guess (audit F4): a kind with
+ *  no time of its own (`Kind.ends`, the "remind me next time…" job) cannot
+ *  be paused - `jarvis_schedule.act`'s pause branch refuses it with "That
+ *  cannot be paused now." - so the HUD must not draw a Pause button. A
+ *  standby schedule CAN be paused there (state active, no `ends`), and the
+ *  Brain offers it, so the HUD keeps that one. */
+const REMINDERS_NO_PAUSE = {
+  available: true, now: 1000, tz: "UTC",
+  jobs: [
+    { id: "s0123456789", kind: "nexttime", text: "", state: "active",
+      when: "until 2027-01-01", repeats: false },
+    { id: "s012345678a", kind: "standby", text: "", state: "active",
+      when: "on standby at 01:00 today" },
+    { id: "s012345678b", kind: "review", text: "", state: "active" },
+  ],
+  todo: [], went_off: [], lists: [],
+};
+
+await check("the tab never offers an action the PC refuses (next-time cannot pause)", async () => {
+  const { page, problems, scheduleWrites } = await openReminders(REMINDERS_NO_PAUSE);
+  const actions = await page.evaluate(() => {
+    const out = {};
+    for (const row of document.querySelectorAll("#reminders-body .rem-row")) {
+      out[row.dataset.remId] = [...row.querySelectorAll("[data-rem-action]")]
+        .map((b) => b.dataset.remAction);
+    }
+    return out;
+  });
+  await page.close();
+  assert.deepEqual(actions["s0123456789"], ["delete"],
+    `a "next time" job cannot be paused by the PC, but the HUD drew ${JSON.stringify(actions["s0123456789"])}`);
+  assert.deepEqual(actions["s012345678a"], ["pause", "delete"],
+    `a standby schedule can be paused on the PC (jarvis_schedule.act pause branch: active + no ends), like the Brain offers: ${JSON.stringify(actions["s012345678a"])}`);
+  assert.deepEqual(actions["s012345678b"], [],
+    "the quiet review row belongs to the Decks window and must have no actions");
+  // Nothing was sent: no button was pressed, and a read never writes.
+  assert.deepEqual(scheduleWrites, [], `opening the tab sent ${JSON.stringify(scheduleWrites)}`);
+  assert.deepEqual(problems, []);
+});
+
+await check("the H1 layout model can open on the Reminders tab", async () => {
+  const layout = readFileSync(join(SRC, "hud-layout.js"), "utf8");
+  const tabs = /STAGE_TABS = Object\.freeze\(\[([\s\S]*?)\]\)/.exec(layout);
+  assert.ok(tabs, "hud-layout.js no longer declares STAGE_TABS");
+  assert.match(tabs[1], /"reminders"/,
+    "STAGE_TABS cannot open on the Reminders tab, so no layout preset can select it");
+  const html = readFileSync(join(SRC, "jarvis_hud.html"), "utf8");
+  assert.match(html, /data-hud-tab-choice="reminders"/,
+    "the layout model knows the tab but the page does not draw it");
 });
 
 await browser.close();

@@ -960,6 +960,61 @@ html[data-hud-layout="studio"][data-hud-tab="today"] #rail-right #rail-waiting{
 }
 html[data-hud-layout="studio"] .bento-waiting{display:flex; flex-direction:column;}
 
+
+/* ---- REMINDERS (2026-10-21, the owner's dedicated Reminders menu) ----- *
+ *  ONE section (#rail-reminders), drawn from the SAME GET /api/schedule
+ *  read the Brain's Coming up uses: the Studio stage tab and its dock icon,
+ *  the Cockpit's Bento card and the Ambient layout's slide-in rail all show
+ *  this one panel, so nothing here is a second list. The words are the PC's
+ *  own and are already blanked in Rust while App lock / the private lists
+ *  are hidden (kinds, times and counts stay). Phase 1 is view + add + the
+ *  existing one-job actions; editing an item and reordering need backend
+ *  changes and a later deploy, and are NOT faked here.
+ * --------------------------------------------------------------------- */
+.reminders-body{display:flex; flex-direction:column; gap:10px;}
+.rem-note{margin:0; padding:7px 9px; border:1px solid var(--line); border-radius:4px;
+  background:rgb(var(--accent-rgb) / .06); font-size:11.5px; line-height:1.45; color:var(--text);}
+.rem-note[hidden]{display:none !important;}
+.rem-empty{margin:2px 0; font-size:12px; line-height:1.45; color:var(--dim);}
+.rem-error{margin:6px 0 0; padding:6px 8px; border:1px solid rgb(var(--bad-rgb) / .55);
+  border-radius:4px; font-size:11.5px; line-height:1.4; color:var(--bad-text);}
+.rem-error[hidden]{display:none !important;}
+.rem-group{display:flex; flex-direction:column; gap:6px;}
+.rem-group h3{margin:2px 0 0; font-family:var(--f-mono); font-size:10px; letter-spacing:.09em;
+  text-transform:uppercase; color:var(--dim);}
+.rem-row{padding:7px 8px; border:1px solid var(--line); border-radius:5px;
+  background:var(--plate-2);}
+.rem-title{margin:0; font-size:12.5px; line-height:1.35; color:var(--text);}
+.rem-meta{margin:2px 0 0; font-family:var(--f-mono); font-size:10.5px; line-height:1.4; color:var(--dim);}
+.rem-actions{display:flex; flex-wrap:wrap; gap:5px; margin-top:6px;}
+.rem-btn{font-size:10.5px; padding:3px 7px; border:1px solid var(--line); border-radius:3px;
+  color:var(--text); background:transparent; cursor:pointer;}
+.rem-btn:hover{border-color:var(--line-hot); color:var(--text);}
+.rem-btn.danger{color:var(--bad-text); border-color:rgb(var(--bad-rgb) / .45);}
+.rem-btn:disabled{opacity:.5; cursor:default;}
+.rem-form{display:flex; flex-direction:column; gap:7px; margin-top:10px; padding-top:10px;
+  border-top:1px solid var(--line);}
+.rem-form-row{display:flex; align-items:center; gap:7px; flex-wrap:wrap;}
+.rem-form-row[hidden]{display:none !important;}
+.rem-form-row > label:first-child, .rem-form-row .rem-days-label{min-width:52px;
+  font-family:var(--f-mono); font-size:10.5px; letter-spacing:.06em; text-transform:uppercase;
+  color:var(--dim);}
+.rem-form input[type="text"], .rem-form input[type="date"], .rem-form input[type="time"],
+.rem-form input[type="number"], .rem-form select{flex:1 1 120px; min-width:0; padding:6px 8px;
+  border:1px solid var(--line); border-radius:3px; background:var(--plate-2); color:var(--text);
+  font-family:var(--f-mono); font-size:11.5px;}
+.rem-form input:focus, .rem-form select:focus{outline:none; border-color:var(--line-hot);}
+.rem-form .rem-days label{display:inline-flex; align-items:center; gap:3px;
+  font-family:var(--f-mono); font-size:10.5px; color:var(--text);}
+.rem-form-actions{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+.rem-form-note{font-family:var(--f-mono); font-size:10px; color:var(--text-faint);}
+html[data-hud-layout="studio"][data-hud-tab="reminders"] #rail-right{display:flex; flex-direction:column;}
+html[data-hud-layout="studio"][data-hud-tab="reminders"] #rail-right .rail-section{display:none;}
+html[data-hud-layout="studio"][data-hud-tab="reminders"] #rail-right #rail-reminders{display:flex;
+  flex-direction:column; gap:8px;}
+html[data-hud-layout="cockpit"] #rail-reminders{display:flex; flex-direction:column; gap:8px;}
+html[data-hud-layout="ambient"] #rail-reminders{display:flex; flex-direction:column; gap:8px;}
+
 /* ---- AMBIENT -------------------------------------------------------- *
  *  No sidebars. Two floating glass pills carry what a rail would have
  *  said: top-left the status, model and latency; top-right the view
@@ -1187,6 +1242,9 @@ html[data-hud-layout="ambient"] .composer{
       <button type="button" class="dock-btn" data-hud-tab-choice="today" title="Approvals waiting for you" aria-pressed="false">
         <span aria-hidden="true">&#10003;</span>
       </button>
+      <button type="button" class="dock-btn" data-hud-tab-choice="reminders" title="Reminders, timers, alarms and to-do" aria-pressed="false">
+        <span aria-hidden="true">&#9200;</span>
+      </button>
       <button type="button" class="dock-btn" id="dock-quickbar" title="Jarvis bar" hidden>
         <span aria-hidden="true">&#9889;</span>
       </button>
@@ -1320,6 +1378,7 @@ html[data-hud-layout="ambient"] .composer{
     <div id="stage-tabs" role="tablist" aria-label="Inspector stage">
       <button type="button" class="stage-tab" data-hud-tab-choice="galaxy" role="tab" aria-selected="true">Galaxy</button>
       <button type="button" class="stage-tab" data-hud-tab-choice="today" role="tab" aria-selected="false">Approvals</button>
+      <button type="button" class="stage-tab" data-hud-tab-choice="reminders" role="tab" aria-selected="false">Reminders</button>
       <button type="button" class="stage-tab" data-hud-tab-choice="memory" role="tab" aria-selected="false">Memory</button>
       <button type="button" class="stage-tab" data-hud-tab-choice="telemetry" role="tab" aria-selected="false">Telemetry</button>
     </div>
@@ -1457,6 +1516,85 @@ html[data-hud-layout="ambient"] .composer{
       </p>
       <span class="wait-badge" id="waiting-badge" hidden>Irreversible - read it first</span>
       <button class="ghost waiting-open" id="waiting-open" type="button">Show the cards</button>
+    </div>
+
+
+    <!-- Reminders (2026-10-21, the owner's dedicated menu). ONE section drawn
+         from the SAME GET /api/schedule read the Brain's Coming up uses; the
+         Studio stage tab / dock icon, the Cockpit Bento card and the Ambient
+         rail all show this one panel. Its words are blanked in Rust while App
+         lock or the private lists are hidden. Phase 1: view, add, and the
+         existing one-job actions - edit/move/reorder need backend changes and
+         a later deploy, and are not faked here. -->
+    <div class="rail-section bento-reminders" id="rail-reminders">
+      <div class="hud-label">Reminders</div>
+      <p class="rem-note" id="rem-note" hidden></p>
+      <p class="rem-error" id="rem-error" role="alert" hidden></p>
+      <div class="reminders-body" id="reminders-body">
+        <p class="rem-empty" id="rem-empty">Loading your reminders&hellip;</p>
+      </div>
+      <form class="rem-form" id="rem-form" autocomplete="off">
+        <div class="rem-form-row">
+          <label for="rem-kind">Kind</label>
+          <select id="rem-kind">
+            <option value="reminder">Reminder</option>
+            <option value="timer">Timer</option>
+            <option value="alarm">Alarm</option>
+            <option value="todo">To-do</option>
+          </select>
+        </div>
+        <div class="rem-form-row">
+          <label for="rem-text">What</label>
+          <input id="rem-text" type="text" maxlength="300" placeholder="Call Mum about the trip">
+        </div>
+        <div class="rem-form-row rem-when" id="rem-when">
+          <label for="rem-date">Date</label>
+          <input id="rem-date" type="date">
+          <label for="rem-time">Time</label>
+          <input id="rem-time" type="time">
+        </div>
+        <div class="rem-form-row" id="rem-minutes" hidden>
+          <label for="rem-minutes-input">Minutes</label>
+          <input id="rem-minutes-input" type="number" min="1" max="1440" step="1" value="10">
+        </div>
+        <div class="rem-form-row rem-when" id="rem-repeat-row">
+          <label for="rem-repeat">Repeat</label>
+          <select id="rem-repeat">
+            <option value="none">Once</option>
+            <option value="day">Every day</option>
+            <option value="weekday">Every weekday</option>
+            <option value="week">Every week</option>
+            <option value="custom">Custom days</option>
+          </select>
+        </div>
+        <div class="rem-form-row" id="rem-days" hidden>
+          <span class="rem-days-label">Days</span>
+          <span class="rem-days">
+            <label><input type="checkbox" value="0"> Mon</label>
+            <label><input type="checkbox" value="1"> Tue</label>
+            <label><input type="checkbox" value="2"> Wed</label>
+            <label><input type="checkbox" value="3"> Thu</label>
+            <label><input type="checkbox" value="4"> Fri</label>
+            <label><input type="checkbox" value="5"> Sat</label>
+            <label><input type="checkbox" value="6"> Sun</label>
+          </span>
+        </div>
+        <div class="rem-form-row" id="rem-list-row" hidden>
+          <label for="rem-list">List</label>
+          <input id="rem-list" type="text" maxlength="30" list="rem-list-names"
+                 placeholder="optional, like: shopping">
+          <datalist id="rem-list-names"></datalist>
+        </div>
+        <div class="rem-form-row">
+          <label for="rem-notes">Notes</label>
+          <input id="rem-notes" type="text" maxlength="300"
+                 placeholder="optional; kept in the item's own words">
+        </div>
+        <div class="rem-form-actions">
+          <button type="submit" class="act primary" id="rem-add">Add</button>
+          <span class="rem-form-note">No card: adding an item only adds.</span>
+        </div>
+      </form>
     </div>
 
     <div class="rail-section bento-telemetry" id="rail-telemetry">
@@ -4185,6 +4323,12 @@ function subscribe(){
     const d = dataOf(m);
     reactor.setPower(typeof d.value === "string" ? d.value : d.mode);
   });
+  // The Reminders tab (2026-10-21): a schedule frame is named `schedule`, so
+  // it reaches addEventListener and never onmessage. The tab re-reads the
+  // list; the frame itself carries ids and kinds only, never the words.
+  es.addEventListener("schedule", () => {
+    if (typeof window.__hudRemindersRefresh === "function") window.__hudRemindersRefresh();
+  });
 
   es.onerror = () => {
     STREAM.live = false;
@@ -4250,7 +4394,7 @@ subscribe();
    * values. */
   var LAYOUT_KEY = "jarvis.hud.layout";
   var LAYOUTS = ["cockpit", "studio", "ambient"];
-  var TABS = ["galaxy", "today", "memory", "telemetry"];
+  var TABS = ["galaxy", "today", "reminders", "memory", "telemetry"];
   var body = document.body;
   var $ = function (id) { return document.getElementById(id); };
 
@@ -4659,6 +4803,392 @@ var laneSelect = $("lane-compact");
    * opened by something that injects the shell late. */
   window.setTimeout(paintQuickbar, 600);
 })();
+
+  // ---- The Reminders tab (2026-10-21, the owner's dedicated menu) --------
+  //  Drawn from the SAME GET /api/schedule read the Brain's Coming up uses;
+  //  the Studio stage tab / dock icon, the Cockpit Bento card and the Ambient
+  //  rail all show this one panel. Its words are blanked in Rust while App
+  //  lock or the private lists are hidden. Phase 1: view, add, and the
+  //  existing one-job actions - edit/move/reorder need backend changes and a
+  //  later deploy, and are not faked here. It lives INSIDE the page's own
+  //  layout script on purpose: another inline script block would be a fifth
+  //  one for the CSP/hash rule tests/csp-inline.mjs holds the page to.
+(function () {
+  "use strict";
+  if (window.__hudReminders) return;
+  window.__hudReminders = true;
+
+  var READ_MS = 15000;
+  var TAGS = { reminder: "Reminder", alarm: "Alarm", timer: "Timer", todo: "To-do",
+               tellme: "Tell me when", standby: "Standby schedule", briefing: "Briefing",
+               today: "Today card", nexttime: "Next time", review: "Review deck" };
+  var $ = function (id) { return document.getElementById(id); };
+  var body = $("reminders-body");
+  var note = $("rem-note");
+  var errorLine = $("rem-error");
+  var view = null;
+  var busy = false;
+
+  function txt(v) { return typeof v === "string" ? v : ""; }
+  function el(tag, cls, words) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (words) n.textContent = words;
+    return n;
+  }
+  function invoke(name, args) {
+    var tauri = window.__TAURI__;
+    var fn = tauri && tauri.core && tauri.core.invoke;
+    if (typeof fn !== "function") {
+      return Promise.reject(new Error("Changing reminders needs the Jarvis desktop window."));
+    }
+    return fn(name, args);
+  }
+  function shown() {
+    var r = $("rail-reminders");
+    if (!r) return false;
+    var b = r.getBoundingClientRect();
+    return b.width > 0 && b.height > 0;
+  }
+
+  /* ---- the read the page already makes -------------------------------- */
+  function readSchedule(a) {
+    var src = a && typeof a === "object" ? a : {};
+    var available = src.available !== false && Array.isArray(src.jobs) && Array.isArray(src.todo);
+    var ok = function (j) { return j && typeof j === "object" && /^s[0-9a-f]{10}$/.test(txt(j.id)); };
+    var row = function (j) {
+      return { id: txt(j.id), kind: txt(j.kind), text: txt(j.text), state: txt(j.state),
+               due: typeof j.due === "number" ? j.due : null,
+               left: typeof j.left === "number" ? j.left : null,
+               when: txt(j.when), repeats: j.repeats === true, repeat: txt(j.repeat),
+               missed: txt(j.missed), note: txt(j.note), hidden: j.hidden === true,
+               list: txt(j.list), snoozed: j.snoozed === true,
+               wentOffAt: txt(j.went_off_at) };
+    };
+    var lists = Array.isArray(src.lists) ? src.lists.filter(function (l) {
+      return l && typeof l === "object" && typeof l.name === "string" && l.name
+        && Number.isInteger(l.open) && l.open > 0;
+    }).map(function (l) {
+      return { name: l.name, title: txt(l.title) || l.name, open: l.open };
+    }) : [];
+    return {
+      available: available,
+      why: available ? "" : txt(src.why) ||
+        "Your PC's Jarvis does not have timers and reminders yet - run apply-patches.ps1 on the PC.",
+      hidden: available && src.hidden === true,
+      hiddenCount: typeof src.hidden_count === "number" ? src.hidden_count : 0,
+      jobs: available ? src.jobs.filter(ok).map(row) : [],
+      todo: available ? src.todo.filter(ok).map(row) : [],
+      wentOff: available && Array.isArray(src.went_off) ? src.went_off.filter(ok).map(row) : [],
+      lists: lists
+    };
+  }
+
+  function refresh() {
+    if (!body) return Promise.resolve();
+    return window.fetch("/api/schedule", { cache: "no-store",
+      headers: { "X-Jarvis-Client": "hud" } }).then(function (r) {
+      return r.json().catch(function () { return null; }).then(function (data) {
+        if (!r.ok) {
+          var why = data && (data.error || data.why);
+          throw new Error(why || ("The PC answered HTTP " + r.status + "."));
+        }
+        view = readSchedule(data);
+        paint();
+      });
+    }).catch(function (e) {
+      if (view === null) {
+        body.replaceChildren(el("p", "rem-empty",
+          "Cannot read your reminders right now: " + (e && e.message ? e.message : e)));
+      }
+    });
+  }
+  window.__hudRemindersRefresh = refresh;
+
+  /* ---- drawing -------------------------------------------------------- */
+  function rowTitle(job) {
+    if (job.hidden) return "(hidden while App lock is on)";
+    if (txt(job.text)) return job.text;
+    if (job.kind === "timer") return "Timer";
+    if (job.kind === "alarm") return "Alarm";
+    if (job.kind === "todo") return "To-do";
+    return TAGS[job.kind] || "Reminder";
+  }
+  function rowMeta(job) {
+    var out = [];
+    if (job.kind === "timer" && typeof job.left === "number") {
+      var mins = Math.max(0, Math.ceil(job.left / 60));
+      out.push(job.state === "paused" ? "Paused - " + mins + " min left"
+        : mins + " min left");
+    } else if (job.when) {
+      out.push(job.when);
+    }
+    if (job.repeats && job.repeat) out.push(job.repeat);
+    if (job.state === "paused" && job.kind !== "timer") out.push("Paused");
+    if (job.state === "waiting") out.push("Waiting for your yes on the approval card.");
+    if (job.missed) out.push("Went off late - the PC was off or asleep.");
+    if (!job.hidden && job.list) out.push("List: " + job.list);
+    if (job.wentOffAt) out.push("Went off at " + job.wentOffAt);
+    return out.join(" · ");
+  }
+  /* The PC's own refusal rules are the authority (jarvis_schedule.act):
+   *   - a kind with no time of its own (`Kind.ends`, e.g. "remind me next
+   *     time I talk about X") cannot be paused or resumed - it has nothing
+   *     to pause, so Delete is the one action on its row (the Brain's own
+   *     Coming up offers only Delete for it);
+   *   - a to-do item is done/deleted, never paused;
+   *   - a waiting job can only be deleted;
+   *   - add time is a timer's alone, and snooze is only for something that
+   *     already went off;
+   *   - the quiet `review` row belongs to the Decks window and has none.
+   * A button is never drawn for something the PC answers "That cannot be
+   * paused now." to. */
+  var NO_PAUSE_KINDS = { nexttime: true };
+  function actionsFor(job, wentOff) {
+    var out = [];
+    if (wentOff) return [{ do: "snooze", label: "Snooze 10 minutes" },
+                         { do: "delete", label: "Delete", danger: true }];
+    if (job.kind === "review") return [];
+    if (job.state === "waiting") return [{ do: "delete", label: "Delete", danger: true }];
+    if (job.kind === "todo") {
+      return [{ do: "done", label: "Done" }, { do: "delete", label: "Delete", danger: true }];
+    }
+    if (job.kind === "timer") {
+      out.push({ do: "add_time", label: "+5 minutes" });
+    }
+    if (!NO_PAUSE_KINDS[job.kind]) {
+      if (job.state === "active") {
+        out.push({ do: "pause", label: "Pause" });
+      } else if (job.state === "paused") {
+        out.push({ do: "resume", label: "Resume" });
+      }
+    }
+    out.push({ do: "delete", label: "Delete", danger: true });
+    return out;
+  }
+  function rowOf(job, wentOff) {
+    var row = el("div", "rem-row");
+    row.setAttribute("data-rem-id", job.id);
+    row.setAttribute("data-rem-kind", job.kind);
+    row.append(el("p", "rem-title", rowTitle(job)));
+    var meta = rowMeta(job);
+    if (meta) row.append(el("p", "rem-meta", meta));
+    var acts = actionsFor(job, wentOff);
+    if (acts.length) {
+      var bar = el("div", "rem-actions");
+      acts.forEach(function (a) {
+        var b = el("button", "rem-btn" + (a.danger ? " danger" : ""), a.label);
+        b.type = "button";
+        b.setAttribute("data-rem-action", a.do);
+        b.addEventListener("click", function () { act(job, a.do, b); });
+        bar.append(b);
+      });
+      row.append(bar);
+    }
+    return row;
+  }
+  function group(title, jobs, wentOff) {
+    if (!jobs.length) return null;
+    var box = el("div", "rem-group");
+    box.append(el("h3", "", title));
+    jobs.forEach(function (j) { box.append(rowOf(j, wentOff)); });
+    return box;
+  }
+  function paint() {
+    if (!body || !view) return;
+    body.replaceChildren();
+    errorLine.hidden = true;
+    var hiddenNote = view.hidden
+      ? (view.hiddenCount
+          ? "Your words are hidden while App lock or \"Hide memory lists\" is on (" +
+            view.hiddenCount + " item" + (view.hiddenCount === 1 ? "" : "s") +
+            " affected). Times, kinds and counts still show."
+          : "Your words are hidden while App lock or \"Hide memory lists\" is on. " +
+            "Times, kinds and counts still show.")
+      : "";
+    if (hiddenNote) { note.textContent = hiddenNote; note.hidden = false; }
+    else { note.hidden = true; note.textContent = ""; }
+    if (!view.available) {
+      body.append(el("p", "rem-empty", view.why));
+      return;
+    }
+    var jobs = view.jobs;
+    var byKind = function (k) { return jobs.filter(function (j) { return j.kind === k; }); };
+    var other = jobs.filter(function (j) {
+      return ["timer", "alarm", "reminder"].indexOf(j.kind) < 0;
+    });
+    var todo = view.todo.filter(function (j) { return !j.list; });
+    var lists = view.lists.map(function (l) {
+      return { name: l.name, title: view.hidden ? "(hidden) list"
+        : (l.title || l.name), open: l.open,
+        items: view.todo.filter(function (j) { return j.list === l.name; }) };
+    }).filter(function (l) { return l.items.length; });
+    var parts = [
+      group("Just went off", view.wentOff, true),
+      group("Timers", byKind("timer"), false),
+      group("Alarms", byKind("alarm"), false),
+      group("Reminders", byKind("reminder"), false),
+      group("To-do", todo, false)
+    ];
+    lists.forEach(function (l) {
+      var g = group(l.title, l.items, false);
+      if (g) parts.push(g);
+    });
+    parts.push(group("Other schedules", other, false));
+    var any = false;
+    parts.forEach(function (p) { if (p) { any = true; body.append(p); } });
+    if (!any) {
+      body.append(el("p", "rem-empty",
+        "Nothing coming up. Add one above, or say \"set a timer for 10 minutes\"."));
+    }
+    var names = $("rem-list-names");
+    if (names) {
+      names.replaceChildren();
+      view.lists.forEach(function (l) {
+        if (view.hidden) return;
+        var o = el("option");
+        o.value = l.name;
+        names.append(o);
+      });
+    }
+  }
+
+  function showSaid(v) {
+    errorLine.hidden = true;
+    var said = v && typeof v === "object" ? txt(v.said) : "";
+    if (said) { note.textContent = said; note.hidden = false; }
+  }
+  function showError(e) {
+    errorLine.textContent = (e && e.message) ? e.message : String(e);
+    errorLine.hidden = false;
+  }
+  function afterChange() { return refresh(); }
+
+  /* ---- one row action ------------------------------------------------- */
+  function act(job, action, button) {
+    if (busy) return;
+    busy = true;
+    Array.prototype.forEach.call(body.querySelectorAll("button"), function (b) {
+      b.disabled = true;
+    });
+    var args = { id: job.id, action: action };
+    if (action === "add_time") args.seconds = 300;
+    invoke("hud_schedule_act", args).then(function (v) {
+      showSaid(v);
+    }).catch(showError).then(function () {
+      busy = false;
+      Array.prototype.forEach.call(body.querySelectorAll("button"), function (b) {
+        b.disabled = false;
+      });
+      if (button) button.disabled = false;
+      return afterChange();
+    });
+  }
+
+  /* ---- the add form --------------------------------------------------- */
+  function selectedDays() {
+    var out = [];
+    Array.prototype.forEach.call(document.querySelectorAll("#rem-days input:checked"),
+      function (c) { out.push(parseInt(c.value, 10)); });
+    return out;
+  }
+  function syncForm() {
+    var kind = $("rem-kind").value;
+    var when = kind === "alarm" || kind === "reminder";
+    $("rem-when").hidden = !when;
+    $("rem-repeat-row").hidden = !when;
+    $("rem-minutes").hidden = kind !== "timer";
+    $("rem-list-row").hidden = kind !== "todo";
+    var repeat = $("rem-repeat").value;
+    $("rem-days").hidden = !(when && (repeat === "week" || repeat === "custom"));
+  }
+  function submitAdd(ev) {
+    if (ev) ev.preventDefault();
+    if (busy) return;
+    errorLine.hidden = true;
+    var kind = $("rem-kind").value;
+    var words = $("rem-text").value.trim();
+    var notes = $("rem-notes").value.trim();
+    var args = { kind: kind, text: words, notes: notes };
+    if (kind === "todo" && !words && !notes) {
+      showError(new Error("Type what to add first."));
+      return;
+    }
+    if ((words.length + (words && notes ? 3 : 0) + notes.length) > 300) {
+      showError(new Error("That is longer than 300 characters - say it more briefly."));
+      return;
+    }
+    if (kind === "timer") {
+      var mins = parseInt($("rem-minutes-input").value, 10);
+      if (!(mins >= 1 && mins <= 1440)) {
+        showError(new Error("A timer is 1 to 1440 minutes (24 hours)."));
+        return;
+      }
+      args.seconds = mins * 60;
+    }
+    if (kind === "alarm" || kind === "reminder") {
+      var repeat = $("rem-repeat").value;
+      var time = $("rem-time").value;
+      if (repeat === "none") {
+        var date = $("rem-date").value;
+        if (!date) { showError(new Error("Pick a date, like 2030-09-15.")); return; }
+        if (!time) { showError(new Error("Write the time as HH:MM, like 18:00.")); return; }
+        args.date = date;
+        args.time = time;
+      } else {
+        if (!time) { showError(new Error("Write the time as HH:MM, like 07:30.")); return; }
+        var rule = { at: time };
+        if (repeat === "custom") {
+          var days = selectedDays();
+          if (!days.length) { showError(new Error("Pick at least one day.")); return; }
+          rule.every = "week";
+          rule.days = days;
+        } else {
+          rule.every = repeat;
+        }
+        args.repeat = rule;
+      }
+    }
+    if (kind === "todo") {
+      var list = $("rem-list").value.trim();
+      if (list) args.list = list;
+    }
+    busy = true;
+    $("rem-add").disabled = true;
+    invoke("hud_schedule_add", args).then(function (v) {
+      showSaid(v);
+      $("rem-text").value = "";
+      $("rem-notes").value = "";
+    }).catch(showError).then(function () {
+      busy = false;
+      $("rem-add").disabled = false;
+      return afterChange();
+    });
+  }
+
+  /* ---- start ---------------------------------------------------------- */
+  function start() {
+    if (!$("rail-reminders")) return;
+    $("rem-kind").addEventListener("change", syncForm);
+    $("rem-repeat").addEventListener("change", syncForm);
+    $("rem-form").addEventListener("submit", submitAdd);
+    syncForm();
+    refresh();
+    var last = Date.now();
+    window.setInterval(function () {
+      // While the tab is off screen, poll as the page already does for its
+      // other reads; the event above is the live path when it IS on screen.
+      if (Date.now() - last < READ_MS - 500) return;
+      last = Date.now();
+      if (shown()) refresh();
+    }, READ_MS);
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start);
+  } else {
+    start();
+  }
+})();
 </script>
 <!-- The one shared rule: what a not-running model is called, and the DOM
      half that draws it (`lane-warning.js`, held to these words by
@@ -4667,6 +5197,7 @@ var laneSelect = $("lane-compact");
      (Tauri hashes every inline script); the same rule is imported by the
      quickbar's main.js, so the two windows cannot come to different wording
      for the same fact. -->
+
 <script type="module">
 import { paintLaneWarning } from "./lane-warning.js";
 window.paintLaneWarning = paintLaneWarning;

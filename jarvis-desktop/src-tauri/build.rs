@@ -37,6 +37,13 @@ fn main() {
             "hud_get",
             "hud_chat",
             "hud_chat_cancel",
+            // The HUD Reminders tab's writes (2026-10-21, the owner's
+            // request): add ONE reminder/timer/alarm/to-do item, and change
+            // ONE job. No clear-list form (Ruling 15: that stays the
+            // Brain's) and never a delete-all. The same backend routes the
+            // Brain uses, held on a stale link, no card. HUD window only.
+            "hud_schedule_add",
+            "hud_schedule_act",
             // App lock and the widget: is the lock on, and "Approve in the
             // Jarvis bar" (apps security audit M3).
             "get_app_lock",
