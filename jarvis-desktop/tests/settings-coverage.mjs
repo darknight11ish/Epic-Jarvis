@@ -142,6 +142,8 @@ await check("the custom switches are found by the feature's ordinary words", asy
     ["headless browser", "browser-engine", "#be-switch"],
     ["lights without asking", "asks-first", null],
     ["data sandbox", "sandbox", "#sbx-switch"],
+    ["chat history", "security", "#ch-switch"],
+    ["how long my chats are kept", "security", "#ch-keep"],
     ["quiet hours", "notifications", "#notif-quiet-enabled"],
     ["prompt coach", "prompt-coach", "#coach-enabled"],
   ];

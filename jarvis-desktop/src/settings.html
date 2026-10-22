@@ -1484,6 +1484,30 @@
           </span>
         </label>
 
+        <!-- ── Chat history on this PC (2026-10-22, task-79 + #734's typed
+             chat_history/chat_keep_days). Owner requirement: findable AND
+             adjustable in Settings. chat-history-settings.js draws the switch and
+             the retention choice from the PC's own status, through the SAME route
+             the typed setting and the Brain's History switch use
+             (/api/history/settings, one field per request): ON raises ONE
+             `history_enable` card and answers "waiting"; OFF is immediate; the
+             retention choice deletes older conversations at once, so it asks here
+             first and is held on a stale link. The page never sees a conversation -
+             the Rust command drops the list and returns only the status fields. -->
+        <h3 class="subhead" id="ch-title">Chat history on this PC</h3>
+        <p class="state" id="ch-state" role="status">Asking Jarvis…</p>
+        <div id="ch-body" hidden>
+          <button class="btn" id="ch-switch" type="button">Turn chat history on</button>
+          <div class="field">
+            <label class="label" for="ch-keep">How long my chats are kept</label>
+            <select id="ch-keep"></select>
+          </div>
+          <p class="note" id="ch-line"></p>
+          <p class="note" id="ch-note"></p>
+          <p class="note" id="ch-link-note" hidden></p>
+          <span class="status" id="ch-status" role="status"></span>
+        </div>
+
         <span class="status" id="sec-status" role="status"></span>
       </section>
 
@@ -3264,6 +3288,7 @@
     <script type="module" src="sandbox-settings.js"></script>
     <script type="module" src="media-index-settings.js"></script>
 <script type="module" src="big-coder-settings.js"></script>
+<script type="module" src="chat-history-settings.js"></script>
     <script type="module" src="setup-settings.js"></script>
   </body>
 </html>
