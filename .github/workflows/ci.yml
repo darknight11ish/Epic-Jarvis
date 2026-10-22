@@ -1552,6 +1552,23 @@ jobs:
       # re-measure rather than trust the digits.
       - name: The documents page's own count and size match docs/
         run: python3 ../../tools/check_docs_map.py
+      # README.md is the first page anyone reads, and it was the one page no
+      # checker measured. On 2026-10-21 a review of it found three kinds of
+      # false statement at once: it named a voice module, `jarvis_voice.py`,
+      # whose job the shipped code had already split away; it said **"The
+      # desktop installer is not published yet"** weeks after the rolling
+      # `desktop-latest` release had been publishing a signed MSI and
+      # setup.exe; and it called two pull requests "in flight" that had
+      # merged. A beginner reads that page first, so a false sentence there
+      # costs the most. This is the compiler for the four things about that
+      # page that can be checked mechanically - every module, document and
+      # script it names exists, it names no pull-request number, none of the
+      # phrases that had already rotted is back, and no link was rewritten
+      # into a Google search for itself by a chat/PDF converter (a corrupt
+      # copy, never the file). It prints every reference it checked, so a
+      # reference that stopped matching cannot pass unnoticed.
+      - name: Every reference in README.md is real, with no PR numbers, stale claims or rewritten links
+        run: python3 ../../tools/check_readme_truth.py
       # ---------------------------------------------------------------------
       # Five more scanners, each of which existed and which NO workflow ran.
       #
