@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-big-coder"
+description = "Enables the big_coder command without any pre-configured scope."
+commands.allow = ["big_coder"]
+
+[[permission]]
+identifier = "deny-big-coder"
+description = "Denies the big_coder command without any pre-configured scope."
+commands.deny = ["big_coder"]

@@ -57,6 +57,7 @@ pub mod look;
 // The searchable recordings and videos switch (media_index.rs; F5 S2, the
 // owner's decision of 2026-10-19). Settings only: the stored-word counts, the
 // switch and the one Delete - it never sees the words themselves.
+pub mod big_coder;
 pub mod media_index;
 // The setup questionnaire (setup_questionnaire.rs; S2, the owner's ask of
 // 2026-10-20; JARVIS-API section 147): the fourteen questions, the READ-ONLY
@@ -1378,6 +1379,7 @@ pub fn run() {
             // disclosure, turn it off at once, ask to turn it back on (ONE
             // normal approval card), and the one Delete of the stored words.
             media_index::media_index,
+            big_coder::big_coder,
             // The setup questionnaire (setup_questionnaire.rs; S2, 2026-10-20;
             // JARVIS-API section 147): read the questions and the PC's current
             // values, ask for the READ-ONLY plan, and apply the owner's

@@ -607,7 +607,7 @@ export const UPDATE_BOTH = {
 
 export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, eraseNotClean, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals, quiz, progress, decks, topics,
   folders, animal, chatbot, support, historyImport, widgets, devices, screen, spending, retirement, youtube, invokeFails, updateBoth,
-  altSpace, reclaimAltSpace,
+  altSpace, reclaimAltSpace, bigCoder,
   tutorials, faq, hudLayout }) {
   const listeners = {};
   window.__calls = [];
@@ -922,6 +922,30 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             window.__memoryWrites.push({ cmd, ...args });
             return { ok: true };
           case "get_hotkeys": return window.__hotkeys;
+    // Task-79: the big coding model's switch. `read` answers the scenario's
+    // status; `on`/`off` behave like the PC's route (ON is one card, OFF is
+    // immediate) and record every call so a test can prove the page used the
+    // one existing command.
+    case "big_coder": {
+      const action = String((args && args.action) || "read");
+      window.__bigCoderCalls.push(action);
+      if (action === "read") {
+        return JSON.parse(JSON.stringify(window.__bigCoder ||
+          { on: false, running: false, message: "" }));
+      }
+      const before = window.__bigCoder ||
+        { on: false, running: false, message: "" };
+      if (action === "on") {
+        window.__bigCoder = { ...before, on: true, changed: true,
+          message: before.onMessage ||
+            "The big coding model is on. It starts only when you ask Jarvis for a code job." };
+      } else {
+        window.__bigCoder = { ...before, on: false, running: false,
+          changed: true, message: before.offMessage ||
+            "The big coding model is off. It will not be started." };
+      }
+      return JSON.parse(JSON.stringify(window.__bigCoder));
+    }
     // R6: the honest Alt+Space state and the one-click re-claim; mirrors
     // hotkeys.rs's `alt_space_status` / `reclaim_alt_space`.
     case "alt_space_status":
@@ -3461,6 +3485,9 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   // R6 (2026-10-21): the Alt+Space startup verdict the Settings page
   // reads, and what a scenario wants the Re-claim call to answer.
   window.__altSpace = altSpace ? JSON.parse(JSON.stringify(altSpace)) : null;
+  // Task-79 (2026-10-22): the big coding model's switch, for Settings.
+  window.__bigCoder = bigCoder ? JSON.parse(JSON.stringify(bigCoder)) : null;
+  window.__bigCoderCalls = [];
   window.__reclaimAltSpace = reclaimAltSpace
     ? JSON.parse(JSON.stringify(reclaimAltSpace)) : null;
   window.__update = JSON.parse(JSON.stringify(update));
@@ -3798,6 +3825,7 @@ export async function open(browser, base, file, data, viewport) {
     hotkeys: HOTKEYS, refuse: [], update: UPDATE_NONE, found: null,
     altSpace: { registered: true, attempts: 0, accelerator: "Alt+Space",
                 reason: "" },
+    bigCoder: { on: false, running: false, message: "" },
     installFails: null, restartFails: null, noRoute: false, decideFails: null, amendFails: null, appearanceFails: null,
     taskActionFails: null, taskNoteFails: null, noteJobs: null,
     noteTargets: NOTE_TARGETS.all,
