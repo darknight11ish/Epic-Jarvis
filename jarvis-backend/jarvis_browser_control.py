@@ -282,71 +282,24 @@ _REFUSAL_WORDS = {
                                    "off-limits even with your yes."),
 }
 
-
-def check_outright_refusal(url: str = "", action_text: str = "") -> Optional[dict]:
-    """None, or the outright refusal for this action.
-
-    Called at the top of plan(), run() and run_steps(); a refusal means NO
-    approval card is raised, because a card would offer a yes that this module
-    will never act on. The three categories and their words are in
-    HARD_REFUSED_CATEGORIES above.
-    """
-    text = " ".join([str(url or ""), str(action_text or "")])
-    if not text.strip():
-        return None
-    for category, patterns, what in HARD_REFUSED_CATEGORIES:
-        for pattern in patterns:
-            if pattern.search(text):
-                why = _REFUSAL_WORDS[category]
-                return {"ok": False, "code": "outright_refused_category",
-                        "category": category, "what": what, "why": why,
-                        "allowed_with_approval": False}
-    return None
-
-#: Wave D-2 (2026-10-22): three things Jarvis refuses OUTRIGHT - before any
-#: approval card, because a card invites a person to say yes and these are
-#: off-limits even then. Each entry is (category, patterns on the action text,
-#: words for the refusal).
-HARD_REFUSED_CATEGORIES = (
-    ("securities_trading", (
-        re.compile(r"\b(?:buy|sell|place|submit|execute|confirm)\b[^.\n]{0,40}"
-                   r"\b(?:order|trade|trade order|market order|limit order|stock|share|"
-                   r"option|contract)s?\b", re.IGNORECASE),
-        re.compile(r"\b(?:place|submit)\s+(?:a\s+)?(?:trade|order)\b", re.IGNORECASE),
-    ), "placing a buy or sell order on a brokerage or exchange"),
-    ("inter_account_money_transfer", (
-        re.compile(r"\b(?:wire|ach)\s+(?:transfer|funds|money)\b", re.IGNORECASE),
-        re.compile(r"\b(?:transfer|move|withdraw|send)\b[^.\n]{0,40}"
-                   r"\b(?:funds|money|balance|crypto|bitcoin|usdt)\b", re.IGNORECASE),
-        re.compile(r"\b(?:send|transfer)\s+(?:crypto|bitcoin|usdt|ether)\b", re.IGNORECASE),
-        re.compile(r"\bwithdraw\s+funds\b", re.IGNORECASE),
-    ), "moving money between accounts, wiring or sending crypto"),
-    ("third_party_account_access", (
-        re.compile(r"\blogs?\s+(?:in|into|on|onto)\b[^.\n]{0,50}"
-                   r"\b(?:my|her|his|their|someone else's|a friend's|another person's|"
-                   r"my partner's|my wife's|my husband's|my son's|my daughter's)\b",
-                   re.IGNORECASE),
-        re.compile(r"\b(?:access|log\s+into|sign\s+into|use)\b[^.\n]{0,40}"
-                   r"\b(?:someone else's|another person's|her|his|their)\s+account\b",
-                   re.IGNORECASE),
-        re.compile(r"\b(?:someone else's|another person's|my (?:friend|partner|wife|husband|"
-                   r"son|daughter|mother|father)'s)\s+(?:online\s+)?account\b",
-                   re.IGNORECASE),
-    ), "logging into an account that belongs to another person"),
+#: Wave D-2 review fix (2026-10-22): the ordinary phrasings that slipped past
+#: the category table ("purchase 10 shares of AAPL", "transfer $500 to my
+#: savings", "move 500 dollars", "log into Sam's account"). Same three
+#: categories, same refusal words; checked in the same function, so there is
+#: still ONE place that decides.
+_EXTRA_REFUSALS = (
+    ("securities_trading", re.compile(
+        r"\b(?:purchase|buy|sell|trade)\b[^.\n]{0,50}\b(?:shares?|stocks?|etfs?|"
+        r"options?|securities|bonds?)\b", re.IGNORECASE)),
+    ("inter_account_money_transfer", re.compile(
+        r"\b(?:transfer|move|send|wire|ach)\b[^.\n]{0,40}(?:\$\s?\d[\d,.]*|"
+        r"\b\d[\d,.]*\s*(?:dollars|usd)\b|\b(?:funds|money|balance|cash|savings|"
+        r"checking|account)\b)", re.IGNORECASE)),
+    ("third_party_account_access", re.compile(
+        r"\b(?:log|sign)\b[^.\n]{0,40}\b[A-Za-z][A-Za-z'-]*'s\s+(?:online\s+)?"
+        r"(?:account|bank|banking|brokerage|email|mail|savings|checking)\b", re.IGNORECASE)),
 )
 
-_REFUSAL_WORDS = {
-    "securities_trading": ("Jarvis will not place a trade on a brokerage or exchange. "
-                           "Buying and selling securities is off-limits even with your yes: "
-                           "do it in your own trading app."),
-    "inter_account_money_transfer": ("Jarvis will not move money between accounts, wire it, "
-                                     "or send crypto. That is off-limits even with your yes: "
-                                     "use your bank's own app or website."),
-    "third_party_account_access": ("Jarvis will not log into an account that belongs to "
-                                   "another person. Accessing someone else's account is "
-                                   "off-limits even with your yes."),
-}
-
 
 def check_outright_refusal(url: str = "", action_text: str = "") -> Optional[dict]:
     """None, or the outright refusal for this action.
@@ -366,6 +319,12 @@ def check_outright_refusal(url: str = "", action_text: str = "") -> Optional[dic
                 return {"ok": False, "code": "outright_refused_category",
                         "category": category, "what": what, "why": why,
                         "allowed_with_approval": False}
+    for category, pattern in _EXTRA_REFUSALS:
+        if pattern.search(text):
+            why = _REFUSAL_WORDS[category]
+            return {"ok": False, "code": "outright_refused_category",
+                    "category": category, "why": why,
+                    "allowed_with_approval": False}
     return None
 
 # `<secret>name</secret>` - a stand-in for a value the model never sees.
@@ -1987,19 +1946,6 @@ def plan(goal: str, session: str, requests: list, *,
                     if_refused=refusal["why"],
                     allowed_domains=list(allowed_domains) if allowed_domains else None,
                     notices=notices, engine=engine, engine_why=engine_why)
-    # Wave D-2: a hard-refused category gets no card and no steps.
-    _nav = [str(r.get("value") or "") for r in (requests or [])
-            if isinstance(r, dict) and str(r.get("action") or "") == "navigate"]
-    _act = " ".join([str(goal or "")] + [
-        (str(r.get("value") or "") + " " + str(r.get("name") or "") + " "
-         + str(r.get("why") or "")) for r in (requests or []) if isinstance(r, dict)])
-    refusal = check_outright_refusal(url=" ".join(_nav), action_text=_act)
-    if refusal:
-        return Plan(goal=str(goal), session=str(session), steps=[],
-                    unmatched=unmatched, refusal=refusal,
-                    if_refused=refusal["why"],
-                    allowed_domains=list(allowed_domains) if allowed_domains else None,
-                    notices=notices, engine=engine, engine_why=engine_why)
     return Plan(
         goal=str(goal), session=str(session), steps=steps, unmatched=unmatched,
         if_refused="nothing on this page changes; the goal is not attempted",
@@ -2248,15 +2194,12 @@ def run(p: Plan, *, read: Optional[Callable[[str], dict]] = None,
     returned. The picture is only ever handed to `review`; this module never
     stores, logs or writes it. A plan with no final step ignores all three.
     """
+    _steps_text = " ".join(
+        " ".join(str(v) for v in (st.as_dict() if hasattr(st, "as_dict") else {})
+                 .values() if isinstance(v, str))
+        for st in (getattr(p, "steps", None) or []))
     _refusal = getattr(p, "refusal", None) or check_outright_refusal(
-        action_text=str(getattr(p, "goal", "") or ""))
-    if _refusal:
-        return {"ok": False, "code": "outright_refused_category",
-                "category": _refusal["category"], "why": _refusal["why"],
-                "error": _refusal["why"], "steps_done": 0, "steps_not_run": [],
-                "allowed_with_approval": False}
-    _refusal = getattr(p, "refusal", None) or check_outright_refusal(
-        action_text=str(getattr(p, "goal", "") or ""))
+        action_text=str(getattr(p, "goal", "") or "") + " " + _steps_text)
     if _refusal:
         return {"ok": False, "code": "outright_refused_category",
                 "category": _refusal["category"], "why": _refusal["why"],

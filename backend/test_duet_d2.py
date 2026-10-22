@@ -133,9 +133,9 @@ def _after(ctx, params):
 def t_d21_a_readonly_step_continues_while_another_waits_and_the_rest_queue():
     del ORDER[:]
     fresh()
-    J.register("d2_gather", _gather)
+    J.register("d2_gather", _gather, readonly=True)
     J.register("d2_send", _send)
-    J.register("d2_gather2", _gather2)
+    J.register("d2_gather2", _gather2, readonly=True)
     J.register("d2_after", _after)
     jid = J.create_plan([
         {"name": "gather", "handler": "d2_gather", "readonly": True},
@@ -169,9 +169,9 @@ def t_d21_a_readonly_step_continues_while_another_waits_and_the_rest_queue():
 def t_d21_the_owner_answers_and_the_plan_finishes_with_ready_for_review():
     del ORDER[:]
     fresh()
-    J.register("d2_gather", _gather)
+    J.register("d2_gather", _gather, readonly=True)
     J.register("d2_send", _send)
-    J.register("d2_gather2", _gather2)
+    J.register("d2_gather2", _gather2, readonly=True)
     J.register("d2_after", _after)
     jid = J.create_plan([
         {"name": "gather", "handler": "d2_gather", "readonly": True},
@@ -201,8 +201,8 @@ def t_d21_the_owner_answers_and_the_plan_finishes_with_ready_for_review():
 def t_d21_stop_halts_at_a_step_boundary_and_nothing_else_runs():
     del ORDER[:]
     fresh()
-    J.register("d2_gather", _gather)
-    J.register("d2_gather2", _gather2)
+    J.register("d2_gather", _gather, readonly=True)
+    J.register("d2_gather2", _gather2, readonly=True)
     jid = J.create_plan([
         {"name": "gather", "handler": "d2_gather", "readonly": True},
         {"name": "gather2", "handler": "d2_gather2", "readonly": True},
@@ -379,10 +379,13 @@ def t_d24_the_walk_splits_and_classifies_and_the_report_keeps_the_details():
           staged["counts"] == {"items": 3, "read_only_prep": 1,
                                "needs_approval_card": 2}, staged.get("counts"))
     report = L.build_evening_report("walk-1", now_ts=2000.0)
-    check("the evening report bundles prepared work and the waiting cards",
-          report["counts"] == {"read_only_prep": 1, "needs_approval_card": 2,
-                               "total": 3}
-          and report["prepared"][0]["source_provenance"]["kind"] == "walk_note"
+    # Nothing was PREPARED by a walk (it only classifies), so the report
+    # must say "to prepare", never "prepared" - the review blocker.
+    check("the evening report says to-prepare, never claims prepared work",
+          report["counts"] == {"prepared": 0, "to_prepare": 1,
+                               "needs_approval_card": 2, "total": 3}
+          and report["prepared"] == []
+          and report["to_prepare"][0]["status"] == "to_prepare"
           and report["waiting"][0]["status"] == "waiting_approval", report)
     check("no autonomous send or approval: the report is a bundle, nothing else",
           report.get("ok") is True and "sent" not in report)
@@ -390,6 +393,33 @@ def t_d24_the_walk_splits_and_classifies_and_the_report_keeps_the_details():
     check("under the hidden lists the details are withheld, the counts stay",
           locked.get("withheld") is True and locked["prepared"] == []
           and locked["waiting"] == [] and locked["counts"]["total"] == 3, locked)
+
+
+def t_d21_a_plan_cannot_call_a_mutating_handler_readonly():
+    fresh()
+    J.register("d2_gather_mutating", _gather)
+    try:
+        J.create_plan([{"handler": "d2_gather_mutating", "readonly": True}])
+        refused = False
+    except ValueError:
+        refused = True
+    check("a step declaring readonly on a handler not registered read-only "
+          "is refused at plan creation", refused)
+
+
+def t_d22_the_classifier_is_defined_once_and_email_passes_prompt_and_taint():
+    tainted = E.plan(to="sam@example.com", subject="health",
+                     body="my cholesterol is 240",
+                     user_prompt="email my doctor my cholesterol result",
+                     tainted=True)
+    check("a tainted Tier-2 draft is refused (prompt/taint reach the classifier)",
+          bool(tainted.problem) and "mentions" in tainted.problem, tainted.problem)
+    asked = E.plan(to="sam@example.com", subject="health",
+                   body="my cholesterol is 240",
+                   user_prompt="email my doctor my cholesterol result",
+                   tainted=False)
+    check("... and an untainted explicitly-asked one is not refused for sensitivity",
+          "mentions" not in asked.problem, asked.problem)
 
 
 # --------------------------------------------------------------------------
@@ -407,7 +437,9 @@ def main() -> int:
                t_d22b_refusals_happen_before_any_card_or_browser,
                t_d23_spending_summary_carries_and_withholds_provenance,
                t_d23_document_hits_carry_and_withhold_provenance,
-               t_d24_the_walk_splits_and_classifies_and_the_report_keeps_the_details):
+               t_d24_the_walk_splits_and_classifies_and_the_report_keeps_the_details,
+               t_d21_a_plan_cannot_call_a_mutating_handler_readonly,
+               t_d22_the_classifier_is_defined_once_and_email_passes_prompt_and_taint):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

@@ -417,7 +417,10 @@ _HANDLERS: dict[str, Callable] = {}
 _HANDLER_LOCK = threading.Lock()
 
 
-def register(name: str, fn: Callable) -> Callable:
+_READONLY_HANDLERS: set = set()
+
+
+def register(name: str, fn: Callable, *, readonly: bool = False) -> Callable:
     """Make `fn` runnable as a job body under `name`.
 
     The handler is called as fn(ctx, params): `ctx` is the JobContext below,
@@ -432,6 +435,11 @@ def register(name: str, fn: Callable) -> Callable:
         raise TypeError(f"handler {name!r} is not callable")
     with _HANDLER_LOCK:
         _HANDLERS[name] = fn
+    with _HANDLER_LOCK:
+        if readonly:
+            _READONLY_HANDLERS.add(name)
+        else:
+            _READONLY_HANDLERS.discard(name)
     return fn
 
 
@@ -689,6 +697,11 @@ def _plan_step(i: int, step: dict) -> dict:
             raise ValueError(f"plan step {i} depends_on must name EARLIER steps only "
                              f"(0..{i - 1}); got {d!r}")
         clean_deps.append(d)
+    if step.get("readonly") is True and handler not in _READONLY_HANDLERS:
+        raise ValueError(f"plan step {i} declares readonly but its handler "
+                         f"{handler!r} has not been registered as read-only "
+                         f"(register(..., readonly=True)); declaring a mutating "
+                         f"handler read-only cannot make it safe")
     return {"name": str(step.get("name") or handler)[:80], "handler": handler,
             "params": dict(params), "readonly": bool(step.get("readonly") is True),
             "depends_on": clean_deps, "status": "pending", "card_id": "",

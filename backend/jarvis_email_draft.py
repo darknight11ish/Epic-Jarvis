@@ -316,7 +316,20 @@ def _hidden_chars(text: str, allow: str = "") -> bool:
 _MESSAGE_ID_RE = re.compile(r"^<[\x21-\x3b\x3d\x3f-\x7e]+@[\x21-\x3b\x3d\x3f-\x7e]+>$")
 
 
-def _outbound_classification(text: str, *, user_prompt: str = "") -> dict:
+def _tainted(caller_value: Optional[bool]) -> bool:
+    """The turn's taint for the classifier: the caller's own value, else
+    the gate's latch, else True - never treat an unknown turn as clean."""
+    if caller_value is not None:
+        return bool(caller_value)
+    try:
+        import jarvis_gate
+        return bool(jarvis_gate.taint_active())
+    except Exception:                                    # noqa: BLE001
+        return True
+
+
+def _outbound_classification(text: str, *, user_prompt: str = "",
+                            tainted: Optional[bool] = None) -> dict:
     """Wave D-2: the two-tier outbound classifier, imported lazily.
 
     jarvis_scrub.py is the module's own scrubber, so it is already beside
@@ -330,44 +343,21 @@ def _outbound_classification(text: str, *, user_prompt: str = "") -> dict:
     """
     try:
         import jarvis_scrub as scrub
-        return scrub.classify_outbound_sensitivity(text, user_prompt=user_prompt)
+        return scrub.classify_outbound_sensitivity(
+            text, user_prompt=user_prompt, tainted=_tainted(tainted))
     except Exception:                                     # noqa: BLE001
-        return {"allowed": True, "tier": 0, "reasons": [],
-                "categories": [], "redacted_text": text}
-
-
-def _outbound_classification(text: str, *, user_prompt: str = "") -> dict:
-    """Wave D-2: the two-tier outbound classifier, imported lazily.
-
-    jarvis_scrub.py is the module's own scrubber, so it is already beside
-    every caller of this one; the lazy import keeps a checkout without it
-    importing (the classifier then says nothing sensitive was found, and
-    the existing card is unchanged - a missing guard must not silently
-    pass, so the draft's own words are still refused by the existing
-    checks and the module keeps working without the file). Only the
-    classifier's Tier-1/Tier-2 decision is skipped when it is absent,
-    and that absence is a checkout problem, not a runtime one.
-    """
-    try:
-        import jarvis_scrub as scrub
-        return scrub.classify_outbound_sensitivity(text, user_prompt=user_prompt)
-    except Exception:                                     # noqa: BLE001
-        return {"allowed": True, "tier": 0, "reasons": [],
-                "categories": [], "redacted_text": text}
+        # FAIL CLOSED: a classifier that cannot answer must not let a
+        # draft through. Tier 1 is "never out", so no prompt overrides it.
+        return {"allowed": False, "tier": 1,
+                "reasons": ["classifier_unavailable"], "categories": [],
+                "redacted_text": text}
 
 
 def plan(to=None, cc=None, subject: str = "", body: str = "",
-        reply_to_message_id: Optional[str] = None) -> Plan:
+        reply_to_message_id: Optional[str] = None,
+        user_prompt: str = "", tainted: Optional[bool] = None) -> Plan:
     """Work out the one draft this would save. Opens no socket. A plan with
     a `problem` is never saved and needs no card: the problem says why.
-
-    Wave D-2: the draft's words are classified before the plan is made.
-    Tier 1 (card numbers, government ids, vault:// handles, API keys,
-    pairing tokens) is never allowed out, even when the request asks for
-    it; Tier 2 (health / personal-finance figures) is allowed only when
-    the owner's own prompt explicitly authorises that category and the
-    turn has not read outside text. A refusal is a `problem`, so it
-    raises no card and saves nothing.
 
     Wave D-2: the draft's words are classified before the plan is made.
     Tier 1 (card numbers, government ids, vault:// handles, API keys,
@@ -454,28 +444,9 @@ def plan(to=None, cc=None, subject: str = "", body: str = "",
     # needs the owner's own explicit words in an untainted turn. The
     # classifier is pure, so a bad draft is refused with plain words and
     # no approval card is raised for it.
-    classed = _outbound_classification(f"{subject}\n{body}")
-    if classed.get("allowed") is not True:
-        tier = int(classed.get("tier") or 0)
-        cats = ", ".join(classed.get("categories") or []) or "sensitive information"
-        if tier == 1:
-            return refused(
-                f"this draft contains {cats}, which never goes out from Jarvis - "
-                "card numbers, government ids, stored passwords, API keys and "
-                "pairing tokens are refused even when you ask. Nothing is saved.")
-        return refused(
-            f"this draft mentions {cats}, and this turn did not ask me to share "
-            "that category (or it read outside text that could have asked for "
-            "you). Say plainly what to share, e.g. 'email my accountant my tax "
-            "balance', and nothing is staged until then.")
-
-    # Wave D-2: what this draft would send out is classified BEFORE the
-    # card is built. Tier 1 (card/SSN/vault/api key/pairing token) is
-    # never allowed out, even if asked; Tier 2 (health / personal finance)
-    # needs the owner's own explicit words in an untainted turn. The
-    # classifier is pure, so a bad draft is refused with plain words and
-    # no approval card is raised for it.
-    classed = _outbound_classification(f"{subject}\n{body}")
+    classed = _outbound_classification(f"{subject}\n{body}",
+                                       user_prompt=user_prompt,
+                                       tainted=tainted)
     if classed.get("allowed") is not True:
         tier = int(classed.get("tier") or 0)
         cats = ", ".join(classed.get("categories") or []) or "sensitive information"

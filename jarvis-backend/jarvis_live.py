@@ -1941,7 +1941,9 @@ def _walk_private() -> bool:
         state = pv.state()
         return bool(state.get("app_locked") or state.get("hide_memory_lists"))
     except Exception:                                        # noqa: BLE001
-        return False
+        # FAIL CLOSED: if the lock state cannot be read, the owner's words
+        # stay hidden rather than shown because a read failed.
+        return True
 
 
 def stage_walk_brain_dump(utterances_or_text, *, session_id: str = "default",
@@ -2003,19 +2005,23 @@ def build_evening_report(session_id: str = "default", *,
     session = str(session_id or "default")[:64]
     with _WALK_LOCK:
         staged = [dict(it) for it in _WALK.get(session, [])]
-    done = [it for it in staged if it["kind"] == "read_only_prep"]
+    done = [it for it in staged if it["kind"] == "read_only_prep"
+            and it.get("status") == "done"]
+    to_prepare = [it for it in staged if it["kind"] == "read_only_prep"
+                  and it.get("status") != "done"]
     waiting = [it for it in staged if it["kind"] == "needs_approval_card"]
     report = {"ok": True, "session_id": session,
               "generated_at": float(now_ts if now_ts is not None else time.time()),
               "withheld": locked,
-              "counts": {"read_only_prep": len(done),
+              "counts": {"prepared": len(done), "to_prepare": len(to_prepare),
                          "needs_approval_card": len(waiting),
                          "total": len(staged)},
-              "prepared": [], "waiting": []}
+              "prepared": [], "to_prepare": [], "waiting": []}
     if locked:
-        report["said"] = (f"{len(done)} prepared item(s) and {len(waiting)} waiting "
-                          f"card(s) are kept, but the details are hidden until you "
-                          f"show the private lists.")
+        report["said"] = (f"{len(done)} prepared item(s), {len(to_prepare)} still "
+                          f"to prepare, and {len(waiting)} waiting card(s) are kept, "
+                          f"but the details are hidden until you show the private "
+                          f"lists.")
         report["words"] = "Hidden until you show the private lists."
         return report
     for it in done:
@@ -2023,10 +2029,15 @@ def build_evening_report(session_id: str = "default", *,
         row["source_provenance"] = {"kind": "walk_note",
                                     "label": "From: your walk brain-dump"}
         report["prepared"].append(row)
+    for it in to_prepare:
+        report["to_prepare"].append({"text": it["text"], "status": "to_prepare",
+                                     "note": "classified from the walk; not "
+                                             "prepared yet"})
     for it in waiting:
         report["waiting"].append({"text": it["text"], "status": "waiting_approval",
                                   "note": "needs your approval card - nothing is "
                                           "approved for you"})
-    report["said"] = (f"Evening report: {len(done)} prepared item(s) from the walk, "
-                      f"and {len(waiting)} waiting for your yes.")
+    report["said"] = (f"Evening report: {len(done)} prepared item(s), "
+                      f"{len(to_prepare)} still to prepare, and "
+                      f"{len(waiting)} waiting for your yes.")
     return report
