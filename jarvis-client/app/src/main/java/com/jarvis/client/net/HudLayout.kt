@@ -443,8 +443,11 @@ object HudLayout {
      */
     fun copyAs(title: String, layout: Layout): Preset {
         val clean = title.trim().replace(Regex("\\s+"), " ").take(40)
-        return Preset("custom." + clean.lowercase().replace(Regex("[^a-z0-9]+"), "-")
-            .trim('-').ifBlank { "preset" }, clean.ifBlank { "My layout" },
+        val slug = clean.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')
+        // A title that cannot be an id still gets a safe id - and a readable
+        // name, so a copy of the layout is never called "!!!".
+        return Preset("custom." + slug.ifBlank { "preset" },
+            if (slug.isBlank()) "My layout" else clean,
             "Your own copy.", false, normalize(layout))
     }
 }
