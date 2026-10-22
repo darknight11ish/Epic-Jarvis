@@ -35,9 +35,12 @@ WHAT IT DOES, IN ORDER
    `jarvis-backend/`. A mismatch is a failed update, not a warning: it is the
    state where the folder on this PC is not the code this repository says it
    is.
-3. `backend/run_suites.py --jobs <workers>` - the SAME suite list CI runs,
-   with the chosen worker count. `run_suites.py`'s default is 1, so CI is
-   untouched.
+3. `backend/run_suites.py --backend-path <backend> --jobs <workers>` - the
+   SAME suite list CI runs, against the LIVE folder this update just patched,
+   with the chosen worker count. The backend is named explicitly (R1,
+   2026-10-21): `run_suites.py` ignores the ambient `JARVIS_BACKEND` by
+   default, and an update's proof run must never depend on an environment
+   variable. `run_suites.py`'s worker default is 1, so CI is untouched.
 4. Records each suite's own time in `<backend>/_jarvis-logs/update-timings.json`
    **per pace** - the same suites take different wall time at 22 workers and at
    1, so a `safe` run is not evidence for `max_speed`. A pace that has not
@@ -1134,7 +1137,7 @@ def patcher_command(repo, backend, *, which=None) -> list:
     ]
 
 
-def suites_command(repo, workers: int) -> list:
+def suites_command(repo, workers: int, backend=None) -> list:
     """run_suites.py with ONLY the worker count changed. Default stays 1.
 
     A mode that changed which suites run would not be a pace, it would be a
@@ -1143,9 +1146,17 @@ def suites_command(repo, workers: int) -> list:
     `--ignore-update-lock` is passed because this IS the update's own suite
     phase: the update holds the lock (see `acquire_lock`), and its own checks
     are exactly what the lock exists to protect. Without it, run_suites.py
-    would refuse the very run that holds the lock."""
-    return [sys.executable, "-B", str(Path(repo) / SUITES_REL),
-            "--jobs", str(int(workers)), LOCK_BYPASS_FLAG]
+    would refuse the very run that holds the lock.
+
+    `--backend-path` is passed whenever the caller knows the folder (every
+    real update does): since R1 (2026-10-21) `run_suites.py` ignores the
+    ambient `JARVIS_BACKEND` by default, and the update's proof run must be the
+    LIVE folder this update just patched - explicitly, so not even a changed
+    environment variable can redirect it."""
+    command = [sys.executable, "-B", str(Path(repo) / SUITES_REL)]
+    if backend is not None:
+        command += ["--backend-path", str(Path(backend).resolve())]
+    return command + ["--jobs", str(int(workers)), LOCK_BYPASS_FLAG]
 
 
 def preflight(repo, backend) -> None:
@@ -1801,7 +1812,7 @@ def _update_locked(repo, backend, mode: str, *, requested_workers,
                                             weight_done=weight_done[0],
                                             weight_total=weight_total))
 
-        suites_exit = _call(run, suites_command(repo, workers), repo, on_suite)
+        suites_exit = _call(run, suites_command(repo, workers, backend), repo, on_suite)
         result = suite_result(suites_exit, suite_lines)
         if not result["ok"]:
             if attempt_mode != "safe":
