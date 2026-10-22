@@ -47,7 +47,7 @@ export const LOOK_BY_PRESET = Object.freeze({
   cockpit: "cockpit",
   studio: "studio",
   ambient: "ambient",
-  focus: "ambient",
+  quiet: "ambient",
   telemetry: "cockpit",
   second_brain: "studio",
   minimal: "ambient",
@@ -147,22 +147,14 @@ export async function saveLayout(layout, storage = globalThis.localStorage) {
 }
 
 /**
- * Choose one built-in preset. The old three-way key is kept in step with the
- * page's look so the HUD window that is open changes at once (the page can only
- * wear its three looks until H2); the layout document itself is the saved
- * truth.
+ * Choose one built-in HUD layout. The document in the settings store is the
+ * ONLY saved truth since F1 of the 2026-10-22 coherence slice; the retired
+ * three-way localStorage key is not written any more (the HUD page no longer
+ * reads it either). A page that is already open follows through the shell's
+ * layout event, not through this function.
  */
-export async function choosePreset(presetId, storage = globalThis.localStorage) {
-  const layout = presetLayout(presetId);
-  const answer = await saveLayout(layout, storage);
-  if (answer.saved) {
-    try {
-      if (storage) storage.setItem(LEGACY_KEY, lookForPreset(layout.base_preset));
-    } catch {
-      // The document is saved; the look mirror is best effort.
-    }
-  }
-  return answer;
+export async function choosePreset(presetId) {
+  return saveLayout(presetLayout(presetId));
 }
 
 /** One line for the picker's status: what is chosen and whether it was kept. */

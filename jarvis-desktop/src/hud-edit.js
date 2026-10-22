@@ -35,7 +35,6 @@ import {
   cardRow,
   describeLayout,
   effectiveCollapsed,
-  migrateLegacyLayout,
   normalizeLayout,
   presetInfo,
   presetLayout,
@@ -294,6 +293,11 @@ export function mountHudEditor(options = {}) {
   let dragState = null;
   let statusEl = null;
   let barEl = null;
+  let badgeEl = null;
+  // L1/FT-1 (2026-10-22): the read-only layout badge can reveal the Focus
+  // presets card without entering Edit HUD. This peek is a VIEW state only -
+  // it never writes the saved layout.
+  let presetsPeek = false;
 
   const byId = (id) => doc.getElementById(id);
   const labelOf = (id) => (CARD_BY_ID.get(id) || { label: id }).label;
@@ -481,7 +485,9 @@ export function mountHudEditor(options = {}) {
       const regionName = EDIT_REGIONS.includes(card.region) ? card.region : "right_rail";
       byRegion.get(regionName).push(card);
       shell.hidden = !card.visible;
-      shell.classList.toggle("hud-card-collapsed", effectiveCollapsed(card, pending));
+      const peekingPresets = card.id === "lanes" && presetsPeek && !editing;
+      shell.classList.toggle("hud-card-collapsed",
+        peekingPresets ? false : effectiveCollapsed(card, pending));
       shell.setAttribute("data-hud-movable", "yes");
       shell.style.setProperty("--hud-span", String(card.col_span));
       shell.style.setProperty("--hud-rows", String(card.row_span));
@@ -513,6 +519,7 @@ export function mountHudEditor(options = {}) {
     }
     doc.body.setAttribute("data-hud-edit", editing ? "on" : "off");
     if (barEl) barEl.hidden = !editing;
+    updateBadge();
     if (options.onRender) {
       try { options.onRender(layout, { editing }); } catch { /* never break the page */ }
     }
@@ -786,9 +793,35 @@ export function mountHudEditor(options = {}) {
     });
   }
 
+  function updateBadge() {
+    if (!badgeEl || !layout) return;
+    const info = presetInfo(layout.base_preset);
+    const name = info ? info.label : (layout.name || "Cockpit");
+    badgeEl.textContent = `Layout: ${name}`;
+    badgeEl.setAttribute("aria-expanded", String(presetsPeek));
+    badgeEl.title = `HUD layout: ${name}. Show the Focus presets and Cloud.`;
+    badgeEl.setAttribute("aria-label",
+      `HUD layout: ${name}. Show the Focus presets and Cloud.`);
+  }
+
   function ensureToggle() {
     const bar = doc.querySelector(".stage-bar");
     if (!bar) return;
+    // F1 (2026-10-22): the read-only `Layout: <Preset Name>` badge sits next
+    // to [Edit HUD]. It names the saved HUD layout and opens the Focus
+    // presets card on click (L1) - it never chooses or saves a layout.
+    badgeEl = doc.createElement("button");
+    badgeEl.type = "button";
+    badgeEl.className = "ghost hud-layout-badge";
+    badgeEl.id = "hud-layout-badge";
+    badgeEl.setAttribute("aria-expanded", "false");
+    badgeEl.addEventListener("click", () => {
+      presetsPeek = !presetsPeek;
+      render();
+      announce(presetsPeek
+        ? "Focus presets and Cloud are shown. Click the layout badge again to hide them."
+        : "Focus presets hidden.");
+    });
     const button = doc.createElement("button");
     button.type = "button";
     button.className = "ghost hud-edit-toggle";
@@ -797,11 +830,12 @@ export function mountHudEditor(options = {}) {
     button.title = "Move, resize, fold or hide the HUD's cards";
     button.textContent = "Edit HUD";
     button.setAttribute("aria-label", "Edit HUD layout");
-    bar.appendChild(button);
+    bar.append(badgeEl, button);
     button.hidden = !shellPresent;
     button.addEventListener("click", () => {
       setEditing(!editing);
     });
+    updateBadge();
   }
 
   // ------------------------------------------------------------------- mount
@@ -839,15 +873,12 @@ export function mountHudEditor(options = {}) {
     // store itself at boot - that read would save a migrated layout as a side
     // effect, and a page load is not an edit. Until the bootstrap pushes its
     // answer, the old three-way value is the honest preview.
-    let stored = globalThis.__jarvisHudLayout;
-    if (!stored) {
-      try {
-        stored = migrateLegacyLayout(globalThis.localStorage.getItem("jarvis.hud.layout"));
-      } catch {
-        stored = null;
-      }
-    }
-    layout = normalizeLayout(stored || { version: 1 });
+    // F1 (2026-10-22): the bootstrap's saved document is the only source;
+    // this page no longer reads the retired localStorage layout key. Until it
+    // arrives, Cockpit is the honest preview, exactly as the page paints.
+    layout = globalThis.__jarvisHudLayout
+      ? normalizeLayout(globalThis.__jarvisHudLayout)
+      : presetLayout("cockpit");
     wire();
     render();
     updateEditButton();
