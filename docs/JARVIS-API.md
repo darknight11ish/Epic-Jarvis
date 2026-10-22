@@ -14462,10 +14462,21 @@ not in `requirements.lock`):
   for **which** programs hold a card. The second answers with the card id but
   **no amount on this PC** (measured 2026-10-17: `used_memory` is `[N/A]` for
   every process, including the two `llama-server.exe` on the 2060), and that
-  is kept as "not told", never turned into 0 or an estimate. Windows' own
-  counter gives a program's **total** graphics memory across every card; the
-  words label it as a total and never present it as one card's number. A
-  card's state (`pstate` + clocks + load) is read from the same answer.
+  is kept as "not told", never turned into 0 or an estimate. **Since R5
+  (2026-10-21) the amount the driver omits is asked of Windows' own
+  GPU-process counter** (`jarvis_hardware.wddm_process_memory`: PDH through
+  ctypes, standard library only, no elevation, 2-second bound, 30-second
+  cache; the same counter CIM already reads for the "other programs" line).
+  It answered here as a normal user in 0.783 s with 63 instances over 43 PIDs.
+  Each program's instances are summed and reported as its **total** across
+  every card, labelled "in total across the cards" and never as one card's
+  number - Windows exposes no clean non-admin mapping from the counter's
+  LUID/phys index to `nvidia-smi`'s card number, so a per-card figure would be
+  a guess. A number from that source carries `used_source =
+  "windows_wddm_counter"`; when the counter is missing, empty or slow the
+  reading stays None and the words keep saying the driver does not report the
+  amounts. A card's state (`pstate` + clocks + load) is read from the same
+  answer.
 - the silent-failure checks (§84.5): a `stat()` of the `*.db-wal` files in
   Jarvis's home folder (`$OPENJARVIS_HOME` when set, else this codebase's
   `OPENJARVIS_CONFIG_DIR`/`JARVIS_CONFIG_DIR`, else `~/.openjarvis`; sizes
