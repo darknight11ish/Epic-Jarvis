@@ -332,14 +332,15 @@ def _outbound_classification(text: str, *, user_prompt: str = "",
                             tainted: Optional[bool] = None) -> dict:
     """Wave D-2: the two-tier outbound classifier, imported lazily.
 
-    jarvis_scrub.py is the module's own scrubber, so it is already beside
-    every caller of this one; the lazy import keeps a checkout without it
-    importing (the classifier then says nothing sensitive was found, and
-    the existing card is unchanged - a missing guard must not silently
-    pass, so the draft's own words are still refused by the existing
-    checks and the module keeps working without the file). Only the
-    classifier's Tier-1/Tier-2 decision is skipped when it is absent,
-    and that absence is a checkout problem, not a runtime one.
+    It is handed BOTH facts the ruling requires: the owner's own prompt words
+    (`user_prompt`, so Tier 2 can be authorised by them) and the turn's taint
+    (`_tainted()`: the caller's value, else the gate's latch, else True).
+
+    FAIL CLOSED (review fix, 2026-10-22): if the classifier cannot run - the
+    module is missing, the import raises, the call raises - this answers
+    `allowed: False, tier: 1, reasons: ["classifier_unavailable"]`, never
+    "nothing sensitive was found". A guard that cannot answer must not let a
+    draft through, and no owner prompt can override Tier 1.
     """
     try:
         import jarvis_scrub as scrub

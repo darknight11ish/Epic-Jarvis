@@ -228,6 +228,10 @@ def t_d22a_tier1_is_refused_even_with_an_explicit_owner_prompt():
             ("government id", "my ssn is 123-45-6789"),
             ("vault handle", "look up vault://bank_login"),
             ("api key", "key sk-abcdefghijklmnopqrstuvwx"),
+            ("project api key", "key sk-proj-abcdefghijklmnopqrstuvwx1234"),
+            ("anthropic api key", "key sk-ant-abcdefghijklmnopqrstuvwx1234"),
+            ("service account key", "key sk-svcacct-abcdefghijklmnopqrstuvwx1234"),
+            ("admin key", "key sk-admin-abcdefghijklmnopqrstuvwx1234"),
             ("pairing token", "jdk1.d0123abcd." + "A" * 43),
     ):
         got = S.classify_outbound_sensitivity(
@@ -287,8 +291,12 @@ def t_d22a_email_draft_refuses_a_tier1_draft_before_the_card():
 def t_d22b_refusals_happen_before_any_card_or_browser():
     cases = (
         ("securities_trading", "submit buy order 100 shares of AAPL"),
+        ("securities_trading", "purchase 10 shares of AAPL"),
         ("inter_account_money_transfer", "initiate wire transfer between accounts"),
+        ("inter_account_money_transfer", "transfer $500 to my savings"),
+        ("inter_account_money_transfer", "move 500 dollars to checking"),
         ("third_party_account_access", "log into my friend's account and check it"),
+        ("third_party_account_access", "log into Sam's account"),
     )
     for category, text in cases:
         got = B.check_outright_refusal(action_text=text)
@@ -303,6 +311,17 @@ def t_d22b_refusals_happen_before_any_card_or_browser():
           stepped.get("ok") is False
           and stepped.get("code") == "outright_refused_category"
           and stepped.get("done") == [], stepped)
+    # The step is what will be done: a benign goal must not smuggle it.
+    step = B.Step(session="s1", url="https://broker.example.com/orders",
+                  role="", name="", action="navigate",
+                  value="https://broker.example.com/orders",
+                  why="purchase 10 shares of AAPL")
+    stepped_plan = B.Plan(goal="look at my notes", session="s1", steps=[step])
+    direct = B.run(stepped_plan, approved=True)
+    check("run() refuses on the STEP text, not only the goal",
+          direct.get("ok") is False
+          and direct.get("code") == "outright_refused_category"
+          and direct.get("category") == "securities_trading", direct)
     planned = B.plan("submit buy order 100 shares of AAPL", "s1", [])
     check("plan() refuses the same category outright (no steps, no card)",
           planned.refusal is not None
@@ -310,6 +329,10 @@ def t_d22b_refusals_happen_before_any_card_or_browser():
           and planned.steps == [], planned.refusal)
     ordinary = B.check_outright_refusal(action_text="renew my library books")
     check("an ordinary action is not refused", ordinary is None, ordinary)
+    for benign in ("buy milk", "purchase a domain",
+                   "send an email to my brother"):
+        got = B.check_outright_refusal(action_text=benign)
+        check(f"a benign phrasing is not refused: {benign!r}", got is None, got)
 
 
 # --------------------------------------------------------------------------
@@ -422,6 +445,44 @@ def t_d22_the_classifier_is_defined_once_and_email_passes_prompt_and_taint():
           "mentions" not in asked.problem, asked.problem)
 
 
+def t_d22_the_classifier_fails_closed_and_no_card_is_raised():
+    saved = S.classify_outbound_sensitivity
+
+    def boom(*_a, **_k):
+        raise RuntimeError("classifier unavailable (test)")
+    S.classify_outbound_sensitivity = boom
+    try:
+        drafted = E.plan(to="sam@example.com", subject="hello", body="nothing special")
+    finally:
+        S.classify_outbound_sensitivity = saved
+    check("a classifier failure refuses the draft (fail closed, Tier 1)",
+          bool(drafted.problem) and "never goes out" in drafted.problem.lower(), drafted.problem)
+    check("... and nothing is ready to save", drafted.ready is False and drafted.to == ())
+
+
+def t_d24_the_walk_withholds_when_the_private_view_cannot_be_read():
+    import types
+    saved = sys.modules.get("jarvis_private_view")
+    broken = types.ModuleType("jarvis_private_view")
+
+    def unreadable():
+        raise RuntimeError("private view unreadable (test)")
+    broken.state = unreadable
+    sys.modules["jarvis_private_view"] = broken
+    try:
+        check("_walk_private fails CLOSED when the private view cannot be read",
+              L._walk_private() is True)
+        locked = L.build_evening_report("walk-1", hide_memory_lists=False, now_ts=3000.0)
+        check("... and the report withholds the owner's words",
+              locked.get("withheld") is True and locked.get("prepared") == []
+              and locked.get("to_prepare") == [] and locked.get("waiting") == [], locked)
+    finally:
+        if saved is None:
+            sys.modules.pop("jarvis_private_view", None)
+        else:
+            sys.modules["jarvis_private_view"] = saved
+
+
 # --------------------------------------------------------------------------
 #   Runner
 # --------------------------------------------------------------------------
@@ -439,7 +500,9 @@ def main() -> int:
                t_d23_document_hits_carry_and_withhold_provenance,
                t_d24_the_walk_splits_and_classifies_and_the_report_keeps_the_details,
                t_d21_a_plan_cannot_call_a_mutating_handler_readonly,
-               t_d22_the_classifier_is_defined_once_and_email_passes_prompt_and_taint):
+               t_d22_the_classifier_is_defined_once_and_email_passes_prompt_and_taint,
+               t_d22_the_classifier_fails_closed_and_no_card_is_raised,
+               t_d24_the_walk_withholds_when_the_private_view_cannot_be_read):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
